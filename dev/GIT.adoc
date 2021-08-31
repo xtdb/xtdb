@@ -1,4 +1,4 @@
-= Git practices in Crux
+= Git practices in XTDB
 
 A rough guide of how we tend to use Git, in practice.
 Obviously use discretion when applying these - they're guidelines, not hard and fast rules.
@@ -18,9 +18,9 @@ Simple, uncontroversial changes (typos, say, or other non-code changes) *can* go
 Err on the side of caution if need be.
 
 ** PRs (again, within reason) should be atomic - the 'minimum viable merge'.
-   If you've got to a point where your change would add value to a Crux user, it can be a PR.
+   If you've got to a point where your change would add value to an XTDB user, it can be a PR.
 ** On the other side, don't include unrelated bugfixes in a larger PR, because we may want to merge those independently of the rest of the PR.
-** Where reasonable, try to make the distinction between changes that preserve Crux's behaviour (e.g. refactorings/restructurings) and changes that advance Crux - it's much easier to review a change knowing that it's supposed to behave exactly the same as it did before.
+** Where reasonable, try to make the distinction between changes that preserve XTDB's behaviour (e.g. refactorings/restructurings) and changes that advance XTDB - it's much easier to review a change knowing that it's supposed to behave exactly the same as it did before.
 
 * **Optimise your commits for later reading**
 +

@@ -1,9 +1,9 @@
 = Building
 
-`build` is a module within the crux repo with two key objectives:
+`build` is a module within the XTDB repo with two key objectives:
 
-* Providing pre-configured JARs and Docker containers to start a basic implementation of Crux with no prior knowledge required.
-* Providing a mechanism to spin up custom Crux artifacts - with two necessary inputs:
+* Providing pre-configured JARs and Docker containers to start a basic implementation of XTDB with no prior knowledge required.
+* Providing a mechanism to spin up custom XTDB artifacts - with two necessary inputs:
 ** A `deps.edn` file containing the dependencies that the node requires.
 ** A `xtdb.edn` file, containing the configuration options to start the node with.
 
@@ -11,18 +11,18 @@
 
 === `xtdb-in-memory`
 
-The `xtdb-in-memory` artifact starts up a basic, in-memory Crux node, with both a HTTP Server _(open on port 3000)_ and the xref:sql.adoc[Crux SQL] module with a SQL server _(open on port 1501)_.
+The `xtdb-in-memory` artifact starts up a basic, in-memory XTDB node, with both a HTTP Server _(open on port 3000)_ and the xref:sql.adoc[XTDB SQL] module with a SQL server _(open on port 1501)_.
 
 It can be downloaded:
 
 * as a Docker image from https://hub.docker.com/repository/docker/juxt/xtdb-in-memory[JUXT's Docker Hub]
 * as an uberjar, `xtdb-in-memory.jar`, from the relevant https://github.com/xtdb/xtdb/releases[GitHub release]
 
-Communication with the node is done via the Crux REST API - see the xref:http.adoc[HTTP docs] for more information.
+Communication with the node is done via the XTDB REST API - see the xref:http.adoc[HTTP docs] for more information.
 
 == Building Artifacts
 
-Alongside the JARs deployed on the GitHub releases is `xtdb-builder.tar.gz` - the scripts within this archive can be used to build a custom Crux JAR or Docker container.
+Alongside the JARs deployed on the GitHub releases is `xtdb-builder.tar.gz` - the scripts within this archive can be used to build a custom XTDB JAR or Docker container.
 
 === Building a JAR (Clojure CLI tooling)
 
@@ -40,21 +40,21 @@ To use `rocksdb` as the index store, document store and transaction-log store of
 [source,clojure, subs=attributes+]
 ----
 ...
-com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{xtdb_version}"}
 ...
 ----
 * In `xtdb.edn`, override the old topology with the following:
 +
 [source,clojure]
 ----
-{:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/crux/indexes"}}
- :xtdb/document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/crux/documents"}}
+{:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/xtdb/indexes"}}
+ :xtdb/document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/xtdb/documents"}}
  :xtdb/tx-log {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/xt/tx-log"}}
  :xtdb.http-server/server {}}
 ----
 
 To build the JAR, run the `build-uberjar.sh` script.
-You can optionally pass the environment variable `UBERJAR_NAME` to the script (for example, `UBERJAR_NAME=crux-rocks.jar ./build-uberjar.sh`), otherwise the built uberjar will be called `xtdb.jar`.
+You can optionally pass the environment variable `UBERJAR_NAME` to the script (for example, `UBERJAR_NAME=xtdb-rocks.jar ./build-uberjar.sh`), otherwise the built uberjar will be called `xtdb.jar`.
 To run the clojure uberjar, use the following command `java -jar xtdb.jar`. This will now start up a node with both a HTTP server and persistent storage.
 
 === Building a JAR (Maven tooling)
@@ -72,11 +72,11 @@ Override the topology within `xtdb.edn` with the following:
 
 [source,clojure]
 ----
-{:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/crux/indexes"}}
- :xtdb/document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/crux/documents"}}
+{:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/xtdb/indexes"}}
+ :xtdb/document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/xtdb/documents"}}
  :xtdb/tx-log {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/xt/tx-log"}}
  :xtdb.http-server/server {}}
 ----
 
 To build your Docker container, run the `build-docker.sh` script.
-You can optionally pass the environment variables `IMAGE_NAME` and `IMAGE_VERSION` to tag the container with (by default, the custom Docker container is called `crux-custom:latest`).
+You can optionally pass the environment variables `IMAGE_NAME` and `IMAGE_VERSION` to tag the container with (by default, the custom Docker container is called `xtdb-custom:latest`).

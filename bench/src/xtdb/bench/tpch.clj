@@ -15,7 +15,7 @@
 
 (defn run-tpch-ingest-only [node {:keys [scale-factor], :or {scale-factor 0.01}}]
   (bench/with-bench-ns :tpch-ingest-only
-    (bench/with-crux-dimensions
+    (bench/with-xtdb-dimensions
       (bench/run-bench :ingest
                        (bench/with-additional-index-metrics node
                          (tpch/load-docs! node scale-factor tpch/tpch-entity->pkey-doc)
@@ -24,7 +24,7 @@
 (defn run-tpch [node {:keys [scale-factor] :as opts}]
   (let [{:keys [scale-factor] :as opts} (assoc opts :scale-factor (or scale-factor 0.01))]
     (bench/with-bench-ns :tpch
-      (bench/with-crux-dimensions
+      (bench/with-xtdb-dimensions
         (bench/run-bench :ingest
           (bench/with-additional-index-metrics node
             (tpch/load-docs! node scale-factor tpch/tpch-entity->pkey-doc)

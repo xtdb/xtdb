@@ -1,5 +1,5 @@
 (ns xtdb.api
-  "Public API of Crux."
+  "Public API of XTDB."
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
@@ -163,7 +163,7 @@
   e.g. `(pull db [:film/name :film/year] :spectre)`
     => `{:film/name \"Spectre\", :film/year 2015}`
 
-  See https://opencrux.com/reference/queries.html#pull for details of the spec format.")
+  See https://xtdb.com/reference/queries.html#pull for details of the spec format.")
 
   (pull-many [db query eids]
     "Returns the requested data for the given entity IDs, based on the projection spec
@@ -171,7 +171,7 @@
   e.g. `(pull-many db [:film/name :film/year] #{:spectre :skyfall})`
     => `[{:film/name \"Spectre\", :film/year 2015}, {:film/name \"Skyfall\", :film/year 2012}]`
 
-  See https://opencrux.com/reference/queries.html#pull for details of the spec format.")
+  See https://xtdb.com/reference/queries.html#pull for details of the spec format.")
 
   (entity-history
     [db eid sort-order]
@@ -220,11 +220,11 @@
   If the transaction doesn't commit (eg because of a failed 'match'), this function returns nil."))
 
 (defn start-node
-  "NOTE: requires any dependencies on the classpath that the Crux modules may need.
+  "NOTE: requires any dependencies on the classpath that the XTDB modules may need.
 
   Accepts a map, or a JSON/EDN file or classpath resource.
 
-  See https://opencrux.com/reference/configuration.html for details.
+  See https://xtdb.com/reference/configuration.html for details.
 
   Returns a node which implements: DBProvider, PXtdb, PXtdbSubmitClient and java.io.Closeable.
 
@@ -246,7 +246,7 @@
     (when (and (nil? @xio/malloc-arena-max)
                (xio/glibc?))
       (defonce warn-on-malloc-arena-max
-        (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for Crux is 2")))
+        (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for XTDB is 2")))
     (reset! (get-in system [:xtdb/node :!system]) system)
     (-> (:xtdb/node system)
         (assoc :close-fn #(.close ^AutoCloseable system)))))
@@ -264,10 +264,10 @@
   The remote client requires valid and transaction time to be specified for all calls to `db`.
 
   NOTE: Requires either clj-http or http-kit on the classpath,
-  See https://opencrux.com/reference/http.html for more information.
+  See https://xtdb.com/reference/http.html for more information.
 
-  url the URL to a Crux HTTP end-point.
-  (OPTIONAL) auth-supplier a supplier function which provides an auth token string for the Crux HTTP end-point.
+  url the URL to an XTDB HTTP end-point.
+  (OPTIONAL) auth-supplier a supplier function which provides an auth token string for the XTDB HTTP end-point.
 
   returns a remote API client."
   (^java.io.Closeable [url]
@@ -276,9 +276,9 @@
    (:node (IXtdb/newApiClient url (->RemoteClientOptions opts)))))
 
 (defn new-submit-client
-  "Starts a submit client for transacting into Crux without running a full local node with index.
+  "Starts a submit client for transacting into XTDB without running a full local node with index.
   Accepts a map, or a JSON/EDN file or classpath resource.
-  See https://opencrux.com/reference/configuration.html for details.
+  See https://xtdb.com/reference/configuration.html for details.
   Returns a component that implements java.io.Closeable and PXtdbSubmitClient.
   Latter allows the node to be stopped by calling `(.close node)`."
   ^java.io.Closeable [options]
@@ -347,7 +347,7 @@
   (alter-meta! #'open-db assoc :arglists db-args))
 
 (defn q
-  "q[uery] a Crux db.
+  "q[uery] an XTDB db.
   query param is a datalog query in map, vector or string form.
   This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
   otherwise, it will return a vector of result tuples."
@@ -358,7 +358,7 @@
   (indexing-tx [tx-fn-ctx]))
 
 (defn open-q
-  "lazily q[uery] a Crux db.
+  "lazily q[uery] an XTDB db.
   query param is a datalog query in map, vector or string form.
 
   This function returns a Cursor of result tuples - once you've consumed

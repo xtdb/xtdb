@@ -46,7 +46,7 @@
                                   [?e :xt/id]]})))))
 
 (t/deftest test-evict
-  (let [in-crux? (fn []
+  (let [in-xtdb? (fn []
                    (with-open [db (xt/open-db *api*)]
                      (boolean (seq (xt/q db {:find '[?e]
                                              :where '[[(lucene-text-search "name: Smith") [[?e]]]
@@ -57,12 +57,12 @@
 
     (submit+await-tx [[::xt/put {:xt/id :ivan :name "Smith"}]])
 
-    (assert (in-crux?))
+    (assert (in-xtdb?))
     (assert (in-lucene-store?))
 
     (submit+await-tx [[::xt/evict :ivan]])
 
-    (t/is (not (in-crux?)))
+    (t/is (not (in-xtdb?)))
     (t/is (not (in-lucene-store?)))))
 
 (t/deftest test-malformed-query

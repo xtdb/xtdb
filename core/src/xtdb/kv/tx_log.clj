@@ -123,6 +123,6 @@
 
 (defn ->tx-log {::sys/deps {:kv-store 'xtdb.mem-kv/->kv-store}}
   [{:keys [kv-store]}]
-  (map->KvTxLog {:tx-submit-executor (bounded-solo-thread-pool 16 (xio/thread-factory "crux-standalone-submit-tx"))
+  (map->KvTxLog {:tx-submit-executor (bounded-solo-thread-pool 16 (xio/thread-factory "xtdb-standalone-submit-tx"))
                  :kv-store kv-store
                  :subscriber-handler (tx-sub/->notifying-subscriber-handler (latest-submitted-tx kv-store))}))

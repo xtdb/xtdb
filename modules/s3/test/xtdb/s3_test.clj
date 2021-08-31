@@ -35,7 +35,7 @@
 (t/deftest test-s3-doc-store
   (with-open [sys (-> (sys/prep-system {::s3/document-store
                                         {:bucket test-s3-bucket
-                                         :prefix (str "crux-s3-test-" (UUID/randomUUID))
+                                         :prefix (str "xtdb-s3-test-" (UUID/randomUUID))
                                          :configurator `->configurator}})
                       (sys/start-system))]
 

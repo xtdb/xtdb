@@ -50,12 +50,12 @@
 
 (defn run-tpch-stress-test [node {:keys [query-count field-count] :as opts}]
   (bench/with-bench-ns :tpch-stress
-    (bench/with-crux-dimensions
+    (bench/with-xtdb-dimensions
       (load-tpch-docs node)
       (run-stress-queries node opts))))
 
 (comment
-  (let [node (user/crux-node)]
+  (let [node (user/xtdb-node)]
     (bench/with-bench-ns :tpch-stress
       (load-tpch-docs node)
       (run-stress-queries node {}))))

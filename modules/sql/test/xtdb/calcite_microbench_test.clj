@@ -31,10 +31,10 @@
 
 (comment
   (require 'user)
-  (load-docs! (user/crux-node))
-  (fix/transact! (user/crux-node) (tf/tpch-tables->xtdb-sql-schemas))
-  (def db (xt/db (user/crux-node)))
-  (def conn (cal/jdbc-connection (user/crux-node)))
+  (load-docs! (user/xtdb-node))
+  (fix/transact! (user/xtdb-node) (tf/tpch-tables->xtdb-sql-schemas))
+  (def db (xt/db (user/xtdb-node)))
+  (def conn (cal/jdbc-connection (user/xtdb-node)))
   (def p (prepared-query conn "SELECT c_name FROM CUSTOMER"))
 
   (println (with-timing*

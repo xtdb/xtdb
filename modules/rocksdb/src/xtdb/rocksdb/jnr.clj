@@ -1,5 +1,5 @@
 (ns ^:no-doc xtdb.rocksdb.jnr
-  "RocksDB KV backend for Crux using JNR:
+  "RocksDB KV backend for XTDB using JNR:
   https://github.com/jnr/jnr-ffi"
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]

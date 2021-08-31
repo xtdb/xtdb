@@ -22,7 +22,7 @@ Liu's component names all seem obvious to us, due to their twenty-first century 
 
 We only need to revisit some https://www.youtube.com/watch?v=95-yZ-31j9A[Today Show clips from 1994] to recall how alien computers and computer networks were just three decades ago. In 1991 a computer was a magical box of infinite possibility. A computer -- a real computing machine -- is by its very nature an abstract thing and thus has always been so much more than a better calculator or a fancier accounting ledger. And yet, paradoxically, that's precisely how we use computers today. Computers coordinate the most mundane aspects of the global economy, send me a message when my library book is due, or record a family's new home in the government's Land Titles database. The sprawling mycelium of computing devices across the globe behave, in aggregate, much more like the robots of retrofuturism than any of us are likely to acknowledge. The robots take us shopping and help us with video calls to our aging parents. The robots are ubiquitous, invisible, and heart-breakingly banal.
 
-image:https://opencrux.com/_/images/articles/strength-of-the-record/retrofuturism-360px.png[Retrofuturism,role="right"]
+image:https://xtdb.com/_/images/articles/strength-of-the-record/retrofuturism-360px.png[Retrofuturism,role="right"]
 Our prosaic robots exist at every layer. The robot is the L2 cache, Linux, and Google Maps. Is it little wonder that we, the techno-elite, construct some brittle metaphors as we climb from XOR gates and system buses to the abstractions that reach the fingertips of the humans? Along the way, we hold on to some outdated metaphors from earlier days of computing. EOT (End-of-Tape) markers show up less commonly in software these days but a modern programmer won't blink an eye at an EOF (End-of-File) marker of the same lineage. As computers entered the mainstream, "directories" of files were given the thin coat of paint known as "folders", producing the increasingly-peculiar physical metaphor of putting your files inside of folders inside of folders inside of folders. The "filing cabinet" metaphor had a more timely death. My last memory of the filing cabinet is Windows for Workgroups.
 
 Of course, we need not restrict ourselves to the tangible world of buttons, files, and folders. We programmers kick ourselves with broken metaphors all the time while programming the robot's innards. Remember when we used "object-relational mapping" libraries to write objects to disk? Those were heady days, weren't they? footnote:fashion[I'm of course not suggesting ORM is out style and hand-crafted artisinal SQL is back in -- no one earnestly believes that old-is-new-again hacker fashion ever constitutes a step forward.] I still remember my first glimpse of the Rails ActiveRecord implementation. `has_many :simply_darling_little_macros` was an epiphany back in 2004 for those of us stuck wiring the fields in our https://martinfowler.com/bliki/POJO.html[POJOs] to database columns by hand like mid-century telephone operators hard-wiring networks of voices, one at a time. Yessir. ORM was a thing of beauty, compared to her contemporaries. Every day at 8:00 AM I would grab a steaming cup of loam-flavoured American drip coffee and sit back to enjoy the DHH Show -- marveling at his juxtapositions: a quagmire of Spring XML against his elegant Ruby macros. But that's not what I'm talking about.
@@ -72,7 +72,7 @@ end
 facility.save
 ----
 
-…to a Crux entity…
+…to an XTDB entity…
 
 [source,clojure]
 ----
@@ -89,12 +89,12 @@ The mapping is a symptom; the anachronism is the disease. Our objects can and sh
 
 End users understand the metaphors of buttons, folders, and desktops as user interfaces. So it is for us developers and our database metaphors. There is some surface area to a database that allows us to store, query, and listen. This is our user interface. It is also our storage metaphor.
 
-image:https://opencrux.com/$$_$$/images/articles/strength-of-the-record/record-cube-396px.png[Structural Cube,role="right"]
+image:https://xtdb.com/$$_$$/images/articles/strength-of-the-record/record-cube-396px.png[Structural Cube,role="right"]
 Storage metaphors come in three broad structural categories: rows in tables, documents in trees, triples in graphs. These structures, in turn, are bound to a three-dimensional field. Our X-axis is schema, from hard to soft, our Y-axis is depth, from flat to nested, and our Z-axis is shape repetition, from regular to unique. Positioned within this cube, any given structure represents the _form_ of our database.
 
 Each structure has a preferred location within the cube. Rows in a relational database table will subscribe to a hard schema, a flat depth, and a common shape. Document stores will subscribe to a softer schema, a nested depth, and (potentially) unique shapes. Triples do not dictate schema by their nature but they have negligible depth and negligible variety. The uncomplicated nature of triples is reminiscent of LISP's absence of syntax. That makes them attractive... but esoteric.
 
-image::https://opencrux.com/_/images/articles/strength-of-the-record/record-jeopardy-dbs.png[Contestants,width="90%",align="center"]
+image::https://xtdb.com/_/images/articles/strength-of-the-record/record-jeopardy-dbs.png[Contestants,width="90%",align="center"]
 
 NOTE: There are visual examples provided for each storage metaphor's preferred structure. They are intended to be fun and illustrative rather than realistic and boring.
 
@@ -104,7 +104,7 @@ I was fifteen years old in 1996. My highschool had an "Information Processing" c
 
 It's easy to see where this confusion comes from. Most people do not care what a computer thinks about rows in a table. A table is an intuitive concept, even to children. But we all know, just as my teacher understood, that text in an arbitrary table is effectively meaningless, text in a spreadsheet table is meaningful but unconstrained, and text in a database is constrained by datatype. When your tables have constraints you can build schema, views, atomic writes, and table-to-table relationships on top of them. That's powerful stuff.
 
-image::https://opencrux.com/_/images/articles/strength-of-the-record/structure-tables.png[Tables,width="70%",align="center"]
+image::https://xtdb.com/_/images/articles/strength-of-the-record/structure-tables.png[Tables,width="70%",align="center"]
 
 Looking back at Cixin Liu's "hard drive" comprised of scholars with notepads, our confidence in the meat computer is likely to go up if we can put some hard limitations on what kinds of data the scholars are allowed to write, and where. The scholar who writes whatever she wants wherever she wants is not a very useful component. She must adhere to the sensibilities of the computer.
 
@@ -120,7 +120,7 @@ Object DBs simply never took off. An object isn't a simple or intuitive concept;
 
 Document DBs, on the other hand, were not such a bad idea. They were just poorly implemented. Standard query languages? Nope. Schemaless? Nope. Relationships? Not really. Append-only, immutable data? That gets pretty expensive when you denormalize all your records into a deeply-nested rat's nest.
 
-image::https://opencrux.com/_/images/articles/strength-of-the-record/structure-document.jpg[Document,width="70%",align="center"]
+image::https://xtdb.com/_/images/articles/strength-of-the-record/structure-document.jpg[Document,width="70%",align="center"]
 
 Developers want languages built on research and standards. Even a fragmented standard like SQL is better than a homebrew query language. MongoDB lacked basic joins https://www.mongodb.com/blog/post/joins-and-other-aggregation-enhancements-coming-in-mongodb-3-2-part-1-of-3-introduction[until version 3.2] but this was an honest mistake. MongoDB engineers believed their customers could survive on schemaless, denormalized data with no relationships. We now know this isn't true. All databases https://sadalage.com/post/schema_less_databases/[have schema]. footnote:schemaless[It is fair to argue that KV stores with no capacity to query the document's internal representation are truly _schemaless_. "Insert this mystery JSON blob at slot X. Okay, now give me the mystery JSON blob from slot Y." If you do not know the shape of the data you're storing, nor the shape of the data you're retrieving, that is a schemaless database. But an opaque, unstructured data store isn't a general purpose database -- and we'll try to restrict this conversation to those.] All databases http://www.sarahmei.com/blog/2013/11/11/why-you-should-never-use-mongodb/[have relationships]. footnote:graphs[If we are honest with ourselves, _all_ relational models form a graph. Even one relationship between two nodes is a graph.] Our schema and relationships may be implicit but they are truths we must face.
 
@@ -214,7 +214,7 @@ Computer Scientists will understand: "evidence about the past" is equivalent to 
 
 Once upon a time in computing history, tapes were composed of files which were composed of records. It could be argued that the "record" is actually the most natural of the three, given that humans have been organizing information into records since long before the computer. Sometimes those records were flat rows in an accountant's ledger but they were often written on card stock:
 
-image::https://opencrux.com/_/images/articles/strength-of-the-record/record-card.jpg[Record Card,474,306,align="center"]
+image::https://xtdb.com/_/images/articles/strength-of-the-record/record-card.jpg[Record Card,474,306,align="center"]
 
 These sorts of records can be seen for hundreds of years into humanity's past, at least as far back as the double-entry bookkeeping of 14th Century Venice. It could even be argued that all three storage metaphors we've examined so far -- the table, the document, and the triple -- can claim the title of "record".
 

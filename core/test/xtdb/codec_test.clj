@@ -85,7 +85,7 @@
   (Class/forName "[B"))
 
 (defn- no-negative-zeros [vs]
-  ;; HACK filter out -0.0 because Java doesn't sort -0.0 ahead of 0.0, but Crux does
+  ;; HACK filter out -0.0 because Java doesn't sort -0.0 ahead of 0.0, but XTDB does
   (remove (every-pred double? zero? #(not= 0 (Double/doubleToLongBits %))) vs))
 
 (tcct/defspec test-ordering-of-values 100

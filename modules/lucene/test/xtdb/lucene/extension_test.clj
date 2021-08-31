@@ -73,7 +73,7 @@
 
 ;;; Egeria Connector use-case, derived from https://github.com/odpi/egeria-connector-crux/
 
-(def ^:const field-xt-val-exact "_crux_val_exact")
+(def ^:const field-xt-val-exact "_xtdb_val_exact")
 
 (defn ^String keyword->kcs [k]
   (subs (str k "-exact") 1))
@@ -82,8 +82,8 @@
   l/LuceneIndexer
 
   (index! [_ index-writer docs]
-    (doseq [{e :xt/id, :as crux-doc} (vals docs)
-            [a ^String v] (->> (dissoc crux-doc :xt/id)
+    (doseq [{e :xt/id, :as xtdb-doc} (vals docs)
+            [a ^String v] (->> (dissoc xtdb-doc :xt/id)
                                (mapcat (fn [[a v]]
                                          (for [v (cc/vectorize-value v)
                                                :when (string? v)]
@@ -201,8 +201,8 @@
   l/LuceneIndexer
 
   (index! [_ index-writer docs]
-    (doseq [{e :xt/id, :as crux-doc} (vals docs)
-            [a v] (->> (dissoc crux-doc :xt/id)
+    (doseq [{e :xt/id, :as xtdb-doc} (vals docs)
+            [a v] (->> (dissoc xtdb-doc :xt/id)
                        (mapcat (fn [[a v]]
                                  (for [v (cc/vectorize-value v)
                                        :when (string? v)]

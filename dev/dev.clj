@@ -1,5 +1,5 @@
 (ns dev
-  "Internal development namespace for Crux. For end-user usage, see
+  "Internal development namespace for XTDB. For end-user usage, see
   examples.clj"
   (:require [xtdb.api :as xt]
             [integrant.core :as i]
@@ -38,14 +38,14 @@
 (def dev-node-dir
   (io/file "dev/dev-node"))
 
-(defmethod i/init-key ::crux [_ {:keys [node-opts]}]
+(defmethod i/init-key ::xtdb [_ {:keys [node-opts]}]
   (xt/start-node node-opts))
 
-(defmethod i/halt-key! ::crux [_ ^IXtdb node]
+(defmethod i/halt-key! ::xtdb [_ ^IXtdb node]
   (.close node))
 
 (def standalone-config
-  {::crux {:node-opts {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
+  {::xtdb {:node-opts {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                    :db-dir (io/file dev-node-dir "indexes"),
                                                    :block-cache :xtdb.rocksdb/block-cache}}
                        :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store,
@@ -73,7 +73,7 @@
   (let [kafka-port (xio/free-port)]
     {::embedded-kafka {:kafka-port kafka-port
                        :kafka-dir (io/file dev-node-dir "kafka")}
-     ::crux {:ek (i/ref ::embedded-kafka)
+     ::xtdb {:ek (i/ref ::embedded-kafka)
              :node-opts {::k/kafka-config {:bootstrap-servers (str "http://localhost:" kafka-port)}
                          :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store
                                                      :db-dir (io/file dev-node-dir "ek-indexes")}}
@@ -86,5 +86,5 @@
 ;; swap for `embedded-kafka-config` to use embedded-kafka
 (ir/set-prep! (fn [] standalone-config))
 
-(defn crux-node []
-  (::crux system))
+(defn xtdb-node []
+  (::xtdb system))

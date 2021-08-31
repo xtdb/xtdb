@@ -35,7 +35,7 @@ TASKDEF_ARN=$(aws ecs register-task-definition\
                       "image":"955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:commit-'${SHA}'",
                       "essential":true,
                       "secrets":[{"name":"SLACK_URL","valueFrom":"arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ"}],
-		      "entryPoint":["java","-cp","crux-bench-standalone.jar","-Xms1g","-Xmx1g","clojure.main", "-m"],
+		      "entryPoint":["java","-cp","xtdb-bench-standalone.jar","-Xms1g","-Xmx1g","clojure.main", "-m"],
                       "logConfiguration":{
                         "logDriver":"awslogs",
                         "options": {

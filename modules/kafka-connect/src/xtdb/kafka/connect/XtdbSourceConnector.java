@@ -26,12 +26,12 @@ public class XtdbSourceConnector extends SourceConnector {
     public static final String DEFAULT_MODE = "tx";
 
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
-        .define(URL_CONFIG, Type.STRING, "http://localhost:3000", Importance.HIGH, "Destination URL of Crux HTTP end point.")
+        .define(URL_CONFIG, Type.STRING, "http://localhost:3000", Importance.HIGH, "Destination URL of XTDB HTTP end point.")
         .define(TOPIC_CONFIG, Type.STRING, Importance.HIGH, "The topic to publish data to")
         .define(FORMAT_CONFIG, Type.STRING, DEFAULT_FORMAT, ConfigDef.ValidString.in("edn", "json", "transit"), Importance.LOW, "Format to use, edn, json or transit (json-verbose)")
         .define(MODE_CONFIG, Type.STRING, DEFAULT_MODE, ConfigDef.ValidString.in("tx", "doc"), Importance.LOW, "Mode to use, tx or doc")
         .define(TASK_BATCH_SIZE_CONFIG, Type.INT, DEFAULT_TASK_BATCH_SIZE, Importance.LOW,
-                "The maximum number of records the Source task can read from Crux at one time");
+                "The maximum number of records the Source task can read from XTDB at one time");
 
     private String url;
     private String topic;

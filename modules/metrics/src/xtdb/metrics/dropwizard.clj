@@ -11,7 +11,7 @@
   (MetricRegistry.))
 
 (defn- metric-name [path]
-  (MetricRegistry/name "crux" ^"[Ljava.lang.String;" (into-array String path)))
+  (MetricRegistry/name "xtdb" ^"[Ljava.lang.String;" (into-array String path)))
 
 ;;;; Timers
 

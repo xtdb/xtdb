@@ -2,20 +2,20 @@
 
 == Installing the connector
 
-Use `confluent-hub install juxt/kafka-connect-crux:{crux_version}` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
+Use `confluent-hub install juxt/kafka-connect-crux:{xtdb_version}` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
 
-The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *Crux node* to communicate with.
+The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *XTDB node* to communicate with.
 
-== Creating the Crux node
+== Creating the XTDB node
 
-To use our connector, you must first have a *Crux node* connected to Kafka. To do this, we start by adding the following dependencies to a project:
+To use our connector, you must first have a *XTDB node* connected to Kafka. To do this, we start by adding the following dependencies to a project:
 
 [source,clj, subs=attributes+]
 ----
-com.xtdb/xtdb-core {:mvn/version "{crux_version}"}
-com.xtdb/xtdb-kafka {:mvn/version "{crux_version}"}
-com.xtdb/xtdb-http-server {:mvn/version "{crux_version}"}
-com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-kafka {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-http-server {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{xtdb_version}"}
 ----
 
 Ensure first that you have a running Kafka broker to connect to. We import the dependencies into a file or REPL, then create our Kafka connected _'node'_ with an associated http server for the connector to communicate with:
@@ -64,7 +64,7 @@ Run the following command within the base of the Confluent folder, to create a w
 ----
 
 
-Within your REPL, transact an element into Crux:
+Within your REPL, transact an element into XTDB:
 
 [source,clj]
 ----

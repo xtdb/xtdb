@@ -11,7 +11,7 @@ import xtdb.api.IXtdb
 // end::import[]
 
 class KConfigurationTest {
-    public fun `Starting a Crux node from file`() {
+    public fun `Starting an XTDB node from file`() {
         // tag::from-file[]
         val xtdbNode: IXtdb = IXtdb.startNode(File("config.json"))
         // end::from-file[]
@@ -19,7 +19,7 @@ class KConfigurationTest {
         close(xtdbNode)
     }
 
-    public fun `Starting a Crux node from resource`() {
+    public fun `Starting an XTDB node from resource`() {
         // tag::from-resource[]
         val xtdbNode = IXtdb.startNode(MyApp::class.java.getResource("config.json"))
         // end::from-resource[]
@@ -27,7 +27,7 @@ class KConfigurationTest {
         close(xtdbNode)
     }
 
-    public fun `Starting a Crux node with configurator`() {
+    public fun `Starting an XTDB node with configurator`() {
         // tag::from-configurator[]
         val xtdbNode = IXtdb.startNode { n ->
             // ...
@@ -35,7 +35,7 @@ class KConfigurationTest {
         // end::from-configurator[]
     }
 
-    public fun `Starting a Crux node with http server`() {
+    public fun `Starting an XTDB node with http server`() {
         // tag::http-server[]
         val xtdbNode = IXtdb.startNode { n ->
             n.with("xtdb.http-server/server") { http ->
@@ -47,7 +47,7 @@ class KConfigurationTest {
         close(xtdbNode)
     }
 
-    public fun `Starting a Crux node and overriding a module implementation`() {
+    public fun `Starting an XTDB node and overriding a module implementation`() {
         // tag::override-module[]
         val xtdbNode = IXtdb.startNode { n ->
             n.with("xtdb/document-store") { docStore ->
@@ -61,7 +61,7 @@ class KConfigurationTest {
         close(xtdbNode)
     }
 
-    public fun `Starting a Crux node with nested modules`() {
+    public fun `Starting an XTDB node with nested modules`() {
         // tag::nested-modules-0[]
         val xtdbNode = IXtdb.startNode{ n ->
             n.with("xtdb/tx-log") { txLog ->
@@ -85,7 +85,7 @@ class KConfigurationTest {
         close(xtdbNode)
     }
 
-    public fun `Starting a Crux node with shared modules`() {
+    public fun `Starting an XTDB node with shared modules`() {
         // tag::sharing-modules[]
         val xtdbNode = IXtdb.startNode { n ->
             n.with("my-rocksdb") { rocks ->

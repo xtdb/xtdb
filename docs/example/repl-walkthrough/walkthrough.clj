@@ -1,11 +1,11 @@
-;; load a repl with the latest crux-core dependency, e.g. using clj:
+;; load a repl with the latest xtdb-core dependency, e.g. using clj:
 ;; $ clj -Sdeps '{:deps {com.xtdb/xtdb-core {:mvn/version "RELEASE"}}}'
 
-(ns walkthrough.crux-standalone
+(ns walkthrough.xtdb-standalone
   (:require [xtdb.api :as xt])
   (:import (xtdb.api IXtdb)))
 
-;; this in-memory configuration is the easiest way to try Crux, no Kafka needed
+;; this in-memory configuration is the easiest way to try XTDB, no Kafka needed
 (def node
   (xt/start-node {}))
 

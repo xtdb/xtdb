@@ -64,7 +64,7 @@
 (defn ingest-data
   [data]
   (xt/submit-tx
-   (dev/crux-node)
+   (dev/xtdb-node)
    (mapv #(do [::xt/put %]) data)))
 
 (comment

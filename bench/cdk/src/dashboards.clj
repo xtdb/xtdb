@@ -18,68 +18,68 @@
 (def ingest-grid
   [[{:bench-type "ingest"
      :bench-ns "ts-devices"
-     :crux-node-type "embedded-kafka-rocksdb"
+     :curx-node-type "embedded-kafka-rocksdb"
      :threshold 0.1}
     {:bench-type "ingest"
      :bench-ns "ts-devices"
-     :crux-node-type "standalone-rocksdb"
+     :curx-node-type "standalone-rocksdb"
      :threshold 0.1}
     {:bench-type "ingest"
      :bench-ns "ts-devices"
-     :crux-node-type "kafka-rocksdb"
+     :curx-node-type "kafka-rocksdb"
      :threshold 0.1}]
 
    [{:bench-type "ingest"
      :bench-ns "ts-weather"
-     :crux-node-type "embedded-kafka-rocksdb"
+     :curx-node-type "embedded-kafka-rocksdb"
      :threshold 0.1}
     {:bench-type "ingest"
      :bench-ns "ts-weather"
-     :crux-node-type "standalone-rocksdb"
+     :curx-node-type "standalone-rocksdb"
      :threshold 0.1}
     {:bench-type "ingest"
      :bench-ns "ts-weather"
-     :crux-node-type "kafka-rocksdb"
+     :curx-node-type "kafka-rocksdb"
      :threshold 0.1}]
 
    [{:bench-type "ingest"
      :bench-ns "watdiv-xtdb"
-     :crux-node-type "embedded-kafka-rocksdb"
+     :curx-node-type "embedded-kafka-rocksdb"
      :threshold 0.45}
     {:bench-type "ingest"
      :bench-ns "watdiv-xtdb"
-     :crux-node-type "standalone-rocksdb"
+     :curx-node-type "standalone-rocksdb"
      :threshold 0.25}
     {:bench-type "ingest"
      :bench-ns "watdiv-xtdb"
-     :crux-node-type "kafka-rocksdb"
+     :curx-node-type "kafka-rocksdb"
      :threshold 0.1}]])
 
 (def queries-grid
   [[{:bench-type "queries-warm"
      :bench-ns "tpch"
-     :crux-node-type "embedded-kafka-rocksdb"
+     :curx-node-type "embedded-kafka-rocksdb"
      :threshold 0.007}
     {:bench-type "queries-warm"
      :bench-ns "tpch"
-     :crux-node-type "kafka-lmdb"
+     :curx-node-type "kafka-lmdb"
      :threshold 0.007}
     {:bench-type "queries-warm"
      :bench-ns "tpch"
-     :crux-node-type "kafka-rocksdb"
+     :curx-node-type "kafka-rocksdb"
      :threshold 0.023}]
 
    [{:bench-type "queries-warm"
      :bench-ns "tpch"
-     :crux-node-type "standalone-lmdb"
+     :curx-node-type "standalone-lmdb"
      :threshold 0.0025}
     {:bench-type "queries-warm"
      :bench-ns "tpch"
-     :crux-node-type "standalone-rocksdb"
+     :curx-node-type "standalone-rocksdb"
      :threshold 0.003}
     {:bench-type "queries-warm"
      :bench-ns "tpch"
-     :crux-node-type "standalone-rocksdb-with-metrics"
+     :curx-node-type "standalone-rocksdb-with-metrics"
      :threshold 0.007}]])
 
 (defn ->metric [m]
@@ -87,7 +87,7 @@
       (namespace "xtdb.bench")
       (dimensions {"bench-type" (:bench-type m)
                    "bench-ns" (:bench-ns m)
-                   "crux-node-type" (:crux-node-type m)})
+                   "curx-node-type" (:curx-node-type m)})
       (metricName "time-taken")
       (statistic "avg")
       (period (Duration/hours 30))
@@ -105,7 +105,7 @@
        (build))))
 
 (defn ->alarm [stack m metric-kw]
-  (.. (Alarm$Builder/create stack (String/join "-" [(:bench-type m) (:bench-ns m) (:crux-node-type m)]))
+  (.. (Alarm$Builder/create stack (String/join "-" [(:bench-type m) (:bench-ns m) (:curx-node-type m)]))
       (metric (get m metric-kw))
       (threshold (:threshold m))
       (evaluationPeriods 1)
@@ -116,7 +116,7 @@
 
 (defn ->alarm-widget [m alarm-kw]
   (.. (AlarmWidget$Builder/create)
-      (title (str/join "-" [(:bench-type m) (:bench-ns m) (:crux-node-type m)]))
+      (title (str/join "-" [(:bench-type m) (:bench-ns m) (:curx-node-type m)]))
       (alarm (get m alarm-kw))
       (leftYAxis (.. (YAxisProps$Builder.)
                      (showUnits false)
@@ -126,7 +126,7 @@
 
 (defn ->graph-widget [m metric-kws]
   (.. (GraphWidget$Builder/create)
-      (title (str/join "-" [(:bench-type m) (:bench-ns m) (:crux-node-type m)]))
+      (title (str/join "-" [(:bench-type m) (:bench-ns m) (:curx-node-type m)]))
       (left (-> (select-keys m metric-kws) vals))
       (leftYAxis (.. (YAxisProps$Builder.)
                      (showUnits false)
@@ -162,7 +162,7 @@
       (build)))
 
 (def stack
-  (.. (Stack$Builder/create app "crux-bench-dashboard-stack")
+  (.. (Stack$Builder/create app "curx-bench-dashboard-stack")
       (env env)
       (build)))
 
@@ -206,48 +206,48 @@
                          (update-in-grid :alarm-widget (fn [m]
                                                          (->alarm-widget m :alarm))))
 
-        alert-dash (.. (Dashboard$Builder/create stack "Crux Bench Ingestion Alerting Dashboard")
-                       (dashboardName "Crux-Benchmarks-Ingestion-Alerting")
+        alert-dash (.. (Dashboard$Builder/create stack "Curx Bench Ingestion Alerting Dashboard")
+                       (dashboardName "Curx-Benchmarks-Ingestion-Alerting")
                        (start "-P8W")
                        (widgets (get-grid ingest-grid :alarm-widget))
                        build)
 
-        timing-dash (.. (Dashboard$Builder/create stack "Crux Bench Ingestion Timings Dashboard")
-                        (dashboardName "Crux-Benchmarks-Ingestion-Timing")
+        timing-dash (.. (Dashboard$Builder/create stack "Curx Bench Ingestion Timings Dashboard")
+                        (dashboardName "Curx-Benchmarks-Ingestion-Timing")
                         (start "-P8W")
                         (widgets (get-grid ingest-grid :timing-widget))
                         build)
 
-        queries-dash (.. (Dashboard$Builder/create stack "Crux Bench Query Timings Dashboard")
-                         (dashboardName "Crux-Benchmarks-Queries-Timing")
+        queries-dash (.. (Dashboard$Builder/create stack "Curx Bench Query Timings Dashboard")
+                         (dashboardName "Curx-Benchmarks-Queries-Timing")
                          (start "-P8W")
                          (widgets (get-grid queries-grid :timing-widget))
                          build)
 
-        queries-alert-dash (.. (Dashboard$Builder/create stack "Crux Bench Query Alerting Dashboard")
-                               (dashboardName "Crux-Benchmarks-Query-Alerting")
+        queries-alert-dash (.. (Dashboard$Builder/create stack "Curx Bench Query Alerting Dashboard")
+                               (dashboardName "Curx-Benchmarks-Query-Alerting")
                                (start "-P8W")
                                (widgets (get-grid queries-grid :alarm-widget))
                                build)
 
-        sns-email-sub (.. (EmailSubscription$Builder/create "crux-devs@juxt.pro")
+        sns-email-sub (.. (EmailSubscription$Builder/create "curx-devs@juxt.pro")
                           (build))
 
-        sns-topic (doto (.. (Topic$Builder/create stack "crux-bench-alerts")
-                            (displayName "Crux Bench Alerts")
+        sns-topic (doto (.. (Topic$Builder/create stack "curx-bench-alerts")
+                            (displayName "Curx Bench Alerts")
                             (build))
                     (.addSubscription sns-email-sub))
 
         sns-actions (into-array [(SnsAction. sns-topic)])
 
-        ingest-alarm (doto (.. (CompositeAlarm$Builder/create stack "crux-bench-ingest-alert")
+        ingest-alarm (doto (.. (CompositeAlarm$Builder/create stack "curx-bench-ingest-alert")
                                (alarmRule (gen-alarm-composite-rule ingest-grid))
                                (actionsEnabled true)
                                (build))
                        (.addAlarmAction sns-actions)
                        (.addOkAction sns-actions))
 
-        query-alarm (doto (.. (CompositeAlarm$Builder/create stack "crux-bench-query-alert")
+        query-alarm (doto (.. (CompositeAlarm$Builder/create stack "curx-bench-query-alert")
                               (alarmRule (gen-alarm-composite-rule queries-grid))
                               (actionsEnabled true)
                               (build))

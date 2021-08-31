@@ -58,7 +58,7 @@
 
   :resource-paths ["resources" "data"]
   :jvm-opts ["-Xms3g" "-Xmx3g"]
-  :uberjar-name "crux-bench-standalone.jar"
+  :uberjar-name "xtdb-bench-standalone.jar"
 
   :profiles {:with-neo4j {:dependencies [[org.neo4j/neo4j "4.0.0"]]
                           :source-paths ["src-neo4j"]}

@@ -3,7 +3,7 @@
 `xtdb.api` exposes a union of methods from `IXtdb` and `IXtdbDatasource`,
 with few lifecycle members added.
 
-[#icruxapi]
+[#ixtdb]
 == IXtdb
 
 === db
@@ -141,7 +141,7 @@ with few lifecycle members added.
 [source,clojure]
 ----
   (listen ^java.lang.AutoCloseable [node event-opts f]
-    "Attaches a listener to Crux's event bus.
+    "Attaches a listener to XTDB's event bus.
 
   `event-opts` should contain `::xt/event-type`, along with any other options the event-type requires.
 
@@ -161,7 +161,7 @@ with few lifecycle members added.
   "Reads the transaction log. Optionally includes
   operations, which allow the contents under the ::xt/tx-ops
   key to be piped into (submit-tx tx-ops) of another
-  Crux instance.
+  XTDB instance.
   after-tx-id      optional transaction id to start after.
   with-ops?        should the operations with documents be included?
   Returns a cursor over the TxLog.")
@@ -215,7 +215,7 @@ with few lifecycle members added.
     "Returns a list of slowest completed/failed queries ran on the node")
 ----
 
-[#icruxdatasource]
+[#ixtdbdatasource]
 == IXtdbDatasource
 Represents the database as of a specific valid and transaction time.
 
@@ -245,7 +245,7 @@ Represents the database as of a specific valid and transaction time.
 ----
   (q
     [db query]
-    "q[uery] a Crux db.
+    "q[uery] an XTDB db.
 
      This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
      otherwise, it will return a vector of result tuples.)
@@ -257,7 +257,7 @@ Represents the database as of a specific valid and transaction time.
 ----
   (open-q
     [db query]
-    "lazily q[uery] a Crux db.
+    "lazily q[uery] an XTDB db.
      query param is a datalog query in map, vector or string form.
 
      This function returns a Cursor of result tuples - once you've consumed
@@ -282,7 +282,7 @@ Represents the database as of a specific valid and transaction time.
      e.g. `(pull db [:film/name :film/year] :spectre)`
        => `{:film/name \"Spectre\", :film/year 2015}`
 
-     See https://opencrux.com/reference/queries.html#pull for details of the spec format.")
+     See https://xtdb.com/reference/queries.html#pull for details of the spec format.")
 ----
 
 === pull-many
@@ -294,7 +294,7 @@ Represents the database as of a specific valid and transaction time.
      e.g. `(pull-many db [:film/name :film/year] #{:spectre :skyfall})`
        => `[{:film/name \"Spectre\", :film/year 2015}, {:film/name \"Skyfall\", :film/year 2012}]`
 
-     See https://opencrux.com/reference/queries.html#pull for details of the spec format.")
+     See https://xtdb.com/reference/queries.html#pull for details of the spec format.")
 ----
 
 === entity-history
@@ -396,11 +396,11 @@ Represents the database as of a specific valid and transaction time.
 (defn start-node ^IXtdb [options])
 ----
 
-NOTE: requires any dependencies on the classpath that the Crux modules may need.
+NOTE: requires any dependencies on the classpath that the XTDB modules may need.
 
 Accepts a map, or a JSON/EDN file or classpath resource.
 
-See https://opencrux.com/reference/configuration.html for details.
+See https://xtdb.com/reference/configuration.html for details.
 
 Returns a node which implements IXtdb and java.io.Closeable.
 Latter allows the node to be stopped by calling `(.close node)`.
@@ -418,9 +418,9 @@ Creates a new remote API client IXtdb.
 The remote client requires valid and transaction time to be specified for all calls to `db`.
 
 NOTE: Requires either clj-http or http-kit on the classpath,
-See https://opencrux.com/reference/http.html for more information.
+See https://xtdb.com/reference/http.html for more information.
 
-Param `url` the URL to a Crux HTTP end-point.
+Param `url` the URL to an XTDB HTTP end-point.
 
 Returns a remote API client.
 
@@ -431,11 +431,11 @@ Returns a remote API client.
 (defn new-submit-client ^IXtdbSubmitClient [options])
 ----
 
-Starts a submit client for transacting into Crux without running a full local node with index.
+Starts a submit client for transacting into XTDB without running a full local node with index.
 
 Accepts a map, or a JSON/EDN file or classpath resource.
 
-For valid options, see https://opencrux.com/reference/configuration.html.
+For valid options, see https://xtdb.com/reference/configuration.html.
 
 Returns a xtdb.api.IXtdbSubmitClient component that implements java.io.Closeable.
 Latter allows the node to be stopped by calling `(.close node)`.

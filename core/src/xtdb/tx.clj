@@ -435,7 +435,7 @@
   (let [!error (atom nil)
         secondary-indices @(:!secondary-indices secondary-indices)
         with-tx-ops? (some :with-tx-ops? secondary-indices)
-        latest-crux-tx-id (::xt/tx-id (db/latest-completed-tx index-store))]
+        latest-xtdb-tx-id (::xt/tx-id (db/latest-completed-tx index-store))]
     (letfn [(process-tx-f [document-store {:keys [::xt/tx-id ::txe/tx-events] :as tx}]
               (let [tx (cond-> tx
                          with-tx-ops? (assoc ::xt/tx-ops (txc/tx-events->tx-ops document-store tx-events)))]
@@ -447,17 +447,17 @@
               (reset! !error t)
               (bus/send bus {::xt/event-type ::ingester-error, :ingester-error t}))]
 
-      ;; catching all the secondary indices up to where Crux is
-      (when (and latest-crux-tx-id (seq secondary-indices))
+      ;; catching all the secondary indices up to where XTDB is
+      (when (and latest-xtdb-tx-id (seq secondary-indices))
         (let [after-tx-id (let [secondary-tx-ids (into #{} (map :after-tx-id) secondary-indices)]
                             (when (every? some? secondary-tx-ids)
                               (apply min secondary-tx-ids)))]
           (try
             (when (or (nil? after-tx-id)
-                      (< ^long after-tx-id ^long latest-crux-tx-id))
+                      (< ^long after-tx-id ^long latest-xtdb-tx-id))
               (with-open [log (db/open-tx-log tx-log after-tx-id)]
                 (doseq [{::keys [tx-id] :as tx} (->> (iterator-seq log)
-                                                     (take-while (comp #(<= ^long % ^long latest-crux-tx-id) ::xt/tx-id)))]
+                                                     (take-while (comp #(<= ^long % ^long latest-xtdb-tx-id) ::xt/tx-id)))]
                   (process-tx-f document-store (assoc tx :committing? (not (db/tx-failed? index-store tx-id)))))))
             (catch Throwable t
               (set-ingester-error! t)
@@ -465,7 +465,7 @@
 
       ;; moving on...
       (let [job (db/subscribe tx-log
-                              latest-crux-tx-id
+                              latest-xtdb-tx-id
                               (fn [_fut tx]
                                 (try
                                   (let [in-flight-tx (db/begin-tx tx-indexer

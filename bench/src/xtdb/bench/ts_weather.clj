@@ -348,7 +348,7 @@
 
 (defn run-weather-bench [node]
   (bench/with-bench-ns :ts-weather
-    (bench/with-crux-dimensions
+    (bench/with-xtdb-dimensions
       (submit-ts-weather-data node)
       (bench/compact-node node)
       (test-last-10-readings node)

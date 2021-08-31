@@ -1685,7 +1685,7 @@
     (when (:full-results? q-conformed)
       (throw (err/illegal-arg :full-results-removed
                               {::err/message (str "`full-results?` was removed - use 'pull' instead: "
-                                                  "https://opencrux.com/reference/queries.html#pull")})))
+                                                  "https://xtdb.com/reference/queries.html#pull")})))
 
     (log/debug :query (xio/pr-edn-str (-> q
                                           (assoc :in (or in []))
@@ -1915,7 +1915,7 @@
         (xt/db in-flight-tx valid-time)))))
 
 (defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
-  (.write w (format "#<CruxDB %s>" (xio/pr-edn-str {::xt/valid-time valid-time, ::xt/tx-id tx-id}))))
+  (.write w (format "#<XtdbDB %s>" (xio/pr-edn-str {::xt/valid-time valid-time, ::xt/tx-id tx-id}))))
 
 (defmethod pp/simple-dispatch QueryDatasource [it]
   (print-method it *out*))
@@ -2016,5 +2016,5 @@
                                                   :spec ::fn-allow-list}}}
   [opts]
   (map->QueryEngine (assoc opts
-                           :interrupt-executor (Executors/newSingleThreadScheduledExecutor (xio/thread-factory "crux-query-interrupter"))
+                           :interrupt-executor (Executors/newSingleThreadScheduledExecutor (xio/thread-factory "xtdb-query-interrupter"))
                            :!pred-ctx (atom {}))))

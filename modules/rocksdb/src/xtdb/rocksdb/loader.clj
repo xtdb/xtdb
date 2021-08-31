@@ -6,7 +6,7 @@
            org.rocksdb.NativeLibraryLoader))
 
 (defn- load-rocksdb-native-lib []
-  (let [tmp (doto (io/file (System/getProperty "java.io.tmpdir") "crux_rocksdb-6.12.7") .mkdirs)
+  (let [tmp (doto (io/file (System/getProperty "java.io.tmpdir") "xtdb_rocksdb-6.12.7") .mkdirs)
         library (io/file tmp (Environment/getJniLibraryFileName "rocksdb"))]
     (.loadLibrary (NativeLibraryLoader/getInstance) (str tmp))
     (str library)))

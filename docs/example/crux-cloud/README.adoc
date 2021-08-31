@@ -1,7 +1,7 @@
-= Use Crux with Confluent's cloud Kafka platform in <5m
+= Use XTDB with Confluent's cloud Kafka platform in <5m
 
 Confluent's latest Kafka-as-a-service offering is extremely compelling for
-small Crux deployments as there are no minimum fees and the pricing structure
+small XTDB deployments as there are no minimum fees and the pricing structure
 is very simple. `Monthly cost = Data in + Data out + Data retained`. There is
 no need to think about brokers or other infrastructure costs. Additionally you
 only pay for what you use and there are no upfront costs or termination fees.
@@ -22,7 +22,7 @@ Login to access your environment dashboard.
 
 == Create a cluster in your default environment
 
-You will need to choose a name (e.g. `crux-1`) cloud provider (e.g. `GCP`) and
+You will need to choose a name (e.g. `xtdb-1`) cloud provider (e.g. `GCP`) and
 region (e.g. `London`).
 
 image::environment-overview.png[]
@@ -31,11 +31,11 @@ image::environment-overview.png[]
 
 Under "Data In/Out > Clients" click "Create Kafka Cluster API key & secret" and
 copy the credentials now embedded in the configuration snippet into a `.properties` file
-in a safe location that is accessible from your Crux REPL.
+in a safe location that is accessible from your XTDB REPL.
 
 == Start a Clojure REPL
 
-`crux-kafka` must be provided. Run `lein repl`
+The XTDB `kafka` module must be provided. Run `lein repl`
 
 Update the various values based on your configuration and run the following
 code to connect to your cluster and make a transaction:
@@ -82,11 +82,11 @@ code to connect to your cluster and make a transaction:
 (xt/q (xt/db node) {:find '[(pull e [*])] :where '[[e :xt/id _]]})
 ----
 
-Note that Crux will automatically generate topics with the required
+Note that XTDB will automatically generate topics with the required
 retention/compaction configurations and set the partition number for the
 transaction topic to `1`.
 
-You can also create and manage topics independently of Crux using a CLI tool or
+You can also create and manage topics independently of XTDB using a CLI tool or
 the Confluent Cloud web interface, but they will need to be configured
 appropriately (see:
 https://github.com/xtdb/xtdb/blob/master/modules/kafka/src/xtdb/kafka.clj).

@@ -25,7 +25,7 @@
   (-> (reduce (fn [s c] (str s (escape-re c) ".*")) "" input)
       (js/RegExp "i")))
 
-(def ^{:private true :const true} crux-builtin-keywords
+(def ^{:private true :const true} xtdb-builtin-keywords
  [:find :where :args :rules :offset :limit :order-by
   :timeout :xt/id])
 
@@ -38,7 +38,7 @@
         blank? (#{"[" "{" " " "("} reg)
         start (if blank? cur (.Pos js/CodeMirror line (gobj/get token "start")))
         end (if blank? cur (.Pos js/CodeMirror line (gobj/get token "end")))
-        words (concat crux-builtin-keywords index)
+        words (concat xtdb-builtin-keywords index)
         fuzzy (if blank? #".*" (fuzzy-re reg))
         words (->> words
                    (map str)

@@ -119,5 +119,5 @@
   ([] (->bus {}))
   ([{:keys [sync?]}]
    (->EventBus (atom {})
-               (Executors/newSingleThreadExecutor (xio/thread-factory "crux-bus-await-thread"))
+               (Executors/newSingleThreadExecutor (xio/thread-factory "xtdb-bus-await-thread"))
                sync?)))

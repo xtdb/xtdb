@@ -1,9 +1,9 @@
 name: howto
-title: Crux How-To Guides
+title: XTDB How-To Guides
 version: master
 start_page: ROOT:quickstart.adoc
 nav:
   - modules/ROOT/nav.adoc
 asciidoc:
   attributes:
-    crux_version: 1.18.1
+    xtdb_version: 1.18.1

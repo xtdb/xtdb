@@ -56,17 +56,17 @@ CREATE TABLE node_transactions (
     {:dbtype "postgresql"
      :user "postgres"
      :password "my-secret-pw"
-     :dbname "cruxtest"
+     :dbname "xtdbtest"
      :host "localhost"})
 
   (def foo-dialect (->dialect nil))
 
-  (crux-corda/setup-tx-schema! foo-dialect foo-db-spec)
+  (xt.corda/setup-tx-schema! foo-dialect foo-db-spec)
 
   (let [dialect foo-dialect]
     (with-open [conn (jdbc/get-connection foo-db-spec)
                 stmt (jdbc/prepare conn ["SELECT * FROM crux_txs ORDER BY crux_tx_id"])
                 rs (.executeQuery stmt)]
       (->> (resultset-seq rs)
-           (mapv #(crux-corda/tx-row->tx % dialect)))))
+           (mapv #(xt.corda/tx-row->tx % dialect)))))
   )

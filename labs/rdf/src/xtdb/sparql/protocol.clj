@@ -74,7 +74,7 @@
             (str/join ", "))
        "]}}"))
 
-(defn sparql-query [crux-node request]
+(defn sparql-query [xtdb-node request]
   (if-let [query (case (:request-method request)
                    :get
                    (get-in request [:query-params "query"])
@@ -89,7 +89,7 @@
                    "application/sparql-results+xml"
                    accept)
           {:keys [find] :as query-map} (sparql/sparql->datalog query)
-          db (xt/db crux-node)
+          db (xt/db xtdb-node)
           results (xt/q db query-map (object-array 0))]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)

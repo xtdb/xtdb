@@ -1,8 +1,8 @@
 = Configuration
 
-A Crux node consists of a number of modules, which can be independently configured and augmented.
+A XTDB node consists of a number of modules, which can be independently configured and augmented.
 
-Once you have an xref:installation.adoc[in-memory Crux node] set up, you can then start to configure the various modules - either through a JSON config file, EDN config file, or programmatically:
+Once you have an xref:installation.adoc[in-memory XTDB node] set up, you can then start to configure the various modules - either through a JSON config file, EDN config file, or programmatically:
 
 [tabs]
 ====
@@ -60,13 +60,13 @@ include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[ta
 --
 ====
 
-Without any explicit configuration, Crux will start an in-memory node.
+Without any explicit configuration, XTDB will start an in-memory node.
 
 **At this point, you can start xref:transactions.adoc[submitting transactions] and xref:queries.adoc[running queries]!**
 
 == Modules
 
-Crux has three main pluggable components - the transaction log, the document store, and the query index store.
+XTDB has three main pluggable components - the transaction log, the document store, and the query index store.
 All three are backed by local KV stores by default, but they can be independently configured and overridden - you might choose to host the transaction log in Kafka, the document store in AWS's S3, and the query indices in RocksDB.
 
 [cols="1,3*^"]
@@ -174,8 +174,8 @@ include::example$test/xtdb/docs/examples/configuration/config_override.edn[inden
 
 === Nested modules
 
-Modules in Crux form an arbitrarily nested tree - parent modules depend on child modules.
-For example, the default implementations of the three main Crux modules are KV store backed implementations - the KV transaction log, the KV document store and the KV index store.
+Modules in XTDB form an arbitrarily nested tree - parent modules depend on child modules.
+For example, the default implementations of the three main XTDB modules are KV store backed implementations - the KV transaction log, the KV document store and the KV index store.
 Each of these implementations depends on being given a concrete KV store implementation - by default, an in-memory KV store.
 To override the implementation and parameters of this KV store (for example, to replace it with RocksDB), we override its `kv-store` dependency, replacing the implementation of the nested module:
 
@@ -231,8 +231,8 @@ The tx-log and document-store are considered 'golden stores'.
 The query indices can, should you wish to, be thrown away and rebuilt from these golden stores.
 
 Ensure that you either persist both or neither of these golden stores.
-If not, Crux will work fine until you restart the node, at which point some will evaporate, but others will remain.
-Crux tends to get rather confused in this situation!
+If not, XTDB will work fine until you restart the node, at which point some will evaporate, but others will remain.
+XTDB tends to get rather confused in this situation!
 
 Likewise, if you persist the query indices, you'll need to persist both the golden stores.
 ====
@@ -292,9 +292,9 @@ include::example$test/xtdb/docs/examples/configuration/config_shared.edn[indent=
 
 == Writing your own module (Clojure)
 
-Crux modules are (currently) vanilla 1-arg Clojure functions with some optional metadata to specify dependencies and arguments.
+XTDB modules are (currently) vanilla 1-arg Clojure functions with some optional metadata to specify dependencies and arguments.
 By convention, these are named `+->your-component+`, to signify that it's returning an instance of your component.
-If the value returned implements `AutoCloseable`/`Closeable`, the module will be closed when the Crux node is stopped.
+If the value returned implements `AutoCloseable`/`Closeable`, the module will be closed when the XTDB node is stopped.
 
 The most basic component would be just a Clojure function, returning the started module:
 
@@ -336,16 +336,16 @@ Bear in mind that any options you do specify can be overridden by end-users!
   )
 ----
 
-You can also use refs - for example, to depend on the Crux node:
+You can also use refs - for example, to depend on the XTDB node:
 
 [source,clojure]
 ----
-(defn ->server {::sys/deps {:crux-node :xtdb/node}
+(defn ->server {::sys/deps {:xtdb-node :xtdb/node}
                 ::sys/args {:spec ::sys/int
                             :doc "Port to start the server on"
                             :required? true
                             :default 3000}}
-  [{:keys [crux-node] :as options}]
+  [{:keys [xtdb-node] :as options}]
   ;; start your server
   )
 ----

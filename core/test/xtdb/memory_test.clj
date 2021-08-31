@@ -12,8 +12,8 @@
     (t/is (= hex (mem/buffer->hex bs)))
     (t/is (mem/buffers=? bs (mem/hex->buffer hex))))
 
-  (let [bs (mem/as-buffer (sha1 (.getBytes "Crux")))
-        hex "0667c714c6512ac8d807d4e508327f3f9f8b3f7e"]
+  (let [bs (mem/as-buffer (sha1 (.getBytes "XTDB")))
+        hex "b858be35f34c1a469f570d26d44a6d18c240bafd"]
     (t/is (= hex (mem/buffer->hex bs)))
     (t/is (mem/buffers=? bs (mem/hex->buffer hex))))
 

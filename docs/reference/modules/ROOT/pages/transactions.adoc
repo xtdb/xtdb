@@ -1,6 +1,6 @@
 = Transactions
 
-Transactions are how you modify data within Crux.
+Transactions are how you modify data within XTDB.
 
 They are comprised of a series of Transaction Operations to be performed.
 
@@ -85,7 +85,7 @@ Transaction Operations are vectors which have their associated keyword as their 
 [#put]
 === Put
 
-Puts a <<#document, Document>> into Crux.
+Puts a <<#document, Document>> into XTDB.
 If a document already exists with the same `id`, a new version of this document will be created at the supplied `valid time`.
 See <<valid-time, Valid Time>> for more details.
 
@@ -193,7 +193,7 @@ If the document supplied is `nil`, the match only passes if there does not exist
 [#evict]
 === Evict
 
-Evicts a document from Crux. Historical versions of the document will no longer be available.
+Evicts a document from XTDB. Historical versions of the document will no longer be available.
 
 [tabs]
 ====
@@ -223,7 +223,7 @@ It is important to note that Evict is the only operation which will have effects
 [#transaction-functions]
 === Transaction Functions
 
-Transaction functions are user-supplied functions that run on the individual Crux nodes when a transaction is being ingested.
+Transaction functions are user-supplied functions that run on the individual XTDB nodes when a transaction is being ingested.
 
 Transaction functions can be used, for example, to safely check the current database state before applying a transaction, for integrity checks, or to patch an entity.
 
@@ -243,7 +243,7 @@ If `false` is returned, or an exception is thrown, the whole transaction will ro
 
 ==== Creating / Updating
 
-Transaction functions are created/updated by submitting a document to Crux with the desired function.
+Transaction functions are created/updated by submitting a document to XTDB with the desired function.
 
 [tabs]
 ====
@@ -339,7 +339,7 @@ A document is a map from keywords to values.
 
 All documents must contain the `:xt/id` key.
 
-Persistence of Clojure metadata is not supported (although is not currently rejected either) - we strongly recommended that all metadata should be removed from each document prior to submission to Crux, to avoid potential equality checking issues (see https://github.com/xtdb/xtdb/issues/1510[here] for more details).
+Persistence of Clojure metadata is not supported (although is not currently rejected either) - we strongly recommended that all metadata should be removed from each document prior to submission to XTDB, to avoid potential equality checking issues (see https://github.com/xtdb/xtdb/issues/1510[here] for more details).
 --
 ====
 
@@ -368,7 +368,7 @@ The following types of document IDs are allowed:
 |String|`"my-id"`
 |Long|`42L`
 |UUID|`UUID.randomUUID()`
-|URI|`URI.create("mailto:crux@juxt.pro")`
+|URI|`URI.create("mailto:hello@xtdb.com")`
 |URL|`new URL("https://github.com/xtdb/xtdb")`
 |IPersistentMap|`PersistentArrayMap.EMPTY.assoc("foo", "bar")`
 |===
@@ -388,7 +388,7 @@ The following types of `:xt/id` are allowed:
 |String|`"my-id"`
 |Integers/Longs|`42`
 |UUID|`#uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"`
-|URI|`#xtdb/id "mailto:crux@juxt.pro"`
+|URI|`#xtdb/id "mailto:hello@xtdb.com"`
 |URL|`#xtdb/id "https://github.com/xtdb/xtdb"`
 |Maps|`{:this :id-field}`
 |===
@@ -424,7 +424,7 @@ When both `valid time` and `end valid time` are provided for Put or Delete, the 
 [#await]
 == Awaiting Transactions
 
-After a transaction is submitted, it needs to be indexed before it is visible in Crux DB snapshots.
+After a transaction is submitted, it needs to be indexed before it is visible in XTDB DB snapshots.
 
 The return value from submitting the transaction can be used to wait for the transaction to be indexed.
 
@@ -458,7 +458,7 @@ include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags
 [#speculative-transactions]
 == Speculative transactions
 
-You can submit speculative transactions to Crux, to see what the results of your queries would be if a new transaction were to be applied.
+You can submit speculative transactions to XTDB, to see what the results of your queries would be if a new transaction were to be applied.
 This is particularly useful for forecasting/projections or further integrity checks, without persisting the changes or affecting other users of the database.
 
 You'll receive a new database value, against which you can make queries and entity requests as you would any normal database value.

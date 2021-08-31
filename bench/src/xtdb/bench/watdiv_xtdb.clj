@@ -78,11 +78,11 @@
 ;; In the subsequent rows, we compare that same run against each of the comparison databases
 ;; - We find the set of queries for which neither database timed out, and where both databases agree on the result count ('correct' queries).
 ;;   The time XTDB took for these 'correct' queries are the headline times, with `:db-time-taken` being the equivalent time taken by the comparison database.
-;; - `crux-failures` are the query indices where the databases disagreed on the result count (i.e. potential bugs).
-;; - `crux-errors` are the query indices where Crux failed/timed out but the comparison database didn't (i.e. the ones we should arguably be able to execute)
+;; - `xtdb-failures` are the query indices where the databases disagreed on the result count (i.e. potential bugs).
+;; - `xtdb-errors` are the query indices where XTDB failed/timed out but the comparison database didn't (i.e. the ones we should arguably be able to execute)
 ;; - Queries where both databases timed out are excluded.
 
-;; N.B. Query 34 is interesting - it shows up as a 'crux-failure' for Neo4J but not RDF4J or Datomic - this is because Neo4J disagrees with RDF4J and Datomic.
+;; N.B. Query 34 is interesting - it shows up as a 'xtdb-failure' for Neo4J but not RDF4J or Datomic - this is because Neo4J disagrees with RDF4J and Datomic.
 ;; I don't know which is correct!
 
 (defn summarise-query-results [watdiv-query-results]
@@ -98,16 +98,16 @@
                                (let [watdiv-results-with-db (for [query-result watdiv-query-results]
                                                               (merge query-result (get query-result db-name)))
                                      both-completed (->> watdiv-results-with-db (filter (every-pred :db-result-count :result-count)))
-                                     crux-correct (->> both-completed (filter #(= (:db-result-count %) (:result-count %))))
-                                     slow-queries (filter #(>= (:time-taken-ms %) (* slow-query-threshold (:db-time-taken-ms %))) crux-correct)
-                                     correct-idxs (into #{} (map :query-idx) crux-correct)]
+                                     xtdb-correct (->> both-completed (filter #(= (:db-result-count %) (:result-count %))))
+                                     slow-queries (filter #(>= (:time-taken-ms %) (* slow-query-threshold (:db-time-taken-ms %))) xtdb-correct)
+                                     correct-idxs (into #{} (map :query-idx) xtdb-correct)]
                                  (-> (merge base-map
                                             {:bench-type (str "queries-" (name db-name))
-                                             :crux-failures (->> both-completed (map :query-idx) (remove correct-idxs) sort vec)
-                                             :crux-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (map :query-idx) sort vec)
+                                             :xtdb-failures (->> both-completed (map :query-idx) (remove correct-idxs) sort vec)
+                                             :xtdb-errors (->> watdiv-results-with-db (filter :db-result-count) (remove :result-count) (map :query-idx) sort vec)
                                              :slow-queries (->> slow-queries (map :query-idx) sort vec)
-                                             :time-taken-ms (->> crux-correct (map :time-taken-ms) (reduce +))
-                                             :db-time-taken-ms (->> crux-correct (map :db-time-taken-ms) (reduce +))})
+                                             :time-taken-ms (->> xtdb-correct (map :time-taken-ms) (reduce +))
+                                             :db-time-taken-ms (->> xtdb-correct (map :db-time-taken-ms) (reduce +))})
                                      (render-duration :db-time-taken-ms :db-time-taken))))
                              (keys @db-query-results)))]
     (run! (comp println json/write-str) summarised-results)
@@ -115,7 +115,7 @@
 
 (defn run-watdiv-bench [node {:keys [test-count] :as opts}]
   (bench/with-bench-ns :watdiv-xtdb
-    (bench/with-crux-dimensions
+    (bench/with-xtdb-dimensions
       (ingest-xtdb node)
       (bench/compact-node node)
 

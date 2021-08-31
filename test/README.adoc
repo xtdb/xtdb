@@ -1,7 +1,7 @@
-= crux-test
+= test
 
-This project contains the majority of the tests for Crux and its various
-projects, including complete tests of `crux-core`.
+This project contains the majority of the tests for XTDB and its various
+projects, including complete tests of `core`.
 
 To run these tests, do `lein test` from within this directory.
 

@@ -152,10 +152,10 @@
       (with-dbs [db (*api*)]
         (let [entity-tx (xt/entity-tx db :ivan)
               ivan {:xt/id :ivan :name "Ivan"}
-              ivan-crux-id (c/hash-doc ivan)]
+              ivan-xtdb-id (c/hash-doc ivan)]
           (t/is (= (merge submitted-tx
                           {:xt/id (c/new-id :ivan)
-                           ::xt/content-hash ivan-crux-id
+                           ::xt/content-hash ivan-xtdb-id
                            ::xt/valid-time valid-time})
                    entity-tx))
           (t/is (= [(dissoc entity-tx :xt/id)] (xt/entity-history db :ivan :asc)))
@@ -198,7 +198,7 @@
         (try
           (.initialize repo)
           (with-open [conn (.getConnection repo)]
-            (t/is (= #{[:ivan]} (execute-sparql conn "SELECT ?e WHERE { ?e <http://juxt.pro/crux/unqualified/name> \"Ivan\" }"))))
+            (t/is (= #{[:ivan]} (execute-sparql conn "SELECT ?e WHERE { ?e <http://xtdb.com/unqualified/name> \"Ivan\" }"))))
           (finally
             (.shutDown repo)))))))
 

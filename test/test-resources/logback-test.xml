@@ -9,7 +9,7 @@
         <appender-ref ref="STDOUT" />
     </root>
 
-    <logger name="crux" level="INFO" />
+    <logger name="xtdb" level="INFO" />
     <logger name="xtdb.node" level="WARN" />
     <logger name="xtdb.mem-kv" level="ERROR" />
     <logger name="xtdb.hash" level="WARN" />

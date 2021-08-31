@@ -19,14 +19,14 @@
 ;; a/e/v (pred limit 1000)
 ;; Lucene Ingest: 6000 ms
 ;; Lucene Search: ~30 ms
-;; Crux Ingest: 25000 ms
-;; Crux Search: ~60 ms
+;; XTDB Ingest: 25000 ms
+;; XTDB Search: ~60 ms
 
 ;; a/v (pred limit 1000)
 ;; Lucene Ingest: 4500 ms
 ;; Lucene Search: ~10 ms
-;; Crux Ingest: 25000 ms
-;; Crux Search: ~60 ms
+;; XTDB Ingest: 25000 ms
+;; XTDB Search: ~60 ms
 
 (defn customers [n]
   (take n (tf/tpch-table->docs (first (TpchTable/getTables)) {:scale-factor 0.5})))

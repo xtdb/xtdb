@@ -968,14 +968,14 @@
   (index-docs [_ docs]
     (with-open [persistent-kv-snapshot (kv/new-snapshot persistent-kv-store)
                 transient-kv-snapshot (kv/new-snapshot transient-kv-store)]
-      (let [crux-db-id (c/->id-buffer :xt/id)
+      (let [xt-id (c/->id-buffer :xt/id)
             docs (->> docs
                       (into {} (remove (fn [[content-hash doc]]
                                          (let [eid-value (c/->value-buffer (:xt/id doc))
                                                k (encode-ecav-key-to (.get seek-buffer-tl)
                                                                      eid-value
                                                                      (c/->id-buffer content-hash)
-                                                                     crux-db-id
+                                                                     xt-id
                                                                      eid-value)]
                                            (or (kv/get-value persistent-kv-snapshot k)
                                                (kv/get-value transient-kv-snapshot k))))))

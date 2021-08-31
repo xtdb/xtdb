@@ -19,15 +19,15 @@ import static xtdb.api.XtdbFactory.resolve;
 public interface IXtdbSubmitClient extends Closeable {
 
     /**
-     * Starts an submit-only client for transacting into Crux without
+     * Starts an submit-only client for transacting into XTDB without
      * running a full local node with index.
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
      * @param options node configuration options.
      * @return        the started submit client node.
-     * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
-     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://xtdb.com/reference/installation.html">Installation</a>
+     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
      */
     static IXtdbSubmitClient newSubmitClient(Map<?, ?> options) {
         Object submitClient = resolve("xtdb.submit-client/open-submit-client").invoke(options);
@@ -35,7 +35,7 @@ public interface IXtdbSubmitClient extends Closeable {
     }
 
     /**
-     * Starts an submit-only client for transacting into Crux without
+     * Starts an submit-only client for transacting into XTDB without
      * running a full local node with index.
      * <p>
      * <pre>
@@ -48,8 +48,8 @@ public interface IXtdbSubmitClient extends Closeable {
      *
      * @param f a callback, provided with an object to configure the node before it starts.
      * @return the started submit client node.
-     * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
-     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://xtdb.com/reference/installation.html">Installation</a>
+     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
      */
     static IXtdbSubmitClient newSubmitClient(Consumer<NodeConfiguration.Builder> f) {
         return newSubmitClient(NodeConfiguration.buildNode(f));
@@ -80,7 +80,7 @@ public interface IXtdbSubmitClient extends Closeable {
     /**
      * Reads the transaction log. Optionally includes  operations, which allow the contents
      * under the ::xt/tx-ops key to be piped into (submit-tx tx-ops) of another
-     * Crux instance.
+     * XTDB instance.
      *
      * @param afterTxId optional transaction id to start after.
      * @param withOps   should the operations with documents be included?

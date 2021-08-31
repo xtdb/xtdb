@@ -10,8 +10,8 @@ publishing {
             from(components["java"])
 
             pom {
-                name.set("Crux Corda State")
-                description.set("A Crux module that allows you to pipe verified Corda transactions into a Crux node, to then query using Crux’s bitemporal Datalog query engine. ")
+                name.set("XTDB Corda State")
+                description.set("A XTDB module that allows you to pipe verified Corda transactions into an XTDB node, to then query using XTDB’s bitemporal Datalog query engine. ")
                 url.set("https://github.com/xtdb/xtdb")
                 licenses {
                     license {

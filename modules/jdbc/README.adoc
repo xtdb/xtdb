@@ -3,7 +3,7 @@
 This project contains `xtdb.jdbc` which is an implementation of `TxLog` backend
 by a JDBC-compatible database of your choosing, for strong durability
 guarantees in situations where Kafka cannot be used and scalability is less
-important. This implementation provides the same semantics as the `crux-kafka`.
+important. This implementation provides the same semantics as the `xtdb-kafka`.
 
 This module has currently has tested support for:
 * H2
@@ -12,9 +12,9 @@ This module has currently has tested support for:
 * PostgreSQL
 * Oracle
 
-H2 and SQLite may be embedded within your application as a standalone Crux node.
+H2 and SQLite may be embedded within your application as a standalone XTDB node.
 
-For tests, see `/crux-test/test/crux/jdbc_test.clj`.
+For tests, see `/test/test/xtdb/jdbc_test.clj`.
 
 === Secondary imports
 

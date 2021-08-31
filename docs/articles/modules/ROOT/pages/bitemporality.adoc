@@ -7,17 +7,17 @@ toc::[]
 [#overview]
 == Overview
 
-Crux is optimised for efficient and globally consistent point-in-time queries
+XTDB is optimised for efficient and globally consistent point-in-time queries
 using a pair of `transaction-time` and `valid-time` timestamps.
 
 Ad-hoc systems for bitemporal recordkeeping typically rely on explicitly
 tracking either `valid-from` and `valid-to` timestamps or range types directly
-within relations.  The bitemporal document model that Crux provides is very
+within relations.  The bitemporal document model that XTDB provides is very
 simple to reason about and it is universal across the entire database,
 therefore it does not require you to consider which historical information is
 worth storing in special "bitemporal tables" upfront.
 
-One or more documents may be inserted into Crux via a `put` transaction at a
+One or more documents may be inserted into XTDB via a `put` transaction at a
 specific `valid-time`, defaulting to the `transaction time` (i.e. `now`), and
 each document remains valid until explicitly updated with a new version via
 `put` or deleted via `delete`.
@@ -63,7 +63,7 @@ for ensuring globally consistent reads across nodes or to query for audit
 reasons.
 ****
 
-NOTE: In Crux, when `transaction-time` isn't specified, it is set to
+NOTE: In XTDB, when `transaction-time` isn't specified, it is set to
 _now_. When writing data, in case there isn’t any specific valid-time
 available, valid-time and transaction-time take the same value.
 
@@ -130,7 +130,7 @@ time-related information within your documents, for instance `valid-time`,
 decision, receipt, notification, availability).
 
 Queries that use domain times do not automatically benefit from any
-kind of native indexes to support efficient execution, however Crux
+kind of native indexes to support efficient execution, however XTDB
 encourages you to build additional layers of functionality to do
 so. See https://github.com/crux-labs/crux-decorators[decorators] for
 examples.
@@ -148,7 +148,7 @@ networks.
 - Ad-hoc auditing is an otherwise intensive and slow process requiring
   significant operational complexity.
 
-With Crux you retain visibility of all historical changes whilst compensating
+With XTDB you retain visibility of all historical changes whilst compensating
 for lag, making corrections, and performing audit queries. By default, deleting
 data only erases visibility of that data from the current perspective. You may
 of course still evict data completely as the legal status of information
@@ -371,7 +371,7 @@ Find all persons who are known to be present in the United States on day 2
 (valid time), as of day 3 (transaction time)
 ****
 
-We are able to easily express this as a query in Crux:
+We are able to easily express this as a query in XTDB:
 
 [source,clj]
 ----
@@ -380,7 +380,7 @@ include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempq-b,i
 include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempq-c,indent=2]
 ----
 
-The answer given by Crux is a simple set of the three relevant people along
+The answer given by XTDB is a simple set of the three relevant people along
 with the details of their last entry and confirmation that none of them were
 known to have yet departed at this point:
 
@@ -394,22 +394,22 @@ include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempr]
 
 === Retroactive Data Structures
 
-At a theoretical level Crux has similar properties to
+At a theoretical level XTDB has similar properties to
 https://en.wikipedia.org/wiki/Retroactive_data_structure[retroactive data
 structures], which are data structures that support "efficient modifications to
 a sequence of operations that have been performed on the structure [...]
 modifications can take the form of retroactive insertion, deletion or updating
 of an operation that was performed at some time in the past".
 
-Crux's bitemporal indexes are
+XTDB's bitemporal indexes are
 https://en.wikipedia.org/wiki/Persistent_data_structure#Partial_versus_Full_Persistence[partially
 persistent] due to the immutability of transaction time. This allows you to
 query any previous version, but only update the latest version. The efficient
-representation of valid time in the indexes makes Crux "fully retroactive",
+representation of valid time in the indexes makes XTDB "fully retroactive",
 which is analogous to partial persistence in the temporal dimension, and
 enables globally-consistent reads.
 
-Crux does not natively implement "non-oblivious retroactivity" (i.e. persisted
+XTDB does not natively implement "non-oblivious retroactivity" (i.e. persisted
 queries and cascading corrections), although this is an important area of
 investigation for https://github.com/vs-uulm/retro-lambda[event]
 https://dl.acm.org/citation.cfm?doid=3210284.3219499[sourcing]
@@ -418,7 +418,7 @@ https://dl.acm.org/citation.cfm?id=3271883[temporal]
 http://informatique.umons.ac.be/ssi/jef/tic.pdf[constraints], and reactive
 bitemporal queries.
 
-In summary, the Crux indexes as a whole could be described as a "partially
+In summary, the XTDB indexes as a whole could be described as a "partially
 persistent and fully retroactive data structure".
 
 .Further reading:

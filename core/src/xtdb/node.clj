@@ -21,7 +21,7 @@
            java.util.concurrent.TimeoutException
            java.util.Date))
 
-(def crux-version
+(def xtdb-version
   (when-let [pom-file (io/resource "META-INF/maven/com.xtdb/xtdb-core/pom.properties")]
     (with-open [in (io/reader pom-file)]
       (let [{:strs [version revision]} (xio/load-properties in)]
@@ -30,7 +30,7 @@
 
 (defn- ensure-node-open [{:keys [closed?]}]
   (when @closed?
-    (throw (IllegalStateException. "Crux node is closed"))))
+    (throw (IllegalStateException. "XTDB node is closed"))))
 
 (defn- await-tx [{:keys [bus tx-ingester]} tx-k awaited-tx ^Duration timeout]
   (let [tx-v (get awaited-tx tx-k)
@@ -123,7 +123,7 @@
                 (merge (status/status-map m)
                        (when (map? m)
                          (into {} (mapcat status) (vals m)))))]
-        (merge crux-version
+        (merge xtdb-version
                (status (dissoc @!system :xtdb/node))))))
 
   (tx-committed? [this {:keys [::xt/tx-id] :as submitted-tx}]

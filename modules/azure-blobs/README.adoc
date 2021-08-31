@@ -1,6 +1,6 @@
-= crux-azure-blobs
+= xtdb-azure-blobs
 
-This Crux module allows you to use Azure's Blob Storage as Crux's 'document store'.
+This XTDB module allows you to use Azure's Blob Storage as XTDB's 'document store'.
 
 .deps.edn
 [source,clojure]
@@ -18,4 +18,4 @@ com.xtdb/xtdb-azure-blobs {:mvn/version "1.18.1"}
 </dependency>
 ----
 
-For more details, see the https://opencrux.com/reference/azure-blobs.html[Azure Blobs documentation]
+For more details, see the https://xtdb.com/reference/azure-blobs.html[Azure Blobs documentation]

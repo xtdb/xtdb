@@ -1,10 +1,10 @@
 = SQL
 
-SQL adapter for Crux making use of https://calcite.apache.org/[Apache Calcite].
+SQL adapter for XTDB making use of https://calcite.apache.org/[Apache Calcite].
 
 == Setup
 
-`xtdb-sql` runs in-process as part of the Crux node as a Crux module.
+`xtdb-sql` runs in-process as part of the XTDB node as an XTDB module.
 
 First, add the `xtdb-sql` dependency to your project:
 
@@ -17,7 +17,7 @@ pom.xml::
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-sql</artifactId>
-    <version>{crux_version}</version>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 
@@ -25,7 +25,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-sql {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-sql {:mvn/version "{xtdb_version}"}
 ----
 ====
 
@@ -33,7 +33,7 @@ com.xtdb/xtdb-sql {:mvn/version "{crux_version}"}
 
 You can either obtain a JDBC connection in-process, or start a server port and connect through a number of external SQL tools.
 
-To get a connection in-process, call `xtdb.calcite/jdbc-connection`, passing it a Crux node:
+To get a connection in-process, call `xtdb.calcite/jdbc-connection`, passing it an XTDB node:
 
 [source,clojure]
 ----
@@ -108,13 +108,13 @@ To connect via the https://github.com/julianhyde/sqlline[SQLLine] CLI tool, inst
 
 [source,bash]
 ----
-coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.16.0 -M sqlline.SqlLine -- -n crux -p crux -u "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf;timeZone=UTC" -d org.apache.calcite.avatica.remote.Driver
+coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.16.0 -M sqlline.SqlLine -- -n xtdb -p xtdb -u "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf;timeZone=UTC" -d org.apache.calcite.avatica.remote.Driver
 ----
 
 [#table-definitions]
 == Table Definitions
 
-To define a table, transact a document into Crux:
+To define a table, transact a document into XTDB:
 
 [source,clojure]
 ----
@@ -126,14 +126,14 @@ To define a table, transact a document into Crux:
  :xt.sql.table/columns '{id :keyword, name :varchar, homeworld :varchar}}
 ----
 
-A SQL table is a schema that maps Crux attributes to SQL table columns.
-Any document in Crux that matches the `:xt.sql.table/query` in the schema document is eligible to be returned via the SQL query.
+A SQL table is a schema that maps XTDB attributes to SQL table columns.
+Any document in XTDB that matches the `:xt.sql.table/query` in the schema document is eligible to be returned via the SQL query.
 
 SQL table column names are mapped from the symbols used by the `:xt.sql.table/query` query backing the table and referred to by `:xt.sql.table/columns`.
 
 Note that in the case where symbols are prefixed with `?`, then `?` is stripped for the SQL column name.
 
-For example with the following Crux transaction operation:
+For example with the following XTDB transaction operation:
 
 [source,clojure]
 ----
@@ -241,5 +241,5 @@ Note that currently we do not support UUIDs and Keywords being set inside of pre
 == Current Limitations
 
 * We support a range of calculations (ceil, lower, upper, concat), but we do not support all.
-* Projections, filters and inner-joins are handled by Crux.
+* Projections, filters and inner-joins are handled by XTDB.
   Left outer joins and aggregations are handled by Calcite in memory.

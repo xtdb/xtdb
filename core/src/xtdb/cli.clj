@@ -17,7 +17,7 @@
   (second (re-find #"\.(.+?)$" (.getName f))))
 
 (def cli-options
-  [["-f" "--file CONFIG_FILE" "Config file to load Crux options from - EDN, JSON"
+  [["-f" "--file CONFIG_FILE" "Config file to load XTDB options from - EDN, JSON"
     :parse-fn io/file
     :validate [if-it-exists "Config file doesn't exist"
                #(contains? #{"edn" "json"} (file-extension %)) "Config file must be .edn or .json"]]
@@ -79,8 +79,8 @@
 
       help (println help)
 
-      :else (let [{:keys [version revision]} n/crux-version]
-              (log/infof "Crux version: %s revision: %s" version revision)
+      :else (let [{:keys [version revision]} n/xtdb-version]
+              (log/infof "XTDB version: %s revision: %s" version revision)
               (with-open [node (xt/start-node node-opts)]
                 (log/info "Node started")
                 @(shutdown-hook-promise))))))

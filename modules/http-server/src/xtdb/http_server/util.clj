@@ -113,14 +113,14 @@
        (m/install {:name "application/json"
                    :encoder [http-json/->json-encoder opts]}))))
 
-(defn db-for-request ^IXtdbDatasource [crux-node {:keys [valid-time tx-time tx-id]}]
+(defn db-for-request ^IXtdbDatasource [xtdb-node {:keys [valid-time tx-time tx-id]}]
   (let [^Map db-basis {::xt/valid-time valid-time
                        ::xt/tx-time tx-time
                        ::xt/tx-id tx-id}]
-    (xt/db crux-node db-basis)))
+    (xt/db xtdb-node db-basis)))
 
-(defn raw-html [{:keys [title crux-node http-options results]}]
-  (let [latest-completed-tx (xt/latest-completed-tx crux-node)]
+(defn raw-html [{:keys [title xtdb-node http-options results]}]
+  (let [latest-completed-tx (xt/latest-completed-tx xtdb-node)]
     (str (hiccup2/html
           [:html
            {:lang "en"}
@@ -143,18 +143,18 @@
             [:link {:rel "stylesheet" :href "/css/codemirror.css"}]
             [:link {:rel "stylesheet"
                     :href "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"}]
-            [:title "Crux Console"]]
+            [:title "XTDB Console"]]
            [:body
             [:nav.header
-             [:div.crux-logo
+             [:div.xtdb-logo
               [:a {:href "/_xtdb/query"}
-               [:img.crux-logo__img {:src "/crux-horizontal-bw.svg.png" }]]]
+               [:img.xtdb-logo__img {:src "/crux-horizontal-bw.svg.png" }]]]
              [:span.mobile-hidden
               [:b (:server-label http-options)]]
              [:div.header__links
-              [:a.header__link {:href "https://opencrux.com/reference/get-started.html" :target "_blank"} "Documentation"]
-              [:a.header__link {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux" :target "_blank"} "Zulip Chat"]
-              [:a.header__link {:href "mailto:crux@juxt.pro" :target "_blank"} "Email Support"]]]
+              [:a.header__link {:href "https://xtdb.com/reference/get-started.html" :target "_blank"} "Documentation"]
+              [:a.header__link {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-xtdb-users" :target "_blank"} "Zulip Chat"]
+              [:a.header__link {:href "mailto:hello@xtdb.com" :target "_blank"} "Email Support"]]]
             [:div.console
              [:div#app
               [:noscript

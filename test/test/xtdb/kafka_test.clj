@@ -78,7 +78,7 @@
               (t/is (= after-evict-doc (xt/entity (xt/db *api*) :after-evict))))))))))
 
 (t/deftest test-consumer-seeks-after-restart
-  (fix/with-tmp-dir "crux-tmp" [tmp]
+  (fix/with-tmp-dir "xtdb-tmp" [tmp]
     (let [with-fixtures (t/join-fixtures [fk/with-cluster-tx-log-opts
                                           fk/with-cluster-doc-store-opts
                                           (fix/with-opts {:xtdb/index-store {:kv-store {:xtdb/module `xtdb.rocksdb/->kv-store, :db-dir (io/file tmp "indexes")}}

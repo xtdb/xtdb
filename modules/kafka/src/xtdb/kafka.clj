@@ -289,7 +289,7 @@
     (let [ids (set ids)
 
           ;; ideally we'd use AdminClient.listOffsets for this, but it was only introduced in 2.5.0
-          ;; which may be a bit recent (April 2020) for Crux folks
+          ;; which may be a bit recent (April 2020) for XTDB folks
           !end-offsets (delay
                          (.endOffsets end-offset-consumer
                                       (for [^PartitionInfo partition-info (.partitionsFor end-offset-consumer doc-topic)]

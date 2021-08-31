@@ -1,14 +1,14 @@
 = Installation
 
-Crux nodes can be xref:#embedded[embedded within your JVM application], or they can be started standalone through a xref:#uberjar[pre-built Crux JAR], via xref:#docker[Docker], or using xref:#clojure-cli[Clojure CLI tooling].
+XTDB nodes can be xref:#embedded[embedded within your JVM application], or they can be started standalone through a xref:#uberjar[pre-built XTDB JAR], via xref:#docker[Docker], or using xref:#clojure-cli[Clojure CLI tooling].
 
-This guide will show you how to set up an in-memory node using the `crux-core` module.
+This guide will show you how to set up an in-memory node using the `core` module.
 You can then proceed to add further modules (eg for persistence) as required - see the documentation of the individual modules for more information.
 
 [#project-dependency]
 == Project dependency
 
-Crux depends on Java 8+.
+XTDB depends on Java 8+.
 
 [tabs]
 ====
@@ -16,7 +16,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-core {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
 ----
 pom.xml::
 +
@@ -25,7 +25,7 @@ pom.xml::
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-core</artifactId>
-    <version>{crux_version}</version>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -33,8 +33,8 @@ pom.xml::
 [#embedded]
 == Within your JVM application
 
-First, add the `crux-core` module as a project dependency.
-We can then start up an in-memory Crux node with:
+First, add the `core` module as a project dependency.
+We can then start up an in-memory XTDB node with:
 
 [tabs]
 ====
@@ -68,32 +68,32 @@ include::example$test/xtdb/docs/Install.kt[tag=main,indent=0]
 ====
 
 [#uberjar]
-== Using a pre-built Crux JAR
+== Using a pre-built XTDB JAR
 
-You can start a standalone Crux node, accessible through HTTP, using a pre-built Crux JAR.
-Crux pre-built JARs can be found on the relevant https://github.com/xtdb/xtdb/releases[GitHub releases,window=_blank] page - we'll use `xtdb-in-memory.jar`.
+You can start a standalone XTDB node, accessible through HTTP, using a pre-built XTDB JAR.
+XTDB pre-built JARs can be found on the relevant https://github.com/xtdb/xtdb/releases[GitHub releases,window=_blank] page - we'll use `xtdb-in-memory.jar`.
 
 Start it in the usual way, with `java -jar xtdb-in-memory.jar`.
 This will open an HTTP port with a console UI on port 3000 - open http://localhost:3000[window=_blank] in your favourite browser.
 
 // TODO build needs its own pages in the main docs, not just a blog
-You can also build custom Crux JARs with your choice of modules - see the https://juxt.pro/blog/crux-build[Crux build,window=_blank] blog for more details.
+You can also build custom XTDB JARs with your choice of modules - see the https://juxt.pro/blog/crux-build[XTDB build,window=_blank] blog for more details.
 
 [#docker]
 == Via Docker
 
-You can also start a standalone Crux node using Docker, using:
+You can also start a standalone XTDB node using Docker, using:
 
 `docker run -p 3000:3000 juxt/xtdb-in-memory:1.18.1`
 
 Again, this opens up an HTTP server at http://localhost:3000[window=_blank].
 
-Likewise, you can build custom Crux Docker images - see the https://juxt.pro/blog/crux-build[Crux build,window=_blank] blog for more details.
+Likewise, you can build custom XTDB Docker images - see the https://juxt.pro/blog/crux-build[XTDB build,window=_blank] blog for more details.
 
 [#clojure-cli]
 == Clojure CLI tooling
 
-Similarly, to start Crux using Clojure's CLI tooling:
+Similarly, to start XTDB using Clojure's CLI tooling:
 
 [tabs]
 ====
@@ -103,8 +103,8 @@ deps.edn::
 ----
 {:deps {org.clojure/clojure {:mvn/version "1.10.3"}
 
-        com.xtdb/xtdb-core {:mvn/version "{crux_version}"}
-        com.xtdb/xtdb-http-server {:mvn/version "{crux_version}"}}}
+        com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+        com.xtdb/xtdb-http-server {:mvn/version "{xtdb_version}"}}}
 ----
 ====
 

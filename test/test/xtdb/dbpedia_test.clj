@@ -36,7 +36,7 @@
 ;; dbpedia_2014.owl is the OWL schema, not dealt with.
 
 ;; Test assumes these files are living somewhere on the classpath
-;; (probably crux-test/resources related to the crux project).
+;; (probably test/resources related to the XTDB project).
 
 ;; There are 5053979 entities across 33449633 triplets in
 ;; mappingbased_properties_en.nt.

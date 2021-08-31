@@ -1,23 +1,23 @@
-<img alt="Crux" role="img" aria-label="Crux" src="./docs/reference/modules/ROOT/images/crux-logo-banner.svg">
+<img alt="XTDB" role="img" aria-label="XTDB" src="./docs/reference/modules/ROOT/images/crux-logo-banner.svg">
 
-[Crux](https://opencrux.com) is a general purpose database with graph-oriented bitemporal indexes.
+[XTDB](https://xtdb.com) is a general purpose database with graph-oriented bitemporal indexes.
 Datalog, SQL & EQL queries are supported, and Java, HTTP & Clojure APIs are
 provided.
 
-Crux follows an _unbundled_ architectural approach, which means that it is
+XTDB follows an _unbundled_ architectural approach, which means that it is
 assembled from decoupled components through the use of an immutable log and
 document store at the core of its design. A range of storage options are
 available for embedded usage and cloud native scaling.
 
 Bitemporal indexing of schemaless documents enables broad possibilities for
 creating layered extensions on top, such as to add additional transaction,
-query, and schema capabilities. In addition to SQL, Crux supplies a
+query, and schema capabilities. In addition to SQL, XTDB supplies a
 [Datalog](https://en.wikipedia.org/wiki/Datalog) query interface that can be
 used to express complex joins and recursive graph traversals.
 
 ## Quick Links
 
-* [Documentation](https://opencrux.com)
+* [Documentation](https://xtdb.com)
 * [Maven releases](https://repo1.maven.org/maven2/com/xtdb/)
   ```xml
   <dependency>
@@ -35,12 +35,12 @@ used to express complex joins and recursive graph traversals.
   com.xtdb/xtdb-core {:mvn/version "1.18.1"}
   ```
 * [Release notes](https://github.com/xtdb/xtdb/releases)
-* Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/xtdb/xtdb/discussions) | crux@juxt.pro
-* [Developing Crux](https://github.com/xtdb/xtdb/tree/master/dev)
+* Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/xtdb/xtdb/discussions) | hello@xtdb.com
+* [Developing XTDB](https://github.com/xtdb/xtdb/tree/master/dev)
 
 ## Unbundled Architecture
 
-Crux embraces the transaction log as the central point of coordination when
+XTDB embraces the transaction log as the central point of coordination when
 running as a distributed system. Use of a separate document store enables simple
 eviction of active and historical data to assist with technical compliance for
 information privacy regulations.
@@ -51,16 +51,16 @@ information privacy regulations.
 >
 > — Martin Kleppmann
 
-<img alt="Unbundled Architecture Diagram" role="img" aria-label="Crux Venn" src="./docs/articles/modules/ROOT/images/crux-node-1.svg" width="1000px">
+<img alt="Unbundled Architecture Diagram" role="img" aria-label="XTDB Venn" src="./docs/articles/modules/ROOT/images/crux-node-1.svg" width="1000px">
 
-This design makes it feasible and desirable to embed Crux nodes directly within
+This design makes it feasible and desirable to embed XTDB nodes directly within
 your application processes, which reduces deployment complexity and eliminates
 round-trip overheads when running complex application queries.
 
 ## Repo Layout
 
-Crux is split across multiple projects which are maintained within this
-repository. `crux-core` contains the main functional components of Crux along
+XTDB is split across multiple projects which are maintained within this
+repository. `core` contains the main functional components of XTDB along
 with interfaces for the pluggable storage components (Kafka, LMDB, RocksDB
 etc.). Implementations of these storage options are located in their own
 projects.

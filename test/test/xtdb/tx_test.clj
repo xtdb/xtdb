@@ -859,7 +859,7 @@
         (test-id) (test-value)))
 
     (t/testing "URI"
-      (doto (URI/create "mailto:crux@juxt.pro")
+      (doto (URI/create "mailto:hello@xtdb.com")
         (test-id) (test-value)))
 
     (t/testing "URL"
@@ -1373,7 +1373,7 @@
           (fix/submit+await-tx node [[::xt/put {:xt/id :foo}]])
           (t/is (= [0] (map ::xt/tx-id @!txs))))))
 
-    (t/testing "secondary indices catch up to Crux indices on node startup"
+    (t/testing "secondary indices catch up to XTDB indices on node startup"
       (fix/with-tmp-dirs #{db-dir idx-dir}
         (with-open [node (xt/start-node (-> {}
                                             (with-persistent-golden-stores db-dir)
@@ -1390,7 +1390,7 @@
             ;; NOTE: don't need `sync` - should happen before node becomes available.
             (t/is (= [0] (map ::xt/tx-id @!txs)))))))
 
-    (t/testing "Crux catches up without replaying tx to secondary indices"
+    (t/testing "XTDB catches up without replaying tx to secondary indices"
       (fix/with-tmp-dirs #{db-dir}
         (let [!txs (atom [])]
           (with-open [node (xt/start-node (-> {}

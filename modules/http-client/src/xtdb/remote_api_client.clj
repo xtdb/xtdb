@@ -21,11 +21,8 @@
     (condp = (.read in)
       -1 nil
       (int \() (->> (repeatedly #(try
-                                   (edn/read {:readers {'crux/id c/id-edn-reader
-                                                        'xtdb/id c/id-edn-reader
-                                                        'crux/query-state qs/->QueryState
+                                   (edn/read {:readers {'xtdb/id c/id-edn-reader
                                                         'xtdb/query-state qs/->QueryState
-                                                        'crux/query-error qs/->QueryError
                                                         'xtdb/query-error qs/->QueryError}
                                               :eof ::eof} in)
                                    (catch RuntimeException e

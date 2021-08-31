@@ -3,28 +3,28 @@
 [#intro]
 == Introduction
 
-Crux is a schemaless document database that provides you with a comprehensive means of traversing and querying across all of your documents.
-Crux automatically indexes the top-level fields in all documents, supporting efficient ad-hoc joins and retrievals.
-Crux is both _immutable_ and _bitemporal_, which are both required characteristics for a safe schemaless database.
+XTDB is a schemaless document database that provides you with a comprehensive means of traversing and querying across all of your documents.
+XTDB automatically indexes the top-level fields in all documents, supporting efficient ad-hoc joins and retrievals.
+XTDB is both _immutable_ and _bitemporal_, which are both required characteristics for a safe schemaless database.
 
-Crux is also a graph database.
+XTDB is also a graph database.
 The central characteristic of a graph database is that it can support arbitrary-depth graph queries (recursive traversals) very efficiently by default, without any need for schema-level optimisations.
-Graph queries are possible through the Crux dialect of the Datalog query language.
+Graph queries are possible through the XTDB dialect of the Datalog query language.
 
-//This page walks through many of the more interesting queries that run as part of Crux's default test suite.
-//See the https://github.com/xtdb/xtdb/blob/master/test/test/crux/query_test.clj[`Crux query test file`] for the full suite of query tests and how each test listed below runs in the wider context.
+//This page walks through many of the more interesting queries that run as part of XTDB's default test suite.
+//See the https://github.com/xtdb/xtdb/blob/master/test/test/xtdb/query_test.clj[`XTDB query test file`] for the full suite of query tests and how each test listed below runs in the wider context.
 
 === SQL
 
-Crux 1.x supports both Datalog and SQL, but SQL support is provided through a module.
-To query Crux using SQL, read the xref:reference::sql.adoc[SQL module documentation].
+XTDB 1.x supports both Datalog and SQL, but SQL support is provided through a module.
+To query XTDB using SQL, read the xref:reference::sql.adoc[SQL module documentation].
 
 === Datalog
 
-Extensible Data Notation (edn) is a simple data format that is used to describe Crux Datalog queries.
+Extensible Data Notation (edn) is a simple data format that is used to describe XTDB Datalog queries.
 To understand how edn works, read the brief description at http://edn-format.org/[http://edn-format.org].
 
-To understand how Datalog works, read the _Learn Crux Datalog Today_ tutorial from the https://www.opencrux.com/tutorials/[Tutorials page].
+To understand how Datalog works, read the _Learn XTDB Datalog Today_ tutorial from the https://www.xtdb.com/tutorials/[Tutorials page].
 
 ////
 Can we remove these 3 paragraphs? -sd
@@ -49,13 +49,13 @@ requested in the `:find` vector within the query.
 [#structure]
 === Basic Structure
 
-A query in Crux is performed by calling `crux/q` on a Crux database snapshot with a quoted map and, optionally, additional arguments.
+A query in XTDB is performed by calling `xt/q` on an XTDB database snapshot with a quoted map and, optionally, additional arguments.
 
 [source,clojure]
 ----
 include::example$test/xtdb/docs/examples/query_test.clj[tags=anatomy,indent=0]
 ----
-<1> Database value. Usually the snapshot view comes from calling `crux/db` on a Crux node
+<1> Database value. Usually the snapshot view comes from calling `xt/db` on an XTDB node
 <2> Query map or vector (ex. `[:find ...etc... ]`, as found in other Datalog databases)
 <3> Argument(s) supplied to the `:in` relations
 
@@ -123,7 +123,7 @@ include::example$test/xtdb/docs/examples/query_test.clj[tags=query-aggregates,in
 include::example$test/xtdb/docs/examples/query_test.clj[tags=query-aggregates-r,indent=0]
 ----
 
-Note there is always implicit grouping across aggregates due to how Crux performs the aggregation lazily _before_ turning the result tuples into a set.
+Note there is always implicit grouping across aggregates due to how XTDB performs the aggregation lazily _before_ turning the result tuples into a set.
 
 === Custom Aggregates
 
@@ -143,8 +143,8 @@ For example:
 [#pull]
 === Pull
 
-Crux queries support a `pull` syntax, allowing you to decouple specifying which entities you want from what data you'd like about those entities in your queries.
-Crux's support is based on the excellent https://edn-query-language.org/eql/1.0.0/what-is-eql.html[EDN Query Language (EQL)^] library.
+XTDB queries support a `pull` syntax, allowing you to decouple specifying which entities you want from what data you'd like about those entities in your queries.
+XTDB's support is based on the excellent https://edn-query-language.org/eql/1.0.0/what-is-eql.html[EDN Query Language (EQL)^] library.
 
 To specify what data you'd like about each entity, include a `(pull ?logic-var projection-spec)` entry in the `:find` clause of your query:
 
@@ -197,7 +197,7 @@ include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-5-r,inde
 
 ==== Attribute parameters
 
-Crux `pull` syntax supports a handful of custom https://edn-query-language.org/eql/1.0.0/specification.html#_parameters[EQL parameters], specified by wrapping the `:attribute` key in a pair: `(:attribute {:param :value, ...})`.
+XTDB `pull` syntax supports a handful of custom https://edn-query-language.org/eql/1.0.0/specification.html#_parameters[EQL parameters], specified by wrapping the `:attribute` key in a pair: `(:attribute {:param :value, ...})`.
 
 * `:as` - to rename attributes in the result, wrap the attribute in `(:source-attribute {:as :output-name})`:
 +
@@ -490,7 +490,7 @@ You need to add such no-op predicates until each leg contains the same set of va
 include::example$test/xtdb/docs/examples/query_test.clj[tags=or-3,indent=0]
 ----
 
-Hypothetically, Crux could automatically detect these cases and insert no-op predicates on the user's behalf, but that would be a deviation from the essential semantics of Datalog.
+Hypothetically, XTDB could automatically detect these cases and insert no-op predicates on the user's behalf, but that would be a deviation from the essential semantics of Datalog.
 Note that `clojure.core/any?` is a function that always returns `true`.
 
 [#clause-or-join]
@@ -527,7 +527,7 @@ Importantly, the logic variable `a` is unbound outside the `or-join` clauses.
 [#in]
 == In
 
-Crux queries can take a set of additional arguments, binding them to variables under the `:in` key within the query.
+XTDB queries can take a set of additional arguments, binding them to variables under the `:in` key within the query.
 
 `:in` supports various kinds of binding.
 
@@ -690,7 +690,7 @@ If the query has not completed by this time, a `java.util.concurrent.TimeoutExce
 [#valid-time-travel]
 == Valid Time travel
 
-When performing a query, `crux/q` is called on a database snapshot.
+When performing a query, `xt/q` is called on a database snapshot.
 
 To query based on a different Valid Time, create this snapshot by specifying the desired Valid Time when we call `db` on the node.
 
@@ -701,7 +701,7 @@ include::example$test/xtdb/docs/examples/query_test.clj[tags=query-at-t-d1,inden
 include::example$test/xtdb/docs/examples/query_test.clj[tags=query-at-t-d2,indent=0]
 ----
 
-Here, we have `put` different documents in Crux with different Valid Times.
+Here, we have `put` different documents in XTDB with different Valid Times.
 
 [source,clj]
 ----
@@ -769,7 +769,7 @@ Result Set:
 include::example$test/xtdb/docs/examples/query_test.clj[tags=join2-r,indent=0]
 ----
 
-Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
+Note that because XTDB is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
 
 [#streaming-queries]
 == Streaming Queries
@@ -796,7 +796,7 @@ include::example$test/xtdb/docs/examples/query_test.clj[tags=streaming-query,ind
 
 [#history-full-document-history]
 === Full Entity History
-Crux allows you to retrieve all versions of a given entity:
+XTDB allows you to retrieve all versions of a given entity:
 [source,clj]
 ----
 include::example$test/xtdb/docs/examples_test.clj[tags=history-full,indent=0]
@@ -851,7 +851,7 @@ map rather than each individual use of every logic variable, for instance:
 
 === Maps and Vectors in data
 
-Say you have a document like so and you want to add it to a Crux db:
+Say you have a document like so and you want to add it to an XTDB db:
 [source,clj]
 ----
 {:xt/id :me
@@ -860,7 +860,7 @@ Say you have a document like so and you want to add it to a Crux db:
            :right ["phone"]}}
 ----
 
-Crux breaks down vectors into individual components so the query engine is able
+XTDB breaks down vectors into individual components so the query engine is able
 see all elements on the base level. As a result of this the query engine is not
 required to traverse any structures or any other types of search algorithm
 which would slow the query down. The same thing should apply for maps so
@@ -889,32 +889,32 @@ To query inside these vectors the code would be:
 [source,clj]
 ----
 (xt/q (xt/db node) '{:find [e l]
-                         :where [[e :list l]]
-                         :in [l]}
-                       "carrots")
+                     :where [[e :list l]]
+                     :in [l]}
+                   "carrots")
 ;; => #{[:you "carrots"] [:me "carrots"]}
 
 (xt/q (xt/db node) '{:find [e p]
-                         :where [[e :pockets/left p]]
-                         :in [p]}
-                       "watch")
+                     :where [[e :pockets/left p]]
+                     :in [p]}
+                   "watch")
 ;; => #{[:you "watch"]}
 ----
 
-Note that `l` and `p` is returned as a single element as Crux decomposes the
+Note that `l` and `p` is returned as a single element as XTDB decomposes the
 vector
 
 [#datascript-differences]
 == DataScript Differences
 
 This list is not necessarily exhaustive and is based on the partial re-usage of
-DataScript's query test suite within Crux's query tests.
+DataScript's query test suite within XTDB's query tests.
 
-Crux does not support:
+XTDB does not support:
 
 - vars in the attribute position, such as `[e ?a "Ivan"]` or `[e _ "Ivan"]`
 
-Crux does _not yet_ support:
+XTDB does _not yet_ support:
 
 - `ground` (you can use alternatively use `identity`)
 - `get-else` (see https://github.com/xtdb/xtdb/blob/7f7b50fcc7c766c8e5913ea7195138c9d1e5314a/crux-test/test/crux/query_test.clj#L1056[`get-attr`] which returns a relation instead)
@@ -929,4 +929,4 @@ Many advanced query requirements can be addressed using custom predicate functio
 
 Be aware during development that query compilation internalizes function definitions and this means that subsequent re-definitions of your custom functions may not be reflected until the query is modified and therefore re-compiled.
 
-Many examples of advanced queries are showcased across the https://github.com/xtdb/xtdb/blob/master/test/test/crux/query_test.clj[query tests] and the suite of benchmarks maintained in the `crux-bench` sub-project.
+Many examples of advanced queries are showcased across the https://github.com/xtdb/xtdb/blob/master/test/test/crux/query_test.clj[query tests] and the suite of benchmarks maintained in the `bench` sub-project.

@@ -1,12 +1,12 @@
 = Google Cloud Storage
 
-You can use Google's Cloud Storage (GCS) as Crux's 'document store' or 'checkpoint store'.
+You can use Google's Cloud Storage (GCS) as XTDB's 'document store' or 'checkpoint store'.
 
 Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
 
 == Project Dependency
 
-In order to use GCS within Crux, you must first add this module as a project dependency:
+In order to use GCS within XTDB, you must first add this module as a project dependency:
 
 [tabs]
 ====
@@ -14,7 +14,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-google-cloud-storage {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-google-cloud-storage {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -24,7 +24,7 @@ pom.xml::
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-google-cloud-storage</artifactId>
-    <version>{crux_version}</version>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -78,7 +78,7 @@ Follow the GCS https://github.com/googleapis/google-cloud-java#authentication[Au
 
 GCS can be used as a query index xref:checkpointing.adoc[checkpoint store].
 
-Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on GCS to remove older checkpoints.
+Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on GCS to remove older checkpoints.
 
 [source,clojure]
 ----

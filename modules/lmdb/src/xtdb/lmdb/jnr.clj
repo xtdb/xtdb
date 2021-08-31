@@ -1,5 +1,5 @@
 (ns ^:no-doc xtdb.lmdb.jnr
-  "LMDB KV backend for Crux (alternative)."
+  "LMDB KV backend for XTDB (alternative)."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]

@@ -78,7 +78,7 @@ public class JXtdbNodeTest {
 
     /*
     IXtdb tests.
-    Note that not testing the ones that return an IXtdbDatasource as these will be tested as part of JCruxDatasourceTest
+    Note that not testing the ones that return an IXtdbDatasource as these will be tested as part of JXTDBDatasourceTest
      */
     @Test
     public void statusTest() {

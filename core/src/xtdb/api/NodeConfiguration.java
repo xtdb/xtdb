@@ -7,9 +7,9 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
- * Class to configure a Crux node.
+ * Class to configure an XTDB node.
  *
- * See https://opencrux.com/reference/configuration.html for examples.
+ * See https://xtdb.com/reference/configuration.html for examples.
  */
 @SuppressWarnings("unused")
 public final class NodeConfiguration {

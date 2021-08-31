@@ -2,7 +2,7 @@
 
 Development Status: Alpha
 
-A Crux module that allows you to pipe verified https://www.corda.net/[Corda] transactions into a Crux node, to then query using Crux's bitemporal Datalog query engine.
+A XTDB module that allows you to pipe verified https://www.corda.net/[Corda] transactions into an XTDB node, to then query using XTDB's bitemporal Datalog query engine.
 
 NOTE: For an introduction to Corda, check out the  https://docs.corda.net/docs/corda-os/4.8/tutorials-index.html[tutorials on the Corda site].
 
@@ -15,10 +15,10 @@ build.gradle.kts::
 [source,kotlin,subs=attributes+]
 ----
 // Main library
-implementation("com.xtdb-labs", "xtdb-corda", "1.18.1")
+implementation("com.xtdb.labs", "xtdb-corda", "1.18.1")
 
 // Library for inclusion in contract JARs
-implementation("com.xtdb-labs", "xtdb-corda-state", "1.18.1")
+implementation("com.xtdb.labs", "xtdb-corda-state", "1.18.1")
 ----
 
 pom.xml::
@@ -26,14 +26,14 @@ pom.xml::
 [source,xml,subs=attributes+]
 ----
 <dependency>
-    <groupId>com.xtdb-labs</groupId>
+    <groupId>com.xtdb.labs</groupId>
     <artifactId>xtdb-corda</artifactId>
     <version>1.18.1</version>
 </dependency>
 
 <!-- Library for inclusion in contract JARs -->
 <dependency>
-    <groupId>com.xtdb-labs</groupId>
+    <groupId>com.xtdb.labs</groupId>
     <artifactId>xtdb-corda-state</artifactId>
     <version>1.18.1</version>
 </dependency>
@@ -42,7 +42,7 @@ pom.xml::
 
 === Corda Service
 
-To set up a Crux node within Corda, create a Corda Service:
+To set up an XTDB node within Corda, create a Corda Service:
 
 [source,kotlin]
 ----
@@ -55,11 +55,11 @@ class XtdbService(private val serviceHub: AppServiceHub) : SingletonSerializable
 }
 ----
 
-This is a minimal configuration - see the main xref:configuration.adoc[Crux configuration] documentation for how to further configure the Crux node within the `startXtdbNode` block.
+This is a minimal configuration - see the main xref:configuration.adoc[XTDB configuration] documentation for how to further configure the XTDB node within the `startXtdbNode` block.
 
-== Mapping Corda documents into Crux
+== Mapping Corda documents into XTDB
 
-By default, any Corda states that implement `xtdb.corda.state.XtdbState` will be indexed into Crux:
+By default, any Corda states that implement `xtdb.corda.state.XtdbState` will be indexed into XTDB:
 
 [source,kotlin]
 ----
@@ -70,9 +70,9 @@ data class IOUState(val value: Int,
                     override val linearId: UniqueIdentifier = UniqueIdentifier()) :
     LinearState, XtdbState {
 
-    override val cruxId = linearId.id
+    override val xtdbId = linearId.id
 
-    override val cruxDoc: Map<String, Any> = mapOf(
+    override val xtdbDoc: Map<String, Any> = mapOf(
         "iou-state/value" to value,
         "iou-state/lender" to lender.name.toString(),
         "iou-state/borrower" to borrower.name.toString())
@@ -97,11 +97,11 @@ class XtdbService(private val serviceHub: AppServiceHub) : SingletonSerializable
 }
 ----
 
-In the same way as each Corda node will only see a subset of transactions of the wider Corda network, the Crux node will only be able to index the transactions of its associated Corda node.
+In the same way as each Corda node will only see a subset of transactions of the wider Corda network, the XTDB node will only be able to index the transactions of its associated Corda node.
 
-== Querying Crux
+== Querying XTDB
 
-To access the standard Crux query API, you can make the Crux node available as a field on your Corda service (as above), and then query Crux xref:queries.adoc[as normal].
+To access the standard XTDB query API, you can make the XTDB node available as a field on your Corda service (as above), and then query XTDB xref:queries.adoc[as normal].
 
 [source,kotlin]
 ----

@@ -1,6 +1,6 @@
 (ns xtdb.http-server
-  "HTTP API for Crux.
-  The optional SPARQL handler requires juxt.crux/rdf."
+  "HTTP API for XTDB.
+  The optional SPARQL handler requires com.xtdb.labs/xtdb-rdf."
   (:require [juxt.clojars-mirrors.camel-snake-kebab.v0v4v2.camel-snake-kebab.core :as csk]
             [clojure.edn :as edn]
             [clojure.instant :as instant]
@@ -45,10 +45,10 @@
 
 (s/def ::db-spec (s/keys :opt-un [::util/valid-time ::util/tx-time ::util/tx-id]))
 
-(defn- db-handler [crux-node]
+(defn- db-handler [xtdb-node]
   (fn [req]
     (let [{:keys [valid-time tx-time tx-id]} (get-in req [:parameters :query])
-          db (util/db-for-request crux-node {:valid-time valid-time
+          db (util/db-for-request xtdb-node {:valid-time valid-time
                                              :tx-time tx-time
                                              :tx-id tx-id})]
       (resp/response (merge {::xt/valid-time (xt/valid-time db)}
@@ -57,11 +57,11 @@
 (s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
                                 :opt-un [::util/valid-time ::util/tx-time ::util/tx-id]))
 
-(defn- entity-tx [crux-node]
+(defn- entity-tx [xtdb-node]
   (fn [req]
     (let [{:keys [eid eid-edn eid-json valid-time tx-time tx-id]} (get-in req [:parameters :query])
           eid (or eid-edn eid-json eid)
-          db (util/db-for-request crux-node {:valid-time valid-time
+          db (util/db-for-request xtdb-node {:valid-time valid-time
                                              :tx-time tx-time
                                              :tx-id tx-id})
           entity-tx (xt/entity-tx db eid)]
@@ -82,7 +82,7 @@
     (reify
       mfc/Decode
       (decode [_ data _]
-        (-> (json/read-value data http-json/crux-object-mapper)
+        (-> (json/read-value data http-json/xtdb-object-mapper)
             (update :tx-ops (fn [tx-ops]
                               (->> tx-ops
                                    (mapv (fn [tx-op]
@@ -100,10 +100,10 @@
 (s/def ::tx-ops vector?)
 (s/def ::submit-tx-spec (s/keys :req-un [::tx-ops]))
 
-(defn- submit-tx [crux-node]
+(defn- submit-tx [xtdb-node]
   (fn [req]
     (let [tx-ops (get-in req [:parameters :body :tx-ops])
-          {::xt/keys [tx-time] :as submitted-tx} (xt/submit-tx crux-node tx-ops)]
+          {::xt/keys [tx-time] :as submitted-tx} (xt/submit-tx xtdb-node tx-ops)]
       (-> {:status 202
            :body submitted-tx}
           (add-last-modified tx-time)))))
@@ -126,34 +126,34 @@
    (-> (util/->default-muuntaja {:json-encode-fn tx-log-json-encode})
        (assoc :return :output-stream))))
 
-(defn- tx-log [crux-node]
+(defn- tx-log [xtdb-node]
   (fn [req]
     (let [{:keys [with-ops? after-tx-id]} (get-in req [:parameters :query])]
       (-> {:status 200
-           :body {:results (xt/open-tx-log crux-node after-tx-id with-ops?)}
+           :body {:results (xt/open-tx-log xtdb-node after-tx-id with-ops?)}
            :return :output-stream}
-          (add-last-modified (::xt/tx-time (xt/latest-completed-tx crux-node)))))))
+          (add-last-modified (::xt/tx-time (xt/latest-completed-tx xtdb-node)))))))
 
 (s/def ::sync-spec (s/keys :opt-un [::util/tx-time ::util/timeout]))
 
-(defn- sync-handler [crux-node]
+(defn- sync-handler [xtdb-node]
   (fn [req]
     (let [{:keys [timeout tx-time]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))
           last-modified (if tx-time
-                          (xt/await-tx-time crux-node tx-time timeout)
-                          (xt/sync crux-node timeout))]
+                          (xt/await-tx-time xtdb-node tx-time timeout)
+                          (xt/sync xtdb-node timeout))]
       (-> {:status 200
            :body {::xt/tx-time last-modified}}
           (add-last-modified last-modified)))))
 
 (s/def ::await-tx-time-spec (s/keys :req-un [::util/tx-time] :opt-un [::util/timeout]))
 
-(defn- await-tx-time-handler [crux-node]
+(defn- await-tx-time-handler [xtdb-node]
   (fn [req]
     (let [{:keys [timeout tx-time]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))]
-      (let [last-modified (xt/await-tx-time crux-node tx-time timeout)]
+      (let [last-modified (xt/await-tx-time xtdb-node tx-time timeout)]
         (->
          {:status 200
           :body {::xt/tx-time last-modified}}
@@ -161,60 +161,60 @@
 
 (s/def ::await-tx-spec (s/keys :req-un [::util/tx-id] :opt-un [::util/timeout]))
 
-(defn- await-tx-handler [crux-node]
+(defn- await-tx-handler [xtdb-node]
   (fn [req]
     (let [{:keys [timeout tx-id]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))
-          {::xt/keys [tx-time] :as tx} (xt/await-tx crux-node {::xt/tx-id tx-id} timeout)]
+          {::xt/keys [tx-time] :as tx} (xt/await-tx xtdb-node {::xt/tx-id tx-id} timeout)]
       (-> {:status 200, :body tx}
           (add-last-modified tx-time)))))
 
-(defn- attribute-stats [crux-node]
+(defn- attribute-stats [xtdb-node]
   (fn [_]
     {:status 200
-     :body (xt/attribute-stats crux-node)}))
+     :body (xt/attribute-stats xtdb-node)}))
 
 (s/def ::tx-committed-spec (s/keys :req-un [::util/tx-id]))
 
-(defn- tx-committed? [crux-node]
+(defn- tx-committed? [xtdb-node]
   (fn [req]
     (try
       (let [tx-id (get-in req [:parameters :query :tx-id])]
         {:status 200
-         :body {:tx-committed? (xt/tx-committed? crux-node {::xt/tx-id tx-id})}})
+         :body {:tx-committed? (xt/tx-committed? xtdb-node {::xt/tx-id tx-id})}})
       (catch NodeOutOfSyncException e
         {:status 400, :body e}))))
 
-(defn latest-completed-tx [crux-node]
+(defn latest-completed-tx [xtdb-node]
   (fn [_]
-    (if-let [latest-completed-tx (xt/latest-completed-tx crux-node)]
+    (if-let [latest-completed-tx (xt/latest-completed-tx xtdb-node)]
       {:status 200
        :body latest-completed-tx}
       {:status 404
        :body {:error "No latest-completed-tx found."}})))
 
-(defn latest-submitted-tx [crux-node]
+(defn latest-submitted-tx [xtdb-node]
   (fn [_]
-    (if-let [latest-submitted-tx (xt/latest-submitted-tx crux-node)]
+    (if-let [latest-submitted-tx (xt/latest-submitted-tx xtdb-node)]
       {:status 200
        :body latest-submitted-tx}
       {:status 404
        :body {:error "No latest-submitted-tx found."}})))
 
-(defn active-queries [crux-node]
+(defn active-queries [xtdb-node]
   (fn [_]
     {:status 200
-     :body (xt/active-queries crux-node)}))
+     :body (xt/active-queries xtdb-node)}))
 
-(defn recent-queries [crux-node]
+(defn recent-queries [xtdb-node]
   (fn [_]
     {:status 200
-     :body (xt/recent-queries crux-node)}))
+     :body (xt/recent-queries xtdb-node)}))
 
-(defn slowest-queries [crux-node]
+(defn slowest-queries [xtdb-node]
   (fn [_]
     {:status 200
-     :body (xt/slowest-queries crux-node)}))
+     :body (xt/slowest-queries xtdb-node)}))
 
 (def ^:private sparql-available?
   (try ; you can change it back to require when clojure.core fixes it to be thread-safe
@@ -223,10 +223,10 @@
     (catch IOException _
       false)))
 
-(defn sparqql [crux-node]
+(defn sparqql [xtdb-node]
   (fn [req]
     (when sparql-available?
-      ((resolve 'xtdb.sparql.protocol/sparql-query) crux-node req))))
+      ((resolve 'xtdb.sparql.protocol/sparql-query) xtdb-node req))))
 
 (defn- add-response-format [handler format]
   (fn [req]
@@ -314,8 +314,8 @@
                                                    (m/slurp)
                                                    (json/read-value))}}))))
 
-(defn- ->crux-router [{{:keys [^String jwks, read-only?]} :http-options
-                       :keys [crux-node], :as opts}]
+(defn- ->xtdb-router [{{:keys [^String jwks, read-only?]} :http-options
+                       :keys [xtdb-node], :as opts}]
   (let [opts (-> opts (update :http-options dissoc :jwks))
         query-handler {:muuntaja (query/->query-muuntaja opts)
                        :summary "Query"
@@ -328,7 +328,7 @@
     (rr/router [["/" {:no-doc true
                       :get (fn [_] (resp/redirect "/_xtdb/query"))}]
                 ["/_xtdb"
-                 ["/db" (-> {:get (db-handler crux-node)
+                 ["/db" (-> {:get (db-handler xtdb-node)
                              :parameters {:query ::db-spec}
                              :summary "DB"
                              :description "Get the resolved db-basis for the given valid-time/transactoin"}
@@ -348,32 +348,32 @@
                                (with-example "query-response"))]
                  ["/query.csv" (assoc query-handler :middleware [[add-response-format "text/csv"]] :no-doc true)]
                  ["/query.tsv" (assoc query-handler :middleware [[add-response-format "text/tsv"]] :no-doc true)]
-                 ["/entity-tx" (-> {:get (entity-tx crux-node)
+                 ["/entity-tx" (-> {:get (entity-tx xtdb-node)
                                     :summary "Entity Tx"
                                     :description "Get transactional information an particular entity"
                                     :parameters {:query ::entity-tx-spec}}
                                    (with-example "entity-tx-response"))]
-                 ["/attribute-stats" (-> {:get (attribute-stats crux-node)
+                 ["/attribute-stats" (-> {:get (attribute-stats xtdb-node)
                                           :summary "Attribute Stats"
                                           :description "Get frequencies of indexed attributes"
                                           :muuntaja (m/create (util/->default-muuntaja {:json-encode-fn identity}))}
                                          (with-example "attribute-stats-response"))]
-                 ["/sync" (-> {:get (sync-handler crux-node)
+                 ["/sync" (-> {:get (sync-handler xtdb-node)
                                :summary "Sync"
                                :description "Wait until the Kafka consumer’s lag is back to 0"
                                :parameters {:query ::sync-spec}}
                               (with-example "sync-response"))]
-                 ["/await-tx" (-> {:get (await-tx-handler crux-node)
+                 ["/await-tx" (-> {:get (await-tx-handler xtdb-node)
                                    :summary "Await Tx"
                                    :description "Wait until the node has indexed a transaction at or past the supplied tx-id"
                                    :parameters {:query ::await-tx-spec}}
                                   (with-example "await-tx-response"))]
-                 ["/await-tx-time" (-> {:get (await-tx-time-handler crux-node)
+                 ["/await-tx-time" (-> {:get (await-tx-time-handler xtdb-node)
                                         :summary "Await Tx Time"
                                         :description "Wait until the node has indexed a transaction that is past the supplied tx-time"
                                         :parameters {:query ::await-tx-time-spec}}
                                        (with-example "await-tx-time-response"))]
-                 ["/tx-log" (-> {:get (tx-log crux-node)
+                 ["/tx-log" (-> {:get (tx-log xtdb-node)
                                  :summary "Tx Log"
                                  :description "Get a list of all transactions"
                                  :muuntaja ->tx-log-muuntaja
@@ -385,44 +385,44 @@
                                     :post (if read-only?
                                             (fn [_] {:status 403
                                                      :body "forbidden: read-only HTTP node"})
-                                            (submit-tx crux-node))
+                                            (submit-tx xtdb-node))
                                     :parameters {:body ::submit-tx-spec}}
                                    (with-example "submit-tx-response"))]
-                 ["/tx-committed" (-> {:get (tx-committed? crux-node)
+                 ["/tx-committed" (-> {:get (tx-committed? xtdb-node)
                                        :summary "Tx Committed"
                                        :description "Checks if a submitted tx was successfully committed"
                                        :parameters {:query ::tx-committed-spec}}
                                       (with-example "tx-committed-response"))]
-                 ["/latest-completed-tx" (-> {:get (latest-completed-tx crux-node)
+                 ["/latest-completed-tx" (-> {:get (latest-completed-tx xtdb-node)
                                               :summary "Latest Completed Tx"
                                               :description "Get the latest transaction to have been indexed by this node"}
                                              (with-example "latest-completed-tx-response"))]
-                 ["/latest-submitted-tx" (-> {:get (latest-submitted-tx crux-node)
+                 ["/latest-submitted-tx" (-> {:get (latest-submitted-tx xtdb-node)
                                               :summary "Latest Submitted Tx"
                                               :description "Get the latest transaction to have been submitted to this cluster"}
                                              (with-example "latest-submitted-tx-response"))]
-                 ["/active-queries" (-> {:get (active-queries crux-node)
+                 ["/active-queries" (-> {:get (active-queries xtdb-node)
                                          :summary "Active Queries"
                                          :description "Get a list of currently running queries"
                                          :muuntaja query-list-muuntaja}
                                         (with-example "active-queries-response"))]
-                 ["/recent-queries" (-> {:get (recent-queries crux-node)
+                 ["/recent-queries" (-> {:get (recent-queries xtdb-node)
                                          :summary "Recent Queries"
                                          :description "Get a list of recently completed/failed queries"
                                          :muuntaja query-list-muuntaja}
                                         (with-example "recent-queries-response"))]
-                 ["/slowest-queries" (-> {:get (slowest-queries crux-node)
+                 ["/slowest-queries" (-> {:get (slowest-queries xtdb-node)
                                           :summary "Slowest Queries"
                                           :description "Get a list of slowest completed/failed queries ran on the node"
                                           :muuntaja query-list-muuntaja}
                                          (with-example "slowest-queries-response"))]
-                 ["/sparql" {:get (sparqql crux-node)
-                             :post (sparqql crux-node)
+                 ["/sparql" {:get (sparqql xtdb-node)
+                             :post (sparqql xtdb-node)
                              :no-doc true}]
 
                  ["/swagger.json"
                   {:get {:no-doc true
-                         :swagger {:info {:title "Crux API"}}
+                         :swagger {:info {:title "XTDB API"}}
                          :handler (swagger/create-swagger-handler)
                          :muuntaja (m/create (assoc (util/->default-muuntaja {}) :default-format "application/json"))}}]]]
 
@@ -444,28 +444,28 @@
                                jwks (conj #(wrap-jwt % (JWKSet/parse jwks))))}})))
 
 ;; entry point for users including our handler in their own server
-(defn ->crux-handler [crux-node http-options]
+(defn ->xtdb-handler [xtdb-node http-options]
   (rr/routes
-   (rr/ring-handler (->crux-router {:crux-node crux-node
+   (rr/ring-handler (->xtdb-router {:xtdb-node xtdb-node
                                     :http-options http-options}))
    (rr/create-resource-handler {:path "/"})))
 
-(alter-meta! #'->crux-handler assoc :arglists '([crux-node {:keys [jwks read-only? server-label]}]))
+(alter-meta! #'->xtdb-handler assoc :arglists '([xtdb-node {:keys [jwks read-only? server-label]}]))
 
-(defn ->server {::sys/deps {:crux-node :xtdb/node}
+(defn ->server {::sys/deps {:xtdb-node :xtdb/node}
                 ::sys/args {:port {:spec ::sys/nat-int
                                    :doc "Port to start the HTTP server on"
                                    :default default-server-port}
                             :read-only? {:spec ::sys/boolean
-                                         :doc "Whether to start the Crux HTTP server in read-only mode"
+                                         :doc "Whether to start the XTDB HTTP server in read-only mode"
                                          :default false}
                             :jwks {:spec ::sys/string
                                    :doc "JWKS string to validate against"}
                             :server-label {:spec ::sys/string}
                             :jetty-opts {:doc "Extra options to pass to Jetty, see https://ring-clojure.github.io/ring/ring.adapter.jetty.html"}}}
-  [{:keys [crux-node port jetty-opts] :as options}]
-  (let [server (j/run-jetty (rr/ring-handler (->crux-router {:crux-node crux-node
-                                                             :http-options (dissoc options :crux-node :port :jetty-opts)})
+  [{:keys [xtdb-node port jetty-opts] :as options}]
+  (let [server (j/run-jetty (rr/ring-handler (->xtdb-router {:xtdb-node xtdb-node
+                                                             :http-options (dissoc options :xtdb-node :port :jetty-opts)})
                                              (rr/routes
                                               (rr/create-resource-handler {:path "/"})
                                               (rr/create-default-handler)))

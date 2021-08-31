@@ -28,7 +28,7 @@
         (.status n)
         (t/is false))
       (catch IllegalStateException e
-        (t/is (= "Crux node is closed" (.getMessage e)))))))
+        (t/is (= "XTDB node is closed" (.getMessage e)))))))
 
 (t/deftest test-start-node-should-throw-missing-argument-exception
   (t/is (thrown-with-msg? IllegalArgumentException
@@ -44,7 +44,7 @@
     (with-open [n (xt/start-node {:xtdb/tx-log {:xtdb/module `j/->tx-log, :connection-pool ::j/connection-pool}
                                   :xtdb/document-store {:xtdb/module `j/->document-store, :connection-pool ::j/connection-pool}
                                   ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect,
-                                                       :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
+                                                       :db-spec {:dbname (str (io/file data-dir "xtdbtest"))}}})]
       (t/is n))))
 
 (t/deftest test-can-set-indexes-kv-store
@@ -89,7 +89,7 @@
                                                         :xtdb/document-store {:xtdb/module `j/->document-store, :connection-pool ::j/connection-pool}
                                                         :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
                                                         ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect
-                                                                             :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}}]
+                                                                             :db-spec {:dbname (str (io/file data-dir "xtdbtest"))}}}]
                                             m))]
       (t/is n)
 
@@ -108,7 +108,7 @@
                                                            :xtdb/document-store {:xtdb/module `j/->document-store, :connection-pool ::j/connection-pool}
                                                            :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
                                                            ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect
-                                                                                :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}}]
+                                                                                :db-spec {:dbname (str (io/file data-dir "xtdbtest2"))}}}]
                                                m))]
 
         (t/is (= #{} (.query (.db n2)

@@ -19,7 +19,7 @@
 
 (def query-root-str
   (string/join "\n"
-               [";; Welcome to the Crux Console!"
+               [";; Welcome to the XTDB Console!"
                 ";;"
                 ";; The Console is a tool for exploring your data and helping you write"
                 ";; Datalog queries. The console also displays useful status information."

@@ -71,7 +71,7 @@ class IOUFlowTests {
             }
         }
 
-        // We check Crux gets a transaction
+        // We check XTDB gets a transaction
         for (node in nodes) {
             val xtdbService = node.services.cordaService(XtdbService::class.java)
             val xtdb = xtdbService.node
@@ -82,7 +82,7 @@ class IOUFlowTests {
             assertEquals(1L, xtTx.id)
             assertEquals(1L, xtdb.latestCompletedTx().id)
 
-            // Crux knows about the transaction now
+            // XTDB knows about the transaction now
             assertEquals(
                 listOf(a.info.singleIdentity().name.toString(), b.info.singleIdentity().name.toString(), 1L),
                 xtdb.db(xtTx).query("""
@@ -92,7 +92,7 @@ class IOUFlowTests {
                              [?iou :iou-state/value ?v]]}""".trimIndent())
                     .first()
             )
-            // Crux knows about the transaction three days from now
+            // XTDB knows about the transaction three days from now
             assertEquals(
                 listOf(a.info.singleIdentity().name.toString(), b.info.singleIdentity().name.toString(), 1L),
                 xtdb.db(DBBasis(inThreeDays, xtTx)).query("""
@@ -101,7 +101,7 @@ class IOUFlowTests {
                              [?iou :iou-state/borrower ?b]
                              [?iou :iou-state/value ?v]]}""".trimIndent()).first()
             )
-            // Crux does not know about the transaction three days ago
+            // XTDB does not know about the transaction three days ago
             assertEquals(
                 emptySet(),
                 xtdb.db(DBBasis(threeDaysAgo, xtTx)).query("""
@@ -212,7 +212,7 @@ class IOUFlowTests {
                              [?iou :iou-state/value ?v]]}
                 """.trimIndent()).single())
 
-        // It is the same CRUX fact too
+        // It is the same XTDB fact too
         assertEquals(
                 firstDB.query("""
                     {:find [?id]
@@ -249,7 +249,7 @@ class IOUFlowTests {
         network.runNetwork()
         secondFuture.getOrThrow()
 
-        // We get 2 separate Crux instances, one after each transaction
+        // We get 2 separate XTDB instances, one after each transaction
         val node = a.services.cordaService(XtdbService::class.java).node
         val firstDB = node.db(firstCheckpoint)
         val secondDB = node.db()

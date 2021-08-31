@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
-  CruxCloudStack:
+  CurxCloudStack:
     Type: String
-    Default: crux-cloud
+    Default: curx-cloud
 
 Resources:
   ConsoleRecordSet:
@@ -11,12 +11,12 @@ Resources:
     Properties:
       AliasTarget:
         DNSName:
-          Fn::ImportValue: !Join [':', [!Ref CruxCloudStack, 'LoadBalancerDNSName']]
+          Fn::ImportValue: !Join [':', [!Ref CurxCloudStack, 'LoadBalancerDNSName']]
         EvaluateTargetHealth: false
         HostedZoneId:
-          Fn::ImportValue: !Join [':', [!Ref CruxCloudStack, 'LoadBalancerCanonicalHostedZoneId']]
+          Fn::ImportValue: !Join [':', [!Ref CurxCloudStack, 'LoadBalancerCanonicalHostedZoneId']]
       HostedZoneName: 'xtdb.cloud.'
-      Name: 'console.crux.cloud'
+      Name: 'console.curx.cloud'
       Type: 'A'
 
   ConsoleTargetGroup:
@@ -28,12 +28,12 @@ Resources:
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
       TargetType: ip
-      Name: 'crux-console-demo'
+      Name: 'curx-console-demo'
       Port: 3000
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
-        Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'VPCId']]
+        Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'VPCId']]
       TargetGroupAttributes:
       - Key: deregistration_delay.timeout_seconds
         Value: '10'
@@ -41,19 +41,19 @@ Resources:
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
-      RepositoryName: 'crux-console-demo'
+      RepositoryName: 'curx-console-demo'
 
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: 'crux-console-demo'
+      ClusterName: 'curx-console-demo'
 
   FargateContainerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to the Fargate containers
       VpcId:
-        Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'VPCId']]
+        Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'VPCId']]
 
   EcsSecurityGroupIngressFromPublicALB:
     Type: AWS::EC2::SecurityGroupIngress
@@ -62,7 +62,7 @@ Resources:
       GroupId: !Ref 'FargateContainerSecurityGroup'
       IpProtocol: -1
       SourceSecurityGroupId:
-        Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerSG']]
+        Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'LoadBalancerSG']]
 
   ECSTaskExecutionRole:
     Type: AWS::IAM::Role
@@ -95,15 +95,15 @@ Resources:
     Properties:
       Cpu: '0.5 vCPU'
       Memory: '2GB'
-      Family: 'crux-console-demo'
+      Family: 'curx-console-demo'
       ExecutionRoleArn:
         Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
       RequiresCompatibilities:
         - 'FARGATE'
       NetworkMode: 'awsvpc'
       ContainerDefinitions:
-        - Name: 'crux-console-demo'
-          Image: '955308952094.dkr.ecr.eu-west-1.amazonaws.com/crux-console-demo:latest'
+        - Name: 'curx-console-demo'
+          Image: '955308952094.dkr.ecr.eu-west-1.amazonaws.com/curx-console-demo:latest'
           PortMappings:
             - ContainerPort: 3000
 
@@ -116,9 +116,9 @@ Resources:
       Conditions:
         - Field: host-header
           Values:
-            - 'console.crux.cloud'
+            - 'console.curx.cloud'
       ListenerArn:
-        Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerHTTPSListener']]
+        Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'LoadBalancerHTTPSListener']]
       Priority: 20
 
   Service:
@@ -126,8 +126,8 @@ Resources:
     DependsOn:
       - ConsoleTaskDef
     Properties:
-      ServiceName: 'crux-console-demo'
-      Cluster: 'crux-console-demo'
+      ServiceName: 'curx-console-demo'
+      Cluster: 'curx-console-demo'
       LaunchType: FARGATE
       HealthCheckGracePeriodSeconds: 600
       DeploymentConfiguration:
@@ -141,11 +141,11 @@ Resources:
             - !Ref 'FargateContainerSecurityGroup'
           Subnets:
             - Fn::ImportValue:
-                !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetOne']]
+                !Join [':', [!Ref 'CurxCloudStack', 'PublicSubnetOne']]
             - Fn::ImportValue:
-                !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetTwo']]
+                !Join [':', [!Ref 'CurxCloudStack', 'PublicSubnetTwo']]
       TaskDefinition: !Ref 'ConsoleTaskDef'
       LoadBalancers:
-        - ContainerName: 'crux-console-demo'
+        - ContainerName: 'curx-console-demo'
           ContainerPort: 3000
           TargetGroupArn: !Ref 'ConsoleTargetGroup'

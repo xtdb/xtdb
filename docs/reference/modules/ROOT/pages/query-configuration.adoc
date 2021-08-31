@@ -1,6 +1,6 @@
 = Query Engine
 
-There are a number of different defaults that can be overridden within the Crux query engine.
+There are a number of different defaults that can be overridden within the XTDB query engine.
 
 [tabs]
 ====

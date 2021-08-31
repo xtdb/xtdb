@@ -9,7 +9,7 @@
            java.util.function.BiConsumer))
 
 (def ^java.util.concurrent.ThreadFactory subscription-thread-factory
-  (xio/thread-factory "crux-tx-subscription"))
+  (xio/thread-factory "xtdb-tx-subscription"))
 
 (defn completable-thread [f]
   (let [fut (CompletableFuture.)

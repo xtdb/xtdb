@@ -1,6 +1,6 @@
 = Embedded Kafka
 
-Crux is ready to work with an embedded Kafka for when you don't have an independently
+XTDB is ready to work with an embedded Kafka for when you don't have an independently
 running Kafka available to connect to (such as during development).
 
 [#embedded-kafka-dependency]
@@ -8,8 +8,8 @@ running Kafka available to connect to (such as during development).
 
 [source,clojure,subs=attributes+]
 ----
-com.xtdb/xtdb-core {:mvn/version "{crux_version}"}
-com.xtdb/xtdb-kafka-embedded {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-kafka-embedded {:mvn/version "{xtdb_version}"}
 ----
 
 [#embedded-kafka-start]

@@ -1,6 +1,6 @@
 = xtdb-rocksdb
 
-https://rocksdb.org/[RocksDB] is often used as the data store for Crux's query indices, but can also be used as a transaction log and/or document store in single node clusters.
+https://rocksdb.org/[RocksDB] is often used as the data store for XTDB's query indices, but can also be used as a transaction log and/or document store in single node clusters.
 
 .deps.edn
 [source,clojure]
@@ -18,4 +18,4 @@ com.xtdb/xtdb-rocksdb {:mvn/version "1.18.1"}
 </dependency>
 ----
 
-For more details, see the https://opencrux.com/reference/rocksdb.html[RocksDB documentation]
+For more details, see the https://xtdb.com/reference/rocksdb.html[RocksDB documentation]

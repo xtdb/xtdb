@@ -1,8 +1,8 @@
-= Crux Lucene
+= XTDB Lucene
 
-Lucene module for Crux making use of https://lucene.apache.org/[Apache Lucene].
+Lucene module for XTDB making use of https://lucene.apache.org/[Apache Lucene].
 
-`xtdb-lucene` runs in-process as part of the Crux node as a Crux module.
+`xtdb-lucene` runs in-process as part of the XTDB node as an XTDB module.
 
 .deps.edn
 [source,clojure]
@@ -20,7 +20,7 @@ com.xtdb/xtdb-lucene {:mvn/version "1.18.1"}
 </dependency>
 ----
 
-For more details, see the https://opencrux.com/reference/lucene.html[Crux Lucene documentation]
+For more details, see the https://xtdb.com/reference/lucene.html[XTDB Lucene documentation]
 
 == Scoring
 

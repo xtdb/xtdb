@@ -1,6 +1,6 @@
 = xtdb-kafka-connect
 
-*Documentation/QuickStart Guides* can be found https://opencrux.com/reference/kafka-connect.html[here].
+*Documentation/QuickStart Guides* can be found https://xtdb.com/reference/kafka-connect.html[here].
 
 === Alpha
 

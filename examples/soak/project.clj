@@ -34,5 +34,5 @@
                  [org.apache.httpcomponents/httpclient "4.5.13"]]
 
   :jvm-opts ["-Xms3g" "-Xmx3g"]
-  :uberjar-name "crux-soak.jar"
+  :uberjar-name "xtdb-soak.jar"
   :pedantic? :warn)

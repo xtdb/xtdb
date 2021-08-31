@@ -4,7 +4,7 @@
 
 Download the connector from Confluent hub, then unzip the downloaded folder:
 ----
-unzip juxt-kafka-connect-crux-1.18.1.zip
+unzip juxt-kafka-connect-xtdb-1.18.1.zip
 ----
 
 Navigate into the base of the Kafka folder, then run the following commands:
@@ -15,18 +15,18 @@ cp $CONNECTOR_PATH/etc/*.properties $KAFKA_HOME/config
 ----
 
 
-The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *Crux node* to communicate with.
+The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *XTDB node* to communicate with.
 
-== Creating the Crux node
+== Creating the XTDB node
 
-To use our connector, you must first have a *Crux node* connected to Kafka. To do this, we start by adding the following dependencies to a project:
+To use our connector, you must first have a *XTDB node* connected to Kafka. To do this, we start by adding the following dependencies to a project:
 
 [source,clj, subs=attributes+]
 ----
-com.xtdb/xtdb-core {:mvn/version "{crux_version}"}
-com.xtdb/xtdb-kafka {:mvn/version "{crux_version}"}
-com.xtdb/xtdb-http-server {:mvn/version "{crux_version}"}
-com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-kafka {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-http-server {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{xtdb_version}"}
 ----
 
 Ensure first that you have a running Kafka broker to connect to. We import the dependencies into a file or REPL, then create our Kafka connected _'node'_ with an associated http server for the connector to communicate with:
@@ -48,7 +48,7 @@ Ensure first that you have a running Kafka broker to connect to. We import the d
 Run the following command within the base of the Kafka folder, to create a worker which connects to the _'connect-test'_ topic, ready to *send* messages to the _node_. This also makes use of *connect-file-source*, checking for changes in a file called _'test.txt'_:
 
 ----
-./bin/connect-standalone.sh config/connect-standalone.properties config/local-crux-sink.properties config/connect-file-source.properties
+./bin/connect-standalone.sh config/connect-standalone.properties config/local-xtdb-sink.properties config/connect-file-source.properties
 ----
 
 Run the following within your Kafka directory, to add a line of JSON to _'test.txt'_:
@@ -71,11 +71,11 @@ Now, verify that this was transacted within your REPL:
 Run the following command within the base of the Kafka folder, to create a worker connects to the 'connect-test' topic, ready to *receive* messages from the _node_. This also makes use of 'connect-file-sink', outputting transactions to your _node_ within _'test.sink.txt'_:
 
 ----
-./bin/connect-standalone.sh config/connect-standalone.properties config/local-crux-source.properties config/connect-file-sink.properties
+./bin/connect-standalone.sh config/connect-standalone.properties config/local-xtdb-source.properties config/connect-file-sink.properties
 ----
 
 
-Within your REPL, transact an element into Crux:
+Within your REPL, transact an element into XTDB:
 
 [source,clj]
 ----

@@ -1,7 +1,7 @@
 FROM clojure:openjdk-11-tools-deps
 
 WORKDIR /usr/lib/xtdb
-VOLUME /var/lib/crux
+VOLUME /var/lib/xtdb
 ENTRYPOINT ["clojure", "-m", "xtdb.main"]
 EXPOSE 3000
 

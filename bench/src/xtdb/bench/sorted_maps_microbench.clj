@@ -33,7 +33,7 @@
     (run-benches node [:subsequent-submits :subsequent-await])))
 
 (comment
-  (fix/with-tmp-dir "crux" [tmp-dir]
+  (fix/with-tmp-dir "xtdb" [tmp-dir]
     (with-open [ek (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file tmp-dir "zk-data")
                                                   :kafka-dir (io/file tmp-dir "kafka-data")
                                                   :kafka-log-dir (io/file tmp-dir "kafka-log")})

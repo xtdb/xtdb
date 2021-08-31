@@ -58,7 +58,7 @@ public interface IXtdbDatasource extends Closeable {
      * e.g. `db.pull("[:film/name :film/year]", "spectre")`
      *   =&gt; `{:film/name "Spectre", :film/year 2015}`
      *
-     * @param projection An EQL projection spec as a String or Clojure data structure - see https://opencrux.com/reference/queries.html#pull
+     * @param projection An EQL projection spec as a String or Clojure data structure - see https://xtdb.com/reference/queries.html#pull
      * @param eid entity ID
      * @return the requested projection starting at the given entity
      */
@@ -70,7 +70,7 @@ public interface IXtdbDatasource extends Closeable {
      * e.g. `db.pullMany("[:film/name :film/year]", Arrays.asList("spectre", "skyfall"))`
      *   =&gt; `[{:film/name "Spectre", :film/year 2015}, {:film/name "Skyfall", :film/year 2012}]`
      *
-     * @param projection An EQL projection spec as a String or Clojure data structure - see https://opencrux.com/reference/queries.html#pull
+     * @param projection An EQL projection spec as a String or Clojure data structure - see https://xtdb.com/reference/queries.html#pull
      * @param eids entity IDs
      * @return the requested projections starting at the given entities
      */
@@ -82,7 +82,7 @@ public interface IXtdbDatasource extends Closeable {
      * e.g. `db.pullMany("[:film/name :film/year]", "spectre", "skyfall")`
      *   =&gt; `[{:film/name "Spectre", :film/year 2015}, {:film/name "Skyfall", :film/year 2012}]`
      *
-     * @param projection An EQL projection spec - see https://opencrux.com/reference/queries.html#pull
+     * @param projection An EQL projection spec - see https://xtdb.com/reference/queries.html#pull
      * @param eids entity IDs
      * @return the requested projections starting at the given entities
      */

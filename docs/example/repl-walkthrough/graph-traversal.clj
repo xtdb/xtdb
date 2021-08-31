@@ -1,4 +1,4 @@
-;; load a repl with the latest crux-core dependency, e.g. using clj:
+;; load a repl with the latest xtdb-core dependency, e.g. using clj:
 ;; $ clj -Sdeps '{:deps {com.xtdb/xtdb-core {:mvn/version "RELEASE"}}}'
 
 (ns walkthrough.graph-traversal
@@ -8,7 +8,7 @@
 
 ;; inspired by http://docs.neo4j.org/chunked/stable/cypher-cookbook-hyperedges.html and https://github.com/Datomic/day-of-datomic/blob/master/tutorial/graph.clj
 
-;; Noteworthy aspects of Crux usage shown below:
+;; Noteworthy aspects of XTDB usage shown below:
 ;; 1) no schema needed
 ;; 2) ability to transact edges before nodes
 ;; 3) keyword IDs

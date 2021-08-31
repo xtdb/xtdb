@@ -58,7 +58,7 @@
                      :reading/ssid ssid})
            *readings-limit* (take *readings-limit*))))))
 
-;; Submits data from devices database into Crux node.
+;; Submits data from devices database into XTDB node.
 (defn submit-ts-devices-data [node]
   (let [info-tx-ops (vec (for [info-doc @info-docs]
                            [::xt/put info-doc]))
@@ -254,7 +254,7 @@
 
 (defn run-devices-bench [node]
   (bench/with-bench-ns :ts-devices
-    (bench/with-crux-dimensions
+    (bench/with-xtdb-dimensions
       (bench/run-bench :ingest
         (bench/with-additional-index-metrics node
           (submit-ts-devices-data node)))
@@ -268,6 +268,6 @@
   (binding [*readings-limit* 1000]
     (bench/with-nodes [node (select-keys bench/nodes ["standalone-rocksdb"])]
       (bench/with-bench-ns :ts-devices
-        (bench/with-crux-dimensions
+        (bench/with-xtdb-dimensions
           (submit-ts-devices-data node)
           (bench/compact-node node))))))

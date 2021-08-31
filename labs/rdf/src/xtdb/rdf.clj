@@ -1,5 +1,5 @@
 (ns ^:no-doc xtdb.rdf
-  "Helpers for loading RDF triples into Crux.
+  "Helpers for loading RDF triples into XTDB.
 
   https://www.w3.org/TR/rdf11-primer/
   https://www.w3.org/TR/n-triples/
@@ -21,14 +21,14 @@
            org.eclipse.rdf4j.model.util.Literals
            org.eclipse.rdf4j.model.impl.SimpleValueFactory))
 
-(def crux-unqualified-iri-prefix "http://juxt.pro/crux/unqualified/")
+(def xtdb-unqualified-iri-prefix "http://xtdb.com/unqualified/")
 
 ;; NOTE: this shifts the parts of the RDF namespace after the first
 ;; slash into the Keyword name.
 (defn iri->kw [^IRI iri]
   (let [iri (NTriplesUtil/unescapeString (str iri))]
-    (if (str/starts-with? iri crux-unqualified-iri-prefix)
-      (keyword (str/replace (str iri) crux-unqualified-iri-prefix ""))
+    (if (str/starts-with? iri xtdb-unqualified-iri-prefix)
+      (keyword (str/replace (str iri) xtdb-unqualified-iri-prefix ""))
       (keyword iri))))
 
 (defn bnode->kw [^BNode bnode]
@@ -239,7 +239,7 @@
         (.createBNode factory (name x))
         (.createIRI factory (if (keyword? x)
                               (cond->> (subs (str x) 1)
-                                (nil? (namespace x)) (str crux-unqualified-iri-prefix))
+                                (nil? (namespace x)) (str xtdb-unqualified-iri-prefix))
                               (str x))))
       (Literals/createLiteral factory x))))
 

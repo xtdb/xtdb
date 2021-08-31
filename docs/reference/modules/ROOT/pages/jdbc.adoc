@@ -1,6 +1,6 @@
 = JDBC
 
-Crux nodes can use JDBC databases to store their transaction logs and/or document stores.
+XTDB nodes can use JDBC databases to store their transaction logs and/or document stores.
 
 image::jdbc-modes.svg?sanitize=true[Local Cluster Mode,450,480,align="center"]
 
@@ -12,7 +12,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-jdbc {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-jdbc {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -22,7 +22,7 @@ pom.xml::
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-jdbc</artifactId>
-    <version>{crux_version}</version>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -31,7 +31,7 @@ pom.xml::
 
 JDBC transaction logs and document stores depend on a 'connection pool' component - if you use both, they can share the same connection pool.
 
-Connection pools require a JDBC 'dialect' - out of the box, Crux supports the following:
+Connection pools require a JDBC 'dialect' - out of the box, XTDB supports the following:
 
 [#dialects]
 * H2: `+xtdb.jdbc.h2/->dialect+`
@@ -48,7 +48,7 @@ The connection pool also requires a `db-spec` - a map containing either a full `
 Any other attributes supplied (`user`, `password`, say) are appended to the URL as query parameters - see your individual JDBC driver for full details.
 
 [#pool-opts]
-Crux uses https://github.com/brettwooldridge/HikariCP[HikariCP] to provide connection pools.
+XTDB uses https://github.com/brettwooldridge/HikariCP[HikariCP] to provide connection pools.
 You can pass options directly to https://javadoc.io/static/com.zaxxer/HikariCP/3.2.0/com/zaxxer/hikari/HikariConfig.html[`HikariConfig`] via `pool-opts` - for example, to `setMaximumPoolSize`, add `maximumPoolSize` to your configuration.
 
 === JDBC as a Transaction Log

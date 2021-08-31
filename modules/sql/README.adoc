@@ -1,8 +1,8 @@
-= Crux SQL
+= XTDB SQL
 
-SQL adapter for Crux making use of https://calcite.apache.org/[Apache Calcite].
+SQL adapter for XTDB making use of https://calcite.apache.org/[Apache Calcite].
 
-`xtdb-sql` runs in-process as part of the Crux node as a Crux module.
+`xtdb-sql` runs in-process as part of the XTDB node as an XTDB module.
 
 .deps.edn
 [source,clojure]
@@ -20,4 +20,4 @@ com.xtdb/xtdb-sql {:mvn/version "1.18.1"}
 </dependency>
 ----
 
-For more details, see the https://opencrux.com/reference/sql.html[Crux SQL documentation]
+For more details, see the https://xtdb.com/reference/sql.html[XTDB SQL documentation]

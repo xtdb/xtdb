@@ -1,10 +1,10 @@
 = RocksDB
 
-https://rocksdb.org/[RocksDB] is often used as the data store for Crux's query indices, but can also be used as a transaction log and/or document store in single node clusters.
+https://rocksdb.org/[RocksDB] is often used as the data store for XTDB's query indices, but can also be used as a transaction log and/or document store in single node clusters.
 
 == Project Dependency
 
-In order to use RocksDB within Crux, you must first add RocksDB as a project dependency:
+In order to use RocksDB within XTDB, you must first add RocksDB as a project dependency:
 
 [tabs]
 ====
@@ -12,7 +12,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -22,7 +22,7 @@ pom.xml::
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-rocksdb</artifactId>
-    <version>{crux_version}</version>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -73,7 +73,7 @@ EDN::
 ----
 ====
 
-It is generally advised to use independent RocksDB instances for each component, although using a single instance for the transaction log and document store is possible. Do not share the RocksDB instance used for the index store with other components as you cannot then perform Crux version upgrades.
+It is generally advised to use independent RocksDB instances for each component, although using a single instance for the transaction log and document store is possible. Do not share the RocksDB instance used for the index store with other components as you cannot then perform XTDB version upgrades.
 
 == Dependencies
 

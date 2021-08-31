@@ -32,11 +32,11 @@
 (def ^:const index-id-size Byte/BYTES)
 
 ;; if you absolutely have to shuffle index numbers around on a version bump, don't move these four.
-(def ^:const index-version-index-id 6)  ; to allow crux upgrades.
+(def ^:const index-version-index-id 6)  ; to allow XTDB upgrades.
                                         ; rebuild indexes from kafka on backward incompatible
 (def ^:const content-hash->doc-index-id 0) ; index for object store
 (def ^:const tx-events-index-id 8) ; used in standalone TxLog
-(def ^:const meta-key->value-index-id 4) ; for crux own needs
+(def ^:const meta-key->value-index-id 4) ; for XTDB's own needs
 
 (def ^:const ave-index-id 1)
 (def ^:const ecav-index-id 2)

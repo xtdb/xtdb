@@ -73,14 +73,14 @@
 
 (defn run-node [{:keys [server-port] :as options} with-node-fn]
   (with-open [embedded-kafka (ek/start-embedded-kafka embedded-kafka-options)
-              crux-node (xt/start-cluster-node options)]
-    (with-node-fn crux-node)))
+              xtdb-node (xt/start-cluster-node options)]
+    (with-node-fn xtdb-node)))
 
 (defn -main []
   (run-node
     crux-options
-    (fn [crux-node]
-      (def crux crux-node)
+    (fn [xtdb-node]
+      (def crux xtdb-node)
       ;; ingest may take a while, more than 15 mins on 2018 15" mbp
       ;;(ingest-data crux)
       (Thread/sleep Long/MAX_VALUE))))
@@ -89,8 +89,8 @@
   (def s (future
            (run-node
              crux-options
-             (fn [crux-node]
-               (def crux crux-node)
+             (fn [xtdb-node]
+               (def crux xtdb-node)
                (Thread/sleep Long/MAX_VALUE))))))
 
 (comment

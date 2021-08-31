@@ -5,14 +5,14 @@ html, body {
     font-family: 'LatoWeb';
     background: url('../gplay.png');
     --mobile-hidden: block;
-    --crux-time-height: 2rem;
+    --xtdb-time-height: 2rem;
     --input-time-width: 14rem;
 }
 
 @media only screen and (max-width: 600px) {
     body {
         --mobile-hidden: none;
-        --crux-time-height: 4rem;
+        --xtdb-time-height: 4rem;
         --input-time-width: 10rem;
     }
 }
@@ -111,11 +111,11 @@ html, body {
     display: block;
 }
 
-.crux-logo {
+.xtdb-logo {
     margin-left: 2.5%;
 }
 
-.crux-logo__img {
+.xtdb-logo__img {
     max-height: 3rem;
     max-width: 20vw;
 }
@@ -428,12 +428,12 @@ html, body {
     cursor: pointer;
 }
 
-.crux-time {
+.xtdb-time {
     display: flex;
     align-items: center;
     margin-bottom: .5rem;
     margin-right: 1rem;
-    height: var(--crux-time-height);
+    height: var(--xtdb-time-height);
 }
 
 .query-suggestions {
@@ -922,7 +922,7 @@ ul.entity-group__value li::before {
 }
 
 @media screen and (max-width: 767px) {
-    .crux-time > *:first-child {
+    .xtdb-time > *:first-child {
 	margin-right: 0;
     }
 

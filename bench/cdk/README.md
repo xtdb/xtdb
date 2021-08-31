@@ -1,4 +1,4 @@
-# AWS CDK Deploy of Crux Bench Dashboards and Alerts
+# AWS CDK Deploy of XTDB Bench Dashboards and Alerts
 
 ## Overview
 

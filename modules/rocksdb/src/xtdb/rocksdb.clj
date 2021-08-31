@@ -1,5 +1,5 @@
 (ns ^:no-doc xtdb.rocksdb
-  "RocksDB KV backend for Crux."
+  "RocksDB KV backend for XTDB."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [xtdb.kv :as kv]

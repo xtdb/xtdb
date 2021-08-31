@@ -10,8 +10,8 @@
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search Query TermQuery]))
 
-(def ^:const ^:private field-content-hash "_crux_content_hash")
-(def ^:const ^:private field-eid "_crux_eid")
+(def ^:const ^:private field-content-hash "_xtdb_content_hash")
+(def ^:const ^:private field-eid "_xtdb_eid")
 
 (defrecord MultiFieldIndexer []
   l/LuceneIndexer

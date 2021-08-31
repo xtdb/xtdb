@@ -43,8 +43,8 @@
 (defmacro with-dimensions [dims & body]
   `(with-dimensions* ~dims (fn [] ~@body)))
 
-(defmacro with-crux-dimensions [& body]
-  `(with-dimensions {:crux-commit commit-hash}
+(defmacro with-xtdb-dimensions [& body]
+  `(with-dimensions {:xtdb-commit commit-hash}
      ~@body))
 
 (defn with-timing* [f]
@@ -142,7 +142,7 @@
                         (Duration/ofMillis maximum-time-taken-this-week)
                         (sparkline times-taken)
                         (let [time-taken-seconds (/ time-taken-ms 1000)]
-                          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :time-taken-ms
+                          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :xtdb-commit :time-taken-ms
                                           :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week :times-taken))))]
                (when (and (= bench-type :ingest) doc-count av-count bytes-indexed)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
@@ -172,7 +172,7 @@
                         (Duration/ofMillis minimum-time-taken-this-week)
                         (Duration/ofMillis maximum-time-taken-this-week)
                         (sparkline times-taken)
-                        (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :time-taken-ms
+                        (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :xtdb-commit :time-taken-ms
                                         :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week :times-taken)))]
                (when (= bench-type :ingest)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
@@ -184,7 +184,7 @@
        (string/join " ")))
 
 (defn results->email [bench-results]
-  (str "<h1>Crux bench results</h1>"
+  (str "<h1>XTDB bench results</h1>"
        (->> (for [[bench-ns results] (group-by :bench-ns bench-results)]
               (str (format "<h2>%s</h2>" bench-ns)
                    (->> (for [[crux-node-type results] (group-by :crux-node-type results)]
@@ -340,7 +340,7 @@
 
 (defn with-nodes* [nodes f]
   (->> (for [[node-type ->node] nodes]
-         (f/with-tmp-dir "crux-node" [data-dir]
+         (f/with-tmp-dir "xtdb-node" [data-dir]
            (with-open [node (xt/start-node (->node data-dir))]
              (with-dimensions {:crux-node-type node-type}
                (log/infof "Running bench on %s node." node-type)
@@ -472,7 +472,7 @@
                      ^AmazonSimpleEmailServiceClient (.build))
 
           email (-> (SendEmailRequest.)
-                    (.withDestination (let [^List to-addresses [(string/replace "crux-bench at juxt.pro" " at " "@")]]
+                    (.withDestination (let [^List to-addresses [(string/replace "xtdb-bench at juxt.pro" " at " "@")]]
                                         (-> (Destination.)
                                             (.withToAddresses to-addresses))))
                     (.withMessage
@@ -484,7 +484,7 @@
                          (.withSubject (-> (Content.)
                                            (.withCharset "UTF-8")
                                            (.withData (str "Bench Results"))))))
-                    (.withSource "crux-bench@juxt.pro"))]
+                    (.withSource "xtdb-bench@juxt.pro"))]
 
       (.sendEmail client email))
 

@@ -42,7 +42,7 @@
 
   :javadoc-opts {:package-names ["xtdb.api"]
                  :output-dir "target/javadoc/out"
-                 :additional-args ["-windowtitle" "Crux Javadoc"
+                 :additional-args ["-windowtitle" "XTDB Javadoc"
                                    "-quiet"
                                    "-Xdoclint:none"
                                    "-link" "https://docs.oracle.com/javase/8/docs/api/"

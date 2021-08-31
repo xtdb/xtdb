@@ -67,9 +67,9 @@
 (t/deftest test-store-and-value []
   (fkv/with-kv-store [kv-store]
     (t/testing "store, retrieve and seek value"
-      (kv/store kv-store [[(long->bytes 1) (.getBytes "Crux")]])
-      (t/is (= "Crux" (String. ^bytes (value kv-store (long->bytes 1)))))
-      (t/is (= [1 "Crux"] (let [[k v] (seek kv-store (long->bytes 1))]
+      (kv/store kv-store [[(long->bytes 1) (.getBytes "XTDB")]])
+      (t/is (= "XTDB" (String. ^bytes (value kv-store (long->bytes 1)))))
+      (t/is (= [1 "XTDB"] (let [[k v] (seek kv-store (long->bytes 1))]
                             [(bytes->long k) (String. ^bytes v)]))))
 
     (t/testing "non existing key"
@@ -137,8 +137,8 @@
 (t/deftest test-delete-keys []
   (fkv/with-kv-store [kv-store]
     (t/testing "store, retrieve and delete value"
-      (kv/store kv-store [[(long->bytes 1) (.getBytes "Crux")]])
-      (t/is (= "Crux" (String. ^bytes (value kv-store (long->bytes 1)))))
+      (kv/store kv-store [[(long->bytes 1) (.getBytes "XTDB")]])
+      (t/is (= "XTDB" (String. ^bytes (value kv-store (long->bytes 1)))))
 
       (kv/store kv-store [[(long->bytes 1) nil]])
       (t/is (nil? (value kv-store (long->bytes 1))))
@@ -148,25 +148,25 @@
 
   (t/testing "store, delete and restore"
     (fkv/with-kv-store [kv-store]
-      (kv/store kv-store [[(long->bytes 1) (.getBytes "Crux")]
-                          [(long->bytes 2) (.getBytes "Crux")]
+      (kv/store kv-store [[(long->bytes 1) (.getBytes "XTDB")]
+                          [(long->bytes 2) (.getBytes "XTDB")]
                           [(long->bytes 1) nil]
                           [(long->bytes 2) nil]
-                          [(long->bytes 1) (.getBytes "Crux")]])
+                          [(long->bytes 1) (.getBytes "XTDB")]])
 
-      (t/is (= "Crux" (String. ^bytes (value kv-store (long->bytes 1)))))
+      (t/is (= "XTDB" (String. ^bytes (value kv-store (long->bytes 1)))))
       (t/is (nil? (value kv-store (long->bytes 2)))))))
 
 (t/deftest test-checkpoint-and-restore-db
   (fkv/with-kv-store [kv-store]
     (when (satisfies? cp/CheckpointSource kv-store)
       (fix/with-tmp-dirs #{backup-dir}
-        (kv/store kv-store [[(long->bytes 1) (.getBytes "Crux")]])
+        (kv/store kv-store [[(long->bytes 1) (.getBytes "XTDB")]])
         (xio/delete-dir backup-dir)
         (cp/save-checkpoint kv-store backup-dir)
         (binding [fkv/*kv-opts* (merge fkv/*kv-opts* {:db-dir backup-dir})]
           (fkv/with-kv-store [restored-kv]
-            (t/is (= "Crux" (String. ^bytes (value restored-kv (long->bytes 1)))))
+            (t/is (= "XTDB" (String. ^bytes (value restored-kv (long->bytes 1)))))
 
             (t/testing "backup and original are different"
               (kv/store kv-store [[(long->bytes 1) (.getBytes "Original")]])
@@ -177,46 +177,46 @@
 (t/deftest test-compact []
   (fkv/with-kv-store [kv-store]
     (t/testing "store, retrieve and delete value"
-      (kv/store kv-store [[(.getBytes "key-with-a-long-prefix-1") (.getBytes "Crux")]])
+      (kv/store kv-store [[(.getBytes "key-with-a-long-prefix-1") (.getBytes "XTDB")]])
       (kv/store kv-store [[(.getBytes "key-with-a-long-prefix-2") (.getBytes "is")]])
       (kv/store kv-store [[(.getBytes "key-with-a-long-prefix-3") (.getBytes "awesome")]])
       (t/testing "compacting"
         (kv/compact kv-store))
-      (t/is (= "Crux" (String. ^bytes (value kv-store (.getBytes "key-with-a-long-prefix-1")))))
+      (t/is (= "XTDB" (String. ^bytes (value kv-store (.getBytes "key-with-a-long-prefix-1")))))
       (t/is (= "is" (String. ^bytes (value kv-store (.getBytes "key-with-a-long-prefix-2")))))
       (t/is (= "awesome" (String. ^bytes (value kv-store (.getBytes "key-with-a-long-prefix-3"))))))))
 
 (t/deftest test-sanity-check-can-start-with-sync-enabled
   (binding [fkv/*kv-opts* (merge fkv/*kv-opts* {:sync? true})]
     (fkv/with-kv-store [kv-store]
-      (kv/store kv-store [[(long->bytes 1) (.getBytes "Crux")]])
-      (t/is (= "Crux" (String. ^bytes (value kv-store (long->bytes 1))))))))
+      (kv/store kv-store [[(long->bytes 1) (.getBytes "XTDB")]])
+      (t/is (= "XTDB" (String. ^bytes (value kv-store (long->bytes 1))))))))
 
 (t/deftest test-sanity-check-can-fsync
   (fkv/with-kv-store [kv-store]
-    (kv/store kv-store [[(long->bytes 1) (.getBytes "Crux")]])
+    (kv/store kv-store [[(long->bytes 1) (.getBytes "XTDB")]])
     (kv/fsync kv-store)
-    (t/is (= "Crux" (String. ^bytes (value kv-store (long->bytes 1)))))))
+    (t/is (= "XTDB" (String. ^bytes (value kv-store (long->bytes 1)))))))
 
 (t/deftest test-can-get-from-snapshot
   (fkv/with-kv-store [kv-store]
-    (kv/store kv-store [[(long->bytes 1) (.getBytes "Crux")]])
+    (kv/store kv-store [[(long->bytes 1) (.getBytes "XTDB")]])
     (with-open [snapshot (kv/new-snapshot kv-store)]
-      (t/is (= "Crux" (String. (mem/->on-heap (kv/get-value snapshot (long->bytes 1))))))
+      (t/is (= "XTDB" (String. (mem/->on-heap (kv/get-value snapshot (long->bytes 1))))))
       (t/is (nil? (kv/get-value snapshot (long->bytes 2)))))))
 
 (t/deftest test-can-read-write-concurrently
   (fkv/with-kv-store [kv-store]
     (let [w-fs (for [_ (range 128)]
                  (future
-                   (kv/store kv-store [[(long->bytes 1) (.getBytes "Crux")]])))]
+                   (kv/store kv-store [[(long->bytes 1) (.getBytes "XTDB")]])))]
       @(first w-fs)
       (let [r-fs (for [_ (range 128)]
                    (future
                      (String. ^bytes (value kv-store (long->bytes 1)))))]
         (mapv deref w-fs)
         (doseq [r-f r-fs]
-          (t/is (= "Crux" @r-f)))))))
+          (t/is (= "XTDB" @r-f)))))))
 
 (t/deftest test-prev-and-next []
   (fkv/with-kv-store [kv-store]

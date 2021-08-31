@@ -73,8 +73,8 @@
                              (cond-> el
                                (get entity-links el) (entity-ref/->EntityRef))))))))))
 
-(defn run-query [{:keys [link-entities? query]} in-args {:keys [crux-node valid-time tx-time]}]
-  (let [db (util/db-for-request crux-node {:valid-time valid-time
+(defn run-query [{:keys [link-entities? query]} in-args {:keys [xtdb-node valid-time tx-time]}]
+  (let [db (util/db-for-request xtdb-node {:valid-time valid-time
                                            :tx-time tx-time})]
     {:query query
      :valid-time (xt/valid-time db)
@@ -96,12 +96,12 @@
             (finally
               (xio/try-close results))))))))
 
-(defn ->html-encoder [{:keys [crux-node http-options]}]
+(defn ->html-encoder [{:keys [xtdb-node http-options]}]
   (reify mfc/EncodeToBytes
     (encode-to-bytes [_ {:keys [no-query? cause ^Closeable results] :as res} charset]
       (try
         (let [^String resp (util/raw-html {:title "/_xtdb/query"
-                                           :crux-node crux-node
+                                           :xtdb-node xtdb-node
                                            :http-options http-options
                                            :results (cond
                                                       no-query? nil

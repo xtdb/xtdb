@@ -1,10 +1,10 @@
 = Full-Text Search
 
-Full-text search module for Crux making use of https://lucene.apache.org/[Apache
+Full-text search module for XTDB making use of https://lucene.apache.org/[Apache
 Lucene].
 
-`xtdb-lucene` runs in-process as part of the Crux node as a Crux module.
-The Lucene index is kept up-to-date asynchronously as a "secondary index" that hooks into the underlying Crux transaction processing.
+`xtdb-lucene` runs in-process as part of the XTDB node as an XTDB module.
+The Lucene index is kept up-to-date asynchronously as a "secondary index" that hooks into the underlying XTDB transaction processing.
 
 == Setup
 
@@ -16,7 +16,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-lucene {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-lucene {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -26,7 +26,7 @@ pom.xml::
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-lucene</artifactId>
-    <version>{crux_version}</version>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -156,10 +156,10 @@ There is an entirely different Lucene search function available for multi-field 
 To enable this document-oriented query model, the structure of the indexes stored in Lucene is fundamentally different to the structure required for the EAV-oriented features discussed above,
 Using both querying and indexing approaches within the same node is supported and discussed discussed below.
 
-In the normal case for `text-search` and `wildcard-text-search`, we index each EAV in a Crux document as individual documents in Lucene.
-This allows for some degree of structural sharing, which should help in the case where there is a lot historical data in Crux.
+In the normal case for `text-search` and `wildcard-text-search`, we index each EAV in an XTDB document as individual documents in Lucene.
+This allows for some degree of structural sharing, which should help in the case where there is a lot historical data in XTDB.
 
-By contrast, `lucene-text-search` indexes a single document per document-version in Crux.
+By contrast, `lucene-text-search` indexes a single document per document-version in XTDB.
 The downside of this is there is no structural sharing (besides whatever tricks Lucene employs under the hood), but the upside is taking advantage of more of the Lucene query language capability, e.g. to perform queries that multiple fields into account.
 
 To enable `lucene-text-search`, you must configure the Lucene Indexer, such like:
@@ -206,17 +206,17 @@ The value of this entry will be supplied to the Lucene `QueryParser` in the case
 
 Each item returned will be a vector of `org.apache.lucene.document.Document` and a Double representing the matched score.
 
-See the https://github.com/xtdb/xtdb/blob/master/modules/lucene/test/crux/lucene/extension_test.clj[extension tests] for examples of decoding the contents of the result document and performing userspace temporal filtering.
+See the https://github.com/xtdb/xtdb/blob/master/modules/lucene/test/xtdb/lucene/extension_test.clj[extension tests] for examples of decoding the contents of the result document and performing userspace temporal filtering.
 
 === Custom Indexer
 
 It is possible to implementing a custom indexer based on the `xtdb.lucene/LuceneIndexer` protocol, which will be necessary to address complex requirements.
-See the https://github.com/xtdb/xtdb/blob/master/modules/lucene/test/crux/lucene/extension_test.clj[extension tests] for examples.
+See the https://github.com/xtdb/xtdb/blob/master/modules/lucene/test/xtdb/lucene/extension_test.clj[extension tests] for examples.
 
 === Custom Analyzer
 
 Lucene provides a huge amount of capability beyond the default `StandardAnalyzer`.
-See the https://github.com/xtdb/xtdb/blob/master/modules/lucene/test/crux/lucene/extension_test.clj[extension tests] for examples.
+See the https://github.com/xtdb/xtdb/blob/master/modules/lucene/test/xtdb/lucene/extension_test.clj[extension tests] for examples.
 
 == Multiple Lucene modules
 
@@ -224,16 +224,16 @@ The built-in search functions all accept an additional opts map parameter as the
 This can be included in your Datalog query as a literal or passed in using a logic variable.
 The value under `:lucene-store-k` in this map can be set to specify that a search function should be run against a particular module (i.e. a specific Lucene secondary index, if many are configured), otherwise the search function will attempt to execute against the default `:xtdb.lucene/lucene-store` module.
 
-See the https://github.com/xtdb/xtdb/blob/master/modules/lucene/test/crux/lucene/extension_test.clj[extension tests] for an example of configuring multiple Lucene modules to run on the same node.
+See the https://github.com/xtdb/xtdb/blob/master/modules/lucene/test/xtdb/lucene/extension_test.clj[extension tests] for an example of configuring multiple Lucene modules to run on the same node.
 
 == Checkpointing Lucene
 
-For more details about checkpointing in Crux, see the xref:checkpointing.adoc[main Checkpointing docs].
+For more details about checkpointing in XTDB, see the xref:checkpointing.adoc[main Checkpointing docs].
 
-You can set up checkpointing on your Lucene store too, in addition to the main Crux query indices.
+You can set up checkpointing on your Lucene store too, in addition to the main XTDB query indices.
 This means that a new node starting up will be able to download a checkpoint of a reasonably recent Lucene store from a central location rather than having to replay all of the transactions.
 
-The parameters are the same as for the main Crux query indices, except applied to your Lucene store component:
+The parameters are the same as for the main XTDB query indices, except applied to your Lucene store component:
 
 [tabs]
 ====

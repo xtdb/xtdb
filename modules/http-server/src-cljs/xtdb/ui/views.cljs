@@ -39,13 +39,13 @@
   (let [show-vt? @(rf/subscribe [::sub/show-vt? component])
         show-tt? @(rf/subscribe [::sub/show-tt? component])]
     [:<>
-     [:div.crux-time
+     [:div.xtdb-time
       [:input {:type :checkbox
                :checked show-vt?
                :on-change #(rf/dispatch [::events/toggle-show-vt component show-vt?])}]
       [:div.input-group-label.label
        [:label "Valid Time"] [:a.label-hint
-                              {:href "https://opencrux.com/about/bitemporality.html#valid"
+                              {:href "https://xtdb.com/about/bitemporality.html#valid"
                                :target "_blank"
                                :title "Learn More"}
                               "ⓘ"]]
@@ -56,13 +56,13 @@
                   (get errors "valid-time"))
          [:p.input-error (get errors "valid-time")])]]
 
-     [:div.crux-time
+     [:div.xtdb-time
       [:input {:type :checkbox
                :checked show-tt?
                :on-change #(rf/dispatch [::events/toggle-show-tt component show-tt?])}]
       [:div.input-group-label.label
        [:label "Transaction Time" ] [:a.label-hint
-                                     {:href "https://opencrux.com/about/bitemporality.html#transaction"
+                                     {:href "https://xtdb.com/about/bitemporality.html#transaction"
                                       :target "_blank"
                                       :title "Learn More"}
                                      "ⓘ"]]
@@ -449,8 +449,8 @@
     [render-status-map metrics-map]
     [:div.node-info__content
      [:span.metrics-warning
-      "You do not have the metrics status reporter enabled - to read about metrics in Crux, see "
-      [:a {:href "https://opencrux.com/reference/monitoring.html"} "here"]
+      "You do not have the metrics status reporter enabled - to read about metrics in XTDB, see "
+      [:a {:href "https://xtdb.com/reference/monitoring.html"} "here"]
       "."]]))
 
 (defn status-pane

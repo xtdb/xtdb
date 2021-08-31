@@ -5,11 +5,11 @@
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]))
 
-(defn ->status-html-encoder [{:keys [crux-node http-options]}]
+(defn ->status-html-encoder [{:keys [xtdb-node http-options]}]
   (reify mfc/EncodeToBytes
     (encode-to-bytes [_ {:keys [status-map attribute-stats] :as res} charset]
       (let [^String resp (util/raw-html {:title "/_status"
-                                         :crux-node crux-node
+                                         :xtdb-node xtdb-node
                                          :http-options http-options
                                          :results {:status-results {:status-map status-map
                                                                     :attribute-stats attribute-stats}}})]
@@ -25,13 +25,13 @@
   (fn [resp req]
     (get-in req [:muuntaja/response :format])))
 
-(defmethod transform-query-resp "text/html" [{:keys [status-map crux-node http-options] :as res} _]
+(defmethod transform-query-resp "text/html" [{:keys [status-map xtdb-node http-options] :as res} _]
   {:status (if (or (not (contains? status-map :xtdb.zk/zk-active?))
                    (:xtdb.zk/zk-active? status-map))
              200
              500)
    :body (merge res
-                {:attribute-stats (xt/attribute-stats crux-node)
+                {:attribute-stats (xt/attribute-stats xtdb-node)
                  :http-options http-options})})
 
 (defmethod transform-query-resp :default [{:keys [status-map]} _]
@@ -41,10 +41,10 @@
              500)
    :body status-map})
 
-(defn status [{:keys [crux-node] :as options}]
+(defn status [{:keys [xtdb-node] :as options}]
   (let [status-muuntaja (->status-muuntaja options)]
     (fn [req]
       (let [req (cond->> req
                   (not (get-in req [:muuntaja/response :format])) (m/negotiate-and-format-request status-muuntaja))]
-        (->> (transform-query-resp (assoc options :status-map (xt/status crux-node)) req)
+        (->> (transform-query-resp (assoc options :status-map (xt/status xtdb-node)) req)
              (m/format-response status-muuntaja req))))))

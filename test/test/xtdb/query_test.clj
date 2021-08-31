@@ -2297,7 +2297,7 @@
                               [?x :follow ?y]]]})
              #{[1 2] [2 3] [3 4] [2 4] [5 3] [4 6]}))
 
-    ;; NOTE: Crux does not support vars in attribute position, so
+    ;; NOTE: XTDB does not support vars in attribute position, so
     ;; :follow is explicit.
     (t/testing "Joining regular clauses with rule"
       (t/is (= (xt/q db
@@ -2309,7 +2309,7 @@
                                 [?a :follow ?b]]]})
                #{[3 2] [6 4] [4 2]})))
 
-    ;; NOTE: Crux does not support vars in attribute position.
+    ;; NOTE: XTDB does not support vars in attribute position.
     #_(t/testing "Rule context is isolated from outer context"
         (t/is (= (xt/q db
                        '{:find [?x]
@@ -2465,7 +2465,7 @@
                        :where [[(> 2 1)]]})
                #{[:a] [:b] [:c]})))
 
-    ;; NOTE: Crux does not support these functions.
+    ;; NOTE: XTDB does not support these functions.
     #_(t/testing "ground"
         (t/is (= (d/q '[:find ?vowel
                         :where [(ground [:a :e :i :o :u]) [?vowel ...]]])
@@ -2614,7 +2614,7 @@
                                [1 :age 35]]})
                #{})))
 
-    ;; Crux supports nil and false results.
+    ;; XTDB supports nil and false results.
     #_(t/testing "Returning nil from function filters out tuple from result"
         (t/is (= (xt/q db
                        {:find '[?x]
@@ -2696,7 +2696,7 @@
                [(= ?e 1)]]}
       #{})
 
-    ;; NOTE: Crux does not support source vars.
+    ;; NOTE: XTDB does not support source vars.
     #_(let [pred (fn [db e a]
                    (= a (:age (d/entity db e))))]
         (t/is (= (xt/q '[:find ?e
@@ -2743,7 +2743,7 @@
                        ["Chimera" 1] ])
                  [[1] [1] [1]])))
 
-    ;; This is solved as Crux performs the aggregation before turning
+    ;; This is solved as XTDB performs the aggregation before turning
     ;; it into a set.
     #_(t/testing "Wrong grouping without :with"
         (t/is (= (xt/q db '[:find (sum ?heads)
@@ -2790,7 +2790,7 @@
                #{[:red  [3 4 5] [1 2 3]]
                  [:blue [7 8]   [7 8]]})))
 
-    ;; NOTE: Crux only support a single final logic var in aggregates.
+    ;; NOTE: XTDB only support a single final logic var in aggregates.
     #_(t/testing "Grouping and parameter passing"
         (is (= (set (d/q '[:find ?color (max ?amount ?x) (min ?amount ?x)
                            :in   [[?color ?x]] ?amount ]

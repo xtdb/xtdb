@@ -60,11 +60,11 @@
                 :else result)))]
     (into {} (recur-on-result result))))
 
-(defn ->entity-html-encoder [{:keys [crux-node http-options]}]
+(defn ->entity-html-encoder [{:keys [xtdb-node http-options]}]
   (reify mfc/EncodeToBytes
     (encode-to-bytes [_ {:keys [eid no-entity? not-found? cause entity ^Closeable entity-history] :as res} charset]
       (let [^String resp (util/raw-html {:title "/_xtdb/entity"
-                                         :crux-node crux-node
+                                         :xtdb-node xtdb-node
                                          :http-options http-options
                                          :results (cond
                                                     no-entity? nil
@@ -111,15 +111,15 @@
     (encode-to-output-stream [_ {:keys [entity ^Cursor entity-history] :as res} _]
       (fn [^OutputStream output-stream]
         (cond
-          entity (j/write-value output-stream entity http-json/crux-object-mapper)
+          entity (j/write-value output-stream entity http-json/xtdb-object-mapper)
           entity-history (try
                            (j/write-value output-stream
                                           (->> (iterator-seq entity-history)
                                                (map http-json/camel-case-keys))
-                                          http-json/crux-object-mapper)
+                                          http-json/xtdb-object-mapper)
                            (finally
                              (xio/try-close entity-history)))
-          :else (j/write-value output-stream res http-json/crux-object-mapper))))))
+          :else (j/write-value output-stream res http-json/xtdb-object-mapper))))))
 
 (defn ->entity-muuntaja [opts]
   (m/create (-> m/default-options
@@ -136,11 +136,11 @@
                 (m/install {:name "application/json"
                             :encoder [->json-encoder]}))))
 
-(defn search-entity-history [{:keys [crux-node]} {:keys [eid valid-time tx-time tx-id sort-order with-corrections with-docs
+(defn search-entity-history [{:keys [xtdb-node]} {:keys [eid valid-time tx-time tx-id sort-order with-corrections with-docs
                                                          start-valid-time start-tx-time start-tx-id
                                                          end-valid-time end-tx-time end-tx-id]}]
   (try
-    (let [db (util/db-for-request crux-node {:valid-time valid-time
+    (let [db (util/db-for-request xtdb-node {:valid-time valid-time
                                              :tx-time tx-time
                                              :tx-id tx-id})
           history-opts {:with-corrections? with-corrections
@@ -160,9 +160,9 @@
     (catch Exception e
       {:error e})))
 
-(defn search-entity [{:keys [crux-node]} {:keys [eid valid-time tx-time link-entities?]}]
+(defn search-entity [{:keys [xtdb-node]} {:keys [eid valid-time tx-time link-entities?]}]
   (try
-    (let [db (util/db-for-request crux-node {:valid-time valid-time
+    (let [db (util/db-for-request xtdb-node {:valid-time valid-time
                                              :tx-time tx-time})
           entity (xt/entity db eid)]
       (cond

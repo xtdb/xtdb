@@ -7,7 +7,7 @@
 
 (defn ->reporter {::sys/args {:domain {:doc "Add custom domain"
                                        :required? false
-                                       :default "crux"
+                                       :default "xtdb"
                                        :spec ::sys/string}
                               :rate-unit {:doc "Set rate unit"
                                           :required? false

@@ -1,5 +1,5 @@
 (ns xtdb.lmdb
-  "LMDB KV backend for Crux."
+  "LMDB KV backend for XTDB."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [xtdb.checkpoint :as cp]

@@ -1,10 +1,10 @@
 = AWS S3
 
-You can use AWS's Simple Storage Service (S3) as Crux's 'document store'.
+You can use AWS's Simple Storage Service (S3) as XTDB's 'document store'.
 
 == Project Dependency
 
-In order to use S3 within Crux, you must first add S3 as a project dependency:
+In order to use S3 within XTDB, you must first add S3 as a project dependency:
 
 [tabs]
 ====
@@ -12,7 +12,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-s3 {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-s3 {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -22,7 +22,7 @@ pom.xml::
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-s3</artifactId>
-    <version>{crux_version}</version>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -77,7 +77,7 @@ EDN::
 
 S3 can be used as a query index xref:checkpointing.adoc[checkpoint store].
 
-Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on your bucket to remove older checkpoints.
+Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on your bucket to remove older checkpoints.
 
 [source,clojure]
 ----
@@ -101,10 +101,10 @@ Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on you
 
 WARNING: This is unfortunately currently only accessible from Clojure - we plan to expose it outside of Clojure soon.
 
-While the above is sufficient to get `crux-s3` working out of the box, there are a plethora of configuration options in S3 - how to get credentials, object properties, serialisation of the documents, etc.
+While the above is sufficient to get `xtdb-s3` working out of the box, there are a plethora of configuration options in S3 - how to get credentials, object properties, serialisation of the documents, etc.
 We expose these via the https://github.com/xtdb/xtdb/blob/master/modules/s3/src/xtdb/s3/S3Configurator.java[`xtdb.s3.S3Configurator`] interface - you can supply an instance using the following in your node configuration.
 
-Through this interface, you can supply an `S3AsyncClient` for crux-s3 to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
+Through this interface, you can supply an `S3AsyncClient` for xtdb-s3 to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
 By default, we get credentials through the usual AWS credentials provider, and store documents using https://github.com/ptaoussanis/nippy[Nippy].
 
 [tabs]

@@ -75,14 +75,14 @@
 
 (def datomic-tx-size 100)
 
-(def crux-tx-size 1000)
+(def xtdb-tx-size 1000)
 
 (defn submit-data [node create-docs]
   (bench/run-bench :ingest
     (bench/with-additional-index-metrics node
       (let [last-tx
             (->> (haystack create-docs :xt/id *needle-count* *haystack-size*)
-                 (partition-all crux-tx-size)
+                 (partition-all xtdb-tx-size)
                  (reduce (fn [last-tx batch]
                            (xt/submit-tx node (vec (for [doc batch] [::xt/put doc]))))
                          nil))]
@@ -144,7 +144,7 @@
               *needle-count* 7]
       (bench/with-nodes [node (select-keys bench/nodes ["standalone-rocksdb"])]
         (bench/with-bench-ns (keyword (str "cyclic-queries--" shape-id))
-          (bench/with-crux-dimensions
+          (bench/with-xtdb-dimensions
             (submit-data node create-docs)
             (bench/compact-node node)
             (with-open [db (xt/open-db node)]
@@ -159,7 +159,7 @@
       (with-datomic
         (fn [conn]
           (bench/with-bench-ns (keyword (str "cyclic-queries-datomic--" shape-id))
-            (bench/with-crux-dimensions
+            (bench/with-xtdb-dimensions
               (submit-datomic-data conn docs-per-shape create-docs)
               (let [db (d/db conn)
                     shape-q-fn (partial d/query {:query shape-q :timeout 30000 :args [db]})]

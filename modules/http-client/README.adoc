@@ -1,6 +1,6 @@
 = xtdb-http-client
 
-This module offers an HTTP client that allows you to send transactions and run queries to a Crux link:../xtdb-http-server/[HTTP server].
+This module offers an HTTP client that allows you to send transactions and run queries to an XTDB link:../xtdb-http-server/[HTTP server].
 
 .deps.edn
 [source,clojure]
@@ -18,4 +18,4 @@ com.xtdb/xtdb-http-client {:mvn/version "1.18.1"}
 </dependency>
 ----
 
-For more details, see the https://opencrux.com/reference/http.html[HTTP documentation].
+For more details, see the https://xtdb.com/reference/http.html[HTTP documentation].

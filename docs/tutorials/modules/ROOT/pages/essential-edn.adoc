@@ -32,7 +32,7 @@ kitchen/fork
 github/fork   ; you can't eat with this
 
 ; Underscore is a valid symbol identifier that has a special
-; meaning in Crux Datalog where it is treated like a wildcard
+; meaning in XTDB Datalog where it is treated like a wildcard
 ; that prevents binding/unification. These are called "blanks".
 _
 
@@ -59,7 +59,7 @@ _
 
 ; Quoting is used by languages to prevent evaluation of an edn data
 ; structure. In Clojure the apostrophe is used as the short-hand for
-; quoting and it enables you to easily construct complex Crux queries.
+; quoting and it enables you to easily construct complex XTDB queries.
 ; Without the apostrophes inside this map, Clojure would expect `a`,
 ; `b`, and `c` to be valid symbols.
 {:find '[a b c]

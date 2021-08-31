@@ -15,13 +15,13 @@
 (defn with-h2-opts [f]
   (fix/with-tmp-dirs #{db-dir}
     (with-opts {:dialect 'xtdb.jdbc.h2/->dialect
-                :db-spec {:dbname (str (io/file db-dir "cruxtest"))}}
+                :db-spec {:dbname (str (io/file db-dir "xtdbtest"))}}
       f)))
 
 (defn with-sqlite-opts [f]
   (fix/with-tmp-dirs #{db-dir}
     (with-opts {:dialect 'xtdb.jdbc.sqlite/->dialect
-                :db-spec {:dbname (str (io/file db-dir "cruxtest"))}}
+                :db-spec {:dbname (str (io/file db-dir "xtdbtest"))}}
       f)))
 
 (defn with-mssql-opts [db-spec f]
@@ -70,25 +70,25 @@
   (when (:postgres jdbc-dialects)
     (t/testing "Postgres"
       (with-open [conn (jdbc/get-connection {:dbtype "postgresql", :user "postgres", :password "postgres"})]
-        (jdbc/execute! conn ["DROP DATABASE IF EXISTS cruxtest"])
-        (jdbc/execute! conn ["CREATE DATABASE cruxtest"]))
-      (with-postgres-opts {:dbname "cruxtest", :user "postgres", :password "postgres"}
+        (jdbc/execute! conn ["DROP DATABASE IF EXISTS xtdbtest"])
+        (jdbc/execute! conn ["CREATE DATABASE xtdbtest"]))
+      (with-postgres-opts {:dbname "xtdbtest", :user "postgres", :password "postgres"}
         f)))
 
   (when (:mysql jdbc-dialects)
     (t/testing "MySQL Database"
       (with-open [conn (jdbc/get-connection {:dbtype "mysql", :user "root", :password "my-secret-pw"})]
-        (jdbc/execute! conn ["DROP DATABASE IF EXISTS cruxtest"])
-        (jdbc/execute! conn ["CREATE DATABASE cruxtest"]))
-      (with-mysql-opts {:dbname "cruxtest", :user "root", :password "my-secret-pw"}
+        (jdbc/execute! conn ["DROP DATABASE IF EXISTS xtdbtest"])
+        (jdbc/execute! conn ["CREATE DATABASE xtdbtest"]))
+      (with-mysql-opts {:dbname "xtdbtest", :user "root", :password "my-secret-pw"}
         f)))
 
   (when (:mssql jdbc-dialects)
     (t/testing "MSSQL Database"
       (with-open [conn (jdbc/get-connection {:dbtype "mssql", :user "sa", :password "yourStrong(!)Password"})]
-        (jdbc/execute! conn ["DROP DATABASE IF EXISTS cruxtest"])
-        (jdbc/execute! conn ["CREATE DATABASE cruxtest"]))
-      (with-mssql-opts {:dbname "cruxtest"
+        (jdbc/execute! conn ["DROP DATABASE IF EXISTS xtdbtest"])
+        (jdbc/execute! conn ["CREATE DATABASE xtdbtest"]))
+      (with-mssql-opts {:dbname "xtdbtest"
                         :user "sa"
                         :password "yourStrong(!)Password"}
         f)))

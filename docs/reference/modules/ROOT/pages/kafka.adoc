@@ -1,7 +1,7 @@
 = Kafka Nodes
 
-When using Crux at scale it is recommended to use multiple Crux nodes connected via a Kafka cluster. Use of multiple nodes provides availability and Kafka itself provides strong fault-tolerance guarantees.
-Kafka can be used for Crux's transaction log and document store components.
+When using XTDB at scale it is recommended to use multiple XTDB nodes connected via a Kafka cluster. Use of multiple nodes provides availability and Kafka itself provides strong fault-tolerance guarantees.
+Kafka can be used for XTDB's transaction log and document store components.
 
 image::local-cluster-mode.svg?sanitize=true[Local Cluster Mode,450,150,align="center"]
 
@@ -22,7 +22,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-kafka {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-kafka {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -32,7 +32,7 @@ pom.xml::
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-kafka</artifactId>
-    <version>{crux_version}</version>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====

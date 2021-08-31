@@ -3,9 +3,9 @@
 [#intro]
 == Introduction
 
-A *Kafka Connect* plugin for transferring data between Crux nodes and Kafka.
+A *Kafka Connect* plugin for transferring data between XTDB nodes and Kafka.
 
-The Crux *source connector* will publish transacations on a node to a Kafka topic, and the *sink connector* can receive transactions from a Kafka topic and submit them to a node.
+The XTDB *source connector* will publish transacations on a node to a Kafka topic, and the *sink connector* can receive transactions from a Kafka topic and submit them to a node.
 
 .Currently supported data formats
 [#table-conversion%header,cols="d,d"]
@@ -33,7 +33,7 @@ include::Kafka-QuickStart.adoc[leveloffset=+1]
 == Source Configuration
 
 .*url*
-* Destination URL of Crux HTTP end point
+* Destination URL of XTDB HTTP end point
 * Type: *String*
 * Importance: *High*
 * Default: _"http://localhost:3000"_
@@ -57,7 +57,7 @@ include::Kafka-QuickStart.adoc[leveloffset=+1]
 * Default: _"tx"_
 
 .*batch.size*
-* The maximum number of records the Source task can read from Crux at one time.
+* The maximum number of records the Source task can read from XTDB at one time.
 * Type: *Int*
 * Importance: *LOW*
 * Default: _2000_
@@ -66,7 +66,7 @@ include::Kafka-QuickStart.adoc[leveloffset=+1]
 == Sink Configuration
 
 .*url*
-* Destination URL of Crux HTTP end point
+* Destination URL of XTDB HTTP end point
 * Type: *String*
 * Importance: *High*
 * Default: _"http://localhost:3000"_

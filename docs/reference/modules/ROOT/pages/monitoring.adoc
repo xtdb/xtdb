@@ -1,6 +1,6 @@
 = Monitoring
 
-Crux can expose metrics about a node via https://metrics.dropwizard.io/4.1.2/[Dropwizard] to https://prometheus.io/[Prometheus], AWS's CloudWatch, and Java's JMX.
+XTDB can expose metrics about a node via https://metrics.dropwizard.io/4.1.2/[Dropwizard] to https://prometheus.io/[Prometheus], AWS's CloudWatch, and Java's JMX.
 
 We expose metrics about transaction ingestion and running queries; if you use RocksDB you can also xref:rocksdb.adoc#monitoring[expose internal RocksDB metrics].
 
@@ -16,7 +16,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-com.xtdb/xtdb-metrics {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-metrics {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -26,7 +26,7 @@ pom.xml::
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-metrics</artifactId>
-    <version>{crux_version}</version>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -35,7 +35,7 @@ You will also need to include dependencies for your individual reporters - these
 
 == Metrics module
 
-The Crux metric reporters depend on a common metrics module:
+The XTDB metric reporters depend on a common metrics module:
 
 [tabs]
 ====

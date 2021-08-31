@@ -14,7 +14,7 @@ import xtdb.api.tx.Transaction;
 import static xtdb.api.XtdbFactory.resolve;
 
 /**
- *  Provides API access to Crux.
+ *  Provides API access to XTDB.
  */
 @SuppressWarnings("unused")
 public interface IXtdb extends IXtdbSubmitClient, Closeable {
@@ -25,56 +25,56 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
      * @return the started node
-     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
      */
     static IXtdb startNode() {
         return startNode(NodeConfiguration.EMPTY);
     }
 
     /**
-     * Starts a Crux node using the provided configuration.
+     * Starts an XTDB node using the provided configuration.
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
-     * @param options a Map of Crux configuration
+     * @param options a Map of XTDB configuration
      * @return the started node.
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
-     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
      */
     static IXtdb startNode(Map<?, ?> options) throws IndexVersionOutOfSyncException {
         return XtdbFactory.startNode(options);
     }
 
     /**
-     * Starts a Crux node using the provided configuration.
+     * Starts an XTDB node using the provided configuration.
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
-     * @param file a JSON or EDN file containing Crux configuration
+     * @param file a JSON or EDN file containing XTDB configuration
      * @return the started node.
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
-     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
      */
     static IXtdb startNode(File file) throws IndexVersionOutOfSyncException {
         return XtdbFactory.startNode(file);
     }
 
     /**
-     * Starts a Crux node using the provided configuration.
+     * Starts an XTDB node using the provided configuration.
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
-     * @param url a URL of a JSON or EDN file containing Crux configuration
+     * @param url a URL of a JSON or EDN file containing XTDB configuration
      * @return the started node.
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
-     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
      */
     static IXtdb startNode(URL url) throws IndexVersionOutOfSyncException {
         return XtdbFactory.startNode(url);
     }
 
     /**
-     * Starts a Crux node using the provided configuration.
+     * Starts an XTDB node using the provided configuration.
      * <p>
      * <pre>
      * IXtdb xtdbNode = IXtdb.startNode(n -&gt; {
@@ -87,8 +87,8 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
      * @param f a callback, provided with an object to configure the node before it starts.
      * @return the started node.
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
-     * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
-     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://xtdb.com/reference/installation.html">Installation</a>
+     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
      */
     static IXtdb startNode(Consumer<NodeConfiguration.Builder> f) throws IndexVersionOutOfSyncException {
         return startNode(NodeConfiguration.buildNode(f));
@@ -104,7 +104,7 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
-     * @param url the URL to a Crux HTTP end-point.
+     * @param url the URL to an XTDB HTTP end-point.
      * @return    a remote API client.
      */
     static IXtdb newApiClient(String url) {
@@ -119,7 +119,7 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
-     * @param url the URL to a Crux HTTP end-point.
+     * @param url the URL to an XTDB HTTP end-point.
      * @param options options for the remote client.
      * @return    a remote API client.
      */
@@ -316,7 +316,7 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
             .assoc(Keyword.intern("with-tx-ops?"), true);
 
     /**
-     * Attaches a listener to Crux's event bus.
+     * Attaches a listener to XTDB's event bus.
      *
      * We currently only support one public event-type: `::xt/indexed-tx`.
      * Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.

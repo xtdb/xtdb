@@ -64,7 +64,7 @@
 
   (start [this src {::keys [cp-format]}]
     (let [checkpoint-dir (or (some-> checkpoint-dir .toFile) (xio/create-tmpdir "checkpointing"))
-          ses (Executors/newSingleThreadScheduledExecutor (xio/thread-factory "crux-checkpoint"))]
+          ses (Executors/newSingleThreadScheduledExecutor (xio/thread-factory "xtdb-checkpoint"))]
       (letfn [(run [[time & more-times]]
                 (try
                   (checkpoint {:approx-frequency approx-frequency,

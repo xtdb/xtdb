@@ -21,13 +21,13 @@
         (.writeObject gen el))
       (.writeEndArray gen))))
 
-(def crux-object-mapper
+(def xtdb-object-mapper
   (j/object-mapper
    {:encode-key-fn true
-    :encoders {Id (fn [crux-id ^JsonGenerator gen]
-                    (.writeString gen (str crux-id)))
-               EDNId (fn [crux-id ^JsonGenerator gen]
-                       (.writeString gen (str crux-id)))
+    :encoders {Id (fn [xtdb-id ^JsonGenerator gen]
+                    (.writeString gen (str xtdb-id)))
+               EDNId (fn [xtdb-id ^JsonGenerator gen]
+                       (.writeString gen (str xtdb-id)))
                (Class/forName "[B") (fn [^bytes bytes ^JsonGenerator gen]
                                       (.writeString gen (c/base64-writer bytes)))
                EntityRef entity-ref/ref-json-encoder
@@ -37,7 +37,7 @@
 (defn try-decode-json [json]
   (try
     (cond-> json
-      (string? json) (j/read-value crux-object-mapper))
+      (string? json) (j/read-value xtdb-object-mapper))
     (catch Exception _e
       ::s/invalid)))
 
@@ -49,7 +49,7 @@
   (reify
     mfc/EncodeToBytes
     (encode-to-bytes [_ data _]
-      (j/write-value-as-bytes (json-encode-fn data) crux-object-mapper))
+      (j/write-value-as-bytes (json-encode-fn data) xtdb-object-mapper))
     mfc/EncodeToOutputStream
     (encode-to-output-stream [_ {:keys [^Cursor results] :as data} _]
       (fn [^OutputStream output-stream]
@@ -58,7 +58,7 @@
                          (if results
                            (map json-encode-fn (iterator-seq results))
                            (json-encode-fn data))
-                         crux-object-mapper)
+                         xtdb-object-mapper)
           (finally
             (xio/try-close results)))))))
 

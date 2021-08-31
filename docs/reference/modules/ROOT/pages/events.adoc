@@ -3,7 +3,7 @@
 [#overview]
 == Overview
 
-You can subscribe to Crux events using `xtdb.api/listen`
+You can subscribe to XTDB events using `xtdb.api/listen`
 
 [source,clojure]
 ----
@@ -25,7 +25,7 @@ You can `.close` the return value from `(xtdb.api/listen ...)` to detach the lis
 |===
 |Event Type|Trigger
 
-|<<#indexed-tx,`::xt/indexed-tx`>>|Crux indexing a transaction
+|<<#indexed-tx,`::xt/indexed-tx`>>|XTDB indexing a transaction
 |===
 
 [#indexed-tx]

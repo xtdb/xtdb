@@ -9,7 +9,7 @@
   (:import [io.airlift.tpch GenerateUtils TpchColumn TpchColumnType$Base TpchEntity TpchTable]
            java.util.UUID))
 
-(def tpch-column-types->crux-calcite-type
+(def tpch-column-types->xtdb-calcite-type
   {TpchColumnType$Base/INTEGER :bigint
    TpchColumnType$Base/VARCHAR :varchar
    TpchColumnType$Base/IDENTIFIER :bigint
@@ -24,7 +24,7 @@
                           :where (vec (for [^TpchColumn c (.getColumns t)]
                                         ['e (keyword (.getColumnName c)) (symbol (.getColumnName c))]))}
    :xt.sql.table/columns (into {} (for [^TpchColumn c (.getColumns t)]
-                                      [(symbol (.getColumnName c)) (tpch-column-types->crux-calcite-type (.getBase (.getType c)))]))})
+                                      [(symbol (.getColumnName c)) (tpch-column-types->xtdb-calcite-type (.getBase (.getType c)))]))})
 
 (defn tpch-tables->xtdb-sql-schemas []
   (map tpch-table->xtdb-sql-schema (TpchTable/getTables)))
@@ -686,7 +686,7 @@
   (require '[xtdb.query :as q] 'dev)
 
   ;; SF 0.01
-  (let [node (dev/crux-node)]
+  (let [node (dev/xtdb-node)]
     (time (load-docs! node 0.01 tpch-entity->pkey-doc))
     (prn (xt/attribute-stats node)))
 
@@ -695,7 +695,7 @@
   ;; Results:
   (slurp (io/resource "io/airlift/tpch/queries/q1.result"))
 
-  (let [node (dev/crux-node)]
+  (let [node (dev/xtdb-node)]
     (time
      (doseq [n (range 1 23)]
        (time

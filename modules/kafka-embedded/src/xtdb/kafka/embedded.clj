@@ -1,5 +1,5 @@
 (ns xtdb.kafka.embedded
-  "Embedded Kafka for self-contained Crux deployments."
+  "Embedded Kafka for self-contained XTDB deployments."
   (:require [clojure.java.io :as io]
             [xtdb.io :as xio]
             [xtdb.config :as config]
@@ -88,7 +88,7 @@
                                ::broker-config]))
 
 (defn start-embedded-kafka
-  "Starts ZooKeeper and Kafka locally. This can be used to run Crux in a
+  "Starts ZooKeeper and Kafka locally. This can be used to run XTDB in a
   self-contained single node mode. The options zookeeper-data-dir and
   kafka-log-dir are required.
 

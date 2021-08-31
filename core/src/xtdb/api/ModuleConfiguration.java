@@ -8,9 +8,9 @@ import java.util.stream.Collectors;
 
 
 /**
- * Class to configure a Crux module.
+ * Class to configure an XTDB module.
  *
- * See https://opencrux.com/reference/configuration.html for examples.
+ * See https://xtdb.com/reference/configuration.html for examples.
  */
 @SuppressWarnings("unused") // entry points
 public final class ModuleConfiguration {
@@ -48,9 +48,9 @@ public final class ModuleConfiguration {
         /**
          * Specifies the constructor of this module.
          *
-         * If it is not explicitly provided, Crux will use the key that this module is referenced by.
+         * If it is not explicitly provided, XTDB will use the key that this module is referenced by.
          * e.g. if it is included under a `"xtdb.rocksdb/kv-store"` key,
-         * Crux will use the `"xtdb.rocksdb/-&gt;kv-store"` Clojure function to construct the module.
+         * XTDB will use the `"xtdb.rocksdb/-&gt;kv-store"` Clojure function to construct the module.
          *
          * @param module the module constructor, e.g. `"xtdb.rocksdb/-&gt;kv-store"`
          * @return this
