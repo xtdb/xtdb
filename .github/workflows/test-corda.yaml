@@ -13,5 +13,5 @@ jobs:
         with:
           java-version: 1.8
       - name: Test with Gradle
-        working-directory: labs/crux-corda
+        working-directory: labs/corda
         run: ./gradlew test

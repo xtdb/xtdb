@@ -42,8 +42,8 @@ publishing {
             url = uri(if (!version.toString().endsWith("-SNAPSHOT")) releasesRepoUrl else snapshotsRepoUrl)
 
             credentials {
-                username = project.properties["ossrhUsername"] as String
-                password = project.properties["ossrhPassword"] as String
+                username = project.properties["ossrhUsername"] as? String
+                password = project.properties["ossrhPassword"] as? String
             }
         }
     }
