@@ -56,7 +56,7 @@
                           ["clean"]
                           ["run" "-m" "figwheel.main" "-O" "advanced" "-bo" "dev"]
                           ["sass"]]
-            "install" ["do" #_"build:cljs" "install"]}
+            "install" ["do" "build:cljs" "install"]}
 
   :resource-paths ["resources" "cljs-target" "src-cljs"]
   :jar-exclusions [#"public/cljs-out/dev/.*"]
