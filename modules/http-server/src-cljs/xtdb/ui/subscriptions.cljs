@@ -44,7 +44,7 @@
                               common/query->formatted-query-string)
          valid-time (str (or valid-time (t/now)))
          latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
-                                (::xt/tx-time)
+                                (:xtdb.api/tx-time)
                                 (t/instant))
          tx-time (str (or tx-time latest-tx-time))]
      {"q" (or query-string query-root-str)
@@ -60,7 +60,7 @@
  ::tx-time
  (fn [db _]
    (let [latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
-                                (::xt/tx-time)
+                                (:xtdb.api/tx-time)
                                 (t/instant))]
      (get-in db [:current-route :query-params :tx-time] latest-tx-time))))
 
@@ -70,7 +70,7 @@
    (let [query-params (get-in db [:current-route :query-params])
          valid-time (str (:valid-time query-params (t/now)))
          latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
-                                (::xt/tx-time)
+                                (:xtdb.api/tx-time)
                                 (t/instant))
          tx-time (str (:tx-time query-params latest-tx-time))]
      {"eid" (:eid-edn query-params)
@@ -88,7 +88,7 @@
            find-clause (:find query)
            table-loading? (get-in db [:query :result-pane :loading?])
            latest-tx-time (some-> (get-in db [:options :latest-completed-tx])
-                                  (::xt/tx-time)
+                                  (:xtdb.api/tx-time)
                                   (t/instant))
            time-info {:valid-time (get-in db [:current-route :query-params :valid-time] (t/now))
                       :tx-time (get-in db [:current-route :query-params :tx-time] latest-tx-time)}
@@ -198,8 +198,8 @@
   (map
    (fn [history-element]
      (-> history-element
-         (update ::xt/tx-time common/iso-format-datetime)
-         (update ::xt/valid-time common/iso-format-datetime)))
+         (update :xtdb.api/tx-time common/iso-format-datetime)
+         (update :xtdb.api/valid-time common/iso-format-datetime)))
    entity-history))
 
 (rf/reg-sub
@@ -215,9 +215,9 @@
   (map
    (fn [[x y]]
      (let [[deletions additions]
-           (data/diff (::xt/doc x) (::xt/doc y))]
+           (data/diff (:xtdb.api/doc x) (:xtdb.api/doc y))]
        (merge
-        (select-keys y [::xt/tx-time ::xt/valid-time])
+        (select-keys y [:xtdb.api/tx-time :xtdb.api/valid-time])
         {:deletions deletions
          :additions additions})))
    (partition 2 1 entity-history)))
