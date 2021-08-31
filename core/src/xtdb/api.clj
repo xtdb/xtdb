@@ -23,7 +23,7 @@
 (s/def ::evicted? boolean?)
 (s/def :crux.db.fn/args (s/coll-of any? :kind vector?))
 
-(s/def :crux.db/fn
+(s/def ::fn
   (s/cat :fn #{'fn}
          :args (s/coll-of symbol? :kind vector? :min-count 1)
          :body (s/* any?)))

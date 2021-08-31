@@ -263,7 +263,7 @@ include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags
 Clojure::
 +
 --
-The document should use the `:crux.db/fn` key.
+The document should use the `::xt/fn` key.
 
 [source,clojure]
 ----

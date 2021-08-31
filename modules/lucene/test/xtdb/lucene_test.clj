@@ -443,7 +443,7 @@
 
 (t/deftest test-can-search-docs-from-tx-fn-1594
   (let [doc {:xt/id :ivan :name "Ivan"}]
-    (submit+await-tx [[::xt/put {:xt/id :submit-tx, :crux.db/fn '(fn [_ ops] ops)}]])
+    (submit+await-tx [[::xt/put {:xt/id :submit-tx, ::xt/fn '(fn [_ ops] ops)}]])
     (submit+await-tx [[::xt/fn :submit-tx [[::xt/put doc]]]])
 
     (t/is (= #{[:ivan]}

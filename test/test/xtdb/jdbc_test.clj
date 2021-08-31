@@ -83,8 +83,8 @@
 
 (t/deftest test-project-star-bug-1016
   (fix/submit+await-tx [[::xt/put {:xt/id :put
-                                  :crux.db/fn '(fn [ctx doc]
-                                                 [[::xt/put doc]])}]])
+                                   ::xt/fn '(fn [ctx doc]
+                                              [[::xt/put doc]])}]])
   (fix/submit+await-tx [[::xt/fn :put {:xt/id :foo, :foo :bar}]])
 
   (let [db (xt/db *api*)]

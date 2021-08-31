@@ -19,11 +19,11 @@
 (defn- with-cluster-node* [f]
   (fix/with-tmp-dir "db-dir" [db-dir]
     (with-open [node (xt/start-node {:xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store,
-                                                                        :db-dir (io/file *event-log-dir* "doc-store")}}
-                                       :xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store,
-                                                                :db-dir (io/file *event-log-dir* "tx-log")}}
-                                       :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
-                                                                     :db-dir db-dir}}})]
+                                                                      :db-dir (io/file *event-log-dir* "doc-store")}}
+                                     :xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store,
+                                                              :db-dir (io/file *event-log-dir* "tx-log")}}
+                                     :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
+                                                                   :db-dir db-dir}}})]
       (binding [*api* node]
         (xt/sync node)
         (f)))))
@@ -54,14 +54,14 @@
                  (xt/latest-submitted-tx *api*)))
         (t/is (= n
                  (count (xt/q (xt/db *api*) '{:find [?e]
-                                                  :where [[?e :xt/id]]}))))))))
+                                              :where [[?e :xt/id]]}))))))))
 
 (t/deftest replaces-tx-fn-arg-docs
   (with-cluster
     (with-cluster-node
       (fix/submit+await-tx [[::xt/put {:xt/id :put-ivan
-                                           :crux.db/fn '(fn [ctx doc]
-                                                          [[::xt/put (assoc doc :xt/id :ivan)]])}]])
+                                       ::xt/fn '(fn [ctx doc]
+                                                  [[::xt/put (assoc doc :xt/id :ivan)]])}]])
 
       (fix/submit+await-tx [[::xt/fn :put-ivan {:name "Ivan"}]])
 
@@ -76,8 +76,8 @@
     (with-cluster
       (with-cluster-node
         (fix/submit+await-tx [[::xt/put {:xt/id :no-args
-                                             :crux.db/fn '(fn [ctx]
-                                                            [[::xt/put {:xt/id :no-fn-args-doc}]])}]])
+                                         ::xt/fn '(fn [ctx]
+                                                    [[::xt/put {:xt/id :no-fn-args-doc}]])}]])
         (fix/submit+await-tx [[::xt/fn :no-args]])
 
         (t/is (= {:xt/id :no-fn-args-doc}
@@ -91,13 +91,13 @@
     (with-cluster
       (with-cluster-node
         (fix/submit+await-tx [[::xt/put {:xt/id :put-ivan
-                                             :crux.db/fn '(fn [ctx doc]
-                                                            [[::xt/put (assoc doc :xt/id :ivan)]])}]])
+                                         ::xt/fn '(fn [ctx doc]
+                                                    [[::xt/put (assoc doc :xt/id :ivan)]])}]])
 
         (fix/submit+await-tx [[::xt/put {:xt/id :put-bob-and-ivan
-                                             :crux.db/fn '(fn [ctx bob ivan]
-                                                            [[::xt/put (assoc bob :xt/id :bob)]
-                                                             [::xt/fn :put-ivan ivan]])}]])
+                                         ::xt/fn '(fn [ctx bob ivan]
+                                                    [[::xt/put (assoc bob :xt/id :bob)]
+                                                     [::xt/fn :put-ivan ivan]])}]])
 
         (fix/submit+await-tx [[::xt/fn :put-bob-and-ivan {:name "Bob"} {:name "Ivan2"}]])
 

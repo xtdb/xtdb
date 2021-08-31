@@ -24,9 +24,9 @@
   (let [node *api*]
     ;; tag::put[]
     (xt/submit-tx node [[::xt/put
-                           {:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <1>
-                           #inst "2018-05-18T09:20:27.966-00:00" ;; <2>
-                           #inst "2018-05-19T08:31:15.966-00:00"]] ) ;; <3>
+                         {:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <1>
+                         #inst "2018-05-18T09:20:27.966-00:00" ;; <2>
+                         #inst "2018-05-19T08:31:15.966-00:00"]] ) ;; <3>
     ;; end::put[]
     (xt/sync node)
     (t/is (nil? (pablo)))
@@ -39,9 +39,9 @@
 
     ;; tag::delete[]
     (xt/submit-tx node [[::xt/delete
-                           :dbpedia.resource/Pablo-Picasso  ;; <1>
-                           #inst "2018-05-18T09:20:27.966-00:00" ;; <2>
-                           #inst "2018-05-19T08:31:15.966-00:00"]]) ;; <3>
+                         :dbpedia.resource/Pablo-Picasso  ;; <1>
+                         #inst "2018-05-18T09:20:27.966-00:00" ;; <2>
+                         #inst "2018-05-19T08:31:15.966-00:00"]]) ;; <3>
     ;; end::delete[]
     (xt/sync node)
     (t/is (some? (pablo)))
@@ -54,10 +54,10 @@
 
     ;; tag::match[]
     (xt/submit-tx node [[::xt/match
-                           :dbpedia.resource/Pablo-Picasso ;; <1>
-                           {:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <2>
-                           #inst "2018-05-18T09:21:31.846-00:00"] ;; <3>
-                          [::xt/delete :dbpedia.resource/Pablo-Picasso]]) ;; <4>
+                         :dbpedia.resource/Pablo-Picasso ;; <1>
+                         {:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <2>
+                         #inst "2018-05-18T09:21:31.846-00:00"] ;; <3>
+                        [::xt/delete :dbpedia.resource/Pablo-Picasso]]) ;; <4>
     ;; end::match[]
     (xt/sync node)
     (t/is (nil? (pablo)))
@@ -80,7 +80,7 @@
 (t/deftest test-function-anatomy
   (fix/submit+await-tx
    [[::xt/put {:xt/id :increment-age
-               :crux.db/fn '
+               ::xt/fn '
                ;; tag::fn-anatomy[]
                (fn [ctx eid]  ;;<1>
                  (let [db (xtdb.api/db ctx) ;;<2>
@@ -106,18 +106,18 @@
 
     ;; tag::fn-put[]
     (xt/submit-tx node [[::xt/put {:xt/id :increment-age
-                                    :crux.db/fn '(fn [ctx eid] ;;<1>
-                                                   (let [db (xtdb.api/db ctx)
-                                                         entity (xtdb.api/entity db eid)]
-                                                     [[::xt/put (update entity :age inc)]]))}]])
+                                   ::xt/fn '(fn [ctx eid] ;;<1>
+                                              (let [db (xtdb.api/db ctx)
+                                                    entity (xtdb.api/entity db eid)]
+                                                [[::xt/put (update entity :age inc)]]))}]])
     ;; end::fn-put[]
 
     (xt/sync node)
 
     ;; tag::fn-use[]
     (xt/submit-tx node [[::xt/fn
-                           :increment-age ;; <1>
-                           :ivan]]) ;; <2>
+                         :increment-age ;; <1>
+                         :ivan]]) ;; <2>
     ;; end::fn-use[]
 
     (xt/sync node)
@@ -149,7 +149,7 @@
       (xt/q db all-names) ; => #{["Ivan"]}
       (xt/q (xt/db node) all-names) ; => #{["Ivan"]}
       ;; end::speculative-2[]
-      (t/is (= #{["Ivan"]}) (xt/q db all-names))
+      (t/is (= #{["Ivan"]} (xt/q db all-names)))
       (t/is (= #{["Ivan"]} (xt/q (xt/db node) all-names)))
       ;; tag::speculative-3[]
       )

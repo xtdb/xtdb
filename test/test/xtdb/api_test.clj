@@ -271,13 +271,13 @@
         (t/testing "tx fns return with-ops? correctly"
           (let [tx4 (fix/submit+await-tx [[::xt/put {:xt/id :jack :age 21}]
                                           [::xt/put {:xt/id :increment-age
-                                                    :crux.db/fn '(fn [ctx eid]
-                                                                   (let [db (xtdb.api/db ctx)
-                                                                         entity (xtdb.api/entity db eid)]
-                                                                     [[::xt/put (update entity :age inc)]]))}]
+                                                     ::xt/fn '(fn [ctx eid]
+                                                                (let [db (xtdb.api/db ctx)
+                                                                      entity (xtdb.api/entity db eid)]
+                                                                  [[::xt/put (update entity :age inc)]]))}]
                                           [::xt/put {:xt/id :increment-age-2
-                                                    :crux.db/fn '(fn [ctx eid]
-                                                                   [[::xt/fn :increment-age eid]])}]
+                                                     ::xt/fn '(fn [ctx eid]
+                                                                [[::xt/fn :increment-age eid]])}]
                                           [::xt/fn :increment-age-2 :jack]])]
             (t/is (true? (xt/tx-committed? *api* tx4)))
             (with-open [tx-log-iterator (xt/open-tx-log *api* nil true)]
@@ -285,8 +285,8 @@
                 (t/is (= [::xt/fn
                           (c/new-id :increment-age-2)
                           {::xt/tx-ops [[::xt/fn
-                                        (c/new-id :increment-age)
-                                        {::xt/tx-ops [[::xt/put {:xt/id :jack, :age 22}]]}]]}]
+                                         (c/new-id :increment-age)
+                                         {::xt/tx-ops [[::xt/put {:xt/id :jack, :age 22}]]}]]}]
                          (last tx-ops)))))))))))
 
 (t/deftest test-history-api
@@ -416,8 +416,8 @@
 
 (t/deftest test-tx-fn-replacing-arg-docs-866
   (fix/submit+await-tx [[::xt/put {:xt/id :put-ivan
-                                  :crux.db/fn '(fn [ctx doc]
-                                                 [[::xt/put (assoc doc :xt/id :ivan)]])}]])
+                                   ::xt/fn '(fn [ctx doc]
+                                              [[::xt/put (assoc doc :xt/id :ivan)]])}]])
 
   (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
     (t/testing "replaces args doc with resulting ops"

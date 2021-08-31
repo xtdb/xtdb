@@ -3745,19 +3745,19 @@
                         [?e :type ?type]]}]
     (fix/submit+await-tx (conj (for [idx (range 1000)]
                                  [::xt/put {:xt/id (UUID/randomUUID)
-                                           :type :person
-                                           :name (str "person-" idx)}])
+                                            :type :person
+                                            :name (str "person-" idx)}])
                                [::xt/put {:xt/id (UUID/randomUUID)
-                                         :type "extra type"}]))
+                                          :type "extra type"}]))
 
     (t/is (= '[?name ?e ?type]
              (-> (q/query-plan-for (xt/db *api*) query)
                  :vars-in-join-order)))
 
     (fix/submit+await-tx [[::xt/put {:xt/id (UUID/randomUUID)
-                                    :name "extra name"}]
+                                     :name "extra name"}]
                           [::xt/put {:xt/id (UUID/randomUUID)
-                                    :name "another extra name"}]])
+                                     :name "another extra name"}]])
 
     (t/is (= '[?name ?e ?type]
              (-> (q/query-plan-for (xt/db *api*) query)

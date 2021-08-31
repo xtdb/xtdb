@@ -8,7 +8,6 @@
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.fixtures :as fix :refer [*api*]]
-            [xtdb.io :as xio]
             [xtdb.rdf :as rdf]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
@@ -207,7 +206,7 @@
     (t/testing "match continues with correct content hash"
       (let [new-picasso (assoc picasso :new? true)
             {new-tx-time ::xt/tx-time, new-tx-id ::xt/tx-id} (fix/submit+await-tx [[::xt/match picasso-id picasso]
-                                                                                 [::xt/put new-picasso]])]
+                                                                                   [::xt/put new-picasso]])]
 
         (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
@@ -225,7 +224,7 @@
   (t/testing "match can check non existing entity"
     (let [ivan {:xt/id :ivan, :value 12}
           {ivan-tx-time ::xt/tx-time, ivan-tx-id ::xt/tx-id} (fix/submit+await-tx [[::xt/match :ivan nil]
-                                                                                 [::xt/put ivan]])]
+                                                                                   [::xt/put ivan]])]
 
       (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
         (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
@@ -402,7 +401,7 @@
                          (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
                            (t/is (= (for [[vt tx-idx value] history]
                                       [vt (get-in res [tx-idx ::xt/tx-id]) (c/hash-doc (when value
-                                                                                        (assoc ivan :value value)))])
+                                                                                         (assoc ivan :value value)))])
 
                                     (->> (db/entity-history index-snapshot eid :asc
                                                             {:start {::xt/valid-time first-vt}})
@@ -580,8 +579,8 @@
     (let [v1-ivan {:xt/id :ivan :name "Ivan" :age 40}
           v4-ivan (assoc v1-ivan :name "IVAN")
           update-attribute-fn {:xt/id :update-attribute-fn
-                               :crux.db/fn '(fn [ctx eid k f]
-                                              [[::xt/put (update (xtdb.api/entity (xtdb.api/db ctx) eid) k (eval f))]])}]
+                               ::xt/fn '(fn [ctx eid k f]
+                                          [[::xt/put (update (xtdb.api/entity (xtdb.api/db ctx) eid) k (eval f))]])}]
       (fix/submit+await-tx [[::xt/put v1-ivan]
                             [::xt/put update-attribute-fn]])
       (t/is (= v1-ivan (xt/entity (xt/db *api*) :ivan)))
@@ -599,9 +598,9 @@
 
         (t/testing "exceptions"
           (t/testing "non existing tx fn"
-            (fix/submit+await-tx '[[::xt/fn :non-existing-fn]])
-            (t/is (= v2-ivan (xt/entity (xt/db *api*) :ivan)))
-            (t/is (thrown? NullPointerException (some-> (#'tx/reset-tx-fn-error) throw))))
+            (let [tx (fix/submit+await-tx '[[::xt/fn :non-existing-fn]])]
+              (t/is (= v2-ivan (xt/entity (xt/db *api*) :ivan)))
+              (t/is (false? (xt/tx-committed? *api* tx)))))
 
           (t/testing "invalid arguments"
             (fix/submit+await-tx '[[::xt/fn :update-attribute-fn :ivan :age foo]])
@@ -610,37 +609,38 @@
           (t/testing "invalid results"
             (fix/submit+await-tx [[::xt/put
                                    {:xt/id :invalid-fn
-                                    :crux.db/fn '(fn [ctx]
-                                                   [[::xt/foo]])}]])
+                                    ::xt/fn '(fn [ctx]
+                                               [[::xt/foo]])}]])
             (fix/submit+await-tx '[[::xt/fn :invalid-fn]])
             (t/is (thrown-with-msg? IllegalArgumentException #"Invalid tx op" (some-> (#'tx/reset-tx-fn-error) throw))))
 
-          (t/testing "no :crux.db/fn"
+          (t/testing "no ::xt/fn"
             (fix/submit+await-tx [[::xt/put
                                    {:xt/id :no-fn}]])
-            (fix/submit+await-tx '[[::xt/fn :no-fn]])
-            (t/is (thrown? NullPointerException (some-> (#'tx/reset-tx-fn-error) throw))))
+
+            (let [tx (fix/submit+await-tx '[[::xt/fn :no-fn]])]
+              (t/is (false? (xt/tx-committed? *api* tx)))))
 
           (t/testing "not a fn"
             (fix/submit+await-tx [[::xt/put
                                    {:xt/id :not-a-fn
-                                    :crux.db/fn 0}]])
+                                    ::xt/fn 0}]])
             (fix/submit+await-tx '[[::xt/fn :not-a-fn]])
             (t/is (thrown? ClassCastException (some-> (#'tx/reset-tx-fn-error) throw))))
 
           (t/testing "compilation errors"
             (fix/submit+await-tx [[::xt/put
                                    {:xt/id :compilation-error-fn
-                                    :crux.db/fn '(fn [ctx]
-                                                   unknown-symbol)}]])
+                                    ::xt/fn '(fn [ctx]
+                                               unknown-symbol)}]])
             (fix/submit+await-tx '[[::xt/fn :compilation-error-fn]])
             (t/is (thrown-with-msg? Exception #"Syntax error compiling" (some-> (#'tx/reset-tx-fn-error) throw))))
 
           (t/testing "exception thrown"
             (fix/submit+await-tx [[::xt/put
                                    {:xt/id :exception-fn
-                                    :crux.db/fn '(fn [ctx]
-                                                   (throw (RuntimeException. "foo")))}]])
+                                    ::xt/fn '(fn [ctx]
+                                               (throw (RuntimeException. "foo")))}]])
             (fix/submit+await-tx '[[::xt/fn :exception-fn]])
             (t/is (thrown-with-msg? RuntimeException #"foo" (some-> (#'tx/reset-tx-fn-error) throw))))
 
@@ -654,9 +654,9 @@
           (fix/submit+await-tx [[::xt/put {:xt/id :foo, :foo 1}]])
           (let [tx (fix/submit+await-tx [[::xt/put {:xt/id :foo, :foo 2}]
                                          [::xt/put {:xt/id :doubling-fn
-                                                   :crux.db/fn '(fn [ctx]
-                                                                  [[::xt/put (-> (xtdb.api/entity (xtdb.api/db ctx) :foo)
-                                                                                (update :foo * 2))]])}]
+                                                    ::xt/fn '(fn [ctx]
+                                                               [[::xt/put (-> (xtdb.api/entity (xtdb.api/db ctx) :foo)
+                                                                              (update :foo * 2))]])}]
                                          [::xt/fn :doubling-fn]])]
 
             (t/is (xt/tx-committed? *api* tx))
@@ -665,8 +665,8 @@
 
         (t/testing "function ops can return other function ops"
           (let [returns-fn {:xt/id :returns-fn
-                            :crux.db/fn '(fn [ctx]
-                                           [[::xt/fn :update-attribute-fn :ivan :name `string/upper-case]])}]
+                            ::xt/fn '(fn [ctx]
+                                       [[::xt/fn :update-attribute-fn :ivan :name `string/upper-case]])}]
             (fix/submit+await-tx [[::xt/put returns-fn]])
             (fix/submit+await-tx [[::xt/fn :returns-fn]])
             (some-> (#'tx/reset-tx-fn-error) throw)
@@ -678,8 +678,8 @@
                                 :hair-style "short"
                                 :mass 60})
                 merge-fn {:xt/id :merge-fn
-                          :crux.db/fn `(fn [ctx# eid# m#]
-                                         [[::xt/put (merge (xt/entity (xt/db ctx#) eid#) m#)]])}]
+                          ::xt/fn `(fn [ctx# eid# m#]
+                                     [[::xt/put (merge (xt/entity (xt/db ctx#) eid#) m#)]])}]
             (fix/submit+await-tx [[::xt/put merge-fn]])
             (fix/submit+await-tx [[::xt/fn :merge-fn :ivan {:mass 60, :hair-style "short"}]])
             (fix/submit+await-tx [[::xt/fn :merge-fn :ivan {:height 180}]])
@@ -688,9 +688,9 @@
 
         (t/testing "function ops can return other function ops that also the forked ctx"
           (let [returns-fn {:xt/id :returns-fn
-                            :crux.db/fn '(fn [ctx]
-                                           [[::xt/put {:xt/id :ivan :name "modified ivan"}]
-                                            [::xt/fn :update-attribute-fn :ivan :name `string/upper-case]])}]
+                            ::xt/fn '(fn [ctx]
+                                       [[::xt/put {:xt/id :ivan :name "modified ivan"}]
+                                        [::xt/fn :update-attribute-fn :ivan :name `string/upper-case]])}]
             (fix/submit+await-tx [[::xt/put returns-fn]])
             (fix/submit+await-tx [[::xt/fn :returns-fn]])
             (some-> (#'tx/reset-tx-fn-error) throw)
@@ -701,8 +701,8 @@
           (fix/submit+await-tx
            [[::xt/put
              {:xt/id :tx-metadata-fn
-              :crux.db/fn `(fn [ctx#]
-                             [[::xt/put {:xt/id :tx-metadata ::xt/current-tx (xt/indexing-tx ctx#)}]])}]])
+              ::xt/fn `(fn [ctx#]
+                         [[::xt/put {:xt/id :tx-metadata ::xt/current-tx (xt/indexing-tx ctx#)}]])}]])
           (let [submitted-tx (fix/submit+await-tx '[[::xt/fn :tx-metadata-fn]])]
             (some-> (#'tx/reset-tx-fn-error) throw)
             (t/is (= {:xt/id :tx-metadata
@@ -713,20 +713,19 @@
   (fix/submit+await-tx [[::xt/put {:xt/id :foo, :foo 1}]])
   (let [tx (fix/submit+await-tx [[::xt/put {:xt/id :foo, :foo 2}]
                                  [::xt/put {:xt/id :put
-                                           :crux.db/fn '(fn [ctx doc]
-                                                          [[::xt/put doc]])}]
+                                            ::xt/fn '(fn [ctx doc]
+                                                       [[::xt/put doc]])}]
                                  [::xt/fn :put {:xt/id :bar, :ref :foo}]
                                  [::xt/put {:xt/id :doubling-fn
-                                           :crux.db/fn '(fn [ctx]
-                                                          (let [db (xtdb.api/db ctx)]
-
-                                                            [[::xt/put {:xt/id :prn-out
-                                                                       :e (xtdb.api/entity db :bar)
-                                                                       :q (first (xtdb.api/q db {:find '[e v]
-                                                                                                 :where '[[e :xt/id :bar]
-                                                                                                          [e :ref v]]}))}]
-                                                             [::xt/put (-> (xtdb.api/entity db :foo)
-                                                                          (update :foo * 2))]]))}]
+                                            ::xt/fn '(fn [ctx]
+                                                       (let [db (xtdb.api/db ctx)]
+                                                         [[::xt/put {:xt/id :prn-out
+                                                                     :e (xtdb.api/entity db :bar)
+                                                                     :q (first (xtdb.api/q db {:find '[e v]
+                                                                                               :where '[[e :xt/id :bar]
+                                                                                                        [e :ref v]]}))}]
+                                                          [::xt/put (-> (xtdb.api/entity db :foo)
+                                                                        (update :foo * 2))]]))}]
                                  [::xt/fn :doubling-fn]])]
 
     (t/is (xt/tx-committed? *api* tx))
@@ -759,22 +758,22 @@
 (t/deftest transaction-fn-return-values-457
   (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
     (let [nil-fn {:xt/id :nil-fn
-                  :crux.db/fn '(fn [ctx] nil)}
+                  ::xt/fn '(fn [ctx] nil)}
           false-fn {:xt/id :false-fn
-                    :crux.db/fn '(fn [ctx] false)}]
+                    ::xt/fn '(fn [ctx] false)}]
 
       (fix/submit+await-tx [[::xt/put nil-fn]
                             [::xt/put false-fn]])
       (fix/submit+await-tx [[::xt/fn :nil-fn]
                             [::xt/put {:xt/id :foo
-                                      :foo? true}]])
+                                       :foo? true}]])
 
       (t/is (= {:xt/id :foo, :foo? true}
                (xt/entity (xt/db *api*) :foo)))
 
       (fix/submit+await-tx [[::xt/fn :false-fn]
                             [::xt/put {:xt/id :bar
-                                      :bar? true}]])
+                                       :bar? true}]])
 
       (t/is (nil? (xt/entity (xt/db *api*) :bar))))))
 
@@ -1049,8 +1048,8 @@
 
 (t/deftest replaces-tx-fn-arg-docs
   (fix/submit+await-tx [[::xt/put {:xt/id :put-ivan
-                                  :crux.db/fn '(fn [ctx doc]
-                                                 [[::xt/put (assoc doc :xt/id :ivan)]])}]])
+                                   ::xt/fn '(fn [ctx doc]
+                                              [[::xt/put (assoc doc :xt/id :ivan)]])}]])
   (t/testing "replaces args doc with resulting ops"
     (fix/submit+await-tx [[::xt/fn :put-ivan {:name "Ivan"}]])
 
@@ -1068,8 +1067,8 @@
 
   (t/testing "replaces fn with no args"
     (fix/submit+await-tx [[::xt/put {:xt/id :no-args
-                                    :crux.db/fn '(fn [ctx]
-                                                   [[::xt/put {:xt/id :no-fn-args-doc}]])}]])
+                                     ::xt/fn '(fn [ctx]
+                                                [[::xt/put {:xt/id :no-fn-args-doc}]])}]])
     (fix/submit+await-tx [[::xt/fn :no-args]])
 
     (t/is (= {:xt/id :no-fn-args-doc}
@@ -1086,9 +1085,9 @@
 
   (t/testing "nested tx-fn"
     (fix/submit+await-tx [[::xt/put {:xt/id :put-bob-and-ivan
-                                    :crux.db/fn '(fn [ctx bob ivan]
-                                                   [[::xt/put (assoc bob :xt/id :bob)]
-                                                    [::xt/fn :put-ivan ivan]])}]])
+                                     ::xt/fn '(fn [ctx bob ivan]
+                                                [[::xt/put (assoc bob :xt/id :bob)]
+                                                 [::xt/fn :put-ivan ivan]])}]])
 
     (fix/submit+await-tx [[::xt/fn :put-bob-and-ivan {:name "Bob"} {:name "Ivan2"}]])
 
@@ -1139,20 +1138,16 @@
     (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil)]
                        (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
-      (t/is (= {:crux.db.fn/failed? true
-                :crux.db.fn/exception 'java.lang.NullPointerException
-                :crux.db.fn/message nil
-                :crux.db.fn/ex-data nil}
-               (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
-                   (get arg-doc-id)
-                   (dissoc :xt/id)))))))
+      (t/is (true? (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
+                       (get arg-doc-id)
+                       :crux.db.fn/failed?))))))
 
 (t/deftest handles-legacy-tx-fns-with-no-args-doc
   ;; we used to not submit args docs if the tx-fn was 0-arg, and hence had nothing to replace
   ;; we don't want the fix to assume that all tx-fns on the tx-log have an arg-doc
   (let [tx-fn (-> {:xt/id :tx-fn,
-                   :crux.db/fn '(fn [ctx]
-                                  [[::xt/put {:xt/id :ivan}]])}
+                   ::xt/fn '(fn [ctx]
+                              [[::xt/put {:xt/id :ivan}]])}
                   (c/xt->crux))]
     (db/submit-docs (:document-store *api*) {(c/hash-doc tx-fn) tx-fn})
 
@@ -1167,8 +1162,8 @@
 
 (t/deftest test-tx-fn-doc-race-1049
   (let [put-fn {:xt/id :put-fn
-                :crux.db/fn '(fn [ctx doc]
-                               [[::xt/put doc]])}
+                ::xt/fn '(fn [ctx doc]
+                           [[::xt/put doc]])}
         foo-doc {:xt/id :foo}
         !arg-doc-resps (atom [{:crux.db.fn/args [foo-doc]}
                               {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :foo) (c/hash-doc foo-doc)]]}])
@@ -1193,7 +1188,7 @@
 
 (t/deftest ensure-tx-fn-arg-docs-replaced-even-when-tx-aborts-960
   (fix/submit+await-tx [[::xt/put {:xt/id :foo
-                                  :crux.db/fn '(fn [ctx arg] [])}]
+                                   ::xt/fn '(fn [ctx arg] [])}]
                         [::xt/match :foo {:xt/id :foo}]
                         [::xt/fn :foo :foo-arg]])
 
@@ -1346,14 +1341,14 @@
   (letfn [(with-persistent-golden-stores [node-config db-dir]
             (-> node-config
                 (assoc :xtdb/tx-log {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
-                                              :db-dir (io/file db-dir "txs")}}
+                                                :db-dir (io/file db-dir "txs")}}
                        :xtdb/document-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
-                                                      :db-dir (io/file db-dir "docs")}})))
+                                                        :db-dir (io/file db-dir "docs")}})))
 
           (with-persistent-indices [node-config idx-dir]
             (-> node-config
                 (assoc :xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
-                                                   :db-dir idx-dir}})))
+                                                     :db-dir idx-dir}})))
 
           (with-secondary-index
             ([node-config after-tx-id opts process-tx-f]

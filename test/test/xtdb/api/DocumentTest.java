@@ -34,7 +34,7 @@ public class DocumentTest {
     @Test(expected = IllegalArgumentException.class)
     public void reassigningFnId() {
         XtdbDocument document = XtdbDocument.create("foo");
-        document.plus("crux.db/fn", "bar");
+        document.plus("xtdb.api/fn", "bar");
     }
 
     @Test

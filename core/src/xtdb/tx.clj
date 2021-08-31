@@ -189,14 +189,6 @@
 (defn- reset-tx-fn-error []
   (first (reset-vals! !last-tx-fn-error nil)))
 
-(defn- ->tx-fn [{body :crux.db/fn
-                 legacy-body :crux.db.fn/body}]
-  (or (tx-fn-eval-cache body)
-      (when legacy-body
-        (let [f (tx-fn-eval-cache legacy-body)]
-          (fn [ctx & args]
-            (apply f (xt/db ctx) args))))))
-
 (defrecord TxFnContext [db-provider indexing-tx]
   xt/DBProvider
   (db [_] (xt/db db-provider))
@@ -229,38 +221,57 @@
                                                          :crux.db.fn/ex-data])))
                 {:abort? true})
 
-      :else (try
-              (let [ctx (->TxFnContext in-flight-tx tx)
-                    db (xt/db ctx)
-                    res (apply (->tx-fn (xt/entity db fn-id)) ctx args)]
-                (if (false? res)
-                  {:abort? true
-                   :docs (when args-doc-id
-                           {args-content-hash {:xt/id args-doc-id
-                                               :crux.db.fn/failed? true}})}
+      :else (let [ctx (->TxFnContext in-flight-tx tx)
+                  db (xt/db ctx)
+                  {fn-body ::xt/fn, :as tx-fn} (xt/entity db fn-id)]
+              (cond
+                (nil? tx-fn) {:abort? true
+                              :docs (when args-doc-id
+                                      {args-content-hash {:xt/id args-doc-id
+                                                          :crux.db.fn/failed? true
+                                                          :crux.db.fn/message (format "Missing tx-fn: `%s`" fn-id)}})}
 
-                  (let [conformed-tx-ops (mapv txc/conform-tx-op res)
-                        tx-events (mapv txc/->tx-event conformed-tx-ops)]
-                    {:tx-events tx-events
-                     :docs (into (if args-doc-id
-                                   {args-content-hash (-> {:xt/id args-doc-id
-                                                           :crux.db.fn/tx-events tx-events}
-                                                          (c/xt->crux))}
-                                   {})
-                                 (mapcat :docs)
-                                 conformed-tx-ops)})))
+                (nil? fn-body) (if (or (:crux.db/fn tx-fn) (:crux.db.fn/body tx-fn))
+                                 (let [msg (format "Legacy Crux tx-fn found: `%s` - see XTDB (v2.0.0) migration guide." (:xt/id tx-fn))]
+                                   (log/error msg)
+                                   (throw (IllegalStateException. msg)))
+                                 {:abort? true
+                                  :docs (when args-doc-id
+                                          {args-content-hash {:xt/id args-doc-id
+                                                              :crux.db.fn/failed? true
+                                                              :crux.db.fn/message (format "tx-fn missing `:xtdb/fn` key: `%s`" (:xt/id tx-fn))}})})
 
-              (catch Throwable t
-                (reset! !last-tx-fn-error t)
-                (log/warn t "Transaction function failure:" fn-id args-doc-id)
+                :else
+                (try
+                  (let [res (apply (tx-fn-eval-cache fn-body) ctx args)]
+                    (if (false? res)
+                      {:abort? true
+                       :docs (when args-doc-id
+                               {args-content-hash {:xt/id args-doc-id
+                                                   :crux.db.fn/failed? true}})}
 
-                {:abort? true
-                 :docs (when args-doc-id
-                         {args-content-hash {:xt/id args-doc-id
-                                             :crux.db.fn/failed? true
-                                             :crux.db.fn/exception (symbol (.getName (class t)))
-                                             :crux.db.fn/message (ex-message t)
-                                             :crux.db.fn/ex-data (ex-data t)}})})))))
+                      (let [conformed-tx-ops (mapv txc/conform-tx-op res)
+                            tx-events (mapv txc/->tx-event conformed-tx-ops)]
+                        {:tx-events tx-events
+                         :docs (into (if args-doc-id
+                                       {args-content-hash (-> {:xt/id args-doc-id
+                                                               :crux.db.fn/tx-events tx-events}
+                                                              (c/xt->crux))}
+                                       {})
+                                     (mapcat :docs)
+                                     conformed-tx-ops)})))
+
+                  (catch Throwable t
+                    (reset! !last-tx-fn-error t)
+                    (log/warn t "Transaction function failure:" fn-id args-doc-id)
+
+                    {:abort? true
+                     :docs (when args-doc-id
+                             {args-content-hash {:xt/id args-doc-id
+                                                 :crux.db.fn/failed? true
+                                                 :crux.db.fn/exception (symbol (.getName (class t)))
+                                                 :crux.db.fn/message (ex-message t)
+                                                 :crux.db.fn/ex-data (ex-data t)}})})))))))
 
 (defmethod index-tx-event :default [[op & _] _tx _in-flight-tx]
   (throw (err/illegal-arg :unknown-tx-op {:op op})))
