@@ -257,7 +257,7 @@
                      s)
 
                    RexInputRef
-                   (get-in schema [:xt.sql.table/query :find (.getIndex ^RexInputRef x)])
+                   (get-in schema [:xtdb.sql/table-query :find (.getIndex ^RexInputRef x)])
 
                    x))
                nodes)
@@ -298,10 +298,10 @@
   (log/debug "Enriching with filter" filter)
   (let [[filters clauses exprs args] (->vars+clauses+exprs schema (->ast filter schema))]
     (-> schema
-        (update-in [:xt.sql.table/query :where] (fnil into []) (vectorize-value (->where filters)))
-        (update-in [:xt.sql.table/query :where] (fnil into []) clauses)
+        (update-in [:xtdb.sql/table-query :where] (fnil into []) (vectorize-value (->where filters)))
+        (update-in [:xtdb.sql/table-query :where] (fnil into []) clauses)
         ;; Todo consider case of multiple arg maps
-        (update-in [:xt.sql.table/query :args] merge args)
+        (update-in [:xtdb.sql/table-query :args] merge args)
         (update :exprs merge exprs))))
 
 (defn enrich-project [schema projects]
@@ -310,37 +310,37 @@
                                         (->ast rex-node schema))
                                       (->vars+clauses+exprs schema))]
     (-> schema
-        (assoc-in [:xt.sql.table/query :find] (vec projects))
-        (update-in [:xt.sql.table/query :where] (fnil into []) clauses)
+        (assoc-in [:xtdb.sql/table-query :find] (vec projects))
+        (update-in [:xtdb.sql/table-query :where] (fnil into []) clauses)
         (update :exprs merge exprs))))
 
 (defn enrich-join [s1 s2 join-type condition]
   (log/debug "Enriching join with" condition)
-  (let [q1 (:xt.sql.table/query s1)
-        q2 (:xt.sql.table/query s2)
-        s2-lvars (into {} (map #(vector % (gensym %))) (keys (:xt.sql.table/columns s2)))
+  (let [q1 (:xtdb.sql/table-query s1)
+        q2 (:xtdb.sql/table-query s2)
+        s2-lvars (into {} (map #(vector % (gensym %))) (keys (:xtdb.sql/table-columns s2)))
         q2 (clojure.walk/postwalk (fn [x] (if (symbol? x) (get s2-lvars x x) x)) q2)
         s3 (-> s1
-               (assoc :xt.sql.table/query (merge-with (fnil into []) q1 q2))
-               (update-in [:xt.sql.table/query :args] (partial apply merge))
+               (assoc :xtdb.sql/table-query (merge-with (fnil into []) q1 q2))
+               (update-in [:xtdb.sql/table-query :args] (partial apply merge))
                (update :exprs merge (:exprs s2)))]
     (enrich-filter s3 condition)))
 
 (defn enrich-sort-by [schema sort-fields]
-  (assoc-in schema [:xt.sql.table/query :order-by]
+  (assoc-in schema [:xtdb.sql/table-query :order-by]
             (mapv (fn [^RelFieldCollation f]
-                    [(nth (get-in schema [:xt.sql.table/query :find]) (.getFieldIndex f))
+                    [(nth (get-in schema [:xtdb.sql/table-query :find]) (.getFieldIndex f))
                      (if (= (.-shortString (.getDirection f)) "DESC") :desc :asc)])
                   sort-fields)))
 
 (defn enrich-limit [schema ^RexNode limit]
   (if limit
-    (assoc-in schema [:xt.sql.table/query :limit] (RexLiteral/intValue limit))
+    (assoc-in schema [:xtdb.sql/table-query :limit] (RexLiteral/intValue limit))
     schema))
 
 (defn enrich-offset [schema ^RexNode offset]
   (if offset
-    (assoc-in schema [:xt.sql.table/query :offset] (RexLiteral/intValue offset))
+    (assoc-in schema [:xtdb.sql/table-query :offset] (RexLiteral/intValue offset))
     schema))
 
 (defn enrich-limit-and-offset [schema ^RexNode limit ^RexNode offset]
@@ -387,14 +387,15 @@
 (defn ^Enumerable scan [node ^Pair schema+expressions column-types ^DataContext data-context]
   (try
     (let [timeout (.get org.apache.calcite.DataContext$Variable/TIMEOUT data-context)
-          {:keys [xt.sql.table/query]} (edn/read-string (.-left schema+expressions))
-          query (update query :args (fn [args] [(merge {:data-context data-context}
-                                                       (into {} (map (fn [[k v]]
-                                                                       [v (.get data-context k)])
-                                                                     args))
-                                                       (into {} (map (fn [^Pair p]
-                                                                       [(symbol (.-left p)) (.-right p)])
-                                                                     (.-right schema+expressions))))]))
+          {:keys [xtdb.sql/table-query]} (edn/read-string (.-left schema+expressions))
+          query (update table-query :args (fn [args]
+                                            [(merge {:data-context data-context}
+                                                    (into {} (map (fn [[k v]]
+                                                                    [v (.get data-context k)])
+                                                                  args))
+                                                    (into {} (map (fn [^Pair p]
+                                                                    [(symbol (.-left p)) (.-right p)])
+                                                                  (.-right schema+expressions))))]))
           query (cond-> query
                   timeout (assoc :timeout timeout))]
       (->enumerator node
@@ -441,11 +442,11 @@
 (defn- ^String ->column-name [c]
   (string/replace (string/upper-case (str c)) #"^\?" ""))
 
-(defn row-type [^RelDataTypeFactory type-factory node {:keys [:xt.sql.table/query :xt.sql.table/columns] :as table-schema}]
+(defn row-type [^RelDataTypeFactory type-factory node {:keys [:xtdb.sql/table-query :xtdb.sql/table-columns] :as table-schema}]
   (let [field-info  (RelDataTypeFactory$Builder. type-factory)]
-    (doseq [c (:find query)]
+    (doseq [c (:find table-query)]
       (let [col-name (->column-name c)
-            col-def (columns c)
+            col-def (table-columns c)
             _ (when-not col-def
                 (throw (err/illegal-arg :unrecognised-column
                                         {::err/message (str "Unrecognised column: " c)})))
@@ -456,14 +457,14 @@
           (.nullable true))))
     (.build field-info)))
 
-(s/def :xt.sql.table/name string?)
-(s/def :xt.sql.table/columns (s/map-of symbol? java-sql-types->calcite-sql-type))
-(s/def ::table (s/keys :req [:xt/id :xt.sql.table/name :xt.sql.table/columns]))
+(s/def :xtdb.sql/table-name string?)
+(s/def :xtdb.sql/table-columns (s/map-of symbol? java-sql-types->calcite-sql-type))
+(s/def ::table (s/keys :req [:xt/id :xtdb.sql/table-name :xtdb.sql/table-columns]))
 
 (defn- lookup-schema [node]
   (let [db (xt/db node)]
     (map first (xt/q db '{:find [(pull e [*])]
-                            :where [[e :xt.sql.table/name]]}))))
+                            :where [[e :xtdb.sql/table-name]]}))))
 
 (defn create-schema [parent-schema name operands]
   (let [node (get !xtdb-nodes (get operands "XTDB_NODE"))
@@ -475,7 +476,7 @@
               (for [table-schema (lookup-schema node)]
                 (do (when-not (s/valid? ::table table-schema)
                       (throw (IllegalStateException. (str "Invalid table schema: " (prn-str table-schema)))))
-                    [(string/upper-case (:xt.sql.table/name table-schema))
+                    [(string/upper-case (:xtdb.sql/table-name table-schema))
                      (XtdbTable. node table-schema scan-only?)])))))))
 
 (def ^:private model

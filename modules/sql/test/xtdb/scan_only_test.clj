@@ -7,14 +7,14 @@
   (cf/with-calcite-connection-scan-only f))
 
 (defn- with-sql-schema [f]
-  (fix/transact! *api* [{:xt/id :xt.sql.schema/person
-                         :xt.sql.table/name "person"
-                         :xt.sql.table/query '{:find [?id ?name ?homeworld ?age ?alive]
-                                               :where [[?id :name ?name]
-                                                       [?id :homeworld ?homeworld]
-                                                       [?id :age ?age]
-                                                       [?id :alive ?alive]]}
-                         :xt.sql.table/columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?age :bigint ?alive :boolean}}])
+  (fix/transact! *api* [{:xt/id :xtdb.sql/person-schema
+                         :xtdb.sql/table-name "person"
+                         :xtdb.sql/table-query '{:find [?id ?name ?homeworld ?age ?alive]
+                                                 :where [[?id :name ?name]
+                                                         [?id :homeworld ?homeworld]
+                                                         [?id :age ?age]
+                                                         [?id :alive ?alive]]}
+                         :xtdb.sql/table-columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?age :bigint ?alive :boolean}}])
   (f))
 
 (t/use-fixtures :each cf/with-calcite-module cf/with-scan-only fix/with-node with-each-connection-type with-sql-schema)

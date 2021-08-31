@@ -17,13 +17,13 @@
    TpchColumnType$Base/DATE :timestamp})
 
 (defn tpch-table->xtdb-sql-schema [^TpchTable t]
-  {:xt/id (keyword "xt.sql.schema" (.getTableName t))
-   :xt.sql.table/name (.getTableName t)
-   :xt.sql.table/query {:find (vec (for [^TpchColumn c (.getColumns t)]
+  {:xt/id (keyword "tpch" (.getTableName t))
+   :xtdb.sql/table-name (.getTableName t)
+   :xtdb.sql/table-query {:find (vec (for [^TpchColumn c (.getColumns t)]
                                        (symbol (.getColumnName c))))
                           :where (vec (for [^TpchColumn c (.getColumns t)]
                                         ['e (keyword (.getColumnName c)) (symbol (.getColumnName c))]))}
-   :xt.sql.table/columns (into {} (for [^TpchColumn c (.getColumns t)]
+   :xtdb.sql/table-columns (into {} (for [^TpchColumn c (.getColumns t)]
                                       [(symbol (.getColumnName c)) (tpch-column-types->xtdb-calcite-type (.getBase (.getType c)))]))})
 
 (defn tpch-tables->xtdb-sql-schemas []

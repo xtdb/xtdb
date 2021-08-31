@@ -13,14 +13,14 @@
     (cf/with-avatica-connection f)))
 
 (defn- with-sql-schema [f]
-  (fix/transact! *api* [{:xt/id :xt.sql.schema/person
-                         :xt.sql.table/name "person"
-                         :xt.sql.table/query '{:find [?id ?name ?homeworld ?age ?alive]
-                                               :where [[?id :name ?name]
-                                                       [?id :homeworld ?homeworld]
-                                                       [?id :age ?age]
-                                                       [?id :alive ?alive]]}
-                         :xt.sql.table/columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?age :bigint ?alive :boolean}}])
+  (fix/transact! *api* [{:xt/id :person-schema
+                         :xtdb.sql/table-name "person"
+                         :xtdb.sql/table-query '{:find [?id ?name ?homeworld ?age ?alive]
+                                                 :where [[?id :name ?name]
+                                                         [?id :homeworld ?homeworld]
+                                                         [?id :age ?age]
+                                                         [?id :alive ?alive]]}
+                         :xtdb.sql/table-columns '{?id :keyword, ?name :varchar, ?homeworld :varchar, ?age :bigint ?alive :boolean}}])
   (f))
 
 (t/use-fixtures :each cf/with-calcite-module fix/with-node with-each-connection-type with-sql-schema)
@@ -267,13 +267,13 @@
            (set (query "SELECT NAME FROM PERSON WHERE NAME IS NOT NULL OR ALIVE = TRUE")))))
 
 (t/deftest test-calcs
-  (fix/transact! *api* [{:xt/id :xt.sql.schema/person
-                         :xt.sql.table/name "person"
-                         :xt.sql.table/query '{:find [?id ?name ?age ?years_worked]
-                                               :where [[?id :name ?name]
-                                                       [?id :age ?age]
-                                                       [?id :years_worked ?years_worked]]}
-                         :xt.sql.table/columns '{?id :keyword, ?name :varchar, ?age :bigint, ?years_worked :bigint}}])
+  (fix/transact! *api* [{:xt/id :person-schema
+                         :xtdb.sql/table-name "person"
+                         :xtdb.sql/table-query '{:find [?id ?name ?age ?years_worked]
+                                                 :where [[?id :name ?name]
+                                                         [?id :age ?age]
+                                                         [?id :years_worked ?years_worked]]}
+                         :xtdb.sql/table-columns '{?id :keyword, ?name :varchar, ?age :bigint, ?years_worked :bigint}}])
 
   (fix/transact! *api* [{:xt/id :ivan :name "Ivan" :age 42 :years_worked 21}
                         {:xt/id :malcolm :name "Malcolm" :age 22 :years_worked 10}])
@@ -337,12 +337,12 @@
     (t/is (= [{:id ":human/ivan", :name "Ivan"}] (query "SELECT ID,NAME FROM PERSON WHERE ID = KEYWORD('human/ivan')")))))
 
 (t/deftest test-uuid
-  (fix/transact! *api* [{:xt/id :xt.sql.schema/person
-                         :xt.sql.table/name "person"
-                         :xt.sql.table/query '{:find [?id ?name ?auuid]
-                                               :where [[?id :name ?name]
-                                                       [?id :auuid ?auuid]]}
-                         :xt.sql.table/columns '{?id :keyword, ?name :varchar, ?auuid :uuid}}])
+  (fix/transact! *api* [{:xt/id :person-schema
+                         :xtdb.sql/table-name "person"
+                         :xtdb.sql/table-query '{:find [?id ?name ?auuid]
+                                                 :where [[?id :name ?name]
+                                                         [?id :auuid ?auuid]]}
+                         :xtdb.sql/table-columns '{?id :keyword, ?name :varchar, ?auuid :uuid}}])
   (let [auuid (java.util.UUID/randomUUID)]
     (fix/transact! *api* [{:xt/id :human/ivan :name "Ivan" :auuid auuid}])
     (t/is (= [{:id ":human/ivan",
@@ -452,61 +452,61 @@
 (t/deftest test-different-data-types
   (let [born #inst "2010-07-01"
         afloat (float 1.0)]
-    (fix/transact! *api* [{:xt/id :xt.sql.schema/person
-                           :xt.sql.table/name "person"
-                           :xt.sql.table/query '{:find [?id ?name ?born ?afloat ?adecimal]
-                                                 :where [[?id :name ?name]
-                                                         [?id :born ?born]
-                                                         [?id :afloat ?afloat]
-                                                         [?id :adecimal ?adecimal]]}
-                           :xt.sql.table/columns '{?id :keyword
-                                                   ?name :varchar
-                                                   ?born :timestamp
-                                                   ?afloat :float
-                                                   ?adecimal :decimal}}
+    (fix/transact! *api* [{:xt/id :person-schema
+                           :xtdb.sql/table-name "person"
+                           :xtdb.sql/table-query '{:find [?id ?name ?born ?afloat ?adecimal]
+                                                   :where [[?id :name ?name]
+                                                           [?id :born ?born]
+                                                           [?id :afloat ?afloat]
+                                                           [?id :adecimal ?adecimal]]}
+                           :xtdb.sql/table-columns '{?id :keyword
+                                                     ?name :varchar
+                                                     ?born :timestamp
+                                                     ?afloat :float
+                                                     ?adecimal :decimal}}
                           {:xt/id :human/ivan :name "Ivan" :homeworld "Earth" :born born :afloat afloat :adecimal 1.3M}])
     (t/is (= [{:id ":human/ivan", :name "Ivan" :born born :afloat afloat :adecimal 1.3M}] (query "SELECT * FROM PERSON")))
     (t/is (first (query "SELECT NAME FROM PERSON WHERE ADECIMAL = 1.3"))))
   (t/testing "restricted types"
     (t/is (thrown-with-msg? java.lang.Exception #"Unrecognised java.sql.Types: :time"
                             (do
-                              (fix/transact! *api* [{:xt/id :xt.sql.schema/person
-                                                     :xt.sql.table/name "person"
-                                                     :xt.sql.table/query '{:find [?id ?name ?born]}
-                                                     :xt.sql.table/columns '{?id :keyword
-                                                                             ?born :time}}])
+                              (fix/transact! *api* [{:xt/id :person-schema
+                                                     :xtdb.sql/table-name "person"
+                                                     :xtdb.sql/table-query '{:find [?id ?name ?born]}
+                                                     :xtdb.sql/table-columns '{?id :keyword
+                                                                               ?born :time}}])
                               (query "SELECT * FROM PERSON")))))
   (t/testing "missing column definition"
     (t/is (thrown-with-msg? java.lang.Exception #"Unrecognised column: \?name"
                             (do
-                              (fix/transact! *api* [{:xt/id :xt.sql.schema/person
-                                                     :xt.sql.table/name "person"
-                                                     :xt.sql.table/query '{:find [?id ?name]}
-                                                     :xt.sql.table/columns '{?id :keyword}}])
+                              (fix/transact! *api* [{:xt/id :person-schema
+                                                     :xtdb.sql/table-name "person"
+                                                     :xtdb.sql/table-query '{:find [?id ?name]}
+                                                     :xtdb.sql/table-columns '{?id :keyword}}])
                               (query "SELECT * FROM PERSON"))))))
 
 (t/deftest test-simple-joins
-  (fix/transact! *api* '[{:xt/id :xt.sql.schema/person
-                          :xt.sql.table/name "person"
-                          :xt.sql.table/query {:find [id name planet age]
-                                               :where [[id :name name]
-                                                       [id :planet planet]
-                                                       [id :age age]]}
-                          :xt.sql.table/columns {id :keyword, name :varchar planet :varchar age :bigint}}
-                         {:xt/id :xt.sql.schema/planet
-                          :xt.sql.table/name "planet"
-                          :xt.sql.table/query {:find [id name climate age]
-                                               :where [[id :name name]
-                                                       [id :climate climate]
-                                                       [id :age age]]}
-                          :xt.sql.table/columns {id :keyword, name :varchar climate :varchar age :bigint}}
-                         {:xt/id :xt.sql.schema/ship
-                          :xt.sql.table/name "ship"
-                          :xt.sql.table/query {:find [id name captain decks]
-                                               :where [[id :name name]
-                                                       [id :captain captain]
-                                                       [id :decks decks]]}
-                          :xt.sql.table/columns {id :keyword, name :varchar captain :varchar decks :bigint}}])
+  (fix/transact! *api* '[{:xt/id :person-schema
+                          :xtdb.sql/table-name "person"
+                          :xtdb.sql/table-query {:find [id name planet age]
+                                                 :where [[id :name name]
+                                                         [id :planet planet]
+                                                         [id :age age]]}
+                          :xtdb.sql/table-columns {id :keyword, name :varchar planet :varchar age :bigint}}
+                         {:xt/id :planet-schema
+                          :xtdb.sql/table-name "planet"
+                          :xtdb.sql/table-query {:find [id name climate age]
+                                                 :where [[id :name name]
+                                                         [id :climate climate]
+                                                         [id :age age]]}
+                          :xtdb.sql/table-columns {id :keyword, name :varchar climate :varchar age :bigint}}
+                         {:xt/id :ship-schema
+                          :xtdb.sql/table-name "ship"
+                          :xtdb.sql/table-query {:find [id name captain decks]
+                                                 :where [[id :name name]
+                                                         [id :captain captain]
+                                                         [id :decks decks]]}
+                          :xtdb.sql/table-columns {id :keyword, name :varchar captain :varchar decks :bigint}}])
   (fix/transact! *api* [{:xt/id :person/ivan :name "Ivan" :planet "earth" :age 25}
                         {:xt/id :person/malcolm :name "Malcolm" :planet "mars" :age 21}
                         {:xt/id :planet/earth :name "earth" :climate "Hot" :age 42}
@@ -603,13 +603,13 @@ XtdbToEnumerableConverter
              (explain q)))))
 
 (t/deftest test-table-backed-by-query
-  (fix/transact! *api* [{:xt/id :xt.sql.schema/person
-                         :xt.sql.table/name "person"
-                         :xt.sql.table/query {:find ['id 'name 'planet]
-                                              :where [['id :name 'name]
-                                                      ['id :planet 'planet]
-                                                      ['id :planet "earth"]]}
-                         :xt.sql.table/columns {'id :keyword, 'name :varchar 'planet :varchar}}])
+  (fix/transact! *api* [{:xt/id :person-schema
+                         :xtdb.sql/table-name "person"
+                         :xtdb.sql/table-query {:find ['id 'name 'planet]
+                                                :where [['id :name 'name]
+                                                        ['id :planet 'planet]
+                                                        ['id :planet "earth"]]}
+                         :xtdb.sql/table-columns {'id :keyword, 'name :varchar 'planet :varchar}}])
   (fix/transact! *api* [{:xt/id :person/ivan :name "Ivan" :planet "earth"}
                         {:xt/id :person/igor :name "Igor" :planet "not-earth"}])
   (t/testing "retrieve data"

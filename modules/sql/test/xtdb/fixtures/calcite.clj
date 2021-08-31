@@ -1,7 +1,6 @@
 (ns xtdb.fixtures.calcite
   (:require [xtdb.calcite :as cal]
-            [xtdb.fixtures :as fix]
-            [xtdb.node :as n])
+            [xtdb.fixtures :as fix])
   (:import java.sql.DriverManager
            java.sql.PreparedStatement))
 
@@ -35,10 +34,9 @@
 
 (defn exec-prepared-query [^PreparedStatement p & args]
   (doseq [[i v] args]
-    (if (string? v)
-      (.setString p i v)
-      (if (number? v)
-        (.setInt p i v))))
+    (cond
+      (string? v) (.setString p i v)
+      (number? v) (.setInt p i v)))
   (with-open [rs (.executeQuery p)]
     (->> rs resultset-seq (into []))))
 
