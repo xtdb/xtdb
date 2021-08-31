@@ -6,7 +6,7 @@
         ch.qos.logback/logback-classic {:mvn/version "1.2.3"}
 
         ;; Crux
-        com.xtdb/xtdb-core {:mvn/version "crux-git-version"}
-        com.xtdb/xtdb-rocksdb {:mvn/version "crux-git-version"}
-        com.xtdb/xtdb-http-server {:mvn/version "crux-git-version"}
-        com.xtdb/xtdb-sql {:mvn/version "crux-git-version"}}}
+        com.xtdb/xtdb-core {:mvn/version "xtdb-git-version"}
+        com.xtdb/xtdb-rocksdb {:mvn/version "xtdb-git-version"}
+        com.xtdb/xtdb-http-server {:mvn/version "xtdb-git-version"}
+        com.xtdb/xtdb-sql {:mvn/version "xtdb-git-version"}}}

@@ -9,20 +9,20 @@
 
 == Preconfigured Artifacts
 
-=== `crux-in-memory`
+=== `xtdb-in-memory`
 
-The `crux-in-memory` artifact starts up a basic, in-memory Crux node, with both a HTTP Server _(open on port 3000)_ and the xref:sql.adoc[Crux SQL] module with a SQL server _(open on port 1501)_.
+The `xtdb-in-memory` artifact starts up a basic, in-memory Crux node, with both a HTTP Server _(open on port 3000)_ and the xref:sql.adoc[Crux SQL] module with a SQL server _(open on port 1501)_.
 
 It can be downloaded:
 
-* as a Docker image from https://hub.docker.com/repository/docker/juxt/crux-in-memory[JUXT's Docker Hub]
-* as an uberjar, `crux-in-memory.jar`, from the relevant https://github.com/xtdb/xtdb/releases[GitHub release]
+* as a Docker image from https://hub.docker.com/repository/docker/juxt/xtdb-in-memory[JUXT's Docker Hub]
+* as an uberjar, `xtdb-in-memory.jar`, from the relevant https://github.com/xtdb/xtdb/releases[GitHub release]
 
 Communication with the node is done via the Crux REST API - see the xref:http.adoc[HTTP docs] for more information.
 
 == Building Artifacts
 
-Alongside the JARs deployed on the GitHub releases is `crux-builder.tar.gz` - the scripts within this archive can be used to build a custom Crux JAR or Docker container.
+Alongside the JARs deployed on the GitHub releases is `xtdb-builder.tar.gz` - the scripts within this archive can be used to build a custom Crux JAR or Docker container.
 
 === Building a JAR (Clojure CLI tooling)
 

@@ -71,9 +71,9 @@ include::example$test/xtdb/docs/Install.kt[tag=main,indent=0]
 == Using a pre-built Crux JAR
 
 You can start a standalone Crux node, accessible through HTTP, using a pre-built Crux JAR.
-Crux pre-built JARs can be found on the relevant https://github.com/xtdb/xtdb/releases[GitHub releases,window=_blank] page - we'll use `crux-in-memory.jar`.
+Crux pre-built JARs can be found on the relevant https://github.com/xtdb/xtdb/releases[GitHub releases,window=_blank] page - we'll use `xtdb-in-memory.jar`.
 
-Start it in the usual way, with `java -jar crux-in-memory.jar`.
+Start it in the usual way, with `java -jar xtdb-in-memory.jar`.
 This will open an HTTP port with a console UI on port 3000 - open http://localhost:3000[window=_blank] in your favourite browser.
 
 // TODO build needs its own pages in the main docs, not just a blog
@@ -84,7 +84,7 @@ You can also build custom Crux JARs with your choice of modules - see the https:
 
 You can also start a standalone Crux node using Docker, using:
 
-`docker run -p 3000:3000 juxt/crux-in-memory:1.18.1`
+`docker run -p 3000:3000 juxt/xtdb-in-memory:1.18.1`
 
 Again, this opens up an HTTP server at http://localhost:3000[window=_blank].
 

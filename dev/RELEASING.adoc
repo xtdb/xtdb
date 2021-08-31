@@ -27,7 +27,7 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 
 1. Await CircleCI.
 2. Await JAR upload (above) - required for Docker images.
-3. Retrieve artifacts from build: crux-builder.tar.gz, crux-in-memory.jar
+3. Retrieve artifacts from build: xtdb-builder.tar.gz, xtdb-in-memory.jar
 
 ## Docs:
 1. Await CircleCI.

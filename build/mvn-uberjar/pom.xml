@@ -3,17 +3,17 @@
   <modelVersion>4.0.0</modelVersion>
 
   <properties>
-      <crux.group-id>juxt</crux.group-id>
-      <crux.artifact-id>crux-custom</crux.artifact-id>
-      <crux.crux-version>crux-git-version</crux.crux-version>
-      <crux.artifact-version>crux-git-version</crux.artifact-version>
-      <crux.uberjar-name>crux.jar</crux.uberjar-name>
+      <xtdb.group-id>com.xtdb</xtdb.group-id>
+      <xtdb.artifact-id>xtdb-custom</xtdb.artifact-id>
+      <xtdb.xtdb-version>xtdb-git-version</xtdb.xtdb-version>
+      <xtdb.artifact-version>xtdb-git-version</xtdb.artifact-version>
+      <xtdb.uberjar-name>xtdb.jar</xtdb.uberjar-name>
   </properties>
 
-  <groupId>${crux.group-id}</groupId>
-  <artifactId>${crux.artifact-id}</artifactId>
-  <version>${crux.artifact-version}</version>
-  <name>#{crux.artifact-id}</name>
+  <groupId>${xtdb.group-id}</groupId>
+  <artifactId>${xtdb.artifact-id}</artifactId>
+  <version>${xtdb.artifact-version}</version>
+  <name>#{xtdb.artifact-id}</name>
 
   <dependencies>
     <dependency>
@@ -35,15 +35,15 @@
     </dependency>
 
     <dependency>
-      <groupId>juxt</groupId>
-      <artifactId>crux-core</artifactId>
-      <version>${crux.crux-version}-beta</version>
+      <groupId>${xtdb.group-id}</groupId>
+      <artifactId>xtdb-core</artifactId>
+      <version>${xtdb.xtdb-version}</version>
     </dependency>
 
     <dependency>
-        <groupId>juxt</groupId>
-        <artifactId>crux-http-server</artifactId>
-        <version>${crux.crux-version}-alpha</version>
+        <groupId>${xtdb.group-id}</groupId>
+        <artifactId>xtdb-http-server</artifactId>
+        <version>${xtdb.xtdb-version}</version>
     </dependency>
   </dependencies>
 
@@ -63,10 +63,10 @@
               <configuration>
                   <transformers>
                       <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                          <mainClass>crux.main</mainClass>
+                          <mainClass>xtdb.main</mainClass>
                       </transformer>
                   </transformers>
-                  <outputFile>${crux.uberjar-name}</outputFile>
+                  <outputFile>${xtdb.uberjar-name}</outputFile>
               </configuration>
               <executions>
                   <execution>

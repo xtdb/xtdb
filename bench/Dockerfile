@@ -9,7 +9,7 @@ ADD data/weather_small_conditions.csv crux-bench/data/
 ADD data/devices_small_device_info.csv crux-bench/data/
 ADD data/devices_small_readings.csv crux-bench/data/
 
-ARG crux_commit='commit-not-found'
-ENV COMMIT_HASH=$crux_commit
+ARG xtdb_commit='commit-not-found'
+ENV COMMIT_HASH=$xtdb_commit
 ENV MALLOC_ARENA_MAX=2
 ADD target/crux-bench-standalone.jar .

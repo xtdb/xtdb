@@ -3,5 +3,5 @@
 !build-uberjar.sh
 !pom.xml
 !xtdb.edn
-!crux-in-memory.edn
+!xtdb-in-memory.edn
 !crux-standalone-rocksdb.edn

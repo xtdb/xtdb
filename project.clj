@@ -87,10 +87,10 @@
              "-Dclojure.spec.check-asserts=true"]
 
   :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
-             :with-s3-tests {:jvm-opts ["-Dxtdb.s3.test-bucket=xtdb-s3-test"]}
-             :with-azure-blobs-tests {:jvm-opts ["-Dxtdb.azure.blobs.test-storage-account=xtdb-azure-blobs-test-storage-account"
-                                                 "-Dxtdb.azure.blobs.test-container=xtdb-azure-blobs-test-container"]}
-             :with-google-cloud-storage-test {:jvm-opts ["-Dxtdb.google.cloud-storage-test.bucket=xtdb-gcs-test"]}
+             :with-s3-tests {:jvm-opts ["-Dxtdb.s3.test-bucket=crux-s3-test"]}
+             :with-azure-blobs-tests {:jvm-opts ["-Dxtdb.azure.blobs.test-storage-account=crux-azure-blobs-test-storage-account"
+                                                 "-Dxtdb.azure.blobs.test-container=crux-azure-blobs-test-container"]}
+             :with-google-cloud-storage-test {:jvm-opts ["-Dxtdb.google.cloud-storage-test.bucket=crux-gcs-test"]}
              :with-chm-add-opens {:jvm-opts ["--add-opens" "java.base/java.util.concurrent=ALL-UNNAMED"]}}
 
   :pedantic? :warn
