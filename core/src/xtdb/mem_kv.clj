@@ -11,7 +11,8 @@
             [xtdb.system :as sys]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
   (:import clojure.lang.Box
-           java.io.Closeable))
+           [java.io Closeable File]
+           java.nio.file.Path))
 
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
@@ -68,7 +69,7 @@
   Closeable
   (close [_]))
 
-(defrecord MemKv [!db cp-job]
+(defrecord MemKv [!db db-dir cp-job]
   kv/KvStore
   (new-snapshot [_]
     (MemKvSnapshot. @!db))
@@ -104,7 +105,9 @@
 
   Closeable
   (close [_]
-    (xio/try-close cp-job)))
+    (xio/try-close cp-job)
+    (when db-dir
+      (persist-db db-dir @!db))))
 
 (def ^:private cp-format
   {:index-version c/index-version
@@ -118,16 +121,20 @@
       (finally
         (xio/delete-dir db-dir)))))
 
-(defn ->kv-store {::sys/deps {:checkpointer (fn [_])}}
+(defn ->kv-store {::sys/deps {:checkpointer (fn [_])}
+                  ::sys/args {:db-dir {:required? false
+                                       :spec ::sys/path}}}
   ([] (->kv-store {}))
 
-  ([{:keys [checkpointer db-dir]}]
-   (let [db (or (when db-dir
+  ([{:keys [checkpointer ^Path db-dir]}]
+   (let [^File db-dir (some-> db-dir .toFile)
+         db (or (when (and db-dir (.exists db-dir))
                   ;; for xtdb.kv-test/test-checkpoint-and-restore-db
                   (restore-db db-dir))
                 (when checkpointer
                   (try-restore-from-checkpoint checkpointer))
                 (sorted-map-by mem/buffer-comparator))
-         kv-store (map->MemKv {:!db (atom db)})]
+         kv-store (map->MemKv {:!db (atom db)
+                               :db-dir db-dir})]
      (cond-> kv-store
        checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format}))))))
