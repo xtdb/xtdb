@@ -6,6 +6,12 @@
            [org.apache.arrow.vector.types.pojo ArrowType Field FieldType Schema]
            java.time.ZoneId))
 
+;; Leaving as reference for now, this approach could be evolved, but
+;; it will be hard to map to Arrow Java in a neat way. In practice,
+;; one will always have a concrete value one wants to map into
+;; existing Arrow vectors. See instead core2.types.json which takes a
+;; more incremental approach.
+
 ;; See https://github.com/apache/arrow/blob/master/format/Schema.fbs
 
 (def ^:private ^ObjectMapper object-mapper (ObjectMapper.))
