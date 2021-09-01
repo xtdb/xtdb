@@ -56,8 +56,7 @@
                              (f v db recurse-state))
                            (.child-fns recurse-state))
                      (raise-doc-lookup-out-of-coll)
-                     (after-doc-lookup (fn [res]
-                                         (into {} (mapcat identity) res)))))))]
+                     (after-doc-lookup (fn [res] (not-empty (into {} (mapcat identity) res))))))))]
     (cond
       (= '... query) pull-child
       (int? query) (fn [v db ^RecurseState recurse-state]

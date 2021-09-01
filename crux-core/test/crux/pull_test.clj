@@ -22,7 +22,11 @@
 (t/deftest test-pull
   (let [db (submit-bond)]
 
-    (t/is (= #{[{}]}
+    (t/is (= #{}
+             (crux/q db '{:find [(pull ?v [])]
+                          :where [[?v :not/here "N/A"]]})))
+
+    (t/is (= #{[nil]}
              (crux/q db '{:find [(pull ?v [])]
                           :where [[?v :vehicle/brand "Aston Martin"]]})))
 
@@ -240,7 +244,7 @@
                                :where [[?root :crux.db/id :root]]}))))))
 
 (t/deftest test-doesnt-hang-on-unknown-eid
-  (t/is (= #{[{}]}
+  (t/is (= #{[nil]}
            (crux/q (crux/db *api*)
                    '{:find [(pull ?e [*])]
                      :in [?e]
@@ -258,7 +262,7 @@
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo :ref [:bar :baz]}]
                         [:crux.tx/put {:crux.db/id :bar}]])
 
-  (t/is (= #{[{:ref [#:crux.db{:id :bar} {}]}]}
+  (t/is (= #{[{:ref [#:crux.db{:id :bar} nil]}]}
            (crux/q (crux/db *api*)
                    '{:find [(pull ?it [{:ref [:crux.db/id]}])]
                      :where [[?it :crux.db/id :foo]]}))))

@@ -116,7 +116,7 @@
 (t/deftest test-pull-default
   (let [db (submit-test-docs people-docs)]
     ;; Datascript returns nil here, because there's no matching datom
-    (t/is (= #{[{}]}
+    (t/is (= #{[nil]}
              (crux/q db '{:find [(pull ?e [:foo])]
                           :where [[?e :crux.db/id :petr]]}))
           "Missing attrs return empty map")
@@ -160,7 +160,7 @@
 
     ;; Datascript returns `{:name "Petr", :children []}` for this, but we've matched documents,
     ;; so we can say 'there are two children, but they don't have `:foo`'
-    (t/is (= #{[{:name "Petr" :children [{} {}]}]}
+    (t/is (= #{[{:name "Petr"}]}
              (crux/q db '{:find [(pull ?e [:name {(:_parent {:as :children}) [:foo]}])]
                           :where [[?e :crux.db/id :petr]]}))
           "Non matching results are removed from collections")
