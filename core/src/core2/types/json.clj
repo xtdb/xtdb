@@ -25,36 +25,6 @@
                          :json/array :json/array
                          :json/object :json/object))
 
-(def ^:private json-hierarchy
-  (-> (make-hierarchy)
-      (derive :json/int :json/number)
-      (derive :json/float :json/number)
-      (derive :json/null :json/scalar)
-      (derive :json/boolean :json/scalar)
-      (derive :json/number :json/scalar)
-      (derive :json/string :json/scalar)
-      (derive :json/array :json/value)
-      (derive :json/object :json/value)
-      (derive :json/scalar :json/value)))
-
-(defn type-kind [[tag x]]
-  (cond
-    (isa? json-hierarchy tag :json/scalar)
-    {:kind :json/scalar}
-    (= :json/array tag)
-    {:kind :json/array}
-    (= :json/object tag)
-    {:kind :json/object
-     :keys (set (keys x))}))
-
-(def json->arrow {:json/null Types$MinorType/NULL
-                  :json/boolean Types$MinorType/BIT
-                  :json/int Types$MinorType/BIGINT
-                  :json/float Types$MinorType/FLOAT8
-                  :json/string Types$MinorType/VARCHAR
-                  :json/array Types$MinorType/LIST
-                  :json/object Types$MinorType/STRUCT})
-
 (defn- kw-name ^String [x]
   (if (keyword? x)
     (subs (str x) 1)
@@ -207,3 +177,36 @@
       (append-writer a writer nil nil (s/conform :json/value x)))
     (.setValueCount v (.getPosition writer))
     (str v)))
+
+;; The below is currently unused, assumes a more manual mapping to
+;; Arrow than using UnionWriter directly as above.
+
+(def ^:private json-hierarchy
+  (-> (make-hierarchy)
+      (derive :json/int :json/number)
+      (derive :json/float :json/number)
+      (derive :json/null :json/scalar)
+      (derive :json/boolean :json/scalar)
+      (derive :json/number :json/scalar)
+      (derive :json/string :json/scalar)
+      (derive :json/array :json/value)
+      (derive :json/object :json/value)
+      (derive :json/scalar :json/value)))
+
+(defn type-kind [[tag x]]
+  (cond
+    (isa? json-hierarchy tag :json/scalar)
+    {:kind :json/scalar}
+    (= :json/array tag)
+    {:kind :json/array}
+    (= :json/object tag)
+    {:kind :json/object
+     :keys (set (keys x))}))
+
+(def json->arrow {:json/null Types$MinorType/NULL
+                  :json/boolean Types$MinorType/BIT
+                  :json/int Types$MinorType/BIGINT
+                  :json/float Types$MinorType/FLOAT8
+                  :json/string Types$MinorType/VARCHAR
+                  :json/array Types$MinorType/LIST
+                  :json/object Types$MinorType/STRUCT})
