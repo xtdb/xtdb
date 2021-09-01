@@ -47,7 +47,7 @@
 
 (defmethod append-writer [:json/object :json/null] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
   (doto writer
-    (-> (.bit (kw-name k)) (.writeNull))))
+    (-> (.bit k) (.writeNull))))
 
 (defmethod append-writer [nil :json/boolean] [_ ^BaseWriter$ScalarWriter writer _ _ [tag x]]
   (doto writer
@@ -60,7 +60,7 @@
 
 (defmethod append-writer [:json/object :json/boolean] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
   (doto writer
-    (-> (.bit (kw-name k)) (.writeBit (if x 1 0)))))
+    (-> (.bit k) (.writeBit (if x 1 0)))))
 
 (defmethod append-writer [nil :json/int] [_ ^BaseWriter$ScalarWriter writer _ _ [tag x]]
   (doto writer
@@ -73,7 +73,7 @@
 
 (defmethod append-writer [:json/object :json/int] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
   (doto writer
-    (-> (.bigInt (kw-name k)) (.writeBigInt x))))
+    (-> (.bigInt k) (.writeBigInt x))))
 
 (defmethod append-writer [nil :json/float] [_ ^BaseWriter$ScalarWriter writer _ _ [tag x]]
   (doto writer
@@ -86,7 +86,7 @@
 
 (defmethod append-writer [:json/object :json/float] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
   (doto writer
-    (-> (.float8 (kw-name k)) (.writeFloat8 x))))
+    (-> (.float8 k) (.writeFloat8 x))))
 
 (defn- write-varchar [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^String x]
   (let [bs (.getBytes x StandardCharsets/UTF_8)
@@ -105,7 +105,7 @@
   writer)
 
 (defmethod append-writer [:json/object :json/string] [^BufferAllocator allocator ^BaseWriter$StructWriter writer _ k [tag x]]
-  (write-varchar allocator (.varChar writer (kw-name k)) x)
+  (write-varchar allocator (.varChar writer k) x)
   writer)
 
 (defmethod append-writer [nil :json/array] [allocator ^UnionWriter writer _ _ [tag x]]
@@ -126,7 +126,7 @@
     writer))
 
 (defmethod append-writer [:json/object :json/array] [allocator ^BaseWriter$StructWriter writer _ k [tag x]]
-  (let [list-writer (.list writer (kw-name k))]
+  (let [list-writer (.list writer k)]
     (.startList list-writer)
     (doseq [v x]
       (append-writer allocator list-writer :json/array nil v))
@@ -137,7 +137,7 @@
   (let [struct-writer (.asStruct writer)]
     (.start writer)
     (doseq [[k v] x]
-      (append-writer allocator struct-writer :json/object k v))
+      (append-writer allocator struct-writer :json/object (kw-name k) v))
     (doto writer
       (.end)
       (advance-writer))))
@@ -146,7 +146,7 @@
   (let [struct-writer (.struct writer)]
     (.start struct-writer)
     (doseq [[k v] x]
-      (append-writer allocator struct-writer :json/object k v))
+      (append-writer allocator struct-writer :json/object (kw-name k) v))
     (.end struct-writer)
     writer))
 
@@ -154,7 +154,7 @@
   (let [struct-writer (.struct writer (kw-name k))]
     (.start struct-writer)
     (doseq [[k v] x]
-      (append-writer allocator struct-writer :json/object k v))
+      (append-writer allocator struct-writer :json/object (kw-name k) v))
     (.end struct-writer)
     writer))
 
