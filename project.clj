@@ -94,8 +94,10 @@
              :with-azure-blobs-tests {:jvm-opts ["-Dxtdb.azure.blobs.test-storage-account=crux-azure-blobs-test-storage-account"
                                                  "-Dxtdb.azure.blobs.test-container=crux-azure-blobs-test-container"]}
              :with-google-cloud-storage-test {:jvm-opts ["-Dxtdb.google.cloud-storage-test.bucket=crux-gcs-test"]}
-             :with-chm-add-opens {:jvm-opts ["--add-opens" "java.base/java.util.concurrent=ALL-UNNAMED"]}}
-
+             :with-chm-add-opens {:jvm-opts ["--add-opens" "java.base/java.util.concurrent=ALL-UNNAMED"]}
+             :nvd {:dependencies [[lein-nvd "1.5.0"]]
+                   :plugins [[lein-nvd "1.5.0"]]}}
+  :nvd {:fail-threshold 11}
   :pedantic? :warn
   :global-vars {*warn-on-reflection* true}
 
