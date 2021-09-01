@@ -43,7 +43,7 @@
 
 (defmethod append-writer [:json/array :json/null] [_ ^BaseWriter$ListWriter writer _ _ [tag x]]
   (doto writer
-    (-> (.writeNull))))
+    (-> (.bit) (.writeNull))))
 
 (defmethod append-writer [:json/object :json/null] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
   (doto writer
@@ -169,13 +169,14 @@
                3.14
                "Hello"
                []
-               [2 3.14 [false]]
+               [2 3.14 [false nil]]
                {}
-               {:B 2 :C 1}
+               {:B 2 :C 1 :F false}
                {:B 3.14 :D {:E ["hello" -1]} :F nil}]]
 
       (append-writer a writer nil nil (s/conform :json/value x)))
     (.setValueCount v (.getPosition writer))
+
     (str v)))
 
 ;; The below is currently unused, assumes a more manual mapping to
