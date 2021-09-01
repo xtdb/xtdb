@@ -51,6 +51,7 @@
                   :json/object Types$MinorType/STRUCT})
 
 
+;; PromotableWriter spike
 (comment
   (with-open [a (org.apache.arrow.memory.RootAllocator.)
               container (org.apache.arrow.vector.complex.NonNullableStructVector/empty "" a)
@@ -102,5 +103,77 @@
     (.end writer)
 
     (.setValueCount container 8)
+    (pr-str (.getChild v "A"))
 
-    (str (.getChild v "A" org.apache.arrow.vector.complex.UnionVector))))
+    ;; Attempt to turn Sparse unions created by the above into dense after the fact (before writing IPC)
+    #_(let [^org.apache.arrow.vector.complex.UnionVector a-vec (.getChild v "A")
+            field (first (.getFields (org.apache.arrow.vector.types.pojo.Schema/fromJSON
+                                      (json/json-str (clojure.walk/postwalk #(if (and (= "Sparse" (get % "mode"))
+                                                                                      (= "union" (get % "name")))
+                                                                               (assoc % "mode" "Dense")
+                                                                               %)
+                                                                            (json/read-str (.toJson (org.apache.arrow.vector.types.pojo.Schema. [(.getField a-vec)]))))))))]
+        (with-open [^org.apache.arrow.vector.complex.DenseUnionVector copy (.createVector ^org.apache.arrow.vector.types.pojo.Field field a)]
+          (dotimes [n (.getValueCount a-vec)]
+            (let [type-id (.getByte (.getTypeBuffer ^org.apache.arrow.vector.complex.UnionVector a-vec) n)
+                  offset (core2.DenseUnionUtil/writeTypeId copy n type-id)]
+              (.copyFromSafe (.getVectorByType copy type-id) n offset (.getVectorByType a-vec type-id))
+              (prn (.getObject copy n))))))))
+
+
+;; UnionWriter spike
+(comment
+  (with-open [a (org.apache.arrow.memory.RootAllocator.)
+              v (org.apache.arrow.vector.complex.UnionVector/empty "" a)
+              ^org.apache.arrow.vector.complex.impl.UnionWriter writer (.getWriter v)]
+    #_(.allocateNew v)
+
+    (.setPosition writer 0)
+    (.writeBit writer 0)
+
+    (.setPosition writer 1)
+    (.writeNull writer)
+
+    (.setPosition writer 2)
+    (.writeBigInt writer 2)
+
+    (.setPosition writer 3)
+    (.writeFloat8 writer 3.14)
+
+    (.setPosition writer 4)
+    (let [bs (.getBytes "Hello" "UTF-8")
+          len (alength bs)]
+      (with-open [buf (.buffer a len)]
+        (.setBytes buf 0 bs)
+        (.writeVarChar writer 0 len buf)))
+
+    (.setPosition writer 5)
+    (let [l (.asList writer)]
+      (.startList l)
+      (.writeBigInt (.bigInt l) 2)
+      (.writeFloat8 (.float8 l) 3.14)
+      (.endList l))
+
+    (.setPosition writer 6)
+    (let [s (.asStruct writer)]
+      (.start s)
+      (.writeBigInt (.bigInt s "B") 2)
+      (.writeBit (.bit s "C") 1)
+      (.end s))
+
+    (.setPosition writer 7)
+    (let [s (.asStruct writer)]
+      (.start s)
+      (.writeFloat8 (.float8 s "B") 3.14)
+      (.end s))
+
+    (.setPosition writer 8)
+    (let [l (.asList writer)]
+      (.startList l)
+      (.writeBit (.bit l) 1)
+      (.writeFloat8 (.float8 l) 3.14)
+      (.writeNull l)
+      (.endList l))
+
+    (.setValueCount v 9)
+    (pr-str v)))
