@@ -5,8 +5,7 @@
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.complex.writer BaseWriter BaseWriter$ListWriter BaseWriter$ScalarWriter BaseWriter$StructWriter]
            [org.apache.arrow.vector.complex.impl UnionWriter]
-           [org.apache.arrow.vector.complex UnionVector]
-           [org.apache.arrow.memory BufferAllocator RootAllocator]))
+           [org.apache.arrow.memory BufferAllocator]))
 
 (s/def :json/null nil?)
 (s/def :json/boolean boolean?)
@@ -157,27 +156,6 @@
       (append-writer allocator struct-writer :json/object (kw-name k) v))
     (.end struct-writer)
     writer))
-
-(comment
-  (with-open [a (RootAllocator.)
-              v (UnionVector/empty "" a)
-              ^UnionWriter writer (.getWriter v)]
-
-    (doseq [x [false
-               nil
-               2
-               3.14
-               "Hello"
-               []
-               [2 3.14 [false nil]]
-               {}
-               {:B 2 :C 1 :F false}
-               {:B 3.14 :D {:E ["hello" -1]} :F nil}]]
-
-      (append-writer a writer nil nil (s/conform :json/value x)))
-    (.setValueCount v (.getPosition writer))
-
-    (str v)))
 
 ;; The below is currently unused, assumes a more manual mapping to
 ;; Arrow than using UnionWriter directly as above.
