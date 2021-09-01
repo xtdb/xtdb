@@ -12,7 +12,7 @@
             [crux.rocksdb :as rocks]
             [clojure.java.io :as io])
   (:import (crux.api ICruxAPI)
-           java.io.Closeable
+           (java.io Closeable File)
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory))
 
@@ -61,13 +61,15 @@
                        :crux.lucene/lucene-store {:db-dir (io/file dev-node-dir "lucene")}}}})
 
 (defmethod i/init-key ::embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
-  (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
-                                 :zookeeper-port (cio/free-port)
-                                 :kafka-log-dir (io/file kafka-dir "kafka-log")
-                                 :kafka-port kafka-port}))
+  {:embedded-kafka (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
+                                                  :zookeeper-port (cio/free-port)
+                                                  :kafka-log-dir (io/file kafka-dir "kafka-log")
+                                                  :kafka-port kafka-port})
+   :meta-properties-file (io/file kafka-dir "kafka-log/meta.properties")})
 
-(defmethod i/halt-key! ::embedded-kafka [_ ^Closeable embedded-kafka]
-  (.close embedded-kafka))
+(defmethod i/halt-key! ::embedded-kafka [_ {:keys [^Closeable embedded-kafka ^File meta-properties-file ]}]
+  (.close embedded-kafka)
+  (.delete meta-properties-file))
 
 (def embedded-kafka-config
   (let [kafka-port (cio/free-port)]
@@ -75,6 +77,7 @@
                        :kafka-dir (io/file dev-node-dir "kafka")}
      ::crux {:ek (i/ref ::embedded-kafka)
              :node-opts {::k/kafka-config {:bootstrap-servers (str "http://localhost:" kafka-port)}
+                         :crux.http-server/server {}
                          :crux/index-store {:kv-store {:crux/module `rocks/->kv-store
                                                        :db-dir (io/file dev-node-dir "ek-indexes")}}
                          :crux/document-store {:crux/module `k/->document-store,
