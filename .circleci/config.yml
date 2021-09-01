@@ -121,6 +121,19 @@ jobs:
       - store_test_results:
           path: "crux-test/target/test-results"
 
+  nvd-check:
+    docker:
+      - image: circleci/clojure:openjdk-8-lein
+    working_directory: ~/crux
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/
+      - run: lein nvd check
+      - store_artifacts:
+          path: "~/crux/target/nvd/dependency-check-report.html"
+          destination: "nvd-report.html"
+
   deploy-bench:
     docker:
       - image: circleci/clojure:openjdk-8-lein
@@ -224,6 +237,9 @@ workflows:
     jobs:
       - build
       - test:
+          requires:
+            - build
+      - nvd-check:
           requires:
             - build
       - deploy-api-docs:

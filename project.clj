@@ -107,7 +107,9 @@
              "-Dclojure.spec.compile-asserts=true"
              "-Dclojure.spec.check-asserts=true"]
 
-  :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
+  :profiles {:dev {:dependencies [[lein-nvd "1.5.0"]]
+                   :plugins [[lein-nvd "1.5.0"]]}
+             :attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
              :with-s3-tests {:jvm-opts ["-Dcrux.s3.test-bucket=crux-s3-test"]}
              :with-azure-blobs-tests {:jvm-opts ["-Dcrux.azure.blobs.test-storage-account=crux-azure-blobs-test-storage-account"
                                                  "-Dcrux.azure.blobs.test-container=crux-azure-blobs-test-container"]}
