@@ -61,13 +61,15 @@
                        :xtdb.lucene/lucene-store {:db-dir (io/file dev-node-dir "lucene")}}}})
 
 (defmethod i/init-key ::embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
-  (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
-                                 :zookeeper-port (xio/free-port)
-                                 :kafka-log-dir (io/file kafka-dir "kafka-log")
-                                 :kafka-port kafka-port}))
+  {:embedded-kafka (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
+                                                  :zookeeper-port (xio/free-port)
+                                                  :kafka-log-dir (io/file kafka-dir "kafka-log")
+                                                  :kafka-port kafka-port})
+   :meta-properties-file (io/file kafka-dir "kafka-log/meta.properties")})
 
-(defmethod i/halt-key! ::embedded-kafka [_ ^Closeable embedded-kafka]
-  (.close embedded-kafka))
+(defmethod i/halt-key! ::embedded-kafka [_ {:keys [^Closeable embedded-kafka ^File meta-properties-file ]}]
+  (.close embedded-kafka)
+  (.delete meta-properties-file))
 
 (def embedded-kafka-config
   (let [kafka-port (xio/free-port)]
