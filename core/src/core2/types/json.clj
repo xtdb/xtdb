@@ -12,6 +12,21 @@
            [org.apache.arrow.vector.complex.impl UnionWriter]
            [org.apache.arrow.memory BufferAllocator]))
 
+;; Type mapping aims to stay close to the Arrow JDBC adapter:
+;; https://github.com/apache/arrow/blob/master/java/adapter/jdbc/src/main/java/org/apache/arrow/adapter/jdbc/JdbcToArrow.java
+
+;; For example, unlike Arrow Java itself, TimeMilliVector is mapped to
+;; LocalTime and DateMilliVector to LocalDate like they are above via
+;; the java.sql definitions.
+
+;; Timezones aren't supported as UnionVector doesn't support it.
+;; Decimals aren't (currently) supported as UnionVector requires a
+;; single scale/precision.
+
+;; Java maps are always assumed to have named keys and are mapped to
+;; structs. Arrow maps with arbitrary key types isn't (currently)
+;; supported.
+
 (defn- kw-name ^String [x]
   (if (keyword? x)
     (subs (str x) 1)
