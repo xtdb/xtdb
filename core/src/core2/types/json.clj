@@ -7,7 +7,8 @@
            [java.time Duration Instant LocalDate LocalTime]
            [java.time.temporal ChronoField]
            [org.apache.arrow.vector.types Types$MinorType]
-           [org.apache.arrow.vector.complex.writer BaseWriter BaseWriter$ListWriter BaseWriter$ScalarWriter BaseWriter$StructWriter]
+           [org.apache.arrow.vector.complex.writer BaseWriter$ListWriter BaseWriter$ScalarWriter BaseWriter$StructWriter]
+           [org.apache.arrow.vector.complex Positionable]
            [org.apache.arrow.vector.complex.impl UnionWriter]
            [org.apache.arrow.memory BufferAllocator]))
 
@@ -16,13 +17,13 @@
     (subs (str x) 1)
     (str x)))
 
-(defn- advance-writer [^BaseWriter writer]
+(defn- advance-writer [^Positionable writer]
   (.setPosition writer (inc (.getPosition writer))))
 
 (defmulti append-writer (fn [allocator writer parent-type k x]
                           [parent-type (class x)]))
 
-(defmethod append-writer [nil nil] [_ ^BaseWriter writer _ _ x]
+(defmethod append-writer [nil nil] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
     (.writeNull)
     (advance-writer)))
@@ -127,7 +128,7 @@
     (-> (.float8 k) (.writeFloat8 x))))
 
 (defn- write-local-date [^BaseWriter$ScalarWriter writer ^LocalDate x]
-  (.writeDateMilli writer (* (.getLong ^LocalDate x ChronoField/EPOCH_DAY) 86400000)))
+  (.writeDateMilli writer (* (.getLong x ChronoField/EPOCH_DAY) 86400000)))
 
 (defmethod append-writer [nil LocalDate] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
@@ -142,8 +143,8 @@
   (doto writer
     (-> (.intervalDay k) (write-local-date x))))
 
-(defn- write-local-time [^BaseWriter$ScalarWriter writer ^LocalDate x]
-  (.writeTimeMilli writer (.getLong ^LocalTime x ChronoField/MILLI_OF_DAY)))
+(defn- write-local-time [^BaseWriter$ScalarWriter writer ^LocalTime x]
+  (.writeTimeMilli writer (.getLong x ChronoField/MILLI_OF_DAY)))
 
 (defmethod append-writer [nil LocalTime] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
@@ -284,7 +285,7 @@
 (defmethod append-writer [nil Map] [allocator ^UnionWriter writer _ _ x]
   (write-struct allocator (.asStruct writer) x)
   (doto writer
-      (advance-writer)))
+    (advance-writer)))
 
 (defmethod append-writer [Types$MinorType/LIST Map] [allocator ^BaseWriter$ListWriter writer _ _ x]
   (write-struct allocator (.struct writer) x)
