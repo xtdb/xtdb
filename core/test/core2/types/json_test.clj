@@ -40,8 +40,6 @@
       (tj/append-writer a writer nil nil x))
     (.setValueCount v (.getPosition writer))
 
-    (prn (.getField v))
-
     (t/testing "nested data"
       (t/is (= [false, nil, 2, 1, 6, 4, 3.14, 2.0, (Text. "Hello"), (Text. "F"), (util/date->local-date-time #inst "1999-01-01T00:00"), (util/date->local-date-time #inst "2021-09-02T13:54:35.809Z"), (.plusDays (Duration/ofMillis 1234) 1), (util/date->local-date-time #inst "1999-05-01"),  (util/date->local-date-time #inst "1970-01-01T14:05:10"), [1, 2, 3], [1, 2, 3], [], [2,3.14,[false,nil]], {}, {"B" 2,"C" 1,"F" false}, [1,{"B" [2]}], {"B" 3.14,"D" {"E" [(Text. "hello"),-1]}}]
                (for [x (range (.getValueCount v))
