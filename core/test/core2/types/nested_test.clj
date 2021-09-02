@@ -1,7 +1,7 @@
-(ns core2.types.json-test
+(ns core2.types.nested-test
   (:require [clojure.test :as t]
             [clojure.spec.alpha :as s]
-            [core2.types.json :as tj]
+            [core2.types.nested :as tn]
             [core2.util :as util])
   (:import [org.apache.arrow.vector.complex UnionVector]
            [org.apache.arrow.vector.util Text]
@@ -37,7 +37,7 @@
                [1 {:B [2]}]
                ;; NOTE: should contain :F
                {:B 3.14 :D {:E ["hello" -1]} :F nil}]]
-      (tj/append-writer a writer nil nil x))
+      (tn/append-writer a writer nil nil x))
     (.setValueCount v (.getPosition writer))
 
     (t/testing "nested data"
