@@ -125,7 +125,7 @@
 
 (defmethod append-writer [Types$MinorType/STRUCT Float] [_ ^BaseWriter$StructWriter writer _ k x]
   (doto writer
-    (-> (.float8 k) (.writeFloat8 x))))
+    (-> (.float4 k) (.writeFloat4 x))))
 
 (defmethod append-writer [nil Double] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
@@ -320,5 +320,5 @@
   writer)
 
 (defmethod append-writer [Types$MinorType/STRUCT Map] [allocator ^BaseWriter$StructWriter writer _ k x]
-  (write-struct allocator (.struct writer (kw-name k)) x)
+  (write-struct allocator (.struct writer k) x)
   writer)
