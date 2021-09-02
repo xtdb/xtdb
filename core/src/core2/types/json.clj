@@ -32,19 +32,19 @@
 (defn- advance-writer [^BaseWriter writer]
   (.setPosition writer (inc (.getPosition writer))))
 
-(defmulti append-writer (fn [allocator writer parent-tag k [tag x]]
-                          [parent-tag tag]))
+(defmulti append-writer (fn [allocator writer parent-type k [tag x]]
+                          [parent-type tag]))
 
 (defmethod append-writer [nil :json/null] [_ ^BaseWriter writer _ _ [tag x]]
   (doto writer
     (.writeNull)
     (advance-writer)))
 
-(defmethod append-writer [:json/array :json/null] [_ ^BaseWriter$ListWriter writer _ _ [tag x]]
+(defmethod append-writer [Types$MinorType/LIST :json/null] [_ ^BaseWriter$ListWriter writer _ _ [tag x]]
   (doto writer
     (-> (.bit) (.writeNull))))
 
-(defmethod append-writer [:json/object :json/null] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
+(defmethod append-writer [Types$MinorType/STRUCT :json/null] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
   (doto writer
     (-> (.bit k) (.writeNull))))
 
@@ -53,11 +53,11 @@
     (.writeBit (if x 1 0))
     (advance-writer)))
 
-(defmethod append-writer [:json/array :json/boolean] [_ ^BaseWriter$ListWriter writer _ _ [tag x]]
+(defmethod append-writer [Types$MinorType/LIST :json/boolean] [_ ^BaseWriter$ListWriter writer _ _ [tag x]]
   (doto writer
     (-> (.bit) (.writeBit (if x 1 0)))))
 
-(defmethod append-writer [:json/object :json/boolean] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
+(defmethod append-writer [Types$MinorType/STRUCT :json/boolean] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
   (doto writer
     (-> (.bit k) (.writeBit (if x 1 0)))))
 
@@ -66,11 +66,11 @@
     (.writeBigInt x)
     (advance-writer)))
 
-(defmethod append-writer [:json/array :json/int] [_ ^BaseWriter$ListWriter writer _ _ [tag x]]
+(defmethod append-writer [Types$MinorType/LIST :json/int] [_ ^BaseWriter$ListWriter writer _ _ [tag x]]
   (doto writer
     (-> (.bigInt) (.writeBigInt x))))
 
-(defmethod append-writer [:json/object :json/int] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
+(defmethod append-writer [Types$MinorType/STRUCT :json/int] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
   (doto writer
     (-> (.bigInt k) (.writeBigInt x))))
 
@@ -79,11 +79,11 @@
     (.writeFloat8 x)
     (advance-writer)))
 
-(defmethod append-writer [:json/array :json/float] [_ ^BaseWriter$ListWriter writer _ _ [tag x]]
+(defmethod append-writer [Types$MinorType/LIST :json/float] [_ ^BaseWriter$ListWriter writer _ _ [tag x]]
   (doto writer
     (-> (.float8) (.writeFloat8 x))))
 
-(defmethod append-writer [:json/object :json/float] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
+(defmethod append-writer [Types$MinorType/STRUCT :json/float] [_ ^BaseWriter$StructWriter writer _ k [tag x]]
   (doto writer
     (-> (.float8 k) (.writeFloat8 x))))
 
@@ -99,18 +99,18 @@
   (doto writer
     (advance-writer)))
 
-(defmethod append-writer [:json/array :json/string] [^BufferAllocator allocator ^BaseWriter$ListWriter writer _ _ [tag x]]
+(defmethod append-writer [Types$MinorType/LIST :json/string] [^BufferAllocator allocator ^BaseWriter$ListWriter writer _ _ [tag x]]
   (append-varchar allocator (.varChar writer) x)
   writer)
 
-(defmethod append-writer [:json/object :json/string] [^BufferAllocator allocator ^BaseWriter$StructWriter writer _ k [tag x]]
+(defmethod append-writer [Types$MinorType/STRUCT :json/string] [^BufferAllocator allocator ^BaseWriter$StructWriter writer _ k [tag x]]
   (append-varchar allocator (.varChar writer k) x)
   writer)
 
 (defn- append-list [allocator ^BaseWriter$ListWriter list-writer x]
   (.startList list-writer)
   (doseq [v x]
-    (append-writer allocator list-writer :json/array nil v))
+    (append-writer allocator list-writer Types$MinorType/LIST nil v))
   (.endList list-writer))
 
 (defmethod append-writer [nil :json/array] [allocator ^UnionWriter writer _ _ [tag x]]
@@ -118,18 +118,18 @@
   (doto writer
     (advance-writer)))
 
-(defmethod append-writer [:json/array :json/array] [allocator ^BaseWriter$ListWriter writer _ _ [tag x]]
+(defmethod append-writer [Types$MinorType/LIST :json/array] [allocator ^BaseWriter$ListWriter writer _ _ [tag x]]
   (append-list allocator (.list writer) x)
   writer)
 
-(defmethod append-writer [:json/object :json/array] [allocator ^BaseWriter$StructWriter writer _ k [tag x]]
+(defmethod append-writer [Types$MinorType/STRUCT :json/array] [allocator ^BaseWriter$StructWriter writer _ k [tag x]]
   (append-list allocator (.list writer k) x)
   writer)
 
 (defn- append-struct [allocator ^BaseWriter$StructWriter struct-writer x]
   (.start struct-writer)
   (doseq [[k v] x]
-    (append-writer allocator struct-writer :json/object (kw-name k) v))
+    (append-writer allocator struct-writer Types$MinorType/STRUCT (kw-name k) v))
   (.end struct-writer))
 
 (defmethod append-writer [nil :json/object] [allocator ^UnionWriter writer _ _ [tag x]]
@@ -137,11 +137,11 @@
   (doto writer
       (advance-writer)))
 
-(defmethod append-writer [:json/array :json/object] [allocator ^BaseWriter$ListWriter writer _ _ [tag x]]
+(defmethod append-writer [Types$MinorType/LIST :json/object] [allocator ^BaseWriter$ListWriter writer _ _ [tag x]]
   (append-struct allocator (.struct writer) x)
   writer)
 
-(defmethod append-writer [:json/object :json/object] [allocator ^BaseWriter$StructWriter writer _ k [tag x]]
+(defmethod append-writer [Types$MinorType/STRUCT :json/object] [allocator ^BaseWriter$StructWriter writer _ k [tag x]]
   (append-struct allocator (.struct writer (kw-name k)) x)
   writer)
 
