@@ -3,7 +3,7 @@
             [clojure.spec.alpha :as s])
   (:import [java.nio.charset StandardCharsets]
            [java.util Date List Map]
-           [java.time Duration]
+           [java.time Duration Instant]
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.complex.writer BaseWriter BaseWriter$ListWriter BaseWriter$ScalarWriter BaseWriter$StructWriter]
            [org.apache.arrow.vector.complex.impl UnionWriter]
@@ -124,6 +124,11 @@
   (doto writer
     (-> (.float8 k) (.writeFloat8 x))))
 
+(defmethod append-writer [nil Duration] [_ ^BaseWriter$ScalarWriter writer _ _ x]
+  (doto writer
+    (.writeDuration (.toMillis ^Duration x))
+    (advance-writer)))
+
 (defmethod append-writer [nil Date] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
     (.writeTimeStampMilli (.getTime ^Date x))
@@ -136,6 +141,40 @@
 (defmethod append-writer [Types$MinorType/STRUCT Date] [_ ^BaseWriter$StructWriter writer _ k x]
   (doto writer
     (-> (.timeStampMilli k) (.writeTimeStampMilli (.getTime ^Date x)))))
+
+(defmethod append-writer [nil Instant] [_ ^BaseWriter$ScalarWriter writer _ _ x]
+  (doto writer
+    (.writeTimeStampMilli (.toEpochMilli ^Instant x))
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST Instant] [_ ^BaseWriter$ListWriter writer _ _ x]
+  (doto writer
+    (-> (.timeStampMilli) (.writeTimeStampMilli (.toEpochMilli ^Instant x)))))
+
+(defmethod append-writer [Types$MinorType/STRUCT Instant] [_ ^BaseWriter$StructWriter writer _ k x]
+  (doto writer
+    (-> (.timeStampMilli k) (.writeTimeStampMilli (.toEpochMilli ^Instant x)))))
+
+
+(defn- append-duration [^BaseWriter$ScalarWriter writer ^Duration x]
+  (let [ms (.toMillis x)]
+    (.writeIntervalDay writer
+                       (/ ms 86400000)
+                       (rem ms 86400000))))
+
+(defmethod append-writer [nil Duration] [_ ^BaseWriter$ScalarWriter writer _ _ x]
+  (doto writer
+    (append-duration x)
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST Duration] [_ ^BaseWriter$ListWriter writer _ _ x]
+  (doto writer
+    (-> (.intervalDay) (append-duration x))))
+
+(defmethod append-writer [Types$MinorType/STRUCT Duration] [_ ^BaseWriter$StructWriter writer _ k x]
+  (let [ms (.toMillis ^Duration x)]
+    (doto writer
+      (-> (.intervalDay k) (append-duration x)))))
 
 (defn- append-varchar [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^CharSequence x]
   (let [bs (.getBytes (str x) StandardCharsets/UTF_8)
