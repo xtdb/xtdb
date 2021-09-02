@@ -1,8 +1,10 @@
 (ns core2.types.json-test
   (:require [clojure.test :as t]
             [clojure.spec.alpha :as s]
-            [core2.types.json :as tj])
+            [core2.types.json :as tj]
+            [core2.util :as util])
   (:import [org.apache.arrow.vector.complex UnionVector]
+           [org.apache.arrow.vector.util Text]
            [org.apache.arrow.memory RootAllocator]))
 
 (t/deftest can-build-sparse-union-vector
@@ -12,8 +14,14 @@
     (doseq [x [false
                nil
                2
+               (byte 1)
+               (short 6)
+               (int 4)
                3.14
+               (float 2)
                "Hello"
+               #inst "1999"
+               (byte-array [1 2 3])
                []
                [2 3.14 [false nil]]
                {}
@@ -24,5 +32,31 @@
       (tj/append-writer a writer nil nil x))
     (.setValueCount v (.getPosition writer))
 
-    (t/is (= "[false, null, 2, 3.14, Hello, [], [2,3.14,[false,null]], {}, {\"B\":2,\"C\":1,\"F\":false}, [1,{\"B\":[2]}], {\"B\":3.14,\"D\":{\"E\":[\"hello\",-1]}}]"
-             (str v)))))
+    (t/testing "nested data"
+      (t/is (= [false, nil, 2, 1, 6, 4, 3.14, 2.0, (Text. "Hello"), (util/date->local-date-time #inst "1999-01-01T00:00"), [1, 2, 3], [], [2,3.14,[false,nil]], {}, {"B" 2,"C" 1,"F" false}, [1,{"B" [2]}], {"B" 3.14,"D" {"E" [(Text. "hello"),-1]}}]
+               (for [x (range (.getValueCount v))
+                     :let [v (.getObject v (long x))]]
+                 (if (bytes? v)
+                   (vec v)
+                   v)))))
+
+    (t/testing "types"
+      (t/is (= [org.apache.arrow.vector.BitVector
+                nil
+                org.apache.arrow.vector.BigIntVector
+                org.apache.arrow.vector.TinyIntVector
+                org.apache.arrow.vector.SmallIntVector
+                org.apache.arrow.vector.IntVector
+                org.apache.arrow.vector.Float8Vector
+                org.apache.arrow.vector.Float4Vector
+                org.apache.arrow.vector.VarCharVector
+                org.apache.arrow.vector.TimeStampMilliVector
+                org.apache.arrow.vector.VarBinaryVector
+                org.apache.arrow.vector.complex.ListVector
+                org.apache.arrow.vector.complex.ListVector
+                org.apache.arrow.vector.complex.StructVector
+                org.apache.arrow.vector.complex.StructVector
+                org.apache.arrow.vector.complex.ListVector
+                org.apache.arrow.vector.complex.StructVector]
+               (for [x (range (.getValueCount v))]
+                 (class (.getVector v (long x)))))))))

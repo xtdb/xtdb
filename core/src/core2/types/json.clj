@@ -2,7 +2,8 @@
   (:require [clojure.data.json :as json]
             [clojure.spec.alpha :as s])
   (:import [java.nio.charset StandardCharsets]
-           [java.util List Map]
+           [java.util Date List Map]
+           [java.time Duration]
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.complex.writer BaseWriter BaseWriter$ListWriter BaseWriter$ScalarWriter BaseWriter$StructWriter]
            [org.apache.arrow.vector.complex.impl UnionWriter]
@@ -45,6 +46,45 @@
   (doto writer
     (-> (.bit k) (.writeBit (if x 1 0)))))
 
+(defmethod append-writer [nil Byte] [_ ^BaseWriter$ScalarWriter writer _ _ x]
+  (doto writer
+    (.writeTinyInt x)
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST Byte] [_ ^BaseWriter$ListWriter writer _ _ x]
+  (doto writer
+    (-> (.tinyInt) (.writeTinyInt x))))
+
+(defmethod append-writer [Types$MinorType/STRUCT Byte] [_ ^BaseWriter$StructWriter writer _ k x]
+  (doto writer
+    (-> (.tinyInt k) (.writeTinyInt x))))
+
+(defmethod append-writer [nil Short] [_ ^BaseWriter$ScalarWriter writer _ _ x]
+  (doto writer
+    (.writeSmallInt x)
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST Short] [_ ^BaseWriter$ListWriter writer _ _ x]
+  (doto writer
+    (-> (.smallInt) (.writeSmallInt x))))
+
+(defmethod append-writer [Types$MinorType/STRUCT Short] [_ ^BaseWriter$StructWriter writer _ k x]
+  (doto writer
+    (-> (.smallInt k) (.writeSmallInt x))))
+
+(defmethod append-writer [nil Integer] [_ ^BaseWriter$ScalarWriter writer _ _ x]
+  (doto writer
+    (.writeInt x)
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST Integer] [_ ^BaseWriter$ListWriter writer _ _ x]
+  (doto writer
+    (-> (.integer) (.writeInt x))))
+
+(defmethod append-writer [Types$MinorType/STRUCT Integer] [_ ^BaseWriter$StructWriter writer _ k x]
+  (doto writer
+    (-> (.integer k) (.writeInt x))))
+
 (defmethod append-writer [nil Long] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
     (.writeBigInt x)
@@ -58,6 +98,19 @@
   (doto writer
     (-> (.bigInt k) (.writeBigInt x))))
 
+(defmethod append-writer [nil Float] [_ ^BaseWriter$ScalarWriter writer _ _ x]
+  (doto writer
+    (.writeFloat4 x)
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST Float] [_ ^BaseWriter$ListWriter writer _ _ x]
+  (doto writer
+    (-> (.float4) (.writeFloat4 x))))
+
+(defmethod append-writer [Types$MinorType/STRUCT Float] [_ ^BaseWriter$StructWriter writer _ k x]
+  (doto writer
+    (-> (.float8 k) (.writeFloat8 x))))
+
 (defmethod append-writer [nil Double] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
     (.writeFloat8 x)
@@ -70,6 +123,19 @@
 (defmethod append-writer [Types$MinorType/STRUCT Double] [_ ^BaseWriter$StructWriter writer _ k x]
   (doto writer
     (-> (.float8 k) (.writeFloat8 x))))
+
+(defmethod append-writer [nil Date] [_ ^BaseWriter$ScalarWriter writer _ _ x]
+  (doto writer
+    (.writeTimeStampMilli (.getTime ^Date x))
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST Date] [_ ^BaseWriter$ListWriter writer _ _ x]
+  (doto writer
+    (-> (.timeStampMilli) (.writeTimeStampMilli (.getTime ^Date x)))))
+
+(defmethod append-writer [Types$MinorType/STRUCT Date] [_ ^BaseWriter$StructWriter writer _ k x]
+  (doto writer
+    (-> (.timeStampMilli k) (.writeTimeStampMilli (.getTime ^Date x)))))
 
 (defn- append-varchar [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^CharSequence x]
   (let [bs (.getBytes (str x) StandardCharsets/UTF_8)
@@ -89,6 +155,25 @@
 
 (defmethod append-writer [Types$MinorType/STRUCT CharSequence] [^BufferAllocator allocator ^BaseWriter$StructWriter writer _ k x]
   (append-varchar allocator (.varChar writer k) x)
+  writer)
+
+(defn- append-varbinary [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^bytes x]
+  (let [len (alength x)]
+    (with-open [buf (.buffer allocator len)]
+      (.setBytes buf 0 x)
+      (.writeVarBinary writer 0 len buf))))
+
+(defmethod append-writer [nil (Class/forName "[B")] [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer _ _ x]
+  (append-varbinary allocator writer x)
+  (doto writer
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST (Class/forName "[B")] [^BufferAllocator allocator ^BaseWriter$ListWriter writer _ _ x]
+  (append-varbinary allocator (.varBinary writer) x)
+  writer)
+
+(defmethod append-writer [Types$MinorType/STRUCT (Class/forName "[B")] [^BufferAllocator allocator ^BaseWriter$StructWriter writer _ k x]
+  (append-varbinary allocator (.varBinary writer k) x)
   writer)
 
 (defn- append-list [allocator ^BaseWriter$ListWriter list-writer x]
