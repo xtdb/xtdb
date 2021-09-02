@@ -5,7 +5,8 @@
             [core2.util :as util])
   (:import [org.apache.arrow.vector.complex UnionVector]
            [org.apache.arrow.vector.util Text]
-           [java.time Duration]
+           [java.time Duration LocalDate LocalTime]
+           [java.nio ByteBuffer]
            [org.apache.arrow.memory RootAllocator]))
 
 (t/deftest can-build-sparse-union-vector
@@ -24,7 +25,10 @@
                #inst "1999"
                (.toInstant #inst "2021-09-02T13:54:35.809Z")
                (.plusDays (Duration/ofMillis 1234) 1)
+               (LocalDate/of 1999 05 01)
+               (LocalTime/of 14 05 10)
                (byte-array [1 2 3])
+               (ByteBuffer/wrap (byte-array [1 2 3]))
                []
                [2 3.14 [false nil]]
                {}
@@ -36,7 +40,7 @@
     (.setValueCount v (.getPosition writer))
 
     (t/testing "nested data"
-      (t/is (= [false, nil, 2, 1, 6, 4, 3.14, 2.0, (Text. "Hello"), (util/date->local-date-time #inst "1999-01-01T00:00"), (util/date->local-date-time #inst "2021-09-02T13:54:35.809Z"), (.plusDays (Duration/ofMillis 1234) 1), [1, 2, 3], [], [2,3.14,[false,nil]], {}, {"B" 2,"C" 1,"F" false}, [1,{"B" [2]}], {"B" 3.14,"D" {"E" [(Text. "hello"),-1]}}]
+      (t/is (= [false, nil, 2, 1, 6, 4, 3.14, 2.0, (Text. "Hello"), (util/date->local-date-time #inst "1999-01-01T00:00"), (util/date->local-date-time #inst "2021-09-02T13:54:35.809Z"), (.plusDays (Duration/ofMillis 1234) 1), (util/date->local-date-time #inst "1999-05-01"),  (util/date->local-date-time #inst "1970-01-01T14:05:10"), [1, 2, 3], [1, 2, 3], [], [2,3.14,[false,nil]], {}, {"B" 2,"C" 1,"F" false}, [1,{"B" [2]}], {"B" 3.14,"D" {"E" [(Text. "hello"),-1]}}]
                (for [x (range (.getValueCount v))
                      :let [v (.getObject v (long x))]]
                  (if (bytes? v)
@@ -56,6 +60,9 @@
                 org.apache.arrow.vector.TimeStampMilliVector
                 org.apache.arrow.vector.TimeStampMilliVector
                 org.apache.arrow.vector.IntervalDayVector
+                org.apache.arrow.vector.DateMilliVector
+                org.apache.arrow.vector.TimeMilliVector
+                org.apache.arrow.vector.VarBinaryVector
                 org.apache.arrow.vector.VarBinaryVector
                 org.apache.arrow.vector.complex.ListVector
                 org.apache.arrow.vector.complex.ListVector

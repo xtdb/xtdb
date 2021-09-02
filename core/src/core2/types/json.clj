@@ -2,8 +2,10 @@
   (:require [clojure.data.json :as json]
             [clojure.spec.alpha :as s])
   (:import [java.nio.charset StandardCharsets]
+           [java.nio ByteBuffer]
            [java.util Date List Map]
-           [java.time Duration Instant]
+           [java.time Duration Instant LocalDate LocalTime]
+           [java.time.temporal ChronoField]
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.complex.writer BaseWriter BaseWriter$ListWriter BaseWriter$ScalarWriter BaseWriter$StructWriter]
            [org.apache.arrow.vector.complex.impl UnionWriter]
@@ -124,10 +126,37 @@
   (doto writer
     (-> (.float8 k) (.writeFloat8 x))))
 
-(defmethod append-writer [nil Duration] [_ ^BaseWriter$ScalarWriter writer _ _ x]
+(defn- write-local-date [^BaseWriter$ScalarWriter writer ^LocalDate x]
+  (.writeDateMilli writer (* (.getLong ^LocalDate x ChronoField/EPOCH_DAY) 86400000)))
+
+(defmethod append-writer [nil LocalDate] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
-    (.writeDuration (.toMillis ^Duration x))
+    (write-local-date x)
     (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST LocalDate] [_ ^BaseWriter$ListWriter writer _ _ x]
+  (doto writer
+    (-> (.intervalDay) (write-local-date x))))
+
+(defmethod append-writer [Types$MinorType/STRUCT LocalDate] [_ ^BaseWriter$StructWriter writer _ k x]
+  (doto writer
+    (-> (.intervalDay k) (write-local-date x))))
+
+(defn- write-local-time [^BaseWriter$ScalarWriter writer ^LocalDate x]
+  (.writeTimeMilli writer (.getLong ^LocalTime x ChronoField/MILLI_OF_DAY)))
+
+(defmethod append-writer [nil LocalTime] [_ ^BaseWriter$ScalarWriter writer _ _ x]
+  (doto writer
+    (write-local-time x)
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST LocalTime] [_ ^BaseWriter$ListWriter writer _ _ x]
+  (doto writer
+    (-> (.timeMilli) (write-local-time x))))
+
+(defmethod append-writer [Types$MinorType/STRUCT LocalTime] [_ ^BaseWriter$StructWriter writer _ k x]
+  (doto writer
+    (-> (.timeMilli k) (write-local-time x))))
 
 (defmethod append-writer [nil Date] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
@@ -155,8 +184,7 @@
   (doto writer
     (-> (.timeStampMilli k) (.writeTimeStampMilli (.toEpochMilli ^Instant x)))))
 
-
-(defn- append-duration [^BaseWriter$ScalarWriter writer ^Duration x]
+(defn- write-duration [^BaseWriter$ScalarWriter writer ^Duration x]
   (let [ms (.toMillis x)]
     (.writeIntervalDay writer
                        (/ ms 86400000)
@@ -164,19 +192,19 @@
 
 (defmethod append-writer [nil Duration] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
-    (append-duration x)
+    (write-duration x)
     (advance-writer)))
 
 (defmethod append-writer [Types$MinorType/LIST Duration] [_ ^BaseWriter$ListWriter writer _ _ x]
   (doto writer
-    (-> (.intervalDay) (append-duration x))))
+    (-> (.intervalDay) (write-duration x))))
 
 (defmethod append-writer [Types$MinorType/STRUCT Duration] [_ ^BaseWriter$StructWriter writer _ k x]
   (let [ms (.toMillis ^Duration x)]
     (doto writer
-      (-> (.intervalDay k) (append-duration x)))))
+      (-> (.intervalDay k) (write-duration x)))))
 
-(defn- append-varchar [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^CharSequence x]
+(defn- write-varchar [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^CharSequence x]
   (let [bs (.getBytes (str x) StandardCharsets/UTF_8)
         len (alength bs)]
     (with-open [buf (.buffer allocator len)]
@@ -184,73 +212,86 @@
       (.writeVarChar writer 0 len buf))))
 
 (defmethod append-writer [nil CharSequence] [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer _ _ x]
-  (append-varchar allocator writer x)
+  (write-varchar allocator writer x)
   (doto writer
     (advance-writer)))
 
 (defmethod append-writer [Types$MinorType/LIST CharSequence] [^BufferAllocator allocator ^BaseWriter$ListWriter writer _ _ x]
-  (append-varchar allocator (.varChar writer) x)
+  (write-varchar allocator (.varChar writer) x)
   writer)
 
 (defmethod append-writer [Types$MinorType/STRUCT CharSequence] [^BufferAllocator allocator ^BaseWriter$StructWriter writer _ k x]
-  (append-varchar allocator (.varChar writer k) x)
+  (write-varchar allocator (.varChar writer k) x)
   writer)
 
-(defn- append-varbinary [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^bytes x]
-  (let [len (alength x)]
+(defn- write-varbinary [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^ByteBuffer x]
+  (let [len (.remaining x)]
     (with-open [buf (.buffer allocator len)]
-      (.setBytes buf 0 x)
+      (.setBytes buf 0 (.duplicate x))
       (.writeVarBinary writer 0 len buf))))
 
 (defmethod append-writer [nil (Class/forName "[B")] [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer _ _ x]
-  (append-varbinary allocator writer x)
+  (write-varbinary allocator writer (ByteBuffer/wrap x))
   (doto writer
     (advance-writer)))
 
 (defmethod append-writer [Types$MinorType/LIST (Class/forName "[B")] [^BufferAllocator allocator ^BaseWriter$ListWriter writer _ _ x]
-  (append-varbinary allocator (.varBinary writer) x)
+  (write-varbinary allocator (.varBinary writer) (ByteBuffer/wrap x))
   writer)
 
 (defmethod append-writer [Types$MinorType/STRUCT (Class/forName "[B")] [^BufferAllocator allocator ^BaseWriter$StructWriter writer _ k x]
-  (append-varbinary allocator (.varBinary writer k) x)
+  (write-varbinary allocator (.varBinary writer k) (ByteBuffer/wrap x))
   writer)
 
-(defn- append-list [allocator ^BaseWriter$ListWriter list-writer x]
+(defmethod append-writer [nil ByteBuffer] [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer _ _ x]
+  (write-varbinary allocator writer x)
+  (doto writer
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST ByteBuffer] [^BufferAllocator allocator ^BaseWriter$ListWriter writer _ _ x]
+  (write-varbinary allocator (.varBinary writer) x)
+  writer)
+
+(defmethod append-writer [Types$MinorType/STRUCT ByteBuffer] [^BufferAllocator allocator ^BaseWriter$StructWriter writer _ k x]
+  (write-varbinary allocator (.varBinary writer k) x)
+  writer)
+
+(defn- write-list [allocator ^BaseWriter$ListWriter list-writer x]
   (.startList list-writer)
   (doseq [v x]
     (append-writer allocator list-writer Types$MinorType/LIST nil v))
   (.endList list-writer))
 
 (defmethod append-writer [nil List] [allocator ^UnionWriter writer _ _ x]
-  (append-list allocator (.asList writer) x)
+  (write-list allocator (.asList writer) x)
   (doto writer
     (advance-writer)))
 
 (defmethod append-writer [Types$MinorType/LIST List] [allocator ^BaseWriter$ListWriter writer _ _ x]
-  (append-list allocator (.list writer) x)
+  (write-list allocator (.list writer) x)
   writer)
 
 (defmethod append-writer [Types$MinorType/STRUCT List] [allocator ^BaseWriter$StructWriter writer _ k x]
-  (append-list allocator (.list writer k) x)
+  (write-list allocator (.list writer k) x)
   writer)
 
-(defn- append-struct [allocator ^BaseWriter$StructWriter struct-writer x]
+(defn- write-struct [allocator ^BaseWriter$StructWriter struct-writer x]
   (.start struct-writer)
   (doseq [[k v] x]
     (append-writer allocator struct-writer Types$MinorType/STRUCT (kw-name k) v))
   (.end struct-writer))
 
 (defmethod append-writer [nil Map] [allocator ^UnionWriter writer _ _ x]
-  (append-struct allocator (.asStruct writer) x)
+  (write-struct allocator (.asStruct writer) x)
   (doto writer
       (advance-writer)))
 
 (defmethod append-writer [Types$MinorType/LIST Map] [allocator ^BaseWriter$ListWriter writer _ _ x]
-  (append-struct allocator (.struct writer) x)
+  (write-struct allocator (.struct writer) x)
   writer)
 
 (defmethod append-writer [Types$MinorType/STRUCT Map] [allocator ^BaseWriter$StructWriter writer _ k x]
-  (append-struct allocator (.struct writer (kw-name k)) x)
+  (write-struct allocator (.struct writer (kw-name k)) x)
   writer)
 
 ;; The below is currently unused, assumes a more manual mapping to
