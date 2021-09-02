@@ -25,6 +25,8 @@
 ;; structs. Arrow maps with arbitrary key types isn't (currently)
 ;; supported.
 
+;; TODO: consider using micros/nanos as default where reasonable?
+
 (defn- kw-name ^String [x]
   (if (keyword? x)
     (subs (str x) 1)
@@ -217,9 +219,8 @@
     (-> (.intervalDay) (write-duration x))))
 
 (defmethod append-writer [Types$MinorType/STRUCT Duration] [_ ^BaseWriter$StructWriter writer _ k x]
-  (let [ms (.toMillis ^Duration x)]
-    (doto writer
-      (-> (.intervalDay k) (write-duration x)))))
+  (doto writer
+    (-> (.intervalDay k) (write-duration x))))
 
 (defn- write-varchar [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^CharSequence x]
   (let [bs (.getBytes (str x) StandardCharsets/UTF_8)
