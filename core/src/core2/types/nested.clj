@@ -25,8 +25,6 @@
 ;; structs. Arrow maps with arbitrary key types isn't (currently)
 ;; supported.
 
-;; TODO: consider using micros/nanos as default where reasonable?
-
 (defn- kw-name ^String [x]
   (if (keyword? x)
     (subs (str x) 1)
@@ -159,7 +157,7 @@
     (-> (.dateMilli k) (write-local-date x))))
 
 (defn- write-local-time [^BaseWriter$ScalarWriter writer ^LocalTime x]
-  (.writeTimeMilli writer (.getLong x ChronoField/MILLI_OF_DAY)))
+  (.writeTimeMicro writer (quot (.getLong x ChronoField/NANO_OF_DAY) 1000)))
 
 (defmethod append-writer [nil LocalTime] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
@@ -168,14 +166,15 @@
 
 (defmethod append-writer [Types$MinorType/LIST LocalTime] [_ ^BaseWriter$ListWriter writer _ _ x]
   (doto writer
-    (-> (.timeMilli) (write-local-time x))))
+    (-> (.timeMicro) (write-local-time x))))
 
 (defmethod append-writer [Types$MinorType/STRUCT LocalTime] [_ ^BaseWriter$StructWriter writer _ k x]
   (doto writer
-    (-> (.timeMilli k) (write-local-time x))))
+    (-> (.timeMicro k) (write-local-time x))))
 
 (defn- write-instant [^BaseWriter$ScalarWriter writer ^Instant x]
-  (.writeTimeStampMilli writer (.toEpochMilli x)))
+  (.writeTimeStampMicro writer (+ (* (.getEpochSecond x) 1000000)
+                                  (quot (.getNano x) 1000))))
 
 (defmethod append-writer [nil Date] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
@@ -184,11 +183,11 @@
 
 (defmethod append-writer [Types$MinorType/LIST Date] [_ ^BaseWriter$ListWriter writer _ _ x]
   (doto writer
-    (-> (.timeStampMilli) (write-instant (.toInstant ^Date x)))))
+    (-> (.timeStampMicro) (write-instant (.toInstant ^Date x)))))
 
 (defmethod append-writer [Types$MinorType/STRUCT Date] [_ ^BaseWriter$StructWriter writer _ k x]
   (doto writer
-    (-> (.timeStampMilli k) (write-instant (.toInstant ^Date x)))))
+    (-> (.timeStampMicro k) (write-instant (.toInstant ^Date x)))))
 
 (defmethod append-writer [nil Instant] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
@@ -197,17 +196,16 @@
 
 (defmethod append-writer [Types$MinorType/LIST Instant] [_ ^BaseWriter$ListWriter writer _ _ x]
   (doto writer
-    (-> (.timeStampMilli) (write-instant x))))
+    (-> (.timeStampMicro) (write-instant x))))
 
 (defmethod append-writer [Types$MinorType/STRUCT Instant] [_ ^BaseWriter$StructWriter writer _ k x]
   (doto writer
-    (-> (.timeStampMilli k) (write-instant x))))
+    (-> (.timeStampMicro k) (write-instant x))))
 
 (defn- write-duration [^BaseWriter$ScalarWriter writer ^Duration x]
-  (let [ms (.toMillis x)]
-    (.writeIntervalDay writer
-                       (/ ms 86400000)
-                       (rem ms 86400000))))
+  (.writeIntervalDay writer
+                     (.toDays x)
+                     (rem (.toMillis x) 86400000)))
 
 (defmethod append-writer [nil Duration] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
