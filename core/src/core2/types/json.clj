@@ -87,7 +87,7 @@
   (doto writer
     (-> (.float8 k) (.writeFloat8 x))))
 
-(defn- write-varchar [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^String x]
+(defn- append-varchar [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer ^String x]
   (let [bs (.getBytes x StandardCharsets/UTF_8)
         len (alength bs)]
     (with-open [buf (.buffer allocator len)]
@@ -95,67 +95,55 @@
       (.writeVarChar writer 0 len buf))))
 
 (defmethod append-writer [nil :json/string] [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer _ _ [tag x]]
-  (write-varchar allocator writer x)
+  (append-varchar allocator writer x)
   (doto writer
     (advance-writer)))
 
 (defmethod append-writer [:json/array :json/string] [^BufferAllocator allocator ^BaseWriter$ListWriter writer _ _ [tag x]]
-  (write-varchar allocator (.varChar writer) x)
+  (append-varchar allocator (.varChar writer) x)
   writer)
 
 (defmethod append-writer [:json/object :json/string] [^BufferAllocator allocator ^BaseWriter$StructWriter writer _ k [tag x]]
-  (write-varchar allocator (.varChar writer k) x)
+  (append-varchar allocator (.varChar writer k) x)
   writer)
 
+(defn- append-list [allocator ^BaseWriter$ListWriter list-writer x]
+  (.startList list-writer)
+  (doseq [v x]
+    (append-writer allocator list-writer :json/array nil v))
+  (.endList list-writer))
+
 (defmethod append-writer [nil :json/array] [allocator ^UnionWriter writer _ _ [tag x]]
-  (let [list-writer (.asList writer)]
-    (.startList writer)
-    (doseq [v x]
-      (append-writer allocator list-writer :json/array nil v))
-    (doto writer
-      (.endList)
-      (advance-writer))))
+  (append-list allocator (.asList writer) x)
+  (doto writer
+    (advance-writer)))
 
 (defmethod append-writer [:json/array :json/array] [allocator ^BaseWriter$ListWriter writer _ _ [tag x]]
-  (let [list-writer (.list writer)]
-    (.startList list-writer)
-    (doseq [v x]
-      (append-writer allocator list-writer :json/array nil v))
-    (.endList list-writer)
-    writer))
+  (append-list allocator (.list writer) x)
+  writer)
 
 (defmethod append-writer [:json/object :json/array] [allocator ^BaseWriter$StructWriter writer _ k [tag x]]
-  (let [list-writer (.list writer k)]
-    (.startList list-writer)
-    (doseq [v x]
-      (append-writer allocator list-writer :json/array nil v))
-    (.endList list-writer)
-    writer))
+  (append-list allocator (.list writer k) x)
+  writer)
+
+(defn- append-struct [allocator ^BaseWriter$StructWriter struct-writer x]
+  (.start struct-writer)
+  (doseq [[k v] x]
+    (append-writer allocator struct-writer :json/object (kw-name k) v))
+  (.end struct-writer))
 
 (defmethod append-writer [nil :json/object] [allocator ^UnionWriter writer _ _ [tag x]]
-  (let [struct-writer (.asStruct writer)]
-    (.start writer)
-    (doseq [[k v] x]
-      (append-writer allocator struct-writer :json/object (kw-name k) v))
-    (doto writer
-      (.end)
-      (advance-writer))))
+  (append-struct allocator (.asStruct writer) x)
+  (doto writer
+      (advance-writer)))
 
 (defmethod append-writer [:json/array :json/object] [allocator ^BaseWriter$ListWriter writer _ _ [tag x]]
-  (let [struct-writer (.struct writer)]
-    (.start struct-writer)
-    (doseq [[k v] x]
-      (append-writer allocator struct-writer :json/object (kw-name k) v))
-    (.end struct-writer)
-    writer))
+  (append-struct allocator (.struct writer) x)
+  writer)
 
 (defmethod append-writer [:json/object :json/object] [allocator ^BaseWriter$StructWriter writer _ k [tag x]]
-  (let [struct-writer (.struct writer (kw-name k))]
-    (.start struct-writer)
-    (doseq [[k v] x]
-      (append-writer allocator struct-writer :json/object (kw-name k) v))
-    (.end struct-writer)
-    writer))
+  (append-struct allocator (.struct writer (kw-name k)) x)
+  writer)
 
 ;; The below is currently unused, assumes a more manual mapping to
 ;; Arrow than using UnionWriter directly as above.
