@@ -159,31 +159,34 @@
   (doto writer
     (-> (.timeMilli k) (write-local-time x))))
 
+(defn- write-instant [^BaseWriter$ScalarWriter writer ^Instant x]
+  (.writeTimeStampMilli writer (.toEpochMilli x)))
+
 (defmethod append-writer [nil Date] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
-    (.writeTimeStampMilli (.getTime ^Date x))
+    (write-instant (.toInstant ^Date x))
     (advance-writer)))
 
 (defmethod append-writer [Types$MinorType/LIST Date] [_ ^BaseWriter$ListWriter writer _ _ x]
   (doto writer
-    (-> (.timeStampMilli) (.writeTimeStampMilli (.getTime ^Date x)))))
+    (-> (.timeStampMilli) (write-instant (.toInstant ^Date x)))))
 
 (defmethod append-writer [Types$MinorType/STRUCT Date] [_ ^BaseWriter$StructWriter writer _ k x]
   (doto writer
-    (-> (.timeStampMilli k) (.writeTimeStampMilli (.getTime ^Date x)))))
+    (-> (.timeStampMilli k) (write-instant (.toInstant ^Date x)))))
 
 (defmethod append-writer [nil Instant] [_ ^BaseWriter$ScalarWriter writer _ _ x]
   (doto writer
-    (.writeTimeStampMilli (.toEpochMilli ^Instant x))
+    (write-instant x)
     (advance-writer)))
 
 (defmethod append-writer [Types$MinorType/LIST Instant] [_ ^BaseWriter$ListWriter writer _ _ x]
   (doto writer
-    (-> (.timeStampMilli) (.writeTimeStampMilli (.toEpochMilli ^Instant x)))))
+    (-> (.timeStampMilli) (write-instant x))))
 
 (defmethod append-writer [Types$MinorType/STRUCT Instant] [_ ^BaseWriter$StructWriter writer _ k x]
   (doto writer
-    (-> (.timeStampMilli k) (.writeTimeStampMilli (.toEpochMilli ^Instant x)))))
+    (-> (.timeStampMilli k) (write-instant x))))
 
 (defn- write-duration [^BaseWriter$ScalarWriter writer ^Duration x]
   (let [ms (.toMillis x)]
