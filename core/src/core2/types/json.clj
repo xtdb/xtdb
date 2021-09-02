@@ -137,11 +137,11 @@
 
 (defmethod append-writer [Types$MinorType/LIST LocalDate] [_ ^BaseWriter$ListWriter writer _ _ x]
   (doto writer
-    (-> (.intervalDay) (write-local-date x))))
+    (-> (.dateMilli) (write-local-date x))))
 
 (defmethod append-writer [Types$MinorType/STRUCT LocalDate] [_ ^BaseWriter$StructWriter writer _ k x]
   (doto writer
-    (-> (.intervalDay k) (write-local-date x))))
+    (-> (.dateMilli k) (write-local-date x))))
 
 (defn- write-local-time [^BaseWriter$ScalarWriter writer ^LocalTime x]
   (.writeTimeMilli writer (.getLong x ChronoField/MILLI_OF_DAY)))
@@ -214,6 +214,19 @@
     (with-open [buf (.buffer allocator len)]
       (.setBytes buf 0 bs)
       (.writeVarChar writer 0 len buf))))
+
+(defmethod append-writer [nil Character] [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer _ _ x]
+  (write-varchar allocator writer (str x))
+  (doto writer
+    (advance-writer)))
+
+(defmethod append-writer [Types$MinorType/LIST Character] [^BufferAllocator allocator ^BaseWriter$ListWriter writer _ _ x]
+  (write-varchar allocator (.varChar writer) (str x))
+  writer)
+
+(defmethod append-writer [Types$MinorType/STRUCT Character] [^BufferAllocator allocator ^BaseWriter$StructWriter writer _ k x]
+  (write-varchar allocator (.varChar writer k) (str x))
+  writer)
 
 (defmethod append-writer [nil CharSequence] [^BufferAllocator allocator ^BaseWriter$ScalarWriter writer _ _ x]
   (write-varchar allocator writer x)
