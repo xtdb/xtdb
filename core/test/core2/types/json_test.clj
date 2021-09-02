@@ -15,11 +15,11 @@
               writer (.getWriter v)]
     (doseq [x [false
                nil
-               2
+               (long 2)
                (byte 1)
                (short 6)
                (int 4)
-               3.14
+               (double 3.14)
                (float 2)
                "Hello"
                #inst "1999"
