@@ -1,12 +1,11 @@
 (ns xtdb.migration-test
   (:require [xtdb.api :as xt]
+            [xtdb.codec :as c]
             [xtdb.fixtures :as fix]
             [clojure.test :as t]
             [clojure.java.io :as io]
             [me.raynes.fs :as fs])
   (:import java.io.File))
-
-(def version "1.18.1")
 
 (def migration-test-nodes-dir
   (io/file (-> (io/as-file (io/resource "xtdb/migration_test.clj"))
@@ -15,7 +14,8 @@
 
 (defn ->node-opts [^File node-dir]
   {:xtdb/tx-log {:kv-store {:db-dir (io/file node-dir "txs")}}
-   :xtdb/document-store {:kv-store {:db-dir (io/file node-dir "docs")}}})
+   :xtdb/document-store {:kv-store {:db-dir (io/file node-dir "docs")}}
+   :xtdb/index-store {:kv-store {:db-dir (io/file node-dir "idxs")}}})
 
 (defn with-migration-build-node [node-dir-name build-node-f]
   (let [node-dir (io/file migration-test-nodes-dir node-dir-name)]
@@ -24,12 +24,13 @@
         (build-node-f node)
         (xt/sync node)))))
 
-(defn with-migration-test-node [node-dir-name test-node-f]
+(defn with-migration-test-node [node-dir-name index-version test-node-f]
   (let [node-dir (io/file migration-test-nodes-dir node-dir-name)]
     (fix/with-tmp-dirs #{copy-dir}
       (fs/copy-dir-into node-dir copy-dir)
 
-      (with-open [node (xt/start-node (->node-opts copy-dir))]
+      (with-open [node (xt/start-node (cond-> (->node-opts copy-dir)
+                                        (not= index-version c/index-version) (dissoc :xtdb/index-store)))]
         (xt/sync node)
         (test-node-f node)))))
 
@@ -39,7 +40,7 @@
     (fn [node]
       (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo}]])))
 
-  (with-migration-test-node "test-basic-node"
+  (with-migration-test-node "test-basic-node" 18
     (fn [node]
       (let [db (xt/db node)]
         (t/is (= {:xt/id :foo}
@@ -64,7 +65,7 @@
                                  [:crux.tx/put {:crux.db/id :no}]])
       (fix/submit+await-tx node [[:crux.tx/evict :foo]])))
 
-  (with-migration-test-node "test-match-evict"
+  (with-migration-test-node "test-match-evict" 18
     (fn [node]
       (let [db (xt/db node)]
         (t/is (nil? (xt/entity db :foo)))
@@ -85,14 +86,14 @@
     (t/is (thrown-with-msg? IllegalStateException
                             #"^Legacy Crux tx-fn"
                             (try
-                              (with-migration-test-node "test-tx-fn"
+                              (with-migration-test-node "test-tx-fn" 18
                                 (fn [node]
                                   (fix/submit+await-tx node [[::xt/fn :the-fn [[::xt/put {:xt/id :bar}]]]])))
                               (catch Exception e
-                                (throw (.getCause e)))))))
+                                (throw (or (.getCause e) e)))))))
 
   (t/testing "once we add an `::xt/fn` implementation, we can continue"
-    (with-migration-test-node "test-tx-fn"
+    (with-migration-test-node "test-tx-fn" 18
       (fn [node]
         (fix/submit+await-tx node [[::xt/put {:xt/id :the-fn
                                               :crux.db/fn '(fn [ctx ops] ops)
