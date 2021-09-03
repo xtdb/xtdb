@@ -5,9 +5,10 @@
             [core2.util :as util])
   (:import [org.apache.arrow.vector.complex UnionVector]
            [org.apache.arrow.vector.util Text]
+           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.memory RootAllocator]
            [java.time Duration LocalDate LocalTime]
-           [java.nio ByteBuffer]
-           [org.apache.arrow.memory RootAllocator]))
+           [java.nio ByteBuffer]))
 
 (t/deftest can-build-sparse-union-vector
   (with-open [allocator (RootAllocator.)
@@ -73,4 +74,42 @@
                 org.apache.arrow.vector.complex.ListVector
                 org.apache.arrow.vector.complex.StructVector]
                (for [x (range (.getValueCount v))]
-                 (class (.getVector v (long x)))))))))
+                 (class (.getVector v (long x)))))))
+
+    (t/testing "sparse to dense union"
+      (with-open [duv (tn/sparse->dense-union v allocator)]
+        (t/is (= (for [x (range (.getValueCount v))
+                       :let [v (.getObject v (long x))]]
+                   (if (bytes? v)
+                     (vec v)
+                     v))
+                 (for [x (range (.getValueCount duv))
+                       :let [v (.getObject duv (long x))]]
+                   (if (bytes? v)
+                     (vec v)
+                     v))))
+        (t/is (.getField duv))
+
+        (t/is (< (.capacity (util/root->arrow-ipc-byte-buffer (VectorSchemaRoot/of (into-array [duv])) :file))
+                 (.capacity (util/root->arrow-ipc-byte-buffer (VectorSchemaRoot/of (into-array [v])) :file))))
+
+        (t/testing "IPC round-trip"
+          (with-open [in-root (VectorSchemaRoot/of (into-array [duv]))
+                      buf (util/->arrow-buf-view allocator (util/root->arrow-ipc-byte-buffer in-root :file))]
+            (let [footer (util/read-arrow-footer buf)]
+              (t/is (= (.getField duv) (first (.getFields (.getSchema footer)))))
+              (with-open [record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buf)
+                          out-root (VectorSchemaRoot/create (.getSchema footer) allocator)]
+                (.load (VectorLoader. out-root) record-batch)
+                (let [reloaded-duv (.getVector out-root 0)]
+                  (t/is (= (.getField duv) (.getField reloaded-duv)))
+                  (t/is (= (for [x (range (.getValueCount v))
+                                 :let [v (.getObject v (long x))]]
+                             (if (bytes? v)
+                               (vec v)
+                               v))
+                           (for [x (range (.getValueCount reloaded-duv))
+                                 :let [v (.getObject reloaded-duv (long x))]]
+                             (if (bytes? v)
+                               (vec v)
+                               v)))))))))))))

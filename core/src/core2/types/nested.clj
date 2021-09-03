@@ -1,14 +1,20 @@
 (ns core2.types.nested
+  (:require [clojure.data.json :as json]
+            [clojure.walk :as w])
   (:import [java.nio.charset StandardCharsets]
            [java.nio ByteBuffer CharBuffer]
            [java.util Date List Map]
            [java.time Duration Instant LocalDate LocalTime]
            [java.time.temporal ChronoField]
            [org.apache.arrow.vector.types Types$MinorType]
+           [org.apache.arrow.vector.types.pojo Field Schema]
            [org.apache.arrow.vector.complex.writer BaseWriter$ListWriter BaseWriter$ScalarWriter BaseWriter$StructWriter]
-           [org.apache.arrow.vector.complex Positionable]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector Positionable StructVector UnionVector]
            [org.apache.arrow.vector.complex.impl UnionWriter]
-           [org.apache.arrow.memory BufferAllocator]))
+           [org.apache.arrow.vector ValueVector]
+           [org.apache.arrow.vector.util VectorBatchAppender]
+           [org.apache.arrow.memory BufferAllocator]
+           [core2 DenseUnionUtil]))
 
 ;; Type mapping aims to stay close to the Arrow JDBC adapter:
 ;; https://github.com/apache/arrow/blob/master/java/adapter/jdbc/src/main/java/org/apache/arrow/adapter/jdbc/JdbcToArrow.java
@@ -24,6 +30,8 @@
 ;; Java maps are always assumed to have named keys and are mapped to
 ;; structs. Arrow maps with arbitrary key types isn't (currently)
 ;; supported.
+
+(set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol ArrowAppendable
   (append-value [_ writer allocator])
@@ -344,3 +352,76 @@
   (append-struct-value [x ^BaseWriter$StructWriter writer ^BufferAllocator allocator k]
     (write-struct allocator (.struct writer k) x)
     writer))
+
+(defn- sparse->dense-union-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
+  (let [schema-json (.toJson (Schema. [field]))]
+    (first (.getFields (Schema/fromJSON (json/json-str
+                                         (w/postwalk
+                                          (fn [x]
+                                            (if (and (= "union" (get x "name"))
+                                                     (= "Sparse" (get x "mode")))
+                                              (assoc x "mode" "Dense")
+                                              x))
+                                          (json/read-str schema-json))))))))
+
+(defn sparse->dense-union ^org.apache.arrow.vector.complex.DenseUnionVector [^UnionVector v ^BufferAllocator allocator]
+  (with-open [^DenseUnionVector duv (.createVector (sparse->dense-union-field (.getField v)) allocator)]
+    (.setInitialCapacity duv (.getValueCount v))
+    ((fn copy-range [^ValueVector in-vec ^ValueVector out-vec ^Long in-start ^Long out-start ^Long size]
+       (let [^long in-start in-start
+             ^long out-start out-start
+             ^long size size]
+         (cond
+           (instance? StructVector in-vec)
+           (let [^StructVector in-vec in-vec
+                 ^StructVector out-vec out-vec]
+             (dotimes [n size]
+               (.setIndexDefined out-vec (+ out-start n))
+               (doseq [k (.getChildFieldNames in-vec)
+                       :let [child-in-vec (.getChild in-vec k)]
+                       :when (not (.isNull child-in-vec (+ in-start n)))]
+                 (copy-range child-in-vec
+                             (.getChild out-vec k)
+                             (+ in-start n)
+                             (+ out-start n)
+                             1))))
+
+           (instance? ListVector in-vec)
+           (let [^ListVector in-vec in-vec
+                 ^ListVector out-vec out-vec]
+             (dotimes [n size]
+               (let [in-n (+ in-start n)
+                     element-size (- (.getElementEndIndex in-vec in-n)
+                                     (.getElementStartIndex in-vec in-n))
+                     out-list-offset (.startNewValue out-vec (+ out-start n))]
+                 (copy-range (.getDataVector in-vec) (.getDataVector out-vec)
+                             (.getElementStartIndex in-vec in-n) out-list-offset element-size)
+                 (.endValue out-vec (+ out-start n) element-size))))
+
+           (instance? UnionVector in-vec)
+           (let [^UnionVector in-vec in-vec
+                 ^DenseUnionVector out-vec out-vec]
+             (dotimes [n size]
+               (let [in-n (+ in-start n)
+                     type-id (.getTypeValue in-vec in-n)
+                     inner-in-vec (.getVector in-vec  in-n)]
+                 (if-let [inner-out-vec (or (.getVectorByType out-vec type-id)
+                                            (when inner-in-vec
+                                              (.addVector out-vec type-id (.createVector (.getField inner-in-vec) allocator))))]
+                   (let [inner-out-n (DenseUnionUtil/writeTypeId out-vec (+ out-start n) type-id)]
+                     (copy-range inner-in-vec inner-out-vec in-n inner-out-n 1))
+                   (.setTypeId out-vec (+ out-start n) type-id)))))
+
+           :else
+           (dotimes [n size]
+             (.copyFromSafe out-vec (+ in-start n) (+ out-start n) in-vec)))))
+     v duv 0 0 (.getValueCount v))
+    (.setValueCount duv (.getValueCount v))
+    ;; Without this extra copy IPC doesn't work for some reason.
+    (let [copy (.createVector (.getField duv) allocator)]
+      (try
+        (doto copy
+          (VectorBatchAppender/batchAppend (into-array [duv])))
+        (catch Throwable t
+          (.close copy)
+          (throw t))))))
