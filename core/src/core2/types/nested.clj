@@ -364,8 +364,8 @@
                                               x))
                                           (json/read-str schema-json))))))))
 
-(defn sparse->dense-union ^org.apache.arrow.vector.complex.DenseUnionVector [^UnionVector v ^BufferAllocator allocator]
-  (with-open [^DenseUnionVector duv (.createVector (sparse->dense-union-field (.getField v)) allocator)]
+(defn sparse->dense-union ^org.apache.arrow.vector.ValueVector [^ValueVector v ^BufferAllocator allocator]
+  (with-open [duv (.createVector (sparse->dense-union-field (.getField v)) allocator)]
     (.setInitialCapacity duv (.getValueCount v))
     ((fn copy-range [^ValueVector in-vec ^ValueVector out-vec ^Long in-start ^Long out-start ^Long size]
        (let [^long in-start in-start
