@@ -54,7 +54,7 @@ We release `xtdb-corda` to Maven Central (OSSRH).
 
 === One-time setup:
 
-See https://www.juxt.pro/blog/maven-central to get access to the JUXT groupId.
+See https://www.juxt.pro/blog/maven-central to get access to the XTDB groupId.
 
 .~/.gradle/gradle.properties:
 [source,properties]
@@ -67,4 +67,4 @@ ossrhPassword=...
 
 === Then
 
-`./gradlew publish`, and head to https://oss.sonatype.org/ to confirm the release.
+`./gradlew publish`, and head to https://s01.oss.sonatype.org/ to confirm the release.

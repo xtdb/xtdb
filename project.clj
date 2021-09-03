@@ -99,12 +99,12 @@
   :pedantic? :warn
   :global-vars {*warn-on-reflection* true}
 
-  :repositories {"snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"}}
+  :repositories {"snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
 
-  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+  :deploy-repositories {"releases" {:url "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2"
                                     :username [:gpg :env/sonatype_username]
                                     :password [:gpg :env/sonatype_password]}
-                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                        "snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"
                                      :username [:gpg :env/sonatype_username]
                                      :password [:gpg :env/sonatype_password]}}
 

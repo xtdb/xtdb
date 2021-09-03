@@ -18,7 +18,7 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 2. Manually approve hold - this kicks off the Maven deploy, building the API docs, deploying Docker images etc.
 
 ## JARs:
-1. Head over to https://oss.sonatype.org, 'Log in', 'Staging Repositories'
+1. Head over to https://s01.oss.sonatype.org, 'Log in', 'Staging Repositories'
 2. 'Close' the repo (performs validations)
 3. 'Release' the repo
 4. Check https://repo1.maven.org/maven2/com/xtdb to see when the artifacts have been mirrored across Maven Central.
