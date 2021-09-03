@@ -420,8 +420,8 @@
     (-> (assoc :v (gensym "_")) (with-meta {:ignore-v? true}))
     (blank-var? e)
     (assoc :e (gensym "_"))
-    (nil? a)
-    (assoc :a :xt/id)))
+    (or (nil? a) (= a :xt/id))
+    (assoc :a :crux.db/id)))
 
 (def ^:private pred->built-in-range-pred {< (comp neg? compare)
                                           <= (comp not pos? compare)
@@ -1419,7 +1419,7 @@
                                             (= e (get v-var->e v)))]
                              [v a])
                            (into {}))
-          e-var->attr (zipmap e-vars (repeat :xt/id))
+          e-var->attr (zipmap e-vars (repeat :crux.db/id))
           var->attr (merge e-var->attr v-var->attr)
           var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+idx-id+or-branches)
                                (build-pred-return-var-bindings var->values-result-index pred-clauses)
@@ -1909,7 +1909,9 @@
                                                    ::xt/tx-time tx-time
                                                    ::xt/tx-id tx-id})]
 
-      (db/submit-docs in-flight-tx (into {} (mapcat :docs) conformed-tx-ops))
+      (db/submit-docs in-flight-tx (->> conformed-tx-ops
+                                        (into {} (comp (mapcat :docs)
+                                                       (xio/map-vals c/xt->crux)))))
 
       (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
         (xt/db in-flight-tx valid-time)))))

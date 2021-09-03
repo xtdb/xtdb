@@ -187,7 +187,8 @@
       (ensure-node-open this)
       (with-open [snapshot (db/open-index-snapshot index-store)]
         (->> (db/all-attrs snapshot)
-             (into {} (map (juxt identity #(db/doc-count snapshot %))))))))
+             (into {} (map (juxt identity #(db/doc-count snapshot %))))
+             c/crux->xt))))
 
   (active-queries [_]
     (map qs/->QueryState (vals (:in-progress @!running-queries))))

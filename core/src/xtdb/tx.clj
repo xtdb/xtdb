@@ -49,8 +49,7 @@
 
 (defn- strict-fetch-docs [{:keys [document-store-tx]} doc-hashes]
   (let [doc-hashes (set doc-hashes)
-        docs (->> (db/fetch-docs document-store-tx doc-hashes)
-                  (xio/map-vals c/crux->xt))
+        docs (db/fetch-docs document-store-tx doc-hashes)
         fetched-doc-hashes (set (keys docs))]
     (when-not (= fetched-doc-hashes doc-hashes)
       (throw (IllegalStateException. (str "missing docs: " (pr-str (set/difference doc-hashes fetched-doc-hashes))))))
@@ -70,8 +69,8 @@
 
 (defn- index-docs [{:keys [index-store-tx !tx]} docs]
   (when (seq docs)
-    (when-let [missing-ids (seq (remove :xt/id (vals docs)))]
-      (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :xt/id"
+    (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
+      (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
                                             :docs missing-ids})))
     (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs index-store-tx docs)
           av-count (->> (vals indexed-docs) (apply concat) (count))]
@@ -208,7 +207,8 @@
          :crux.db.fn/keys [args tx-events failed?]
          :as args-doc} (when args-content-hash
                          (-> (strict-fetch-docs in-flight-tx #{args-content-hash})
-                             (get args-content-hash)))]
+                             (get args-content-hash)
+                             c/crux->xt))]
     (cond
       tx-events {:tx-events tx-events
                  :docs (strict-fetch-docs in-flight-tx (txc/tx-events->doc-hashes tx-events))}
@@ -254,9 +254,8 @@
                             tx-events (mapv txc/->tx-event conformed-tx-ops)]
                         {:tx-events tx-events
                          :docs (into (if args-doc-id
-                                       {args-content-hash (-> {:xt/id args-doc-id
-                                                               :crux.db.fn/tx-events tx-events}
-                                                              (c/xt->crux))}
+                                       {args-content-hash {:xt/id args-doc-id
+                                                           :crux.db.fn/tx-events tx-events}}
                                        {})
                                      (mapcat :docs)
                                      conformed-tx-ops)})))
@@ -311,7 +310,8 @@
               abort? (loop [[tx-event & more-tx-events] tx-events]
                        (when tx-event
                          (let [{:keys [docs abort? evict-eids etxs], new-tx-events :tx-events}
-                               (index-tx-event tx-event tx deps)]
+                               (index-tx-event tx-event tx deps)
+                               docs (->> docs (xio/map-vals c/xt->crux))]
                            (if abort?
                              (do
                                (when-let [docs (seq (concat docs (arg-docs-to-replace document-store-tx more-tx-events)))]
@@ -319,7 +319,7 @@
                                true)
 
                              (do
-                               (index-docs this (->> docs without-tx-fn-docs (xio/map-vals c/crux->xt)))
+                               (index-docs this (-> docs without-tx-fn-docs))
                                (db/index-entity-txs index-store-tx etxs)
                                (let [{:keys [tombstones]} (when (seq evict-eids)
                                                             (db/unindex-eids index-store-tx evict-eids))]

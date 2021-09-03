@@ -9,7 +9,8 @@
             [xtdb.query :as q]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
-            [xtdb.tx.conform :as txc])
+            [xtdb.tx.conform :as txc]
+            [xtdb.codec :as c])
   (:import xtdb.query.VarBinding
            [java.io Closeable File]
            java.nio.file.Path
@@ -42,14 +43,14 @@
   (subs (str k) 1))
 
 (def ^:const index-version 1)
-(def ^:const field-xt-id "_xt_id")
-(def ^:const field-xt-val "_xt_val")
-(def ^:const field-xt-attr "_xt_attr")
-(def ^:const field-xt-eid "_xt_eid")
+(def ^:const field-xt-id "_crux_id")
+(def ^:const field-xt-val "_crux_val")
+(def ^:const field-xt-attr "_crux_attr")
+(def ^:const field-xt-eid "_crux_eid")
 
 (defn- validate-index-version [^IndexWriter writer]
   (let [found-index-version (some-> (into {} (.getLiveCommitData writer))
-                                    (get "xtdb.lucene/index-version")
+                                    (get "crux.lucene/index-version")
                                     (Long/parseLong))]
     (when-not (or (zero? (.numDocs (.getDocStats writer)))
                   (= index-version found-index-version))
@@ -64,7 +65,7 @@
 
 (defn- user-data->tx-id [user-data]
   (some-> user-data
-          (get "xtdb.api/tx-id")
+          (get "crux.tx/tx-id")
           (Long/parseLong)))
 
 (defn latest-completed-tx-id [^IndexWriter index-writer]
@@ -226,8 +227,8 @@
   LuceneIndexer
 
   (index! [_ index-writer docs]
-    (doseq [{e :xt/id, :as xtdb-doc} (vals docs)
-            [a v] (->> (dissoc xtdb-doc :xt/id)
+    (doseq [{e :crux.db/id, :as doc} (vals docs)
+            [a v] (->> (dissoc doc :crux.db/id)
                        (mapcat (fn [[a v]]
                                  (for [v (cc/vectorize-value v)
                                        :when (string? v)]
@@ -386,10 +387,10 @@
                             (let [{:keys [docs evicted-eids]} (transform-tx-ops tx-ops)]
                               (when-let [evicting-eids (not-empty evicted-eids)]
                                 (evict! indexer index-writer evicting-eids))
-                              (index! indexer index-writer docs)))
+                              (index! indexer index-writer (->> docs (xio/map-vals c/xt->crux)))))
 
-                          (.setLiveCommitData index-writer {"xtdb.api/tx-id" (str tx-id)
-                                                            "xtdb.lucene/index-version" (str index-version)})
+                          (.setLiveCommitData index-writer {"crux.tx/tx-id" (str tx-id)
+                                                            "crux.lucene/index-version" (str index-version)})
                           (when (.isZero refresh-frequency)
                             (.maybeRefreshBlocking searcher-manager))))
 

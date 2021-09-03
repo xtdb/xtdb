@@ -303,7 +303,7 @@
                                (remove c/evicted-doc?))))))))))
 
 (t/deftest test-multiple-txs-in-same-ms-441
-  (let [ivan {:xt/id :ivan}
+  (let [ivan {:crux.db/id :ivan}
         ivan1 (assoc ivan :value 1)
         ivan2 (assoc ivan :value 2)
         t #inst "2019-11-29"]
@@ -332,7 +332,7 @@
                (db/entity-history index-snapshot :ivan :asc {:start-valid-time t}))))))
 
 (t/deftest test-entity-history-seq-corner-cases
-  (let [ivan {:xt/id :ivan}
+  (let [ivan {:crux.db/id :ivan}
         ivan1 (assoc ivan :value 1)
         ivan2 (assoc ivan :value 2)
         t1 #inst "2020-05-01"
@@ -550,7 +550,7 @@
                  log))))))
 
 (t/deftest migrates-unhashed-tx-log-eids
-  (let [doc {:xt/id :foo}
+  (let [doc {:crux.db/id :foo}
         doc-id (c/hash-doc doc)]
     (db/submit-docs (:document-store *api*) {doc-id doc})
     (doto @(db/submit-tx (:tx-log *api*) [[:crux.tx/match :foo (c/new-id c/nil-id-buffer)]
@@ -1164,7 +1164,7 @@
   (let [put-fn {:xt/id :put-fn
                 ::xt/fn '(fn [ctx doc]
                            [[::xt/put doc]])}
-        foo-doc {:xt/id :foo}
+        foo-doc {:crux.db/id :foo}
         !arg-doc-resps (atom [{:crux.db.fn/args [foo-doc]}
                               {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :foo) (c/hash-doc foo-doc)]]}])
         ->mocked-doc-store (fn [_opts]
@@ -1173,11 +1173,11 @@
                                (fetch-docs [_ ids]
                                  (->> ids
                                       (into {} (map (juxt identity
-                                                          (some-fn {(c/hash-doc put-fn) put-fn
+                                                          (some-fn {(c/hash-doc put-fn) (c/xt->crux put-fn)
                                                                     (c/hash-doc foo-doc) foo-doc}
                                                                    (fn [id]
                                                                      (let [[[doc] _] (swap-vals! !arg-doc-resps rest)]
-                                                                       (merge doc {:xt/id id})))))))))))]
+                                                                       (merge doc {:crux.db/id id})))))))))))]
     (with-open [node (xt/start-node {:xtdb/document-store ->mocked-doc-store})]
       (xt/submit-tx node [[::xt/put put-fn]])
       (xt/submit-tx node [[::xt/fn :put-fn foo-doc]])

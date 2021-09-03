@@ -10,9 +10,9 @@
 (t/deftest test-submit-client
   (fix/with-tmp-dir "db" [db-dir]
     (let [submit-opts {:xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store
-                                              :db-dir (io/file db-dir "tx-log")}}
+                                                :db-dir (io/file db-dir "tx-log")}}
                        :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store
-                                                      :db-dir (io/file db-dir "doc-store")}}}
+                                                        :db-dir (io/file db-dir "doc-store")}}}
 
           submitted-tx
           (with-open [submit-client (xt/new-submit-client submit-opts)]

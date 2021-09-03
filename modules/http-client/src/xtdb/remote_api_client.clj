@@ -347,8 +347,7 @@
             (when (and (= 403 (:status data))
                        (string/includes? (:body data) "read-only HTTP node"))
               (throw (UnsupportedOperationException. "read-only HTTP node")))
-            (throw e))))
-      ))
+            (throw e))))))
 
   (open-tx-log ^xtdb.api.ICursor [this after-tx-id with-ops?]
     (let [with-ops? (boolean with-ops?)

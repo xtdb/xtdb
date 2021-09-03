@@ -332,7 +332,18 @@
       (catch UnsatisfiedLinkError e
         (log/debug "Could not call glibc mallopt")))))
 
-(defn map-vals [f m]
-  (->> m
-       (into {} (map (fn [v]
-                       (MapEntry/create (key v) (f (val v))))))))
+(defn map-vals
+  ([f]
+   (fn [rf]
+     (fn
+       ([] (rf))
+
+       ([acc el]
+         (rf acc (MapEntry/create (key el) (f (val el)))))
+
+       ([acc] (rf acc)))))
+
+  ([f m]
+   (->> m
+        (into {} (map (fn [v]
+                        (MapEntry/create (key v) (f (val v)))))))))

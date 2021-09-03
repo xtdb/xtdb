@@ -1,24 +1,23 @@
 (ns xtdb.corda
-  (:require [xtdb.api :as xt]
-            [xtdb.tx :as tx]
-            [xtdb.tx.event :as txe]
-            [xtdb.tx.subscribe :as tx-sub]
-            [xtdb.db :as db]
-            [xtdb.codec :as c]
-            [xtdb.system :as sys]
+  (:require [clojure.set :as set]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
-            [clojure.set :as set]
-            [xtdb.io :as xio])
-  (:import (xtdb.corda.state XtdbState)
-           (xtdb.api ICursor)
-           kotlin.jvm.functions.Function1
-           (net.corda.core.crypto SecureHash)
-           (net.corda.core.node AppServiceHub)
-           (net.corda.core.transactions SignedTransaction)
-           (net.corda.core.contracts TransactionState StateAndRef)
+            [xtdb.api :as xt]
+            [xtdb.codec :as c]
+            [xtdb.db :as db]
+            [xtdb.io :as xio]
+            [xtdb.system :as sys]
+            [xtdb.tx.event :as txe]
+            [xtdb.tx.subscribe :as tx-sub])
+  (:import kotlin.jvm.functions.Function1
+           [net.corda.core.contracts StateAndRef TransactionState]
+           net.corda.core.crypto.SecureHash
+           net.corda.core.node.AppServiceHub
            net.corda.core.node.services.vault.SessionScope
-           org.hibernate.jdbc.ReturningWork))
+           net.corda.core.transactions.SignedTransaction
+           org.hibernate.jdbc.ReturningWork
+           xtdb.api.ICursor
+           xtdb.corda.state.XtdbState))
 
 (set! *warn-on-reflection* true)
 
@@ -160,7 +159,7 @@
   (subscribe [this after-tx-id f]
     (tx-sub/handle-notifying-subscriber subscriber-handler this after-tx-id
                                         (fn [fut {:keys [docs] :as tx}]
-                                          (db/submit-docs document-store docs)
+                                          (db/submit-docs document-store (->> docs (xio/map-vals c/xt->crux)))
                                           (f fut tx)))))
 
 (defn notify-tx [^SecureHash corda-tx-id {{{:keys [subscriber-handler]} :tx-log} :node, :as node}]

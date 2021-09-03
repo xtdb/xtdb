@@ -4,7 +4,9 @@
             [xtdb.system :as sys]
             [xtdb.tx.conform :as txc]
             [clojure.pprint :as pp]
-            [xtdb.api :as xt])
+            [xtdb.api :as xt]
+            [xtdb.io :as xio]
+            [xtdb.codec :as c])
   (:import [java.io Closeable Writer]
            java.lang.AutoCloseable))
 
@@ -12,7 +14,9 @@
   xt/PXtdbSubmitClient
   (submit-tx-async [_ tx-ops]
     (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
-      (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
+      (db/submit-docs document-store (->> conformed-tx-ops
+                                          (into {} (comp (mapcat :docs)
+                                                         (xio/map-vals c/xt->crux)))))
       (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))
 
   (submit-tx [this tx-ops]
