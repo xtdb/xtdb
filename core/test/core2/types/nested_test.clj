@@ -10,8 +10,8 @@
            [org.apache.arrow.memory RootAllocator]))
 
 (t/deftest can-build-sparse-union-vector
-  (with-open [a (RootAllocator.)
-              v (UnionVector/empty "" a)
+  (with-open [allocator (RootAllocator.)
+              v (UnionVector/empty "" allocator)
               writer (.getWriter v)]
     (doseq [x [false
                nil
@@ -37,7 +37,7 @@
                [1 {:B [2]}]
                ;; NOTE: should contain :F
                {:B 3.14 :D {:E ["hello" -1]} :F nil}]]
-      (tn/append-writer a writer nil nil x))
+      (tn/append-value x writer allocator))
     (.setValueCount v (.getPosition writer))
 
     (t/testing "nested data"
