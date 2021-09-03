@@ -21,8 +21,11 @@
 
 (t/deftest test-pull
   (let [db (submit-bond)]
+    (t/is (= #{}
+             (xt/q db '{:find [(pull ?v [])]
+                        :where [[?v :not/here "N/A"]]})))
 
-    (t/is (= #{[{}]}
+    (t/is (= #{[nil]}
              (xt/q db '{:find [(pull ?v [])]
                         :where [[?v :vehicle/brand "Aston Martin"]]})))
 
@@ -240,7 +243,7 @@
                              :where [[?root :xt/id :root]]}))))))
 
 (t/deftest test-doesnt-hang-on-unknown-eid
-  (t/is (= #{[{}]}
+  (t/is (= #{[nil]}
            (xt/q (xt/db *api*)
                  '{:find [(pull ?e [*])]
                    :in [?e]
@@ -257,8 +260,7 @@
 (t/deftest test-missing-forward-join
   (fix/submit+await-tx [[::xt/put {:xt/id :foo :ref [:bar :baz]}]
                         [::xt/put {:xt/id :bar}]])
-
-  (t/is (= #{[{:ref [{:xt/id :bar} {}]}]}
+  (t/is (= #{[{:ref [{:xt/id :bar} nil]}]}
            (xt/q (xt/db *api*)
                  '{:find [(pull ?it [{:ref [:xt/id]}])]
                    :where [[?it :xt/id :foo]]}))))
