@@ -4,12 +4,12 @@
   (:import [java.nio.charset StandardCharsets]
            [java.nio ByteBuffer CharBuffer]
            [java.util Date Collection List Map Set UUID]
-           [java.time Duration Instant LocalDate LocalTime ZoneId ZonedDateTime]
+           [java.time Duration Instant LocalDate LocalTime Period ZoneId ZonedDateTime]
            [java.time.temporal ChronoField ChronoUnit]
            [org.apache.arrow.vector.types Types$MinorType TimeUnit]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$Timestamp ArrowType$Union Field FieldType]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector
+           [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector IntervalYearVector
             TimeMicroVector TimeStampMicroVector TimeStampMicroTZVector VarBinaryVector VarCharVector ValueVector UInt2Vector]
            [org.apache.arrow.vector.util Text VectorBatchAppender]
            [core2 DenseUnionUtil]
@@ -89,6 +89,10 @@
   (get-value [v idx]
     (.atZone (Instant/ofEpochSecond 0 (* 1000 (.get v idx)))
              (ZoneId/of (.getTimezone ^ArrowType$Timestamp (.getType (.getField v))))))
+
+  IntervalYearVector
+  (get-value [v idx]
+    (.normalized (.getObject ^IntervalYearVector v ^long idx)))
 
   ListVector
   (get-value [v idx]
@@ -270,6 +274,15 @@
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset (quot (.toNanos x) 1000))
       v))
+
+  Period
+  (append-value [x ^DenseUnionVector v]
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/INTERVALYEAR))
+          inner-vec (.getIntervalYearVector v type-id)
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
+      (.setSafe inner-vec offset (.toTotalMonths x))
+      v))
+
 
   Character
   (append-value [x ^DenseUnionVector v]
