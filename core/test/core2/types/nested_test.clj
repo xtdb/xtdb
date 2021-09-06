@@ -64,7 +64,7 @@
                 org.apache.arrow.vector.VarCharVector
                 org.apache.arrow.vector.TimeStampMicroVector
                 org.apache.arrow.vector.TimeStampMicroVector
-                org.apache.arrow.vector.IntervalDayVector
+                org.apache.arrow.vector.DurationVector
                 org.apache.arrow.vector.DateMilliVector
                 org.apache.arrow.vector.TimeMicroVector
                 org.apache.arrow.vector.VarBinaryVector

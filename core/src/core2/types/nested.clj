@@ -5,11 +5,11 @@
            [java.nio ByteBuffer CharBuffer]
            [java.util Date List Map]
            [java.time Duration Instant LocalDate LocalTime]
-           [java.time.temporal ChronoField]
-           [org.apache.arrow.vector.types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType]
+           [java.time.temporal ChronoField ChronoUnit]
+           [org.apache.arrow.vector.types Types$MinorType TimeUnit]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Duration ArrowType$Union Field FieldType]
            [org.apache.arrow.vector.complex DenseUnionVector]
-           [org.apache.arrow.vector ValueVector]
+           [org.apache.arrow.vector DurationVector ValueVector]
            [org.apache.arrow.vector.util Text VectorBatchAppender]
            [core2 DenseUnionUtil]))
 
@@ -39,13 +39,12 @@
     (str x)))
 
 ;; TODO: this scans the children all the time.
-(defn- get-or-create-type-id ^long [^DenseUnionVector v ^Types$MinorType type]
-  (let [arrow-type (.getType type)
-        children (.getChildren (.getField v))]
+(defn- get-or-create-type-id ^long [^DenseUnionVector v ^ArrowType arrow-type]
+  (let [children (.getChildren (.getField v))]
     (loop [idx 0]
       (cond
         (= idx (.size children))
-        (.registerNewTypeId v (Field/nullable (.name type) arrow-type))
+        (.registerNewTypeId v (Field/nullable "" arrow-type))
 
         (= arrow-type (.getType ^Field (.get children idx)))
         (if-let [type-ids (.getTypeIds ^ArrowType$Union (.getType (.getMinorType v)))]
@@ -67,7 +66,7 @@
 
   Boolean
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/BIT)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/BIT))
           inner-vec (.getBitVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset (if x 1 0))
@@ -75,7 +74,7 @@
 
   Byte
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/TINYINT)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/TINYINT))
           inner-vec (.getTinyIntVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset x)
@@ -83,7 +82,7 @@
 
   Short
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/SMALLINT)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/SMALLINT))
           inner-vec (.getSmallIntVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset x)
@@ -91,7 +90,7 @@
 
   Integer
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/INT)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/INT))
           inner-vec (.getIntVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset x)
@@ -99,7 +98,7 @@
 
   Long
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/BIGINT)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/BIGINT))
           inner-vec (.getBigIntVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset x)
@@ -107,7 +106,7 @@
 
   Float
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/FLOAT4)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/FLOAT4))
           inner-vec (.getFloat4Vector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset x)
@@ -115,7 +114,7 @@
 
   Double
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/FLOAT8)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/FLOAT8))
           inner-vec (.getFloat8Vector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset x)
@@ -123,7 +122,7 @@
 
   LocalDate
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/DATEMILLI)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/DATEMILLI))
           inner-vec (.getDateMilliVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (assign-type-id v type-id (.getField inner-vec))
@@ -132,7 +131,7 @@
 
   LocalTime
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/TIMEMICRO)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/TIMEMICRO))
           inner-vec (.getTimeMicroVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset (quot (.getLong x ChronoField/NANO_OF_DAY) 1000))
@@ -144,7 +143,7 @@
 
   Instant
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/TIMESTAMPMICRO)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/TIMESTAMPMICRO))
           inner-vec (.getTimeStampMicroVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset (+ (* (.getEpochSecond x) 1000000)
@@ -153,10 +152,13 @@
 
   Duration
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/INTERVALDAY)
-          inner-vec (.getIntervalDayVector v type-id)
+    (let [duration-arrow-type (ArrowType$Duration. TimeUnit/MICROSECOND)
+          type-id (get-or-create-type-id v duration-arrow-type)
+          ^DurationVector inner-vec (or (.getVectorByType v type-id)
+                                        (.addVector v type-id (.createVector (Field/nullable (str "duration" type-id) duration-arrow-type)
+                                                                             (.getAllocator v))))
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
-      (.setSafe inner-vec offset (.toDays x) (rem (.toMillis x) 86400000))
+      (.setSafe inner-vec offset (quot (.toNanos x) 1000))
       v))
 
   Character
@@ -165,7 +167,7 @@
 
   CharSequence
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/VARCHAR)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/VARCHAR))
           inner-vec (.getVarCharVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
           x (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap x))]
@@ -174,7 +176,7 @@
 
   ByteBuffer
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/VARBINARY)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/VARBINARY))
           inner-vec (.getVarBinaryVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset (.duplicate x) (.position x) (.remaining x))
@@ -182,7 +184,7 @@
 
   List
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/LIST)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/LIST))
           inner-vec (.getList v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
           data-vec (.getVector (.addOrGetVector inner-vec (FieldType/nullable (.getType Types$MinorType/DENSEUNION))))]
@@ -194,7 +196,7 @@
 
   Map
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v Types$MinorType/STRUCT)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/STRUCT))
           inner-vec (.getStruct v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setIndexDefined inner-vec offset)
