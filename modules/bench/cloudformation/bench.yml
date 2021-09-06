@@ -136,8 +136,8 @@ Resources:
               Action:
                 - 's3:GetObject'
               Resource:
-                - "arn:aws:s3:::crux-datasets"
-                - "arn:aws:s3:::crux-datasets/*"
+                - "arn:aws:s3:::xtdb-datasets"
+                - "arn:aws:s3:::xtdb-datasets/*"
 
   BenchBucket:
     Type: AWS::S3::Bucket
