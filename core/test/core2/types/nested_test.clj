@@ -78,7 +78,7 @@
                 org.apache.arrow.vector.VarBinaryVector
                 org.apache.arrow.vector.VarCharVector
                 org.apache.arrow.vector.VarCharVector
-                org.apache.arrow.vector.VarBinaryVector
+                org.apache.arrow.vector.FixedSizeBinaryVector
                 org.apache.arrow.vector.complex.ListVector
                 org.apache.arrow.vector.complex.ListVector
                 org.apache.arrow.vector.complex.ListVector

@@ -7,9 +7,10 @@
            [java.time Duration Instant LocalDate LocalTime ZoneId ZonedDateTime]
            [java.time.temporal ChronoField ChronoUnit]
            [org.apache.arrow.vector.types Types$MinorType TimeUnit]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$Timestamp ArrowType$Union Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$Timestamp ArrowType$Union Field FieldType]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector TimeMicroVector TimeStampMicroVector TimeStampMicroTZVector VarBinaryVector VarCharVector ValueVector]
+           [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector
+            TimeMicroVector TimeStampMicroVector TimeStampMicroTZVector VarBinaryVector VarCharVector ValueVector]
            [org.apache.arrow.vector.util Text VectorBatchAppender]
            [core2 DenseUnionUtil]
            [clojure.lang IPersistentList IPersistentSet Keyword Symbol]))
@@ -47,7 +48,7 @@
   (get-value [v idx]
     (get-value (.getVectorByType v (.getTypeId v idx)) (.getOffset v idx)))
 
-  VarBinaryVector
+  FixedSizeBinaryVector
   (get-value [v idx]
     (let [x (ByteBuffer/wrap (.getObject v ^long idx))]
       (case (get (.getMetadata (.getField v)) extension-metadata-key-name)
@@ -55,6 +56,10 @@
         (UUID. (.getLong x) (.getLong x))
 
         x)))
+
+  VarBinaryVector
+  (get-value [v idx]
+    (ByteBuffer/wrap (.getObject v ^long idx)))
 
   VarCharVector
   (get-value [v idx]
@@ -319,16 +324,16 @@
 
   UUID
   (append-value [x ^DenseUnionVector v]
-    (let [arrow-type (.getType Types$MinorType/VARBINARY)
+    (let [arrow-type (ArrowType$FixedSizeBinary. 16)
           extension-type "uuid"
           type-id (get-or-create-type-id v arrow-type (fn [^Field f]
                                                         (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
-          ^VarBinaryVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
-          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
-          bb (ByteBuffer/allocate 16)]
-      (.putLong bb 0 (.getMostSignificantBits x))
-      (.putLong bb Long/BYTES (.getLeastSignificantBits x))
-      (.setSafe inner-vec offset bb 0 (.remaining bb))
+          ^FixedSizeBinaryVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
+      (.setSafe inner-vec offset (-> (ByteBuffer/allocate 16)
+                                     (.putLong (.getMostSignificantBits x))
+                                     (.putLong (.getLeastSignificantBits x))
+                                     (.array)))
       v))
 
   ByteBuffer
