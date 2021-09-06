@@ -3,15 +3,16 @@
             [clojure.walk :as w])
   (:import [java.nio.charset StandardCharsets]
            [java.nio ByteBuffer CharBuffer]
-           [java.util Date List Map]
+           [java.util Date Collection List Map Set UUID]
            [java.time Duration Instant LocalDate LocalTime ZoneId ZonedDateTime]
            [java.time.temporal ChronoField ChronoUnit]
            [org.apache.arrow.vector.types Types$MinorType TimeUnit]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$Timestamp ArrowType$Union Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$Timestamp ArrowType$Union Field FieldType]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector TimeMicroVector TimeStampMicroVector TimeStampMicroTZVector VarBinaryVector VarCharVector ValueVector]
            [org.apache.arrow.vector.util Text VectorBatchAppender]
-           [core2 DenseUnionUtil]))
+           [core2 DenseUnionUtil]
+           [clojure.lang IPersistentList IPersistentSet Keyword Symbol]))
 
 ;; Type mapping aims to stay close to the Arrow JDBC adapter:
 ;; https://github.com/apache/arrow/blob/master/java/adapter/jdbc/src/main/java/org/apache/arrow/adapter/jdbc/JdbcToArrow.java
@@ -25,6 +26,8 @@
 ;; supported.
 
 (set! *unchecked-math* :warn-on-boxed)
+
+(def ^:private extension-metadata-key-name ArrowType$ExtensionType/EXTENSION_METADATA_KEY_NAME)
 
 (defprotocol ArrowAppendable
   (append-value [_ v]))
@@ -46,11 +49,27 @@
 
   VarBinaryVector
   (get-value [v idx]
-    (ByteBuffer/wrap (.getObject v ^long idx)))
+    (let [x (ByteBuffer/wrap (.getObject v ^long idx))]
+      (case (get (.getMetadata (.getField v)) extension-metadata-key-name)
+        "uuid"
+        (UUID. (.getLong x) (.getLong x))
+
+        x)))
 
   VarCharVector
   (get-value [v idx]
-    (str (.getObject v ^long idx)))
+    (let [x (str (.getObject v ^long idx))]
+      (case (get (.getMetadata (.getField v)) extension-metadata-key-name)
+        "char"
+        (.charAt x 0)
+
+        "clojure.lang.Keyword"
+        (keyword x)
+
+        "clojure.lang.Symbol"
+        (symbol x)
+
+        x)))
 
   DateMilliVector
   (get-value [v idx]
@@ -74,7 +93,14 @@
     (loop [element-idx (.getElementStartIndex v idx)
            acc []]
       (if (= (.getElementEndIndex v idx) element-idx)
-        acc
+        (case (get (.getMetadata (.getField v)) extension-metadata-key-name)
+          "clojure.lang.IPersistentSet"
+          (set acc)
+
+          "clojure.lang.IPersistentList"
+          (apply list acc)
+
+          acc)
         (recur (inc element-idx)
                (conj acc (get-value (.getDataVector v) element-idx))))))
 
@@ -94,7 +120,8 @@
 ;; TODO: this scans the children all the time.
 (defn- get-or-create-type-id
   (^long [^DenseUnionVector v ^ArrowType arrow-type]
-   (get-or-create-type-id v arrow-type (constantly true)))
+   (get-or-create-type-id v arrow-type (fn [^Field f]
+                                         (empty? (.getMetadata f)))))
   (^long [^DenseUnionVector v ^ArrowType arrow-type field-pred]
    (let [children (.getChildren (.getField v))]
      (loop [idx 0]
@@ -111,10 +138,12 @@
          :else
          (recur (inc idx)))))))
 
-(defn- get-or-add-vector [^DenseUnionVector v ^ArrowType arrow-type ^String prefix ^long type-id]
-  (or (.getVectorByType v type-id)
-      (.addVector v type-id (.createVector (Field/nullable (str prefix type-id) arrow-type)
-                                           (.getAllocator v)))))
+(defn- get-or-add-vector
+  ([^DenseUnionVector v ^ArrowType arrow-type ^String prefix ^Long type-id]
+   (get-or-add-vector v arrow-type prefix type-id nil))
+  ([^DenseUnionVector v ^ArrowType arrow-type ^String prefix ^Long type-id metadata]
+   (or (.getVectorByType v type-id)
+       (.addVector v type-id (.createNewSingleVector (FieldType. true arrow-type nil metadata) (str prefix type-id) (.getAllocator v) nil)))))
 
 (extend-protocol ArrowAppendable
   (class (byte-array 0))
@@ -196,7 +225,6 @@
     (let [type-id (get-or-create-type-id v (.getType Types$MinorType/DATEMILLI))
           inner-vec (.getDateMilliVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
-      (assign-type-id v type-id (.getField inner-vec))
       (.setSafe inner-vec offset (* (.getLong x ChronoField/EPOCH_DAY) 86400000))
       v))
 
@@ -243,7 +271,16 @@
 
   Character
   (append-value [x ^DenseUnionVector v]
-    (append-value (str x) v))
+    (let [arrow-type (.getType Types$MinorType/VARCHAR)
+          extension-type "char"
+          type-id (get-or-create-type-id v arrow-type (fn [^Field f]
+                                                        (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
+          ^VarCharVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
+          x (str x)
+          x (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap x))]
+      (.setSafe inner-vec offset x (.position x) (.remaining x))
+      v))
 
   CharSequence
   (append-value [x ^DenseUnionVector v]
@@ -252,6 +289,46 @@
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
           x (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap x))]
       (.setSafe inner-vec offset x (.position x) (.remaining x))
+      v))
+
+  Keyword
+  (append-value [x ^DenseUnionVector v]
+    (let [arrow-type (.getType Types$MinorType/VARCHAR)
+          extension-type "clojure.lang.Keyword"
+          type-id (get-or-create-type-id v arrow-type (fn [^Field f]
+                                                        (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
+          ^VarCharVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
+          x (kw-name x)
+          x (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap x))]
+      (.setSafe inner-vec offset x (.position x) (.remaining x))
+      v))
+
+  Symbol
+  (append-value [x ^DenseUnionVector v]
+    (let [arrow-type (.getType Types$MinorType/VARCHAR)
+          extension-type "clojure.lang.Symbol"
+          type-id (get-or-create-type-id v arrow-type (fn [^Field f]
+                                                        (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
+          ^VarCharVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
+          x (str x)
+          bb (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap x))]
+      (.setSafe inner-vec offset bb (.position bb) (.remaining bb))
+      v))
+
+  UUID
+  (append-value [x ^DenseUnionVector v]
+    (let [arrow-type (.getType Types$MinorType/VARBINARY)
+          extension-type "uuid"
+          type-id (get-or-create-type-id v arrow-type (fn [^Field f]
+                                                        (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
+          ^VarBinaryVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
+          bb (ByteBuffer/allocate 16)]
+      (.putLong bb 0 (.getMostSignificantBits x))
+      (.putLong bb Long/BYTES (.getLeastSignificantBits x))
+      (.setSafe inner-vec offset bb 0 (.remaining bb))
       v))
 
   ByteBuffer
@@ -268,7 +345,37 @@
           inner-vec (.getList v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
           data-vec (.getVector (.addOrGetVector inner-vec (FieldType/nullable (.getType Types$MinorType/DENSEUNION))))]
-       (.startNewValue inner-vec offset)
+      (.startNewValue inner-vec offset)
+      (doseq [v x]
+        (append-value v data-vec))
+      (.endValue inner-vec offset (count x))
+      v))
+
+  Set
+  (append-value [x ^DenseUnionVector v]
+    (let [arrow-type (.getType Types$MinorType/LIST)
+          extension-type "clojure.lang.IPersistentSet"
+          type-id (get-or-create-type-id v arrow-type (fn [^Field f]
+                                                        (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
+          ^ListVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
+          data-vec (.getVector (.addOrGetVector inner-vec (FieldType/nullable (.getType Types$MinorType/DENSEUNION))))]
+      (.startNewValue inner-vec offset)
+      (doseq [v x]
+        (append-value v data-vec))
+      (.endValue inner-vec offset (count x))
+      v))
+
+  IPersistentList
+  (append-value [x ^DenseUnionVector v]
+    (let [arrow-type (.getType Types$MinorType/LIST)
+          extension-type "clojure.lang.IPersistentList"
+          type-id (get-or-create-type-id v arrow-type (fn [^Field f]
+                                                        (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
+          ^ListVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
+          data-vec (.getVector (.addOrGetVector inner-vec (FieldType/nullable (.getType Types$MinorType/DENSEUNION))))]
+      (.startNewValue inner-vec offset)
       (doseq [v x]
         (append-value v data-vec))
       (.endValue inner-vec offset (count x))
