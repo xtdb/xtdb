@@ -65,7 +65,7 @@
                 org.apache.arrow.vector.Float8Vector
                 org.apache.arrow.vector.Float4Vector
                 org.apache.arrow.vector.VarCharVector
-                org.apache.arrow.vector.VarCharVector
+                org.apache.arrow.vector.UInt2Vector
                 org.apache.arrow.vector.DecimalVector
                 org.apache.arrow.vector.DecimalVector
                 org.apache.arrow.vector.TimeStampMicroVector

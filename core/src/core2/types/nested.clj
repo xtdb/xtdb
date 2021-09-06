@@ -10,7 +10,7 @@
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$Timestamp ArrowType$Union Field FieldType]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector
-            TimeMicroVector TimeStampMicroVector TimeStampMicroTZVector VarBinaryVector VarCharVector ValueVector]
+            TimeMicroVector TimeStampMicroVector TimeStampMicroTZVector VarBinaryVector VarCharVector ValueVector UInt2Vector]
            [org.apache.arrow.vector.util Text VectorBatchAppender]
            [core2 DenseUnionUtil]
            [clojure.lang IPersistentList IPersistentSet Keyword Symbol]))
@@ -65,9 +65,6 @@
   (get-value [v idx]
     (let [x (str (.getObject v ^long idx))]
       (case (get (.getMetadata (.getField v)) extension-metadata-key-name)
-        "char"
-        (.charAt x 0)
-
         "clojure.lang.Keyword"
         (keyword x)
 
@@ -256,7 +253,7 @@
 
   ZonedDateTime
   (append-value [x ^DenseUnionVector v]
-    (let [arrow-type (ArrowType$Timestamp. TimeUnit/MICROSECOND, (str (.getZone x)))
+    (let [arrow-type (ArrowType$Timestamp. TimeUnit/MICROSECOND (str (.getZone x)))
           type-id (get-or-create-type-id v arrow-type)
           ^TimeStampMicroTZVector inner-vec (get-or-add-vector v arrow-type "timestamp" type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
@@ -276,15 +273,13 @@
 
   Character
   (append-value [x ^DenseUnionVector v]
-    (let [arrow-type (.getType Types$MinorType/VARCHAR)
+    (let [arrow-type (.getType Types$MinorType/UINT2)
           extension-type "char"
           type-id (get-or-create-type-id v arrow-type (fn [^Field f]
                                                         (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
-          ^VarCharVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
-          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
-          x (str x)
-          x (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap x))]
-      (.setSafe inner-vec offset x (.position x) (.remaining x))
+          ^UInt2Vector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
+      (.setSafe inner-vec offset x)
       v))
 
   CharSequence
