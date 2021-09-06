@@ -205,11 +205,11 @@
                          (let [db (xtdb.api/db ctx)
                                entity (xtdb.api/entity db eid)]
                            [[::xt/put (update entity :age inc)]])))
-        {:strs [txId] :as tx} (submit-tx [["put" {"xt/id" "increment-age", "xtdb.api/fn" tx-fn}]])]
+        {:strs [txId] :as tx} (submit-tx [["put" {"xt/id" "increment-age", "xt/fn" tx-fn}]])]
     (t/is (= tx
              (json-get {:url "/_xtdb/await-tx"
                         :qps {"txId" txId}})))
-    (t/is (= {"xt/id" "increment-age", "xtdb.api/fn" tx-fn}
+    (t/is (= {"xt/id" "increment-age", "xt/fn" tx-fn}
              (json-get {:url "/_xtdb/entity"
                         :qps {"eid" "increment-age"}}))))
 

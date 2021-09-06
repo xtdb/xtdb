@@ -60,8 +60,8 @@
   (with-cluster
     (with-cluster-node
       (fix/submit+await-tx [[::xt/put {:xt/id :put-ivan
-                                       ::xt/fn '(fn [ctx doc]
-                                                  [[::xt/put (assoc doc :xt/id :ivan)]])}]])
+                                       :xt/fn '(fn [ctx doc]
+                                                 [[::xt/put (assoc doc :xt/id :ivan)]])}]])
 
       (fix/submit+await-tx [[::xt/fn :put-ivan {:name "Ivan"}]])
 
@@ -76,8 +76,8 @@
     (with-cluster
       (with-cluster-node
         (fix/submit+await-tx [[::xt/put {:xt/id :no-args
-                                         ::xt/fn '(fn [ctx]
-                                                    [[::xt/put {:xt/id :no-fn-args-doc}]])}]])
+                                         :xt/fn '(fn [ctx]
+                                                   [[::xt/put {:xt/id :no-fn-args-doc}]])}]])
         (fix/submit+await-tx [[::xt/fn :no-args]])
 
         (t/is (= {:xt/id :no-fn-args-doc}
@@ -91,13 +91,13 @@
     (with-cluster
       (with-cluster-node
         (fix/submit+await-tx [[::xt/put {:xt/id :put-ivan
-                                         ::xt/fn '(fn [ctx doc]
-                                                    [[::xt/put (assoc doc :xt/id :ivan)]])}]])
+                                         :xt/fn '(fn [ctx doc]
+                                                   [[::xt/put (assoc doc :xt/id :ivan)]])}]])
 
         (fix/submit+await-tx [[::xt/put {:xt/id :put-bob-and-ivan
-                                         ::xt/fn '(fn [ctx bob ivan]
-                                                    [[::xt/put (assoc bob :xt/id :bob)]
-                                                     [::xt/fn :put-ivan ivan]])}]])
+                                         :xt/fn '(fn [ctx bob ivan]
+                                                   [[::xt/put (assoc bob :xt/id :bob)]
+                                                    [::xt/fn :put-ivan ivan]])}]])
 
         (fix/submit+await-tx [[::xt/fn :put-bob-and-ivan {:name "Bob"} {:name "Ivan2"}]])
 

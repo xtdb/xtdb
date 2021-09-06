@@ -378,9 +378,9 @@
 
 (t/deftest test-use-in-argument
   (submit+await-tx [[::xt/put {:xt/id :ivan
-                              :firstname "Fred"
-                              :surname "Smith"
-                              :escape-text "firstname:James"}]])
+                               :firstname "Fred"
+                               :surname "Smith"
+                               :escape-text "firstname:James"}]])
 
   (with-open [db (xt/open-db *api*)]
     (t/is (seq (xt/q db '{:find [?e]
@@ -443,7 +443,7 @@
 
 (t/deftest test-can-search-docs-from-tx-fn-1594
   (let [doc {:xt/id :ivan :name "Ivan"}]
-    (submit+await-tx [[::xt/put {:xt/id :submit-tx, ::xt/fn '(fn [_ ops] ops)}]])
+    (submit+await-tx [[::xt/put {:xt/id :submit-tx, :xt/fn '(fn [_ ops] ops)}]])
     (submit+await-tx [[::xt/fn :submit-tx [[::xt/put doc]]]])
 
     (t/is (= #{[:ivan]}

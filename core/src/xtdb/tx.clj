@@ -223,7 +223,7 @@
 
       :else (let [ctx (->TxFnContext in-flight-tx tx)
                   db (xt/db ctx)
-                  {fn-body ::xt/fn, :as tx-fn} (xt/entity db fn-id)]
+                  {fn-body :xt/fn, :as tx-fn} (xt/entity db fn-id)]
               (cond
                 (nil? tx-fn) {:abort? true
                               :docs (when args-doc-id

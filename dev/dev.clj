@@ -46,14 +46,14 @@
 
 (def standalone-config
   {::xtdb {:node-opts {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
-                                                   :db-dir (io/file dev-node-dir "indexes"),
-                                                   :block-cache :xtdb.rocksdb/block-cache}}
+                                                     :db-dir (io/file dev-node-dir "indexes"),
+                                                     :block-cache :xtdb.rocksdb/block-cache}}
                        :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store,
-                                                      :db-dir (io/file dev-node-dir "documents")
-                                                      :block-cache :xtdb.rocksdb/block-cache}}
+                                                        :db-dir (io/file dev-node-dir "documents")
+                                                        :block-cache :xtdb.rocksdb/block-cache}}
                        :xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store,
-                                              :db-dir (io/file dev-node-dir "tx-log")
-                                              :block-cache :xtdb.rocksdb/block-cache}}
+                                                :db-dir (io/file dev-node-dir "tx-log")
+                                                :block-cache :xtdb.rocksdb/block-cache}}
                        :xtdb.rocksdb/block-cache {:xtdb/module `rocks/->lru-block-cache
                                                   :cache-size (* 128 1024 1024)}
                        :xtdb.metrics.jmx/reporter {}
@@ -76,11 +76,11 @@
      ::xtdb {:ek (i/ref ::embedded-kafka)
              :node-opts {::k/kafka-config {:bootstrap-servers (str "http://localhost:" kafka-port)}
                          :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store
-                                                     :db-dir (io/file dev-node-dir "ek-indexes")}}
+                                                       :db-dir (io/file dev-node-dir "ek-indexes")}}
                          :xtdb/document-store {:xtdb/module `k/->document-store,
-                                             :kafka-config ::k/kafka-config
-                                             :local-document-store {:kv-store {:xtdb/module `rocks/->kv-store,
-                                                                               :db-dir (io/file dev-node-dir "ek-documents")}}}
+                                               :kafka-config ::k/kafka-config
+                                               :local-document-store {:kv-store {:xtdb/module `rocks/->kv-store,
+                                                                                 :db-dir (io/file dev-node-dir "ek-documents")}}}
                          :xtdb/tx-log {:xtdb/module `k/->tx-log, :kafka-config ::k/kafka-config}}}}))
 
 ;; swap for `embedded-kafka-config` to use embedded-kafka

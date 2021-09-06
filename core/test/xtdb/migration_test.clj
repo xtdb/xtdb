@@ -97,7 +97,7 @@
       (fn [node]
         (fix/submit+await-tx node [[::xt/put {:xt/id :the-fn
                                               :crux.db/fn '(fn [ctx ops] ops)
-                                              ::xt/fn '(fn [ctx ops] ops)}]])
+                                              :xt/fn '(fn [ctx ops] ops)}]])
         (fix/submit+await-tx node [[::xt/fn :the-fn [[::xt/put {:xt/id :bar}]]]])
         (let [db (xt/db node)]
           (t/is (= {:xt/id :foo}

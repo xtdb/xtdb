@@ -80,7 +80,7 @@
 (t/deftest test-function-anatomy
   (fix/submit+await-tx
    [[::xt/put {:xt/id :increment-age
-               ::xt/fn '
+               :xt/fn '
                ;; tag::fn-anatomy[]
                (fn [ctx eid]  ;;<1>
                  (let [db (xtdb.api/db ctx) ;;<2>
@@ -106,7 +106,7 @@
 
     ;; tag::fn-put[]
     (xt/submit-tx node [[::xt/put {:xt/id :increment-age
-                                   ::xt/fn '(fn [ctx eid] ;;<1>
+                                   :xt/fn '(fn [ctx eid] ;;<1>
                                               (let [db (xtdb.api/db ctx)
                                                     entity (xtdb.api/entity db eid)]
                                                 [[::xt/put (update entity :age inc)]]))}]])

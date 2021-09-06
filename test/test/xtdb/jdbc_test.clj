@@ -83,24 +83,24 @@
 
 (t/deftest test-project-star-bug-1016
   (fix/submit+await-tx [[::xt/put {:xt/id :put
-                                   ::xt/fn '(fn [ctx doc]
-                                              [[::xt/put doc]])}]])
+                                   :xt/fn '(fn [ctx doc]
+                                             [[::xt/put doc]])}]])
   (fix/submit+await-tx [[::xt/fn :put {:xt/id :foo, :foo :bar}]])
 
   (let [db (xt/db *api*)]
 
     (t/is (= #{[{:xt/id :foo, :foo :bar}]}
              (xt/q db
-                    '{:find [(pull ?e [*])]
-                      :where [[?e :xt/id :foo]]})))
+                   '{:find [(pull ?e [*])]
+                     :where [[?e :xt/id :foo]]})))
 
     (t/is (= {:xt/id :foo, :foo :bar}
              (xt/entity db :foo)))
 
     (t/is (= #{[{:xt/id :foo, :foo :bar}]}
              (xt/q db
-                    '{:find [(pull ?e [*])]
-                      :where [[?e :xt/id :foo]]})))))
+                   '{:find [(pull ?e [*])]
+                     :where [[?e :xt/id :foo]]})))))
 
 (t/deftest test-deadlock
   ;; SQLite doesn't support writing from multiple threads
@@ -114,7 +114,7 @@
       (->> (for [_ (range 100)]
              (future
                (xt/submit-tx *api* (for [eid (shuffle eids)]
-                                      [::xt/put {:xt/id eid}]))))
+                                     [::xt/put {:xt/id eid}]))))
            doall
            (run! deref))
       (t/is true))))

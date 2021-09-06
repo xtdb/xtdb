@@ -12,7 +12,7 @@ import java.util.function.Consumer;
 
 public final class XtdbDocument {
     private static final Keyword DB_ID = Keyword.intern("xt/id");
-    private static final Keyword FN_ID = Keyword.intern("xtdb.api/fn");
+    private static final Keyword FN_ID = Keyword.intern("xt/fn");
 
     private final Object id;
     private final IPersistentMap data;
@@ -168,7 +168,7 @@ public final class XtdbDocument {
 
     private static void assertNotReserved(Keyword key) {
         if (DB_ID.equals(key)) throw new IllegalArgumentException(":xt/id is a reserved key");
-        if (FN_ID.equals(key)) throw new IllegalArgumentException(":xtdb.api/fn is a reserved key");
+        if (FN_ID.equals(key)) throw new IllegalArgumentException(":xt/fn is a reserved key");
     }
 
     private Builder toBuilder() {

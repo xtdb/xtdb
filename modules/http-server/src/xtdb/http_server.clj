@@ -73,7 +73,7 @@
          :body {:error (str eid " entity-tx not found")}}))))
 
 (defn- ->submit-json-decoder [_]
-  (let [decoders {::txc/->doc #(xio/update-if % ::xt/fn edn/read-string)
+  (let [decoders {::txc/->doc #(xio/update-if % :xt/fn edn/read-string)
                   ::txc/->valid-time (fn [vt-str]
                                        (try
                                          (instant/read-instant-date vt-str)
