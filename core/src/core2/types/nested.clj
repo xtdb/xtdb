@@ -7,9 +7,9 @@
            [java.time Duration Instant LocalDate LocalTime]
            [java.time.temporal ChronoField ChronoUnit]
            [org.apache.arrow.vector.types Types$MinorType TimeUnit]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Duration ArrowType$Union Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$Union Field FieldType]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector DateMilliVector DurationVector TimeMicroVector TimeStampMicroVector VarBinaryVector VarCharVector ValueVector]
+           [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector TimeMicroVector TimeStampMicroVector VarBinaryVector VarCharVector ValueVector]
            [org.apache.arrow.vector.util Text VectorBatchAppender]
            [core2 DenseUnionUtil]))
 
@@ -21,8 +21,6 @@
 ;; the java.sql definitions.
 
 ;; Timezones aren't supported as UnionVector doesn't support it.
-;; Decimals aren't (currently) supported as UnionVector requires a
-;; single scale/precision.
 
 ;; Java maps are always assumed to have named keys and are mapped to
 ;; structs. Arrow maps with arbitrary key types isn't (currently)
@@ -172,6 +170,17 @@
   (append-value [x ^DenseUnionVector v]
     (let [type-id (get-or-create-type-id v (.getType Types$MinorType/FLOAT8))
           inner-vec (.getFloat8Vector v type-id)
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
+      (.setSafe inner-vec offset x)
+      v))
+
+  BigDecimal
+  (append-value [x ^DenseUnionVector v]
+    (let [decimal-arrow-type (ArrowType$Decimal. (.precision x) (.scale x) 128)
+          type-id (get-or-create-type-id v decimal-arrow-type)
+          ^DecimalVector inner-vec (or (.getVectorByType v type-id)
+                                       (.addVector v type-id (.createVector (Field/nullable (str "decimal" type-id) decimal-arrow-type)
+                                                                            (.getAllocator v))))
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset x)
       v))
