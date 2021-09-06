@@ -4,12 +4,12 @@
   (:import [java.nio.charset StandardCharsets]
            [java.nio ByteBuffer CharBuffer]
            [java.util Date List Map]
-           [java.time Duration Instant LocalDate LocalTime]
+           [java.time Duration Instant LocalDate LocalTime ZoneId ZonedDateTime]
            [java.time.temporal ChronoField ChronoUnit]
            [org.apache.arrow.vector.types Types$MinorType TimeUnit]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$Union Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$Timestamp ArrowType$Union Field FieldType]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector TimeMicroVector TimeStampMicroVector VarBinaryVector VarCharVector ValueVector]
+           [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector TimeMicroVector TimeStampMicroVector TimeStampMicroTZVector VarBinaryVector VarCharVector ValueVector]
            [org.apache.arrow.vector.util Text VectorBatchAppender]
            [core2 DenseUnionUtil]))
 
@@ -19,8 +19,6 @@
 ;; For example, unlike Arrow Java itself, TimeMilliVector is mapped to
 ;; LocalTime and DateMilliVector to LocalDate like they are above via
 ;; the java.sql definitions.
-
-;; Timezones aren't supported as UnionVector doesn't support it.
 
 ;; Java maps are always assumed to have named keys and are mapped to
 ;; structs. Arrow maps with arbitrary key types isn't (currently)
@@ -66,6 +64,11 @@
   (get-value [v idx]
     (Instant/ofEpochSecond 0 (* 1000 (.get v idx))))
 
+  TimeStampMicroTZVector
+  (get-value [v idx]
+    (.atZone (Instant/ofEpochSecond 0 (* 1000 (.get v idx)))
+             (ZoneId/of (.getTimezone ^ArrowType$Timestamp (.getType (.getField v))))))
+
   ListVector
   (get-value [v idx]
     (loop [element-idx (.getElementStartIndex v idx)
@@ -101,12 +104,17 @@
 
          (and (= arrow-type (.getType ^Field (.get children idx)))
               (field-pred ^Field (.get children idx)))
-         (if-let [type-ids (.getTypeIds ^ArrowType$Union (.getType (.getMinorType v)))]
+         (if-let [type-ids (.getTypeIds ^ArrowType$Union (.getType (.getField v)))]
            (aget type-ids idx)
            idx)
 
          :else
          (recur (inc idx)))))))
+
+(defn- get-or-add-vector [^DenseUnionVector v ^ArrowType arrow-type ^String prefix ^long type-id]
+  (or (.getVectorByType v type-id)
+      (.addVector v type-id (.createVector (Field/nullable (str prefix type-id) arrow-type)
+                                           (.getAllocator v)))))
 
 (extend-protocol ArrowAppendable
   (class (byte-array 0))
@@ -176,11 +184,9 @@
 
   BigDecimal
   (append-value [x ^DenseUnionVector v]
-    (let [decimal-arrow-type (ArrowType$Decimal. (.precision x) (.scale x) 128)
-          type-id (get-or-create-type-id v decimal-arrow-type)
-          ^DecimalVector inner-vec (or (.getVectorByType v type-id)
-                                       (.addVector v type-id (.createVector (Field/nullable (str "decimal" type-id) decimal-arrow-type)
-                                                                            (.getAllocator v))))
+    (let [arrow-type (ArrowType$Decimal. (.precision x) (.scale x) 128)
+          type-id (get-or-create-type-id v arrow-type)
+          ^DecimalVector inner-vec (get-or-add-vector v arrow-type "decimal" type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset x)
       v))
@@ -215,13 +221,22 @@
                                     (quot (.getNano x) 1000)))
       v))
 
+  ZonedDateTime
+  (append-value [x ^DenseUnionVector v]
+    (let [arrow-type (ArrowType$Timestamp. TimeUnit/MICROSECOND, (str (.getZone x)))
+          type-id (get-or-create-type-id v arrow-type)
+          ^TimeStampMicroTZVector inner-vec (get-or-add-vector v arrow-type "timestamp" type-id)
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
+          x (.toInstant x)]
+      (.setSafe inner-vec offset (+ (* (.getEpochSecond x) 1000000)
+                                    (quot (.getNano x) 1000)))
+      v))
+
   Duration
   (append-value [x ^DenseUnionVector v]
-    (let [duration-arrow-type (ArrowType$Duration. TimeUnit/MICROSECOND)
-          type-id (get-or-create-type-id v duration-arrow-type)
-          ^DurationVector inner-vec (or (.getVectorByType v type-id)
-                                        (.addVector v type-id (.createVector (Field/nullable (str "duration" type-id) duration-arrow-type)
-                                                                             (.getAllocator v))))
+    (let [arrow-type (ArrowType$Duration. TimeUnit/MICROSECOND)
+          type-id (get-or-create-type-id v arrow-type)
+          ^DurationVector inner-vec (get-or-add-vector v arrow-type "duration" type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset (quot (.toNanos x) 1000))
       v))

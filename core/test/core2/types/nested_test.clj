@@ -8,7 +8,7 @@
            [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo Schema]
            [org.apache.arrow.memory RootAllocator]
-           [java.time Duration LocalDate LocalTime]
+           [java.time Duration LocalDate LocalTime ZonedDateTime ZoneId]
            [java.nio ByteBuffer]))
 
 (t/deftest can-build-sparse-union-vector
@@ -29,6 +29,7 @@
                2.718281828459045M
                #inst "1999"
                (.toInstant #inst "2021-09-02T13:54:35.809Z")
+               (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "Europe/Stockholm"))
                (.plusDays (Duration/ofMillis 1234) 1)
                (LocalDate/of 1999 05 01)
                (LocalTime/of 14 05 10)
@@ -45,7 +46,7 @@
     (t/is (.getField v))
 
     (t/testing "nested data"
-      (t/is (= [false, nil, 2, 1, 6, 4, 3.14, 2.0, "Hello", "F", 1.41M, 2.718281828459045M, (.toInstant #inst "1999-01-01T00:00"), (.toInstant #inst "2021-09-02T13:54:35.809Z"), (.plusDays (Duration/ofMillis 1234) 1), (LocalDate/of 1999 05 01), (LocalTime/of 14 05 10), (ByteBuffer/wrap (byte-array [1, 2, 3])), (ByteBuffer/wrap (byte-array [1, 2, 3])), [], [2, 3.14, [false, nil]], {}, {:B 2, :C 1, :F false}, [1, {:B [2]}], {:B 3.14, :D {:E ["hello", -1]} :F nil}]
+      (t/is (= [false, nil, 2, 1, 6, 4, 3.14, 2.0, "Hello", "F", 1.41M, 2.718281828459045M, (.toInstant #inst "1999-01-01T00:00"), (.toInstant #inst "2021-09-02T13:54:35.809Z"), (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "Europe/Stockholm")), (.plusDays (Duration/ofMillis 1234) 1), (LocalDate/of 1999 05 01), (LocalTime/of 14 05 10), (ByteBuffer/wrap (byte-array [1, 2, 3])), (ByteBuffer/wrap (byte-array [1, 2, 3])), [], [2, 3.14, [false, nil]], {}, {:B 2, :C 1, :F false}, [1, {:B [2]}], {:B 3.14, :D {:E ["hello", -1]} :F nil}]
                (for [x (range (.getValueCount v))]
                  (tn/get-value v x)))))
 
@@ -64,6 +65,7 @@
                 org.apache.arrow.vector.DecimalVector
                 org.apache.arrow.vector.TimeStampMicroVector
                 org.apache.arrow.vector.TimeStampMicroVector
+                org.apache.arrow.vector.TimeStampMicroTZVector
                 org.apache.arrow.vector.DurationVector
                 org.apache.arrow.vector.DateMilliVector
                 org.apache.arrow.vector.TimeMicroVector
