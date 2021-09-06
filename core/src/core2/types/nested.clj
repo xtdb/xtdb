@@ -8,8 +8,8 @@
            [java.time.temporal ChronoField ChronoUnit]
            [org.apache.arrow.vector.types Types$MinorType TimeUnit]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Duration ArrowType$Union Field FieldType]
-           [org.apache.arrow.vector.complex DenseUnionVector]
-           [org.apache.arrow.vector DurationVector ValueVector]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
+           [org.apache.arrow.vector DateMilliVector DurationVector TimeMicroVector TimeStampMicroVector VarBinaryVector VarCharVector ValueVector]
            [org.apache.arrow.vector.util Text VectorBatchAppender]
            [core2 DenseUnionUtil]))
 
@@ -32,6 +32,58 @@
 
 (defprotocol ArrowAppendable
   (append-value [_ v]))
+
+(defprotocol ArrowReadable
+  (get-value [_ idx]))
+
+(extend-protocol ArrowReadable
+  nil
+  (get-value [_ _])
+
+  ValueVector
+  (get-value [v idx]
+    (.getObject v idx))
+
+  DenseUnionVector
+  (get-value [v idx]
+    (get-value (.getVectorByType v (.getTypeId v idx)) (.getOffset v idx)))
+
+  VarBinaryVector
+  (get-value [v idx]
+    (ByteBuffer/wrap (.getObject v ^long idx)))
+
+  VarCharVector
+  (get-value [v idx]
+    (str (.getObject v ^long idx)))
+
+  DateMilliVector
+  (get-value [v idx]
+    (LocalDate/ofEpochDay (quot (.get v idx) 86400000)))
+
+  TimeMicroVector
+  (get-value [v idx]
+    (LocalTime/ofNanoOfDay (* 1000 (.get v idx))))
+
+  TimeStampMicroVector
+  (get-value [v idx]
+    (Instant/ofEpochSecond 0 (* 1000 (.get v idx))))
+
+  ListVector
+  (get-value [v idx]
+    (loop [element-idx (.getElementStartIndex v idx)
+           acc []]
+      (if (= (.getElementEndIndex v idx) element-idx)
+        acc
+        (recur (inc element-idx)
+               (conj acc (get-value (.getDataVector v) element-idx))))))
+
+  StructVector
+  (get-value [v idx]
+    (reduce
+     (fn [acc n]
+       (assoc acc (keyword n) (get-value (.getChild v n ValueVector) idx)))
+     {}
+     (.getChildFieldNames v))))
 
 (defn- kw-name ^String [x]
   (if (keyword? x)

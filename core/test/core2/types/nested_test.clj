@@ -37,19 +37,15 @@
                {}
                {:B 2 :C 1 :F false}
                [1 {:B [2]}]
-               ;; NOTE: should contain :F
                {:B 3.14 :D {:E ["hello" -1]} :F nil}]]
       (tn/append-value x v))
 
     (t/is (.getField v))
 
     (t/testing "nested data"
-      (t/is (= [false, nil, 2, 1, 6, 4, 3.14, 2.0, (Text. "Hello"), (Text. "F"), (util/date->local-date-time #inst "1999-01-01T00:00"), (util/date->local-date-time #inst "2021-09-02T13:54:35.809Z"), (.plusDays (Duration/ofMillis 1234) 1), (util/date->local-date-time #inst "1999-05-01"), 50710000000, (ByteBuffer/wrap (byte-array [1, 2, 3])), (ByteBuffer/wrap (byte-array [1, 2, 3])), [], [2,3.14,[false,nil]], {}, {"B" 2,"C" 1,"F" false}, [1,{"B" [2]}], {"B" 3.14,"D" {"E" [(Text. "hello"),-1]}}]
-               (for [x (range (.getValueCount v))
-                     :let [v (.getObject v (long x))]]
-                 (if (bytes? v)
-                   (ByteBuffer/wrap v)
-                   v)))))
+      (t/is (= [false, nil, 2, 1, 6, 4, 3.14, 2.0, "Hello", "F", (.toInstant #inst "1999-01-01T00:00"), (.toInstant #inst "2021-09-02T13:54:35.809Z"), (.plusDays (Duration/ofMillis 1234) 1), (LocalDate/of 1999 05 01), (LocalTime/of 14 05 10), (ByteBuffer/wrap (byte-array [1, 2, 3])), (ByteBuffer/wrap (byte-array [1, 2, 3])), [], [2, 3.14, [false, nil]], {}, {:B 2, :C 1, :F false}, [1, {:B [2]}], {:B 3.14, :D {:E ["hello", -1]} :F nil}]
+               (for [x (range (.getValueCount v))]
+                 (tn/get-value v x)))))
 
     (t/testing "types"
       (t/is (= [org.apache.arrow.vector.BitVector
@@ -88,13 +84,7 @@
             (.load (VectorLoader. out-root) record-batch)
             (let [reloaded-duv (.getVector out-root 0)]
               (t/is (= (.getField v) (.getField reloaded-duv)))
-              (t/is (= (for [x (range (.getValueCount v))
-                             :let [v (.getObject v (long x))]]
-                         (if (bytes? v)
-                           (ByteBuffer/wrap v)
-                           v))
-                       (for [x (range (.getValueCount reloaded-duv))
-                             :let [v (.getObject reloaded-duv (long x))]]
-                         (if (bytes? v)
-                           (ByteBuffer/wrap v)
-                           v)))))))))))
+              (t/is (= (for [x (range (.getValueCount v))]
+                         (tn/get-value v x))
+                       (for [x (range (.getValueCount reloaded-duv))]
+                         (tn/get-value reloaded-duv x)))))))))))
