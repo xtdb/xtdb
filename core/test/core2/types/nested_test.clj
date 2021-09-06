@@ -79,8 +79,7 @@
                  (class (.getVectorByType v (.getTypeId v (long x))))))))
 
     (t/testing "IPC round-trip"
-      (with-open [copy (tn/finish-append v)
-                  in-root (VectorSchemaRoot/of (into-array [copy]))
+      (with-open [in-root (VectorSchemaRoot/of (into-array [v]))
                   buf (util/->arrow-buf-view allocator (util/root->arrow-ipc-byte-buffer in-root :file))]
         (let [footer (util/read-arrow-footer buf)]
           (t/is (= (.getField v) (first (.getFields (.getSchema footer)))))
