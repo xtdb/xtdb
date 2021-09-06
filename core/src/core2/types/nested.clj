@@ -39,20 +39,24 @@
     (str x)))
 
 ;; TODO: this scans the children all the time.
-(defn- get-or-create-type-id ^long [^DenseUnionVector v ^ArrowType arrow-type]
-  (let [children (.getChildren (.getField v))]
-    (loop [idx 0]
-      (cond
-        (= idx (.size children))
-        (.registerNewTypeId v (Field/nullable "" arrow-type))
+(defn- get-or-create-type-id
+  (^long [^DenseUnionVector v ^ArrowType arrow-type]
+   (get-or-create-type-id v arrow-type (constantly true)))
+  (^long [^DenseUnionVector v ^ArrowType arrow-type field-pred]
+   (let [children (.getChildren (.getField v))]
+     (loop [idx 0]
+       (cond
+         (= idx (.size children))
+         (.registerNewTypeId v (Field/nullable "" arrow-type))
 
-        (= arrow-type (.getType ^Field (.get children idx)))
-        (if-let [type-ids (.getTypeIds ^ArrowType$Union (.getType (.getMinorType v)))]
-          (aget type-ids idx)
-          idx)
+         (and (= arrow-type (.getType ^Field (.get children idx)))
+              (field-pred ^Field (.get children idx)))
+         (if-let [type-ids (.getTypeIds ^ArrowType$Union (.getType (.getMinorType v)))]
+           (aget type-ids idx)
+           idx)
 
-        :else
-        (recur (inc idx))))))
+         :else
+         (recur (inc idx)))))))
 
 (extend-protocol ArrowAppendable
   (class (byte-array 0))
@@ -196,14 +200,16 @@
 
   Map
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/STRUCT))
+    (let [key-set (set (map kw-name (keys x)))
+          type-id (get-or-create-type-id v
+                                         (.getType Types$MinorType/STRUCT)
+                                         (fn [^Field f]
+                                           (= key-set (set (for [^Field f (.getChildren f)]
+                                                             (.getName f))))))
           inner-vec (.getStruct v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setIndexDefined inner-vec offset)
-      (doseq [k (distinct (concat (.getChildFieldNames inner-vec)
-                                  (map kw-name (keys x))))
-              :let [data-vec (or (.getChild inner-vec k DenseUnionVector)
-                                 (.addOrGet inner-vec k (FieldType/nullable (.getType Types$MinorType/DENSEUNION)) DenseUnionVector))]]
-        (.setValueCount data-vec (dec (.getValueCount inner-vec)))
+      (doseq [k key-set
+              :let [data-vec (.addOrGet inner-vec k (FieldType/nullable (.getType Types$MinorType/DENSEUNION)) DenseUnionVector)]]
         (append-value (get x (keyword k)) data-vec))
       v)))
