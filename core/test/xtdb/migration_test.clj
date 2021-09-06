@@ -29,8 +29,13 @@
     (fix/with-tmp-dirs #{copy-dir}
       (fs/copy-dir-into node-dir copy-dir)
 
-      (with-open [node (xt/start-node (cond-> (->node-opts copy-dir)
-                                        (not= index-version c/index-version) (dissoc :xtdb/index-store)))]
+      (when (and index-version (= index-version c/index-version))
+        (with-open [node (xt/start-node (->node-opts copy-dir))]
+          (xt/sync node)
+          (test-node-f node)))
+
+      (with-open [node (xt/start-node (-> (->node-opts copy-dir)
+                                          (dissoc :xtdb/index-store)))]
         (xt/sync node)
         (test-node-f node)))))
 
