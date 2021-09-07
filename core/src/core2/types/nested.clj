@@ -27,7 +27,6 @@
 ;; supported.
 
 ;; TODO:
-;; - use proper null type in append-value for union.
 ;; - append-value support for maps (for non keyword maps).
 ;; - experimental append-value support for Serializable?
 ;; - support java.sql types for append-value?
@@ -193,8 +192,11 @@
 
   nil
   (append-value [_ ^DenseUnionVector v]
-    (.setValueCount v (inc (.getValueCount v)))
-    v)
+    (let [arrow-type (.getType Types$MinorType/NULL)
+          type-id (get-or-create-type-id v arrow-type)
+          ^NullVector inner-vec (get-or-add-vector v arrow-type "null" type-id)
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
+      v))
 
   Boolean
   (append-value [x ^DenseUnionVector v]

@@ -58,7 +58,7 @@
 
     (t/testing "types"
       (t/is (= [org.apache.arrow.vector.BitVector
-                nil
+                org.apache.arrow.vector.NullVector
                 org.apache.arrow.vector.BigIntVector
                 org.apache.arrow.vector.TinyIntVector
                 org.apache.arrow.vector.SmallIntVector
