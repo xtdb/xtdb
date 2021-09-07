@@ -8,8 +8,8 @@
            [java.time Duration Instant LocalDate LocalTime Period ZoneId ZonedDateTime]
            [java.time.temporal ChronoField ChronoUnit]
            [org.apache.arrow.vector.types Types$MinorType TimeUnit]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$Timestamp ArrowType$Union Field FieldType]
-           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$Map ArrowType$Timestamp ArrowType$Union Field FieldType]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector MapVector StructVector]
            [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector IntervalYearVector
             TimeMicroVector TimeStampMicroVector TimeStampMicroTZVector VarBinaryVector VarCharVector ValueVector UInt2Vector]
            [org.apache.arrow.vector.util Text VectorBatchAppender]
@@ -19,18 +19,13 @@
 ;; Type mapping aims to stay close to the Arrow JDBC adapter:
 ;; https://github.com/apache/arrow/blob/master/java/adapter/jdbc/src/main/java/org/apache/arrow/adapter/jdbc/JdbcToArrow.java
 
-;; For example, unlike Arrow Java itself, TimeMilliVector is mapped to
-;; LocalTime and DateMilliVector to LocalDate like they are above via
+;; For example, unlike Arrow Java itself, TimeMicroVector is mapped to
+;; LocalTime and DateMicroVector to LocalDate like they are above via
 ;; the java.sql definitions.
 
-;; Java maps are always assumed to have named keys and are mapped to
-;; structs. Arrow maps with arbitrary key types isn't (currently)
-;; supported.
-
 ;; TODO:
-;; - append-value support for maps (for non keyword maps).
-;; - support java.sql types for append-value?
-;; - consistent get-value implementations for vectors we don't generate but may read.
+;; - consistent get-value implementations for vectors we don't
+;;   generate but may read.
 
 ;; NOTE, potential future improvements, mainly efficiency/performance:
 ;; - registering type ids requires scan of the union's children.
@@ -63,6 +58,8 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:private extension-metadata-key-name ArrowType$ExtensionType/EXTENSION_METADATA_KEY_NAME)
+
+(def ^:private dense-union-field-type (FieldType. false (.getType Types$MinorType/DENSEUNION) nil))
 
 (defprotocol ArrowAppendable
   (append-value [_ v]))
@@ -153,10 +150,22 @@
   StructVector
   (get-value [v idx]
     (reduce
-     (fn [acc n]
-       (assoc acc (keyword n) (get-value (.getChild v n ValueVector) idx)))
+     (fn [acc k]
+       (assoc acc (keyword k) (get-value (.getChild v k ValueVector) idx)))
      {}
-     (.getChildFieldNames v))))
+     (.getChildFieldNames v)))
+
+  MapVector
+  (get-value [v idx]
+    (let [^StructVector element-vec (.getDataVector v)
+          key-vec (.getChild element-vec MapVector/KEY_NAME)
+          value-vec (.getChild element-vec MapVector/VALUE_NAME)]
+      (loop [element-idx (.getElementStartIndex v idx)
+             acc {}]
+        (if (= (.getElementEndIndex v idx) element-idx)
+          acc
+          (recur (inc element-idx)
+                 (assoc acc (get-value key-vec element-idx) (get-value value-vec element-idx))))))))
 
 (defn- kw-name ^String [x]
   (if (keyword? x)
@@ -189,7 +198,7 @@
    (get-or-add-vector v arrow-type prefix type-id nil))
   ([^DenseUnionVector v ^ArrowType arrow-type ^String prefix ^Long type-id metadata]
    (or (.getVectorByType v type-id)
-       (.addVector v type-id (.createNewSingleVector (FieldType. true arrow-type nil metadata) (str prefix type-id) (.getAllocator v) nil)))))
+       (.addVector v type-id (.createNewSingleVector (FieldType. false arrow-type nil metadata) (str prefix type-id) (.getAllocator v) nil)))))
 
 (extend-protocol ArrowAppendable
   (class (byte-array 0))
@@ -400,7 +409,7 @@
     (let [type-id (get-or-create-type-id v (.getType Types$MinorType/LIST))
           inner-vec (.getList v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
-          data-vec (.getVector (.addOrGetVector inner-vec (FieldType/nullable (.getType Types$MinorType/DENSEUNION))))]
+          data-vec (.getVector (.addOrGetVector inner-vec dense-union-field-type))]
       (.startNewValue inner-vec offset)
       (doseq [v x]
         (append-value v data-vec))
@@ -415,7 +424,7 @@
                                                         (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
           ^ListVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
-          data-vec (.getVector (.addOrGetVector inner-vec (FieldType/nullable (.getType Types$MinorType/DENSEUNION))))]
+          data-vec (.getVector (.addOrGetVector inner-vec dense-union-field-type))]
       (.startNewValue inner-vec offset)
       (doseq [v x]
         (append-value v data-vec))
@@ -430,7 +439,7 @@
                                                         (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
           ^ListVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
-          data-vec (.getVector (.addOrGetVector inner-vec (FieldType/nullable (.getType Types$MinorType/DENSEUNION))))]
+          data-vec (.getVector (.addOrGetVector inner-vec dense-union-field-type))]
       (.startNewValue inner-vec offset)
       (doseq [v x]
         (append-value v data-vec))
@@ -439,19 +448,33 @@
 
   Map
   (append-value [x ^DenseUnionVector v]
-    (let [key-set (set (map kw-name (keys x)))
-          type-id (get-or-create-type-id v
-                                         (.getType Types$MinorType/STRUCT)
-                                         (fn [^Field f]
-                                           (= key-set (set (for [^Field f (.getChildren f)]
-                                                             (.getName f))))))
-          inner-vec (.getStruct v type-id)
-          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
-      (.setIndexDefined inner-vec offset)
-      (doseq [k key-set
-              :let [data-vec (.addOrGet inner-vec k (FieldType/nullable (.getType Types$MinorType/DENSEUNION)) DenseUnionVector)]]
-        (append-value (get x (keyword k)) data-vec))
-      v))
+    (if (every? keyword? (keys x))
+      (let [key-set (set (map kw-name (keys x)))
+            type-id (get-or-create-type-id v
+                                           (.getType Types$MinorType/STRUCT)
+                                           (fn [^Field f]
+                                             (= key-set (set (for [^Field f (.getChildren f)]
+                                                               (.getName f))))))
+            inner-vec (.getStruct v type-id)
+            offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
+        (.setIndexDefined inner-vec offset)
+        (doseq [k key-set
+                :let [data-vec (.addOrGet inner-vec k dense-union-field-type DenseUnionVector)]]
+          (append-value (get x (keyword k)) data-vec))
+        v)
+      (let [arrow-type (ArrowType$Map. false)
+            type-id (get-or-create-type-id v arrow-type)
+            ^MapVector inner-vec (get-or-add-vector v arrow-type "map" type-id)
+            offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
+            ^StructVector element-vec (.getVector (.addOrGetVector inner-vec (FieldType. false (.getType Types$MinorType/STRUCT) nil)))
+            key-vec (.addOrGet element-vec MapVector/KEY_NAME dense-union-field-type DenseUnionVector)
+            value-vec (.addOrGet element-vec MapVector/VALUE_NAME dense-union-field-type DenseUnionVector)]
+        (.startNewValue inner-vec offset)
+        (doseq [[k v] x]
+          (append-value k key-vec)
+          (append-value v value-vec))
+        (.endValue inner-vec offset (count x))
+        v)))
 
   Object
   (append-value [x ^DenseUnionVector v]
