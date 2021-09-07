@@ -57,7 +57,7 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
-                             :db-dir (io/file "/tmp/rocksdb")}}
+                               :db-dir (io/file "/tmp/rocksdb")}}
  :xtdb/document-store {...}
  :xtdb/tx-log {...}}
 ----
@@ -67,7 +67,7 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
-                             :db-dir "/tmp/rocksdb"}}
+                               :db-dir "/tmp/rocksdb"}}
  :xtdb/document-store {...}
  :xtdb/tx-log {...}}
 ----
@@ -119,7 +119,7 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
-                             :metrics {:xtdb/module 'xtdb.rocksdb.metrics/->metrics}}
+                               :metrics {:xtdb/module 'xtdb.rocksdb.metrics/->metrics}}
  :xtdb/document-store {...}
  :xtdb/tx-log {...}}
 ----
@@ -129,7 +129,7 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
-                             :metrics {:xtdb/module xtdb.rocksdb.metrics/->metrics}}
+                               :metrics {:xtdb/module xtdb.rocksdb.metrics/->metrics}}
  :xtdb/document-store {...}
  :xtdb/tx-log {...}}
 ----
@@ -186,11 +186,11 @@ Clojure::
 {:xtdb.rocksdb/block-cache {:xtdb/module 'xtdb.rocksdb/->lru-block-cache
 			                      :cache-size (* 512 1024 1024)}
  :xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
-                             :block-cache :xtdb.rocksdb/block-cache}}
+                               :block-cache :xtdb.rocksdb/block-cache}}
  :xtdb/document-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
-                                :block-cache :xtdb.rocksdb/block-cache}}
+                                  :block-cache :xtdb.rocksdb/block-cache}}
  :xtdb/tx-log {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
-                        :block-cache :xtdb.rocksdb/block-cache}}}
+                          :block-cache :xtdb.rocksdb/block-cache}}}
 ----
 
 EDN::
@@ -200,11 +200,11 @@ EDN::
 {:xtdb.rocksdb/block-cache {:xtdb/module xtdb.rocksdb/->lru-block-cache
 			                      :cache-size 536870912}
  :xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
-                             :block-cache :xtdb.rocksdb/block-cache}}
+                               :block-cache :xtdb.rocksdb/block-cache}}
  :xtdb/document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
-                                :block-cache :xtdb.rocksdb/block-cache}}
+                                  :block-cache :xtdb.rocksdb/block-cache}}
  :xtdb/tx-log {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
-                        :block-cache :xtdb.rocksdb/block-cache}}}
+                          :block-cache :xtdb.rocksdb/block-cache}}}
 ----
 ====
 

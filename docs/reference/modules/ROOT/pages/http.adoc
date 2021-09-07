@@ -158,7 +158,7 @@ EDN::
 [source,clojure,subs=attributes+]
 ----
 {:xtdb.version/version "{xtdb_version}",
- :xtdb.version/revision nil, :xtdb.index/index-version 13,
+ :xtdb.version/revision nil, :xtdb.index/index-version 18,
  :xtdb.tx-log/consumer-state nil,
  :xtdb.kv/kv-store "xtdb.rocksdb.RocksKv",
  :xtdb.kv/estimate-num-keys 3,

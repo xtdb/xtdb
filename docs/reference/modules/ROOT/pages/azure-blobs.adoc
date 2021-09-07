@@ -54,9 +54,9 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module 'xtdb.azure.blobs/->document-store
-                     :sas-token "your-sas-token"
-                     :storage-account "your-storage-account"
-                     :container "your-container-name"}}
+                       :sas-token "your-sas-token"
+                       :storage-account "your-storage-account"
+                       :container "your-container-name"}}
 ----
 
 EDN::
@@ -64,9 +64,9 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module xtdb.azure.blobs/->document-store
-                     :sas-token "your-sas-token"
-                     :storage-account "your-storage-account"
-                     :container "your-container-name"}}
+                       :sas-token "your-sas-token"
+                       :storage-account "your-storage-account"
+                       :container "your-container-name"}}
 ----
 ====
 

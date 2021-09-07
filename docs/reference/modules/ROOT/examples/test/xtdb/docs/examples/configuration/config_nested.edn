@@ -1,4 +1,4 @@
 {:xtdb/tx-log {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
-                        :db-dir "/tmp/txs"}}
+                          :db-dir "/tmp/txs"}}
  :xtdb/document-store {...}
  :xtdb/index-store {...}}

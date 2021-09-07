@@ -90,16 +90,16 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/tx-log {:xtdb/module 'xtdb.jdbc/->tx-log
-             :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect}
-                               :pool-opts { ... }
-                               :db-spec {:jdbcUrl "..."
-                                         ;; OR
-                                         :host "..."
-                                         :dbname "..."
-                                         :user "..."
-                                         :password "..."
-                                         ... }}
-             :poll-sleep-duration (Duration/ofSeconds 1)}
+               :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect}
+                                 :pool-opts { ... }
+                                 :db-spec {:jdbcUrl "..."
+                                           ;; OR
+                                           :host "..."
+                                           :dbname "..."
+                                           :user "..."
+                                           :password "..."
+                                           ... }}
+               :poll-sleep-duration (Duration/ofSeconds 1)}
  ...}
 ----
 
@@ -108,16 +108,16 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/tx-log {:xtdb/module xtdb.jdbc/->tx-log
-             :connection-pool {:dialect {:xtdb/module xtdb.jdbc.psql/->dialect}
-                               :pool-opts { ... }
-                               :db-spec {:jdbcUrl "..."
-                                         ;; OR
-                                         :host "..."
-                                         :dbname "..."
-                                         :user "..."
-                                         :password "..."
-                                         ... }}
-             :poll-sleep-duration "PT1S"}
+               :connection-pool {:dialect {:xtdb/module xtdb.jdbc.psql/->dialect}
+                                 :pool-opts { ... }
+                                 :db-spec {:jdbcUrl "..."
+                                           ;; OR
+                                           :host "..."
+                                           :dbname "..."
+                                           :user "..."
+                                           :password "..."
+                                           ... }}
+               :poll-sleep-duration "PT1S"}
  ...}
 ----
 ====
@@ -151,9 +151,9 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module 'xtdb.jdbc/->document-store
-                     :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect}
-                                       :pool-opts { ... }
-                                       :db-spec { ... }}}
+                       :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect}
+                                         :pool-opts { ... }
+                                         :db-spec { ... }}}
  ...}
 ----
 
@@ -162,9 +162,9 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module xtdb.jdbc/->document-store
-                     :connection-pool {:dialect {:xtdb/module xtdb.jdbc.psql/->dialect}
-                                       :pool-opts { ... }
-                                       :db-spec { ... }}}
+                       :connection-pool {:dialect {:xtdb/module xtdb.jdbc.psql/->dialect}
+                                         :pool-opts { ... }
+                                         :db-spec { ... }}}
  ...}
 ----
 ====
@@ -211,9 +211,9 @@ Clojure::
                              :pool-opts { ... }
                              :db-spec { ... }}
  :xtdb/tx-log {:xtdb/module 'xtdb.jdbc/->tx-log
-             :connection-pool :xtdb.jdbc/connection-pool}
+               :connection-pool :xtdb.jdbc/connection-pool}
  :xtdb/document-store {:xtdb/module 'xtdb.jdbc/->document-store
-                     :connection-pool :xtdb.jdbc/connection-pool}
+                       :connection-pool :xtdb.jdbc/connection-pool}
  ...}
 ----
 
@@ -225,9 +225,9 @@ EDN::
                              :pool-opts { ... }
                              :db-spec { ... }}
  :xtdb/tx-log {:xtdb/module xtdb.jdbc/->tx-log
-             :connection-pool :xtdb.jdbc/connection-pool}
+               :connection-pool :xtdb.jdbc/connection-pool}
  :xtdb/document-store {:xtdb/module xtdb.jdbc/->document-store
-                     :connection-pool :xtdb.jdbc/connection-pool}
+                       :connection-pool :xtdb.jdbc/connection-pool}
  ...}
 ----
 ====

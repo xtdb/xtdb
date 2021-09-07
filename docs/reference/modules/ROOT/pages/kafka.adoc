@@ -72,9 +72,9 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/tx-log {:xtdb/module 'xtdb.kafka/->tx-log
-             :kafka-config {:bootstrap-servers "localhost:9092"}
-             :tx-topic-opts {:topic-name "crux-transaction-log"}
-             :poll-wait-duration (Duration/ofSeconds 1)}
+               :kafka-config {:bootstrap-servers "localhost:9092"}
+               :tx-topic-opts {:topic-name "crux-transaction-log"}
+               :poll-wait-duration (Duration/ofSeconds 1)}
  ...}
 ----
 
@@ -83,9 +83,9 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/tx-log {:xtdb/module xtdb.kafka/->tx-log
-             :kafka-config {:bootstrap-servers "localhost:9092"}
-             :tx-topic-opts {:topic-name "crux-transaction-log"}
-             :poll-wait-duration "PT1S"}
+               :kafka-config {:bootstrap-servers "localhost:9092"}
+               :tx-topic-opts {:topic-name "crux-transaction-log"}
+               :poll-wait-duration "PT1S"}
  ...}
 ----
 ====
@@ -127,13 +127,13 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module 'xtdb.kafka/->document-store
-                     :kafka-config {:bootstrap-servers "localhost:9092"
-                                    ...}
-                     :doc-topic-opts {:topic-name "crux-docs"
+                       :kafka-config {:bootstrap-servers "localhost:9092"
                                       ...}
-                     :local-document-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
-                                                       :db-dir (io/file "/tmp/rocksdb")}}
-                     :poll-wait-duration (Duration/ofSeconds 1)}
+                       :doc-topic-opts {:topic-name "crux-docs"
+                                        ...}
+                       :local-document-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
+                                                         :db-dir (io/file "/tmp/rocksdb")}}
+                       :poll-wait-duration (Duration/ofSeconds 1)}
  ...}
 ----
 
@@ -142,13 +142,13 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module xtdb.kafka/->document-store
-                     :kafka-config {:bootstrap-servers "localhost:9092"
-                                    ...}
-                     :doc-topic-opts {:topic-name "crux-docs"
+                       :kafka-config {:bootstrap-servers "localhost:9092"
                                       ...}
-                     :local-document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
-                                                       :db-dir "/tmp/rocksdb"}}
-                     :poll-wait-duration "PT1S"}
+                       :doc-topic-opts {:topic-name "crux-docs"
+                                        ...}
+                       :local-document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
+                                                         :db-dir "/tmp/rocksdb"}}
+                       :poll-wait-duration "PT1S"}
  ...}
 ----
 ====
@@ -194,7 +194,7 @@ Clojure::
  :local-rocksdb {:xtdb/module 'xtdb.rocksdb/->kv-store
                  :db-dir (io/file "/tmp/rocksdb")}
  :xtdb/document-store {...
-                     :local-document-store {:kv-store :local-rocksdb}}
+                       :local-document-store {:kv-store :local-rocksdb}}
  :xtdb/index-store {:kv-store :local-rocksdb}}
 ----
 
@@ -206,7 +206,7 @@ EDN::
  :local-rocksdb {:xtdb/module xtdb.rocksdb/->kv-store
                  :db-dir "/tmp/rocksdb"}
  :xtdb/document-store {...
-                     :local-document-store {:kv-store :local-rocksdb}}
+                       :local-document-store {:kv-store :local-rocksdb}}
  :xtdb/index-store {:kv-store :local-rocksdb}}
 ----
 ====
@@ -265,11 +265,11 @@ EDN::
                 :bootstrap-servers "localhost:9092"
                 ...}
  :xtdb/tx-log {:xtdb/module xtdb.kafka/->tx-log
-             :kafka-config :kafka-config
-             ...}
+               :kafka-config :kafka-config
+               ...}
  :xtdb/document-store {:xtdb/module xtdb.kafka/->document-store
-                     :kafka-config :kafka-config
-                     ...}}
+                       :kafka-config :kafka-config
+                       ...}}
 ----
 ====
 

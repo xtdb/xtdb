@@ -125,7 +125,6 @@ package xtdbinabox;
 
 import java.io.File;
 import java.io.IOException;
-import xtdb.api.XTDB;
 import xtdb.api.IXtdb;
 
 class Box {
@@ -185,11 +184,11 @@ Clojure REPL::
 [source,clojure,subs=attributes+]
 ----
 xtdb-in-a-box.db> (xt/submit-tx xtdb-node [[::xt/put
-                                              {:xt/id "hi2u"
-                                               :user/name "zig"}]])
+                                            {:xt/id "hi2u"
+                                             :user/name "zig"}]])
 ;; => #::xt{:tx-id 0, :tx-time #inst "2021-03-11T02:27:09.176-00:00"}
 xtdb-in-a-box.db> (xt/q (xt/db xtdb-node) '{:find [e]
-                                                :where [[e :user/name "zig"]]} )
+                                            :where [[e :user/name "zig"]]} )
 ;; => #{["hi2u"]}
 xtdb-in-a-box.db> (stop-xtdb!)
 ;; => nil

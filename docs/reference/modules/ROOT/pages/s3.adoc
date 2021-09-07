@@ -51,8 +51,8 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module 'xtdb.s3/->document-store
-                     :bucket "your-bucket"
-                     ...}}
+                       :bucket "your-bucket"
+                       ...}}
 ----
 
 EDN::
@@ -60,8 +60,8 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module xtdb.s3/->document-store
-                     :bucket "your-bucket"
-                     ...}}
+                       :bucket "your-bucket"
+                       ...}}
 ----
 ====
 
@@ -114,9 +114,9 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/document-store {:xtdb/module 'xtdb.s3/->document-store
-                     :configurator (fn [_]
-                                     (reify S3Configurator
-                                       ...)
-                     ...}}
+                       :configurator (fn [_]
+                                       (reify S3Configurator
+                                         ...)
+                       ...}}
 ----
 ====

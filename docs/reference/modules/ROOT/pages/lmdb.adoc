@@ -57,7 +57,7 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/index-store {:kv-store {:xtdb/module 'xtdb.lmdb/->kv-store
-                             :db-dir (io/file "/tmp/lmdb")}}
+                               :db-dir (io/file "/tmp/lmdb")}}
  :xtdb/document-store {...}
  :xtdb/tx-log {...}}
 ----
@@ -67,7 +67,7 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/index-store {:kv-store {:xtdb/module xtdb.lmdb/->kv-store
-                             :db-dir "/tmp/lmdb"}}
+                               :db-dir "/tmp/lmdb"}}
  :xtdb/document-store {...}
  :xtdb/tx-log {...}}
 ----

@@ -44,7 +44,7 @@ Clojure::
 [source,clojure]
 ----
 {:xtdb/index-store {:kv-store {:xtdb/module 'avisi.crux.xodus/->kv-store
-                             :db-dir (io/file "/tmp/xodus")}}
+                               :db-dir (io/file "/tmp/xodus")}}
  :xtdb/document-store {...}
  :xtdb/tx-log {...}}
 ----
@@ -54,7 +54,7 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/index-store {:kv-store {:xtdb/module avisi.crux.xodus/->kv-store
-                             :db-dir "/tmp/xodus"}}
+                               :db-dir "/tmp/xodus"}}
  :xtdb/document-store {...}
  :xtdb/tx-log {...}}
 ----

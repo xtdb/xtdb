@@ -50,10 +50,10 @@ Clojure::
 ----
 {:xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
                                ...
-                             :checkpointer {:xtdb/module 'xtdb.checkpoint/->checkpointer
-                                            :store {:xtdb/module 'xtdb.checkpoint/->filesystem-checkpoint-store
-                                                    :path "/path/to/cp-store"}
-                                            :approx-frequency (Duration/ofHours 6)}}}
+                               :checkpointer {:xtdb/module 'xtdb.checkpoint/->checkpointer
+                                              :store {:xtdb/module 'xtdb.checkpoint/->filesystem-checkpoint-store
+                                                      :path "/path/to/cp-store"}
+                                              :approx-frequency (Duration/ofHours 6)}}}
  ...}
 ----
 
@@ -62,11 +62,11 @@ EDN::
 [source,clojure]
 ----
 {:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
-                             ...
-                             :checkpointer {:xtdb/module xtdb.checkpoint/->checkpointer
-                                            :store {:xtdb/module xtdb.checkpoint/->filesystem-checkpoint-store
-                                                    :path "/path/to/cp-store"}
-                                            :approx-frequency "PT6H"}}}
+                               ...
+                               :checkpointer {:xtdb/module xtdb.checkpoint/->checkpointer
+                                              :store {:xtdb/module xtdb.checkpoint/->filesystem-checkpoint-store
+                                                      :path "/path/to/cp-store"}
+                                              :approx-frequency "PT6H"}}}
  ...}
 ----
 ====

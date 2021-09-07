@@ -29,11 +29,11 @@ mkdir xtdb-cli && cd xtdb-cli
 (2) Next, create two new files within this directory named `deps.edn` and `xtdb.edn` with the following configuration code:
 
 .;; deps.edn
-[source,clojure]
+[source,clojure,subs=attributes+]
 ----
 {:deps {org.clojure/clojure {:mvn/version "1.10.3"}
-        com.xtdb/xtdb-core {:mvn/version "1.18.1"}
-        com.xtdb/xtdb-http-server {:mvn/version "1.18.1"}}}
+        com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+        com.xtdb/xtdb-http-server {:mvn/version "{xtdb_version}"}}}
 ----
 
 .;; xtdb.edn
@@ -53,7 +53,7 @@ clojure -M -m xtdb.main # <1>
 
 Two minutes are up and your XTDB node is running. Nice work! To check that everything is working, head over to http://localhost:3000[http://localhost:3000] where you should see the XTDB console.
 
-== Part 2: Talking to XTDB Over HTTP
+== Part 2: Talking to XTDB over HTTP
 
 At the moment, the database is empty. Before we can start to play with some of the features that XTDB has to offer, we need to add some data. We will be using the https://xtdb.com/reference/http.html#rest-api[REST API] to send and receive JSON via https://curl.se[curl].
 

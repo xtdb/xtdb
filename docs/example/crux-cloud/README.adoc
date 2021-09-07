@@ -55,11 +55,11 @@ code to connect to your cluster and make a transaction:
                                 :topic-name "tx-1"}}
 
     :xtdb/document-store {:xtdb/module 'xtdb.kafka/->document-store
-                        :kafka-config :xtdb.kafka/kafka-config
-                        :doc-topic-opts {:replication-factor 3
-                                         :topic-name "doc-1" ; choose your doc-topic name
-                                         :doc-partitions 6} ; Confluent Cloud default
-                        :local-document-store {:kv-store :rocksdb}}
+                          :kafka-config :xtdb.kafka/kafka-config
+                          :doc-topic-opts {:replication-factor 3
+                                           :topic-name "doc-1" ; choose your doc-topic name
+                                           :doc-partitions 6} ; Confluent Cloud default
+                          :local-document-store {:kv-store :rocksdb}}
     :xtdb/index-store {:kv-store :rocksdb}
     :rocksdb {:xtdb/module 'xtdb.rocksdb/->kv-store
               :db-dir "/tmp/rocksdb"}}))

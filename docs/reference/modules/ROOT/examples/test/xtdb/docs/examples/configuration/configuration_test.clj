@@ -46,8 +46,8 @@
            (with-open [node
                        ;; tag::override-module[]
                        (xt/start-node {:xtdb/document-store {:xtdb/module 'xtdb.s3/->document-store
-                                                           :bucket "my-bucket"
-                                                           :prefix "my-prefix"}})
+                                                             :bucket "my-bucket"
+                                                             :prefix "my-prefix"}})
                        ;; end::override-module[]
                        ]
              (t/is true))))
@@ -56,7 +56,7 @@
   (with-open [node
               ;; tag::nested-modules-0[]
               (xt/start-node {:xtdb/tx-log {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
-                                                     :db-dir (io/file "/tmp/txs")}}
+                                                       :db-dir (io/file "/tmp/txs")}}
                               ;; end::nested-modules-0[]
                               })]
     (comment [( ("This obviously won't run so putting in a comment"

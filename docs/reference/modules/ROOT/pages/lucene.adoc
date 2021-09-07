@@ -121,9 +121,9 @@ It's possible to supply var bindings to use in `text-search`:
 
 [source,clojure]
 ----
-(c/q db '{:find [?v]
-          :in [input]
-          :where [[(text-search :name input) [[?e ?v]]]]}
+(xt/q db '{:find [?v]
+           :in [input]
+           :where [[(text-search :name input) [[?e ?v]]]]}
      "Ivan")
 ----
 
