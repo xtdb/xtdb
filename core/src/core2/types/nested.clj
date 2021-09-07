@@ -56,8 +56,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:private dense-union-field-type (FieldType. false (.getType Types$MinorType/DENSEUNION) nil))
-
 (defn- extension-type [^ValueVector v]
   (get (.getMetadata (.getField v)) ArrowType$ExtensionType/EXTENSION_METADATA_KEY_NAME))
 
@@ -69,7 +67,6 @@
 
 (defprotocol ArrowReadable
   (get-value [_ idx]))
-
 
 ;; NOTE: Vectors not explicitly listed here have useful getObject
 ;; methods and are handled by ValueVector.
@@ -244,6 +241,8 @@
           acc
           (recur (inc element-idx)
                  (assoc acc (get-value key-vec element-idx) (get-value value-vec element-idx))))))))
+
+(def ^:private dense-union-field-type (FieldType. false (.getType Types$MinorType/DENSEUNION) nil))
 
 (defn- kw-name ^String [x]
   (if (keyword? x)
