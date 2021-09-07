@@ -5,7 +5,7 @@
            [java.nio ByteBuffer CharBuffer]
            [java.io ByteArrayInputStream ByteArrayOutputStream ObjectInputStream ObjectOutputStream Serializable]
            [java.util Date Collection List Map Set UUID]
-           [java.time Duration Instant LocalDate LocalTime Period ZoneId ZonedDateTime]
+           [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime ZoneOffset]
            [java.time.temporal ChronoField ChronoUnit]
            [org.apache.arrow.vector.types Types$MinorType TimeUnit]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$Map ArrowType$Timestamp ArrowType$Union Field FieldType]
@@ -169,22 +169,6 @@
   TimeSecVector
   (get-value [v idx]
     (LocalTime/ofSecondOfDay (.get v idx)))
-
-  TimeStampMicroVector
-  (get-value [v idx]
-    (Instant/ofEpochSecond 0 (* 1000 (.get v idx))))
-
-  TimeStampMilliVector
-  (get-value [v idx]
-    (Instant/ofEpochSecond 0 (* 1000000 (.get v idx))))
-
-  TimeStampNanoVector
-  (get-value [v idx]
-    (Instant/ofEpochSecond 0 (.get v idx)))
-
-  TimeStampSecVector
-  (get-value [v idx]
-    (Instant/ofEpochSecond (.get v idx) 0))
 
   TimeStampMicroTZVector
   (get-value [v idx]
@@ -449,6 +433,16 @@
       (.setSafe inner-vec offset (* (.getLong x ChronoField/EPOCH_DAY) 86400000))
       v))
 
+  LocalDateTime
+  (append-value [x ^DenseUnionVector v]
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/TIMESTAMPMICRO))
+          inner-vec (.getTimeStampMicroVector v type-id)
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
+          x (.toInstant x ZoneOffset/UTC)]
+      (.setSafe inner-vec offset (+ (* (.getEpochSecond x) 1000000)
+                                    (quot (.getNano x) 1000)))
+      v))
+
   LocalTime
   (append-value [x ^DenseUnionVector v]
     (let [type-id (get-or-create-type-id v (.getType Types$MinorType/TIMEMICRO))
@@ -463,12 +457,7 @@
 
   Instant
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/TIMESTAMPMICRO))
-          inner-vec (.getTimeStampMicroVector v type-id)
-          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
-      (.setSafe inner-vec offset (+ (* (.getEpochSecond x) 1000000)
-                                    (quot (.getNano x) 1000)))
-      v))
+    (append-value (ZonedDateTime/ofInstant x (ZoneId/of "UTC")) v))
 
   ZonedDateTime
   (append-value [x ^DenseUnionVector v]
@@ -480,6 +469,10 @@
       (.setSafe inner-vec offset (+ (* (.getEpochSecond x) 1000000)
                                     (quot (.getNano x) 1000)))
       v))
+
+  OffsetDateTime
+  (append-value [x ^DenseUnionVector v]
+    (append-value (.toZonedDateTime x) v))
 
   Duration
   (append-value [x ^DenseUnionVector v]
