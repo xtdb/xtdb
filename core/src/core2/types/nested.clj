@@ -9,9 +9,12 @@
            [java.time.temporal ChronoField ChronoUnit]
            [org.apache.arrow.vector.types Types$MinorType TimeUnit]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$Map ArrowType$Timestamp ArrowType$Union Field FieldType]
-           [org.apache.arrow.vector.complex DenseUnionVector ListVector MapVector StructVector]
-           [org.apache.arrow.vector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector IntervalYearVector
-            TimeMicroVector TimeStampMicroVector TimeStampMicroTZVector VarBinaryVector VarCharVector ValueVector UInt2Vector]
+           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector LargeListVector ListVector MapVector StructVector]
+           [org.apache.arrow.vector DateDayVector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector IntervalYearVector
+            LargeVarBinaryVector LargeVarCharVector
+            TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroVector TimeStampMilliVector TimeStampNanoVector TimeStampSecVector
+            TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector
+            VarBinaryVector VarCharVector ValueVector UInt1Vector UInt2Vector UInt4Vector UInt8Vector]
            [org.apache.arrow.vector.util Text VectorBatchAppender]
            [core2 DenseUnionUtil]
            [clojure.lang IPersistentList IPersistentSet Keyword Symbol]))
@@ -22,10 +25,6 @@
 ;; For example, unlike Arrow Java itself, TimeMicroVector is mapped to
 ;; LocalTime and DateMicroVector to LocalDate like they are above via
 ;; the java.sql definitions.
-
-;; TODO:
-;; - consistent get-value implementations for vectors we don't
-;;   generate but may read.
 
 ;; NOTE, potential future improvements, mainly efficiency/performance:
 ;; - registering type ids requires scan of the union's children.
@@ -62,11 +61,18 @@
 (defn- extension-type [^ValueVector v]
   (get (.getMetadata (.getField v)) ArrowType$ExtensionType/EXTENSION_METADATA_KEY_NAME))
 
+(defn- zone-id ^java.time.ZoneId [^ValueVector v]
+  (ZoneId/of (.getTimezone ^ArrowType$Timestamp (.getType (.getField v)))))
+
 (defprotocol ArrowAppendable
   (append-value [_ v]))
 
 (defprotocol ArrowReadable
   (get-value [_ idx]))
+
+
+;; NOTE: Vectors not explicitly listed here have useful getObject
+;; methods and are handled by ValueVector.
 
 (extend-protocol ArrowReadable
   nil
@@ -75,6 +81,27 @@
   ValueVector
   (get-value [v idx]
     (.getObject v idx))
+
+  UInt1Vector
+  (get-value [v idx]
+    (.getObjectNoOverflow v idx))
+
+  UInt2Vector
+  (get-value [v idx]
+    (let [x (.getObject v ^long idx)]
+      (case (extension-type v)
+        "char"
+        x
+
+        (int x))))
+
+  UInt4Vector
+  (get-value [v idx]
+    (.getObjectNoOverflow v idx))
+
+  UInt8Vector
+  (get-value [v idx]
+    (bigdec (.getObjectNoOverflow v idx)))
 
   DenseUnionVector
   (get-value [v idx]
@@ -97,7 +124,11 @@
         (with-open [in (ObjectInputStream. (ByteArrayInputStream. x))]
           (.readObject in))
 
-        (ByteBuffer/wrap (.getObject v ^long idx)))))
+        (ByteBuffer/wrap x))))
+
+  LargeVarBinaryVector
+  (get-value [v idx]
+    (ByteBuffer/wrap (.getObject v ^long idx)))
 
   VarCharVector
   (get-value [v idx]
@@ -111,6 +142,14 @@
 
         x)))
 
+  LargeVarCharVector
+  (get-value [v idx]
+    (str (.getObject v ^long idx)))
+
+  DateDayVector
+  (get-value [v idx]
+    (LocalDate/ofEpochDay (.get v idx)))
+
   DateMilliVector
   (get-value [v idx]
     (LocalDate/ofEpochDay (quot (.get v idx) 86400000)))
@@ -119,14 +158,49 @@
   (get-value [v idx]
     (LocalTime/ofNanoOfDay (* 1000 (.get v idx))))
 
+  TimeMilliVector
+  (get-value [v idx]
+    (LocalTime/ofNanoOfDay (* 1000000 (.get v idx))))
+
+  TimeNanoVector
+  (get-value [v idx]
+    (LocalTime/ofNanoOfDay (.get v idx)))
+
+  TimeSecVector
+  (get-value [v idx]
+    (LocalTime/ofSecondOfDay (.get v idx)))
+
   TimeStampMicroVector
   (get-value [v idx]
     (Instant/ofEpochSecond 0 (* 1000 (.get v idx))))
 
+  TimeStampMilliVector
+  (get-value [v idx]
+    (Instant/ofEpochSecond 0 (* 1000000 (.get v idx))))
+
+  TimeStampNanoVector
+  (get-value [v idx]
+    (Instant/ofEpochSecond 0 (.get v idx)))
+
+  TimeStampSecVector
+  (get-value [v idx]
+    (Instant/ofEpochSecond (.get v idx) 0))
+
   TimeStampMicroTZVector
   (get-value [v idx]
-    (.atZone (Instant/ofEpochSecond 0 (* 1000 (.get v idx)))
-             (ZoneId/of (.getTimezone ^ArrowType$Timestamp (.getType (.getField v))))))
+    (.atZone (Instant/ofEpochSecond 0 (* 1000 (.get v idx))) (zone-id v)))
+
+  TimeStampMilliTZVector
+  (get-value [v idx]
+    (.atZone (Instant/ofEpochSecond 0 (* 1000000 (.get v idx))) (zone-id v)))
+
+  TimeStampNanoTZVector
+  (get-value [v idx]
+    (.atZone (Instant/ofEpochSecond 0 (.get v idx)) (zone-id v)))
+
+  TimeStampSecTZVector
+  (get-value [v idx]
+    (.atZone (Instant/ofEpochSecond (.get v idx) 0) (zone-id v)))
 
   IntervalYearVector
   (get-value [v idx]
@@ -134,17 +208,36 @@
 
   ListVector
   (get-value [v idx]
+    (let [x (loop [element-idx (.getElementStartIndex v idx)
+                   acc []]
+              (if (= (.getElementEndIndex v idx) element-idx)
+                acc
+                (recur (inc element-idx)
+                       (conj acc (get-value (.getDataVector v) element-idx)))))]
+      (case (extension-type v)
+        "clojure.lang.IPersistentSet"
+        (set x)
+
+        "clojure.lang.IPersistentList"
+        (apply list x)
+
+        x)))
+
+  FixedSizeListVector
+  (get-value [v idx]
     (loop [element-idx (.getElementStartIndex v idx)
            acc []]
       (if (= (.getElementEndIndex v idx) element-idx)
-        (case (extension-type v)
-          "clojure.lang.IPersistentSet"
-          (set acc)
+        acc
+        (recur (inc element-idx)
+               (conj acc (get-value (.getDataVector v) element-idx))))))
 
-          "clojure.lang.IPersistentList"
-          (apply list acc)
-
-          acc)
+  LargeListVector
+  (get-value [v idx]
+    (loop [element-idx (.getElementStartIndex v idx)
+           acc []]
+      (if (= (.getElementEndIndex v idx) element-idx)
+        acc
         (recur (inc element-idx)
                (conj acc (get-value (.getDataVector v) element-idx))))))
 
@@ -334,6 +427,10 @@
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
       (.setSafe inner-vec offset (.duplicate x) (.position x) (.remaining x))
       v))
+
+  BigInteger
+  (append-value [x ^DenseUnionVector v]
+    (append-value (bigdec x) v))
 
   BigDecimal
   (append-value [x ^DenseUnionVector v]
