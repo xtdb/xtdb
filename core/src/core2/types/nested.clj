@@ -27,12 +27,27 @@
 ;; supported.
 
 ;; TODO:
-;; remove original type spec spike.
-;; use proper null type in union.
-;; add support for maps (for non keyword maps).
-;; experimental support for Serializable?
-;; support java.sql types for append-value?
-;; consistent get-value implementations for vectors we don't generate but may read.
+;; - remove original type spec spike.
+;; - use proper null type in append-value for union.
+;; - append-value support for maps (for non keyword maps).
+;; - experimental append-value support for Serializable?
+;; - support java.sql types for append-value?
+;; - consistent get-value implementations for vectors we don't generate but may read.
+
+;; NOTE: potential future improvements, mainly efficiency/performance
+
+;; - registering type ids requires scan of the union's children.
+
+;; - generates needless DenseUnions, could attempt to promote during
+;;   append or remove them before read.
+
+;; - get-value is a protocol, which implies the index argument and
+;;   return value is always boxed, may need some access object
+;;   instead?
+
+;; - append-value is also a protocol, which means that while dispatch
+;;   is fast, the receiver is boxed, something that could be avoided
+;;   if types are known during expression compilation.
 
 (set! *unchecked-math* :warn-on-boxed)
 
