@@ -34,20 +34,33 @@
 ;; - support java.sql types for append-value?
 ;; - consistent get-value implementations for vectors we don't generate but may read.
 
-;; NOTE: potential future improvements, mainly efficiency/performance
-
+;; NOTE, potential future improvements, mainly efficiency/performance:
 ;; - registering type ids requires scan of the union's children.
-
 ;; - generates needless DenseUnions, could attempt to promote during
 ;;   append or remove them before read.
-
 ;; - get-value is a protocol, which implies the index argument and
 ;;   return value is always boxed, may need some access object
 ;;   instead?
-
 ;; - append-value is also a protocol, which means that while dispatch
 ;;   is fast, the receiver is boxed, something that could be avoided
 ;;   if types are known during expression compilation.
+
+;; C2 Integration:
+
+;; Will require changes to tx-produce, ingest, metadata, late
+;; materialisation (relation) and expression system. The latter two
+;; (query side) should preferably also support -any- valid Arrow, but
+;; we may only ingest and have our expressions generate the types
+;; supported by append-value. Apart from the initial support, there
+;; will be further things that are not supported today, new predicates
+;; and functions, ability to navigate the nested data, and some form
+;; of unnest operator in the logical plan that can flatten arrays.
+
+;; As an aside, tx-produce and ingest should in theory also preferably
+;; be able to take arbitrary Arrow at the lowest level (by passing the
+;; inference implemented here) eventually, which would affect
+;; metadata. This is a slightly future problem though, we just want to
+;; keep an eye on it.
 
 (set! *unchecked-math* :warn-on-boxed)
 
