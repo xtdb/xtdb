@@ -27,7 +27,6 @@
 ;; supported.
 
 ;; TODO:
-;; - remove original type spec spike.
 ;; - use proper null type in append-value for union.
 ;; - append-value support for maps (for non keyword maps).
 ;; - experimental append-value support for Serializable?
