@@ -512,8 +512,8 @@
           ^VarCharVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id extension-type)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
           x (kw-name x)
-          x (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap x))]
-      (.setSafe inner-vec offset x (.position x) (.remaining x))
+          bb (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap x))]
+      (.setSafe inner-vec offset bb (.position bb) (.remaining bb))
       v))
 
   Symbol
