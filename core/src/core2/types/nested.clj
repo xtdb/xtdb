@@ -26,6 +26,14 @@
 ;; structs. Arrow maps with arbitrary key types isn't (currently)
 ;; supported.
 
+;; TODO:
+;; remove original type spec spike.
+;; use proper null type in union.
+;; add support for maps (for non keyword maps).
+;; experimental support for Serializable?
+;; support java.sql types for append-value?
+;; consistent get-value implementations for vectors we don't generate but may read.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:private extension-metadata-key-name ArrowType$ExtensionType/EXTENSION_METADATA_KEY_NAME)
