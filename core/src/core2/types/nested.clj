@@ -3,6 +3,7 @@
             [clojure.walk :as w])
   (:import [java.nio.charset StandardCharsets]
            [java.nio ByteBuffer CharBuffer]
+           [java.io ByteArrayInputStream ByteArrayOutputStream ObjectInputStream ObjectOutputStream Serializable]
            [java.util Date Collection List Map Set UUID]
            [java.time Duration Instant LocalDate LocalTime Period ZoneId ZonedDateTime]
            [java.time.temporal ChronoField ChronoUnit]
@@ -28,7 +29,6 @@
 
 ;; TODO:
 ;; - append-value support for maps (for non keyword maps).
-;; - experimental append-value support for Serializable?
 ;; - support java.sql types for append-value?
 ;; - consistent get-value implementations for vectors we don't generate but may read.
 
@@ -93,7 +93,13 @@
 
   VarBinaryVector
   (get-value [v idx]
-    (ByteBuffer/wrap (.getObject v ^long idx)))
+    (let [x (.getObject v ^long idx)]
+      (case (get (.getMetadata (.getField v)) extension-metadata-key-name)
+        "java.io.Serializable"
+        (with-open [in (ObjectInputStream. (ByteArrayInputStream. x))]
+          (.readObject in))
+
+        (ByteBuffer/wrap (.getObject v ^long idx)))))
 
   VarCharVector
   (get-value [v idx]
@@ -445,4 +451,19 @@
       (doseq [k key-set
               :let [data-vec (.addOrGet inner-vec k (FieldType/nullable (.getType Types$MinorType/DENSEUNION)) DenseUnionVector)]]
         (append-value (get x (keyword k)) data-vec))
+      v))
+
+  Object
+  (append-value [x ^DenseUnionVector v]
+    (let [arrow-type (.getType Types$MinorType/VARBINARY)
+          extension-type "java.io.Serializable"
+          type-id (get-or-create-type-id v arrow-type (fn [^Field f]
+                                                        (= extension-type (get (.getMetadata f) extension-metadata-key-name))))
+          ^VarBinaryVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id {extension-metadata-key-name extension-type})
+          offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
+          ^bytes ba (with-open [baos (ByteArrayOutputStream.)
+                                out (ObjectOutputStream. baos)]
+                      (.writeObject out x)
+                      (.toByteArray baos))]
+      (.setSafe inner-vec offset ba)
       v)))

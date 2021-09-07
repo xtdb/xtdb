@@ -9,7 +9,8 @@
            [org.apache.arrow.vector.types.pojo Schema]
            [org.apache.arrow.memory RootAllocator]
            [java.time Duration LocalDate LocalTime Period ZonedDateTime ZoneId]
-           [java.nio ByteBuffer]))
+           [java.nio ByteBuffer]
+           [java.net URL]))
 
 (t/deftest can-build-sparse-union-vector
   (with-open [allocator (RootAllocator.)
@@ -39,6 +40,7 @@
                :foo/bar
                'foo/baz
                #uuid "7b9f641c-254d-4d9a-a5d9-be8bac9fb0fd"
+               (URL. "http://juxt.pro")
                []
                [2 3.14 [false nil]]
                #{3 "foo"}
@@ -52,7 +54,7 @@
     (t/is (.getField v))
 
     (t/testing "nested data"
-      (t/is (= [false, nil, 2, 1, 6, 4, 3.14, 2.0, "Hello", \F, 1.41M, 2.718281828459045M, (.toInstant #inst "1999-01-01T00:00"), (.toInstant #inst "2021-09-02T13:54:35.809Z"), (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "Europe/Stockholm")), (.plusDays (Duration/ofMillis 1234) 1), (Period/of 1 2 0), (LocalDate/of 1999 05 01), (LocalTime/of 14 05 10), (ByteBuffer/wrap (byte-array [1, 2, 3])), (ByteBuffer/wrap (byte-array [1, 2, 3])), :foo/bar, 'foo/baz, #uuid "7b9f641c-254d-4d9a-a5d9-be8bac9fb0fd", [], [2, 3.14, [false, nil]], #{3 "foo"}, '(foo 10) {}, {:B 2, :C 1, :F false}, [1, {:B [2]}], {:B 3.14, :D {:E ["hello", -1]} :F nil}]
+      (t/is (= [false, nil, 2, 1, 6, 4, 3.14, 2.0, "Hello", \F, 1.41M, 2.718281828459045M, (.toInstant #inst "1999-01-01T00:00"), (.toInstant #inst "2021-09-02T13:54:35.809Z"), (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "Europe/Stockholm")), (.plusDays (Duration/ofMillis 1234) 1), (Period/of 1 2 0), (LocalDate/of 1999 05 01), (LocalTime/of 14 05 10), (ByteBuffer/wrap (byte-array [1, 2, 3])), (ByteBuffer/wrap (byte-array [1, 2, 3])), :foo/bar, 'foo/baz, #uuid "7b9f641c-254d-4d9a-a5d9-be8bac9fb0fd", (URL. "http://juxt.pro"), [], [2, 3.14, [false, nil]], #{3 "foo"}, '(foo 10) {}, {:B 2, :C 1, :F false}, [1, {:B [2]}], {:B 3.14, :D {:E ["hello", -1]} :F nil}]
                (for [x (range (.getValueCount v))]
                  (tn/get-value v x)))))
 
@@ -81,6 +83,7 @@
                 org.apache.arrow.vector.VarCharVector
                 org.apache.arrow.vector.VarCharVector
                 org.apache.arrow.vector.FixedSizeBinaryVector
+                org.apache.arrow.vector.VarBinaryVector
                 org.apache.arrow.vector.complex.ListVector
                 org.apache.arrow.vector.complex.ListVector
                 org.apache.arrow.vector.complex.ListVector
