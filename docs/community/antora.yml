@@ -1,6 +1,7 @@
 name: community
 title: XTDB
-version: main
+version: master
+display_version: main
 start_page: ROOT:faq.adoc
 nav:
   - modules/ROOT/nav.adoc

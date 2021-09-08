@@ -1,6 +1,7 @@
 name: howto
 title: XTDB How-To Guides
-version: main
+version: master
+display_version: main
 start_page: ROOT:quickstart.adoc
 nav:
   - modules/ROOT/nav.adoc

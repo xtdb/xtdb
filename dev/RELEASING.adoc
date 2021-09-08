@@ -34,7 +34,7 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 2. Create a `docs-v<next-release>` branch
 3. Update `docs/reference/antora.yml`:
    * Delete `prerelease: indeed` and `display-version: main` lines
-   * Update `version: main` to `version: <next-release>`
+   * Update `version: master` to `version: <next-release>`
 4. Commit, push branch to the main JUXT XTDB repo
 5. Head over to `crux-site`, build and deploy the site
    * Build using `./bin/build-site.sh`
