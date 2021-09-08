@@ -7,7 +7,8 @@
            [java.util Date Collection List Map Set UUID]
            [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime ZoneOffset]
            [java.time.temporal ChronoField ChronoUnit]
-           [org.apache.arrow.vector.types Types$MinorType TimeUnit]
+           [java.util.concurrent TimeUnit]
+           [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$Map ArrowType$Timestamp ArrowType$Union Field FieldType]
            [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector LargeListVector ListVector MapVector StructVector]
            [org.apache.arrow.vector DateDayVector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector IntervalYearVector
@@ -149,15 +150,15 @@
 
   DateMilliVector
   (get-value [v idx]
-    (LocalDate/ofEpochDay (quot (.get v idx) 86400000)))
+    (LocalDate/ofEpochDay (.toDays TimeUnit/MILLISECONDS (.get v idx))))
 
   TimeMicroVector
   (get-value [v idx]
-    (LocalTime/ofNanoOfDay (* 1000 (.get v idx))))
+    (LocalTime/ofNanoOfDay (.toNanos TimeUnit/MICROSECONDS (.get v idx))))
 
   TimeMilliVector
   (get-value [v idx]
-    (LocalTime/ofNanoOfDay (* 1000000 (.get v idx))))
+    (LocalTime/ofNanoOfDay (.toNanos TimeUnit/MILLISECONDS (.get v idx))))
 
   TimeNanoVector
   (get-value [v idx]
@@ -169,11 +170,11 @@
 
   TimeStampMicroTZVector
   (get-value [v idx]
-    (.atZone (Instant/ofEpochSecond 0 (* 1000 (.get v idx))) (zone-id v)))
+    (.atZone (Instant/ofEpochSecond 0 (.toNanos TimeUnit/MICROSECONDS (.get v idx))) (zone-id v)))
 
   TimeStampMilliTZVector
   (get-value [v idx]
-    (.atZone (Instant/ofEpochSecond 0 (* 1000000 (.get v idx))) (zone-id v)))
+    (.atZone (Instant/ofEpochSecond 0 (.toNanos TimeUnit/MILLISECONDS (.get v idx))) (zone-id v)))
 
   TimeStampNanoTZVector
   (get-value [v idx]
@@ -438,8 +439,8 @@
           inner-vec (.getTimeStampMicroVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
           x (.toInstant x ZoneOffset/UTC)]
-      (.setSafe inner-vec offset (+ (* (.getEpochSecond x) 1000000)
-                                    (quot (.getNano x) 1000)))
+      (.setSafe inner-vec offset (+ (.toMicros TimeUnit/SECONDS (.getEpochSecond x))
+                                    (.toMicros TimeUnit/NANOSECONDS (.getNano x))))
       v))
 
   LocalTime
@@ -460,13 +461,13 @@
 
   ZonedDateTime
   (append-value [x ^DenseUnionVector v]
-    (let [arrow-type (ArrowType$Timestamp. TimeUnit/MICROSECOND (str (.getZone x)))
+    (let [arrow-type (ArrowType$Timestamp. org.apache.arrow.vector.types.TimeUnit/MICROSECOND (str (.getZone x)))
           type-id (get-or-create-type-id v arrow-type)
           ^TimeStampMicroTZVector inner-vec (get-or-add-vector v arrow-type "timestamp" type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
           x (.toInstant x)]
-      (.setSafe inner-vec offset (+ (* (.getEpochSecond x) 1000000)
-                                    (quot (.getNano x) 1000)))
+      (.setSafe inner-vec offset (+ (.toMicros TimeUnit/SECONDS (.getEpochSecond x))
+                                    (.toMicros TimeUnit/NANOSECONDS (.getNano x))))
       v))
 
   OffsetDateTime
@@ -475,7 +476,7 @@
 
   Duration
   (append-value [x ^DenseUnionVector v]
-    (let [arrow-type (ArrowType$Duration. TimeUnit/MICROSECOND)
+    (let [arrow-type (ArrowType$Duration. org.apache.arrow.vector.types.TimeUnit/MICROSECOND)
           type-id (get-or-create-type-id v arrow-type)
           ^DurationVector inner-vec (get-or-add-vector v arrow-type "duration" type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
