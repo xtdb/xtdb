@@ -1,10 +1,10 @@
 = RocksDB
 
-https://rocksdb.org/[RocksDB] is often used as the data store for Crux's query indices, but can also be used as a transaction log and/or document store in single node clusters.
+https://rocksdb.org/[RocksDB] is often used as the data store for XTDB's query indices, but can also be used as a transaction log and/or document store in single node clusters.
 
 == Project Dependency
 
-In order to use RocksDB within Crux, you must first add RocksDB as a project dependency:
+In order to use RocksDB within XTDB, you must first add RocksDB as a project dependency:
 
 [tabs]
 ====
@@ -12,7 +12,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-rocksdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -20,9 +20,9 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-rocksdb</artifactId>
-    <version>{crux_version}</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-rocksdb</artifactId>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -31,7 +31,7 @@ If you're using RocksDB and seeing out-of-memory issues, we recommend setting th
 
 == Using RocksDB
 
-Replace the implementation of the desired component with `+crux.rocksdb/->kv-store+`
+Replace the implementation of the desired component with `+xtdb.rocksdb/->kv-store+`
 
 [tabs]
 ====
@@ -40,15 +40,15 @@ JSON::
 [source,json]
 ----
 {
-  "crux/index-store": {
+  "xtdb/index-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
       "db-dir": "/tmp/rocksdb"
     }
   },
 
-  "crux/document-store": { ... },
-  "crux/tx-log": { ... }
+  "xtdb/document-store": { ... },
+  "xtdb/tx-log": { ... }
 }
 ----
 
@@ -56,24 +56,24 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
                                :db-dir (io/file "/tmp/rocksdb")}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
                                :db-dir "/tmp/rocksdb"}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
 ----
 ====
 
-It is generally advised to use independent RocksDB instances for each component, although using a single instance for the transaction log and document store is possible. Do not share the RocksDB instance used for the index store with other components as you cannot then perform Crux version upgrades.
+It is generally advised to use independent RocksDB instances for each component, although using a single instance for the transaction log and document store is possible. Do not share the RocksDB instance used for the index store with other components as you cannot then perform XTDB version upgrades.
 
 == Dependencies
 
@@ -99,18 +99,18 @@ JSON::
 [source,json]
 ----
 {
-  "crux/index-store": {
+  "xtdb/index-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
       "metrics": {
-        "crux/module": "crux.rocksdb.metrics/->metrics"
+        "xtdb/module": "xtdb.rocksdb.metrics/->metrics"
       }
       ...
     }
   },
 
-  "crux/document-store": { ... },
-  "crux/tx-log": { ... }
+  "xtdb/document-store": { ... },
+  "xtdb/tx-log": { ... }
 }
 ----
 
@@ -118,20 +118,20 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                               :metrics {:crux/module 'crux.rocksdb.metrics/->metrics}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+{:xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
+                               :metrics {:xtdb/module 'xtdb.rocksdb.metrics/->metrics}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
-                               :metrics {:crux/module crux.rocksdb.metrics/->metrics}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+{:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
+                               :metrics {:xtdb/module xtdb.rocksdb.metrics/->metrics}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
 ----
 ====
 
@@ -153,27 +153,27 @@ JSON::
 [source,json]
 ----
 {
-  "crux.rocksdb/block-cache": {
-    "crux/module": "crux.rocksdb/>lru-block-cache",
+  "xtdb.rocksdb/block-cache": {
+    "xtdb/module": "xtdb.rocksdb/>lru-block-cache",
     "cache-size":536870912
   },
-  "crux/index-store": {
+  "xtdb/index-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
-      "block-cache": "crux.rocksdb/block-cache"
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
+      "block-cache": "xtdb.rocksdb/block-cache"
       ...
     }
   },
-  "crux/document-store": {
+  "xtdb/document-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
-      "block-cache": "crux.rocksdb/block-cache"
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
+      "block-cache": "xtdb.rocksdb/block-cache"
     }
   },
-  "crux/tx-log": {
+  "xtdb/tx-log": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
-      "block-cache": "crux.rocksdb/block-cache"
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
+      "block-cache": "xtdb.rocksdb/block-cache"
     }
   }
 }
@@ -183,28 +183,28 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.rocksdb/block-cache {:crux/module 'crux.rocksdb/->lru-block-cache
-			    :cache-size (* 512 1024 1024)}
- :crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                               :block-cache :crux.rocksdb/block-cache}}
- :crux/document-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                                  :block-cache :crux.rocksdb/block-cache}}
- :crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                          :block-cache :crux.rocksdb/block-cache}}}
+{:xtdb.rocksdb/block-cache {:xtdb/module 'xtdb.rocksdb/->lru-block-cache
+			                      :cache-size (* 512 1024 1024)}
+ :xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
+                               :block-cache :xtdb.rocksdb/block-cache}}
+ :xtdb/document-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
+                                  :block-cache :xtdb.rocksdb/block-cache}}
+ :xtdb/tx-log {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
+                          :block-cache :xtdb.rocksdb/block-cache}}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.rocksdb/block-cache {:crux/module crux.rocksdb/->lru-block-cache
-			    :cache-size 536870912}
- :crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
-                               :block-cache :crux.rocksdb/block-cache}}
- :crux/document-store {:kv-store {:crux/module crux.rocksdb/->kv-store
-                                  :block-cache :crux.rocksdb/block-cache}}
- :crux/tx-log {:kv-store {:crux/module crux.rocksdb/->kv-store
-                          :block-cache :crux.rocksdb/block-cache}}}
+{:xtdb.rocksdb/block-cache {:xtdb/module xtdb.rocksdb/->lru-block-cache
+			                      :cache-size 536870912}
+ :xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
+                               :block-cache :xtdb.rocksdb/block-cache}}
+ :xtdb/document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
+                                  :block-cache :xtdb.rocksdb/block-cache}}
+ :xtdb/tx-log {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
+                          :block-cache :xtdb.rocksdb/block-cache}}}
 ----
 ====
 

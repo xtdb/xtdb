@@ -1,61 +1,61 @@
-= Command Line Crux
-:page-subtitle: Run a Crux node and query it over HTTP with curl. A 10-minute guide.
+= Command Line XTDB
+:page-subtitle: Run an XTDB node and query it over HTTP with curl. A 10-minute guide.
 :page-author: John Mone
 :page-header: just-start-laptop.jpg
 :page-published: 2021-02-09T10:00Z
 :page-category: Clojure
 :thumbnail: begin-with-coffee
 :page-thumbnail: {thumbnail}
-:page-thumbnailalt: Command Line Crux
+:page-thumbnailalt: Command Line XTDB
 
-Without writing a single line of code, this guide will show you how to spin up an in-memory Crux node on your development machine in less than 2 minutes. Then we'll show you how to talk to it over HTTP from the command line.
+Without writing a single line of code, this guide will show you how to spin up an in-memory XTDB node on your development machine in less than 2 minutes. Then we'll show you how to talk to it over HTTP from the command line.
 
-NOTE: This guide will be skipping a large amount of information about Crux, how it works, and much of its available functionality. For more information about the Crux HTTP API, please take a look at the https://opencrux.com/reference/http.html[Crux HTTP module documentation].
+NOTE: This guide will be skipping a large amount of information about XTDB, how it works, and much of its available functionality. For more information about the XTDB HTTP API, please take a look at the https://xtdb.com/reference/http.html[XTDB HTTP module documentation].
 Throughout this guide, you will see links to targeted extra reading and information, should you wish to read more.
 
-== Part 1: Getting a Crux node running on your local machine
+== Part 1: Getting an XTDB node running on your local machine
 
-This guide will install Crux using the Clojure CLI tools. You can find in the other methods of installing Crux in the https://opencrux.com/reference/installation.html[Crux installation docs].
+This guide will install XTDB using the Clojure CLI tools. You can find in the other methods of installing XTDB in the https://xtdb.com/reference/installation.html[XTDB installation docs].
 
-If you do not have the Clojure CLI tools installed, installers are available from the https://clojure.org/guides/getting_started#_clojure_installer_and_cli_tools[Clojure Getting Started Guide]. Don't worry, you don't need to know Clojure or the Clojure toolchain to run Crux. Just copy the commands below.
+If you do not have the Clojure CLI tools installed, installers are available from the https://clojure.org/guides/getting_started#_clojure_installer_and_cli_tools[Clojure Getting Started Guide]. Don't worry, you don't need to know Clojure or the Clojure toolchain to run XTDB. Just copy the commands below.
 
-(1) First, create a directory to house the settings for your new Crux node by running the following in your terminal:
+(1) First, create a directory to house the settings for your new XTDB node by running the following in your terminal:
 
 [source,sh]
 ----
-mkdir crux-cli && cd crux-cli
+mkdir xtdb-cli && cd xtdb-cli
 ----
 
-(2) Next, create two new files within this directory named `deps.edn` and `crux.edn` with the following configuration code:
+(2) Next, create two new files within this directory named `deps.edn` and `xtdb.edn` with the following configuration code:
 
 .;; deps.edn
-[source,clojure]
+[source,clojure,subs=attributes+]
 ----
-{:deps {org.clojure/clojure   {:mvn/version "1.10.3"}
-        pro.juxt.crux/crux-core        {:mvn/version "1.18.1"}
-        pro.juxt.crux/crux-http-server {:mvn/version "1.18.1"}}}
+{:deps {org.clojure/clojure {:mvn/version "1.10.3"}
+        com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+        com.xtdb/xtdb-http-server {:mvn/version "{xtdb_version}"}}}
 ----
 
-.;; crux.edn
+.;; xtdb.edn
 [source,clojure]
 ----
-{:crux.http-server/server {:port 3000}} ;; <1>
+{:xtdb.http-server/server {:port 3000}} ;; <1>
 ----
-<1> This configuration tells Crux to start an HTTP server on port 3000.
+<1> This configuration tells XTDB to start an HTTP server on port 3000.
 
-(3) Last, and still from within `crux-cli`, run this command in your terminal:
+(3) Last, and still from within `xtdb-cli`, run this command in your terminal:
 
 [source,sh]
 ----
-clojure -M -m crux.main # <1>
+clojure -M -m xtdb.main # <1>
 ----
 <1> You will probably see a `SLF4J: Failed to load class` error. Just ignore it.
 
-Two minutes are up and your Crux node is running. Nice work! To check that everything is working, head over to http://localhost:3000[http://localhost:3000] where you should see the Crux console.
+Two minutes are up and your XTDB node is running. Nice work! To check that everything is working, head over to http://localhost:3000[http://localhost:3000] where you should see the XTDB console.
 
-== Part 2: Talking to Crux Over HTTP
+== Part 2: Talking to XTDB over HTTP
 
-At the moment, the database is empty. Before we can start to play with some of the features that Crux has to offer, we need to add some data. We will be using the https://opencrux.com/reference/http.html#rest-api[REST API] to send and receive JSON via https://curl.se[curl].
+At the moment, the database is empty. Before we can start to play with some of the features that XTDB has to offer, we need to add some data. We will be using the https://xtdb.com/reference/http.html#rest-api[REST API] to send and receive JSON via https://curl.se[curl].
 
 For this guide, we will be working with facts about the current president of the United States.
 At the time of writing, the current president is Joe Biden. Lets add that to the database:
@@ -67,25 +67,25 @@ curl -X POST \
      -H "Accept: application/json" \
      -d '{"tx-ops": [
            ["put", { ;; <1>
-                "crux.db/id": "president", ;; <2>
+                "xt/id": "president", ;; <2>
                 "name": "Joe", ;; <3>
                 "last-name": "Biden" ;; <4>
             }]
          ]}' \
-     http://localhost:3000/_crux/submit-tx
+     http://localhost:3000/_xtdb/submit-tx
 ----
 <1> `put` - The type of operation we are performing
 <2> The ID for the document we are adding
 <3> The name to be associated with `president`
 <4> The last name to be associated with the `president`
 
-We see that a transaction has been received by our locally running Crux node. Now lets retrieve the entity:
+We see that a transaction has been received by our locally running XTDB node. Now lets retrieve the entity:
 
 [source,curl]
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     http://localhost:3000/_crux/entity\?eid=president ;; <1>
+     http://localhost:3000/_xtdb/entity\?eid=president ;; <1>
 ----
 <1> GET the entity by the same ID we used above
 
@@ -93,7 +93,7 @@ We see that the data we just put in the database is successfully showing up at t
 
 Joe Biden hasn't always been the president of the United States.
 
-With Crux, we can add data to the past (or the future) by passing a 'valid time' along with the document. Notice that we are using the same ID as before, something that wouldn't work in a traditional database.
+With XTDB, we can add data to the past (or the future) by passing a 'valid time' along with the document. Notice that we are using the same ID as before, something that wouldn't work in a traditional database.
 
 [source,curl]
 ----
@@ -102,12 +102,12 @@ curl -X POST \
      -H "Accept: application/json" \
      -d '{"tx-ops": [
            ["put", {
-                "crux.db/id": "president", ;; <1>
+                "xt/id": "president", ;; <1>
                 "name": "Donald",
                 "last-name": "Trump"
             }, "2017-01-20"] ;; <2>
          ]}' \
-     http://localhost:3000/_crux/submit-tx
+     http://localhost:3000/_xtdb/submit-tx
 ----
 <1> The same ID as our first `put` operation
 <2> The valid time for the document being added
@@ -120,7 +120,7 @@ Now lets retrieve the `president` entity again:
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     http://localhost:3000/_crux/entity\?eid=president
+     http://localhost:3000/_xtdb/entity\?eid=president
 ----
 
 We get the same result - Joe Biden!
@@ -135,11 +135,11 @@ To retrieve the Donald Trump document we just added, we can pass a valid time wi
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     http://localhost:3000/_crux/entity\?eid=president\&valid-time=2020-10-10 ;; <1>
+     http://localhost:3000/_xtdb/entity\?eid=president\&valid-time=2020-10-10 ;; <1>
 ----
 <1> We pass a valid time of `2020-10-10`
 
-The above operation allows us to find out who the president was on the date passed. Crux will return Donald Trump for any date between `2017-01-20` and the valid time on the Joe Biden document.
+The above operation allows us to find out who the president was on the date passed. XTDB will return Donald Trump for any date between `2017-01-20` and the valid time on the Joe Biden document.
 
 We can see all of our transactions by passing some more arguments to the same `/entity` endpoint:
 
@@ -147,11 +147,11 @@ We can see all of our transactions by passing some more arguments to the same `/
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     http://localhost:3000/_crux/entity\?eid=president\&history=true\&sortOrder=desc\&withDocs=true ;; <1>
+     http://localhost:3000/_xtdb/entity\?eid=president\&history=true\&sortOrder=desc\&withDocs=true ;; <1>
 ----
 <1> `history=true` returns all historical documents for this entity
 
-If you look closely at the Joe Biden document, the `validTime` is equal to today's date. This is because we did not explicitly provide a 'valid time' with our initial `put`. By default, Crux assumes `validTime` is equal to the current date-time unless otherwise specified.
+If you look closely at the Joe Biden document, the `validTime` is equal to today's date. This is because we did not explicitly provide a 'valid time' with our initial `put`. By default, XTDB assumes `validTime` is equal to the current date-time unless otherwise specified.
 
 Let's correct the entry for Joe Biden by passing the correct 'valid time':
 
@@ -162,26 +162,26 @@ curl -X POST \
      -H "Accept: application/json" \
      -d '{"tx-ops": [
            ["put", {
-                "crux.db/id": "president",
+                "xt/id": "president",
                 "name": "Joe",
                 "last-name": "Biden"
             }, "2021-01-20"] ;; <1>
          ]}' \
-     http://localhost:3000/_crux/submit-tx
+     http://localhost:3000/_xtdb/submit-tx
 ----
 <1> Again, `"2021-01-20"` is our explicit 'valid time' parameter.
 
 We now have a historically accurate dataset for the last two presidents of the United States that we can query over a temporal plane! You can run the history query again to validate our correction.
 
-Using Crux, we can do powerful queries over the temporal plane and retrieve data as if we had travelled back in time.footnote:[Crux is actually more sophisticated than this and supports two-dimensional temporal plane: _bitemporality._ This is a short guide, which is why an explanation wasn't included here. If you would like to read more, we have an https://opencrux.com/about/bitemporality.html[explanation of bitemporality]] Crux achieves this by maintaining an immutable (write-only) transaction log. This makes Crux a powerful asset where auditing is important or when looking back at historical data is valuable. Better still, Crux can build on top of many different DB solutions allowing you to retain the infrastructure you already know and love!
+Using XTDB, we can do powerful queries over the temporal plane and retrieve data as if we had travelled back in time.footnote:[XTDB is actually more sophisticated than this and supports two-dimensional temporal plane: _bitemporality._ This is a short guide, which is why an explanation wasn't included here. If you would like to read more, we have an https://xtdb.com/about/bitemporality.html[explanation of bitemporality]] XTDB achieves this by maintaining an immutable (write-only) transaction log. This makes XTDB a powerful asset where auditing is important or when looking back at historical data is valuable. Better still, XTDB can build on top of many different DB solutions allowing you to retain the infrastructure you already know and love!
 
-In this guide, we used 3 operations: storing documents with `submit-tx`, retrieving documents with `entity`, and retrieving document histories with `history=true`. The complete set of 18 REST operations, including RESTful https://opencrux.com/reference/http.html#post-query[Datalog queries], are explained in the https://opencrux.com/reference/http.html#rest-api[Crux REST API documentation].
+In this guide, we used 3 operations: storing documents with `submit-tx`, retrieving documents with `entity`, and retrieving document histories with `history=true`. The complete set of 18 REST operations, including RESTful https://xtdb.com/reference/http.html#post-query[Datalog queries], are explained in the https://xtdb.com/reference/http.html#rest-api[XTDB REST API documentation].
 
-Crux also supports a number of other protocols and features:
+XTDB also supports a number of other protocols and features:
 
-* https://opencrux.com/reference/queries.html[Native Datalog queries]
-* https://opencrux.com/reference/sql.html[SQL queries]
-* https://opencrux.com/reference/lucene.html[Full-text search with Apache Lucene]
-* https://opencrux.com/reference/transactions.html#speculative-transactions[Speculative transactions]
+* https://xtdb.com/reference/queries.html[Native Datalog queries]
+* https://xtdb.com/reference/sql.html[SQL queries]
+* https://xtdb.com/reference/lucene.html[Full-text search with Apache Lucene]
+* https://xtdb.com/reference/transactions.html#speculative-transactions[Speculative transactions]
 
-Now that you've dipped your toes in the temporal data waters, we encourage you to experiment with the more advanced features of Crux!
+Now that you've dipped your toes in the temporal data waters, we encourage you to experiment with the more advanced features of XTDB!

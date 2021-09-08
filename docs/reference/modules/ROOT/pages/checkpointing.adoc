@@ -1,8 +1,8 @@
 = Checkpointing
 
-Crux nodes can save checkpoints of their query indices on a regular basis, so that new nodes can start to service queries faster.
+XTDB nodes can save checkpoints of their query indices on a regular basis, so that new nodes can start to service queries faster.
 
-Crux nodes that join a cluster have to obtain a local set of query indices before they can service queries.
+XTDB nodes that join a cluster have to obtain a local set of query indices before they can service queries.
 These can be built by replaying the transaction log from the beginning, although this may be slow for clusters with a lot of history.
 Checkpointing allows the nodes in a cluster to share checkpoints into a central 'checkpoint store', so that nodes joining a cluster can retrieve a recent checkpoint of the query indices, rather than replaying the whole history.
 
@@ -12,7 +12,7 @@ The checkpoint store is a pluggable module - there are a number of officially su
 - AWS's xref::s3.adoc#checkpoint-store[S3]
 - GCP's xref::google-cloud-storage.adoc#checkpoint-store[Cloud Storage]
 
-Crux nodes in a cluster don't explicitly communicate regarding which one is responsible for creating a checkpoint - instead, they check at random intervals to see whether any other node has recently created a checkpoint, and create one if necessary.
+XTDB nodes in a cluster don't explicitly communicate regarding which one is responsible for creating a checkpoint - instead, they check at random intervals to see whether any other node has recently created a checkpoint, and create one if necessary.
 The desired frequency of checkpoints can be set using `approx-frequency`.
 
 == Setting up
@@ -26,14 +26,14 @@ JSON::
 [source,json]
 ----
 {
-  "crux/index-store": {
+  "xtdb/index-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
       ...
       "checkpointer": {
-        "crux/module": "crux.checkpoint/->checkpointer",
+        "xtdb/module": "xtdb.checkpoint/->checkpointer",
         "store": {
-          "crux/module": "crux.checkpoint/->filesystem-checkpoint-store",
+          "xtdb/module": "xtdb.checkpoint/->filesystem-checkpoint-store",
           "path": "/path/to/cp-store"
         },
         "approx-frequency": "PT6H"
@@ -48,10 +48,10 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
                                ...
-                               :checkpointer {:crux/module 'crux.checkpoint/->checkpointer
-                                              :store {:crux/module 'crux.checkpoint/->filesystem-checkpoint-store
+                               :checkpointer {:xtdb/module 'xtdb.checkpoint/->checkpointer
+                                              :store {:xtdb/module 'xtdb.checkpoint/->filesystem-checkpoint-store
                                                       :path "/path/to/cp-store"}
                                               :approx-frequency (Duration/ofHours 6)}}}
  ...}
@@ -61,10 +61,10 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
                                ...
-                               :checkpointer {:crux/module crux.checkpoint/->checkpointer
-                                              :store {:crux/module crux.checkpoint/->filesystem-checkpoint-store
+                               :checkpointer {:xtdb/module xtdb.checkpoint/->checkpointer
+                                              :store {:xtdb/module xtdb.checkpoint/->filesystem-checkpoint-store
                                                       :path "/path/to/cp-store"}
                                               :approx-frequency "PT6H"}}}
  ...}

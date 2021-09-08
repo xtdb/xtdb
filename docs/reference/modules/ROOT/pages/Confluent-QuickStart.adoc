@@ -2,34 +2,34 @@
 
 == Installing the connector
 
-Use `confluent-hub install juxt/kafka-connect-crux:{crux_version}` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
+Use `confluent-hub install juxt/kafka-connect-crux:{xtdb_version}` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
 
-The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *Crux node* to communicate with.
+The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *XTDB node* to communicate with.
 
-== Creating the Crux node
+== Creating the XTDB node
 
-To use our connector, you must first have a *Crux node* connected to Kafka. To do this, we start by adding the following dependencies to a project:
+To use our connector, you must first have a *XTDB node* connected to Kafka. To do this, we start by adding the following dependencies to a project:
 
 [source,clj, subs=attributes+]
 ----
-pro.juxt.crux/crux-core {:mvn/version "{crux_version}"}
-pro.juxt.crux/crux-kafka {:mvn/version "{crux_version}"}
-pro.juxt.crux/crux-http-server {:mvn/version "{crux_version}"}
-pro.juxt.crux/crux-rocksdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-kafka {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-http-server {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{xtdb_version}"}
 ----
 
 Ensure first that you have a running Kafka broker to connect to. We import the dependencies into a file or REPL, then create our Kafka connected _'node'_ with an associated http server for the connector to communicate with:
 
 [source,clj]
 ----
-(require '[crux.api :as crux]
-         '[crux.http-server :as srv])
-(import (crux.api ICruxAPI))
+(require '[xtdb.api :as xt]
+         '[xtdb.http-server :as srv])
+(import (xtdb.api IXtdb))
 
-(def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.node/topology '[crux.kafka/topology crux.http-server/module]
+(def ^xtdb.api.IXtdb node
+  (crux/start-node {:crux.node/topology '[xtdb.kafka/topology crux.http-server/module]
                     :crux.kafka/bootstrap-servers "localhost:9092"
-                    :crux.http-server/port 3000}))
+                    :xtdb.http-server/port 3000}))
 ----
 
 == Sink Connector
@@ -43,16 +43,16 @@ Run the following command within the base of the Confluent folder, to create a w
 Run the following within your Confluent directory, to add a line of JSON to _'test.txt'_:
 
 ----
-echo '{"crux.db/id": "415c45c9-7cbe-4660-801b-dab9edc60c84", "value": "baz"}' >> test.txt
+echo '{"xt/id": "415c45c9-7cbe-4660-801b-dab9edc60c84", "value": "baz"}' >> test.txt
 ----
 
 Now, verify that this was transacted within your REPL:
 
 [source,clj]
 ----
-(crux/entity (crux/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
+(xt/entity (xt/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
 ==>
-{:crux.db/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
+{:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
 ----
 
 == Source Connector
@@ -64,11 +64,11 @@ Run the following command within the base of the Confluent folder, to create a w
 ----
 
 
-Within your REPL, transact an element into Crux:
+Within your REPL, transact an element into XTDB:
 
 [source,clj]
 ----
-(crux/submit-tx node [[:crux.tx/put {:crux.db/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"}]])
+(xt/submit-tx node [[::xt/put {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"}]])
 ----
 
 Check the contents of 'test.sink.txt' using the command below, and you should see that the transactions were outputted to the _'connect-test'_ topic:
@@ -76,5 +76,5 @@ Check the contents of 'test.sink.txt' using the command below, and you should se
 ----
 tail test.sink.txt
 ==>
-[[:crux.tx/put {:crux.db/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"} #inst "2019-09-19T12:31:21.342-00:00"]]
+[[::xt/put {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"} #inst "2019-09-19T12:31:21.342-00:00"]]
 ----

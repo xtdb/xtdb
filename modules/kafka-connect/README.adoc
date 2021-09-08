@@ -1,0 +1,17 @@
+= xtdb-kafka-connect
+
+*Documentation/QuickStart Guides* can be found https://xtdb.com/reference/kafka-connect.html[here].
+
+=== Alpha
+
+This project contains both `xtdb.kafka.connect.XtdbSinkConnector`
+which is an implementation of
+`org.apache.kafka.connect.sink.SinkConnector` and
+`xtdb.kafka.connect.XtdbSourceConnector` which is an implementation of
+`org.apache.kafka.connect.source.SourceConnector` .
+
+
+=== Packaging the Connector
+
+To build the connector into a zip archive (for use with confluent hub), use `lein package` in the command line.
+The generated zip archive will be within *targets*, named **juxt-xtdb-kafka-connect-<VERSION>.zip.**

@@ -1,9 +1,0 @@
-= crux-core
-
-This project contains all major codec, transaction, indexing, query and API
-functionality.
-
-All protocols for interacting with pluggable storage (Kafka, LMDB, RocksDB
-etc.) are defined within `crux-core` but the implementations of these protocols
-exist in other projects within this repository. Therefore, use of `crux-core`
-by itself (using `crux.mem-kv`) does not provide any persistence.

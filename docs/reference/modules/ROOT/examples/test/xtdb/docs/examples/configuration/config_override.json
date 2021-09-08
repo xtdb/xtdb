@@ -1,0 +1,7 @@
+{
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.s3/->document-store",
+    "bucket": "my-bucket",
+    "prefix": "my-prefix"
+  }
+}

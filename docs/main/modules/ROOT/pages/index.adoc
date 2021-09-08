@@ -1,3 +1,3 @@
-= Crux
+= XTDB
 :page-layout: homepage
 :page-nav: black-nav

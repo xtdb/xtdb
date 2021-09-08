@@ -1,6 +1,6 @@
 = Monitoring
 
-Crux can expose metrics about a node via https://metrics.dropwizard.io/4.1.2/[Dropwizard] to https://prometheus.io/[Prometheus], AWS's CloudWatch, and Java's JMX.
+XTDB can expose metrics about a node via https://metrics.dropwizard.io/4.1.2/[Dropwizard] to https://prometheus.io/[Prometheus], AWS's CloudWatch, and Java's JMX.
 
 We expose metrics about transaction ingestion and running queries; if you use RocksDB you can also xref:rocksdb.adoc#monitoring[expose internal RocksDB metrics].
 
@@ -8,7 +8,7 @@ toc::[levels=1]
 
 == Project Dependency
 
-In order to use any of the `crux-metrics` reporters, you will need to include the following dependency on `crux-metrics`:
+In order to use any of the `xtdb-metrics` reporters, you will need to include the following dependency on `xtdb-metrics`:
 
 [tabs]
 ====
@@ -16,7 +16,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-metrics {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-metrics {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -24,9 +24,9 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-metrics</artifactId>
-    <version>{crux_version}</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-metrics</artifactId>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -35,7 +35,7 @@ You will also need to include dependencies for your individual reporters - these
 
 == Metrics module
 
-The Crux metric reporters depend on a common metrics module:
+The XTDB metric reporters depend on a common metrics module:
 
 [tabs]
 ====
@@ -44,7 +44,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics/metrics": { ... },
+  "xtdb.metrics/metrics": { ... },
 }
 ----
 
@@ -52,14 +52,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics/metrics { ... }}
+{:xtdb.metrics/metrics { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics/metrics { ... }}
+{:xtdb.metrics/metrics { ... }}
 ----
 
 ====
@@ -76,7 +76,7 @@ You can omit this if you're happy with its default parameters.
 
 This reporter pushes metrics to a Prometheus 'Pushgateway' at regular intervals.
 
-You will need to add the following dependencies, alongside `crux-metrics`, in your project:
+You will need to add the following dependencies, alongside `xtdb-metrics`, in your project:
 
 === Additional dependencies
 
@@ -103,7 +103,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.prometheus/reporter": { ... }
+  "xtdb.metrics.prometheus/reporter": { ... }
 }
 ----
 
@@ -111,14 +111,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.prometheus/reporter { ... }}
+{:xtdb.metrics.prometheus/reporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.prometheus/reporter { ... }}
+{:xtdb.metrics.prometheus/reporter { ... }}
 ----
 ====
 
@@ -159,7 +159,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.prometheus/http-exporter": { ... }
+  "xtdb.metrics.prometheus/http-exporter": { ... }
 }
 ----
 
@@ -168,14 +168,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.prometheus/http-exporter { ... }}
+{:xtdb.metrics.prometheus/http-exporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.prometheus/http-exporter { ... }}
+{:xtdb.metrics.prometheus/http-exporter { ... }}
 ----
 ====
 
@@ -212,7 +212,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.cloudwatch/reporter": { ... }
+  "xtdb.metrics.cloudwatch/reporter": { ... }
 }
 ----
 
@@ -220,14 +220,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.cloudwatch/reporter { ... }}
+{:xtdb.metrics.cloudwatch/reporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.cloudwatch/reporter { ... }}
+{:xtdb.metrics.cloudwatch/reporter { ... }}
 ----
 ====
 
@@ -238,7 +238,7 @@ EDN::
 * `dimensions` (`Map<String, String>`): dimensions to include in the pushed metrics
 * `jvm-metrics?` (boolean, default false): includes JVM metrics in the pushed metrics
 * `region` (string): override default AWS region for uploading metrics
-* `ignore-rules` (`List<String>`): a list of metrics to ignore, in gitignore format. e.g. `["crux.tx" "!crux.tx.ingest"]` would ignore `crux.tx.*`, except `crux.tx.ingest`
+* `ignore-rules` (`List<String>`): a list of metrics to ignore, in gitignore format. e.g. `["xtdb.tx" "!xtdb.tx.ingest"]` would ignore `xtdb.tx.*`, except `xtdb.tx.ingest`
 * `dry-run?` (boolean, default false): reporter outputs to a local SLF4J logger instead
 * `dry-run-report-frequency` (string/`Duration`, default `"PT1S"`)
 
@@ -266,7 +266,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.jmx/reporter": { ... }
+  "xtdb.metrics.jmx/reporter": { ... }
 }
 ----
 
@@ -274,14 +274,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.jmx/reporter { ... }}
+{:xtdb.metrics.jmx/reporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.jmx/reporter { ... }}
+{:xtdb.metrics.jmx/reporter { ... }}
 ----
 ====
 
@@ -308,7 +308,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.console/reporter": { ... }
+  "xtdb.metrics.console/reporter": { ... }
 }
 ----
 
@@ -316,14 +316,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.console/reporter { ... }}
+{:xtdb.metrics.console/reporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.console/reporter { ... }}
+{:xtdb.metrics.console/reporter { ... }}
 ----
 ====
 
@@ -350,7 +350,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.csv/reporter": { ... }
+  "xtdb.metrics.csv/reporter": { ... }
 }
 ----
 
@@ -358,14 +358,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.csv/reporter { ... }}
+{:xtdb.metrics.csv/reporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.csv/reporter { ... }}
+{:xtdb.metrics.csv/reporter { ... }}
 ----
 ====
 

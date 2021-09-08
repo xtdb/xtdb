@@ -1,6 +1,6 @@
 = JDBC
 
-Crux nodes can use JDBC databases to store their transaction logs and/or document stores.
+XTDB nodes can use JDBC databases to store their transaction logs and/or document stores.
 
 image::jdbc-modes.svg?sanitize=true[Local Cluster Mode,450,480,align="center"]
 
@@ -12,7 +12,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-jdbc {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-jdbc {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -20,9 +20,9 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-jdbc</artifactId>
-    <version>{crux_version}</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-jdbc</artifactId>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -31,24 +31,24 @@ pom.xml::
 
 JDBC transaction logs and document stores depend on a 'connection pool' component - if you use both, they can share the same connection pool.
 
-Connection pools require a JDBC 'dialect' - out of the box, Crux supports the following:
+Connection pools require a JDBC 'dialect' - out of the box, XTDB supports the following:
 
 [#dialects]
-* H2: `+crux.jdbc.h2/->dialect+`
-* MySQL: `+crux.jdbc.mysql/->dialect+`
-* Microsoft SQL Server: `+crux.jdbc.mssql/->dialect+`
-* Oracle: `+crux.jdbc.oracle/->dialect+`
-* PostgreSQL: `+crux.jdbc.psql/->dialect+`
-* SQLite: `+crux.jdbc.sqlite/->dialect+`
+* H2: `+xtdb.jdbc.h2/->dialect+`
+* MySQL: `+xtdb.jdbc.mysql/->dialect+`
+* Microsoft SQL Server: `+xtdb.jdbc.mssql/->dialect+`
+* Oracle: `+xtdb.jdbc.oracle/->dialect+`
+* PostgreSQL: `+xtdb.jdbc.psql/->dialect+`
+* SQLite: `+xtdb.jdbc.sqlite/->dialect+`
 
-Each of these also require an additional dependency to pull in the relevant JDBC driver - see the Crux JDBC https://github.com/juxt/crux/blob/master/crux-jdbc/project.clj[project.clj] for our latest dependencies.
+Each of these also require an additional dependency to pull in the relevant JDBC driver - see the XTDB JDBC https://github.com/xtdb/xtdb/blob/master/modules/jdbc/project.clj[project.clj] for our latest dependencies.
 
 [#db-spec]
 The connection pool also requires a `db-spec` - a map containing either a full `jdbcUrl` or its component parts, including `dbtype` (provided by the dialect by default), `host`, `port`, `dbname`.
 Any other attributes supplied (`user`, `password`, say) are appended to the URL as query parameters - see your individual JDBC driver for full details.
 
 [#pool-opts]
-Crux uses https://github.com/brettwooldridge/HikariCP[HikariCP] to provide connection pools.
+XTDB uses https://github.com/brettwooldridge/HikariCP[HikariCP] to provide connection pools.
 You can pass options directly to https://javadoc.io/static/com.zaxxer/HikariCP/3.2.0/com/zaxxer/hikari/HikariConfig.html[`HikariConfig`] via `pool-opts` - for example, to `setMaximumPoolSize`, add `maximumPoolSize` to your configuration.
 
 === JDBC as a Transaction Log
@@ -60,11 +60,11 @@ JSON::
 [source,json]
 ----
 {
-  "crux/tx-log": {
-    "crux/module": "crux.jdbc/->tx-log",
+  "xtdb/tx-log": {
+    "xtdb/module": "xtdb.jdbc/->tx-log",
     "connection-pool": {
       "dialect": {
-        "crux/module": "crux.jdbc.psql/->dialect"
+        "xtdb/module": "xtdb.jdbc.psql/->dialect"
       },
       "pool-opts": { ... },
       "db-spec": {
@@ -89,8 +89,8 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/tx-log {:crux/module 'crux.jdbc/->tx-log
-               :connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
+{:xtdb/tx-log {:xtdb/module 'xtdb.jdbc/->tx-log
+               :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect}
                                  :pool-opts { ... }
                                  :db-spec {:jdbcUrl "..."
                                            ;; OR
@@ -107,8 +107,8 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/tx-log {:crux/module crux.jdbc/->tx-log
-               :connection-pool {:dialect {:crux/module crux.jdbc.psql/->dialect}
+{:xtdb/tx-log {:xtdb/module xtdb.jdbc/->tx-log
+               :connection-pool {:dialect {:xtdb/module xtdb.jdbc.psql/->dialect}
                                  :pool-opts { ... }
                                  :db-spec {:jdbcUrl "..."
                                            ;; OR
@@ -131,11 +131,11 @@ JSON::
 [source,json]
 ----
 {
-  "crux/document-store": {
-    "crux/module": "crux.jdbc/->document-store",
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.jdbc/->document-store",
     "connection-pool": {
       "dialect": {
-        "crux/module": "crux.jdbc.psql/->dialect"
+        "xtdb/module": "xtdb.jdbc.psql/->dialect"
       },
       "pool-opts": { ... },
       "db-spec": { ... }
@@ -150,8 +150,8 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module 'crux.jdbc/->document-store
-                       :connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
+{:xtdb/document-store {:xtdb/module 'xtdb.jdbc/->document-store
+                       :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect}
                                          :pool-opts { ... }
                                          :db-spec { ... }}}
  ...}
@@ -161,8 +161,8 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module crux.jdbc/->document-store
-                       :connection-pool {:dialect {:crux/module crux.jdbc.psql/->dialect}
+{:xtdb/document-store {:xtdb/module xtdb.jdbc/->document-store
+                       :connection-pool {:dialect {:xtdb/module xtdb.jdbc.psql/->dialect}
                                          :pool-opts { ... }
                                          :db-spec { ... }}}
  ...}
@@ -180,23 +180,23 @@ JSON::
 [source,json]
 ----
 {
-  "crux.jdbc/connection-pool": {
+  "xtdb.jdbc/connection-pool": {
     "dialect": {
-      "crux/module": "crux.jdbc.psql/->dialect"
+      "xtdb/module": "xtdb.jdbc.psql/->dialect"
     },
     "pool-opts": { ... },
     "db-spec": { ... }
   },
 
 
-  "crux/document-store": {
-    "crux/module": "crux.jdbc/->document-store",
-    "connection-pool": "crux.jdbc/connection-pool"
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.jdbc/->document-store",
+    "connection-pool": "xtdb.jdbc/connection-pool"
   },
 
-  "crux/tx-log": {
-    "crux/module": "crux.jdbc/->tx-log",
-    "connection-pool": "crux.jdbc/connection-pool"
+  "xtdb/tx-log": {
+    "xtdb/module": "xtdb.jdbc/->tx-log",
+    "connection-pool": "xtdb.jdbc/connection-pool"
   },
 
   ...
@@ -207,13 +207,13 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.jdbc/connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
+{:xtdb.jdbc/connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect}
                              :pool-opts { ... }
                              :db-spec { ... }}
- :crux/tx-log {:crux/module 'crux.jdbc/->tx-log
-               :connection-pool :crux.jdbc/connection-pool}
- :crux/document-store {:crux/module 'crux.jdbc/->document-store
-                       :connection-pool :crux.jdbc/connection-pool}
+ :xtdb/tx-log {:xtdb/module 'xtdb.jdbc/->tx-log
+               :connection-pool :xtdb.jdbc/connection-pool}
+ :xtdb/document-store {:xtdb/module 'xtdb.jdbc/->document-store
+                       :connection-pool :xtdb.jdbc/connection-pool}
  ...}
 ----
 
@@ -221,32 +221,32 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux.jdbc/connection-pool {:dialect {:crux/module crux.jdbc.psql/->dialect}
+{:xtdb.jdbc/connection-pool {:dialect {:xtdb/module xtdb.jdbc.psql/->dialect}
                              :pool-opts { ... }
                              :db-spec { ... }}
- :crux/tx-log {:crux/module crux.jdbc/->tx-log
-               :connection-pool :crux.jdbc/connection-pool}
- :crux/document-store {:crux/module crux.jdbc/->document-store
-                       :connection-pool :crux.jdbc/connection-pool}
+ :xtdb/tx-log {:xtdb/module xtdb.jdbc/->tx-log
+               :connection-pool :xtdb.jdbc/connection-pool}
+ :xtdb/document-store {:xtdb/module xtdb.jdbc/->document-store
+                       :connection-pool :xtdb.jdbc/connection-pool}
  ...}
 ----
 ====
 
 == Parameters
 
-=== Connection pool (`+crux.jdbc/->connection-pool+`)
+=== Connection pool (`+xtdb.jdbc/->connection-pool+`)
 
 * `dialect` (dialect, required): JDBC xref:#dialects[dialect]
 * `pool-opts` (map): see xref:#pool-opts[above]
 * `db-spec` (map, required): see xref:#db-spec[above]
 
 
-=== Transaction log (`+crux.jdbc/->tx-log+`)
+=== Transaction log (`+xtdb.jdbc/->tx-log+`)
 
 * `connection-pool`
 * `poll-sleep-duration` (string/`Duration`, default 100 milliseconds, `"PT0.1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
 
-=== Document store (`+crux.jdbc/->document-store+`)
+=== Document store (`+xtdb.jdbc/->document-store+`)
 
 * `connection-pool`
 * `cache-size` (int): size of in-memory document cache

@@ -1,5 +1,5 @@
-= Crux-in-a-Box (on RocksDB)
-:page-subtitle: The simplest possible Crux setup
+= XTDB-in-a-Box (on RocksDB)
+:page-subtitle: The simplest possible XTDB setup
 :page-author: Steven Deobald
 :page-header: aurora-1197753_1920.jpg
 :page-published: 2021-03-10T22:55Z
@@ -7,10 +7,10 @@
 
 == Introduction
 
-This guide will show you how to set up Crux with the following properties:
+This guide will show you how to set up XTDB with the following properties:
 
 . Disk: Records persist to disk
-. One node: Only one Crux node is configured
+. One node: Only one XTDB node is configured
 . Storage: RocksDB is used for all 3 stores (tx-log, doc-store, and index-store)
 
 This guide will not discuss high-availability, failover/clustering/replication, or backups. You can use this simple RocksDB configuration in production and back it up as you would any other volume. If you want more advanced features, however, you should consider the xref:reference::kafka.adoc[Kafka] and/or xref:reference::jdbc.adoc[JDBC] modules.
@@ -28,7 +28,7 @@ Ensure you are using Java 8 or higher:
 java -version
 ----
 
-Add Crux to your Clojure or Java project:
+Add XTDB to your Clojure or Java project:
 
 [tabs]
 ====
@@ -36,29 +36,29 @@ deps.edn::
 +
 [source,clojure,subs=attributes+]
 ----
-pro.juxt.crux/crux-core {:mvn/version "{crux_version}"}
-pro.juxt.crux/crux-rocksdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{xtdb_version}"}
 ----
 project.clj::
 +
 [source,clojure,subs=attributes+]
 ----
-[pro.juxt.crux/crux-core "{crux_version}"]
-[pro.juxt.crux/crux-rocksdb "{crux_version}"]
+[com.xtdb/xtdb-core "{xtdb_version}"]
+[com.xtdb/xtdb-rocksdb "{xtdb_version}"]
 ----
 pom.xml::
 +
 [source,xml,subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-core</artifactId>
-    <version>{crux_version}</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-core</artifactId>
+    <version>{xtdb_version}</version>
 </dependency>
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-rocksdb</artifactId>
-    <version>{crux_version}</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-rocksdb</artifactId>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -70,7 +70,7 @@ pom.xml::
 
 Ignore this note if you just want to get up and running quickly. It's completely optional, but nice to have.
 
-Without setting up logging, you will see a `SLF4J: Defaulting to no-operation (NOP) logger implementation` message on STDOUT from Crux. This is harmless, but in a real application you will want to configure `Logback` with the http://www.slf4j.org[SLF4J] API to see INFO messages from Crux.
+Without setting up logging, you will see a `SLF4J: Defaulting to no-operation (NOP) logger implementation` message on STDOUT from XTDB. This is harmless, but in a real application you will want to configure `Logback` with the http://www.slf4j.org[SLF4J] API to see INFO messages from XTDB.
 
 To do this in Clojure:
 
@@ -85,11 +85,11 @@ To do this in Java:
 . Create a https://github.com/deobald/crux-in-a-box/blob/1ba9ed4d85bd15e90adec46b19523b262f8480ae/java/src/main/resources/logback.xml[`crux-in-a-box/src/main/resources/logback.xml`] file
 ====
 
-=== 2. Configure Crux
+=== 2. Configure XTDB
 
 This guide gets you up and running quickly by hard-coding configuration values. Store these configuration values with your favourite configuration library. In Clojure, you might use  https://github.com/juxt/aero[Aero].
 
-This guide also does not make any assumptions about how you manage stateful services. Crux is a stateful service, however, and you should store the Crux node in your favourite state management library. In Clojure, you might use https://github.com/tolitius/mount[Mount].
+This guide also does not make any assumptions about how you manage stateful services. XTDB is a stateful service, however, and you should store the XTDB node in your favourite state management library. In Clojure, you might use https://github.com/tolitius/mount[Mount].
 
 [tabs]
 ====
@@ -97,41 +97,40 @@ Clojure::
 +
 [source,clojure,subs=attributes+]
 ----
-(ns crux-in-a-box.db
+(ns xtdb-in-a-box.db
   (:require [clojure.java.io :as io]
-            [crux.api :as crux]))
+            [xtdb.api :as xt]))
 
-(defn start-crux! []
+(defn start-xtdb! []
   (letfn [(kv-store [dir]
-            {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                        :db-dir      (io/file dir)
-                        :sync?       true}})]
-    (crux/start-node
-     {:crux/tx-log              (kv-store "data/dev/tx-log")
-      :crux/document-store      (kv-store "data/dev/doc-store")
-      :crux/index-store         (kv-store "data/dev/index-store")})))
+            {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
+                        :db-dir (io/file dir)
+                        :sync? true}})]
+    (xt/start-node
+     {:xtdb/tx-log (kv-store "data/dev/tx-log")
+      :xtdb/document-store (kv-store "data/dev/doc-store")
+      :xtdb/index-store (kv-store "data/dev/index-store")})))
 
-(def crux-node (start-crux!))
+(def xtdb-node (start-xtdb!))
 
-(defn stop-crux! []
-  (.close crux-node))
+(defn stop-xtdb! []
+  (.close xtdb-node))
 
 ----
 Java::
 +
 [source,java,subs=attributes+]
 ----
-package cruxinabox;
+package xtdbinabox;
 
 import java.io.File;
 import java.io.IOException;
-import crux.api.Crux;
-import crux.api.ICruxAPI;
+import xtdb.api.IXtdb;
 
 class Box {
     public static void main(String[] args) {
-        try(ICruxAPI cruxNode = Crux.startNode(new File("config.json"))) {
-            System.out.println("Crux Started.");
+        try(IXtdb xtdbNode = IXtdb.startNode(new File("config.json"))) {
+            System.out.println("XTDB Started.");
         }
         catch (IOException e) {
             // ...
@@ -145,28 +144,28 @@ config.json::
 [source,json,subs=attributes+]
 ----
 {
-  "crux/index-store": {
+  "xtdb/index-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
       "db-dir": "data/index-store"
     }
   },
-  "crux/document-store": {
+  "xtdb/document-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
       "db-dir": "data/doc-store"
     }
   },
-  "crux/tx-log": {
+  "xtdb/tx-log": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
       "db-dir": "data/tx-log"
     }
   },
-  "crux.lucene/lucene-store": {
+  "xtdb.lucene/lucene-store": {
     "db-dir": "data/dev/lucene-dir"
   },
-  "crux.http-server/server": {
+  "xtdb.http-server/server": {
     "port": 9999
   }
 }
@@ -176,7 +175,7 @@ config.json::
 
 === 3. Take it for a test drive
 
-Time to play with your new Crux node. Try inserting some data, query it back out, and then shut down your node. This guide is not meant to teach you Datalog, the Crux API, or Crux query semantics -- you can look through the Tutorial and Reference Docs to dig deeper. But you should note that Crux is _asynchronous by default_. That means `submit-tx` returns immediately, even if your document hasn't been indexed yet. It's unlikely your query will come back empty, but don't be shocked if it does. Just try it again.
+Time to play with your new XTDB node. Try inserting some data, query it back out, and then shut down your node. This guide is not meant to teach you Datalog, the XTDB API, or XTDB query semantics -- you can look through the Tutorial and Reference Docs to dig deeper. But you should note that XTDB is _asynchronous by default_. That means `submit-tx` returns immediately, even if your document hasn't been indexed yet. It's unlikely your query will come back empty, but don't be shocked if it does. Just try it again.
 
 [tabs]
 ====
@@ -184,34 +183,34 @@ Clojure REPL::
 +
 [source,clojure,subs=attributes+]
 ----
-crux-in-a-box.db> (crux/submit-tx crux-node [[:crux.tx/put
-                                              {:crux.db/id "hi2u"
-                                               :user/name "zig"}]])
-;; => #:crux.tx{:tx-id 0, :tx-time #inst "2021-03-11T02:27:09.176-00:00"}
-crux-in-a-box.db> (crux/q (crux/db crux-node) '{:find [e]
-                                                :where [[e :user/name "zig"]]} )
+xtdb-in-a-box.db> (xt/submit-tx xtdb-node [[::xt/put
+                                            {:xt/id "hi2u"
+                                             :user/name "zig"}]])
+;; => #::xt{:tx-id 0, :tx-time #inst "2021-03-11T02:27:09.176-00:00"}
+xtdb-in-a-box.db> (xt/q (xt/db xtdb-node) '{:find [e]
+                                            :where [[e :user/name "zig"]]} )
 ;; => #{["hi2u"]}
-crux-in-a-box.db> (stop-crux!)
+xtdb-in-a-box.db> (stop-xtdb!)
 ;; => nil
 ----
 Java::
 +
 [source,java,subs=attributes+]
 ----
-/* include these imports in addition to those you used to configure crux: */
+/* include these imports in addition to those you used to configure XTDB: */
 import java.util.HashMap;
 import java.util.List;
 
-import crux.api.ICruxDatasource;
-import crux.api.ICursor;
-import crux.api.CruxDocument;
-import crux.api.TransactionInstant;
-import crux.api.tx.Transaction;
+import xtdb.api.IXtdbDatasource;
+import xtdb.api.ICursor;
+import xtdb.api.XtdbDocument;
+import xtdb.api.TransactionInstant;
+import xtdb.api.tx.Transaction;
 
 /* submitTx example: */
 HashMap<String, Object> data = new HashMap<>();
 data.put("user/name", "zig");
-CruxDocument document = CruxDocument.create("hi2u", data);
+XtdbDocument document = XtdbDocument.create("hi2u", data);
 TransactionInstant transaction = node.submitTx(Transaction.buildTx(tx -> {
     tx.put(document);
 }));
@@ -220,7 +219,7 @@ System.out.println(data.toString());
 /* query example: */
 node.awaitTx(transaction, null);
 String query = "{:find [e] :where [[e :user/name \"zig\"]]}";
-ICruxDatasource db = node.db();
+IXtdbDatasource db = node.db();
 ICursor<List<?>> results = db.openQuery(query);
 if (results.hasNext()) {
     List<?> result = results.next();
@@ -233,4 +232,4 @@ node.close();
 
 == Considerations
 
-This is a simple Crux setup with a small footprint. You could use this setup to build a small greenfield project or replace an existing Postgres, MySQL, or MongoDB installation which currently supports CRUD or reference data. With Crux, that database can grow with you. When it eventually requires streaming, replication, or high availability, you can migrate from RocksDB to Kafka or JDBC. But you don't need to involve those modules up-front unless you're sure you need them.
+This is a simple XTDB setup with a small footprint. You could use this setup to build a small greenfield project or replace an existing Postgres, MySQL, or MongoDB installation which currently supports CRUD or reference data. With XTDB, that database can grow with you. When it eventually requires streaming, replication, or high availability, you can migrate from RocksDB to Kafka or JDBC. But you don't need to involve those modules up-front unless you're sure you need them.

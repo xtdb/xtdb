@@ -1,6 +1,6 @@
 = Embedded Kafka
 
-Crux is ready to work with an embedded Kafka for when you don't have an independently
+XTDB is ready to work with an embedded Kafka for when you don't have an independently
 running Kafka available to connect to (such as during development).
 
 [#embedded-kafka-dependency]
@@ -8,8 +8,8 @@ running Kafka available to connect to (such as during development).
 
 [source,clojure,subs=attributes+]
 ----
-pro.juxt.crux/crux-core {:mvn/version "{crux_version}"}
-pro.juxt.crux/crux-kafka-embedded {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-kafka-embedded {:mvn/version "{xtdb_version}"}
 ----
 
 [#embedded-kafka-start]
@@ -17,14 +17,14 @@ pro.juxt.crux/crux-kafka-embedded {:mvn/version "{crux_version}"}
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=require-ek]
+include::example$test/xtdb/docs/examples_test.clj[tags=require-ek]
 
-include::example$test/crux/docs/examples_test.clj[tags=ek-example]
+include::example$test/xtdb/docs/examples_test.clj[tags=ek-example]
 ----
 
 You can later stop the Embedded Kafka if you wish:
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=ek-close]
+include::example$test/xtdb/docs/examples_test.clj[tags=ek-close]
 ----

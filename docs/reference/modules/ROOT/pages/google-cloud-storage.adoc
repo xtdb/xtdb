@@ -1,12 +1,12 @@
 = Google Cloud Storage
 
-You can use Google's Cloud Storage (GCS) as Crux's 'document store' or 'checkpoint store'.
+You can use Google's Cloud Storage (GCS) as XTDB's 'document store' or 'checkpoint store'.
 
 Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
 
 == Project Dependency
 
-In order to use GCS within Crux, you must first add this module as a project dependency:
+In order to use GCS within XTDB, you must first add this module as a project dependency:
 
 [tabs]
 ====
@@ -14,7 +14,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-google-cloud-storage {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-google-cloud-storage {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -22,16 +22,16 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-google-cloud-storage</artifactId>
-    <version>{crux_version}</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-google-cloud-storage</artifactId>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
 
 == Using GCS
 
-Replace the implementation of the document store with `+crux.google.cloud-storage/->document-store+`
+Replace the implementation of the document store with `+xtdb.google.cloud-storage/->document-store+`
 
 [tabs]
 ====
@@ -40,8 +40,8 @@ JSON::
 [source,json]
 ----
 {
-  "crux/document-store": {
-    "crux/module": "crux.google.cloud-storage/->document-store",
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.google.cloud-storage/->document-store",
     "root-path": "gs://bucket/prefix"
   },
 }
@@ -51,7 +51,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module 'crux.google.cloud-storage/->document-store
+{:xtdb/document-store {:xtdb/module 'xtdb.google.cloud-storage/->document-store
                        :root-path "gs://bucket/prefix"}}
 ----
 
@@ -59,7 +59,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module crux.google.cloud-storage/->document-store
+{:xtdb/document-store {:xtdb/module xtdb.google.cloud-storage/->document-store
                        :root-path "gs://bucket/prefix"}}
 ----
 ====
@@ -78,14 +78,14 @@ Follow the GCS https://github.com/googleapis/google-cloud-java#authentication[Au
 
 GCS can be used as a query index xref:checkpointing.adoc[checkpoint store].
 
-Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on GCS to remove older checkpoints.
+Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on GCS to remove older checkpoints.
 
 [source,clojure]
 ----
-;; under :crux/index-store -> :kv-store -> :checkpointer
+;; under :xtdb/index-store -> :kv-store -> :checkpointer
 ;; see the Checkpointing guide for other parameters
 {:checkpointer {...
-                :store {:crux/module 'crux.google.cloud-storage/->checkpoint-store
+                :store {:xtdb/module 'xtdb.google.cloud-storage/->checkpoint-store
                         :path "gs://bucket/prefix"}}
 ----
 

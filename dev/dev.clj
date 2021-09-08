@@ -1,17 +1,17 @@
 (ns dev
-  "Internal development namespace for Crux. For end-user usage, see
+  "Internal development namespace for XTDB. For end-user usage, see
   examples.clj"
-  (:require [crux.api :as crux]
+  (:require [xtdb.api :as xt]
             [integrant.core :as i]
             [integrant.repl.state :refer [system]]
             [integrant.repl :as ir :refer [go halt reset reset-all]]
-            [crux.io :as cio]
-            [crux.lucene]
-            [crux.kafka :as k]
-            [crux.kafka.embedded :as ek]
-            [crux.rocksdb :as rocks]
+            [xtdb.io :as xio]
+            [xtdb.lucene]
+            [xtdb.kafka :as k]
+            [xtdb.kafka.embedded :as ek]
+            [xtdb.rocksdb :as rocks]
             [clojure.java.io :as io])
-  (:import (crux.api ICruxAPI)
+  (:import (xtdb.api IXtdb)
            java.io.Closeable
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory))
@@ -38,31 +38,31 @@
 (def dev-node-dir
   (io/file "dev/dev-node"))
 
-(defmethod i/init-key ::crux [_ {:keys [node-opts]}]
-  (crux/start-node node-opts))
+(defmethod i/init-key ::xtdb [_ {:keys [node-opts]}]
+  (xt/start-node node-opts))
 
-(defmethod i/halt-key! ::crux [_ ^ICruxAPI node]
+(defmethod i/halt-key! ::xtdb [_ ^IXtdb node]
   (.close node))
 
 (def standalone-config
-  {::crux {:node-opts {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
+  {::xtdb {:node-opts {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                      :db-dir (io/file dev-node-dir "indexes"),
-                                                     :block-cache :crux.rocksdb/block-cache}}
-                       :crux/document-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                     :block-cache :xtdb.rocksdb/block-cache}}
+                       :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                         :db-dir (io/file dev-node-dir "documents")
-                                                        :block-cache :crux.rocksdb/block-cache}}
-                       :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
+                                                        :block-cache :xtdb.rocksdb/block-cache}}
+                       :xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store,
                                                 :db-dir (io/file dev-node-dir "tx-log")
-                                                :block-cache :crux.rocksdb/block-cache}}
-                       :crux.rocksdb/block-cache {:crux/module `rocks/->lru-block-cache
+                                                :block-cache :xtdb.rocksdb/block-cache}}
+                       :xtdb.rocksdb/block-cache {:xtdb/module `rocks/->lru-block-cache
                                                   :cache-size (* 128 1024 1024)}
-                       :crux.metrics.jmx/reporter {}
-                       :crux.http-server/server {}
-                       :crux.lucene/lucene-store {:db-dir (io/file dev-node-dir "lucene")}}}})
+                       :xtdb.metrics.jmx/reporter {}
+                       :xtdb.http-server/server {}
+                       :xtdb.lucene/lucene-store {:db-dir (io/file dev-node-dir "lucene")}}}})
 
 (defmethod i/init-key ::embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
   (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
-                                 :zookeeper-port (cio/free-port)
+                                 :zookeeper-port (xio/free-port)
                                  :kafka-log-dir (io/file kafka-dir "kafka-log")
                                  :kafka-port kafka-port}))
 
@@ -70,21 +70,21 @@
   (.close embedded-kafka))
 
 (def embedded-kafka-config
-  (let [kafka-port (cio/free-port)]
+  (let [kafka-port (xio/free-port)]
     {::embedded-kafka {:kafka-port kafka-port
                        :kafka-dir (io/file dev-node-dir "kafka")}
-     ::crux {:ek (i/ref ::embedded-kafka)
+     ::xtdb {:ek (i/ref ::embedded-kafka)
              :node-opts {::k/kafka-config {:bootstrap-servers (str "http://localhost:" kafka-port)}
-                         :crux/index-store {:kv-store {:crux/module `rocks/->kv-store
+                         :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store
                                                        :db-dir (io/file dev-node-dir "ek-indexes")}}
-                         :crux/document-store {:crux/module `k/->document-store,
+                         :xtdb/document-store {:xtdb/module `k/->document-store,
                                                :kafka-config ::k/kafka-config
-                                               :local-document-store {:kv-store {:crux/module `rocks/->kv-store,
+                                               :local-document-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                                                  :db-dir (io/file dev-node-dir "ek-documents")}}}
-                         :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config}}}}))
+                         :xtdb/tx-log {:xtdb/module `k/->tx-log, :kafka-config ::k/kafka-config}}}}))
 
 ;; swap for `embedded-kafka-config` to use embedded-kafka
 (ir/set-prep! (fn [] standalone-config))
 
-(defn crux-node []
-  (::crux system))
+(defn xtdb-node []
+  (::xtdb system))

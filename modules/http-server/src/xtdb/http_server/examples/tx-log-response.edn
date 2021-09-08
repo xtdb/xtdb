@@ -1,0 +1,12 @@
+^:results-cursor ({:xtdb.api/tx-id 0,
+                   :xtdb.api/tx-time #inst "2020-10-16T09:02:43.429-00:00",
+                   :xtdb.api/tx-events [[:xtdb.api/put
+	  		                                 #xtdb/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
+			                                   #xtdb/id "f441402b3c5d37365203947aabe85cf471498bf0"
+			                                   #inst "2020-06-20T20:05:50.000-00:00"]]}
+                  {:xtdb.api/tx-id 1,
+                   :xtdb.api/tx-time #inst "2020-10-16T09:28:27.785-00:00",
+                   :xtdb.api/tx-events [[:xtdb.api/put
+                                         #xtdb/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
+                                         #xtdb/id "f441402b3c5d37365203947aabe85cf471498bf0"
+                                         #inst "2020-06-20T20:05:50.000-00:00"]]})

@@ -1,12 +1,12 @@
 = Azure Blobs
 
-You can use Azure's Blob Storage as Crux's 'document store'.
+You can use Azure's Blob Storage as XTDB's 'document store'.
 
 Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
 
 == Project Dependency
 
-In order to use Blob Storage within Crux, you must first add this module as a project dependency:
+In order to use Blob Storage within XTDB, you must first add this module as a project dependency:
 
 [tabs]
 ====
@@ -14,7 +14,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-azure-blobs {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-azure-blobs {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -22,16 +22,16 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-azure-blobs</artifactId>
-    <version>{crux_version}</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-azure-blobs</artifactId>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
 
 == Using Azure Blobs
 
-Replace the implementation of the document store with `+crux.azure.blobs/->document-store+`
+Replace the implementation of the document store with `+xtdb.azure.blobs/->document-store+`
 
 [tabs]
 ====
@@ -40,8 +40,8 @@ JSON::
 [source,json]
 ----
 {
-  "crux/document-store": {
-    "crux/module": "crux.azure.blobs/->document-store",
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.azure.blobs/->document-store",
     "sas-token": "your-sas-token",
     "storage-account": "your-storage-account",
     "container": "your-container-name"
@@ -53,7 +53,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module 'crux.azure.blobs/->document-store
+{:xtdb/document-store {:xtdb/module 'xtdb.azure.blobs/->document-store
                        :sas-token "your-sas-token"
                        :storage-account "your-storage-account"
                        :container "your-container-name"}}
@@ -63,7 +63,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module crux.azure.blobs/->document-store
+{:xtdb/document-store {:xtdb/module xtdb.azure.blobs/->document-store
                        :sas-token "your-sas-token"
                        :storage-account "your-storage-account"
                        :container "your-container-name"}}

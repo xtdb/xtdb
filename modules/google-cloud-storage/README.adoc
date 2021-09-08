@@ -1,0 +1,23 @@
+= xtdb-google-cloud-storage
+
+This XTDB module allows you to use Google's Cloud Storage as XTDB's 'document store' and/or 'checkpoint store'.
+
+.deps.edn
+[source,clojure]
+----
+com.xtdb/xtdb-google-cloud-storage {:mvn/version "1.18.1"}
+----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-google-cloud-storage</artifactId>
+    <version>1.18.1</version>
+</dependency>
+----
+
+Follow the GCS https://github.com/googleapis/google-cloud-java#authentication[Authentication Guide] to get set up.
+
+For more details, see the https://xtdb.com/reference/google-cloud-storage.html[Google Cloud Storage documentation]

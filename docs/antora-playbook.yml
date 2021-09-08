@@ -1,7 +1,7 @@
 site:
-  title: Crux
+  title: XTDB
   start_page: reference::index.adoc
-  url: https://opencrux.com/
+  url: https://xtdb.com/
 content:
   sources:
     - url: ../
@@ -21,7 +21,7 @@ content:
     - url: ../
       start_path: docs/articles
       branches: master
-    # TODO: the remaining components do not belong in crux/docs:
+    # TODO: the remaining components do not belong in xtdb/docs:
     - url: ../
       start_path: docs/community
       branches: master

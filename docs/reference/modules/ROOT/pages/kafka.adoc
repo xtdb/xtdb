@@ -1,7 +1,7 @@
 = Kafka Nodes
 
-When using Crux at scale it is recommended to use multiple Crux nodes connected via a Kafka cluster. Use of multiple nodes provides availability and Kafka itself provides strong fault-tolerance guarantees.
-Kafka can be used for Crux's transaction log and document store components.
+When using XTDB at scale it is recommended to use multiple XTDB nodes connected via a Kafka cluster. Use of multiple nodes provides availability and Kafka itself provides strong fault-tolerance guarantees.
+Kafka can be used for XTDB's transaction log and document store components.
 
 image::local-cluster-mode.svg?sanitize=true[Local Cluster Mode,450,150,align="center"]
 
@@ -22,7 +22,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-kafka {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-kafka {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -30,9 +30,9 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-kafka</artifactId>
-    <version>{crux_version}</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-kafka</artifactId>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
@@ -48,8 +48,8 @@ JSON::
 [source,json]
 ----
 {
-  "crux/tx-log": {
-    "crux/module": "crux.kafka/->tx-log",
+  "xtdb/tx-log": {
+    "xtdb/module": "xtdb.kafka/->tx-log",
     "kafka-config": {
       "bootstrap-servers": "localhost:9092",
       ...
@@ -71,7 +71,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/tx-log {:crux/module 'crux.kafka/->tx-log
+{:xtdb/tx-log {:xtdb/module 'xtdb.kafka/->tx-log
                :kafka-config {:bootstrap-servers "localhost:9092"}
                :tx-topic-opts {:topic-name "crux-transaction-log"}
                :poll-wait-duration (Duration/ofSeconds 1)}
@@ -82,7 +82,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/tx-log {:crux/module crux.kafka/->tx-log
+{:xtdb/tx-log {:xtdb/module xtdb.kafka/->tx-log
                :kafka-config {:bootstrap-servers "localhost:9092"}
                :tx-topic-opts {:topic-name "crux-transaction-log"}
                :poll-wait-duration "PT1S"}
@@ -99,8 +99,8 @@ JSON::
 [source,json]
 ----
 {
-  "crux/document-store": {
-    "crux/module": "crux.kafka/->document-store",
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.kafka/->document-store",
     "kafka-config": {
       "bootstrap-servers": "localhost:9092",
       ...
@@ -111,7 +111,7 @@ JSON::
     },
     "local-document-store": {
       "kv-store": {
-        "crux/module": "crux.rocksdb/->kv-store",
+        "xtdb/module": "xtdb.rocksdb/->kv-store",
         "db-dir": "/tmp/rocksdb"
       }
     },
@@ -126,12 +126,12 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module 'crux.kafka/->document-store
+{:xtdb/document-store {:xtdb/module 'xtdb.kafka/->document-store
                        :kafka-config {:bootstrap-servers "localhost:9092"
                                       ...}
                        :doc-topic-opts {:topic-name "crux-docs"
                                         ...}
-                       :local-document-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                       :local-document-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
                                                          :db-dir (io/file "/tmp/rocksdb")}}
                        :poll-wait-duration (Duration/ofSeconds 1)}
  ...}
@@ -141,19 +141,19 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module crux.kafka/->document-store
+{:xtdb/document-store {:xtdb/module xtdb.kafka/->document-store
                        :kafka-config {:bootstrap-servers "localhost:9092"
                                       ...}
                        :doc-topic-opts {:topic-name "crux-docs"
                                         ...}
-                       :local-document-store {:kv-store {:crux/module crux.rocksdb/->kv-store
+                       :local-document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
                                                          :db-dir "/tmp/rocksdb"}}
                        :poll-wait-duration "PT1S"}
  ...}
 ----
 ====
 
-If you do not want the local node to index transactions, you can use the xref:ingest-only-doc-store[`+crux.kafka/->ingest-only-document-store+`] module.
+If you do not want the local node to index transactions, you can use the xref:submit-only-doc-store[`+xtdb.kafka/->submit-only-document-store+`] module.
 
 ==== Sharing the local KV store
 
@@ -167,18 +167,18 @@ JSON::
 ----
 {
   "local-rocksdb": {
-    "crux/module": "crux.rocksdb/->kv-store",
+    "xtdb/module": "xtdb.rocksdb/->kv-store",
     "db-dir": "/tmp/rocksdb"
   },
 
-  "crux/document-store": {
+  "xtdb/document-store": {
     ...
     "local-document-store": {
       "kv-store": "local-rocksdb"
     }
   },
 
-  "crux/index-store": {
+  "xtdb/index-store": {
     "kv-store": "local-rocksdb"
   }
 
@@ -191,11 +191,11 @@ Clojure::
 [source,clojure]
 ----
 {...
- :local-rocksdb {:crux/module 'crux.rocksdb/->kv-store
+ :local-rocksdb {:xtdb/module 'xtdb.rocksdb/->kv-store
                  :db-dir (io/file "/tmp/rocksdb")}
- :crux/document-store {...
+ :xtdb/document-store {...
                        :local-document-store {:kv-store :local-rocksdb}}
- :crux/index-store {:kv-store :local-rocksdb}}
+ :xtdb/index-store {:kv-store :local-rocksdb}}
 ----
 
 EDN::
@@ -203,11 +203,11 @@ EDN::
 [source,clojure]
 ----
 {...
- :local-rocksdb {:crux/module crux.rocksdb/->kv-store
+ :local-rocksdb {:xtdb/module xtdb.rocksdb/->kv-store
                  :db-dir "/tmp/rocksdb"}
- :crux/document-store {...
+ :xtdb/document-store {...
                        :local-document-store {:kv-store :local-rocksdb}}
- :crux/index-store {:kv-store :local-rocksdb}}
+ :xtdb/index-store {:kv-store :local-rocksdb}}
 ----
 ====
 
@@ -223,19 +223,19 @@ JSON::
 ----
 {
   "kafka-config": {
-    "crux/module": "crux.kafka/->kafka-config",
+    "xtdb/module": "xtdb.kafka/->kafka-config",
     "bootstrap-servers": "localhost:9092",
     ...
   },
 
-  "crux/tx-log": {
-    "crux/module": "crux.kafka/->tx-log",
+  "xtdb/tx-log": {
+    "xtdb/module": "xtdb.kafka/->tx-log",
     "kafka-config": "kafka-config",
     ...
   }
 
-  "crux/document-store": {
-    "crux/module": "crux.kafka/->document-store",
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.kafka/->document-store",
     "kafka-config": "kafka-config",
     ...
   }
@@ -246,13 +246,13 @@ Clojure::
 +
 [source,clojure]
 ----
-{:kafka-config {:crux/module 'crux.kafka/->kafka-config
+{:kafka-config {:xtdb/module 'xtdb.kafka/->kafka-config
                 :bootstrap-servers "localhost:9092"
                 ...}
- :crux/tx-log {:crux/module 'crux.kafka/->tx-log
+ :xtdb/tx-log {:xtdb/module 'xtdb.kafka/->tx-log
                :kafka-config :kafka-config
                ...}
- :crux/document-store {:crux/module 'crux.kafka/->document-store
+ :xtdb/document-store {:xtdb/module 'xtdb.kafka/->document-store
                        :kafka-config :kafka-config
                        ...}}
 ----
@@ -261,13 +261,13 @@ EDN::
 +
 [source,clojure]
 ----
-{:kafka-config {:crux/module crux.kafka/->kafka-config
+{:kafka-config {:xtdb/module xtdb.kafka/->kafka-config
                 :bootstrap-servers "localhost:9092"
                 ...}
- :crux/tx-log {:crux/module crux.kafka/->tx-log
+ :xtdb/tx-log {:xtdb/module xtdb.kafka/->tx-log
                :kafka-config :kafka-config
                ...}
- :crux/document-store {:crux/module crux.kafka/->document-store
+ :xtdb/document-store {:xtdb/module xtdb.kafka/->document-store
                        :kafka-config :kafka-config
                        ...}}
 ----
@@ -275,14 +275,14 @@ EDN::
 
 == Parameters
 
-=== Connection config (`+crux.kafka/->kafka-config+`)
+=== Connection config (`+xtdb.kafka/->kafka-config+`)
 
 * `tx-topic-opts` (topic options)
 * `bootstrap-servers` (string, default `"localhost:9092"`): URL for connecting to Kafka
 * `properties-file` (string/`File`/`Path`): Kafka connection properties file, supplied directly to Kafka
 * `properties-map` (map): Kafka connection properties map, supplied directly to Kafka
 
-=== Topic options (`+crux.kafka/->topic-opts+`)
+=== Topic options (`+xtdb.kafka/->topic-opts+`)
 
 * `topic-name` (string, required, default `"tx-topic"` for tx-log, `"doc-topic"` for document-store)
 * `num-partitions` (int, default 1)
@@ -290,14 +290,14 @@ EDN::
 * `create-topics?` (boolean, default true): whether to create topics if they do not exist
 * `topic-config` (map): any further topic config to pass directly to Kafka
 
-=== Transaction log (`+crux.kafka/->tx-log+`)
+=== Transaction log (`+xtdb.kafka/->tx-log+`)
 
 * `kafka-config` (connection config)
 * `tx-topic-opts` (topic options)
 * `poll-wait-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to wait on each Kafka poll.
 * `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
 
-=== Document store (`+crux.kafka/->document-store+`)
+=== Document store (`+xtdb.kafka/->document-store+`)
 
 * `kafka-config` (connection config)
 * `doc-topic-opts` (topic options)
@@ -305,8 +305,8 @@ EDN::
 * `poll-wait-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to wait on each Kafka poll.
 * `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
 
-[#ingest-only-doc-store]
-=== Ingest-only document store (`+crux.kafka/->ingest-only-document-store+`)
+[#submit-only-doc-store]
+=== Submit-only document store (`+xtdb.kafka/->submit-only-document-store+`)
 
 * `kafka-config` (connection config)
 * `tx-topic-opts` (topic options)

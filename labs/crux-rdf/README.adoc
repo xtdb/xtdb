@@ -1,7 +1,0 @@
-= crux-rdf
-
-This project contains helpers for loading RDF triples into Crux and a
-SPARQL-to-Datalog compiler which can handle a subset of SPARQL.
-
-For tests, run `lein test` within this project directory and see
-`/crux-rdf/test/crux/`.

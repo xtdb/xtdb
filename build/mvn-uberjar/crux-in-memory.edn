@@ -1,0 +1,2 @@
+{:xtdb.http-server/server {}
+ :xtdb.calcite/server {}}

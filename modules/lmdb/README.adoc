@@ -1,0 +1,23 @@
+= xtdb-lmdb
+
+https://symas.com/lmdb/[LMDB] can be used as the data store for XTDB's query indices, but can also be used as a transaction log and/or document store in single node clusters.
+
+LMDB tends to provide faster queries than xref:rocksdb.adoc[RocksDB] in exchange for a slower ingest rate.
+
+.deps.edn
+[source,clojure]
+----
+com.xtdb/xtdb-lmdb {:mvn/version "1.18.1"}
+----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-lmdb</artifactId>
+    <version>1.18.1</version>
+</dependency>
+----
+
+For more details, see the https://xtdb.com/reference/lmdb.html[LMDB documentation]

@@ -9,11 +9,11 @@
 
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.json "1.0.0"]
-                 [pro.juxt.crux/crux-core]
-                 [pro.juxt.crux/crux-kafka]
-                 [pro.juxt.crux/crux-rocksdb]
-                 [pro.juxt.crux/crux-metrics]
-                 [pro.juxt.crux/crux-s3]
+                 [com.xtdb/xtdb-core]
+                 [com.xtdb/xtdb-kafka]
+                 [com.xtdb/xtdb-rocksdb]
+                 [com.xtdb/xtdb-metrics]
+                 [com.xtdb/xtdb-s3]
 
                  [bidi "2.1.6"]
                  [hiccup "2.0.0-alpha2"]
@@ -34,5 +34,5 @@
                  [org.apache.httpcomponents/httpclient "4.5.13"]]
 
   :jvm-opts ["-Xms3g" "-Xmx3g"]
-  :uberjar-name "crux-soak.jar"
+  :uberjar-name "xtdb-soak.jar"
   :pedantic? :warn)

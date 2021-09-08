@@ -1,6 +1,6 @@
 = Query Engine
 
-There are a number of different defaults that can be overridden within the Crux query engine.
+There are a number of different defaults that can be overridden within the XTDB query engine.
 
 [tabs]
 ====
@@ -9,7 +9,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux/query-engine": {
+  "xtdb/query-engine": {
     "fn-allow-list": ["foo/bar"]
   }
 }
@@ -19,14 +19,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/query-engine {:fn-allow-list '[foo/bar]}}
+{:xtdb/query-engine {:fn-allow-list '[foo/bar]}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/query-engine {:fn-allow-list [foo/bar]}
+{:xtdb/query-engine {:fn-allow-list [foo/bar]}
 ----
 ====
 

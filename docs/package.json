@@ -1,7 +1,7 @@
 {
-  "name": "crux-docs",
+  "name": "xtdb-docs",
   "version": "1.0.0",
-  "description": "Crux Documentation",
+  "description": "XTDB Documentation",
   "author": "JUXT",
   "dependencies": {
     "@antora/cli": "^2.3.4",

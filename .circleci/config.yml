@@ -10,11 +10,11 @@ orbs:
   go: circleci/go@0.2.0
   docker: circleci/docker@0.5.20
 
-  crux-build:
+  xtdb-build:
     commands:
       deploy-artifacts:
         parameters:
-          crux-edn:
+          xtdb-edn:
             type: string
           deps-edn:
             type: string
@@ -23,19 +23,19 @@ orbs:
         steps:
           - run:
               command: |
-                cd crux-build
-                DEPS_EDN=<<parameters.deps-edn>> CRUX_EDN=<<parameters.crux-edn>> ./build-tar.sh
-                cd crux-builder/clj-uberjar/
+                cd build
+                DEPS_EDN=<<parameters.deps-edn>> XTDB_EDN=<<parameters.xtdb-edn>> ./build-tar.sh
+                cd xtdb-builder/clj-uberjar/
                 UBERJAR_NAME=<<parameters.artifact-name>>.jar ./build-uberjar.sh
 
           - store_artifacts:
-              path: "~/crux/crux-build/crux-builder/clj-uberjar/<<parameters.artifact-name>>.jar"
+              path: "~/xtdb/build/xtdb-builder/clj-uberjar/<<parameters.artifact-name>>.jar"
               destination: "<<parameters.artifact-name>>.jar"
 
           - run:
               command: |
                 export IMAGE_NAME=juxt/<<parameters.artifact-name>>
-                cd crux-build/crux-builder/docker/
+                cd build/xtdb-builder/docker/
                 IMAGE_NAME="${IMAGE_NAME}" IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
                 echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
                 docker push "${IMAGE_NAME}:${CIRCLE_TAG}"
@@ -43,11 +43,11 @@ orbs:
         steps:
           - run:
               command: |
-                cd crux-build
+                cd build
                 ./build-tar.sh
           - store_artifacts:
-              path: ~/crux/crux-build/crux-builder.tar.gz
-              destination: crux-builder.tar.gz
+              path: ~/xtdb/build/xtdb-builder.tar.gz
+              destination: xtdb-builder.tar.gz
 
 version: 2.1
 jobs:
@@ -55,7 +55,7 @@ jobs:
     docker:
       - image: circleci/clojure:openjdk-8-lein
 
-    working_directory: ~/crux
+    working_directory: ~/xtdb
 
     environment:
       LEIN_ROOT: "true"
@@ -77,7 +77,7 @@ jobs:
 
       - run:
           command: |
-            rm -rf ~/.m2/juxt/crux-*
+            rm -rf ~/.m2/juxt/xtdb-*
             export LEIN_JVM_OPTS=-Xmx2G
             ./lein-sub install
 
@@ -96,7 +96,7 @@ jobs:
     docker:
       - image: circleci/clojure:openjdk-8-lein
 
-    working_directory: ~/crux
+    working_directory: ~/xtdb
     steps:
       - checkout
       - attach_workspace:
@@ -109,7 +109,7 @@ jobs:
     docker:
       - image: circleci/clojure:openjdk-8-lein
 
-    working_directory: ~/crux
+    working_directory: ~/xtdb
     steps:
       - checkout
       - attach_workspace:
@@ -119,13 +119,13 @@ jobs:
             ./lein-sub check
             ./lein-sub test
       - store_test_results:
-          path: "crux-test/target/test-results"
+          path: "test/target/test-results"
 
   deploy-bench:
     docker:
       - image: circleci/clojure:openjdk-8-lein
 
-    working_directory: ~/crux
+    working_directory: ~/xtdb
     steps:
         - checkout
         - attach_workspace:
@@ -133,18 +133,18 @@ jobs:
         - docker/install-docker
         - setup_remote_docker
 
-        - run: md5sum ~/crux/crux-bench/bin/download-dataset.sh > .circleci-bench-dataset-cache-key
+        - run: md5sum ~/xtdb/bench/bin/download-dataset.sh > .circleci-bench-dataset-cache-key
         - restore_cache:
             keys:
               - v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
               # fallback to using the latest cache if no exact match is found
               - v1-dataset-
 
-        - run: sh ./crux-bench/bin/download-dataset.sh
-        - run: ./lein-sub -s crux-bench uberjar
+        - run: sh ./bench/bin/download-dataset.sh
+        - run: ./lein-sub -s bench uberjar
         - run:
             command: |
-              echo 'export BUILD_ARG="--build-arg crux_commit=$CIRCLE_SHA1"' >> $BASH_ENV
+              echo 'export BUILD_ARG="--build-arg xtdb_commit=$CIRCLE_SHA1"' >> $BASH_ENV
               echo 'export BUILD_TAGS="commit-$CIRCLE_SHA1"' >> $BASH_ENV
               if [ "${CIRCLE_BRANCH}" == "master" ]; then
                 echo 'export BUILD_TAGS="master,master-$CIRCLE_SHA1,${BUILD_TAGS}"' >> $BASH_ENV
@@ -153,18 +153,18 @@ jobs:
         - aws-ecr/build-and-push-image:
               dockerfile: 'Dockerfile'
               extra-build-args: '${BUILD_ARG}'
-              path: "crux-bench/"
+              path: "bench/"
               repo: 'crux-bench'
               tag: '${BUILD_TAGS}'
         - save_cache:
             paths:
-              - ~/crux/crux-bench/data/
+              - ~/xtdb/bench/data/
             key: v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
 
-  crux-build-artifacts:
+  xtdb-build-artifacts:
     docker:
       - image: circleci/clojure:openjdk-8-tools-deps
-    working_directory: ~/crux
+    working_directory: ~/xtdb
     steps:
       - checkout
       - attach_workspace:
@@ -172,20 +172,20 @@ jobs:
       - docker/install-docker
       - setup_remote_docker
 
-      - crux-build/deploy-tar
-      - crux-build/deploy-artifacts:
-          crux-edn: "crux-in-memory.edn"
+      - xtdb-build/deploy-tar
+      - xtdb-build/deploy-artifacts:
+          xtdb-edn: "xtdb-in-memory.edn"
           deps-edn: "deps-in-memory.edn"
-          artifact-name: "crux-in-memory"
-      - crux-build/deploy-artifacts:
-          crux-edn: "crux-standalone-rocksdb.edn"
+          artifact-name: "xtdb-in-memory"
+      - xtdb-build/deploy-artifacts:
+          xtdb-edn: "xtdb-standalone-rocksdb.edn"
           deps-edn: "deps-standalone-rocksdb.edn"
-          artifact-name: "crux-standalone-rocksdb"
+          artifact-name: "xtdb-standalone-rocksdb"
 
   deploy-api-docs:
     docker:
       - image: circleci/clojure:openjdk-8-lein
-    working_directory: ~/crux
+    working_directory: ~/xtdb
     steps:
       - checkout
       - attach_workspace:
@@ -198,19 +198,19 @@ jobs:
             else
               echo 'export DOCS_PREFIX="${CIRCLE_BRANCH}"' >> $BASH_ENV
             fi
-      - run: javadoc -Xdoclint:none -d crux-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api
+      - run: javadoc -Xdoclint:none -d xtdb-javadoc/ -cp `lein classpath` -sourcepath core/src xtdb.api
       - aws-s3/sync:
           arguments: |
             --acl public-read
-          from: crux-javadoc
-          to: 's3://crux-doc/crux-javadoc/${DOCS_PREFIX}'
+          from: xtdb-javadoc
+          to: 's3://crux-doc/xtdb-javadoc/${DOCS_PREFIX}'
       - node/install
       - run:
           command: |
-            lein run -m crux.http-server.get-swagger
+            lein run -m xtdb.http-server.get-swagger
             npm install redoc-cli
             mkdir swagger-doc
-            ./node_modules/redoc-cli/index.js bundle swagger.json -o redoc/crux-redoc.html
+            ./node_modules/redoc-cli/index.js bundle swagger.json -o redoc/xtdb-redoc.html
       - aws-s3/sync:
           arguments: |
             --acl public-read
@@ -264,7 +264,7 @@ workflows:
               only: /.*/
             branches:
               ignore: /.*/
-      - crux-build-artifacts:
+      - xtdb-build-artifacts:
           requires:
             - hold
           filters:

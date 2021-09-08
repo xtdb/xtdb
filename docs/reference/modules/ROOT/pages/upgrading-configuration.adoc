@@ -2,9 +2,9 @@
 
 == Break Versioning
 
-Crux follows a https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Break Versioning] scheme.
+XTDB follows a https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Break Versioning] scheme.
 
-This versioning emphasizes the maximum amount of impact a Crux version update could have on users, and recognises that there are only two types of version bumps: those that are safe, and those that require you to carefully read the changelog.
+This versioning emphasizes the maximum amount of impact an XTDB version update could have on users, and recognises that there are only two types of version bumps: those that are safe, and those that require you to carefully read the changelog.
 
 It is intented to be comfortable to follow strictly and be reliable in practice.
 
@@ -19,10 +19,10 @@ It is intented to be comfortable to follow strictly and be reliable in practice.
 
 == Index Rebuilding
 
-Upgrading a node from Crux version `1.X.n` to `1.Y.n` (a minor bump) often requires rebuilding the node's local KV index-store from the golden stores, i.e. the transaction log and the document store.
+Upgrading a node from XTDB version `1.X.n` to `1.Y.n` (a minor bump) often requires rebuilding the node's local KV index-store from the golden stores, i.e. the transaction log and the document store.
 However, it isn't always the case that minor bumps require an index rebuild and this distinction is made clear in the release notes for a given version.
 
-You can perform the rebuild process by simply shutting down the node and removing the index-store's `db-dir` (and similarly for Lucene's `db-dir` indexes where `crux-lucene` is enabled).
-Crux will then rebuild the indices when the node is restarted.
+You can perform the rebuild process by simply shutting down the node and removing the index-store's `db-dir` (and similarly for Lucene's `db-dir` indexes where `xtdb-lucene` is enabled).
+XTDB will then rebuild the indices when the node is restarted.
 
 During development and other manual interactions, it is strongly suggested to rename or move the index directories rather than delete them, in case you need to rollback.

@@ -1,12 +1,12 @@
 = LMDB
 
-https://symas.com/lmdb/[LMDB] can be used as the data store for Crux's query indices, but can also be used as a transaction log and/or document store in single node clusters.
+https://symas.com/lmdb/[LMDB] can be used as the data store for XTDB's query indices, but can also be used as a transaction log and/or document store in single node clusters.
 
 LMDB tends to provide faster queries than xref:rocksdb.adoc[RocksDB] in exchange for a slower ingest rate.
 
 == Project Dependency
 
-In order to use LMDB within Crux, you must first add LMDB as a project dependency:
+In order to use LMDB within XTDB, you must first add LMDB as a project dependency:
 
 [tabs]
 ====
@@ -14,7 +14,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-lmdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-lmdb {:mvn/version "{xtdb_version}"}
 ----
 
 pom.xml::
@@ -22,16 +22,16 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-lmdb</artifactId>
-    <version>{crux_version}</version>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-lmdb</artifactId>
+    <version>{xtdb_version}</version>
 </dependency>
 ----
 ====
 
 == Using LMDB
 
-Replace the implementation of the desired component with `+crux.lmdb/->kv-store+`
+Replace the implementation of the desired component with `+xtdb.lmdb/->kv-store+`
 
 [tabs]
 ====
@@ -40,15 +40,15 @@ JSON::
 [source,json]
 ----
 {
-  "crux/index-store": {
+  "xtdb/index-store": {
     "kv-store": {
-      "crux/module": "crux.lmdb/->kv-store",
+      "xtdb/module": "xtdb.lmdb/->kv-store",
       "db-dir": "/tmp/lmdb"
     }
   },
 
-  "crux/document-store": { ... },
-  "crux/tx-log": { ... }
+  "xtdb/document-store": { ... },
+  "xtdb/tx-log": { ... }
 }
 ----
 
@@ -56,24 +56,24 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module 'crux.lmdb/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module 'xtdb.lmdb/->kv-store
                                :db-dir (io/file "/tmp/lmdb")}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module crux.lmdb/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module xtdb.lmdb/->kv-store
                                :db-dir "/tmp/lmdb"}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
 ----
 ====
 
-It is generally advised to use independent LMDB instances for each component, although using a single instance for the transaction log and document store is possible. Do not share the LMDB instance used for the index store with other components as you cannot then perform Crux version upgrades.
+It is generally advised to use independent LMDB instances for each component, although using a single instance for the transaction log and document store is possible. Do not share the LMDB instance used for the index store with other components as you cannot then perform XTDB version upgrades.
 
 == Parameters
 

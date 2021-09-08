@@ -1,0 +1,7 @@
+= xtdb-rdf
+
+This project contains helpers for loading RDF triples into XTDB and a
+SPARQL-to-Datalog compiler which can handle a subset of SPARQL.
+
+For tests, run `lein test` within this project directory and see
+`/labs/rdf/test/xtdb/`.

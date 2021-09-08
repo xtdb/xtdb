@@ -1,0 +1,32 @@
+= XTDB Lucene
+
+Lucene module for XTDB making use of https://lucene.apache.org/[Apache Lucene].
+
+`xtdb-lucene` runs in-process as part of the XTDB node as an XTDB module.
+
+.deps.edn
+[source,clojure]
+----
+com.xtdb/xtdb-lucene {:mvn/version "1.18.1"}
+----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-lucene</artifactId>
+    <version>1.18.1</version>
+</dependency>
+----
+
+For more details, see the https://xtdb.com/reference/lucene.html[XTDB Lucene documentation]
+
+== Scoring
+
+This module uses the default BM25Similarity similarity to calculate
+scores.
+
+Please note that although data is evicted from the Lucene index during
+the `xt/evict` transaction operation, data is not removed during
+a normal `xt/delete`.

@@ -1,5 +1,4 @@
 .Articles
-* xref:what-is-crux.adoc[What is Crux?]
+* xref:what-is-crux.adoc[What is XTDB?]
 * xref:bitemporality.adoc[Bitemporality]
 * xref:strength-of-the-record.adoc[Strength of the Record]
-

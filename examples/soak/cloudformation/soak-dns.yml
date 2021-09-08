@@ -14,6 +14,6 @@ Resources:
         DNSName: !Ref 'LoadBalancerDNSName'
         EvaluateTargetHealth: false
         HostedZoneId: !Ref 'LoadBalancerCanonicalHostedZoneId'
-      HostedZoneName: 'crux.cloud.'
+      HostedZoneName: 'xtdb.cloud.'
       Name: 'soak.crux.cloud'
       Type: 'A'

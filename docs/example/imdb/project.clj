@@ -4,7 +4,7 @@
   :dependencies
   [[org.clojure/clojure "1.10.3"]
    [juxt/crux-core "19.09-1.4.0-alpha"]
-   [juxt/crux-rocksdb "19.09-1.4.0-alpha"]
+   [juxt/xtdb-rocksdb "19.09-1.4.0-alpha"]
    [juxt/crux-kafka "19.09-1.4.0-alpha"]
    [juxt/crux-kafka-embedded "19.09-1.4.0-alpha"]
    [yada "1.3.0-alpha7"]

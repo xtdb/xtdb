@@ -1,0 +1,14 @@
+= test
+
+This project contains the majority of the tests for XTDB and its various
+projects, including complete tests of `core`.
+
+To run these tests, do `lein test` from within this directory.
+
+== Oracle for Testing
+
+Download the Oracle JDBC binary, and install into your local maven repo:
+
+```
+mvn install:install-file -DgroupId=com.oracle -DartifactId=ojdbc -Dversion=12.2.0.1 -Dpackaging=jar -Dfile=ojdbc8.jar -DgeneratePom=true
+```

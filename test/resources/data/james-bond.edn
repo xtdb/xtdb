@@ -1,0 +1,225 @@
+;; from https://neo4j.com/graphgist/know-more-about-james-bond-movie with love
+[
+ {:film/director :john-glen, :film/bond :roger-moore, :film/vehicles #{:jeep-cherokee :bronco :ltd :chevrolet-corvette-c4 :cadillac-fleetwood-75-limousine :silver-cloud-ii}, :film/box "321172633", :film/bond-girls #{:mary-stävin :grace-jones :fiona-fullerton :tanya-roberts}, :type :film, :film/name "A View to a Kill", :film/year "1985", :xt/id :a-view-to-a-kill}
+ {:film/director :martin-campbell, :film/bond :daniel-craig, :film/vehicles #{:dbs-v12 :db5 :crown-victoria-police-interceptor :mondeo-25-litre-st :xj8 :xj9 :range-rover-sport}, :film/box "669789482", :film/bond-girls #{:eva-green}, :type :film, :film/name "Casino Royale", :film/year "2006", :xt/id :casino-royale}
+ {:film/director :guy-hamilton, :film/bond :sean-connery, :film/vehicles #{:triumph-stag :mustang-mach-1 :econoline :thunderbird :custom-500 :galaxie-500sedan :ltd :cadillac-hearse :600}, :film/box "648514469", :film/bond-girls #{:jill-st-john}, :type :film, :film/name "Diamonds Are Forever", :film/year "1971", :xt/id :diamonds-are-forever}
+ {:film/director :lee-tamahori, :film/bond :pierce-brosnan, :film/vehicles #{:v12-vanquish :thunderbird :fairlane :xkr}, :film/box "543639638", :film/bond-girls #{:halle-berry :rosamund-pike}, :type :film, :film/name "Die Another Day", :film/year "2002", :xt/id :die-another-day}
+ {:film/director :terence-young, :film/bond :sean-connery, :film/vehicles #{:anglia-105e :lasalle-hearse :chevrolet-bel-airconvertible :chevrolet-impalasedan :vauxhall-pa-crestasedan :sunbeam-alpine}, :film/box "440759072", :film/bond-girls #{:eunice-gayson :zena-marshall :ursula-andress}, :type :film, :film/name "Dr. No", :film/year "1962", :xt/id :dr-no}
+ {:film/director :john-glen, :film/bond :roger-moore, :film/vehicles #{:citroën-2cv :lotus-esprit-turbo :450-sel :silver-wraith-ii}, :film/box "486468881", :film/bond-girls #{:cassandra-harris :carole-bouquet}, :type :film, :film/name "For Your Eyes Only", :film/year "1981", :xt/id :for-your-eyes-only}
+ {:film/director :terence-young, :film/bond :sean-connery, :film/vehicles #{:1935-bentley-35-litredrophead-coupé-park-ward :citroën-11-legere :chevrolet-c30-flatbed-truck :silver-wraith}, :film/box "576277964", :film/bond-girls #{:eunice-gayson :aliza-gur :martine-beswick :daniela-bianchi}, :type :film, :film/name "From Russia with Love", :film/year "1963", :xt/id :from-russia-with-love}
+ {:film/director :martin-campbell, :film/bond :pierce-brosnan, :film/vehicles #{:db5 :vaz-2105 :z3 :w140 :gaz-31029 :vaz-2106 :zaz-965}, :film/box "529548711", :film/bond-girls #{:serena-gordon :izabella-scorupco}, :type :film, :film/name "GoldenEye", :film/year "1995", :xt/id :goldeneye}
+ {:film/director :guy-hamilton, :film/bond :sean-connery, :film/vehicles #{:db5 :1964-lincoln-continental :country-squire :ranchero :thunderbird :mustangconvertible :180 :phantom-iii}, :film/box "912257512", :film/bond-girls #{:shirley-eaton :honor-blackman}, :type :film, :film/name "Goldfinger", :film/year "1964", :xt/id :goldfinger}
+ {:film/director :john-glen, :film/bond :timothy-dalton, :film/vehicles #{:jeep-cj-7 :mercury-grand-marquis-stretched-limousine :lincoln-mark-vii-lsc :chevrolet-caprice :silver-shadow :biturbo}, :film/box "285157191", :film/bond-girls #{:carey-lowell :talisa-soto}, :type :film, :film/name "Licence to Kill", :film/year "1989", :xt/id :licence-to-kill}
+ {:film/director :guy-hamilton, :film/bond :roger-moore, :film/vehicles #{:cadillac-fleetwood-60-special-brougham :chevrolet-impala :chevrolet-chevelle :chevrolet-nova :corvorado}, :film/box "825110761", :film/bond-girls #{:madeline-smith :gloria-hendry :jane-seymour}, :type :film, :film/name "Live and Let Die", :film/year "1973", :xt/id :live-and-let-die}
+ {:film/director :lewis-gilbert, :film/bond :roger-moore, :film/vehicles #{:amc-concord :jeep-wagoneer :chevrolet-veraneioambulance :silver-shadow :mp-lafer-cabriolet}, :film/box "655872400", :film/bond-girls #{:corinne-cléry :emily-bolton :lois-chiles}, :type :film, :film/name "Moonraker", :film/year "1979", :xt/id :moonraker}
+ {:film/director :john-glen, :film/bond :roger-moore, :film/vehicles #{:alfa-romeo-gtv6 :518i :austin-fx4-taxi :range-rover-classicconvertible :600 :250se :phantom-iii}, :film/box "426244352", :film/bond-girls #{:kristina-wayborn :maud-adams}, :type :film, :film/name "Octopussy", :film/year "1983", :xt/id :octopussy}
+ {:film/director :peter-r-hunt, :film/bond :george-lazenby, :film/vehicles #{:dbs :citroën-2cv :mercury-cougar-xr7 :220s :600 :silver-shadow}, :film/box "505899782", :film/bond-girls #{:diana-rigg :angela-scoular :catherine-schell}, :type :film, :film/name "On Her Majesty's Secret Service", :film/year "1969", :xt/id :on-her-majestys-secret-service}
+ {:film/director :marc-forster, :film/bond :daniel-craig, :film/vehicles #{:alfa-romeo-159 :alfa-romeo-156 :dbs-v12 :audi-a6 :ka :edge :bronco-ii :xj10 :range-rover-sport :volvo-s40 :beetle}, :film/box "622246378", :film/bond-girls #{:gemma-arterton :olga-kurylenko}, :type :film, :film/name "Quantum of Solace", :film/year "2008", :xt/id :quantum-of-solace}
+ {:film/director :sam-mendes, :film/bond :daniel-craig, :film/vehicles #{:db5 :audi-a5 :xj :land-rover-defender :range-rover-l322 :land-rover-discovery-4 :s400}, :film/box "1108561008", :film/bond-girls #{:tonia-sotiropoulou :bérénice-marlohe}, :type :film, :film/name "Skyfall", :film/year "2012", :xt/id :skyfall}
+ {:film/director :sam-mendes, :film/bond :daniel-craig, :film/vehicles #{:db10 :db5 :c-x75 :xj8 :land-rover-defender-bigfoot :range-rover-sport :discovery-sport :s-class :silver-wraith}, :film/box "877470327", :film/bond-girls #{:stephanie-sigman :monica-bellucci :léa-seydoux}, :type :film, :film/name "Spectre", :film/year "2015", :xt/id :spectre}
+ {:film/director :john-glen, :film/bond :timothy-dalton, :film/vehicles #{:v8-vantage-volante :audi-200 :audi-100-avant-quattro :vaz-2106 :vaz-2105 :rover-800 :gmc-vanduraambulance :range-rover-classic :land-rover-series-iii :w111}, :film/box "381088866", :film/bond-girls #{:kell-tyler :maryam-dabo}, :type :film, :film/name "The Living Daylights", :film/year "1987", :xt/id :the-living-daylights}
+ {:film/director :guy-hamilton, :film/bond :roger-moore, :film/vehicles #{:amc-hornet :amc-matador-coupe :amc-matador-sedan :mgb :w115 :silver-shadow}, :film/box "448249281", :film/bond-girls #{:maud-adams :britt-ekland}, :type :film, :film/name "The Man with the Golden Gun", :film/year "1974", :xt/id :the-man-with-the-golden-gun}
+ {:film/director :lewis-gilbert, :film/bond :roger-moore, :film/vehicles #{:leyland-sherpa-van :taunus-23-ghia :lotus-esprit-s1}, :film/box "692713752", :film/bond-girls #{:sue-vanner :dawn-rodrigues :barbara-bach}, :type :film, :film/name "The Spy Who Loved Me", :film/year "1977", :xt/id :the-spy-who-loved-me}
+ {:film/director :michael-apted, :film/bond :pierce-brosnan, :film/vehicles #{:db5 :vaz-2121 :z8 :silver-shadow}, :film/box "491617153", :film/bond-girls #{:serena-scott-thomas :sophie-marceau :denise-richards}, :type :film, :film/name "The World Is Not Enough", :film/year "1999", :xt/id :the-world-is-not-enough}
+ {:film/director :terence-young, :film/bond :sean-connery, :film/vehicles #{:db5 :mustangconvertible :fairlane-skyliner :thunderbird :lincoln-continental}, :film/box "1014941117", :film/bond-girls #{:molly-peters :luciana-paluzzi :claudine-auger}, :type :film, :film/name "Thunderball", :film/year "1965", :xt/id :thunderball}
+ {:film/director :roger-spottiswoode, :film/bond :pierce-brosnan, :film/vehicles #{:jeep-cherokee :db5 :750il :r1200c-motorcycle :daimler-limousine :scorpio :vauxhall-omega :opel-senator :range-rover-p38a :w126s}, :film/box "478946402", :film/bond-girls #{:cecilie-thomsen :teri-hatcher :michelle-yeoh}, :type :film, :film/name "Tomorrow Never Dies", :film/year "1997", :xt/id :tomorrow-never-dies}
+ {:film/director :lewis-gilbert, :film/bond :sean-connery, :film/vehicles #{:2000gt}, :film/box "756544419", :film/bond-girls #{:akiko-wakabayashi :karin-dor :mie-hama}, :type :film, :film/name "You Only Live Twice", :film/year "1967", :xt/id :you-only-live-twice}
+ {:xt/id :akiko-wakabayashi, :type :person, :person/name "Akiko Wakabayashi", :person/role "Aki"}
+ {:xt/id :aliza-gur, :type :person, :person/name "Aliza Gur", :person/role "Vida"}
+ {:xt/id :angela-scoular, :type :person, :person/name "Angela Scoular", :person/role "Ruby Bartlett"}
+ {:xt/id :barbara-bach, :type :person, :person/name "Barbara Bach", :person/role "Anya Amasova"}
+ {:xt/id :britt-ekland, :type :person, :person/name "Britt Ekland", :person/role "Mary Goodnight"}
+ {:xt/id :bérénice-marlohe, :type :person, :person/name "Bérénice Marlohe", :person/role "Sévérine"}
+ {:xt/id :carey-lowell, :type :person, :person/name "Carey Lowell", :person/role "Pam Bouvier"}
+ {:xt/id :carole-bouquet, :type :person, :person/name "Carole Bouquet", :person/role "Melina Havelock"}
+ {:xt/id :cassandra-harris, :type :person, :person/name "Cassandra Harris", :person/role "Countess Lisl von Schlaf"}
+ {:xt/id :catherine-schell, :type :person, :person/name "Catherine Schell", :person/role "Nancy"}
+ {:xt/id :cecilie-thomsen, :type :person, :person/name "Cecilie Thomsen", :person/role "Prof. Inga Bergstrøm"}
+ {:xt/id :claudine-auger, :type :person, :person/name "Claudine Auger", :person/role "Domino Derval"}
+ {:xt/id :corinne-cléry, :type :person, :person/name "Corinne Cléry", :person/role "Corinne Dufour"}
+ {:xt/id :daniel-craig, :type :person, :person/name "Daniel Craig"}
+ {:xt/id :daniela-bianchi, :type :person, :person/name "Daniela Bianchi", :person/role "Tatiana Romanova"}
+ {:xt/id :dawn-rodrigues, :type :person, :person/name "Dawn Rodrigues", :person/role "Harem Tent Girl"}
+ {:xt/id :denise-richards, :type :person, :person/name "Denise Richards", :person/role "Dr. Christmas Jones"}
+ {:xt/id :diana-rigg, :type :person, :person/name "Diana Rigg", :person/role "Teresa di Vicenzo"}
+ {:xt/id :emily-bolton, :type :person, :person/name "Emily Bolton", :person/role "Manuela"}
+ {:xt/id :eunice-gayson, :type :person, :person/name "Eunice Gayson", :person/role "Sylvia Trench"}
+ {:xt/id :eva-green, :type :person, :person/name "Eva Green", :person/role "Vesper Lynd"}
+ {:xt/id :fiona-fullerton, :type :person, :person/name "Fiona Fullerton", :person/role "Pola Ivanova"}
+ {:xt/id :gemma-arterton, :type :person, :person/name "Gemma Arterton", :person/role "Strawberry Fields"}
+ {:xt/id :george-lazenby, :type :person, :person/name "George Lazenby"}
+ {:xt/id :gloria-hendry, :type :person, :person/name "Gloria Hendry", :person/role "Rosie Carver"}
+ {:xt/id :grace-jones, :type :person, :person/name "Grace Jones", :person/role "May Day"}
+ {:xt/id :guy-hamilton, :type :person, :person/name "Guy Hamilton"}
+ {:xt/id :halle-berry, :type :person, :person/name "Halle Berry", :person/role "Giacinta Jinx Johnson"}
+ {:xt/id :honor-blackman, :type :person, :person/name "Honor Blackman", :person/role "Pussy Galore"}
+ {:xt/id :izabella-scorupco, :type :person, :person/name "Izabella Scorupco", :person/role "Natalya Simonova"}
+ {:xt/id :jane-seymour, :type :person, :person/name "Jane Seymour", :person/role "Solitaire"}
+ {:xt/id :jill-st-john, :type :person, :person/name "Jill St. John", :person/role "Tiffany Case"}
+ {:xt/id :john-glen, :type :person, :person/name "John Glen"}
+ {:xt/id :karin-dor, :type :person, :person/name "Karin Dor", :person/role "Helga Brandt"}
+ {:xt/id :kell-tyler, :type :person, :person/name "Kell Tyler", :person/role "Linda"}
+ {:xt/id :kristina-wayborn, :type :person, :person/name "Kristina Wayborn", :person/role "Magda"}
+ {:xt/id :lee-tamahori, :type :person, :person/name "Lee Tamahori"}
+ {:xt/id :lewis-gilbert, :type :person, :person/name "Lewis Gilbert"}
+ {:xt/id :lois-chiles, :type :person, :person/name "Lois Chiles", :person/role "Holly Goodhead"}
+ {:xt/id :luciana-paluzzi, :type :person, :person/name "Luciana Paluzzi", :person/role "Fiona Volpe"}
+ {:xt/id :léa-seydoux, :type :person, :person/name "Léa Seydoux", :person/role "Dr. Madeleine Swann"}
+ {:xt/id :madeline-smith, :type :person, :person/name "Madeline Smith", :person/role "Miss Caruso"}
+ {:xt/id :marc-forster, :type :person, :person/name "Marc Forster"}
+ {:xt/id :martin-campbell, :type :person, :person/name "Martin Campbell"}
+ {:xt/id :martine-beswick, :type :person, :person/name "Martine Beswick", :person/role "Zora"}
+ {:xt/id :mary-stävin, :type :person, :person/name "Mary Stävin", :person/role "Kimberley Jones"}
+ {:xt/id :maryam-dabo, :type :person, :person/name "Maryam d'Abo", :person/role "Kara Milovy"}
+ {:xt/id :maud-adams, :type :person, :person/name "Maud Adams", :person/role "Octopussy"}
+ {:xt/id :michael-apted, :type :person, :person/name "Michael Apted"}
+ {:xt/id :michelle-yeoh, :type :person, :person/name "Michelle Yeoh", :person/role "Wai Lin"}
+ {:xt/id :mie-hama, :type :person, :person/name "Mie Hama", :person/role "Kissy Suzuki"}
+ {:xt/id :molly-peters, :type :person, :person/name "Molly Peters", :person/role "Patricia Pat Fearing"}
+ {:xt/id :monica-bellucci, :type :person, :person/name "Monica Bellucci", :person/role "Lucia Sciarra"}
+ {:xt/id :olga-kurylenko, :type :person, :person/name "Olga Kurylenko", :person/role "Camille Montes"}
+ {:xt/id :peter-r-hunt, :type :person, :person/name "Peter R. Hunt"}
+ {:xt/id :pierce-brosnan, :type :person, :person/name "Pierce Brosnan"}
+ {:xt/id :roger-moore, :type :person, :person/name "Roger Moore"}
+ {:xt/id :roger-spottiswoode, :type :person, :person/name "Roger Spottiswoode"}
+ {:xt/id :rosamund-pike, :type :person, :person/name "Rosamund Pike", :person/role "Miranda Frost"}
+ {:xt/id :sam-mendes, :type :person, :person/name "Sam Mendes"}
+ {:xt/id :sean-connery, :type :person, :person/name "Sean Connery"}
+ {:xt/id :serena-gordon, :type :person, :person/name "Serena Gordon", :person/role "Caroline"}
+ {:xt/id :serena-scott-thomas, :type :person, :person/name "Serena Scott Thomas", :person/role "Dr. Molly Warmflash"}
+ {:xt/id :shirley-eaton, :type :person, :person/name "Shirley Eaton", :person/role "Jill Masterson"}
+ {:xt/id :sophie-marceau, :type :person, :person/name "Sophie Marceau", :person/role "Elektra King"}
+ {:xt/id :stephanie-sigman, :type :person, :person/name "Stephanie Sigman", :person/role "Estrella"}
+ {:xt/id :sue-vanner, :type :person, :person/name "Sue Vanner", :person/role "Log Cabin Girl"}
+ {:xt/id :talisa-soto, :type :person, :person/name "Talisa Soto", :person/role "Lupe Lamora"}
+ {:xt/id :tanya-roberts, :type :person, :person/name "Tanya Roberts", :person/role "Stacey Sutton"}
+ {:xt/id :terence-young, :type :person, :person/name "Terence Young"}
+ {:xt/id :teri-hatcher, :type :person, :person/name "Teri Hatcher", :person/role "Paris Carver"}
+ {:xt/id :timothy-dalton, :type :person, :person/name "Timothy Dalton"}
+ {:xt/id :tonia-sotiropoulou, :type :person, :person/name "Tonia Sotiropoulou", :person/role "Bond's Lover"}
+ {:xt/id :ursula-andress, :type :person, :person/name "Ursula Andress", :person/role "Honey Ryder"}
+ {:xt/id :zena-marshall, :type :person, :person/name "Zena Marshall", :person/role "Miss Taro"}
+ {:xt/id :180, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "180"}
+ {:xt/id :1935-bentley-35-litredrophead-coupé-park-ward, :type :vehicle, :vehicle/brand "Bentley", :vehicle/model "1935 Bentley 3.5 Litredrophead coupé Park Ward"}
+ {:xt/id :1937-bentley-4½-litregurney-nutting-3-position-drophead-coupé, :type :vehicle, :vehicle/brand "Bentley", :vehicle/model "1937 Bentley 4½ LitreGurney Nutting 3-Position-Drophead Coupé"}
+ {:xt/id :1964-lincoln-continental, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "1964 Lincoln Continental"}
+ {:xt/id :2000gt, :type :vehicle, :vehicle/brand "Toyota", :vehicle/model "2000GT"}
+ {:xt/id :220s, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "220S"}
+ {:xt/id :250se, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "250SE"}
+ {:xt/id :450-sel, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "450 SEL"}
+ {:xt/id :518i, :type :vehicle, :vehicle/brand "BMW", :vehicle/model "518i"}
+ {:xt/id :600, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "600"}
+ {:xt/id :750il, :type :vehicle, :vehicle/brand "BMW", :vehicle/model "750iL"}
+ {:xt/id :alfa-romeo-156, :type :vehicle, :vehicle/brand "Alfa", :vehicle/model "Alfa Romeo 156"}
+ {:xt/id :alfa-romeo-159, :type :vehicle, :vehicle/brand "Alfa", :vehicle/model "Alfa Romeo 159"}
+ {:xt/id :alfa-romeo-gtv6, :type :vehicle, :vehicle/brand "Alfa", :vehicle/model "Alfa Romeo GTV6"}
+ {:xt/id :amc-concord, :type :vehicle, :vehicle/brand "AMC", :vehicle/model "AMC Concord"}
+ {:xt/id :amc-hornet, :type :vehicle, :vehicle/brand "AMC", :vehicle/model "AMC Hornet"}
+ {:xt/id :amc-matador-coupe, :type :vehicle, :vehicle/brand "AMC", :vehicle/model "AMC Matador coupe"}
+ {:xt/id :amc-matador-sedan, :type :vehicle, :vehicle/brand "AMC", :vehicle/model "AMC Matador sedan"}
+ {:xt/id :anglia-105e, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Anglia 105E"}
+ {:xt/id :audi-100-avant-quattro, :type :vehicle, :vehicle/brand "Audi", :vehicle/model "Audi 100 Avant Quattro"}
+ {:xt/id :audi-200, :type :vehicle, :vehicle/brand "Audi", :vehicle/model "Audi 200"}
+ {:xt/id :audi-a5, :type :vehicle, :vehicle/brand "Audi", :vehicle/model "Audi A5"}
+ {:xt/id :audi-a6, :type :vehicle, :vehicle/brand "Audi", :vehicle/model "Audi A6"}
+ {:xt/id :austin-fx4-taxi, :type :vehicle, :vehicle/brand "Rover", :vehicle/model "Austin FX4 taxi"}
+ {:xt/id :beetle, :type :vehicle, :vehicle/brand "Volkswagen", :vehicle/model "Beetle"}
+ {:xt/id :biturbo, :type :vehicle, :vehicle/brand "Maserati", :vehicle/model "Biturbo"}
+ {:xt/id :bronco, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Bronco"}
+ {:xt/id :bronco-ii, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Bronco II"}
+ {:xt/id :c-x75, :type :vehicle, :vehicle/brand "Jaguar", :vehicle/model "C-X75"}
+ {:xt/id :cadillac-fleetwood-60-special-brougham, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Cadillac Fleetwood 60 Special Brougham"}
+ {:xt/id :cadillac-fleetwood-75-limousine, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Cadillac Fleetwood 75 limousine"}
+ {:xt/id :cadillac-hearse, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Cadillac hearse"}
+ {:xt/id :chevrolet-bel-airconvertible, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Chevrolet Bel Airconvertible"}
+ {:xt/id :chevrolet-c30-flatbed-truck, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Chevrolet C30 flatbed truck"}
+ {:xt/id :chevrolet-caprice, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Chevrolet Caprice"}
+ {:xt/id :chevrolet-chevelle, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Chevrolet Chevelle"}
+ {:xt/id :chevrolet-corvette-c4, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Chevrolet Corvette C4"}
+ {:xt/id :chevrolet-impala, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Chevrolet Impala"}
+ {:xt/id :chevrolet-impalasedan, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Chevrolet Impalasedan"}
+ {:xt/id :chevrolet-nova, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Chevrolet Nova"}
+ {:xt/id :chevrolet-veraneioambulance, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Chevrolet Veraneioambulance"}
+ {:xt/id :citroën-11-legere, :type :vehicle, :vehicle/brand "Citroën", :vehicle/model "Citroën 11 Legere"}
+ {:xt/id :citroën-2cv, :type :vehicle, :vehicle/brand "Citroën", :vehicle/model "Citroën 2CV"}
+ {:xt/id :corvorado, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Corvorado"}
+ {:xt/id :country-squire, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Country Squire"}
+ {:xt/id :crown-victoria-police-interceptor, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Crown Victoria Police Interceptor"}
+ {:xt/id :custom-500, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Custom 500"}
+ {:xt/id :daimler-limousine, :type :vehicle, :vehicle/brand "Daimler", :vehicle/model "Daimler Limousine"}
+ {:xt/id :db10, :type :vehicle, :vehicle/brand "Aston Martin", :vehicle/model "DB10"}
+ {:xt/id :db5, :type :vehicle, :vehicle/brand "Aston Martin", :vehicle/model "DB5"}
+ {:xt/id :dbs, :type :vehicle, :vehicle/brand "Aston Martin", :vehicle/model "DBS"}
+ {:xt/id :dbs-v12, :type :vehicle, :vehicle/brand "Aston Martin", :vehicle/model "DBS V12"}
+ {:xt/id :discovery-sport, :type :vehicle, :vehicle/brand "Land Rover", :vehicle/model "Discovery Sport"}
+ {:xt/id :econoline, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Econoline"}
+ {:xt/id :edge, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Edge"}
+ {:xt/id :fairlane, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Fairlane"}
+ {:xt/id :fairlane-skyliner, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Fairlane Skyliner"}
+ {:xt/id :galaxie-500sedan, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Galaxie 500sedan"}
+ {:xt/id :gaz-31029, :type :vehicle, :vehicle/brand "GAZ", :vehicle/model "GAZ-31029"}
+ {:xt/id :gmc-vanduraambulance, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "GMC VanduraAmbulance"}
+ {:xt/id :jeep-cherokee, :type :vehicle, :vehicle/brand "AMC", :vehicle/model "Jeep Cherokee"}
+ {:xt/id :jeep-cj-7, :type :vehicle, :vehicle/brand "AMC", :vehicle/model "Jeep CJ-7"}
+ {:xt/id :jeep-wagoneer, :type :vehicle, :vehicle/brand "AMC", :vehicle/model "Jeep Wagoneer"}
+ {:xt/id :ka, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Ka"}
+ {:xt/id :land-rover-defender, :type :vehicle, :vehicle/brand "Land Rover", :vehicle/model "Land Rover Defender"}
+ {:xt/id :land-rover-defender-bigfoot, :type :vehicle, :vehicle/brand "Land Rover", :vehicle/model "Land Rover Defender Bigfoot"}
+ {:xt/id :land-rover-discovery-4, :type :vehicle, :vehicle/brand "Land Rover", :vehicle/model "Land Rover Discovery 4"}
+ {:xt/id :land-rover-series-iii, :type :vehicle, :vehicle/brand "Land Rover", :vehicle/model "Land Rover Series III"}
+ {:xt/id :lasalle-hearse, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "LaSalle hearse"}
+ {:xt/id :leyland-sherpa-van, :type :vehicle, :vehicle/brand "Leyland", :vehicle/model "Leyland Sherpa van"}
+ {:xt/id :lincoln-continental, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Lincoln Continental"}
+ {:xt/id :lincoln-mark-vii-lsc, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Lincoln Mark VII LSC"}
+ {:xt/id :lotus-esprit-s1, :type :vehicle, :vehicle/brand "Lotus", :vehicle/model "Lotus Esprit S1"}
+ {:xt/id :lotus-esprit-turbo, :type :vehicle, :vehicle/brand "Lotus", :vehicle/model "Lotus Esprit Turbo"}
+ {:xt/id :ltd, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "LTD"}
+ {:xt/id :mercury-cougar-xr7, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Mercury Cougar XR7"}
+ {:xt/id :mercury-grand-marquis-stretched-limousine, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Mercury Grand Marquis stretched limousine"}
+ {:xt/id :mgb, :type :vehicle, :vehicle/brand "BMC", :vehicle/model "MGB"}
+ {:xt/id :mondeo-25-litre-st, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Mondeo 2.5 Litre ST"}
+ {:xt/id :mp-lafer-cabriolet, :type :vehicle, :vehicle/brand "Lafer", :vehicle/model "MP Lafer Cabriolet"}
+ {:xt/id :mustang-mach-1, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Mustang Mach 1"}
+ {:xt/id :mustangconvertible, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "MustangConvertible"}
+ {:xt/id :opel-senator, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Opel Senator"}
+ {:xt/id :phantom-iii, :type :vehicle, :vehicle/brand "Rolls-Royce", :vehicle/model "Phantom III"}
+ {:xt/id :r1200c-motorcycle, :type :vehicle, :vehicle/brand "BMW", :vehicle/model "R1200C motorcycle"}
+ {:xt/id :ranchero, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Ranchero"}
+ {:xt/id :range-rover-classic, :type :vehicle, :vehicle/brand "Land Rover", :vehicle/model "Range Rover Classic"}
+ {:xt/id :range-rover-classicconvertible, :type :vehicle, :vehicle/brand "Land Rover", :vehicle/model "Range Rover Classicconvertible"}
+ {:xt/id :range-rover-l322, :type :vehicle, :vehicle/brand "Land Rover", :vehicle/model "Range Rover (L322)"}
+ {:xt/id :range-rover-p38a, :type :vehicle, :vehicle/brand "Land Rover", :vehicle/model "Range Rover (P38A)"}
+ {:xt/id :range-rover-sport, :type :vehicle, :vehicle/brand "Land Rover", :vehicle/model "Range Rover Sport"}
+ {:xt/id :rover-800, :type :vehicle, :vehicle/brand "Rover", :vehicle/model "Rover 800"}
+ {:xt/id :s-class, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "S-Class"}
+ {:xt/id :s400, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "S400"}
+ {:xt/id :scorpio, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Scorpio"}
+ {:xt/id :silver-cloud-ii, :type :vehicle, :vehicle/brand "Rolls-Royce", :vehicle/model "Silver Cloud II"}
+ {:xt/id :silver-shadow, :type :vehicle, :vehicle/brand "Rolls-Royce", :vehicle/model "Silver Shadow"}
+ {:xt/id :silver-wraith, :type :vehicle, :vehicle/brand "Rolls-Royce", :vehicle/model "Silver Wraith"}
+ {:xt/id :silver-wraith-ii, :type :vehicle, :vehicle/brand "Rolls-Royce", :vehicle/model "Silver Wraith II"}
+ {:xt/id :sunbeam-alpine, :type :vehicle, :vehicle/brand "Sunbeam", :vehicle/model "Sunbeam Alpine"}
+ {:xt/id :taunus-23-ghia, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Taunus 2.3 Ghia"}
+ {:xt/id :thunderbird, :type :vehicle, :vehicle/brand "Ford", :vehicle/model "Thunderbird"}
+ {:xt/id :triumph-stag, :type :vehicle, :vehicle/brand "Triumph", :vehicle/model "Triumph Stag"}
+ {:xt/id :v12-vanquish, :type :vehicle, :vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}
+ {:xt/id :v8-vantage-volante, :type :vehicle, :vehicle/brand "Aston Martin", :vehicle/model "V8 Vantage Volante"}
+ {:xt/id :vauxhall-omega, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Vauxhall Omega"}
+ {:xt/id :vauxhall-pa-crestasedan, :type :vehicle, :vehicle/brand "Chevrolet", :vehicle/model "Vauxhall PA Crestasedan"}
+ {:xt/id :vaz-2105, :type :vehicle, :vehicle/brand "AvtoVAZ", :vehicle/model "VAZ-2105"}
+ {:xt/id :vaz-2106, :type :vehicle, :vehicle/brand "AvtoVAZ", :vehicle/model "VAZ-2106"}
+ {:xt/id :vaz-2121, :type :vehicle, :vehicle/brand "AvtoVAZ", :vehicle/model "VAZ-2121"}
+ {:xt/id :volvo-s40, :type :vehicle, :vehicle/brand "Volvo", :vehicle/model "Volvo S40"}
+ {:xt/id :w111, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "W111"}
+ {:xt/id :w115, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "W115"}
+ {:xt/id :w126s, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "W126s"}
+ {:xt/id :w140, :type :vehicle, :vehicle/brand "Mercedes Benz", :vehicle/model "W140"}
+ {:xt/id :xj, :type :vehicle, :vehicle/brand "Jaguar", :vehicle/model "XJ"}
+ {:xt/id :xj10, :type :vehicle, :vehicle/brand "Jaguar", :vehicle/model "XJ10"}
+ {:xt/id :xj8, :type :vehicle, :vehicle/brand "Jaguar", :vehicle/model "XJ8"}
+ {:xt/id :xj9, :type :vehicle, :vehicle/brand "Jaguar", :vehicle/model "XJ9"}
+ {:xt/id :xkr, :type :vehicle, :vehicle/brand "Jaguar", :vehicle/model "XKR"}
+ {:xt/id :z3, :type :vehicle, :vehicle/brand "BMW", :vehicle/model "Z3"}
+ {:xt/id :z8, :type :vehicle, :vehicle/brand "BMW", :vehicle/model "Z8"}
+ {:xt/id :zaz-965, :type :vehicle, :vehicle/brand "ZAZ", :vehicle/model "ZAZ-965"}
+ ]

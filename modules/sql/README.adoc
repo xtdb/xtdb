@@ -1,0 +1,23 @@
+= XTDB SQL
+
+SQL adapter for XTDB making use of https://calcite.apache.org/[Apache Calcite].
+
+`xtdb-sql` runs in-process as part of the XTDB node as an XTDB module.
+
+.deps.edn
+[source,clojure]
+----
+com.xtdb/xtdb-sql {:mvn/version "1.18.1"}
+----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-sql</artifactId>
+    <version>1.18.1</version>
+</dependency>
+----
+
+For more details, see the https://xtdb.com/reference/sql.html[XTDB SQL documentation]

@@ -1,30 +1,30 @@
-= Contributing to Crux
+= Contributing to XTDB
 
 Welcome - and first of all, thanks!
 
-Crux would not exist without the community of vibrant open source projects on which it depends, and we hope that the Crux community will serve to extend and reflect our gratitude.
+XTDB would not exist without the community of vibrant open source projects on which it depends, and we hope that the XTDB community will serve to extend and reflect our gratitude.
 
 == How to contribute
 
-We use https://github.com/juxt/crux/issues[GitHub Issues] to work on near-term changes to the Crux codebase and documentation.
-Our work-in-progress is shown on our https://github.com/juxt/crux/projects/1[GitHub Project Board].
+We use https://github.com/xtdb/xtdb/issues[GitHub Issues] to work on near-term changes to the XTDB codebase and documentation.
+Our work-in-progress is shown on our https://github.com/xtdb/xtdb/projects/1[GitHub Project Board].
 
 PRs with fixes and improvements to our documentation are also very welcome.
 
-A Contributor License Agreement (CLA) is necessary for us to ensure that we can support a healthy Crux ecosystem over the indefinite future.
-Please complete the very short https://raw.githubusercontent.com/juxt/crux/master/docs/open-crux-individual-contributor-license-agreement-cla.rtf[.rtf template] and email it to us, crux@juxt.pro, along with a reference to your current PR on GitHub.
+A Contributor License Agreement (CLA) is necessary for us to ensure that we can support a healthy XTDB ecosystem over the indefinite future.
+Please complete the very short https://raw.githubusercontent.com/xtdb/xtdb/master/docs/open-crux-individual-contributor-license-agreement-cla.rtf[.rtf template] and email it to us, hello@xtdb.com, along with a reference to your current PR on GitHub.
 
 Particularly, *please do not open an issue to ask a question* - you'll get quicker support using our support channels below. Thanks!
 
 == Releases
 
-Our releases are published using https://github.com/juxt/crux/releases[GitHub releases] - feel free to 'watch' the Crux repo to receive notifications.
+Our releases are published using https://github.com/xtdb/xtdb/releases[GitHub releases] - feel free to 'watch' the XTDB repo to receive notifications.
 
 == Get in touch!
 
-As well as GitHub, our official support channel is the https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux[Crux Zulip channel], where we'll be more than happy to answer questions and guide you through contributing to Crux.
-We also frequent the #crux channel on http://clojurians.net/[Clojurians Slack]
+As well as GitHub, our official support channel is the https://juxt-oss.zulipchat.com/#narrow/stream/194466-xtdb-users[XTDB Zulip channel], where we'll be more than happy to answer questions and guide you through contributing to XTDB.
+We also frequent the #xtdb channel on http://clojurians.net/[Clojurians Slack]
 
 Cheers!
 
-Crux Team
+XTDB Team

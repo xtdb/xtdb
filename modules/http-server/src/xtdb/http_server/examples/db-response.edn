@@ -1,0 +1,3 @@
+{:xtdb.api/valid-time #inst "2020-11-05T17:19:39.218-00:00"
+ :xtdb.api/tx-time #inst "2020-11-04T15:43:12.845-00:00"
+ :xtdb.api/tx-id 4}

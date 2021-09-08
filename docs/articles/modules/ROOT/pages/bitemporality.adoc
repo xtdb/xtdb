@@ -7,17 +7,17 @@ toc::[]
 [#overview]
 == Overview
 
-Crux is optimised for efficient and globally consistent point-in-time queries
+XTDB is optimised for efficient and globally consistent point-in-time queries
 using a pair of `transaction-time` and `valid-time` timestamps.
 
 Ad-hoc systems for bitemporal recordkeeping typically rely on explicitly
 tracking either `valid-from` and `valid-to` timestamps or range types directly
-within relations.  The bitemporal document model that Crux provides is very
+within relations.  The bitemporal document model that XTDB provides is very
 simple to reason about and it is universal across the entire database,
 therefore it does not require you to consider which historical information is
 worth storing in special "bitemporal tables" upfront.
 
-One or more documents may be inserted into Crux via a `put` transaction at a
+One or more documents may be inserted into XTDB via a `put` transaction at a
 specific `valid-time`, defaulting to the `transaction time` (i.e. `now`), and
 each document remains valid until explicitly updated with a new version via
 `put` or deleted via `delete`.
@@ -63,7 +63,7 @@ for ensuring globally consistent reads across nodes or to query for audit
 reasons.
 ****
 
-NOTE: In Crux, when `transaction-time` isn't specified, it is set to
+NOTE: In XTDB, when `transaction-time` isn't specified, it is set to
 _now_. When writing data, in case there isn’t any specific valid-time
 available, valid-time and transaction-time take the same value.
 
@@ -130,7 +130,7 @@ time-related information within your documents, for instance `valid-time`,
 decision, receipt, notification, availability).
 
 Queries that use domain times do not automatically benefit from any
-kind of native indexes to support efficient execution, however Crux
+kind of native indexes to support efficient execution, however XTDB
 encourages you to build additional layers of functionality to do
 so. See https://github.com/crux-labs/crux-decorators[decorators] for
 examples.
@@ -148,7 +148,7 @@ networks.
 - Ad-hoc auditing is an otherwise intensive and slow process requiring
   significant operational complexity.
 
-With Crux you retain visibility of all historical changes whilst compensating
+With XTDB you retain visibility of all historical changes whilst compensating
 for lag, making corrections, and performing audit queries. By default, deleting
 data only erases visibility of that data from the current perspective. You may
 of course still evict data completely as the legal status of information
@@ -231,9 +231,9 @@ Assuming Day 0 for the investigation period is `#inst "2018-12-31"`, the
 initial documents are ingested using the Day 0 valid time:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp0,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp0,indent=0]
 
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp1,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp1,indent=0]
 ----
 
 The first document shows that `Person 2` was recorded entering via `:SFO` and
@@ -249,7 +249,7 @@ documents available to ingest.
 A single event arrives on Day 2 showing `Person 4` arriving at `:NY`:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp2,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp2,indent=0]
 ----
 
 ==== Day 3
@@ -258,7 +258,7 @@ Next, we learn on Day 3 that `Person 4` departed from `:NY`, which is
 represented as an update to the existing document using the Day 3 valid time:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp3,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp3,indent=0]
 ----
 
 ==== Day 4
@@ -270,23 +270,23 @@ First we receive an event showing that `Person 1` entered `:NY` on Day 0 which
 must ingest using the Day 0 valid time `#inst "2018-12-31"`:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp4,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp4,indent=0]
 ----
 
 We then receive an event showing that `Person 1` departed from `:NY` on Day 3,
 so again we ingest this document using the corresponding Day 3 valid time:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp4b,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp4b,indent=0]
 ----
 
 Finally, we receive two events relating to Day 4, which can be ingested using
 the current valid time:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp4c,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp4c,indent=0]
 
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp4d,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp4d,indent=0]
 ----
 
 ==== Day 5
@@ -295,7 +295,7 @@ On Day 5 there is an event showing that `Person 2`, having arrived on Day 0
 (which we already knew), departed from `:SFO` on Day 5.
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp5,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp5,indent=0]
 ----
 
 ==== Day 6
@@ -311,9 +311,9 @@ error. The second document shows that `Person 3` has only just departed on Day
 7, which is how the previous error was noticed.
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp7a,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp7a,indent=0]
 
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp7b,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp7b,indent=0]
 ----
 
 ==== Day 8
@@ -323,9 +323,9 @@ Two documents have been received relating to new arrivals on Day 8. Note that
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp8a,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp8a,indent=0]
 
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp8b,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp8b,indent=0]
 ----
 
 ==== Day 9
@@ -333,7 +333,7 @@ include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp8b,in
 On Day 9 we learn that `Person 3` also departed on Day 8.
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp9,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp9,indent=0]
 ----
 
 ==== Day 10
@@ -342,7 +342,7 @@ A single document arrives showing that `Person 5` entered at `:LA` earlier that
 day.
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp10,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp10,indent=0]
 ----
 
 ==== Day 11
@@ -351,7 +351,7 @@ Similarly to the previous day, a single document arrives showing that `Person
 7` entered at `:NY` earlier that day.
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp11,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp11,indent=0]
 ----
 
 ==== Day 12
@@ -359,7 +359,7 @@ include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp11,in
 Finally, on Day 12 we learn that `Person 6` entered at `:NY` that same day.
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp12,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp12,indent=0]
 ----
 
 ==== Question Time
@@ -371,22 +371,22 @@ Find all persons who are known to be present in the United States on day 2
 (valid time), as of day 3 (transaction time)
 ****
 
-We are able to easily express this as a query in Crux:
+We are able to easily express this as a query in XTDB:
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitempq-a,indent=0]
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitempq-b,indent=12]
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitempq-c,indent=2]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempq-a,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempq-b,indent=12]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempq-c,indent=2]
 ----
 
-The answer given by Crux is a simple set of the three relevant people along
+The answer given by XTDB is a simple set of the three relevant people along
 with the details of their last entry and confirmation that none of them were
 known to have yet departed at this point:
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitempr]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempr]
 ----
 
 [#related]
@@ -394,22 +394,22 @@ include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitempr]
 
 === Retroactive Data Structures
 
-At a theoretical level Crux has similar properties to
+At a theoretical level XTDB has similar properties to
 https://en.wikipedia.org/wiki/Retroactive_data_structure[retroactive data
 structures], which are data structures that support "efficient modifications to
 a sequence of operations that have been performed on the structure [...]
 modifications can take the form of retroactive insertion, deletion or updating
 of an operation that was performed at some time in the past".
 
-Crux's bitemporal indexes are
+XTDB's bitemporal indexes are
 https://en.wikipedia.org/wiki/Persistent_data_structure#Partial_versus_Full_Persistence[partially
 persistent] due to the immutability of transaction time. This allows you to
 query any previous version, but only update the latest version. The efficient
-representation of valid time in the indexes makes Crux "fully retroactive",
+representation of valid time in the indexes makes XTDB "fully retroactive",
 which is analogous to partial persistence in the temporal dimension, and
 enables globally-consistent reads.
 
-Crux does not natively implement "non-oblivious retroactivity" (i.e. persisted
+XTDB does not natively implement "non-oblivious retroactivity" (i.e. persisted
 queries and cascading corrections), although this is an important area of
 investigation for https://github.com/vs-uulm/retro-lambda[event]
 https://dl.acm.org/citation.cfm?doid=3210284.3219499[sourcing]
@@ -418,7 +418,7 @@ https://dl.acm.org/citation.cfm?id=3271883[temporal]
 http://informatique.umons.ac.be/ssi/jef/tic.pdf[constraints], and reactive
 bitemporal queries.
 
-In summary, the Crux indexes as a whole could be described as a "partially
+In summary, the XTDB indexes as a whole could be described as a "partially
 persistent and fully retroactive data structure".
 
 .Further reading:

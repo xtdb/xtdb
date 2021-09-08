@@ -1,0 +1,12 @@
+{
+  "my-rocksdb": {
+    "xtdb/module": "xtdb.rocksdb/->kv-store",
+    "db-dir": "/tmp/txs"
+  },
+  "xtdb/tx-log": {
+    "kv-store": "my-rocksdb"
+  },
+  "xtdb/document-store": {
+    "kv-store": "my-rocksdb"
+  }
+}

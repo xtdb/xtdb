@@ -1,69 +1,69 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
-  CruxCloudStack:
+  CurxCloudStack:
     Type: String
-    Default: crux-cloud
+    Default: curx-cloud
 
 Resources:
   ECSCluster:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-cluster.yml
+      TemplateURL: https://curx-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-cluster.yml
       Parameters:
         VPCId:
-          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'VPCId']]
+          Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'VPCId']]
         LoadBalancerSG:
-          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerSG']]
+          Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'LoadBalancerSG']]
       Tags:
         - Key: juxt:team
-          Value: crux-core
+          Value: curx-core
 
   ECRRepository:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecr-repo.yml
+      TemplateURL: https://curx-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecr-repo.yml
       Tags:
         - Key: juxt:team
-          Value: crux-core
+          Value: curx-core
 
   SoakDNS:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/soak-dns.yml
+      TemplateURL: https://curx-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/soak-dns.yml
       Parameters:
         LoadBalancerDNSName:
-          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerDNSName']]
+          Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'LoadBalancerDNSName']]
         LoadBalancerCanonicalHostedZoneId:
-          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerCanonicalHostedZoneId']]
+          Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'LoadBalancerCanonicalHostedZoneId']]
       Tags:
         - Key: juxt:team
-          Value: crux-core
+          Value: curx-core
 
   ECSIngest:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-ingest.yml
+      TemplateURL: https://curx-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-ingest.yml
       Parameters:
         ECSClusterARN: !GetAtt 'ECSCluster.Outputs.ECSClusterARN'
       Tags:
         - Key: juxt:team
-          Value: crux-core
+          Value: curx-core
 
   ECSService:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-service.yml
+      TemplateURL: https://curx-cloudformation.s3-eu-west-1.amazonaws.com/crux-soak/ecs-service.yml
       Parameters:
         VPCId:
-          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'VPCId']]
+          Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'VPCId']]
         PublicSubnetOne:
-          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetOne']]
+          Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'PublicSubnetOne']]
         PublicSubnetTwo:
-          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'PublicSubnetTwo']]
+          Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'PublicSubnetTwo']]
         LoadBalancerHTTPSListener:
-          Fn::ImportValue: !Join [':', [!Ref 'CruxCloudStack', 'LoadBalancerHTTPSListener']]
+          Fn::ImportValue: !Join [':', [!Ref 'CurxCloudStack', 'LoadBalancerHTTPSListener']]
         FargateContainerSecurityGroup: !GetAtt 'ECSCluster.Outputs.FargateContainerSecurityGroup'
       Tags:
         - Key: juxt:team
-          Value: crux-core
+          Value: curx-core

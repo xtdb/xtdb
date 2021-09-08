@@ -1,0 +1,70 @@
+= XTDB Corda
+
+A https://xtdb.com[XTDB] module that allows you to pipe verified https://www.corda.net/[Corda] transactions into an XTDB node, to then query using XTDB's bitemporal Datalog query engine.
+
+.build.gradle.kts
+[source,kotlin]
+----
+// Main library
+implementation("com.xtdb.labs", "xtdb-corda", "1.18.1")
+
+// Library for inclusion in contract JARs
+implementation("com.xtdb.labs", "xtdb-corda-state", "1.18.1")
+----
+
+.pom.xml
+[source,xml]
+----
+<dependency>
+    <groupId>com.xtdb.labs</groupId>
+    <artifactId>xtdb-corda</artifactId>
+    <version>1.18.1</version>
+</dependency>
+
+<!-- Library for inclusion in contract JARs -->
+<dependency>
+    <groupId>com.xtdb.labs</groupId>
+    <artifactId>xtdb-corda-state</artifactId>
+    <version>1.18.1</version>
+</dependency>
+----
+
+// TODO
+User documentation will live on the https://xtdb.com/reference[XTDB documentation site].
+
+== Developing `xtdb-corda`
+
+
+* Testing: `./gradlew test`
+* CI: unlike XTDB, this is done through a manual https://github.com/xtdb/xtdb/actions/workflows/test-corda.yaml[GitHub action]
+* REPL: `./gradlew clojureRepl`
+
+* Entry points:
+** `xtdb-corda/src/main/kotlin/xtdb/corda/XtdbCorda.kt` - entry point for the XTDB driver, adds extension functions to `AppServiceHub`
+** `xtdb-corda/src/main/clojure/xtdb/corda.clj` - the implementation of the XTDB driver
+** `xtdb-corda-state/src/main/kotlin/xtdb/corda/state/XtdbState.kt` - interface that Corda states should implement to be included in XTDB
+* Example user app:
+** `examples/iou-contract/src/main/kotlin/com/example/contract/IOUState.kt` - example of a Corda state with an XTDB mapping
+** `examples/iou-workflow/src/main/kotlin/com/example/service/XtdbService.kt` - example of a CordaService that starts an XTDB node
+** `examples/iou-workflow/src/test/kotlin/com/example/workflow/IOUFlowTests.kt` - E2E test for the IOU app
+
+== Releasing
+
+We release `xtdb-corda` to Maven Central (OSSRH).
+
+=== One-time setup:
+
+See https://www.juxt.pro/blog/maven-central to get access to the XTDB groupId.
+
+.~/.gradle/gradle.properties:
+[source,properties]
+----
+signing.gnupg.keyName=...
+
+ossrhUsername=...
+ossrhPassword=...
+----
+
+=== Then
+
+`./gradlew publish`, and head to https://s01.oss.sonatype.org/ to confirm the release.

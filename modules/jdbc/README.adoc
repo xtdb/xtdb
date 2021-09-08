@@ -1,0 +1,30 @@
+= xtdb-jdbc
+
+This project contains `xtdb.jdbc` which is an implementation of `TxLog` backend
+by a JDBC-compatible database of your choosing, for strong durability
+guarantees in situations where Kafka cannot be used and scalability is less
+important. This implementation provides the same semantics as the `xtdb-kafka`.
+
+This module has currently has tested support for:
+* H2
+* SQLite
+* MySQL
+* PostgreSQL
+* Oracle
+
+H2 and SQLite may be embedded within your application as a standalone XTDB node.
+
+For tests, see `/test/test/xtdb/jdbc_test.clj`.
+
+=== Secondary imports
+
+To make use of the various database implementations, it is likely that you will need to download and import secondary drivers. For example, in using an Oracle database you would require the Oracle JDBC drivers, which may be imported into the project.clj in which you are using xtdb-jdbc:
+
+----
+:dependencies
+	...
+	[com.xtdb/xtdb-core <version>]
+	[com.xtdb/xtdb-jdbc <version>]
+        [com.oracle.ojdbc/ojdbc8 "19.3.0.0"]
+	...
+----

@@ -9,24 +9,24 @@ set -e
       MODULES=$(echo "$2" | tr ":" "\n" )
       shift 2;
   else
-      MODULES="crux-core
-labs/crux-rdf
-crux-metrics
-crux-rocksdb
-crux-lmdb
-crux-jdbc
-crux-http-client
-crux-http-server
-crux-kafka-embedded
-crux-kafka-connect
-crux-kafka
-crux-sql
-crux-lucene
-crux-test
-crux-s3
-crux-azure-blobs
-crux-google-cloud-storage
-crux-bench"
+      MODULES="core
+labs/rdf
+modules/metrics
+modules/rocksdb
+modules/lmdb
+modules/jdbc
+modules/http-client
+modules/http-server
+modules/kafka-embedded
+modules/kafka-connect
+modules/kafka
+modules/sql
+modules/lucene
+test
+modules/s3
+modules/azure-blobs
+modules/google-cloud-storage
+bench"
   fi
 
   for MODULE in $MODULES; do

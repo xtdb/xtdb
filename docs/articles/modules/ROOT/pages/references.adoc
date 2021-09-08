@@ -5,8 +5,8 @@
 == Highlights
 
 We have highlighted a shortlist of papers and books for anyone interested in the philosophy and
-architecture of Crux. We consider these works to be of high value and directly relevant to the
-current design of Crux.
+architecture of XTDB. We consider these works to be of high value and directly relevant to the
+current design of XTDB.
 
 * https://cs.stanford.edu/people/chrismre/papers/paper49.Ngo.pdf[Worst-case Optimal Join Algorithms], Ngo, Porat, et al. Journal of the ACM, Vol. 64, No. 3, Article 16. 2018.
 * https://arxiv.org/abs/1310.3314[Skew Strikes Back: New Developments in the Theory of Join Algorithms], Ngo, Re, Rudra. ACM SIGMOD Record, Vol. 42, No. 4, Pages 5-16. 2014.
@@ -19,7 +19,7 @@ current design of Crux.
 [#bibliography]
 == Bibliography
 
-The bibliography contains papers, books, and other materials which are directly relevant to Crux
+The bibliography contains papers, books, and other materials which are directly relevant to XTDB
 and its architecture -- past, present, and very-near-future.
 
 [#columnar]
@@ -172,8 +172,8 @@ and its architecture -- past, present, and very-near-future.
 == Inspiration and Research
 
 These resources do not necessarily reflect algorithms, datastructures, or concepts which apply directly
-to the current Crux architecture. These resources have been useful for the Crux team in the past, for one
-reason or another. They may: reflect past Crux architectures, have helped onboard team members, influence
+to the current XTDB architecture. These resources have been useful for the XTDB team in the past, for one
+reason or another. They may: reflect past XTDB architectures, have helped onboard team members, influence
 our overall philosophy, or simply be something we find interesting in the field.
 
 [#graph]
@@ -214,21 +214,21 @@ our overall philosophy, or simply be something we find interesting in the field.
 == JUXT Resources
 
 Our own talks and articles are listed in reverse-chronological order. Although older resources are still
-relevant to the philosophy and design of Crux, newer resources will always provide a better undersatnding
+relevant to the philosophy and design of XTDB, newer resources will always provide a better undersatnding
 of implementation details.
 
 === Talks and Articles
 
-* https://opencrux.com/articles/strength-of-the-record.html[The Strength of the Record], Deobald. opencrux.com. 2021.
-* https://opencrux.com/blog/crux-sql.html[Crux SQL: Query your Datalog database with SQL], Pither. Crux Weblog. 2020.
+* https://xtdb.com/articles/strength-of-the-record.html[The Strength of the Record], Deobald. xtdb.com. 2021.
+* https://xtdb.com/blog/crux-sql.html[XTDB SQL: Query your Datalog database with SQL], Pither. XTDB Weblog. 2020.
 * https://juxt.pro/blog/value-of-bitemporality[The Value of Bitemporality], Pither. JUXT Weblog. 2019.
 * https://www.youtube.com/watch?v=YjAVsvYGbuU[The Design and Implementation of a Bitemporal DBMS], Råberg. ClojuTRE (YouTube). September 2019.
 * https://www.youtube.com/watch?v=ykbYNBE-V3k[Temporal Databases for Stream Architectures], Taylor, Pither. StrangeLoop (YouTube). September 2019.
-* https://www.youtube.com/watch?v=3Stja6YUB94[The Crux of Bitemporality], Pither. Clojure/north (YouTube). May 2019.
-* https://soundcloud.com/defn-771544745/49-crux-with-jon-and-jeremy[defn Podcast #49: Crux with Jon and Jeremy], Pither, Taylor. Soundcloud. May 2019.
+* https://www.youtube.com/watch?v=3Stja6YUB94[The XTDB of Bitemporality], Pither. Clojure/north (YouTube). May 2019.
+* https://soundcloud.com/defn-771544745/49-crux-with-jon-and-jeremy[defn Podcast #49: XTDB with Jon and Jeremy], Pither, Taylor. Soundcloud. May 2019.
 
 === Prior Art
 
 * https://github.com/hraberg/datascript-mapdb[datascript-mapdb: Durable Datascript backed by MapDB], Råberg. GitHub (archived). 2016.
 * https://github.com/hraberg/eyvind[Eyvind: distributed rule engine], Råberg. GitHub (archived). 2016.
-* https://github.com/crux-labs/crux-datascript[crux-datascript: Replicate Crux data into DataScript], Taylor. Github.
+* https://github.com/crux-labs/crux-datascript[crux-datascript: Replicate XTDB data into DataScript], Taylor. Github.

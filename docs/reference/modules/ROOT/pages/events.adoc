@@ -3,20 +3,20 @@
 [#overview]
 == Overview
 
-You can subscribe to Crux events using `crux.api/listen`
+You can subscribe to XTDB events using `xtdb.api/listen`
 
 [source,clojure]
 ----
-(crux.api/listen node
+(xtdb.api/listen node
                  event-opts <1>
                  f) <2>
 ----
 <1> A map which contains which event to listen to along with any relevant options
 <2> The function to run when the event triggers
 
-`event-ops` must contain `:crux/event-type`
+`event-ops` must contain `::xt/event-type`
 
-You can `.close` the return value from `(crux.api/listen ...)` to detach the listener, should you need to.
+You can `.close` the return value from `(xtdb.api/listen ...)` to detach the listener, should you need to.
 
 [#events]
 == Events
@@ -25,7 +25,7 @@ You can `.close` the return value from `(crux.api/listen ...)` to detach the lis
 |===
 |Event Type|Trigger
 
-|<<#indexed-tx,`:crux/indexed-tx`>>|Crux indexing a transaction
+|<<#indexed-tx,`::xt/indexed-tx`>>|XTDB indexing a transaction
 |===
 
 [#indexed-tx]
@@ -42,7 +42,7 @@ You can `.close` the return value from `(crux.api/listen ...)` to detach the lis
 
 ==== Function Parameters
 
-`:crux/indexed-tx` passes one parameter to the function supplied to `crux.api/listen`
+`::xt/indexed-tx` passes one parameter to the function supplied to `xtdb.api/listen`
 
 This parameter is a map of the following
 
@@ -50,23 +50,23 @@ This parameter is a map of the following
 |===
 |Key|Value Type|Value
 
-|`:crux/event-type`|Keyword|`:crux/indexed-tx`
-|`:crux.tx/tx-id`|Long|ID of the indexed transaction
-|`:crux.tx/tx-time`|Date|Transaction time of the indexed transaction
+|`::xt/event-type`|Keyword|`::xt/indexed-tx`
+|`::xt/tx-id`|Long|ID of the indexed transaction
+|`::xt/tx-time`|Date|Transaction time of the indexed transaction
 |`:committed?`|Boolean|Whether the transaction was committed or aborted
-|`:crux/tx-ops`|List|List of the transaction operations indexed
+|`::xt/tx-ops`|List|List of the transaction operations indexed
 |===
 
 ==== Example
 
 [source,clojure]
 ----
-(crux/listen node {:crux/event-type :crux/indexed-tx, :with-tx-ops? true}
+(xt/listen node {::xt/event-type ::xt/indexed-tx, :with-tx-ops? true}
   (fn [ev]
     (println "event received!")
     (clojure.pprint/pprint ev)))
 
-(crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]])
+(xt/submit-tx node [[::xt/put {:xt/id :ivan, :name "Ivan"}]])
 ----
 
 Will print
@@ -74,9 +74,9 @@ Will print
 [source,clojure]
 ----
 event received!
-{:crux/event-type :crux/indexed-tx,
- :crux.tx/tx-id ...,
- :crux.tx/tx-time #inst "...",
+{::xt/event-type ::xt/indexed-tx,
+ ::xt/tx-id ...,
+ ::xt/tx-time #inst "...",
  :committed? true,
- :crux/tx-ops [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]]}
+ ::xt/tx-ops [[::xt/put {:xt/id :ivan, :name "Ivan"}]]}
 ----

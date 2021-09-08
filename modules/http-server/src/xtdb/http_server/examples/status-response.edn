@@ -1,0 +1,6 @@
+{:xtdb.version/version "1.18.1",
+ :xtdb.version/revision nil, :xtdb.index/index-version 13,
+ :xtdb.tx-log/consumer-state nil,
+ :xtdb.kv/kv-store "xtdb.rocksdb.RocksKv",
+ :xtdb.kv/estimate-num-keys 3,
+ :xtdb.kv/size 132665}

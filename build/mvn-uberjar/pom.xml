@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <properties>
+      <xtdb.group-id>com.xtdb</xtdb.group-id>
+      <xtdb.artifact-id>xtdb-custom</xtdb.artifact-id>
+      <xtdb.xtdb-version>xtdb-git-version</xtdb.xtdb-version>
+      <xtdb.artifact-version>xtdb-git-version</xtdb.artifact-version>
+      <xtdb.uberjar-name>xtdb.jar</xtdb.uberjar-name>
+  </properties>
+
+  <groupId>${xtdb.group-id}</groupId>
+  <artifactId>${xtdb.artifact-id}</artifactId>
+  <version>${xtdb.artifact-version}</version>
+  <name>#{xtdb.artifact-id}</name>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.clojure</groupId>
+      <artifactId>clojure</artifactId>
+      <version>1.10.1</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>1.7.29</version>
+    </dependency>
+
+    <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-classic</artifactId>
+        <version>1.2.3</version>
+    </dependency>
+
+    <dependency>
+      <groupId>${xtdb.group-id}</groupId>
+      <artifactId>xtdb-core</artifactId>
+      <version>${xtdb.xtdb-version}</version>
+    </dependency>
+
+    <dependency>
+        <groupId>${xtdb.group-id}</groupId>
+        <artifactId>xtdb-http-server</artifactId>
+        <version>${xtdb.xtdb-version}</version>
+    </dependency>
+  </dependencies>
+
+  <repositories>
+      <repository>
+          <id>clojars.org</id>
+          <url>https://repo.clojars.org</url>
+      </repository>
+  </repositories>
+
+  <build>
+      <plugins>
+          <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-shade-plugin</artifactId>
+              <version>3.2.1</version>
+              <configuration>
+                  <transformers>
+                      <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                          <mainClass>xtdb.main</mainClass>
+                      </transformer>
+                  </transformers>
+                  <outputFile>${xtdb.uberjar-name}</outputFile>
+              </configuration>
+              <executions>
+                  <execution>
+                      <phase>package</phase>
+                      <goals>
+                          <goal>shade</goal>
+                      </goals>
+                  </execution>
+              </executions>
+          </plugin>
+      </plugins>
+  </build>
+</project>

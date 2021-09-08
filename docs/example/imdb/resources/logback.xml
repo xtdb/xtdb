@@ -7,7 +7,7 @@
   <root level="WARN">
     <appender-ref ref="STDOUT" />
   </root>
-  <logger name="crux" level="INFO" />
+  <logger name="xtdb" level="INFO" />
   <logger name="imdb" level="INFO" />
   <logger name="org.apache.kafka" level="ERROR" />
   <logger name="org.apache.zookeeper" level="ERROR" />

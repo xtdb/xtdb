@@ -1,6 +1,6 @@
 = Xodus
 
-Our friends over at https://www.avisi.nl/en/home[Avisi] have released support for https://github.com/JetBrains/xodus[JetBrains Xodus] as a KV store for Crux's indices.
+Our friends over at https://www.avisi.nl/en/home[Avisi] have released support for https://github.com/JetBrains/xodus[JetBrains Xodus] as a KV store for XTDB's indices.
 
 For more details, see the https://github.com/avisi-apps/crux-xodus[crux-xodus] GitHub repo.
 
@@ -27,15 +27,15 @@ JSON::
 [source,json]
 ----
 {
-  "crux/index-store": {
+  "xtdb/index-store": {
     "kv-store": {
-      "crux/module": "avisi.crux.xodus/->kv-store",
+      "xtdb/module": "avisi.crux.xodus/->kv-store",
       "db-dir": "/tmp/xodus"
     }
   },
 
-  "crux/document-store": { ... },
-  "crux/tx-log": { ... }
+  "xtdb/document-store": { ... },
+  "xtdb/tx-log": { ... }
 }
 ----
 
@@ -43,20 +43,20 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module 'avisi.crux.xodus/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module 'avisi.crux.xodus/->kv-store
                                :db-dir (io/file "/tmp/xodus")}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module avisi.crux.xodus/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module avisi.crux.xodus/->kv-store
                                :db-dir "/tmp/xodus"}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
 ----
 ====
 
