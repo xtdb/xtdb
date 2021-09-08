@@ -1,6 +1,6 @@
 name: reference
 title: Reference
-version: main
+version: master
 prerelease: indeed
 display_version: main
 start_page: ROOT:installation.adoc
