@@ -1,1 +1,1 @@
-{:hooks {:analyze-call {crux.fixtures/with-tmp-dirs hooks.crux/with-tmp-dirs}}}
+{:hooks {:analyze-call {crux.fixtures/with-tmp-dirs hooks.xtdb/with-tmp-dirs}}}

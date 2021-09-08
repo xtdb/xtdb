@@ -1,4 +1,4 @@
-(ns hooks.crux
+(ns hooks.xtdb
   (:require [clj-kondo.hooks-api :as api]))
 
 (defn with-tmp-dirs [{{[_ dir-set & body] :children} :node}]
