@@ -234,15 +234,15 @@
                                      (-> tx-log-entry
                                          (dissoc :xtdb.tx.event/tx-events)
                                          (assoc ::xt/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
-                                   (fn [tx-log-entry]
+                                   (fn [{:keys [xtdb.tx.event/tx-events] :as tx-log-entry}]
                                      (-> tx-log-entry
-                                         (update :xtdb.tx.event/tx-events
-                                                 (fn [evts]
-                                                   (->> evts
-                                                        (mapv (fn [evt]
-                                                                (-> evt
-                                                                    (update 0 txc/crux-op->xt-op)
-                                                                    (update 1 c/new-id))))))))))))]
+                                         (dissoc :xtdb.tx.event/tx-events)
+                                         (assoc ::xt/tx-events
+                                                (->> tx-events
+                                                     (mapv (fn [evt]
+                                                             (-> evt
+                                                                 (update 0 txc/crux-op->xt-op)
+                                                                 (update 1 c/new-id)))))))))))]
             (xio/->cursor (fn []
                             (.close tx-log-iterator))
                           tx-log)))))))

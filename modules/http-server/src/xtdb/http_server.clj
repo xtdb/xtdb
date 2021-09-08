@@ -118,7 +118,7 @@
 (defn tx-log-json-encode [tx]
   (-> tx
       (xio/update-if ::xt/tx-ops txs->json)
-      (xio/update-if :xtdb.tx.event/tx-events txs->json)
+      (xio/update-if ::xt/tx-events txs->json)
       (http-json/camel-case-keys)))
 
 (def ->tx-log-muuntaja

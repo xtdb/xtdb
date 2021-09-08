@@ -221,7 +221,7 @@
         (let [result (iterator-seq tx-log-iterator)]
           (t/is (not (realized? result)))
           (t/is (= [(assoc tx1
-                           :xtdb.tx.event/tx-events [[::xt/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
+                           ::xt/tx-events [[::xt/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
                    result))
           (t/is (realized? result))))
 
@@ -246,7 +246,7 @@
           (with-open [tx-log-iterator (xt/open-tx-log *api* nil false)]
             (let [result (iterator-seq tx-log-iterator)]
               (t/is (= [(assoc tx1
-                               :xtdb.tx.event/tx-events [[::xt/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
+                               ::xt/tx-events [[::xt/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
                        result))))
 
           (let [tx3 (fix/submit+await-tx [[::xt/match :ivan {:xt/id :ivan :name "Ivan"}]

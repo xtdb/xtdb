@@ -21,7 +21,7 @@ public class TestUtils {
 
     static final Keyword TX_TIME = Keyword.intern("xtdb.api/tx-time");
     static final Keyword TX_ID = Keyword.intern("xtdb.api/tx-id");
-    static final Keyword TX_EVENTS = Keyword.intern("xtdb.tx.event/tx-events");
+    static final Keyword TX_EVENTS = Keyword.intern("xtdb.api/tx-events");
     static final Keyword TX = Keyword.intern("xtdb.api/tx");
 
     static final Keyword TX_OPS = Keyword.intern("xtdb.api/tx-ops");

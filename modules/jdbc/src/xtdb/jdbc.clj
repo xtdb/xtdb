@@ -12,6 +12,7 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [xtdb.tx.event :as txe]
             [xtdb.tx.subscribe :as tx-sub])
   (:import clojure.lang.MapEntry
            [com.zaxxer.hikari HikariConfig HikariDataSource]
@@ -153,7 +154,7 @@
                          (map (fn [y]
                                 {::xt/tx-id (long (:event_offset y))
                                  ::xt/tx-time (-> (:tx_time y) (->date dialect))
-                                 :xtdb.tx.event/tx-events (-> (:v y) (<-blob dialect))}))))))
+                                 ::txe/tx-events (-> (:v y) (<-blob dialect))}))))))
 
   (subscribe [this after-tx-id f]
     (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))

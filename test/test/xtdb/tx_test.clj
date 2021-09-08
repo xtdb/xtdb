@@ -561,7 +561,7 @@
              (xt/entity (xt/db *api*) :foo)))
 
     (with-open [log-iterator (xt/open-tx-log *api* nil nil)]
-      (let [evts (::txe/tx-events (first (iterator-seq log-iterator)))]
+      (let [evts (::xt/tx-events (first (iterator-seq log-iterator)))]
         ;; have to check not= too because Id's `equals` conforms its input to Id
         (t/is (not= [::xt/match :foo (c/new-id c/nil-id-buffer)]
                     (first evts)))
