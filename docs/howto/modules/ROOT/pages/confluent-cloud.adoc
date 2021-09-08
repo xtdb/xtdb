@@ -120,7 +120,7 @@ Note that the node's indexes will be in-memory by default and therefore will be 
 Behind the scenes, XTDB will automatically generate topics with the required retention/compaction configurations and will set the number of partitions for the transaction topic to `1`.
 
 You can also create and manage topics independently of XTDB using a CLI tool or the Confluent Cloud web interface, but they may need to be configured according to the latest XTDB defaults (see
-https://github.com/xtdb/xtdb/blob/master/modules/kafka/src/xtdb/kafka.clj[kafka.clj]).
+https://github.com/xtdb/xtdb/blob/main/modules/kafka/src/xtdb/kafka.clj[kafka.clj]).
 
 === 3. Finished
 

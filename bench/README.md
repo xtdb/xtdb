@@ -14,7 +14,7 @@ If you wish to save to / load from S3 on your local benchmarks (used within the 
 
 ## Nightly benchmarks
 
-Every push on `master` triggers a deployment job on CircleCI, building a new docker image and uploading it to the **Elastic Container Registry** on AWS. The latest of these `master` images is ran at midnight every single weekday.
+Every push on `main` triggers a deployment job on CircleCI, building a new docker image and uploading it to the **Elastic Container Registry** on AWS. The latest of these `main` images is ran at midnight every single weekday.
 
 ## Manually running a benchmark on AWS
 

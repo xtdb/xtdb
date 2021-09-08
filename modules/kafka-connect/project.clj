@@ -36,7 +36,7 @@
 
   :confluent-hub-manifest {:component_types ["sink" "source"]
                            :description "A Kafka Connect plugin for transferring data between XTDB nodes and Kafka. Acts as a source for publishing transacations on a node to a Kafka topic, as well as a sink to receive transactions from a Kafka topic and submit them to a node."
-                           :documentation_url "https://github.com/xtdb/xtdb/tree/master/modules/kafka-connect"
+                           :documentation_url "https://github.com/xtdb/xtdb/tree/main/modules/kafka-connect"
                            :features {:confluent_control_center_integration true,
                                       :delivery_guarantee ["exactly_once"],
                                       :kafka_connect_api true,

@@ -71,7 +71,7 @@
 ;;; Watdiv numbers:
 
 ;; We've run 100 queries on each of the comparison DBs and saved the results - time taken, whether it timed out, and result count.
-;; Every night, we run those same queries, once, against XTDB master.
+;; Every night, we run those same queries, once, against XTDB main.
 
 ;; `queries` - XTDB time taken to run all 100 queries (including queries that timed out).
 

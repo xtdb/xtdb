@@ -27,10 +27,10 @@ Resources:
           "rules": [
           {
             "rulePriority": 1,
-            "description": "Only keep latest five images of master",
+            "description": "Only keep latest five images of main",
             "selection": {
               "tagStatus": "tagged",
-              "tagPrefixList": ["master"],
+              "tagPrefixList": ["main"],
               "countType": "imageCountMoreThan",
               "countNumber": 5
             },
@@ -38,10 +38,10 @@ Resources:
           },
           {
             "rulePriority": 2,
-            "description": "Only keep master-images for 14 days",
+            "description": "Only keep main-images for 14 days",
             "selection": {
               "tagStatus": "tagged",
-              "tagPrefixList": ["master-"],
+              "tagPrefixList": ["main-"],
               "countType": "sinceImagePushed",
               "countNumber": 14,
               "countUnit": "days"
@@ -197,7 +197,7 @@ Resources:
         - Name: 'bench-container'
           Cpu: 2048
           Memory: 8192
-          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:master'
+          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:main'
           Essential: true
           Secrets:
             - Name: "SLACK_URL"

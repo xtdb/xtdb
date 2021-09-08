@@ -1,6 +1,6 @@
 name: articles
 title: XTDB Articles
-version: master
+version: main
 start_page: ROOT:what-is-crux.adoc
 nav:
   - modules/ROOT/articles-nav.adoc

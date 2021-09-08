@@ -20,11 +20,11 @@ content:
       branches: HEAD
     - url: ../
       start_path: docs/articles
-      branches: master
+      branches: main
     # TODO: the remaining components do not belong in xtdb/docs:
     - url: ../
       start_path: docs/community
-      branches: master
+      branches: main
 
 ui:
   bundle:

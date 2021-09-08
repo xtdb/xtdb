@@ -2,7 +2,7 @@
 
 Rigorous benchmarking supports the team's development activities by providing rapid feedback on complex changes and a regular benchmark process allows the team to discover and address performance regressions during day-to-day development, well in advance of any releases.
 
-The https://github.com/xtdb/xtdb/tree/master/bench[`bench`] sub-project contains a number of benchmarking suites that are run nightly on standard AWS infrastructure (`m5.xlarge` instances via https://github.com/xtdb/xtdb/blob/master/bench/cloudformation.yaml[CloudFormation]) to support regression testing of new development and validate all performance improvement changes.
+The https://github.com/xtdb/xtdb/tree/main/bench[`bench`] sub-project contains a number of benchmarking suites that are run nightly on standard AWS infrastructure (`m5.xlarge` instances via https://github.com/xtdb/xtdb/blob/main/bench/cloudformation.yaml[CloudFormation]) to support regression testing of new development and validate all performance improvement changes.
 
 These suites cover a wide range of analysis at a variety of scale factors, including: graph query performance, bitemporal query performance, ingestion performance (throughput & latency), and disk usage.
 
@@ -28,7 +28,7 @@ http://www.tpc.org/tpch/
 The TPC-H is a decision support benchmark. It consists of a suite of business oriented ad-hoc queries and concurrent data modifications. The queries and the data populating the database have been chosen to have broad industry-wide relevance. This benchmark illustrates decision support systems that examine large volumes of data, execute queries with a high degree of complexity, and give answers to critical business questions.
 ****
 
-See the https://github.com/xtdb/xtdb/blob/master/test/src/xtdb/fixtures/tpch.clj[TPC-H test fixture] for details.
+See the https://github.com/xtdb/xtdb/blob/main/test/src/xtdb/fixtures/tpch.clj[TPC-H test fixture] for details.
 
 [#watdiv]
 == WatDiv SPARQL Tests

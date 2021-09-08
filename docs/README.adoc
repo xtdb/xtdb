@@ -18,14 +18,14 @@ From here, though, you can build the documentation section in isolation, to chec
 
 == Versions:
 
-The documentation site includes documentation for previous releases as well as the current master branch.
+The documentation site includes documentation for previous releases as well as the current main branch.
 These are located by branch name convention - branches prefixed with `docs-v*` will be included.
 
 === Release checklist:
 
 1. Create a `docs-v<new-version>` branch
 2. Update docs/reference/antora.yml:
-  a. Delete `prerelease: indeed` and `display-version: master` lines
-  b. Update `version: master` to `version: <new-version>`
+  a. Delete `prerelease: indeed` and `display-version: main` lines
+  b. Update `version: main` to `version: <new-version>`
 3. Commit, push branch to the main JUXT XTDB repo
 4. Head over to `crux-site` to deploy the docs.

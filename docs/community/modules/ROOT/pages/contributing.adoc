@@ -24,4 +24,4 @@ Please strive to follow the best-practices for commit messages which are outline
 A Contributor License Agreement (CLA) is necessary for us to ensure that we can support a healthy XTDB ecosystem over the indefinite future.
 Please complete the very short `.rtf` template linked below and email it to us, hello@xtdb.com, along with a reference to your current PR on GitHub.
 
-https://raw.githubusercontent.com/xtdb/xtdb/master/docs/open-crux-individual-contributor-license-agreement-cla.rtf[XTDB CLA]
+https://raw.githubusercontent.com/xtdb/xtdb/main/docs/open-crux-individual-contributor-license-agreement-cla.rtf[XTDB CLA]

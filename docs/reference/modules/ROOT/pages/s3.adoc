@@ -102,7 +102,7 @@ Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on you
 WARNING: This is unfortunately currently only accessible from Clojure - we plan to expose it outside of Clojure soon.
 
 While the above is sufficient to get `xtdb-s3` working out of the box, there are a plethora of configuration options in S3 - how to get credentials, object properties, serialisation of the documents, etc.
-We expose these via the https://github.com/xtdb/xtdb/blob/master/modules/s3/src/xtdb/s3/S3Configurator.java[`xtdb.s3.S3Configurator`] interface - you can supply an instance using the following in your node configuration.
+We expose these via the https://github.com/xtdb/xtdb/blob/main/modules/s3/src/xtdb/s3/S3Configurator.java[`xtdb.s3.S3Configurator`] interface - you can supply an instance using the following in your node configuration.
 
 Through this interface, you can supply an `S3AsyncClient` for xtdb-s3 to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
 By default, we get credentials through the usual AWS credentials provider, and store documents using https://github.com/ptaoussanis/nippy[Nippy].

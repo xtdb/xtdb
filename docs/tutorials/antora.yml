@@ -1,6 +1,6 @@
 name: tutorials
 title: XTDB Tutorials
-version: master
+version: main
 start_page: ROOT:space-adventure.adoc
 nav:
   - modules/ROOT/nav.adoc

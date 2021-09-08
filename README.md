@@ -36,7 +36,7 @@ used to express complex joins and recursive graph traversals.
   ```
 * [Release notes](https://github.com/xtdb/xtdb/releases)
 * Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/xtdb/xtdb/discussions) | hello@xtdb.com
-* [Developing XTDB](https://github.com/xtdb/xtdb/tree/master/dev)
+* [Developing XTDB](https://github.com/xtdb/xtdb/tree/main/dev)
 
 ## Unbundled Architecture
 

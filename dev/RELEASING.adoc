@@ -11,7 +11,7 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 
 1. find/replace `<previous-version>` -> `<next-version>`, commit
 2. `git tag --annotate --sign <next-version>` (magit `t -a -s t`), add release notes to tag.
-3. `git push origin master <next-version>`
+3. `git push origin main <next-version>`
 
 ## CircleCI
 1. Await https://app.circleci.com/pipelines/github/xtdb/xtdb[CircleCI build]
@@ -33,8 +33,8 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 1. Await CircleCI.
 2. Create a `docs-v<next-release>` branch
 3. Update `docs/reference/antora.yml`:
-   * Delete `prerelease: indeed` and `display-version: master` lines
-   * Update `version: master` to `version: <next-release>`
+   * Delete `prerelease: indeed` and `display-version: main` lines
+   * Update `version: main` to `version: <next-release>`
 4. Commit, push branch to the main JUXT XTDB repo
 5. Head over to `crux-site`, build and deploy the site
    * Build using `./bin/build-site.sh`

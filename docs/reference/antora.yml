@@ -1,8 +1,8 @@
 name: reference
 title: Reference
-version: master
+version: main
 prerelease: indeed
-display_version: master
+display_version: main
 start_page: ROOT:installation.adoc
 nav:
   - modules/ROOT/nav.adoc

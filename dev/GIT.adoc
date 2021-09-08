@@ -7,14 +7,14 @@ This is a living document - please feel free to start discussions/raise PRs.
 We loosely follow a https://nvie.com/posts/a-successful-git-branching-model/['git flow'] model.
 Differences:
 
-* We develop on the `master` branch, rather than `develop`.
-* When we find bugs on a previous release that require patch releases, we create a branch from master named (for example) `1.10.x`.
+* We develop on the `main` branch, rather than `develop`.
+* When we find bugs on a previous release that require patch releases, we create a branch from main named (for example) `1.10.x`.
 
 Other conventions:
 
 * **PRs by default**
 +
-Simple, uncontroversial changes (typos, say, or other non-code changes) *can* go straight to `master`, within reason, but be aware of the curse of the 'simple change'.
+Simple, uncontroversial changes (typos, say, or other non-code changes) *can* go straight to `main`, within reason, but be aware of the curse of the 'simple change'.
 Err on the side of caution if need be.
 
 ** PRs (again, within reason) should be atomic - the 'minimum viable merge'.
@@ -39,11 +39,11 @@ I find this works well, but each to their own.)
 +
 This is related to the previous point, because it's much easier to reason about/bisect changes if they're linear. It means:
 
-** Prefer rebasing feature branches on `master` to pull in changes from elsewhere over merging `master` into the feature branch.
-** When you merge your feature branch back into master, there are a few patterns, depending on the size of the change:
+** Prefer rebasing feature branches on `main` to pull in changes from elsewhere over merging `main` into the feature branch.
+** When you merge your feature branch back into main, there are a few patterns, depending on the size of the change:
 *** Github's 'squash and merge PR' is a reasonable default
-*** If it's a single commit, it can go straight onto master (once reviewed)
-*** If you want to keep the original commits visible (for git blame purposes, say), `git switch master && git merge --no-ff <branch>` clearly marks out a block of work, preserves your commits, and keeps the history linear.
+*** If it's a single commit, it can go straight onto main (once reviewed)
+*** If you want to keep the original commits visible (for git blame purposes, say), `git switch main && git merge --no-ff <branch>` clearly marks out a block of work, preserves your commits, and keeps the history linear.
 
 * **The issue/PR assignee is responsible for progression**
 +
