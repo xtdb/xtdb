@@ -101,7 +101,7 @@ include::example$test/xtdb/docs/examples_test.clj[tags=start-http-client]
 
 All of the REST endpoints return `application/edn`, `application/json` and https://github.com/cognitect/transit-clj[`application/transit+json`].
 Individual endpoints may return additional types - see their docs below, or see the
-Swagger documentation link:https://crux-doc.s3.eu-west-2.amazonaws.com/redoc/{page-version}/crux-redoc.html[here].
+Swagger documentation link:https://xtdb-api-doc.s3.eu-west-1.amazonaws.com/redoc/{page-version}/crux-redoc.html[here].
 
 [NOTE]
 All endpoints with query-parameters accept them in both a kebab-case and camel cased format, (ie: if `valid-time` is taken, `validTime` will also be taken)

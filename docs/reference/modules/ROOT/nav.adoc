@@ -7,7 +7,7 @@
 * xref:queries.adoc[Queries]
 * Core API
 ** xref:clojure-api.adoc[Clojure]
-** https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/{page-version}/index.html[Java,window=_blank]
+** https://xtdb-api-doc.s3.eu-west-1.amazonaws.com/crux-javadoc/{page-version}/index.html[Java,window=_blank]
 * xref:building.adoc[Building]
 * xref:monitoring.adoc[Monitoring]
 * xref:checkpointing.adoc[Checkpointing]
