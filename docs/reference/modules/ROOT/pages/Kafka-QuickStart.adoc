@@ -4,7 +4,7 @@
 
 Download the connector from Confluent hub, then unzip the downloaded folder:
 ----
-unzip juxt-kafka-connect-xtdb-1.18.1.zip
+unzip juxt-kafka-connect-xtdb-1.19.0-beta1.zip
 ----
 
 Navigate into the base of the Kafka folder, then run the following commands:

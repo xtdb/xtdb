@@ -5,7 +5,7 @@ This XTDB module allows you to use AWS's Simple Storage Service (S3) as XTDB's '
 .deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-s3 {:mvn/version "1.18.1"}
+com.xtdb/xtdb-s3 {:mvn/version "1.19.0-beta1"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ com.xtdb/xtdb-s3 {:mvn/version "1.18.1"}
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-s3</artifactId>
-    <version>1.18.1</version>
+    <version>1.19.0-beta1</version>
 </dependency>
 ----
 

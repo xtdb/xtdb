@@ -6,10 +6,10 @@ A https://xtdb.com[XTDB] module that allows you to pipe verified https://www.cor
 [source,kotlin]
 ----
 // Main library
-implementation("com.xtdb.labs", "xtdb-corda", "1.18.1")
+implementation("com.xtdb.labs", "xtdb-corda", "1.19.0-beta1")
 
 // Library for inclusion in contract JARs
-implementation("com.xtdb.labs", "xtdb-corda-state", "1.18.1")
+implementation("com.xtdb.labs", "xtdb-corda-state", "1.19.0-beta1")
 ----
 
 .pom.xml
@@ -18,14 +18,14 @@ implementation("com.xtdb.labs", "xtdb-corda-state", "1.18.1")
 <dependency>
     <groupId>com.xtdb.labs</groupId>
     <artifactId>xtdb-corda</artifactId>
-    <version>1.18.1</version>
+    <version>1.19.0-beta1</version>
 </dependency>
 
 <!-- Library for inclusion in contract JARs -->
 <dependency>
     <groupId>com.xtdb.labs</groupId>
     <artifactId>xtdb-corda-state</artifactId>
-    <version>1.18.1</version>
+    <version>1.19.0-beta1</version>
 </dependency>
 ----
 
