@@ -10,7 +10,7 @@
            [java.nio ByteBuffer]
            [java.net URL]))
 
-(t/deftest can-build-sparse-union-vector
+(t/deftest can-build-dense-union-vector
   (with-open [allocator (RootAllocator.)
               v (DenseUnionVector/empty "" allocator)]
 
