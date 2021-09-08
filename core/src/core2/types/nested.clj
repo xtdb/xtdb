@@ -1,22 +1,21 @@
 (ns core2.types.nested
-  (:require [clojure.data.json :as json]
-            [clojure.walk :as w])
   (:import [java.nio.charset StandardCharsets]
            [java.nio ByteBuffer CharBuffer]
            [java.io ByteArrayInputStream ByteArrayOutputStream ObjectInputStream ObjectOutputStream Serializable]
-           [java.util Date Collection List Map Set UUID]
+           [java.util Date List Map Set UUID]
            [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZoneId ZonedDateTime ZoneOffset]
-           [java.time.temporal ChronoField ChronoUnit]
+           [java.time.temporal ChronoField]
            [java.util.concurrent TimeUnit]
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$Map ArrowType$Timestamp ArrowType$Union Field FieldType]
            [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector LargeListVector ListVector MapVector StructVector]
            [org.apache.arrow.vector DateDayVector DateMilliVector DecimalVector DurationVector FixedSizeBinaryVector IntervalYearVector
             LargeVarBinaryVector LargeVarCharVector
-            TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector TimeStampMicroVector TimeStampMilliVector TimeStampNanoVector TimeStampSecVector
+            TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector
+            TimeStampMicroVector TimeStampMilliVector TimeStampNanoVector TimeStampSecVector
             TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector
-            VarBinaryVector VarCharVector ValueVector UInt1Vector UInt2Vector UInt4Vector UInt8Vector]
-           [org.apache.arrow.vector.util Text VectorBatchAppender]
+            VarBinaryVector VarCharVector ValueVector
+            UInt1Vector UInt2Vector UInt4Vector UInt8Vector]
            [core2 DenseUnionUtil]
            [clojure.lang IPersistentList IPersistentSet Keyword Symbol]))
 

@@ -4,9 +4,7 @@
             [core2.types.nested :as tn]
             [core2.util :as util])
   (:import [org.apache.arrow.vector.complex DenseUnionVector]
-           [org.apache.arrow.vector.util Text VectorBatchAppender]
            [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.types.pojo Schema]
            [org.apache.arrow.memory RootAllocator]
            [java.time Duration LocalDate LocalDateTime LocalTime OffsetDateTime Period ZonedDateTime ZoneId ZoneOffset]
            [java.nio ByteBuffer]
