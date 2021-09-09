@@ -1,3 +1,5 @@
+# Architecture Summary
+
 ## Principles
 
 - Multiple nodes tailing same log, sharing the same object store.
@@ -38,16 +40,16 @@ Two main extension points:
 - Overly flexible data model
 
 ### End scenarios:
-- Core2 as a viable alternative to Crux
+- Core2 as a viable alternative to Classic
   Spectrum:
-  - A: Drop-in replacement for Crux
-  - B: Essentially Crux but with Arrow
-  - C: Crux re-thought
-- Core2 canned, knowledge pulled into Crux
+  - A: Drop-in replacement for Classic
+  - B: Essentially Classic but with Arrow
+  - C: Classic re-thought
+- Core2 canned, knowledge pulled into Classic
 
 ### Things to consider:
 - User migration?
-- Maintaining Crux
+- Maintaining Classic
 - Pulling existing users over vs attracting new users
 
 ## Risks to Core2:
@@ -67,6 +69,5 @@ Two main extension points:
 - Resourcing - scaling team and remaining productive
 - External buy-in and understanding, getting people back on board
 - External expectation of drop-in replacement
-- Crux rename timing
 - Classic vs Core2 time/focus
 - Keeping the Classic flame alive while we're working on Core2
