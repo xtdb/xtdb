@@ -102,8 +102,8 @@ but avoiding parts we don't support.
 ## Consequences
 
 All processing needs to map down to the internal [data
-model](0002-data-model.md) and [temporal data
-model](0006-temporal-data.md)
+model](0002-data-model.md) and [temporal data](0006-temporal-data.md)
+support.
 
 In the core, the logical plan will need to expand to support the parts
 of SQL we need. The expression evaluator needs to support three-valued
