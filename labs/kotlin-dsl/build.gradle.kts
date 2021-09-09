@@ -7,7 +7,7 @@ plugins {
     signing
 }
 
-group = "com.xtdb"
+group = "com.xtdb.labs"
 version = "0.1.0-SNAPSHOT"
 
 java {
