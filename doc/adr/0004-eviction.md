@@ -111,9 +111,13 @@ and adding the combined result.
 
 ## Decision
 
-We will implement the "versioned eviction proposal" above.
+We will implement the "versioned eviction proposal" above. We do not
+want to introduce distributed locks or consensus for this use case.
 
 ## Consequences
 
-Complicates the persistence model which based on a shared, eventually
-consistent object store.
+It will be possible to bypass the immutable historical data XTDB
+advocates when needed.
+
+This complicates the persistence model which based on a shared,
+eventually consistent object store.

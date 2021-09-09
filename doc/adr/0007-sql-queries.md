@@ -98,6 +98,8 @@ We will write our own parser, closely following the [official SQL:2011
 grammar](https://jakewheat.github.io/sql-overview/sql-2011-foundation-grammar.html),
 but avoiding parts we don't support.
 
+We're currently postponing any decisions around dealing with graph
+queries to a later date.
 
 ## Consequences
 
@@ -114,6 +116,3 @@ The PostgreSQL wire protocol doesn't support representing the full
 Arrow type system. A column in the result set has a single type and
 there's no concept of unions. The type system can be extended, but the
 question is what happens when using existing drivers.
-
-We're currently postponing any decisions around dealing with graph
-queries to a later date.

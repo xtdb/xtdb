@@ -168,5 +168,8 @@ won't sit in the compatibility layer.
 
 ## Consequences
 
+Existing users will be able to migrate their data but not be able to
+use all features.
+
 Users will have to migrate their usage of transaction functions to
 integrity checks.
