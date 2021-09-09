@@ -13,9 +13,9 @@ queries and a natural way to access nested data in documents.
 
 ### Implementation
 
-The SQL implementation is responsible for parsing SQL queries and
+The SQL implementation is responsible for parsing SQL queries and to
 generate a logical plan. It's not responsible for optimising the plan
-or the translation it into a physical plan.
+or the translation of it into a physical plan.
 
 ### Parser
 
@@ -96,6 +96,7 @@ We will write our own parser, closely following the [official SQL:2011
 grammar](https://jakewheat.github.io/sql-overview/sql-2011-foundation-grammar.html),
 but avoiding parts we don't support.
 
+
 ## Consequences
 
 All processing needs to map down to the internal [data
@@ -111,3 +112,6 @@ The PostgreSQL wire protocol doesn't support representing the full
 Arrow type system. A column in the result set has a single type and
 there's no concept of unions. The type system can be extended, but the
 question is what happens when using existing drivers.
+
+We're currently postponing any decisions around dealing with graph
+queries to a later date.
