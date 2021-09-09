@@ -1,3 +1,3 @@
 
-rootProject.name = "crux-kotlin-dsl"
+rootProject.name = "xtdb-kotlin-dsl"
 
