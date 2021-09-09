@@ -22,7 +22,7 @@ content:
       start_path: docs/articles
       branches: HEAD
     # TODO: the remaining components do not belong in xtdb/docs:
-    - url: ../../crux-site
+    - url: ../../website-old
       start_path: blog
       branches: HEAD
     - url: ../

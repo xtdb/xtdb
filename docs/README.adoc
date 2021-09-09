@@ -2,7 +2,7 @@
 
 We use https://docs.antora.org/antora/2.3/[Antora] to build the XTDB documentation.
 
-The full website build/deploy is available (to JUXTers) in the private https://github.com/xtdb/crux-site[crux-site] repo - for more details, see the README over there.
+The full website build/deploy is available (to JUXTers) in the private https://github.com/xtdb/website-old[website-old] repo - for more details, see the README over there.
 
 From here, though, you can build the documentation section in isolation, to check any changes.
 
@@ -28,4 +28,4 @@ These are located by branch name convention - branches prefixed with `docs-v*` w
   a. Delete `prerelease: indeed` and `display-version: main` lines
   b. Update `version: master` to `version: <new-version>`
 3. Commit, push branch to the main JUXT XTDB repo
-4. Head over to `crux-site` to deploy the docs.
+4. Head over to `website-old` to deploy the docs.

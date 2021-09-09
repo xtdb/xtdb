@@ -7,7 +7,7 @@ PLAYBOOK="antora-playbook.yml"
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --with-local-bundle)
-            OPTS+=" --ui-bundle-url=../../crux-site/build/ui-bundle.zip"
+            OPTS+=" --ui-bundle-url=../../website-old/build/ui-bundle.zip"
             shift;;
         *) echo "Unknown parameter passed: $1"; exit 1;;
     esac
