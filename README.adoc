@@ -1,21 +1,21 @@
-= Crux Kotlin DSL
+= XTDB Kotlin DSL
 
-A Kotlin DSL for Crux which enables pretty transactions and queries
+A Kotlin DSL for XTDB which enables pretty transactions and queries
 
 == Quickstart
 
-Add `crux-kotlin-dsl` as a dependency:
+Add `xtdb-kotlin-dsl` as a dependency:
 
 ```kotlin
 dependencies {
-    implementation("pro.juxt.crux:crux-kotlin-dsl:0.0.4")
+    implementation("com.xtdb:xtdb-kotlin-dsl:0.1.0")
     // ...
 }
 ```
 
 == Status
 
-Pre-Alpha: This library is experimental. If you need a stable Java/Kotlin API, use the https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/master/index.html[Crux Core Java API] directly for now.
+Pre-Alpha: This library is experimental. If you need a stable Java/Kotlin API, use the https://xtdb-api-docs.s3.eu-west-1.amazonaws.com/xtdb-javadoc/main/index.html[XTDB Core Java API] directly for now.
 
 == Releasing
 

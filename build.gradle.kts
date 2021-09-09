@@ -7,8 +7,8 @@ plugins {
     signing
 }
 
-group = "pro.juxt.crux"
-version = "0.0.5-SNAPSHOT"
+group = "com.xtdb"
+version = "0.1.0-SNAPSHOT"
 
 java {
     withJavadocJar()
@@ -22,11 +22,11 @@ repositories {
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
-            artifactId = "crux-kotlin-dsl"
+            artifactId = "xtdb-kotlin-dsl"
             from(components["java"])
             pom {
-                name.set("Crux Kotlin DSL")
-                description.set("A Kotlin DSL for Crux which enables pretty transactions and queries")
+                name.set("XTDB Kotlin DSL")
+                description.set("A Kotlin DSL for XTDB which enables pretty transactions and queries")
                 url.set("https://github.com/crux-labs/crux-kotlin-dsl")
                 licenses {
                     license {
@@ -75,7 +75,7 @@ dependencies {
     implementation(platform("org.jetbrains.kotlin:kotlin-bom"))
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 
-    api("pro.juxt.crux:crux-core:1.17.1") {
+    api("com.xtdb:xtdb-core:1.19.0-beta1") {
         isTransitive = true
     }
 
@@ -83,7 +83,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.6.0")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.6.0")
     testImplementation("com.natpryce:hamkrest:1.8.0.1")
-    testImplementation("pro.juxt.crux:crux-rocksdb:1.17.1")
+    testImplementation("com.xtdb:xtdb-rocksdb:1.19.0-beta1")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.6.0")
 }
 
