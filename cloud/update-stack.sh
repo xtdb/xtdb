@@ -1,11 +1,25 @@
 #!/bin/bash
 set -e
-set -x
 
-aws s3 sync --delete --exclude '*.sh' $(dirname $0) s3://crux-cloudformation/crux-cloud/
+if [ $# != 1 ]; then
+    echo "expected: $(basename $0) <template-file>"
+    exit 1
+fi
 
-aws cloudformation update-stack \
+TEMPLATE_FILE=$1
+STACK_NAME=`basename $TEMPLATE_FILE`
+STACK_NAME=${STACK_NAME%.yml}
+
+DESCRIBE=$(aws cloudformation describe-stacks --stack-name $STACK_NAME 2>&1 >/dev/null ; echo $?)
+
+if [ $DESCRIBE == 0 ]; then
+    OP=update-stack
+else
+    OP=create-stack
+fi
+
+aws cloudformation $OP \
     --capabilities CAPABILITY_IAM \
-    --template-url https://crux-cloudformation.s3-eu-west-1.amazonaws.com/crux-cloud/crux-cloud.yml \
-    --stack-name crux-cloud \
-    --tags Key=juxt:team,Value=crux-core
+    --template-body "file://$(realpath $TEMPLATE_FILE)" \
+    --region eu-west-1 \
+    --stack-name $STACK_NAME

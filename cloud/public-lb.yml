@@ -1,23 +1,17 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
-  VPCId:
-    Type: String
-  PublicSubnetOne:
-    Type: String
-  PublicSubnetTwo:
-    Type: String
   CertificateARN:
     Type: String
-    Default: 'arn:aws:acm:eu-west-1:955308952094:certificate/51477c84-1221-44fa-b569-012e2ce9d338'
+    Default: 'arn:aws:acm:eu-west-1:199686536682:certificate/928c2c31-7338-4506-8914-a27b6f3fc38d'
 
 Resources:
   LoadBalancerSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "crux-cloud-public-load-balancer"
+      GroupName: "xtdb-cloud-public-load-balancer"
       GroupDescription: "Access to the public-facing load balancer"
-      VpcId: !Ref 'VPCId'
+      VpcId: !ImportValue 'xtdb-vpc:VPC'
       SecurityGroupIngress:
         # Allow access to ALB from anywhere on the internet
         - CidrIp: 0.0.0.0/0
@@ -31,12 +25,9 @@ Resources:
       - Key: idle_timeout.timeout_seconds
         Value: '30'
       Subnets:
-        - !Ref 'PublicSubnetOne'
-        - !Ref 'PublicSubnetTwo'
+        - !ImportValue 'xtdb-vpc:PublicSubnetOne'
+        - !ImportValue 'xtdb-vpc:PublicSubnetTwo'
       SecurityGroups: [!Ref 'LoadBalancerSG']
-      Tags:
-        - Key: Name
-          Value: crux-cloud-lb
 
   LoadBalancerHTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener

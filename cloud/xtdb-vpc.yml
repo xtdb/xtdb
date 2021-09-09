@@ -9,7 +9,7 @@ Resources:
       CidrBlock: '10.0.0.0/16'
       Tags:
         - Key: Name
-          Value: crux-cloud
+          Value: xtdb-cloud
 
   PublicSubnetOne:
     Type: AWS::EC2::Subnet
@@ -20,7 +20,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: crux-cloud-a1
+          Value: xtdb-cloud-a1
 
   PublicSubnetTwo:
     Type: AWS::EC2::Subnet
@@ -31,7 +31,7 @@ Resources:
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: crux-cloud-b1
+          Value: xtdb-cloud-b1
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -48,7 +48,7 @@ Resources:
       VpcId: !Ref 'VPC'
       Tags:
         - Key: Name
-          Value: crux-cloud-public
+          Value: xtdb-cloud-public
 
   PublicRoute:
     Type: AWS::EC2::Route
@@ -74,11 +74,17 @@ Outputs:
   VPCId:
     Description: The ID of the VPC that this stack is deployed in
     Value: !Ref 'VPC'
+    Export:
+      Name: xtdb-vpc:VPC
 
   PublicSubnetOne:
     Description: Public subnet one
     Value: !Ref 'PublicSubnetOne'
+    Export:
+      Name: xtdb-vpc:PublicSubnetOne
 
   PublicSubnetTwo:
     Description: Public subnet two
     Value: !Ref 'PublicSubnetTwo'
+    Export:
+      Name: xtdb-vpc:PublicSubnetTwo
