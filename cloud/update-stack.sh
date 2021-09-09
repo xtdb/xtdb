@@ -14,7 +14,7 @@ OP=update-stack
 aws cloudformation describe-stacks --stack-name $STACK_NAME 2>/dev/null >/dev/null || OP=create-stack
 
 aws cloudformation $OP \
-    --capabilities CAPABILITY_IAM \
+    --capabilities CAPABILITY_NAMED_IAM \
     --template-body "file://$(realpath $TEMPLATE_FILE)" \
     --region eu-west-1 \
     --stack-name $STACK_NAME
