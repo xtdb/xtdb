@@ -28,7 +28,8 @@ Operations also need to be able to do bitemporal corrections.
 
 ## Decision
 
-We will support EDN-style transactions to start.
+We will support EDN-style transactions to start, either in EDN, JSON
+or raw Arrow.
 
 As per the [data model](0002-data-model.md), the transactions are
 converted to Arrow client side before submitted.
