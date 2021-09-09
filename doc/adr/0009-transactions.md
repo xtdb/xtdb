@@ -38,6 +38,10 @@ Integrity checks are done via queries and transaction functions should
 not be supported by default. Transactions are proposed and can be
 rejected.
 
+We need a way to override the system (transaction) time, mainly to be
+used for initial import or migration. The system time still needs to
+be monotonically increasing.
+
 ## Consequences
 
 Transactions must be fully deterministic as all nodes needs to reach

@@ -150,8 +150,23 @@ classic engine, require rework.
 
 ## Decision
 
-TBD
+We will build a migration tool for data in classic.
+
+Nippy (or arbitrary Java objects) will not be supported in XTDB by
+default but this Arrow extension type can be enabled via a flag. These
+columns will be Arrow varbinary to non-JVM users.
+
+Transaction functions will not be supported in XTDB as it requires
+strict determinism.
+
+Arbitrary Clojure functions in queries can be enabled via a flag.
+
+We will provide a shim emulating the classic Clojure API.
+
+There will be no Lucene support initially, and if we build it this
+won't sit in the compatibility layer.
 
 ## Consequences
 
-TBD
+Users will have to migrate their usage of transaction functions to
+integrity checks.
