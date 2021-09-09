@@ -111,7 +111,7 @@ and adding the combined result.
 
 ## Decision
 
-TBD
+We will implement the "versioned eviction proposal" above.
 
 ## Consequences
 
