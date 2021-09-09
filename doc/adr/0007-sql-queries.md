@@ -59,8 +59,10 @@ Options:
 
 1. SQL:1999 common table expressions and recursive queries.
 2. [SQL:202x/PGQ](https://s3.amazonaws.com/artifacts.opencypher.org/website/ocim5/slides/ocim5+-+SQL+and+GQL+Status+2019-03-06.pdf)
-   "SQL Property Graph Query", openCypher-like queries embedded in
-   SQL. Related to GQL which is a new language.
+   "SQL Property Graph Query",
+   [openCypher](https://opencypher.org/)-like queries embedded in
+   SQL. Related to [GQL](https://www.gqlstandards.org/) which is a new
+   language (and not to be confused with GraphQL).
 
 ### Temporal
 
