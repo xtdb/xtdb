@@ -10,13 +10,8 @@ TEMPLATE_FILE=$1
 STACK_NAME=`basename $TEMPLATE_FILE`
 STACK_NAME=${STACK_NAME%.yml}
 
-DESCRIBE=$(aws cloudformation describe-stacks --stack-name $STACK_NAME 2>&1 >/dev/null ; echo $?)
-
-if [ $DESCRIBE == 0 ]; then
-    OP=update-stack
-else
-    OP=create-stack
-fi
+OP=update-stack
+aws cloudformation describe-stacks --stack-name $STACK_NAME 2>/dev/null >/dev/null || OP=create-stack
 
 aws cloudformation $OP \
     --capabilities CAPABILITY_IAM \
