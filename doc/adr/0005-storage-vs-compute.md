@@ -20,16 +20,16 @@ We want to avoid each node to store its own local index. This is to:
 
 ## Decision
 
-The index is written in chunks to a shared object store. As these
-chunks are a function of the log, all nodes will reach the same
-conclusion and upload the same immutable chunks to the object store.
-
 We will support two simple extension points:
 
 1. Object store. This is a eventually consistent key/value store, like
    for example S3.
 2. Log. This is a totally ordered log of proposed transactions, like
    for example a Kafka topic with a single partition.
+
+The index is written in chunks to a shared object store. As these
+chunks are a function of the log, all nodes will reach the same
+conclusion and upload the same immutable chunks to the object store.
 
 ## Consequences
 
