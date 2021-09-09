@@ -1,0 +1,117 @@
+= XTDB Kotlin DSL
+
+A Kotlin DSL for XTDB which enables pretty transactions and queries
+
+== Quickstart
+
+Add `xtdb-kotlin-dsl` as a dependency:
+
+```kotlin
+dependencies {
+    implementation("com.xtdb:xtdb-kotlin-dsl:0.1.0")
+    // ...
+}
+```
+
+== Status
+
+Pre-Alpha: This library is experimental. If you need a stable Java/Kotlin API, use the https://xtdb-api-docs.s3.eu-west-1.amazonaws.com/xtdb-javadoc/main/index.html[XTDB Core Java API] directly for now.
+
+== Releasing
+
+To release a JAR to MavenCentral, you will need to follow four steps:
+
+1. Create a Sonatype user
+2. Create a GPG key
+3. Create a `gradle.properties` file with your secrets
+4. Build and Publish
+
+=== (1) Create a Sonatype user
+
+As far as I can tell, there is no automated way for existing users to add new
+users to GroupIds. There is https://oss.sonatype.org, which has some administrator
+features but it would seem none of us are admins for the GroupId `pro.juxt`.
+
+The process will unfortunately be somewhat manual. Create a JIRA user (yes, really)
+on https://issues.sonatype.org/secure/Signup!default.jspa[issues.sonatype.org]. Then
+create a new JIRA ticket (yes, really) requesting "deployer" access to the `pro.juxt`
+GroupId. A human being will be with you shortly.
+
+=== (2) Create a GPG key
+
+Follow the instructions here:
+https://central.sonatype.org/publish/requirements/gpg/#generating-a-key-pair
+...save your key's passphrase and revocation certificate in your password manager.
+
+If you have trouble distributing your GPG key, try one of the servers listed in this tutorial:
+https://medium.com/geekculture/how-to-publish-artifacts-on-maven-central-24342fd286cd#bb8b
+
+=== (3) Create `gradle.properties` secrets
+
+==== (3.a) Get your public key id:
+
+[source,shell]
+----
+# Look for the key in '0xABCDEFGH' format.
+# Use the 8-char 'ABCDEFGH' portion as 'signing.keyId' below.
+gpg -K --keyid-format 0xSHORT
+----
+
+==== (3.b) Create a secret key ring file:
+
+[source,shell]
+----
+# this requires your key's passphrase:
+gpg --keyring secring.gpg --export-secret-keys > ~/.gnupg/secring.gpg
+----
+
+==== (3.c) Create `~/.gradle/gradle.properties`
+
+This file will hold your secrets, which is why it's not in git.
+See this Gradle doc for more details:
+https://docs.gradle.org/current/userguide/signing_plugin.html#sec:signatory_credentials
+
+.~/.gradle/gradle.properties
+[source]
+----
+# File location: ~/.gradle/gradle.properties
+signing.keyId=ABCDEFGH
+signing.password=YOUR_PASSPHRASE
+signing.secretKeyRingFile=/home/YOUR_USER/.gnupg/secring.gpg
+ossrhUsername=YOUR_SONATYPE_JIRA_USERNAME
+ossrhPassword=YOUR_SONATYPE_JIRA_PASSWORD
+----
+
+=== (4) Build and publish:
+
+[source,shell]
+----
+./gradlew test
+./gradlew build jar javadocJar sourcesJar
+./gradlew publish
+----
+
+=== (5) Release to Central:
+
+Go to https://oss.sonatype.org/#stagingRepositories and check the box next to the repository you just published
+
+Click "Close"
+
+When the operation is complete, click "Release"
+
+== References
+
+* https://www.juxt.pro/drafts/crux-kotlin (TODO: replace with real blog post)
+* https://github.com/AlistairONeill/crux-kotlin-dsl
+
+== Copyright & License
+
+The MIT License (MIT)
+
+Copyright © 2020-2021 JUXT LTD.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
