@@ -7,7 +7,6 @@ import xtdb.api.query.domain.QuerySection.LimitSection
 import xtdb.api.query.domain.QuerySection.OffsetSection
 import xtdb.api.underware.BuilderContext
 import xtdb.api.underware.SimpleBuilderContext
-import javax.naming.OperationNotSupportedException
 
 sealed class QueryContextBase: SimpleBuilderContext<QuerySection, Query>(::Query) {
     operator fun QuerySection.unaryPlus() = add(this)
@@ -17,13 +16,13 @@ sealed class QueryContextBase: SimpleBuilderContext<QuerySection, Query>(::Query
     fun bind(block: BindContext.() -> Unit) = +BindContext.build(block)
 
     var offset: Int
-        get() = throw OperationNotSupportedException()
+        get() = throw UnsupportedOperationException()
         set(value) {
             +OffsetSection(value)
         }
 
     var limit: Int
-        get() = throw OperationNotSupportedException()
+        get() = throw UnsupportedOperationException()
         set(value) {
             +LimitSection(value)
         }

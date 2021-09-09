@@ -1,7 +1,5 @@
 package xtdb.api
 
-import javax.naming.OperationNotSupportedException
-
 class ModuleConfigurationContext private constructor() {
     companion object {
         fun build(block: ModuleConfigurationContext.() -> Unit): ModuleConfiguration =
@@ -11,7 +9,7 @@ class ModuleConfigurationContext private constructor() {
     private val builder = ModuleConfiguration.builder()
 
     var module: String
-        get() = throw OperationNotSupportedException()
+        get() = throw UnsupportedOperationException()
         set(value) {
             builder.module(value)
         }
