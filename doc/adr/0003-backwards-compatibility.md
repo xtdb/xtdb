@@ -1,41 +1,17 @@
-## Core2 in Classic
+# 1. Backwards compatibility
 
+Date: 2021-09-09
+
+## Status
+
+Proposed
+
+## Context
+
+XTDB needs some level of compatibility with classic. At the minimum we
+need to import the data and timeline.
 
 ### Transaction processing (write side)
-
-
-#### Transaction log
-
-The first approach is to keep existing logs, and write the Arrow
-transactions inside the current processing, and initially add c2 as a
-secondary index in classic to get going. Later we can migrate the
-existing logs to an Arrow-first log.
-
-There's some mess here in the interim where we assume content hashes
-(with all the pain that entails) and also implicitly still an document
-store. Not technically that hard to fix, but breaking changes and
-migrations abound. Codec would need to keep existing until the final
-migration. One can probably replace the document store with a simpler
-(and much smaller) id mapping if one preservers with the existing log.
-
-The ingest part of c2 mainly disappears, as it would be replaced by
-the existing parts of classic. Actual indexing would obviously remain.
-
-Note that the external view of what's submitted to the log doesn't
-need to change, just the internal representation.
-
-As per c2's design, once the migration to c2 is done, the log doesn't
-need infinite retention. The Kafka document topic can also disappear
-and the document get baked into the main log (see Eviction below for
-further discussion).
-
-
-
-#### Document store
-
-This would be replaced eventually by the object store from c2, and
-internally they share some implementation details (like how to talk to
-S3 etc.), but it would probably be messy to try to reuse anything.
 
 
 #### Rollback
@@ -60,18 +36,6 @@ Nothing really changes here actually, once everything else works.
 
 We would move towards c2's Arrow based data model. I would suggest we
 do a few additions:
-
-1. add all the java.util.time types that make sense.
-2. use Instants instead of Dates (but support Dates on the way in).
-3. vectors or sets would become lists of scalars.
-4. the above implies that sets aren't really supported, JSON first
-   model.
-5. introduce "components" similar to Datomic, so we autoshred nested
-   maps out to new documents with assigned internal ids.
-6. on eviction (and potentially deletion, but its a bit slow), do
-   cascading deletes of the internal ids.
-7. we can add a Nippy Arrow Type would we want to, but then that
-   becomes totally opaque.
 
 
 #### match/cas
@@ -120,50 +84,10 @@ current slice and the current in-memory temporal index.
 
 #### Lucene
 
-Can stay as is initially if one uses regular checkpoints and the new
-secondary index mechanism to catch up.
-
-At a minimum, also requires porting the predicate to the c2 world.
-
-A more c2-native solution would be to have secondary indexes
+A c2-native solution would be to have secondary indexes
 participate in finish chunk, and maybe also a collective LSM-style
 merge process. Temporal could maybe also use this capability if it
 existed.
-
-
-### Datalog query (read side)
-
-Note that once one has c2 as a secondary index, one can speculatively
-try to compile queries using c2, and see if it accepts them, if it
-does, one proceed to execute queries using the logical plan. One can
-also have a A/B sanity mode that checks c2 returns the same results
-(probably not same order) as classic. Nudging away at this would mean
-one can eventually draw a line in the sand and promote c2 to the real
-index, and remove a lot of classic.
-
-
-#### Valid time in Datalog
-
-There's an old proposal for this to enable this via the triple
-bindings and add `[e a v vt-start vt-end]` to the engine. One would
-then do the normal temporal predicates against these values. A
-temporal join would be represented as an overlaps between the time
-stamps of two entities.
-
-Transaction time is given by the query, but the idea was that if one
-access these columns, they override the default valid time of the
-entire query. In the c2 logical plan the temporal resolution is
-decided per scanned relation so its quite easy to do.
-
-Ignoring performance, this is quite easy to build I think, the logical
-plan already has the needed parts and the SQL:2011 predicates have
-been implemented.
-
-
-#### Transaction time in Datalog
-
-Can technically be done like above, by adding further fields to bind,
-but becomes a bit unwieldy.
 
 
 #### History API
@@ -238,3 +162,13 @@ somehow. To be explored. Quite chunky piece of work risk-reward-wise.
 
 These may "just work", or if they rely on complicated parts of the
 classic engine, require rework.
+
+
+## Decision
+
+TBD
+
+
+## Consequences
+
+TBD
