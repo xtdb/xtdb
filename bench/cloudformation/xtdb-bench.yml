@@ -1,12 +1,17 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: A stack for running XTDB Benchmarks
 
+Parameters:
+  SecretArn:
+    Type: String
+    Default: arn:aws:secretsmanager:eu-west-1:199686536682:secret:xtdb-bench-2tWiZM
+
 Resources:
   # ECS Resources
   ECSCluster:
     Type: AWS::ECS::Cluster
     Properties:
-      ClusterName: 'crux-bench'
+      ClusterName: 'xtdb-bench'
       ClusterSettings:
         - Name: 'containerInsights'
           Value: 'enabled'
@@ -14,63 +19,63 @@ Resources:
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: 'crux-bench'
+      LogGroupName: 'xtdb-bench'
       RetentionInDays: 365
 
   ECRRepository:
     Type: AWS::ECR::Repository
     Properties:
-      RepositoryName: 'crux-bench'
+      RepositoryName: 'xtdb-bench'
       LifecyclePolicy:
         LifecyclePolicyText: |
           {
-          "rules": [
-          {
-            "rulePriority": 1,
-            "description": "Only keep latest five images of main",
-            "selection": {
-              "tagStatus": "tagged",
-              "tagPrefixList": ["main"],
-              "countType": "imageCountMoreThan",
-              "countNumber": 5
+            "rules": [
+            {
+              "rulePriority": 1,
+              "description": "Only keep latest five images of main",
+              "selection": {
+                "tagStatus": "tagged",
+                "tagPrefixList": ["main"],
+                "countType": "imageCountMoreThan",
+                "countNumber": 5
+              },
+              "action": { "type": "expire" }
             },
-            "action": { "type": "expire" }
-          },
-          {
-            "rulePriority": 2,
-            "description": "Only keep main-images for 14 days",
-            "selection": {
-              "tagStatus": "tagged",
-              "tagPrefixList": ["main-"],
-              "countType": "sinceImagePushed",
-              "countNumber": 14,
-              "countUnit": "days"
+            {
+              "rulePriority": 2,
+              "description": "Only keep main-images for 14 days",
+              "selection": {
+                "tagStatus": "tagged",
+                "tagPrefixList": ["main-"],
+                "countType": "sinceImagePushed",
+                "countNumber": 14,
+                "countUnit": "days"
+              },
+              "action": { "type": "expire" }
             },
-            "action": { "type": "expire" }
-          },
-          {
-            "rulePriority": 3,
-            "description": "Only keep commit-sha images for 5 days",
-            "selection": {
-              "tagStatus": "tagged",
-              "tagPrefixList": ["commit-"],
-              "countType": "sinceImagePushed",
-              "countNumber": 5,
-              "countUnit": "days"
+            {
+              "rulePriority": 3,
+              "description": "Only keep commit-sha images for 5 days",
+              "selection": {
+                "tagStatus": "tagged",
+                "tagPrefixList": ["commit-"],
+                "countType": "sinceImagePushed",
+                "countNumber": 5,
+                "countUnit": "days"
+              },
+              "action": { "type": "expire" }
             },
-            "action": { "type": "expire" }
-          },
-          {
-            "rulePriority": 4,
-            "description": "Delete untagged images",
-            "selection": {
-              "tagStatus": "untagged",
-              "countType": "imageCountMoreThan",
-              "countNumber": 1
-            },
-            "action": { "type": "expire" }
-          }]
-          },
+            {
+              "rulePriority": 4,
+              "description": "Delete untagged images",
+              "selection": {
+                "tagStatus": "untagged",
+                "countType": "imageCountMoreThan",
+                "countNumber": 1
+              },
+              "action": { "type": "expire" }
+            }]
+          }
 
   ECSTaskExecutionRole:
     Type: AWS::IAM::Role
@@ -140,7 +145,7 @@ Resources:
   BenchBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: 'crux-bench'
+      BucketName: 'xtdb-bench'
 
   BenchTask:
     Type: AWS::ECS::TaskDefinition
@@ -150,11 +155,9 @@ Resources:
     Properties:
       Cpu: '4 vCPU'
       Memory: '12GB'
-      Family: 'crux-bench'
-      ExecutionRoleArn:
-        Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
-      TaskRoleArn:
-        Fn::GetAtt: ["ECSTaskRole", "Arn"]
+      Family: 'xtdb-bench'
+      ExecutionRoleArn: !GetAtt ["ECSTaskExecutionRole", "Arn"]
+      TaskRoleArn: !GetAtt ["ECSTaskRole", "Arn"]
       RequiresCompatibilities:
         - 'EC2'
       NetworkMode: 'host'
@@ -197,19 +200,18 @@ Resources:
         - Name: 'bench-container'
           Cpu: 2048
           Memory: 8192
-          Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:main'
+          Image: !Join [':', [ !GetAtt [ 'ECRRepository', 'RepositoryUri' ], 'main' ] ]
           Essential: true
           Secrets:
             - Name: "SLACK_URL"
-              ValueFrom:
-                "arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ"
+              ValueFrom: !Ref SecretArn
           Environment:
             - Name: 'XTDB_BENCH_CW_METRICS'
               Value: 'true'
           LogConfiguration:
             LogDriver: awslogs
             Options:
-              awslogs-region: 'eu-west-2'
+              awslogs-region: 'eu-west-1'
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
 
@@ -242,15 +244,15 @@ Resources:
   ECSInstance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: 'ami-037dd70536680c11f'
+      ImageId: 'ami-0489c3efb4fe85f5d' # amzn2-ami-ecs-hvm-2.0.20200928-x86_64-ebs
       InstanceType: 'm5.xlarge'
-      SubnetId: 'subnet-5f840136'
-      SecurityGroupIds:
-        - 'sg-0255e869'
+      SubnetId: !ImportValue 'xtdb-vpc:PublicSubnetOne'
+      # SecurityGroupIds:
+      #   - 'sg-0255e869'
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          echo ECS_CLUSTER=crux-bench >> /etc/ecs/ecs.config
+          echo ECS_CLUSTER=xtdb-bench >> /etc/ecs/ecs.config
       IamInstanceProfile: !Ref EC2InstanceProfile
 
   TaskSchedulerRole:
@@ -272,15 +274,13 @@ Resources:
                - Effect: "Allow"
                  Condition:
                    ArnEquals:
-                     ecs:cluster:
-                       Fn::GetAtt: ["ECSCluster", "Arn"]
+                     ecs:cluster: !GetAtt ["ECSCluster", "Arn"]
                  Action: "ecs:RunTask"
                  Resource: "*"
                - Effect: "Allow"
                  Condition:
                    ArnEquals:
-                     ecs:cluster:
-                       Fn::GetAtt: ["ECSCluster", "Arn"]
+                     ecs:cluster: !GetAtt ["ECSCluster", "Arn"]
                  Action:
                    - "iam:ListInstanceProfiles"
                    - "iam:ListRoles"
@@ -312,12 +312,11 @@ Resources:
       Description: "Stops the Bench EC2 instance"
       Runtime: 'python3.7'
       Handler: 'index.lambda_handler'
-      Role:
-        Fn::GetAtt: ["EC2LambdaRole", "Arn"]
+      Role: !GetAtt ["EC2LambdaRole", "Arn"]
       Code:
         ZipFile: !Sub |
           import boto3
-          region = 'eu-west-2'
+          region = 'eu-west-1'
           instances = ['${ECSInstance}']
           ec2 = boto3.client('ec2', region_name=region)
           def lambda_handler(event, context):
@@ -329,12 +328,11 @@ Resources:
       Description: "Stops the Bench EC2 instance"
       Handler: 'index.lambda_handler'
       Runtime: 'python3.7'
-      Role:
-        Fn::GetAtt: ["EC2LambdaRole", "Arn"]
+      Role: !GetAtt ["EC2LambdaRole", "Arn"]
       Code:
         ZipFile: !Sub |
           import boto3
-          region = 'eu-west-2'
+          region = 'eu-west-1'
           instances = ['${ECSInstance}']
           ec2 = boto3.client('ec2', region_name=region)
           def lambda_handler(event, context):
@@ -351,18 +349,15 @@ Resources:
       State: "ENABLED"
       Targets:
         - Id: "startEC2Instances"
-          Arn:
-            Fn::GetAtt: ["EC2StartLambda", "Arn"]
+          Arn: !GetAtt ["EC2StartLambda", "Arn"]
 
   InvokeStartPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName:
-        Fn::GetAtt: ["EC2StartLambda", "Arn"]
+      FunctionName: !GetAtt ["EC2StartLambda", "Arn"]
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
-      SourceArn:
-        Fn::GetAtt: ["ScheduleStartInstance", "Arn"]
+      SourceArn: !GetAtt ["ScheduleStartInstance", "Arn"]
 
   TaskSchedule:
     Type: AWS::Events::Rule
@@ -370,20 +365,18 @@ Resources:
       - ECSInstance
       - BenchTask
     Properties:
-      Name: "crux-bench-scheduler"
+      Name: "xtdb-bench-scheduler"
       ScheduleExpression: "cron(0 0 ? * * *)"
       State: "ENABLED"
       Targets:
-        - Id: "crux-bench"
-          RoleArn:
-            Fn::GetAtt: ["TaskSchedulerRole", "Arn"]
+        - Id: "xtdb-bench"
+          RoleArn: !GetAtt ["TaskSchedulerRole", "Arn"]
           EcsParameters:
             LaunchType: "EC2"
             TaskDefinitionArn:
               Ref: "BenchTask"
             TaskCount: 1
-          Arn:
-            Fn::GetAtt: ["ECSCluster", "Arn"]
+          Arn: !GetAtt ["ECSCluster", "Arn"]
 
   ScheduleStopInstance:
     Type: AWS::Events::Rule
@@ -396,18 +389,15 @@ Resources:
       State: "ENABLED"
       Targets:
         - Id: "stopEC2Instances"
-          Arn:
-            Fn::GetAtt: ["EC2StopLambda", "Arn"]
+          Arn: !GetAtt ["EC2StopLambda", "Arn"]
 
   InvokeStopPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName:
-        Fn::GetAtt: ["EC2StopLambda", "Arn"]
+      FunctionName: !GetAtt ["EC2StopLambda", "Arn"]
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
-      SourceArn:
-        Fn::GetAtt: ["ScheduleStopInstance", "Arn"]
+      SourceArn: !GetAtt ["ScheduleStopInstance", "Arn"]
 
   BenchMessageLambdaRole:
     Type: AWS::IAM::Role
@@ -433,17 +423,16 @@ Resources:
       Description: "Sends a slack message when a bench run fails"
       Handler: 'index.send_message'
       Runtime: 'python3.7'
-      Role:
-        Fn::GetAtt: ["BenchMessageLambdaRole", "Arn"]
+      Role: !GetAtt ["BenchMessageLambdaRole", "Arn"]
       Code:
         ZipFile: !Sub |
           import urllib3
           import json
           import boto3
-          region = 'eu-west-2'
+          region = 'eu-west-1'
           http = urllib3.PoolManager()
           secrets_manager = boto3.client('secretsmanager', region_name=region)
-          slack_url_secret = secrets_manager.get_secret_value(SecretId='arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ')
+          slack_url_secret = secrets_manager.get_secret_value(SecretId='${SecretArn}')
           url = json.loads(slack_url_secret['SecretString'])['slack-url']
           def send_message(event, context):
             task_containers = event['detail']['containers']
@@ -461,32 +450,26 @@ Resources:
     Properties:
       EventPattern:
         {
-        "source":["aws.ecs"],
-        "detail-type":["ECS Task State Change"],
-        "detail":
-          {
-             "lastStatus":["STOPPED"],
-             "stoppedReason":["Essential container in task exited"]
-          }
+          "source":["aws.ecs"],
+          "detail-type":["ECS Task State Change"],
+          "detail":
+            {
+              "lastStatus":["STOPPED"],
+              "stoppedReason":["Essential container in task exited"]
+            }
         }
       Targets:
-        - Arn:
-            Fn::GetAtt: ["BenchStoppedSendMessage", "Arn"]
+        - Arn: !GetAtt ["BenchStoppedSendMessage", "Arn"]
           Id: "benchStopped"
 
   BenchStoppedMessagePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName:
-        Fn::GetAtt: ["BenchStoppedSendMessage", "Arn"]
+      FunctionName: !GetAtt ["BenchStoppedSendMessage", "Arn"]
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
-      SourceArn:
-        Fn::GetAtt: ["BenchTaskStoppedRule", "Arn"]
+      SourceArn: !GetAtt ["BenchTaskStoppedRule", "Arn"]
 
-# These are the values output by the CloudFormation template. Be careful
-# about changing any of them, because of them are exported with specific
-# names so that the other task related CF templates can use them.
 Outputs:
   ClusterName:
     Description: The name of the ECS cluster
