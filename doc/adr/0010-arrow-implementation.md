@@ -68,6 +68,10 @@ expression language. Clojure provides many powerful tools to work with
 dynamically typed objects, like protocols and multi-methods, but these
 all have their overhead. Java primitives can be magnitudes faster.
 
+Pragmatically, there will be a difference between what's easiest done
+with acceptable performance and reasonable amount of work, and how we
+should really want this to ideally work.
+
 ## Decision
 
 We will remove the current implementation in `core2.types` and also
@@ -104,7 +108,13 @@ used when writing or reading data where the type isn't known as
 above. Actual processing in `core2.expression` should only fallback to
 these if necessary.
 
-`core2.relation` needs to be consolidated into this world somehow. One
-option is to sub-class ValueVector, another is to use dense unions
-with gaps in the offsets to simulate the filtering. A third is to
-fully embrace it, but this may create duplication with Arrow itself.
+`core2.relation` needs to be consolidated into this world somehow:
+
+1. sub-class ValueVector.
+2. use dense unions with gaps in the offsets to simulate the
+filtering. The [Arrow Columnar
+Format](https://arrow.apache.org/docs/format/Columnar.html#dense-union)
+allows this, "The respective offsets for each child value array must
+be in order / increasing."
+3. fully embrace it, but this may create duplication of Arrow Java
+itself.
