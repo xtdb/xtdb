@@ -1,0 +1,440 @@
+= SQL (Documentation-Driven Design)
+
+XTDB 2.2 provides a practical subset of SQL through the
+https://www.postgresql.org/docs/13/protocol.html[V3 Postgres Wire Protocol].
+Not all features of the wire protocol are implemented.
+For example, Extended Queries and Function Calls and not supported.
+
+== Meta
+
+This document is written for a fictitious `2.2.0` version of xtdb/Crux.
+It assumes a fancy-pants transaction model, capable of realistic `INSERT` and `UPDATE` operations.
+A simpler version of this document, describing a SQL surface area easier to implement (even in Crux 1.x) can be found at `sql-ddd-2.1.0.adoc1`.
+
+
+== Installation
+
+Since xtdb supports both SQL and Datalog as first-class query languages, you will need to install the query module for your preferred query language.
+
+[source,xml]
+----
+	<dependency>
+	    <groupId>com.xtdb</groupId>
+	    <artifactId>xtdb-sql</artifactId>
+	    <version>2.1</version>
+	</dependency>
+----
+
+== Setup
+
+=== SSL/TLS
+
+* TODO: explain how to configure SSL
+
+=== Authentication
+
+* TODO: explain how to configure auth
+
+=== ParameterStatus
+
+After the authentication has succeeded the server has the possibility to send multiple `ParameterStatus` messages to the client.
+These are used to communicate information like `server_version` (emulates PostgreSQL 9.5) or `server_encoding`.
+
+XTDB also sends a message containing the xtdb_version parameter. This contains the current xtdb version number.
+This information is useful for clients to detect that they’re connecting to xtdb instead of a PostgreSQL instance.
+
+== Postgres Wire Protocol: Supported
+
+* https://www.postgresql.org/docs/13/protocol-flow.html#id-1.10.5.7.4[Simple Query] API is fully implemented.
+* https://www.postgresql.org/docs/13/protocol-flow.html#PROTOCOL-COPY[COPY] is fully implemented.
+* https://www.postgresql.org/docs/13/protocol-flow.html#id-1.10.5.7.9[Cancelling Requests in Progress] is supported but is subject to similar vagaries as Cancel Requests in Postgres. Specifically, there is no way to send a Cancel request on an existing connection and no way for the client to know if a Cancel request has succeeded.
+* https://www.postgresql.org/docs/13/protocol-flow.html#id-1.10.5.7.10[Termination scenarios] are equivalent but not identical to those of Postgres.
+* https://www.postgresql.org/docs/13/protocol-flow.html#id-1.10.5.7.11[SSL] is supported.
+
+== Postgres Wire Protocol: Unsupported
+
+* https://www.postgresql.org/docs/13/protocol-flow.html#PROTOCOL-FLOW-EXT-QUERY[Extended Query]
+* https://www.postgresql.org/docs/13/protocol-flow.html#id-1.10.5.7.6[Function Call]
+* https://www.postgresql.org/docs/13/protocol-flow.html#id-1.10.5.7.12[GSSAPI Encryption]
+* https://www.postgresql.org/docs/13/protocol-replication.html[Replication] and  https://www.postgresql.org/docs/13/protocol-logical-replication.html[Logical Replication] are completely unsupported because xtdb nodes use a completely different mechanism for replication.
+
+== Client Libraries / Adapters
+
+Any client library which supports the Postgres wire protocol should work with xtdb. There will be edge cases where xtdb does not support Postgres SQL extensions.
+
+Client libraries known to work with xtdb:
+
+* Go: https://github.com/jackc/pgx[pgx] and `database/sql`
+* Ruby: https://github.com/ged/ruby-pg[pg]
+* Python: https://github.com/psycopg/psycopg2/[psycopg2]
+* JavaScript: https://github.com/brianc/node-postgres[node-postgres (pg)]
+* C#: https://github.com/npgsql/npgsql[npgsql]
+* Java: https://github.com/pgjdbc/pgjdbc[PgJDBC]
+
+== Object-Relational Mappers
+
+ORMs tend to be built on top of existing libraries and, as such, will tend to work out of the box. There will be edge cases where extensions to Postgres SQL required by xtdb (SQL:2011 extensions, `EVICT`, etc.) do not have corresponding APIs in these ORMs yet. When that happens, users can execute xtdb's SQL extensions directly.
+
+ORMs known to work with xtdb:
+
+* Ruby: https://guides.rubyonrails.org/active_record_postgresql.html[ActiveRecord]
+* Python: https://github.com/sqlalchemy/sqlalchemy[SQLAlchemy]
+* Others....
+
+== Transactions
+
+=== BEGIN ; ROLLBACK ; COMMIT
+
+==== Restrictions
+
+* `SAVEPOINT` is not supported since xtdb is immutable and savepoints are not required.
+* Although it is legal to place an `EVICT` command within the scope of a transaction, it will not rollback if the transaction is rolled back. As such, evictions should be performed rarely and in isolation from other commands.
+
+==== Synopsis
+
+[source,sql]
+----
+BEGIN;
+  [ { select | insert | update | delete | ROLLBACK; } [, ...] ]
+COMMIT;
+----
+
+== Data Definition Language (DDL)
+
+XTDB is not Postgres and does not adhere to Postgres semantics.
+A small subset of Postgres SQL's DDL is supported, for two purposes.
+First, to aid in the migration of legacy software from Postgres to xtdb.
+Second, DDL executed in xtdb will create metadata which helps the xtdb query engine.
+
+XTDB DDL can be executed within a scoped transaction (permitting rollback).
+
+=== CREATE TABLE
+
+==== Restrictions
+
+* `GLOBAL/LOCAL` / `TEMPORARY`: xtdb has an inherently global, immutable tablespace and does not support global/local specifiers or temporary tables
+* `COLLATE`: xtdb is a columnar store and does not support collation
+* Constraints: xtdb is schemaless and does not support many column or table constraints. These constraints are not available because the require xtdb read while it performs a write:
+** `REFERENCES`
+** `GENERATED`
+** `UNIQUE`
+** `CHECK`
+** (Maybe we would want to support some of these later? Dunno. -sd)
+* `INHERITS`: xtdb does not support table inheritance
+* `PARTITION BY`: xtdb does not support table partitions
+* `ON COMMIT`: since xtdb does not support temporary tables, `ON COMMIT` qualifiers are not supported
+* `TABLESPACE`: xtdb only has one global tablespace
+
+==== Synopsis
+
+[source,sql]
+----
+CREATE TABLE [ IF NOT EXISTS ] table_name ( [
+  { column_name data_type [ column_constraint [ ... ] ] }
+  [, ... ]
+] )
+
+where column_constraint is:
+
+[ CONSTRAINT constraint_name ]
+{ NOT NULL |
+  NULL |
+  DEFAULT default_expr }
+----
+
+=== DROP TABLE
+
+==== Restrictions
+
+* `CASCADE / RESTRICT`: Since xtdb does not have a static schema, tables do not have explicit references or dependent objects.
+** (Obviously this would change if we ever chose to support references in xtdb SQL. -sd)
+
+==== Synopsis
+
+[source,sql]
+----
+DROP TABLE [ IF EXISTS ] name [, ...]
+----
+
+=== ALTER TABLE
+
+==== Restrictions
+
+`ALTER TABLE` commands are symmetrical to `CREATE TABLE` commands and the same restrictions apply.
+`ALTER TABLE` is used almost exclusively for renaming tables and columns for the purposes of schema migration.
+The only constraints permitted are `NOT NULL`, `NULL`, and `DEFAULT`.
+
+==== Synopsis
+
+[source,sql]
+----
+ALTER TABLE [ IF EXISTS ] [ ONLY ] name [ * ]
+    action [, ... ]
+ALTER TABLE [ IF EXISTS ] [ ONLY ] name [ * ]
+    RENAME [ COLUMN ] column_name TO new_column_name
+ALTER TABLE [ IF EXISTS ] [ ONLY ] name [ * ]
+    RENAME CONSTRAINT constraint_name TO new_constraint_name
+ALTER TABLE [ IF EXISTS ] name
+    RENAME TO new_name
+
+where action is one of:
+
+    ADD [ COLUMN ] [ IF NOT EXISTS ] column_name data_type [ column_constraint [ ... ] ]
+    DROP [ COLUMN ] [ IF EXISTS ] column_name
+    ALTER [ COLUMN ] column_name [ SET DATA ] TYPE data_type [ USING expression ]
+    ALTER [ COLUMN ] column_name SET DEFAULT expression
+    ALTER [ COLUMN ] column_name DROP DEFAULT
+    ALTER [ COLUMN ] column_name { SET | DROP } NOT NULL
+    ALTER [ COLUMN ] column_name DROP EXPRESSION [ IF EXISTS ]
+    ADD table_constraint [ NOT VALID ]
+    ALTER CONSTRAINT constraint_name
+    VALIDATE CONSTRAINT constraint_name
+    DROP CONSTRAINT [ IF EXISTS ] constraint_name
+----
+
+=== TRUNCATE
+
+Although `TRUNCATE` is supported, it is almost never what you want.
+Given that xtdb is an immutable database, it is very unlikely you want to "delete" all entities (rows) from a particular table, as they will remain on disk.
+
+==== Restrictions
+
+* `IDENTITY` is not supported
+* `CASCADE / RESTRICT` are not supported
+
+==== Synopsis
+
+[source,sql]
+----
+TRUNCATE [ TABLE ] [ ONLY ] name [ * ] [, ... ]
+----
+
+== Data Control Language (DCL)
+
+DCL is not supported by xtdb.
+Authorization must occur at other layers.
+See https://github.com/juxt/site[`site`].
+
+== Data Manipulation Language (DML)
+
+XTDB supports a subset of Postgres SQL's DML.
+Some behaviours do not make sense in the context of a schemaless, immutable data store and are thus not supported.
+
+=== INSERT
+
+Every record in xtdb contains an `:xt/id` column.
+This is not optional.
+
+==== Restrictions
+
+* `ALIAS` is not supported
+* `OVERRIDING` is not supported since `IDENTITY` columns are not supported
+* `COLLATE` is not supported in `ON CONFLICT`
+* `RETURNING` is not supported for asynchronous `INSERT`s
+** (Do we permit fully synchronous INSERT at all? If not, drop RETURNING since it doesn't make any sense. -sd)
+
+==== Synopsis
+
+[source,sql]
+----
+[ WITH [ RECURSIVE ] with_query [, ...] ]
+INSERT INTO table_name [ ( column_name [, ...] ) ]
+    { DEFAULT VALUES | VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+    [ ON CONFLICT [ conflict_target ] conflict_action ]
+    [ RETURNING * | output_expression [ [ AS ] output_name ] [, ...] ]
+    [ { valid_time_clause | tx_time_clause } ]
+
+where conflict_target can be one of:
+
+    ( { index_column_name | ( index_expression ) } [ opclass ] [, ...] ) [ WHERE index_predicate ]
+    ON CONSTRAINT constraint_name
+
+and conflict_action is one of:
+
+    DO NOTHING
+    DO UPDATE SET { column_name = { expression | DEFAULT } |
+                    ( column_name [, ...] ) = ( { expression | DEFAULT } [, ...] ) |
+                    ( column_name [, ...] ) = ( sub-SELECT )
+                  } [, ...]
+              [ WHERE condition ]
+----
+
+=== UPDATE
+
+Every record in xtdb contains an `:xt/id` column.
+This is not optional.
+
+Note that "updates" in xtdb are not destructive.
+If no Valid Time is specified, an update creates a new version of an existing entity (row) as-of now.
+Historical reads (valid time queries) will still find the original row which was "updated".
+
+==== Restrictions
+
+* `AS ALIAS` is not supported
+* `WHERE CURRENT OF` is not supported; cursors are not supported because xtdb is a columnar store
+* `RETURNING` is not supported for asynchronous `UPDATE`s
+** (Do we permit fully synchronous UPDATE at all? If not, drop RETURNING since it doesn't make any sense. -sd)
+
+==== Synopsis
+
+[source,sql]
+----
+[ WITH [ RECURSIVE ] with_query [, ...] ]
+UPDATE [ ONLY ] table_name [ * ]
+    SET { column_name = { expression | DEFAULT } |
+          ( column_name [, ...] ) = [ ROW ] ( { expression | DEFAULT } [, ...] ) |
+          ( column_name [, ...] ) = ( sub-SELECT )
+        } [, ...]
+    [ FROM from_item [, ...] ]
+    [ WHERE condition ]
+    [ RETURNING * | output_expression [ [ AS ] output_name ] [, ...] ]
+    [ { valid_time_clause | tx_time_clause } ]
+----
+
+=== DELETE
+
+Note that `DELETE` does not remove data from disk.
+If you want data to be removed, use `EVICT`.
+
+==== Restrictions
+
+* `AS ALIAS` is not supported
+* `WHERE CURRENT OF` is not supported; cursors are not supported because xtdb is a columnar store
+* `RETURNING` is not supported for asynchronous `DELETE`s
+** (Do we permit fully synchronous DELETE at all? If not, drop RETURNING since it doesn't make any sense. -sd)
+
+==== Synopsis
+
+[source,sql]
+----
+[ WITH [ RECURSIVE ] with_query [, ...] ]
+DELETE FROM [ ONLY ] table_name [ * ]
+    [ USING from_item [, ...] ]
+    [ WHERE condition ]
+    [ RETURNING * | output_expression [ [ AS ] output_name ] [, ...] ]
+    [ { valid_time_clause | tx_time_clause } ]
+----
+
+== Data Query Language (DQL)
+
+Where permitted, the syntax for the `SELECT` statement may be used in the `WHERE` clauses of DML statements above.
+
+=== SELECT
+
+==== Restrictions
+
+* Functions are not supported
+* `FOR lock_strength` is not supported. Since xtdb is immutable, there are no destructive operations requiring locks.
+
+==== Synopsis
+
+[source,sql]
+----
+[ WITH [ RECURSIVE ] with_query [, ...] ]
+SELECT [ ALL | DISTINCT [ ON ( expression [, ...] ) ] ]
+    [ * | expression [ [ AS ] output_name ] [, ...] ]
+    [ FROM from_item [, ...] ]
+    [ WHERE condition ]
+    [ GROUP BY grouping_element [, ...] ]
+    [ HAVING condition ]
+    [ WINDOW window_name AS ( window_definition ) [, ...] ]
+    [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select ]
+    [ ORDER BY expression [ ASC | DESC | USING operator ] [ NULLS { FIRST | LAST } ] [, ...] ]
+    [ LIMIT { count | ALL } ]
+    [ OFFSET start [ ROW | ROWS ] ]
+    [ FETCH { FIRST | NEXT } [ count ] { ROW | ROWS } ONLY ]
+    [ { valid_time_clause | tx_time_clause } ]
+
+where from_item can be one of:
+
+    [ ONLY ] table_name [ * ] [ [ AS ] alias [ ( column_alias [, ...] ) ] ]
+                [ TABLESAMPLE sampling_method ( argument [, ...] ) [ REPEATABLE ( seed ) ] ]
+    [ LATERAL ] ( select ) [ AS ] alias [ ( column_alias [, ...] ) ]
+    with_query_name [ [ AS ] alias [ ( column_alias [, ...] ) ] ]
+    from_item [ NATURAL ] join_type from_item [ ON join_condition | USING ( join_column [, ...] ) ]
+
+and grouping_element can be one of:
+
+    ( )
+    expression
+    ( expression [, ...] )
+    ROLLUP ( { expression | ( expression [, ...] ) } [, ...] )
+    CUBE ( { expression | ( expression [, ...] ) } [, ...] )
+    GROUPING SETS ( grouping_element [, ...] )
+
+and with_query is:
+
+    with_query_name [ ( column_name [, ...] ) ] AS ( select | values | insert | update | delete )
+
+TABLE [ ONLY ] table_name [ * ]
+----
+
+== Extended (XTDB) Query Language (XQL)
+
+=== EVICT
+
+`EVICT` is an extension to DML.
+
+==== Restrictions
+
+* `WHERE` only supports matching by `:tx.id`
+** (Is this still true in our fancy 2.2.0 query engine? I'd maybe vote "yes" ... users should have to query out the entities they really want to evict, in my opinion. I'd love to hear arguments, though. -sd)
+* `RETURNING` is not supported, since the data may have been deleted for compliance reasons and it should never be returned from the `EVICT` command.
+
+==== Synopsis
+
+[source,sql]
+----
+EVICT FROM [ ONLY ] table_name [ * ]
+    [ WHERE condition ]
+----
+
+=== KEYWORD
+
+Used to generate keyword data types within SQL statements.
+`KEYWORD` is an extension to DML and DQL.
+
+==== Restrictions
+
+* Cannot be used in prepared statements
+
+==== Synopsis
+
+[source,sql]
+----
+KEYWORD ( keyword )
+----
+
+=== SQL:2011 Temporal Clauses
+
+Most of SQL:2011 is supported with the exception of temporal features which do not make sense in an immutable bitemporal database because they can be supported natively instead.
+
+==== Restrictions
+
+* Time Period Definitions: xtdb does not support bitemporality on custom columns as Valid Time and Transaction Time are in-built.
+* Temporal Primary Keys (`WITHOUT OVERLAPS`): xtdb does not support custom primary keys; all tables use `:xt/id` as their primary key and it is not used in temporal clauses.
+* Temporal Referential Integrity: xtdb does not support table constraints because it is schemaless
+
+* Automatic Time Period Splitting: xtdb does not require this, since entities/rows in xtdb are not volatile.
+* Application Time (Valid Time Only) Period Tables (`PERIOD FOR`): xtdb does not require uni-temporality -- all tables are bitemporal
+* System-Versioned (Tx Time Only) Tables (`PERIOD FOR SYSTEM_TIME` or `WITH SYSTEM VERSIONING`): xtdb does not require uni-temporality -- all tables are bitemporal
+
+==== Synopsis
+
+[source,sql]
+----
+valid_time_clause is one of:
+
+[ CONTAINS timestamp ]
+[ OVERLAPS timestamp ]
+[ EQUALS timestamp ]
+[ PRECEDES timestamp ]
+[ SUCCEEDS timestamp ]
+[ IMMEDIATELY PRECEDES timestamp ]
+[ IMMEDIATELY SUCCEEDS timestamp ]
+
+tx_time_clause is one of:
+
+[ AS OF SYSTEM TIME timestamp ]
+[ VERSIONS BETWEEN SYSTEM TIME lower_bound AND upper_bound ]
+----
