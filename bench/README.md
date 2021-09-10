@@ -20,7 +20,7 @@ Every push on `main` triggers a deployment job on CircleCI, building a new docke
 
 Circle is responsible for building and pushing the bench docker images - it does this for every commit on the origin repo for branches with an active PR.
 
-To deploy Docker images to ECR from your own branches, set up CircleCI to build your fork, and ensure you've added the four AWS env vars (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_ECR_ACCOUNT_URL`).
+To deploy Docker images to ECR from your own branches, set up CircleCI to build your fork, and ensure you've added the four AWS env vars (`AWS_REGION`, `BENCH_AWS_ACCESS_KEY`, `BENCH_AWS_SECRET_KEY` and `BENCH_ECR_ACCOUNT_URL`).
 
 Assuming you have `awscli` and `jq` installed, and you are authenticated with AWS and ECR (see [**here**](https://docs.aws.amazon.com/cli/latest/reference/ecr/get-login.html)), you can run the bench for a CI-built commit using `bin/run-bench.sh [-r <COMMIT-ISH>] [--nodes node1,node2] [--tests test1,test2]`.
 
