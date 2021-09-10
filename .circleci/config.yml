@@ -216,6 +216,8 @@ jobs:
             fi
       - run: javadoc -Xdoclint:none -d xtdb-javadoc/ -cp `lein classpath` -sourcepath core/src xtdb.api
       - aws-s3/sync:
+          aws-access-key-id: SITE_AWS_ACCESS_KEY
+          aws-secret-access-key: SITE_AWS_SECRET_KEY
           arguments: |
             --acl public-read
           from: xtdb-javadoc
@@ -228,6 +230,8 @@ jobs:
             mkdir swagger-doc
             ./node_modules/redoc-cli/index.js bundle swagger.json -o redoc/xtdb-redoc.html
       - aws-s3/sync:
+          aws-access-key-id: SITE_AWS_ACCESS_KEY
+          aws-secret-access-key: SITE_AWS_SECRET_KEY
           arguments: |
             --acl public-read
           from: redoc
