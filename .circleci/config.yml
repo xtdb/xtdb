@@ -164,11 +164,14 @@ jobs:
               fi
 
         - aws-ecr/build-and-push-image:
-              dockerfile: 'Dockerfile'
-              extra-build-args: '${BUILD_ARG}'
-              path: "bench/"
-              repo: 'crux-bench'
-              tag: '${BUILD_TAGS}'
+            account-url: BENCH_ECR_ACCOUNT_URL
+            aws-access-key-id: BENCH_AWS_ACCESS_KEY
+            aws-secret-access-key: BENCH_AWS_SECRET_KEY
+            dockerfile: 'Dockerfile'
+            extra-build-args: '${BUILD_ARG}'
+            path: "bench/"
+            repo: 'xtdb-bench'
+            tag: '${BUILD_TAGS}'
         - save_cache:
             paths:
               - ~/xtdb/bench/data/
@@ -216,7 +219,7 @@ jobs:
           arguments: |
             --acl public-read
           from: xtdb-javadoc
-          to: 's3://crux-doc/xtdb-javadoc/${DOCS_PREFIX}'
+          to: 's3://xtdb-api-docs/xtdb-javadoc/${DOCS_PREFIX}'
       - node/install
       - run:
           command: |
@@ -228,7 +231,7 @@ jobs:
           arguments: |
             --acl public-read
           from: redoc
-          to: 's3://crux-doc/redoc/${DOCS_PREFIX}'
+          to: 's3://xtdb-api-docs/redoc/${DOCS_PREFIX}'
 
 
 workflows:

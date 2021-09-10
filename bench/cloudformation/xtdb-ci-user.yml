@@ -1,0 +1,42 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: A stack for creating our Bench CI user
+
+Resources:
+  User:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: ci-bench
+
+  AccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref User
+      Status: Active
+
+  CredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: /bench/ci
+      SecretString: !Sub '{"ACCESS_KEY":"${AccessKey}","SECRET_KEY":"${AccessKey.SecretAccessKey}"}'
+
+
+  EcrPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: EcrPush
+      Users:
+        - !Ref User
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'ecr:GetAuthorizationToken'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+              - 'ecr:CompleteLayerUpload'
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:InitiateLayerUpload'
+              - 'ecr:PutImage'
+              - 'ecr:UploadLayerPart'
+            Resource: '*'
