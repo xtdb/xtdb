@@ -94,8 +94,8 @@ initial inference from Java or when the vector is a dense union with
 several incompatible children. Compatible types are things like the
 different timestamps, numbers etc. that can be cast to each other in a
 meaningful way. This implies that protocols and multi-methods cannot
-be the core of the implementation. We should embrace run time code
-generation and do this the Lisp way.
+be the core of the implementation - during run time. We should embrace
+run time code generation and do this the Lisp way.
 
 ## Consequences
 
@@ -106,4 +106,5 @@ these if necessary.
 
 `core2.relation` needs to be consolidated into this world somehow. One
 option is to sub-class ValueVector, another is to use dense unions
-with gaps in the offsets to simulate the filtering.
+with gaps in the offsets to simulate the filtering. A third is to
+fully embrace it, but this may create duplication with Arrow itself.
