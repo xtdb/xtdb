@@ -3,6 +3,7 @@
             [core2.util :as util])
   (:import [core2.relation IAppendColumn IAppendRelation IReadColumn IReadRelation]
            java.nio.ByteBuffer
+           java.nio.charset.StandardCharsets
            java.time.Duration
            [java.util ArrayList Collection Date HashMap HashSet LinkedHashMap List Map Map$Entry Set]
            java.util.function.Function
@@ -275,7 +276,7 @@
     2 (.appendLong col obj)
     3 (.appendDouble col obj)
     4 (.appendBytes col obj)
-    5 (.appendString col (ByteBuffer/wrap (.getBytes ^String obj)))
+    5 (.appendString col (ByteBuffer/wrap (.getBytes ^String obj StandardCharsets/UTF_8)))
     6 (.appendBool col obj)
     10 (.appendDateMillis col (.getTime ^Date obj))
     18 (.appendDurationMillis col (.toMillis ^Duration obj))
