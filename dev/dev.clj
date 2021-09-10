@@ -12,7 +12,7 @@
             [xtdb.rocksdb :as rocks]
             [clojure.java.io :as io])
   (:import (xtdb.api IXtdb)
-           java.io.Closeable
+           (java.io Closeable File)
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory))
 
@@ -67,7 +67,7 @@
                                                   :kafka-port kafka-port})
    :meta-properties-file (io/file kafka-dir "kafka-log/meta.properties")})
 
-(defmethod i/halt-key! ::embedded-kafka [_ {:keys [^Closeable embedded-kafka ^File meta-properties-file ]}]
+(defmethod i/halt-key! ::embedded-kafka [_ {:keys [^Closeable embedded-kafka ^File meta-properties-file]}]
   (.close embedded-kafka)
   (.delete meta-properties-file))
 
