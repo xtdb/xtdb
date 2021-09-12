@@ -72,6 +72,32 @@ Pragmatically, there will be a difference between what's easiest done
 with acceptable performance and reasonable amount of work, and how we
 should really want this to ideally work.
 
+One can see a spectrum of approaches when it comes to expressions:
+
+1. Always use the Java representation as per `core2.types.nested`,
+   this makes dealing with nested data easy. Writing functions also
+   become easier as one can assume that things are valid Java types,
+   like Duration or String. Literals are just their Java instances.
+2. Like the above, but ensure that one removes all reflection and
+   remove boxes with primitive types.
+3. Like the above, but also ensure varbinary and varchar avoid
+   needless copies.
+4. Like the above, but also ensure all fixed width values use their
+   primitive counter parts, that is, a Duration is a long etc. (This
+   is kind of where we are today.) Gets complicated when there are
+   many types.
+5. Like the above, but also introduce "lazy" access to nested Lists
+   and Maps.
+6. Stay as close to Arrow as possible, and only use primitives locals
+   for literals as a optimisation. Never turn anything into a Java
+   object.
+
+Currently the expression system use a set of Java types (Date, String
+etc.) during the compilation, this breaks down when we want to use the
+full Arrow type system, a more natural approach is to use Arrow's own
+types in the multi-methods. This is orthogonal to the actual
+representation inside the expressions.
+
 ## Decision
 
 We will remove the current implementation in `core2.types` and also
