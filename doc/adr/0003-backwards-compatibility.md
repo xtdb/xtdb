@@ -11,6 +11,9 @@ Proposed
 XTDB needs some level of compatibility with classic. At the minimum we
 need to import the data and timeline.
 
+@jon: I suggest we break this ADR out into small, more specific ADRs
+we can make a decision on.
+
 ### Transaction processing (write side)
 
 #### Rollback
@@ -27,11 +30,11 @@ version.
 
 #### Transaction functions
 
-Nothing really changes here actually, once everything else works.
+See [ADR-0011](0011-classic-tx-fns.md)
 
 #### Data model
 
-We would move towards c2's Arrow based data model. I would suggest we
+We would move towards c2's Arrow based data model ([ADR-0002](0002-data-model.md)). I would suggest we
 do a few additions:
 
 #### match/cas
