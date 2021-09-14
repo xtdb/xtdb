@@ -13,7 +13,7 @@ model.
 
 ## Decision
 
-We will use [Apache Arrow]( https://arrow.apache.org/) which is an
+We will use https://arrow.apache.org/[Apache Arrow] which is an
 emerging industry standard for columnar data.
 
 Arrow supports nested data via lists and structs, and supports dynamic

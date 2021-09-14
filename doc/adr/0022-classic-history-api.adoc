@@ -12,7 +12,7 @@ If we want to keep supporting it until we have full temporal support
 (including transaction time), we can simulate it via the scan operator
 I think.
 
-If the history API can be superceded by the new temporal query
+If the history API can be superseded by the new temporal query
 capability, we could also consider NOT supporting classic-like history
 API.
 

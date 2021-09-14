@@ -4,19 +4,19 @@ Date: 2021-09-09
 
 ## Status
 
-Superceded by:
+Superseded by:
 
-* Tx Fns: [ADR-0011](0011-classic-tx-fns.adoc)
-* Lucene: [ADR-0012](0012-classic-lucene.adoc)
-* Pull Syntax [ADR-0013](0013-classic-pull.adoc)
-* Speculative transactions [ADR-0014](0014-classic-speculative-txes.adoc)
-* Clojure predicates [ADR-0015](0015-classic-clojure-predicates.adoc)
-* Arbitrary Types [ADR-0017](0017-classic-arbitrary-types.adoc)
-* Datalog Rules [ADR-0018](0018-classic-datalog-rules.adoc)
-* Advanced Datalog [ADR-0019](0019-classic-advanced-datalog.adoc)
-* Migration Tool [ADR-0020](0020-classic-migration-tool.adoc)
-* Tx-ops [ADR-0021](0021-classic-tx-fns.adoc)
-* History API [ADR-0022](0022-classic-history-api.adoc)
+* Tx Fns: link:0011-classic-tx-fns.adoc[ADR-0011]
+* Lucene: link:0012-classic-lucene.adoc[ADR-0012]
+* Pull Syntax link:0013-classic-pull.adoc[ADR-0013]
+* Speculative transactions: link:0014-classic-speculative-txes.adoc[ADR-0014]
+* Clojure predicates link:0015-classic-clojure-predicates.adoc[ADR-0015]
+* Arbitrary Types link:0017-classic-arbitrary-types.adoc[ADR-0017]
+* Datalog Rules link:0018-classic-datalog-rules.adoc[ADR-0018]
+* Advanced Datalog link:0019-classic-advanced-datalog.adoc[ADR-0019]
+* Migration Tool link:0020-classic-migration-tool.adoc[ADR-0020]
+* Tx-ops link:0021-classic-tx-fns.adoc[ADR-0021]
+* History API link:0022-classic-history-api.adoc[ADR-0022]
 
 ## Context
 
@@ -39,7 +39,7 @@ version.
 
 #### See Also
 
-* [Eviction](0004-eviction.adoc), assumed to be orthogonal.
+* link:0004-eviction.adoc[Eviction] assumed to be orthogonal.
 
 ## Decision
 

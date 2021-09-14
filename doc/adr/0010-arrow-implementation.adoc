@@ -8,9 +8,9 @@ Proposed
 
 ## Context
 
-XTDB uses Arrow as its [data model](0002-data-model.adoc). We use [Arrow
-Java](https://arrow.apache.org/docs/java/index.html), which is the
-official Arrow implementation for the JVM.
+XTDB uses Arrow as its link:0002-data-model.adoc[data model]. We use
+https://arrow.apache.org/docs/java/index.html[Arrow Java], which is
+the official Arrow implementation for the JVM.
 
 Our current usage of this assumes a small set of predefined literal
 types, and doesn't support nesting:
@@ -114,9 +114,9 @@ We should reach a single way to access the vectors, be it our own type
 hierarchy (like `core2.relation`) or sub-classing ValueVector if
 necessary to stay closer to Arrow Java. The representation needs to
 stay close to Arrow in spirit, and not introduce too many other heap
-allocated objects. The [Arrow C data
-interface](https://arrow.apache.org/docs/format/CDataInterface.html)
-could be a source of inspiration (as it was for the removed
+allocated objects. The
+https://arrow.apache.org/docs/format/CDataInterface.html[Arrow C data
+interface] could be a source of inspiration (as it was for the removed
 `core2.mini-arrow` namespace).
 
 We should only used boxed values when there's no choice, like on
@@ -138,8 +138,7 @@ these if necessary.
 
 1. sub-class ValueVector.
 2. use dense unions with gaps in the offsets to simulate the
-filtering. The [Arrow Columnar
-Format](https://arrow.apache.org/docs/format/Columnar.html#dense-union)
+filtering. The https://arrow.apache.org/docs/format/Columnar.html#dense-union[Arrow Columnar Format]
 allows this, "The respective offsets for each child value array must
 be in order / increasing."
 3. fully embrace it, but this may create duplication of Arrow Java
