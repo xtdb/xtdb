@@ -80,10 +80,7 @@ current slice and the current in-memory temporal index.
 
 #### Lucene
 
-A c2-native solution would be to have secondary indexes
-participate in finish chunk, and maybe also a collective LSM-style
-merge process. Temporal could maybe also use this capability if it
-existed.
+See [ADR-0012](0012-classic-lucene.md)
 
 #### History API
 
