@@ -5,7 +5,6 @@
             core2.buffer-pool
             [core2.expression.comparator :as expr.comp]
             core2.object-store
-            [core2.relation :as rel]
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
@@ -79,13 +78,11 @@
   (when (pos? (.getValueCount field-vec))
     (let [arrow-type (.getType (.getField field-vec))
           type-name (type->field-name arrow-type)
-          col-comparator (expr.comp/->comparator arrow-type)
 
-          field-col (rel/<-vector field-vec)
           min-vec (.getChild min-meta-vec type-name)
-          min-col (rel/<-vector min-vec)
           max-vec (.getChild max-meta-vec type-name)
-          max-col (rel/<-vector max-vec)]
+
+          col-comparator (expr.comp/->comparator arrow-type)]
 
       (.setIndexDefined min-meta-vec meta-idx)
       (.setIndexDefined max-meta-vec meta-idx)
@@ -93,12 +90,12 @@
       (dotimes [field-idx (.getValueCount field-vec)]
         (when (or (.isNull min-vec meta-idx)
                   (and (not (.isNull field-vec field-idx))
-                       (neg? (.compareIdx col-comparator field-col field-idx min-col meta-idx))))
+                       (neg? (.compareIdx col-comparator field-vec field-idx min-vec meta-idx))))
           (.copyFromSafe min-vec field-idx meta-idx field-vec))
 
         (when (or (.isNull max-vec meta-idx)
                   (and (not (.isNull field-vec field-idx))
-                       (pos? (.compareIdx col-comparator field-col field-idx max-col meta-idx))))
+                       (pos? (.compareIdx col-comparator field-vec field-idx max-vec meta-idx))))
           (.copyFromSafe max-vec field-idx meta-idx field-vec))))))
 
 (defn write-meta [^VectorSchemaRoot metadata-root, live-roots, ^long chunk-idx, ^long max-rows-per-block]

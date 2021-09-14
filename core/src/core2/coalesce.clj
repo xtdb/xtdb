@@ -1,9 +1,11 @@
 (ns core2.coalesce
+  (:require [core2.relation :as rel]
+            [core2.util :as util])
   (:import core2.ICursor
            [core2.relation IAppendRelation IReadRelation]
            java.util.function.Consumer
-           org.apache.arrow.memory.BufferAllocator)
-  (:require [core2.relation :as rel]))
+           org.apache.arrow.memory.BufferAllocator
+           org.apache.arrow.util.AutoCloseables))
 
 ;; We pass the first 100 results through immediately, so that any limit-like queries don't need to wait for a full block to return rows.
 ;; Then, we coalesce small blocks together into blocks of at least 100, to share the per-block costs.
@@ -43,8 +45,8 @@
 
                                                       ;; otherwise, add it to the pending rows.
                                                       :else
-                                                      (let [append-rel (vswap! !append-rel #(or % (rel/->fresh-append-relation allocator)))]
-                                                        (rel/copy-rel-from append-rel read-rel)
+                                                      (let [^IAppendRelation append-rel (vswap! !append-rel #(or % (rel/->append-relation allocator)))]
+                                                        (.appendRelation append-rel read-rel)
                                                         (vswap! !rows-appended + row-count)))))))
                 rows-appended @!rows-appended]
 
@@ -64,8 +66,7 @@
               :else false)))
 
         (finally
-          (when-let [^IAppendRelation append-rel @!append-rel]
-            (.close append-rel))))))
+          (util/try-close @!append-rel)))))
 
   (close [_]
     (.close cursor)))

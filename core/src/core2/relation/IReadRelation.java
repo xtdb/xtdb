@@ -1,12 +1,16 @@
 package core2.relation;
 
-public interface IReadRelation extends AutoCloseable {
+import org.apache.arrow.util.AutoCloseables;
+import org.apache.arrow.vector.ValueVector;
 
-    Iterable<IReadColumn> readColumns();
-    IReadColumn readColumn(String colName);
+@SuppressWarnings("try")
+public interface IReadRelation extends AutoCloseable, Iterable<IReadColumn<?>> {
+
+    <V extends ValueVector> IReadColumn<V> readColumn(String colName);
+
     int rowCount();
 
     @Override
-    default void close() {
+    default void close() throws Exception {
     }
 }

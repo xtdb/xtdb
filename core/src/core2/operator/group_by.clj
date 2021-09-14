@@ -1,14 +1,17 @@
 (ns core2.operator.group-by
   (:require [core2.relation :as rel]
-            [core2.util :as util]
-            [core2.types :as types])
+            [core2.types :as types]
+            [core2.types.nested :as nested]
+            [core2.util :as util])
   (:import core2.ICursor
            core2.relation.IReadRelation
-           [java.util ArrayList Comparator DoubleSummaryStatistics HashMap LinkedHashMap List LongSummaryStatistics Map Optional Spliterator]
+           [java.util ArrayList Comparator DoubleSummaryStatistics HashMap LinkedList List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer ObjDoubleConsumer ObjIntConsumer ObjLongConsumer Supplier]
            [java.util.stream Collector Collector$Characteristics Collectors IntStream]
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ArrowBufPointer
+           [org.apache.arrow.vector BigIntVector Float8Vector]
+           org.apache.arrow.vector.complex.DenseUnionVector
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -24,8 +27,9 @@
 
   (aggregate [_ in-rel container idx-bitmap]
     (or container
-        (.getObject (.readColumn in-rel col-name)
-                    (.first idx-bitmap))))
+        (let [col (.readColumn in-rel col-name)]
+          (nested/get-value (.getVector col)
+                            (.getIndex col (.first idx-bitmap))))))
 
   (finish [_ container]
     container))
@@ -44,6 +48,7 @@
 
   (aggregate [_ in-rel container idx-bitmap]
     (let [from-col (.readColumn in-rel from-name)
+          from-vec (.getVector from-col)
           accumulator (.accumulator collector)]
       (.collect ^IntStream (.stream idx-bitmap)
                 (if (some? container)
@@ -52,7 +57,7 @@
                   (.supplier collector))
                 (reify ObjIntConsumer
                   (accept [_ acc idx]
-                    (.accept accumulator acc (.getObject from-col idx))))
+                    (.accept accumulator acc (nested/get-value from-vec (.getIndex from-col idx)))))
                 accumulator)))
 
   (finish [_ container]
@@ -75,26 +80,34 @@
           acc (if (some? container)
                 container
                 (.get supplier))
+          arrow-types (rel/col->arrow-types from-col)
           consumer (cond
-                     (= #{(types/->arrow-type :bigint)} (.arrowTypes from-col))
-                     (reify IntConsumer
-                       (accept [_ idx]
-                         (.accept ^ObjLongConsumer accumulator acc
-                                  (.getLong from-col idx))))
+                     (= #{(types/->arrow-type :bigint)} arrow-types)
+                     (let [from-col (-> from-col
+                                        (rel/nested-read-col (types/->arrow-type :bigint)))
+                           ^BigIntVector from-vec (.getVector from-col)]
+                       (reify IntConsumer
+                         (accept [_ idx]
+                           (.accept ^ObjLongConsumer accumulator acc
+                                    (.get from-vec (.getIndex from-col idx))))))
 
-                     (= #{(types/->arrow-type :float8)} (.arrowTypes from-col))
-                     (reify IntConsumer
-                       (accept [_ idx]
-                         (.accept ^ObjDoubleConsumer accumulator acc
-                                  (.getDouble from-col idx))))
+                     (= #{(types/->arrow-type :float8)} arrow-types)
+                     (let [from-col (-> from-col
+                                        (rel/nested-read-col (types/->arrow-type :float8)))
+                           ^Float8Vector from-vec (.getVector from-col)]
+                       (reify IntConsumer
+                         (accept [_ idx]
+                           (.accept ^ObjDoubleConsumer accumulator acc
+                                    (.get from-vec (.getIndex from-col idx))))))
 
                      :else
-                     (reify IntConsumer
-                       (accept [_ idx]
-                         (let [v (.getObject from-col idx)]
-                           (if (integer? v)
-                             (.accept ^ObjLongConsumer accumulator acc v)
-                             (.accept ^ObjDoubleConsumer accumulator acc v))))))]
+                     (let [from-vec (.getVector from-col)]
+                       (reify IntConsumer
+                         (accept [_ idx]
+                           (let [v (nested/get-value from-vec idx)]
+                             (if (integer? v)
+                               (.accept ^ObjLongConsumer accumulator acc v)
+                               (.accept ^ObjDoubleConsumer accumulator acc v)))))))]
       (.forEach ^IntStream (.stream idx-bitmap) consumer)
       acc))
 
@@ -240,8 +253,7 @@
   (let [ks (ArrayList. (.size group-specs))]
     (doseq [^GroupSpec group-spec group-specs]
       (let [from-col (.readColumn in-rel (.col-name group-spec))]
-        (.add ks (util/pointer-or-object (._getInternalVector from-col idx)
-                                         (._getInternalIndex from-col idx)))))
+        (.add ks (util/pointer-or-object (.getVector from-col) (.getIndex from-col idx)))))
     ks))
 
 (defn- aggregate-groups [^BufferAllocator allocator ^IReadRelation in-rel ^List aggregate-specs ^Map group->accs]
@@ -269,22 +281,23 @@
                                  idx-bitmap))))))
 
 (defn- finish-groups ^core2.relation.IReadRelation [^BufferAllocator allocator
-                                                  ^List aggregate-specs
-                                                  ^Map group->accs]
-  (let [^List all-accs (ArrayList. ^List (vals group->accs))
-        ^Map out-cols (LinkedHashMap.)
+                                                    ^List aggregate-specs
+                                                    ^Map group->accs]
+  (let [all-accs (ArrayList. ^List (vals group->accs))
+        out-cols (LinkedList.)
         row-count (.size all-accs)]
     (dotimes [n (.size aggregate-specs)]
       (let [^AggregateSpec aggregate-spec (.get aggregate-specs n)
             col-name (.columnName aggregate-spec)
-            append-col (rel/->fresh-append-column allocator col-name)]
+            append-vec (DenseUnionVector/empty col-name allocator)]
         (dotimes [idx row-count]
           (let [^objects accs (.get all-accs idx)]
-            (.appendObject append-col
-                           (.finish aggregate-spec (aget accs n)))))
+            ;; HACK: using nested for now to get this working,
+            ;; we'll want to incorporate this when we bring in a consistent DUV approach.
+            (nested/append-value (.finish aggregate-spec (aget accs n)) append-vec)))
 
-        (.put out-cols col-name append-col)))
-    (rel/->read-relation (rel/append->read-cols out-cols))))
+        (.add out-cols (rel/<-vector append-vec))))
+    (rel/->read-relation out-cols)))
 
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor

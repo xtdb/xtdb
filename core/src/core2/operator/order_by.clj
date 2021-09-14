@@ -19,11 +19,16 @@
   (OrderSpec. col-name direction))
 
 (defn- accumulate-relations ^core2.relation.IReadRelation [allocator ^ICursor in-cursor]
-  (let [append-rel (rel/->fresh-append-relation allocator)]
-    (.forEachRemaining in-cursor
-                       (reify Consumer
-                         (accept [_ read-rel]
-                           (rel/copy-rel-from append-rel read-rel))))
+  (let [append-rel (rel/->append-relation allocator)]
+    (try
+      (.forEachRemaining in-cursor
+                         (reify Consumer
+                           (accept [_ src-rel]
+                             (.appendRelation append-rel src-rel))))
+      (catch Exception e
+        (.close append-rel)
+        (throw e)))
+
     (.read append-rel)))
 
 (defn- sorted-idxs ^ints [^IReadRelation read-rel, ^List #_<OrderSpec> order-specs]
@@ -32,18 +37,18 @@
       (.sorted (reduce (fn [^Comparator acc ^OrderSpec order-spec]
                          (let [^String col-name (.col-name order-spec)
                                read-col (.readColumn read-rel col-name)
-                               arrow-types (.arrowTypes read-col)
-                               ^ArrowType arrow-type (if (= 1 (.size arrow-types))
+                               arrow-types (rel/col->arrow-types read-col)
+                               ^ArrowType arrow-type (if (= 1 (count arrow-types))
                                                        (first arrow-types)
                                                        (throw (UnsupportedOperationException.)))
+                               read-col (rel/nested-read-col read-col arrow-type)
+                               read-vec (.getVector read-col)
                                col-comparator (expr.comp/->comparator arrow-type)
 
                                ^Comparator
                                comparator (cond-> (reify Comparator
                                                     (compare [_ left right]
-                                                      (.compareIdx col-comparator
-                                                                   read-col left
-                                                                   read-col right)))
+                                                      (.compareIdx col-comparator read-vec (.getIndex read-col left) read-vec (.getIndex read-col right))))
                                             (= :desc (.direction order-spec)) (.reversed))]
                            (if acc
                              (.thenComparing acc comparator)

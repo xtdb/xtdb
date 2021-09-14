@@ -123,8 +123,8 @@
 
 (defn <-column [^IReadColumn col]
   (mapv (fn [idx]
-          (.getObject col idx))
-        (range (.valueCount col))))
+          (.getObject (.getVector col) (.getIndex col idx)))
+        (range (.getValueCount col))))
 
 (defn <-cursor [^ICursor cursor]
   (let [!res (volatile! (transient []))]

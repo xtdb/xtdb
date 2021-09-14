@@ -4,6 +4,7 @@
             [core2.test-util :as tu]
             [core2.types :as ty])
   (:import core2.operator.select.IRelationSelector
+           org.apache.arrow.vector.BigIntVector
            org.apache.arrow.vector.types.pojo.Schema
            org.roaringbitmap.RoaringBitmap))
 
@@ -21,11 +22,11 @@
                                                       (reify IRelationSelector
                                                         (select [_ in-rel]
                                                           (let [idxs (RoaringBitmap.)
-                                                                a-col (.readColumn in-rel "a")
-                                                                b-col (.readColumn in-rel "b")]
+                                                                ^BigIntVector a-vec (.getVector (.readColumn in-rel "a"))
+                                                                ^BigIntVector b-vec (.getVector (.readColumn in-rel "b"))]
                                                             (dotimes [idx (.rowCount in-rel)]
-                                                              (when (> (.getLong a-col idx)
-                                                                       (.getLong b-col idx))
+                                                              (when (> (.get a-vec idx)
+                                                                       (.get b-vec idx))
                                                                 (.add idxs idx)))
 
                                                             idxs))))]

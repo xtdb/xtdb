@@ -6,7 +6,7 @@
             [core2.util :as util])
   (:import core2.ICursor
            [core2.relation IReadColumn IReadRelation]
-           [java.util LinkedHashMap Map]
+           [java.util LinkedList Map]
            java.util.function.Consumer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -29,15 +29,15 @@
                    (reify Consumer
                      (accept [_ in-rel]
                        (let [^IReadRelation in-rel in-rel
-                             out-cols (LinkedHashMap.)]
+                             out-cols (LinkedList.)]
 
-                         (doseq [^IReadColumn in-col (.readColumns in-rel)
+                         (doseq [^IReadColumn in-col in-rel
                                  :let [old-name (.getName in-col)
                                        col-name (cond->> (get rename-map old-name old-name)
                                                   prefix (str prefix relation-prefix-delimiter))]]
-                           (.put out-cols col-name (.rename in-col col-name)))
+                           (.add out-cols (.withName in-col col-name)))
 
-                         (.accept c (rel/->read-relation out-cols (.rowCount in-rel)))))))))
+                         (.accept c (rel/->read-relation out-cols))))))))
 
   (close [_]
     (util/try-close in-cursor)))

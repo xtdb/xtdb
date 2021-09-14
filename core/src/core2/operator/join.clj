@@ -1,11 +1,11 @@
 (ns core2.operator.join
   (:require [core2.bloom :as bloom]
             [core2.operator.scan :as scan]
-            [core2.util :as util]
-            [core2.relation :as rel])
+            [core2.relation :as rel]
+            [core2.util :as util])
   (:import core2.ICursor
-           [core2.relation IReadColumn IReadRelation]
-           [java.util ArrayList HashMap List Map]
+           [core2.relation IAppendRelation IReadColumn IReadRelation IRowAppender]
+           [java.util ArrayList HashMap Iterator List Map]
            [java.util.function Consumer Function]
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
@@ -14,93 +14,107 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- cross-product ^core2.relation.IReadRelation [^List left-rels, ^long left-row-count, ^IReadRelation right-rel]
-  (let [out-rel (rel/->indirect-append-relation)
-        right-row-count (.rowCount right-rel)]
+(defn- cross-product ^core2.relation.IReadRelation [^IReadRelation left-rel, ^IReadRelation right-rel]
+  (let [left-row-count (.rowCount left-rel)
+        right-row-count (.rowCount right-rel)
+        row-count (* left-row-count right-row-count)]
+    (rel/->read-relation (concat (rel/select left-rel
+                                             (let [idxs (int-array row-count)]
+                                               (dotimes [idx row-count]
+                                                 (aset idxs idx ^long (quot idx right-row-count)))
+                                               idxs))
 
-    (doseq [^IReadRelation left-rel left-rels
-            :let [left-row-count (.rowCount left-rel)]
-            ^IReadColumn in-col (.readColumns left-rel)
-            :let [out-col (.appendColumn out-rel (.getName in-col))]]
-      (dotimes [left-idx left-row-count]
-        (dotimes [_right-idx right-row-count]
-          (.appendFrom out-col in-col left-idx))))
-
-    (doseq [^IReadColumn in-col (.readColumns right-rel)
-            :let [out-col (.appendColumn out-rel (.getName in-col))]]
-      (dotimes [_left-idx left-row-count]
-        (dotimes [right-idx right-row-count]
-          (.appendFrom out-col in-col right-idx))))
-
-    (.read out-rel)))
+                                 (rel/select right-rel
+                                             (let [idxs (int-array row-count)]
+                                               (dotimes [idx row-count]
+                                                 (aset idxs idx ^long (rem idx right-row-count)))
+                                               idxs))))))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
                           ^ICursor left-cursor
                           ^ICursor right-cursor
-                          ^List left-rels]
+                          ^List left-rels
+                          ^:unsynchronized-mutable ^Iterator left-rel-iterator
+                          ^:unsynchronized-mutable ^IReadRelation right-rel]
   ICursor
-  (tryAdvance [_ c]
+  (tryAdvance [this c]
     (.forEachRemaining left-cursor
                        (reify Consumer
-                         (accept [_ in-rel]
-                           (.add left-rels (.read (doto (rel/->fresh-append-relation allocator)
-                                                    (rel/copy-rel-from in-rel)))))))
+                         (accept [_ left-rel]
+                           (.add left-rels (rel/copy left-rel allocator)))))
 
     (boolean
-     (when-not (.isEmpty left-rels)
-       (let [left-row-count (transduce (map #(.rowCount ^IReadRelation %)) + left-rels)]
-         (.tryAdvance right-cursor
-                      (reify Consumer
-                        (accept [_ right-rel]
-                          (with-open [^IReadRelation out-rel (cross-product left-rels left-row-count right-rel)]
-                            (.accept c out-rel)))))))))
+     (when-let [right-rel (or (when (and left-rel-iterator (.hasNext left-rel-iterator))
+                                right-rel)
+                              (do
+                                (when right-rel
+                                  (.close right-rel)
+                                  (set! (.right-rel this) nil))
+                                (when (.tryAdvance right-cursor
+                                                   (reify Consumer
+                                                     (accept [_ right-rel]
+                                                       (set! (.right-rel this) (rel/copy right-rel allocator))
+                                                       (set! (.left-rel-iterator this) (.iterator left-rels)))))
+                                  (.right-rel this))))]
+
+       (when-let [left-rel (when (.hasNext left-rel-iterator)
+                             (.next left-rel-iterator))]
+         (.accept c (cross-product left-rel right-rel))
+         true))))
 
   (close [_]
     (when left-rels
       (run! util/try-close left-rels)
       (.clear left-rels))
     (util/try-close left-cursor)
+    (util/try-close right-rel)
     (util/try-close right-cursor)))
 
 (defn ->cross-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.)))
+  (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))
 
-(deftype BuildPointer [^IReadRelation rel, ^int idx, pointer-or-object])
+(deftype BuildPointer [^List #_<IRowAppender> row-appenders, ^int idx, pointer-or-object])
 
-(defn- build-phase [^BufferAllocator allocator
+(defn- build-phase [^IAppendRelation append-rel
                     ^IReadRelation build-rel
-                    ^List build-rels
-                    ^Map join-key->build-pointers
                     ^String build-column-name
-                    ^MutableRoaringBitmap pushdown-bloom]
-  (let [^IReadRelation build-rel (.read (doto (rel/->fresh-append-relation allocator)
-                                          (rel/copy-rel-from build-rel)))
-        build-col (.readColumn build-rel build-column-name)]
-    (.add build-rels build-rel)
-    (dotimes [build-idx (.valueCount build-col)]
-      (let [internal-vec (._getInternalVector build-col build-idx)
-            internal-idx (._getInternalIndex build-col build-idx)]
-        (.add pushdown-bloom ^ints (bloom/bloom-hashes internal-vec internal-idx))
+                    ^String probe-column-name
+                    ^Map join-key->build-pointers
+                    ^MutableRoaringBitmap pushdown-bloom
+                    semi-join?]
+  (let [row-appenders (when-not semi-join?
+                        (vec (for [^IReadColumn col build-rel
+                                   :let [col-name (.getName col)]
+                                   :when (not= col-name probe-column-name)]
+                               (.rowAppender (.appendColumn append-rel col-name) col))))
+        build-col (.readColumn build-rel build-column-name)
+        internal-vec (.getVector build-col)]
+    (dotimes [build-idx (.getValueCount build-col)]
+      (let [idx (.getIndex build-col build-idx)]
+        (.add pushdown-bloom ^ints (bloom/bloom-hashes internal-vec idx))
         (doto ^List (.computeIfAbsent join-key->build-pointers
-                                      (.hashCode internal-vec internal-idx)
+                                      (.hashCode internal-vec idx)
                                       (reify Function
                                         (apply [_ x]
                                           (ArrayList.))))
-          (.add (BuildPointer. build-rel build-idx
-                               (util/pointer-or-object internal-vec internal-idx))))))))
+          (.add (BuildPointer. row-appenders build-idx
+                               (util/pointer-or-object internal-vec idx))))))))
 
-(defn- probe-phase ^core2.relation.IReadRelation [^IReadRelation probe-rel
+(defn- probe-phase ^core2.relation.IReadRelation [^IAppendRelation append-rel
+                                                  ^IReadRelation probe-rel
                                                   ^Map join-key->build-pointers
                                                   ^String probe-column-name
                                                   semi-join? anti-join?]
   (when (pos? (.rowCount probe-rel))
-    (let [probe-col (.readColumn probe-rel probe-column-name)
+    (let [probe-row-appenders (vec (for [^IReadColumn col probe-rel]
+                                     (.rowAppender (.appendColumn append-rel (.getName col)) col)))
+          probe-col (.readColumn probe-rel probe-column-name)
           probe-pointer (ArrowBufPointer.)
           matching-build-pointers (ArrayList.)
-          matching-probe-idxs (IntStream/builder)]
-      (dotimes [probe-idx (.valueCount probe-col)]
-        (let [internal-vec (._getInternalVector probe-col probe-idx)
-              internal-idx (._getInternalIndex probe-col probe-idx)
+          matching-probe-idxs (IntStream/builder)
+          internal-vec (.getVector probe-col)]
+      (dotimes [probe-idx (.getValueCount probe-col)]
+        (let [internal-idx (.getIndex probe-col probe-idx)
               match? (when-let [^List build-pointers (.get join-key->build-pointers (.hashCode internal-vec internal-idx))]
                        (let [probe-pointer-or-object (util/pointer-or-object internal-vec internal-idx probe-pointer)
                              build-pointer-it (.iterator build-pointers)]
@@ -124,29 +138,20 @@
             semi-join? (when match?
                          (.add matching-probe-idxs probe-idx)))))
 
-      (let [out-rel (rel/->indirect-append-relation)]
-        (when-not semi-join?
-          ;; this one jumps around a bit between build-rels,
-          ;; particularly needing to re-read cols and re-gen append-cols for each build-ptr -
-          ;; maybe some scope for optimisation
-          (doseq [^BuildPointer build-pointer matching-build-pointers
-                  :let [^IReadRelation build-rel (.rel build-pointer)]
-                  ^IReadColumn in-col (.readColumns build-rel)
-                  :when (not= (.getName in-col) probe-column-name)
-                  :let [out-col (.appendColumn out-rel (.getName in-col))]]
-            (.appendFrom out-col in-col (.idx build-pointer))))
+      (when-not semi-join?
+        (doseq [^BuildPointer build-pointer matching-build-pointers
+                ^IRowAppender row-appender (.row-appenders build-pointer)]
+          (.appendRow row-appender (.idx build-pointer))))
 
-        (let [probe-idxs (.toArray (.build matching-probe-idxs))]
-          (doseq [^IReadColumn in-col (.readColumns probe-rel)
-                  :let [out-col (.appendColumn out-rel (.getName in-col))]]
-            (dotimes [idx (alength probe-idxs)]
-              (.appendFrom out-col in-col (aget probe-idxs idx)))))
-
-        (.read out-rel)))))
+      (let [probe-idxs (.toArray (.build matching-probe-idxs))]
+        (doseq [^IRowAppender row-appender probe-row-appenders]
+          (dotimes [idx (alength probe-idxs)]
+            (.appendRow row-appender (aget probe-idxs idx))))))))
 
 (deftype JoinCursor [^BufferAllocator allocator
                      ^ICursor build-cursor, ^String build-column-name
                      ^ICursor probe-cursor, ^String probe-column-name
+                     ^IAppendRelation append-rel
                      ^List build-rels
                      ^Map join-key->build-pointers
                      ^MutableRoaringBitmap pushdown-bloom
@@ -156,8 +161,13 @@
   (tryAdvance [_ c]
     (.forEachRemaining build-cursor
                        (reify Consumer
-                         (accept [_ in-rel]
-                           (build-phase allocator in-rel build-rels join-key->build-pointers build-column-name pushdown-bloom))))
+                         (accept [_ build-rel]
+                           (let [build-rel (rel/copy build-rel allocator)]
+                             (.add build-rels build-rel)
+                             (build-phase append-rel build-rel
+                                          build-column-name probe-column-name
+                                          join-key->build-pointers pushdown-bloom
+                                          semi-join?)))))
 
     (boolean
      (when (or (not (.isEmpty join-key->build-pointers))
@@ -169,14 +179,16 @@
            (while (and (not @!advanced)
                        (.tryAdvance probe-cursor
                                     (reify Consumer
-                                      (accept [_ in-rel]
-                                        (when-let [out-rel (probe-phase in-rel join-key->build-pointers
-                                                                        probe-column-name semi-join? anti-join?)]
+                                      (accept [_ probe-rel]
+                                        (probe-phase append-rel probe-rel join-key->build-pointers
+                                                     probe-column-name semi-join? anti-join?)
+                                        (let [out-rel (.read append-rel)]
                                           (try
                                             (when (pos? (.rowCount out-rel))
                                               (reset! !advanced true)
                                               (.accept c out-rel))
                                             (finally
+                                              (.clear append-rel)
                                               (util/try-close out-rel))))))))))
          @!advanced))))
 
@@ -194,6 +206,7 @@
                                          ^String right-column-name]
   (JoinCursor. allocator
                left-cursor left-column-name right-cursor right-column-name
+               (rel/->append-relation allocator)
                (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
                false false))
 
@@ -204,6 +217,7 @@
                                               ^String right-column-name]
   (JoinCursor. allocator
                right-cursor right-column-name left-cursor left-column-name
+               (rel/->append-relation allocator)
                (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
                true false))
 
@@ -214,5 +228,6 @@
                                               ^String right-column-name]
   (JoinCursor. allocator
                right-cursor right-column-name left-cursor left-column-name
+               (rel/->append-relation allocator)
                (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
                true true))

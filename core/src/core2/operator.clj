@@ -23,7 +23,7 @@
            [core2 ICursor IResultSet]
            [core2.operator.set ICursorFactory IFixpointCursorFactory]
            core2.snapshot.ISnapshot
-           [java.util Date List NoSuchElementException]
+           [java.util Date Iterator NoSuchElementException]
            java.util.function.Consumer
            [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
@@ -279,21 +279,20 @@
 ;; the tryAdvance returns.
 (deftype CursorResultSet [^BufferAllocator allocator
                           ^ICursor cursor
-                          ^:unsynchronized-mutable ^List next-values]
+                          ^:unsynchronized-mutable ^Iterator next-values]
   IResultSet
   (hasNext [res]
-    (or (not (empty? next-values))
-        (and (.tryAdvance cursor
-                          (reify Consumer
-                            (accept [_ rel]
-                              (set! (.-next-values res) (rel/rel->rows rel)))))
-             (not (empty? next-values)))))
+    (boolean
+     (or (and next-values (.hasNext next-values))
+         (and (.tryAdvance cursor
+                           (reify Consumer
+                             (accept [_ rel]
+                               (set! (.-next-values res)
+                                     (.iterator (rel/rel->rows rel))))))
+              (.hasNext next-values)))))
 
-  (next [this]
-    (let [[next-value & more-values] (or (seq (.next-values this))
-                                         (throw (NoSuchElementException.)))]
-      (set! (.next-values this) more-values)
-      next-value))
+  (next [_]
+    (.next next-values))
 
   (close [_]
     (util/try-close cursor)

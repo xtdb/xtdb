@@ -1,24 +1,14 @@
 package core2.relation;
 
-import java.nio.ByteBuffer;
-import java.time.Duration;
-import java.util.Date;
+import org.apache.arrow.vector.ValueVector;
 
-public interface IAppendColumn extends AutoCloseable {
-    void appendFrom(IReadColumn src, int idx);
-    IReadColumn read();
+@SuppressWarnings("try")
+public interface IAppendColumn<V extends ValueVector> extends AutoCloseable {
+    void appendColumn(IReadColumn<?> sourceColumn);
 
-    void appendNull();
-    void appendBool(boolean bool);
-    void appendDouble(double dbl);
-    void appendLong(long lng);
-    void appendDateMillis(long date);
-    void appendDurationMillis(long millis);
-    void appendString(ByteBuffer buf);
-    void appendBytes(ByteBuffer buf);
-    void appendObject(Object obj);
+    IRowAppender rowAppender(IReadColumn<?> sourceColumn);
 
-    @Override
-    default void close() {
-    }
+    IReadColumn<V> read();
+
+    void clear();
 }

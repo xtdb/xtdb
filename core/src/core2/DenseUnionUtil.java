@@ -46,17 +46,23 @@ public class DenseUnionUtil {
         }
     }
 
+    public static void ensureDuvCapacity(DenseUnionVector duv, int capacity) {
+        var offsetBuffer = duv.getOffsetBuffer();
+        while ((long) capacity * DenseUnionVector.OFFSET_WIDTH > offsetBuffer.capacity()) {
+            duv.reAlloc();
+            offsetBuffer = duv.getOffsetBuffer();
+        }
+    }
+
     public static int writeTypeId(DenseUnionVector duv, int idx, byte typeId) {
         // NOTE: also updates value count of the vector.
         var subVec = duv.getVectorByType(typeId);
         var offset = subVec.getValueCount();
         var offsetIdx = DenseUnionVector.OFFSET_WIDTH * idx;
 
+        ensureDuvCapacity(duv, idx + 1);
+
         var offsetBuffer = duv.getOffsetBuffer();
-        while (offsetIdx >= offsetBuffer.capacity()) {
-            duv.reAlloc();
-            offsetBuffer = duv.getOffsetBuffer();
-        }
 
         duv.setTypeId(idx, typeId);
         offsetBuffer.setInt(offsetIdx, offset);

@@ -15,6 +15,7 @@
            [java.time Duration Instant ZoneOffset]
            [java.time.temporal ChronoField ChronoUnit]
            [java.util Date LinkedHashMap]
+           org.apache.arrow.vector.BaseVariableWidthVector
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -200,21 +201,43 @@
               (Byte/compareUnsigned x-byte y-byte)))))
       diff)))
 
+(defn element->nio-buffer ^java.nio.ByteBuffer [^BaseVariableWidthVector vec ^long idx]
+  (let [value-buffer (.getDataBuffer vec)
+        offset-buffer (.getOffsetBuffer vec)
+        offset-idx (* idx BaseVariableWidthVector/OFFSET_WIDTH)
+        offset (.getInt offset-buffer offset-idx)
+        end-offset (.getInt offset-buffer (+ offset-idx BaseVariableWidthVector/OFFSET_WIDTH))]
+    (.nioBuffer value-buffer offset (- end-offset offset))))
+
+(defn get-value-form [arrow-type vec-sym idx-sym]
+  `(let [~(-> vec-sym
+              (with-tag (-> arrow-type types/arrow-type->vector-type)))
+         ~vec-sym]
+     ~(condp = (types/<-arrow-type arrow-type)
+        :bit `(= 1 (.get ~vec-sym ~idx-sym))
+        :bigint `(.get ~vec-sym ~idx-sym)
+        :float8 `(.get ~vec-sym ~idx-sym)
+        :varchar `(element->nio-buffer ~vec-sym ~idx-sym)
+        :varbinary `(element->nio-buffer ~vec-sym ~idx-sym)
+        :timestamp-milli `(.get ~vec-sym ~idx-sym)
+        :duration-milli `(.get ~vec-sym ~idx-sym)
+        `(normalize-union-value (.getObject ~vec-sym ~idx-sym)))))
+
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->types]}]
   (let [var-types (or (get var->types variable)
                       (throw (IllegalArgumentException. (str "unknown variable: " variable))))
         var-type (or (when (= 1 (count var-types))
                        (get types/arrow-type->java-type (first var-types)))
-                     Comparable)]
-    {:code (condp = var-type
-             Boolean `(.getBool ~variable ~idx-sym)
-             Long `(.getLong ~variable ~idx-sym)
-             Double `(.getDouble ~variable ~idx-sym)
-             String `(.getBuffer ~variable ~idx-sym)
-             types/byte-array-class `(.getBuffer ~variable ~idx-sym)
-             Date `(.getDateMillis ~variable ~idx-sym)
-             Duration `(.getDurationMillis ~variable ~idx-sym)
-             `(normalize-union-value (.getObject ~variable ~idx-sym)))
+                     Comparable)
+        arrow-type (types/class->arrow-type var-type)
+        vec-sym (gensym 'vec)]
+    ;; TODO the `nested-read-col` call doesn't need to be per-elem
+    {:code `(let [~vec-sym (-> ~variable
+                               (rel/nested-read-col (-> ~(types/<-arrow-type arrow-type)
+                                                        (types/->arrow-type)))
+                               (.getVector))
+                  ~idx-sym (.getIndex ~variable ~idx-sym)]
+              ~(get-value-form arrow-type vec-sym idx-sym))
      :return-type var-type}))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} _]
@@ -490,15 +513,6 @@
         (map (fn [variable]
                (MapEntry/create variable (.readColumn in-rel (name variable))))))))
 
-(def ^:private return-type->append-sym
-  {Boolean '.appendBool
-   Long '.appendLong
-   Double '.appendDouble
-   String '.appendString
-   types/byte-array-class '.appendBuffer
-   Date '.appendDateMillis
-   Duration '.appendDurationMillis})
-
 (def ^:private return-type->type-kw
   {Boolean :bit
    Long :bigint
@@ -508,6 +522,35 @@
    Date :timestamp-milli
    Duration :duration-milli})
 
+(defmulti set-value-form
+  (fn [return-type-kw out-vec-sym idx-sym code]
+    return-type-kw))
+
+(defmethod set-value-form Boolean [_ out-vec-sym idx-sym code]
+  `(.set ~out-vec-sym ~idx-sym (if ~code 1 0)))
+
+(defmethod set-value-form Long [_ out-vec-sym idx-sym code]
+  `(.set ~out-vec-sym ~idx-sym (long ~code)))
+
+(defmethod set-value-form Double [_ out-vec-sym idx-sym code]
+  `(.set ~out-vec-sym ~idx-sym (double ~code)))
+
+(defmethod set-value-form String [_ out-vec-sym idx-sym code]
+  `(let [buf# ~code]
+     (.setSafe ~out-vec-sym ~idx-sym buf#
+               (.position buf#) (.remaining buf#))))
+
+(defmethod set-value-form types/byte-array-class [_ out-vec-sym idx-sym code]
+  `(let [buf# ~code]
+     (.setSafe ~out-vec-sym ~idx-sym buf#
+               (.position buf#) (.remaining buf#))))
+
+(defmethod set-value-form Date [_ out-vec-sym idx-sym code]
+  `(.set ~out-vec-sym ~idx-sym ~code))
+
+(defmethod set-value-form Duration [_ out-vec-sym idx-sym code]
+  `(.set ~out-vec-sym ~idx-sym ~code))
+
 (defn- generate-projection [col-name expr var-types param-types]
   (let [codegen-opts {:var->types var-types, :param->type param-types}
         {:keys [code return-type]} (postwalk-expr #(codegen-expr % codegen-opts) expr)
@@ -515,17 +558,22 @@
                        (map #(with-tag % IReadColumn)))
 
         allocator-sym (gensym 'allocator)
-        out-col-sym (gensym 'out-vec)]
+        out-vec-sym (gensym 'out-vec)]
 
     `(fn [~allocator-sym [~@variables] [~@(keys param-types)] ^long row-count#]
-       (let [~out-col-sym ~(if-let [type-kw (return-type->type-kw return-type)]
-                             `(rel/->vector-append-column ~allocator-sym ~col-name (types/->arrow-type ~type-kw))
-                             `(rel/->fresh-append-column ~allocator-sym ~col-name))]
+       (let [~(-> out-vec-sym
+                  (with-tag (-> return-type types/class->arrow-type types/arrow-type->vector-type)))
+             ~(if-let [type-kw (return-type->type-kw return-type)]
+                `(.createVector (types/->field ~col-name (types/->arrow-type ~type-kw) false)
+                                ~allocator-sym)
+                `(throw (UnsupportedOperationException.)))]
+
+         (.setValueCount ~out-vec-sym row-count#)
+
          (dotimes [~idx-sym row-count#]
-           (~(get return-type->append-sym return-type '.appendObject)
-            ~out-col-sym
-            ~code))
-         (.read ~out-col-sym)))))
+           ~(set-value-form return-type out-vec-sym idx-sym code))
+
+         (rel/<-vector ~out-vec-sym)))))
 
 (def ^:private memo-generate-projection (memoize generate-projection))
 (def ^:private memo-eval (memoize eval))
@@ -539,7 +587,7 @@
               var-types (->> in-cols
                              (util/into-linked-map
                               (util/map-values (fn [_variable ^IReadColumn read-col]
-                                                 (.arrowTypes read-col)))))
+                                                 (rel/col->arrow-types read-col)))))
               expr-fn (-> (memo-generate-projection col-name expr var-types param-types)
                           (memo-eval))]
           (expr-fn allocator (vals in-cols) (vals emitted-params) (.rowCount in-rel)))))))
@@ -567,14 +615,16 @@
                                                       (normalise-params params))]
     (reify IRelationSelector
       (select [_ in]
-        (let [in-cols (expression-in-cols in expr)
-              var-types (->> in-cols
-                             (util/into-linked-map
-                              (util/map-values (fn [_variable ^IReadColumn read-col]
-                                                 (.arrowTypes read-col)))))
-              expr-code (memo-generate-selection expr var-types param-types)
-              expr-fn (memo-eval expr-code)]
-          (expr-fn (vals in-cols) (vals emitted-params) (.rowCount in)))))))
+        (if (pos? (.rowCount in))
+          (let [in-cols (expression-in-cols in expr)
+                var-types (->> in-cols
+                               (util/into-linked-map
+                                (util/map-values (fn [_variable ^IReadColumn read-col]
+                                                   (rel/col->arrow-types read-col)))))
+                expr-code (memo-generate-selection expr var-types param-types)
+                expr-fn (memo-eval expr-code)]
+            (expr-fn (vals in-cols) (vals emitted-params) (.rowCount in)))
+          (RoaringBitmap.))))))
 
 (defn ->expression-column-selector ^core2.operator.select.IColumnSelector [form params]
   (let [{:keys [expr param-types emitted-params]} (-> (form->expr form params)
@@ -584,10 +634,12 @@
         variable (first vars)]
     (reify IColumnSelector
       (select [_ in-col]
-        (let [in-cols (doto (LinkedHashMap.)
-                        (.put variable in-col))
-              var-types (doto (LinkedHashMap.)
-                          (.put variable (.arrowTypes in-col)))
-              expr-code (memo-generate-selection expr var-types param-types)
-              expr-fn (memo-eval expr-code)]
-          (expr-fn (vals in-cols) (vals emitted-params) (.valueCount in-col)))))))
+        (if (pos? (.getValueCount in-col))
+          (let [in-cols (doto (LinkedHashMap.)
+                          (.put variable in-col))
+                var-types (doto (LinkedHashMap.)
+                            (.put variable (rel/col->arrow-types in-col)))
+                expr-code (memo-generate-selection expr var-types param-types)
+                expr-fn (memo-eval expr-code)]
+            (expr-fn (vals in-cols) (vals emitted-params) (.getValueCount in-col)))
+          (RoaringBitmap.))))))

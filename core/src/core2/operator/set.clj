@@ -7,6 +7,7 @@
            [core2.relation IReadColumn IReadRelation]
            [java.util ArrayList HashSet LinkedList List Set]
            java.util.function.Consumer
+           java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ArrowBufPointer
            [org.apache.arrow.vector.types.pojo Field Schema]))
@@ -14,7 +15,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- ->union-compatible-schema [^Schema x ^Schema y]
-  ;; TODO JH reinstate this check somewhere?
+  ;; TODO reinstate this check somewhere?
   (letfn [(union-incompatible []
             (err/illegal-arg :union-incompatible
                              {::err/message "Schemas are not union compatible"
@@ -60,6 +61,9 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
+(defn ->union-all-cursor ^core2.ICursor [^ICursor left-cursor, ^ICursor right-cursor]
+  (UnionAllCursor. left-cursor right-cursor))
+
 (defn- copy-set-key [^BufferAllocator allocator ^List k]
   (dotimes [n (.size k)]
     (let [x (.get k n)]
@@ -75,8 +79,7 @@
 (defn- ->set-key [^List cols ^long idx]
   (let [set-key (ArrayList. (count cols))]
     (doseq [^IReadColumn col cols]
-      (.add set-key (util/pointer-or-object (._getInternalVector col idx)
-                                            (._getInternalIndex col idx))))
+      (.add set-key (util/pointer-or-object (.getVector col) (.getIndex col idx))))
     set-key))
 
 (deftype IntersectionCursor [^BufferAllocator allocator
@@ -92,7 +95,7 @@
                            (let [^IReadRelation in-rel in-rel
                                  row-count (.rowCount in-rel)]
                              (when (pos? row-count)
-                               (let [cols (.readColumns in-rel)]
+                               (let [cols (seq in-rel)]
                                  (dotimes [idx row-count]
                                    (let [set-key (->set-key cols idx)]
                                      (when-not (.contains intersection-set set-key)
@@ -109,17 +112,17 @@
                                             row-count (.rowCount in-rel)]
 
                                         (when (pos? row-count)
-                                          (let [in-cols (.readColumns in-rel)
-                                                out-rel (rel/->indirect-append-relation)
-                                                row-copier (rel/row-copier out-rel in-rel)]
+                                          (let [in-cols (seq in-rel)
+                                                idxs (IntStream/builder)]
                                             (dotimes [idx row-count]
                                               (when (cond-> (.contains intersection-set (->set-key in-cols idx))
                                                       difference? not)
-                                                (.appendRow row-copier idx)))
+                                                (.add idxs idx)))
 
-                                            (let [out-rel (.read out-rel)]
-                                              (when (pos? (.rowCount out-rel))
-                                                (.accept c out-rel)))))))))))
+                                            (let [idxs (.toArray (.build idxs))]
+                                              (when-not (empty? idxs)
+                                                (reset! !advanced? true)
+                                                (.accept c (rel/select in-rel idxs))))))))))))
          @!advanced?))))
 
   (close [_]
@@ -127,6 +130,12 @@
     (.clear intersection-set)
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
+
+(defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
+  (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) true))
+
+(defn ->intersection-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
+  (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) false))
 
 (deftype DistinctCursor [^BufferAllocator allocator
                          ^ICursor in-cursor
@@ -141,24 +150,27 @@
                                    (let [^IReadRelation in-rel in-rel
                                          row-count (.rowCount in-rel)]
                                      (when (pos? row-count)
-                                       (let [cols (.readColumns in-rel)
-                                             out-rel (rel/->indirect-append-relation)
-                                             row-copier (rel/row-copier out-rel in-rel)]
+                                       (let [in-cols (seq in-rel)
+                                             idxs (IntStream/builder)]
                                          (dotimes [idx row-count]
-                                           (let [k (->set-key cols idx)]
+                                           (let [k (->set-key in-cols idx)]
                                              (when-not (.contains seen-set k)
                                                (.add seen-set (copy-set-key allocator k))
-                                               (.appendRow row-copier idx))))
+                                               (.add idxs idx))))
 
-                                         (let [out-rel (.read out-rel)]
-                                           (when (pos? (.rowCount out-rel))
-                                             (.accept c out-rel)))))))))))
+                                         (let [idxs (.toArray (.build idxs))]
+                                           (when-not (empty? idxs)
+                                             (reset! !advanced? true)
+                                             (.accept c (rel/select in-rel idxs))))))))))))
       @!advanced?))
 
   (close [_]
     (run! release-set-key seen-set)
     (.clear seen-set)
     (util/try-close in-cursor)))
+
+(defn ->distinct-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor]
+  (DistinctCursor. allocator in-cursor (HashSet.)))
 
 (definterface ICursorFactory
   (^core2.ICursor createCursor []))
@@ -204,21 +216,22 @@
                       (accept [_ in-rel]
                         (let [^IReadRelation in-rel in-rel]
                           (when (pos? (.rowCount in-rel))
-                            (let [cols (.readColumns in-rel)
-                                  out-rel (rel/->fresh-append-relation allocator)
-                                  row-copier (rel/row-copier out-rel in-rel)]
+                            (let [cols (seq in-rel)
+                                  idxs (IntStream/builder)]
                               (dotimes [idx (.rowCount in-rel)]
                                 (let [k (->set-key cols idx)]
                                   (when-not (.contains fixpoint-set k)
                                     (.add fixpoint-set (copy-set-key allocator k))
-                                    (.appendRow row-copier idx))))
+                                    (.add idxs idx))))
 
-                              (let [out-rel (.read out-rel)]
-                                (when (pos? (.rowCount out-rel))
-                                  (.add rels out-rel)
-                                  (.accept c out-rel)
-                                  (set! (.continue? this) true)
-                                  (reset! !advanced? true))))))))]
+                              (let [idxs (.toArray (.build idxs))]
+                                (when-not (empty? idxs)
+                                  (let [out-rel (-> (rel/select in-rel idxs)
+                                                    (rel/copy allocator))]
+                                    (.add rels out-rel)
+                                    (.accept c out-rel)
+                                    (set! (.continue? this) true)
+                                    (reset! !advanced? true)))))))))]
 
         (.tryAdvance base-cursor inner-c)
 
@@ -234,6 +247,7 @@
                                                     (set! (.recursive-cursor this) cursor)
                                                     cursor)))]
 
+
                   (while (and (not @!advanced?)
                               (let [more? (.tryAdvance recursive-cursor inner-c)]
                                 (when-not more?
@@ -248,18 +262,6 @@
     (run! release-set-key fixpoint-set)
     (.clear fixpoint-set)
     (util/try-close base-cursor)))
-
-(defn ->union-all-cursor ^core2.ICursor [^ICursor left-cursor, ^ICursor right-cursor]
-  (UnionAllCursor. left-cursor right-cursor))
-
-(defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) true))
-
-(defn ->intersection-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) false))
-
-(defn ->distinct-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor]
-  (DistinctCursor. allocator in-cursor (HashSet.)))
 
 (defn ->fixpoint-cursor ^core2.ICursor [^BufferAllocator allocator,
                                         ^ICursor base-cursor

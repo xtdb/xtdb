@@ -1,8 +1,10 @@
 (ns core2.operator.table
   (:require [core2.error :as err]
-            [core2.relation :as rel])
+            [core2.relation :as rel]
+            [core2.types :as ty]
+            [core2.util :as util])
   (:import core2.ICursor
-           [java.util ArrayList List]
+           [java.util ArrayList LinkedList List]
            org.apache.arrow.memory.BufferAllocator))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -14,14 +16,24 @@
   (tryAdvance [this c]
     (if (or done? (.isEmpty rows))
       false
-      (do (set! (.done? this) true)
-          (with-open [out-rel (rel/->fresh-append-relation allocator)]
-            (doseq [k (keys (first rows))
-                    :let [out-col (.appendColumn out-rel (name k))]
-                    v (map k rows)]
-              (.appendObject out-col v))
-            (.accept c (.read out-rel)))
-          true)))
+      (do
+        (set! (.done? this) true)
+
+        (let [out-cols (LinkedList.)]
+          (try
+            (doseq [k (keys (first rows))]
+              (let [out-vec (.createVector (ty/->primitive-dense-union-field (name k)) allocator)]
+                (.add out-cols (rel/<-vector out-vec))
+                (dorun
+                 (map-indexed (fn [idx row]
+                                (ty/set-safe! out-vec idx (get row k)))
+                              rows))))
+            (catch Exception _
+              (run! util/try-close out-cols)))
+
+          (with-open [out-rel (rel/->read-relation out-cols)]
+            (.accept c out-rel)
+            true)))))
 
   (close [_]))
 

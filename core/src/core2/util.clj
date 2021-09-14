@@ -1,6 +1,5 @@
 (ns core2.util
-  (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log])
   (:import clojure.lang.MapEntry
            [core2 DenseUnionUtil ICursor]
@@ -15,10 +14,10 @@
            [java.nio.file CopyOption Files FileVisitResult LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time Duration LocalDateTime ZoneId]
-           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList List Map$Entry Queue Spliterator UUID]
+           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList List Map$Entry Queue UUID]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
-           [java.util.function BiFunction Consumer Function IntUnaryOperator Supplier]
+           [java.util.function BiFunction Function IntUnaryOperator Supplier]
            [org.apache.arrow.compression CommonsCompressionFactory ZstdCompressionCodec]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator RootAllocator]

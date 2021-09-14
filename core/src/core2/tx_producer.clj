@@ -1,6 +1,5 @@
 (ns core2.tx-producer
-  (:require [clojure.set :as set]
-            core2.log
+  (:require core2.log
             [core2.types :as t]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]

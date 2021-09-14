@@ -1,10 +1,12 @@
 package core2.relation;
 
-public interface IAppendRelation extends AutoCloseable {
-    IAppendColumn appendColumn(String colName);
+@SuppressWarnings("try")
+public interface IAppendRelation extends AutoCloseable, Iterable<IAppendColumn<?>> {
+    void appendRelation(IReadRelation sourceRelation);
+
+    IAppendColumn<?> appendColumn(String name);
+
     IReadRelation read();
 
-    @Override
-    default void close() {
-    }
+    void clear();
 }

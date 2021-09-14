@@ -1,9 +1,9 @@
 (ns core2.operator.slice
-  (:require [core2.util :as util]
-            [core2.relation :as rel])
+  (:require [core2.relation :as rel])
   (:import core2.ICursor
            core2.relation.IReadRelation
-           java.util.function.Consumer))
+           java.util.function.Consumer
+           java.util.stream.IntStream))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -34,9 +34,8 @@
 
                                      (set! (.-idx this) (+ old-idx row-count))
 
-                                     (when-let [[rel-offset rel-length] (offset+length offset limit old-idx row-count)]
-                                       (.accept c (.read (doto (rel/->indirect-append-relation)
-                                                           (rel/copy-rel-from in-rel rel-offset rel-length))))
+                                     (when-let [[^long rel-offset, ^long rel-length] (offset+length offset limit old-idx row-count)]
+                                       (.accept c (rel/select in-rel (.toArray (IntStream/range rel-offset (+ rel-offset rel-length)))))
                                        (reset! !advanced? true))))))))
       @!advanced?))
 

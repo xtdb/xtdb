@@ -1,30 +1,26 @@
 package core2.relation;
 
+import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.ValueVector;
-import org.apache.arrow.vector.types.pojo.ArrowType;
 
-import java.nio.ByteBuffer;
-import java.util.EnumSet;
-import java.util.Set;
+public interface IReadColumn<V extends ValueVector> extends AutoCloseable {
 
-public interface IReadColumn extends AutoCloseable {
+    V getVector();
+
+    int getIndex(int idx);
+
     String getName();
-    IReadColumn rename(String colName);
-    int valueCount();
-    Set<ArrowType> arrowTypes();
 
-    boolean getBool(int idx);
-    long getLong(int idx);
-    long getDateMillis(int idx);
-    long getDurationMillis(int idx);
-    double getDouble(int idx);
-    ByteBuffer getBuffer(int idx);
-    Object getObject(int idx);
+    int getValueCount();
 
-    ValueVector _getInternalVector(int idx);
-    int _getInternalIndex(int idx);
+    IReadColumn<V> withName(String colName);
+
+    IReadColumn<V> copy(BufferAllocator allocator);
+
+    IReadColumn<V> select(int[] idxs);
 
     @Override
     default void close() {
+        getVector().close();
     }
 }

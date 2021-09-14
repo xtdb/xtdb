@@ -8,6 +8,7 @@
             [core2.types :as ty])
   (:import core2.operator.project.ProjectionSpec
            core2.operator.select.IRelationSelector
+           org.apache.arrow.vector.BigIntVector
            org.apache.arrow.vector.types.pojo.Schema
            org.roaringbitmap.RoaringBitmap))
 
@@ -178,27 +179,36 @@
                                       [(reify ProjectionSpec
                                          (project [_ allocator in-rel]
                                            (let [a-col (.readColumn in-rel "a")
-                                                 out-col (rel/->fresh-append-column allocator "a")]
-                                             (dotimes [idx (.rowCount in-rel)]
-                                               (.appendLong out-col (inc (.getLong a-col idx))))
-                                             (.read out-col))))
+                                                 ^BigIntVector a-vec (.getVector a-col)
+                                                 row-count (.rowCount in-rel)
+                                                 out-vec (doto (BigIntVector. "a" allocator)
+                                                           (.setValueCount row-count))]
+                                             (dotimes [idx row-count]
+                                               (.set out-vec idx (inc (.get a-vec idx))))
+                                             (rel/<-vector out-vec))))
 
                                        (reify ProjectionSpec
                                          (project [_ allocator in-rel]
-                                           (let [a-col (.readColumn in-rel "a")
+                                           (let [row-count (.rowCount in-rel)
+                                                 a-col (.readColumn in-rel "a")
+                                                 ^BigIntVector a-vec (.getVector a-col)
                                                  b-col (.readColumn in-rel "b")
-                                                 out-col (rel/->fresh-append-column allocator "b")]
-                                             (dotimes [idx (.rowCount in-rel)]
-                                               (.appendLong out-col (* (inc (.getLong a-col idx))
-                                                                       (.getLong b-col idx))))
-                                             (.read out-col))))])
+                                                 ^BigIntVector b-vec (.getVector b-col)
+
+                                                 out-vec (doto (BigIntVector. "b" allocator)
+                                                           (.setValueCount row-count))]
+                                             (dotimes [idx row-count]
+                                               (.set out-vec idx (* (inc (.get a-vec idx))
+                                                                    (.get b-vec idx))))
+                                             (rel/<-vector out-vec))))])
 
                                      (reify IRelationSelector
                                        (select [_ in-rel]
                                          (let [idx-bitmap (RoaringBitmap.)
-                                               a-col (.readColumn in-rel "a")]
+                                               a-col (.readColumn in-rel "a")
+                                               ^BigIntVector a-vec (.getVector a-col)]
                                            (dotimes [idx (.rowCount in-rel)]
-                                             (when (<= (.getLong a-col idx) 8)
+                                             (when (<= (.get a-vec idx) 8)
                                                (.add idx-bitmap idx)))
 
                                            idx-bitmap))))))

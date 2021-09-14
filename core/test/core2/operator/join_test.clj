@@ -21,13 +21,13 @@
 
       (t/is (= [#{{:a 12, :b 10, :c 1}
                   {:a 0, :b 10, :c 1}
-                  {:a 100, :b 10, :c 1}
-                  {:a 12, :b 15, :c 2}
                   {:a 0, :b 15, :c 2}
+                  {:a 12, :b 15, :c 2}}
+                #{{:a 100, :b 10, :c 1}
                   {:a 100, :b 15, :c 2}}
-                #{{:a 12, :b 83, :c 3}
-                  {:a 0, :b 83, :c 3}
-                  {:a 100, :b 83, :c 3}}]
+                #{{:a 0, :b 83, :c 3}
+                  {:a 12, :b 83, :c 3}}
+                #{{:a 100, :b 83, :c 3}}]
                (mapv set (tu/<-cursor join-cursor)))))
 
     (t/testing "empty input and output"
@@ -157,7 +157,6 @@
                   join-cursor (join/->semi-equi-join-cursor tu/*allocator* left-cursor "a" right-cursor "b")]
 
         (t/is (empty? (tu/<-cursor join-cursor)))))
-
 
     (t/testing "empty output"
       (with-open [left-cursor (tu/->cursor (Schema. [a-field])

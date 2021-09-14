@@ -5,8 +5,7 @@
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            core2.ICursor
-           java.util.LinkedHashMap
-           java.util.Map))
+           java.util.LinkedList))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -30,14 +29,16 @@
     (.tryAdvance in-cursor
                  (reify Consumer
                    (accept [_ read-rel]
-                     (let [^Map out-cols (LinkedHashMap.)]
+                     (let [out-cols (LinkedList.)]
                        (try
                          (doseq [^ProjectionSpec projection-spec projection-specs]
                            (let [out-col (.project projection-spec allocator read-rel)]
-                             (.put out-cols (.getName out-col) out-col)))
+                             (.add out-cols out-col)))
+
                          (.accept c (rel/->read-relation out-cols))
+
                          (finally
-                           (run! util/try-close (vals out-cols)))))))))
+                           (run! util/try-close out-cols))))))))
 
   (close [_]
     (util/try-close in-cursor)))
