@@ -51,7 +51,7 @@ information privacy regulations.
 >
 > — Martin Kleppmann
 
-<img alt="Unbundled Architecture Diagram" role="img" aria-label="XTDB Venn" src="./docs/articles/modules/ROOT/images/crux-node-1.svg" width="1000px">
+<img alt="Unbundled Architecture Diagram" role="img" aria-label="XTDB Venn" src="./docs/articles/modules/ROOT/images/xtdb-node-1.svg" width="1000px">
 
 This design makes it feasible and desirable to embed XTDB nodes directly within
 your application processes, which reduces deployment complexity and eliminates
