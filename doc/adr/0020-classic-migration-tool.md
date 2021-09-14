@@ -1,0 +1,14 @@
+# 20 Classic Migration Tool
+
+Date: 2021-09-14
+
+## Status
+
+Proposed
+
+## Context
+
+## Consequences
+
+Existing users will be able to migrate their data but not be able to
+use all features, as we are not aiming for 100% API compatibility.

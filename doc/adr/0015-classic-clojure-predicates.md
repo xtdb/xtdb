@@ -1,0 +1,22 @@
+# 15 Classic Clojure Predicates
+
+Date: 2021-09-14
+
+## Status
+
+Proposed
+
+## Context
+
+The direction in c2 is to not support arbitrary Clojure
+predicates. For performance reasons we should still implement typed,
+fast predicates for the "supported" language.
+
+That said, we can also support a :default in the multi-method which
+unwraps any special representation (like a Date being a long
+internally) and invoke a normal Clojure function, and then coerce the
+result back. Doesn't exist but not hard to build.
+
+Arbitrary Clojure functions in queries can be enabled via a flag.
+
+## Consequences

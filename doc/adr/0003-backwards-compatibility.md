@@ -4,15 +4,24 @@ Date: 2021-09-09
 
 ## Status
 
-Proposed
+Superceded by:
+
+* Tx Fns: [ADR-0011](0011-classic-tx-fns.md)
+* Lucene: [ADR-0012](0012-classic-lucene.md)
+* Pull Syntax [ADR-0013](0013-classic-pull.md)
+* Speculative transactions [ADR-0014](0014-classic-speculative-txes.md)
+* Clojure predicates [ADR-0015](0015-classic-clojure-predicates.md)
+* Arbitrary Types [ADR-0017](0017-classic-arbitrary-types.md)
+* Datalog Rules [ADR-0018](0018-classic-datalog-rules.md)
+* Advanced Datalog [ADR-0019](0019-classic-advanced-datalog.md)
+* Migration Tool [ADR-0020](0020-classic-migration-tool.md)
+* Tx-ops [ADR-0021](0021-classic-tx-fns.md)
+* History API [ADR-0022](0022-classic-history-api.md)
 
 ## Context
 
 XTDB needs some level of compatibility with classic. At the minimum we
 need to import the data and timeline.
-
-@jon: I suggest we break this ADR out into small, more specific ADRs
-we can make a decision on.
 
 ### Transaction processing (write side)
 
@@ -28,133 +37,14 @@ The temporal in-memory index is a persistent data structure, so you
 wouldn't need to do anything here, just go back to the previous
 version.
 
-#### Misc
+#### See Also
 
-* Transaction Functions: [ADR-0011](0011-classic-tx-fns.md)
-* Lucene: [ADR-0012](0012-classic-lucene.md)
-* Pull Syntax [ADR-0013](0013-classic-pull.md)
-* Speculative transactions [ADR-0014](0014-classic-speculative-txes.md)
-
-#### Data model
-
-We would move towards c2's Arrow based data model ([ADR-0002](0002-data-model.md)). I would suggest we
-do a few additions:
-
-#### match/cas
-
-Can be implemented as a scan of the same columns. For consistency, its
-easiest to write the expected doc to Arrow as well and just compare
-the rows.
-
-#### Eviction
-
-Doesn't exist in c2 yet, but is somewhat orthogonal. Can be built in
-various ways. A simple design I think may work is:
-
-1. hard delete all overlap in the temporal index.
-2. write row-id sets into the object store as a work items, named by
-   the evict-ops row id.
-3. out-of-band, pick all work-items you can find for a chunk, download
-   it, copy it, skipping the row ids in the set.
-4. upload it in place, breaking "immutable chunks" principle.
-5. sanity check that the uploaded file is the one you expect, then
-   delete the work items you processed, as this is done after, if
-   someone else uploads before you, they would have seen the same or
-   later work items. Might require some tweaks to actually be safe,
-   but possible to design a protocol. The S3 database paper has one.
-6. local caches will still contain the data, but it will be filtered
-   out by the temporal index, let it disappear naturally from the
-   nodes. If forced, cycle the nodes regularly to ensure this happens
-   within regulatory time frames.
-
-Note that eviction in c2 only deals with the object store, not the
-transaction log, so if the log has infinite retention, one cannot
-guarantee data being removed there. If this is a deal-breaker, we
-could redesign the document topic with slightly different constraints
-than now, but reopens many issues with eviction and complexity.
-
-#### History API
-
-If we want to keep supporting it until we have full temporal support
-(including transaction time), we can simulate it via the scan operator
-I think.
-
-#### Clojure predicates
-
-The direction in c2 is to not support arbitrary Clojure
-predicates. For performance reasons we should still implement typed,
-fast predicates for the "supported" language. That said, we can also
-support a :default in the multi-method which unwraps any special
-representation (like a Date being a long internally) and invoke a
-normal Clojure function, and then coerce the result back. Doesn't
-exist but not hard to build.
-
-#### Relation, collection and tuple bindings
-
-The c2 logical plan supports single value projections only. There are
-a few routes here, we can support more advanced projections in the
-projection operator directly, or we can support binding
-list-of-structs (everything can be represented as a relation binding)
-directly as a result, and then introduce a second unwrap operator
-(there are various names for this in relational algebra, to be
-decided) which is a bit like flatmap and would flatten a specfic
-nested value. A simpler half-way house is to support list of scalars
-only and unwrap that. Datalog would compile these bindings to a
-combination of project/unwrap.
-
-#### Multiple and external data sources
-
-The c2 logical plan and Datalog supports multiple data sources. We can
-also relatively easily support other Arrow sources of data, like CSV,
-Avro, JDBC, JSON, Parquet etc. which would bring features classic
-currently doesn't have. There's a CSV spike, but area requires more
-work, but with good cost / benefit, and can be farmed out to someone
-else.
-
-#### Advanced Datalog
-
-- `or` unions.
-- `or-join` semi-joins against unions.
-- `not`, `not-join` anti-joins.
-
-Note that we don't support more than one variable in joins, so we
-either need to fix that in c2, or combine the joins with selects to do
-further filtering.
-
-#### Rules
-
-Some easier rules can be compiled to our fixpoint operator in c2, more
-advanced rules quite hard to do in the generic case. There's a
-potential direction where you create ad-hoc operators for them
-somehow. To be explored. Quite chunky piece of work risk-reward-wise.
-
-#### Calcite and other modules compiling to Datalog
-
-These may "just work", or if they rely on complicated parts of the
-classic engine, require rework.
+* [Eviction](0004-eviction.md), assumed to be orthogonal.
 
 ## Decision
 
-We will build a migration tool for data in classic.
-
-Nippy (or arbitrary Java objects) will not be supported in XTDB by
-default but this Arrow extension type can be enabled via a flag. These
-columns will be Arrow varbinary to non-JVM users.
-
-Transaction functions will not be supported in XTDB as it requires
-strict determinism.
-
-Arbitrary Clojure functions in queries can be enabled via a flag.
-
-We will provide a shim emulating the classic Clojure API.
-
-There will be no Lucene support initially, and if we build it this
-won't sit in the compatibility layer.
+N/A. This ADR has been superceded as it is too all-encompassing. We
+will need to decide on a case-by-base basis what elements of classic
+compatibility we want to commit to.
 
 ## Consequences
-
-Existing users will be able to migrate their data but not be able to
-use all features.
-
-Users will have to migrate their usage of transaction functions to
-integrity checks.

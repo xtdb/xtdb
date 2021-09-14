@@ -16,6 +16,9 @@ There is no ADR currently for allowing users to trigger/manage tx-fns via SQL, w
 
 ## Decision
 
+Transaction functions were not originally to be supported in XTDB SQL
+as it requires strict determinism.
+
 ## Consequences
 
 There may be some confusion/tension/discussion around a clean/pure remote-first API supporting what is minimally needed by SQL & Datalog users, and where the boundary lies between supporting classic like functionality exclusively for Clojure/Datalog users.

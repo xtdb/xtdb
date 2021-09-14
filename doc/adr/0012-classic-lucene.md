@@ -15,4 +15,7 @@ participate in finish chunk, and maybe also a collective LSM-style
 merge process. Temporal could maybe also use this capability if it
 existed.
 
+Current plan is that there will be no Lucene support initially, and if
+we build it this won't sit in the compatibility layer.
+
 ## Consequences

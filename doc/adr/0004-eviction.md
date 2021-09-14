@@ -109,6 +109,33 @@ this reason they also suggest using compaction operations via the log
 itself, which merges together a bunch of smaller files, removing them
 and adding the combined result.
 
+#### Write up of classic comparison (originally in ADR-0003)
+
+Doesn't exist in c2 yet, but is somewhat orthogonal. Can be built in
+various ways. A simple design I think may work is:
+
+1. hard delete all overlap in the temporal index.
+2. write row-id sets into the object store as a work items, named by
+   the evict-ops row id.
+3. out-of-band, pick all work-items you can find for a chunk, download
+   it, copy it, skipping the row ids in the set.
+4. upload it in place, breaking "immutable chunks" principle.
+5. sanity check that the uploaded file is the one you expect, then
+   delete the work items you processed, as this is done after, if
+   someone else uploads before you, they would have seen the same or
+   later work items. Might require some tweaks to actually be safe,
+   but possible to design a protocol. The S3 database paper has one.
+6. local caches will still contain the data, but it will be filtered
+   out by the temporal index, let it disappear naturally from the
+   nodes. If forced, cycle the nodes regularly to ensure this happens
+   within regulatory time frames.
+
+Note that eviction in c2 only deals with the object store, not the
+transaction log, so if the log has infinite retention, one cannot
+guarantee data being removed there. If this is a deal-breaker, we
+could redesign the document topic with slightly different constraints
+than now, but reopens many issues with eviction and complexity.
+
 ## Decision
 
 We will implement the "versioned eviction proposal" above. We do not

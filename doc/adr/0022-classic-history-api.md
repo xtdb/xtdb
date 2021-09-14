@@ -1,0 +1,19 @@
+# 22 History API
+
+Date: 2021-09-14
+
+## Status
+
+Proposed
+
+## Context
+
+If we want to keep supporting it until we have full temporal support
+(including transaction time), we can simulate it via the scan operator
+I think.
+
+If the history API can be superceded by the new temporal query
+capability, we could also consider NOT supporting classic-like history
+API.
+
+## Consequences
