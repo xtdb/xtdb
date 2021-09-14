@@ -14,4 +14,16 @@ is kind of like a db in c2). This is a bit slow, but fundamentally
 doable. Note that all data won't be needed to be copied, just the
 current slice and the current in-memory temporal index.
 
+### Rollback
+
+Currently c2 takes a zero-copy of the live data and present that for
+queries. The easiest way to do rollbacks is to do this the other way
+around. Have the transaction take a zero-copy slice, modify it (append
+only) and then if it commits, replace and release (decrease the
+reference count) of the previous watermark.
+
+The temporal in-memory index is a persistent data structure, so you
+wouldn't need to do anything here, just go back to the previous
+version.
+
 ## Consequences

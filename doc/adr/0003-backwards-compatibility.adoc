@@ -23,23 +23,7 @@ Superseded by:
 XTDB needs some level of compatibility with classic. At the minimum we
 need to import the data and timeline.
 
-### Transaction processing (write side)
-
-#### Rollback
-
-Currently c2 takes a zero-copy of the live data and present that for
-queries. The easiest way to do rollbacks is to do this the other way
-around. Have the transaction take a zero-copy slice, modify it (append
-only) and then if it commits, replace and release (decrease the
-reference count) of the previous watermark.
-
-The temporal in-memory index is a persistent data structure, so you
-wouldn't need to do anything here, just go back to the previous
-version.
-
-#### See Also
-
-* link:0004-eviction.adoc[Eviction] assumed to be orthogonal.
+link:0004-eviction.adoc[Eviction] is assumed to be orthogonal.
 
 ## Decision
 
