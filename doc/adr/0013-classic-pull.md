@@ -1,0 +1,15 @@
+# 13 Classic-like Pull Syntax
+
+Date: 2021-09-14
+
+## Status
+
+Proposed
+
+## Context
+
+Would need to be partly rewritten unless mistaken, but isn't
+fundamentally hard, especially not now when the Pull engine is based
+on the index store, it would be executed as recursive scan calls.
+
+## Consequences

@@ -28,9 +28,12 @@ The temporal in-memory index is a persistent data structure, so you
 wouldn't need to do anything here, just go back to the previous
 version.
 
-#### Transaction functions
+#### Misc
 
-See [ADR-0011](0011-classic-tx-fns.md)
+* Transaction Functions: [ADR-0011](0011-classic-tx-fns.md)
+* Lucene: [ADR-0012](0012-classic-lucene.md)
+* Pull Syntax [ADR-0013](0013-classic-pull.md)
+* Speculative transactions [ADR-0014](0014-classic-speculative-txes.md)
 
 #### Data model
 
@@ -70,29 +73,11 @@ guarantee data being removed there. If this is a deal-breaker, we
 could redesign the document topic with slightly different constraints
 than now, but reopens many issues with eviction and complexity.
 
-#### Speculative transactions
-
-The easiest way to do this is c2 is to take defensive (or
-copy-on-write) copies of the live roots in the watermark (a watermark
-is kind of like a db in c2). This is a bit slow, but fundamentally
-doable. Note that all data won't be needed to be copied, just the
-current slice and the current in-memory temporal index.
-
-#### Lucene
-
-See [ADR-0012](0012-classic-lucene.md)
-
 #### History API
 
 If we want to keep supporting it until we have full temporal support
 (including transaction time), we can simulate it via the scan operator
 I think.
-
-#### Pull
-
-Would need to be partly rewritten unless I'm mistaken, but isn't
-fundamentally hard, especially not now when the Pull engine is based
-on the index store, it would be executed as recursive scan calls.
 
 #### Clojure predicates
 
