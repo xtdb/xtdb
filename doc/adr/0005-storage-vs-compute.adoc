@@ -43,5 +43,5 @@ catch up from the latest chunk.
 ### Known issues
 
 1. The design leads to rework across nodes.
-2. [Eviction](0004-eviction.md) breaks the deterministic and immutable
+2. [Eviction](0004-eviction.adoc) breaks the deterministic and immutable
    model.

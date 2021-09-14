@@ -8,7 +8,7 @@ Proposed
 
 ## Context
 
-XTDB uses Arrow as its [data model](0002-data-model.md). We use [Arrow
+XTDB uses Arrow as its [data model](0002-data-model.adoc). We use [Arrow
 Java](https://arrow.apache.org/docs/java/index.html), which is the
 official Arrow implementation for the JVM.
 

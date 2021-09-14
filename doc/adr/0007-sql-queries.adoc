@@ -104,7 +104,7 @@ queries to a later date.
 ## Consequences
 
 All processing needs to map down to the internal [data
-model](0002-data-model.md) and [temporal data](0006-temporal-data.md)
+model](0002-data-model.adoc) and [temporal data](0006-temporal-data.adoc)
 support.
 
 In the core, the logical plan will need to expand to support the parts

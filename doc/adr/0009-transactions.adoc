@@ -31,7 +31,7 @@ Operations also need to be able to do bitemporal corrections.
 We will support EDN-style transactions to start, either in EDN, JSON
 or raw Arrow.
 
-As per the [data model](0002-data-model.md), the transactions are
+As per the [data model](0002-data-model.adoc), the transactions are
 converted to Arrow client side before submitted.
 
 Integrity checks are done via queries and transaction functions should

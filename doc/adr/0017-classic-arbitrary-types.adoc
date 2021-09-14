@@ -9,7 +9,7 @@ Proposed
 ## Context
 
 We would move towards c2's Arrow based data model
-([ADR-0002](0002-data-model.md)).
+([ADR-0002](0002-data-model.adoc)).
 
 Nippy (or arbitrary Java objects) will not be supported in XTDB by
 default but this Arrow extension type can be enabled via a flag. These
