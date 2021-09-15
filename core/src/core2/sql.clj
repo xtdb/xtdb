@@ -298,11 +298,15 @@
     simplify-transform
     normalize-transform]))
 
-;; High level SQL grammar, from
-;; https://calcite.apache.org/docs/reference.html
+;; SQL:2011 official grammar:
+
+;; https://jakewheat.github.io/sql-overview/sql-2011-foundation-grammar.html
 
 ;; See also Date, SQL and Relational Theory, p. 455-458, A Simplified
 ;; BNF Grammar
+
+;; High level SQL grammar, from
+;; https://calcite.apache.org/docs/reference.html
 
 ;; SQLite grammar:
 ;; https://github.com/bkiers/sqlite-parser/blob/master/src/main/antlr4/nl/bigo/sqliteparser/SQLite.g4
