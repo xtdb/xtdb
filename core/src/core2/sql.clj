@@ -313,7 +313,10 @@
                 :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*([*]/\\s*|$)'")
                 :string-ci true))
 
-
+(comment
+  (time (parse-sql-92
+         "SELECT * FROM user WHERE id = 2"
+         :start :query-specification)))
 
 ;; SQL:2011 official grammar:
 
