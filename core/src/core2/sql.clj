@@ -238,7 +238,8 @@
      (zipmap constants (map constantly constants)))))
 
 (def ^:private simplify-transform
-  (->> (for [[x y] {:like-exp :like
+  (->> (for [[x y] {:join-exp :join
+                    :like-exp :like
                     :null-exp :null
                     :overlaps-exp :overlaps
                     :concatenation-exp :concatenation
@@ -290,22 +291,6 @@
                      (if (contains? #{:where :having :offset :limit} k)
                        [k v]
                        (vec (cons k v))))))))
-
-(defn- find-joins [where known-tables]
-  (->> (for [x (normalize-where where)
-             :when (= := (first x))
-             :let [[_ a b] x]
-             :when (and (symbol? a)
-                        (symbol? b)
-                        (not= (symbol-prefix a)
-                              (symbol-prefix b))
-                        (contains? known-tables (symbol-prefix a))
-                        (contains? known-tables (symbol-prefix b)))]
-         {:lhs (symbol-prefix a)
-          :rhs (symbol-prefix b)
-          :using {(symbol-suffix-and-prefix->kw a)
-                  (symbol-suffix-and-prefix->kw b)}
-          :selection x})))
 
 (defn parse-and-transform [sql]
   (reduce
