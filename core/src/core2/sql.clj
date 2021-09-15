@@ -6,7 +6,7 @@
             [clojure.string :as s]
             [instaparse.core :as insta])
   (:import [java.util Date]
-           [java.time Duration Period ZoneOffset]
+           [java.time Duration LocalTime Period ZoneOffset]
            [java.time.temporal TemporalAmount]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -18,6 +18,9 @@
 
 (defn- parse-date [x]
   (i/read-instant-date (s/replace (parse-string x) " " "T")))
+
+(defn- parse-time [x]
+  (LocalTime/parse (parse-string x)))
 
 (defn- parse-number [x]
   (edn/read-string x))
@@ -35,7 +38,10 @@
   (symbol x))
 
 (defn- parse-boolean [[x]]
-  (= :true x))
+  (case x
+    :true true
+    :false false
+    :unknown nil))
 
 (defn- parse-like-pattern [x & [escape]]
   (let [pattern (parse-string x)
@@ -69,6 +75,7 @@
    :numeric-literal parse-number
    :unsigned-numeric-literal parse-number
    :date-literal parse-date
+   :time-literal parse-time
    :timestamp-literal parse-date
    :interval-literal parse-interval
    :string-literal parse-string
@@ -122,6 +129,11 @@
                 [:like-exp x pattern])
                ([x not pattern]
                 [:boolean-not [:like-exp x pattern]]))
+   :null-exp (fn
+               ([x]
+                [:null-exp x])
+               ([x no]
+                [:boolean-not [:null-exp x]]))
    :in-exp (fn
                ([x y]
                 [:in-exp x y])
@@ -227,6 +239,14 @@
 
 (def ^:private simplify-transform
   (->> (for [[x y] {:like-exp :like
+                    :null-exp :null
+                    :overlaps-exp :overlaps
+                    :concatenation-exp :concatenation
+                    :position-exp :position
+                    :length-exp :length
+                    :substring-exp :substring
+                    :fold-exp :fold
+                    :trim-exp :trim
                     :in-exp :in
                     :case-exp :case
                     :exists-exp :exists
