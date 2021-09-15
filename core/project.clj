@@ -29,6 +29,8 @@
 
                  [org.roaringbitmap/RoaringBitmap "0.9.15"]
 
+                 [instaparse "1.4.10"]
+
                  [pro.juxt.clojars-mirrors.integrant/integrant "0.8.0"]]
 
   :java-source-paths ["src"]
