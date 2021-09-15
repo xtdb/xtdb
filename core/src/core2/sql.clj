@@ -306,6 +306,15 @@
     simplify-transform
     normalize-transform]))
 
+;; Full SQL-92 query parser based on official grammar:
+
+(def parse-sql-92
+  (insta/parser (io/resource "core2/sql/sql-92.ebnf")
+                :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*([*]/\\s*|$)'")
+                :string-ci true))
+
+
+
 ;; SQL:2011 official grammar:
 
 ;; https://jakewheat.github.io/sql-overview/sql-2011-foundation-grammar.html
