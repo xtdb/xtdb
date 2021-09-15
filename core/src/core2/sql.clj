@@ -118,11 +118,14 @@
                          [:numeric-multiply x y]))
    :numeric-divide (fn [x y]
                      (if (and (number? x) (number? y))
-                       (/ x y)
+                       (let [x (/ x y)]
+                         (if (ratio? x)
+                           (double x)
+                           x))
                        [:numeric-divide x y]))
    :numeric-modulo (fn [x y]
                      (if (and (number? x) (number? y))
-                       (rem x y)
+                       (mod x y)
                        [:numeric-modulo x y]))
    :like-exp (fn
                ([x pattern]
@@ -132,7 +135,7 @@
    :null-exp (fn
                ([x]
                 [:null-exp x])
-               ([x no]
+               ([x not]
                 [:boolean-not [:null-exp x]]))
    :in-exp (fn
                ([x y]
