@@ -110,15 +110,15 @@
                 org.apache.arrow.vector.DecimalVector
                 org.apache.arrow.vector.DecimalVector
                 org.apache.arrow.vector.DecimalVector
-                org.apache.arrow.vector.TimeStampMicroTZVector
-                org.apache.arrow.vector.TimeStampMicroTZVector
-                org.apache.arrow.vector.TimeStampMicroTZVector
-                org.apache.arrow.vector.TimeStampMicroTZVector
-                org.apache.arrow.vector.TimeStampMicroVector
+                org.apache.arrow.vector.TimeStampMilliTZVector
+                org.apache.arrow.vector.TimeStampMilliTZVector
+                org.apache.arrow.vector.TimeStampMilliTZVector
+                org.apache.arrow.vector.TimeStampMilliTZVector
+                org.apache.arrow.vector.TimeStampMilliVector
                 org.apache.arrow.vector.DurationVector
                 org.apache.arrow.vector.IntervalYearVector
                 org.apache.arrow.vector.DateMilliVector
-                org.apache.arrow.vector.TimeMicroVector
+                org.apache.arrow.vector.TimeMilliVector
                 org.apache.arrow.vector.VarBinaryVector
                 org.apache.arrow.vector.VarBinaryVector
                 org.apache.arrow.vector.VarCharVector

@@ -434,20 +434,20 @@
 
   LocalDateTime
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/TIMESTAMPMICRO))
-          inner-vec (.getTimeStampMicroVector v type-id)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/TIMESTAMPMILLI))
+          inner-vec (.getTimeStampMilliVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
           x (.toInstant x ZoneOffset/UTC)]
-      (.setSafe inner-vec offset (+ (.toMicros TimeUnit/SECONDS (.getEpochSecond x))
-                                    (.toMicros TimeUnit/NANOSECONDS (.getNano x))))
+      (.setSafe inner-vec offset (+ (.toMillis TimeUnit/SECONDS (.getEpochSecond x))
+                                    (.toMillis TimeUnit/NANOSECONDS (.getNano x))))
       v))
 
   LocalTime
   (append-value [x ^DenseUnionVector v]
-    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/TIMEMICRO))
-          inner-vec (.getTimeMicroVector v type-id)
+    (let [type-id (get-or-create-type-id v (.getType Types$MinorType/TIMEMILLI))
+          inner-vec (.getTimeMilliVector v type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
-      (.setSafe inner-vec offset (quot (.getLong x ChronoField/NANO_OF_DAY) 1000))
+      (.setSafe inner-vec offset (quot (.getLong x ChronoField/NANO_OF_DAY) 1000000))
       v))
 
   Date
@@ -460,13 +460,13 @@
 
   ZonedDateTime
   (append-value [x ^DenseUnionVector v]
-    (let [arrow-type (ArrowType$Timestamp. org.apache.arrow.vector.types.TimeUnit/MICROSECOND (str (.getZone x)))
+    (let [arrow-type (ArrowType$Timestamp. org.apache.arrow.vector.types.TimeUnit/MILLISECOND (str (.getZone x)))
           type-id (get-or-create-type-id v arrow-type)
-          ^TimeStampMicroTZVector inner-vec (get-or-add-vector v arrow-type "timestamp" type-id)
+          ^TimeStampMilliTZVector inner-vec (get-or-add-vector v arrow-type "timestamp" type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
           x (.toInstant x)]
-      (.setSafe inner-vec offset (+ (.toMicros TimeUnit/SECONDS (.getEpochSecond x))
-                                    (.toMicros TimeUnit/NANOSECONDS (.getNano x))))
+      (.setSafe inner-vec offset (+ (.toMillis TimeUnit/SECONDS (.getEpochSecond x))
+                                    (.toMillis TimeUnit/NANOSECONDS (.getNano x))))
       v))
 
   OffsetDateTime
@@ -475,11 +475,11 @@
 
   Duration
   (append-value [x ^DenseUnionVector v]
-    (let [arrow-type (ArrowType$Duration. org.apache.arrow.vector.types.TimeUnit/MICROSECOND)
+    (let [arrow-type (ArrowType$Duration. org.apache.arrow.vector.types.TimeUnit/MILLISECOND)
           type-id (get-or-create-type-id v arrow-type)
           ^DurationVector inner-vec (get-or-add-vector v arrow-type "duration" type-id)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
-      (.setSafe inner-vec offset (quot (.toNanos x) 1000))
+      (.setSafe inner-vec offset (quot (.toNanos x) 1000000))
       v))
 
   Period
