@@ -329,6 +329,10 @@
 
 ;; https://jakewheat.github.io/sql-overview/sql-2011-foundation-grammar.html
 
+;; Repository has both grammars for 1992, 1999, 2003, 2006, 2008, 2011
+;; and 2016 and draft specifications for 1992, 1999, 2003, 2006 and
+;; 2011: https://github.com/JakeWheat/sql-overview
+
 ;; See also Date, SQL and Relational Theory, p. 455-458, A Simplified
 ;; BNF Grammar
 
