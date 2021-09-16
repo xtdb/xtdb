@@ -310,7 +310,7 @@
 
 (def parse-sql-92
   (insta/parser (io/resource "core2/sql/sql-92.ebnf")
-                :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*([*]/\\s*|$)'")
+                :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*?([*]/\\s*|$)'")
                 :string-ci true))
 
 (comment
