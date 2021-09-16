@@ -315,7 +315,7 @@
 
 (comment
   (time (parse-sql-92
-         "SELECT * FROM user WHERE id = 21"
+         "SELECT * FROM user WHERE user.id = 21"
          :start :query-specification)))
 
 ;; SQL:2011 official grammar:
