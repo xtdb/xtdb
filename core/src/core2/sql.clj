@@ -314,9 +314,16 @@
                 :string-ci true))
 
 (comment
-  (time (parse-sql-92
-         "SELECT * FROM user WHERE user.id = 21"
-         :start :query-specification)))
+  (count
+   (insta/parses
+    parse-sql-92
+    "SELECT * FROM user WHERE user.id = 21"
+    :start :query-specification))
+
+  (time
+   (parse-sql-92
+    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000'"
+    :start :query-specification)))
 
 ;; SQL:2011 official grammar:
 
