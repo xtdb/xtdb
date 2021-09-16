@@ -318,12 +318,12 @@
    (insta/parses
     parse-sql-92
     "SELECT * FROM user WHERE user.id = 21"
-    :start :query-specification))
+    :start :dynamic-select-statement))
 
   (time
    (parse-sql-92
-    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000'"
-    :start :query-specification)))
+    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
+    :start :dynamic-select-statement)))
 
 ;; SQL:2011 official grammar:
 
