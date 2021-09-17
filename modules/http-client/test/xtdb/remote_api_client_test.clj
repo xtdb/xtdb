@@ -41,7 +41,7 @@
 (defn with-api* [{:keys [jwks ->jwt-token]} f]
   (let [server-port (xio/free-port)]
     (with-open [node (xt/start-node {:xtdb.http-server/server {:port server-port
-                                                                :jwks jwks}})
+                                                               :jwks jwks}})
                 client (xt/new-api-client (str "http://localhost:" server-port) {:->jwt-token ->jwt-token})]
 
       (binding [*api* client]
@@ -108,3 +108,16 @@
     (binding [sut/*now* (constantly (.toInstant (Date. (- (.getTime expired-date) (* 2 1000)))))]
       (t/is (= valid-jwt (->jwt-token)))
       (t/is (= 2 @!call-count)))))
+
+(t/deftest test-accepts-tx-id
+  (with-api {}
+    (xt/submit-tx *api* [[::xt/put {:xt/id :foo, :version 1}]])
+    (xt/submit-tx *api* [[::xt/put {:xt/id :foo, :version 2}]])
+
+    (xt/sync *api*)
+
+    (let [db (xt/db *api* {::xt/tx-id 0})]
+      (t/is (= 1 (:version (xt/entity db :foo))))
+
+      (t/is (= #{[1]} (xt/q db '{:find [?version]
+                                 :where [[?e :version ?version]]}))))))

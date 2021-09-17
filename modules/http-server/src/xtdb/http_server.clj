@@ -152,12 +152,11 @@
 (defn- await-tx-time-handler [xtdb-node]
   (fn [req]
     (let [{:keys [timeout tx-time]} (get-in req [:parameters :query])
-          timeout (some-> timeout (Duration/ofMillis))]
-      (let [last-modified (xt/await-tx-time xtdb-node tx-time timeout)]
-        (->
-         {:status 200
-          :body {::xt/tx-time last-modified}}
-         (add-last-modified last-modified))))))
+          timeout (some-> timeout (Duration/ofMillis))
+          last-modified (xt/await-tx-time xtdb-node tx-time timeout)]
+        (-> {:status 200
+             :body {::xt/tx-time last-modified}}
+            (add-last-modified last-modified)))))
 
 (s/def ::await-tx-spec (s/keys :req-un [::util/tx-id] :opt-un [::util/timeout]))
 

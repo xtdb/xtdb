@@ -54,7 +54,7 @@
 
 ;; TODO: Need to ensure all query clauses are present + coerced properly
 (s/def ::query-params
-  (s/keys :opt-un [::util/valid-time ::util/tx-time ::util/link-entities?
+  (s/keys :opt-un [::util/valid-time ::util/tx-time ::util/tx-id ::util/link-entities?
                    ::query-edn ::in-args-edn ::in-args-json]))
 
 (s/def ::body-params
@@ -73,12 +73,15 @@
                              (cond-> el
                                (get entity-links el) (entity-ref/->EntityRef))))))))))
 
-(defn run-query [{:keys [link-entities? query]} in-args {:keys [xtdb-node valid-time tx-time]}]
+(defn run-query [{:keys [link-entities? query]} in-args {:keys [xtdb-node valid-time tx-time tx-id]}]
   (let [db (util/db-for-request xtdb-node {:valid-time valid-time
-                                           :tx-time tx-time})]
+                                           :tx-time tx-time
+                                           :tx-id tx-id})
+        basis (xt/db-basis db)]
     {:query query
-     :valid-time (xt/valid-time db)
-     :tx-time (xt/transaction-time db)
+     :valid-time (get-in basis [::xt/tx ::xt/valid-time])
+     :tx-time (get-in basis [::xt/tx ::xt/tx-time])
+     :tx-id (get-in basis [::xt/tx ::xt/tx-id])
      :results (if link-entities?
                 (let [results (apply xt/q db query in-args)]
                   (xio/->cursor (fn []) (with-entity-refs results db)))
@@ -192,7 +195,7 @@
 (defn data-browser-query [options]
   (fn [req]
     (let [{query-params :query body-params :body} (get-in req [:parameters])
-          {:keys [valid-time tx-time query-edn in-args-edn in-args-json]} query-params
+          {:keys [valid-time tx-time tx-id query-edn in-args-edn in-args-json]} query-params
           query (or query-edn (get body-params :query))
           in-args (or in-args-edn in-args-json (get body-params :in-args))]
       (-> (if (nil? query)
@@ -201,5 +204,6 @@
                        in-args
                        (assoc options
                               :valid-time valid-time
-                              :tx-time tx-time)))
+                              :tx-time tx-time
+                              :tx-id tx-id)))
           (transform-query-resp req)))))
