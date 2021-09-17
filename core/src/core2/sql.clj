@@ -320,6 +320,18 @@
     "SELECT * FROM user WHERE user.id = 21"
     :start :dynamic-select-statement))
 
+  (count
+   (insta/parses
+    parse-sql-92
+    "user.id = 21"
+    :start :comparison-predicate))
+
+  (insta/parse
+   parse-sql-92
+   "user.id = 21"
+   :start :comparison-predicate
+   :trace true)
+
   (time
    (parse-sql-92
     "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
@@ -346,14 +358,11 @@
 ;; SQL BNF from the spec:
 ;; https://ronsavage.github.io/SQL/
 
-;; https://github.com/epfldata/dblab/blob/develop/components/src/main/scala/ch/epfl/data/dblab/frontend/parser/SQLAST.scala
-;; https://github.com/epfldata/dblab/blob/develop/components/src/main/scala/ch/epfl/data/dblab/frontend/parser/SQLParser.scala
+;; PostgreSQL Antlr4 grammar:
+;; https://github.com/tshprecher/antlr_psql/tree/master/antlr4
 
-;; RelaX - relational algebra calculator
-;; https://dbis-uibk.github.io/relax/
+;; PartiQL: SQL-compatible access to relational, semi-structured, and nested data.
+;; https://partiql.org/assets/PartiQL-Specification.pdf
 
-;; https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf
-;; https://www.cs.purdue.edu/homes/rompf/papers/rompf-icfp15.pdf
-
-;; https://github.com/epfldata/dblab/blob/develop/components/src/main/scala/ch/epfl/data/dblab/queryengine/push/Operators.scala
-;; https://github.com/epfldata/dblab/blob/develop/components/src/main/scala/ch/epfl/data/dblab/queryengine/volcano/Operators.scala
+;; SQL-99 Complete, Really
+;; https://crate.io/docs/sql-99/en/latest/index.html
