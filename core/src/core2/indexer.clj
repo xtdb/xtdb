@@ -1,6 +1,6 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
-            core2.api
+            [core2.api :as c2]
             [core2.await :as await]
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
@@ -9,10 +9,12 @@
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.buffer-pool :as bp])
   (:import clojure.lang.MapEntry
            [core2 DenseUnionUtil ICursor]
            core2.api.TransactionInstant
+           core2.buffer_pool.BufferPool
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.ITemporalManager
@@ -24,12 +26,13 @@
            java.util.concurrent.atomic.AtomicInteger
            java.util.concurrent.locks.StampedLock
            [java.util.function Consumer Function]
-           org.apache.arrow.memory.BufferAllocator
+           [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema]
-           org.apache.arrow.vector.types.UnionMode))
+           org.apache.arrow.vector.types.UnionMode
+           org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -276,6 +279,31 @@
       (close [_]
         (.close log-root)))))
 
+(defn- with-latest-log-chunk [{:keys [^ObjectStore object-store ^BufferPool buffer-pool]} f]
+  (when-let [latest-log-k (last (.listObjects object-store "log-"))]
+    @(-> (.getBuffer buffer-pool latest-log-k)
+         (util/then-apply
+           (fn [^ArrowBuf log-buffer]
+             (assert log-buffer)
+
+             (when log-buffer
+               (f log-buffer)))))))
+
+(defn latest-tx [deps]
+  (with-latest-log-chunk deps
+    (fn [log-buf]
+      (util/with-last-block log-buf
+        (fn [^VectorSchemaRoot log-root]
+          (let [tx-count (.getRowCount log-root)
+                ^BigIntVector tx-id-vec (.getVector log-root "_tx-id")
+                ^TimeStampMilliVector tx-time-vec (.getVector log-root "_tx-time")
+                ^BigIntVector row-id-vec (-> ^ListVector (.getVector log-root "ops")
+                                             ^StructVector (.getDataVector)
+                                             (.getChild "_row-id"))]
+            {:latest-tx (c2/->TransactionInstant (.get tx-id-vec (dec tx-count))
+                                                 (Date. (.get tx-time-vec (dec tx-count))))
+             :latest-row-id (.get row-id-vec (dec (.getValueCount row-id-vec)))}))))))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -505,15 +533,16 @@
           :allocator (ig/ref :core2/allocator)
           :object-store (ig/ref :core2/object-store)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
-          :temporal-mgr (ig/ref ::temporal/temporal-manager)}
+          :temporal-mgr (ig/ref ::temporal/temporal-manager)
+          :buffer-pool (ig/ref ::bp/buffer-pool)}
          opts))
 
 (defmethod ig/init-key ::indexer
   [_ {:keys [allocator object-store metadata-mgr ^ITemporalManager temporal-mgr
-             max-rows-per-chunk max-rows-per-block]}]
+             max-rows-per-chunk max-rows-per-block]
+      :as deps}]
 
-  (let [[latest-row-id latest-tx] @(meta/with-latest-metadata metadata-mgr
-                                     (juxt meta/latest-row-id meta/latest-tx))
+  (let [{:keys [latest-row-id latest-tx]} (latest-tx deps)
         chunk-idx (if latest-row-id
                     (inc (long latest-row-id))
                     0)

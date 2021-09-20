@@ -207,28 +207,6 @@
 (defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, f]
   (.withMetadata metadata-mgr chunk-idx (util/->jbifn f)))
 
-(defn with-latest-metadata [^IMetadataManager metadata-mgr, f]
-  (if-let [chunk-idx (last (.knownChunks metadata-mgr))]
-    (with-metadata metadata-mgr chunk-idx f)
-    (CompletableFuture/completedFuture nil)))
-
-(defn latest-tx [_chunk-idx ^VectorSchemaRoot metadata-root]
-  (let [metadata-idxs (->metadata-idxs metadata-root)
-        ^StructVector max-vec (.getVector metadata-root "max")]
-    (c2/->TransactionInstant (-> max-vec
-                                 ^BigIntVector
-                                 (.getChild (type->field-name (t/->arrow-type :bigint)))
-                                 (.get (.columnIndex metadata-idxs "_tx-id")))
-                             (Date. (-> max-vec
-                                        ^TimeStampMilliVector
-                                        (.getChild (type->field-name (t/->arrow-type :timestamp-milli)))
-                                        (.get (.columnIndex metadata-idxs "_tx-time")))))))
-
-(defn latest-row-id [_chunk-idx ^VectorSchemaRoot metadata-root]
-  (let [metadata-idxs (->metadata-idxs metadata-root)]
-    (.get ^BigIntVector (.getVector metadata-root "max-row-id")
-          (.columnIndex metadata-idxs "_tx-id"))))
-
 (defn matching-chunks [^IMetadataManager metadata-mgr, ^Watermark watermark, metadata-pred]
   (->> (for [^long chunk-idx (.knownChunks metadata-mgr)
              :while (or (nil? watermark) (< chunk-idx (.chunk-idx watermark)))]

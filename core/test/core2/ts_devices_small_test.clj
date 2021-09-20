@@ -1,15 +1,15 @@
 (ns core2.ts-devices-small-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
-            [core2.metadata :as meta]
             [core2.test-util :as tu]
             [core2.ts-devices :as tsd]
             [core2.util :as util]
             [clojure.tools.logging :as log]
             [core2.snapshot :as snap]
-            [core2.operator :as op])
-  (:import core2.metadata.IMetadataManager
-           java.time.Duration))
+            [core2.operator :as op]
+            [core2.indexer :as idx]
+            [core2.object-store :as os]
+            [core2.buffer-pool :as bp])
+  (:import java.time.Duration))
 
 (def ^:private ^:dynamic *node*)
 
@@ -22,8 +22,7 @@
         (binding [*node* node]
           (t/is (nil? (tu/latest-completed-tx node)))
 
-          (let [^IMetadataManager mm (::meta/metadata-manager @(:!system node))
-                last-tx-instant (tsd/submit-ts-devices node {:size :small})]
+          (let [last-tx-instant (tsd/submit-ts-devices node {:size :small})]
 
             (log/info "transactions submitted, last tx" (pr-str last-tx-instant))
             (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofMinutes 15))))
@@ -31,8 +30,8 @@
             (tu/finish-chunk node)
 
             (t/is (= [last-tx-instant (dec 1001000)]
-                     @(meta/with-latest-metadata mm
-                        (juxt meta/latest-tx meta/latest-row-id)))))
+                     (idx/latest-tx {:object-store (tu/component ::os/file-system-object-store)
+                                     :buffer-pool (tu/component ::bp/buffer-pool)}))))
 
           (f))))))
 

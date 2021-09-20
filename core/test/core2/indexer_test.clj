@@ -85,12 +85,10 @@
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (::os/file-system-object-store system)
             ^IBufferPool bp (::bp/buffer-pool system)
-            ^IMetadataManager mm (::meta/metadata-manager system)
             ^TemporalManager tm (::temporal/temporal-manager system)
             ^IChunkManager idx (::idx/indexer system)]
 
-        (t/is (every? nil? @(meta/with-latest-metadata mm
-                              (juxt meta/latest-tx meta/latest-row-id))))
+        (t/is (nil? (idx/latest-tx {:object-store os, :buffer-pool bp})))
 
         (t/is (= last-tx-instant
                  @(last (for [tx-ops txs]
@@ -128,9 +126,9 @@
           (t/is (zero? (.row-count watermark)))
           (t/is (empty? (.column->root watermark))))
 
-        (t/is (= [last-tx-instant (dec total-number-of-ops)]
-                 @(meta/with-latest-metadata mm
-                    (juxt meta/latest-tx meta/latest-row-id))))
+        (t/is (= {:latest-tx last-tx-instant
+                  :latest-row-id (dec total-number-of-ops)}
+                 (idx/latest-tx {:object-store os, :buffer-pool bp})))
 
         (let [objects-list (.listObjects os "metadata-")]
           (t/is (= 1 (count objects-list)))
@@ -142,7 +140,7 @@
           (let [buffer-name "metadata-0000000000000000.arrow"
                 ^ArrowBuf buffer @(.getBuffer bp buffer-name)
                 footer (util/read-arrow-footer buffer)]
-            (t/is (= 2 (count (.buffers ^BufferPool bp))))
+            (t/is (= 3 (count (.buffers ^BufferPool bp))))
             (t/is (instance? ArrowBuf buffer))
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
@@ -191,7 +189,7 @@
               (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
               (t/is (= size (.getSize (.getReferenceManager ^ArrowBuf buffer))))
               (t/is (zero? (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
-              (t/is (= 1 (count (.buffers ^BufferPool bp)))))))))))
+              (t/is (= 2 (count (.buffers ^BufferPool bp)))))))))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
@@ -205,7 +203,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
-      (let [^ObjectStore os (::os/file-system-object-store @(:!system node))]
+      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
 
         (-> (c2/submit-tx node tx-ops)
             (tu/then-await-tx node (Duration/ofMillis 2000)))
@@ -268,8 +266,8 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :max-rows-per-chunk 3000, :max-rows-per-block 300})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [^ObjectStore os (::os/file-system-object-store @(:!system node))
-            ^IMetadataManager mm (::meta/metadata-manager @(:!system node))
+      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)
+            ^IBufferPool bp (tu/component node ::bp/buffer-pool)
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -290,9 +288,9 @@
           (t/is (= last-tx-instant (tu/latest-completed-tx node)))
           (tu/finish-chunk node)
 
-          (t/is [last-tx-instant (dec (count tx-ops))]
-                @(meta/with-latest-metadata mm
-                   (juxt meta/latest-tx meta/latest-row-id)))
+          (t/is (= {:latest-tx last-tx-instant
+                    :latest-row-id (dec (count tx-ops))}
+                   (idx/latest-tx {:object-store os, :buffer-pool bp})))
 
           (let [objs (.listObjects os)]
             (t/is (= 4 (count (filter #(re-matches #"temporal-\p{XDigit}+.*" %) objs))))
@@ -408,6 +406,7 @@
           (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [system @(:!system node)
                   ^ObjectStore os (::os/file-system-object-store system)
+                  ^BufferPool bp (::bp/buffer-pool system)
                   ^IMetadataManager mm (::meta/metadata-manager system)
                   ^TemporalManager tm (::temporal/temporal-manager system)]
               (t/is (= first-half-tx-instant
@@ -415,10 +414,11 @@
                            (tu/then-await-tx node (Duration/ofSeconds 5)))))
               (t/is (= first-half-tx-instant (tu/latest-completed-tx node)))
 
-              (let [[^TransactionInstant os-tx-instant os-latest-row-id] @(meta/with-latest-metadata mm
-                                                                            (juxt meta/latest-tx meta/latest-row-id))]
-                (t/is (< (.tx-id os-tx-instant) (.tx-id first-half-tx-instant)))
-                (t/is (< os-latest-row-id (count first-half-tx-ops)))
+              (let [{:keys [^TransactionInstant latest-tx, latest-row-id]}
+                    (idx/latest-tx {:object-store os, :buffer-pool bp})]
+
+                (t/is (< (.tx-id latest-tx) (.tx-id first-half-tx-instant)))
+                (t/is (< latest-row-id (count first-half-tx-ops)))
 
                 (let [objs (.listObjects os)]
                   (t/is (= 5 (count (filter #(re-matches #"metadata-.*" %) objs))))
