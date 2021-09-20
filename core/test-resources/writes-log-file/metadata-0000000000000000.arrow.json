@@ -47,31 +47,6 @@
           "name" : "utf8"
         },
         "children" : [ ]
-      },{
-        "name" : "bit",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bigint",
-        "nullable" : true,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "timestamp-milli",
-        "nullable" : true,
-        "type" : {
-          "name" : "timestamp",
-          "unit" : "MILLISECOND",
-          "timezone" : null
-        },
-        "children" : [ ]
       }]
     },{
       "name" : "max",
@@ -84,31 +59,6 @@
         "nullable" : true,
         "type" : {
           "name" : "utf8"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bit",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bigint",
-        "nullable" : true,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "timestamp-milli",
-        "nullable" : true,
-        "type" : {
-          "name" : "timestamp",
-          "unit" : "MILLISECOND",
-          "timezone" : null
         },
         "children" : [ ]
       }]
@@ -144,31 +94,6 @@
               "name" : "utf8"
             },
             "children" : [ ]
-          },{
-            "name" : "bit",
-            "nullable" : true,
-            "type" : {
-              "name" : "bool"
-            },
-            "children" : [ ]
-          },{
-            "name" : "bigint",
-            "nullable" : true,
-            "type" : {
-              "name" : "int",
-              "bitWidth" : 64,
-              "isSigned" : true
-            },
-            "children" : [ ]
-          },{
-            "name" : "timestamp-milli",
-            "nullable" : true,
-            "type" : {
-              "name" : "timestamp",
-              "unit" : "MILLISECOND",
-              "timezone" : null
-            },
-            "children" : [ ]
           }]
         },{
           "name" : "max",
@@ -181,31 +106,6 @@
             "nullable" : true,
             "type" : {
               "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "bit",
-            "nullable" : true,
-            "type" : {
-              "name" : "bool"
-            },
-            "children" : [ ]
-          },{
-            "name" : "bigint",
-            "nullable" : true,
-            "type" : {
-              "name" : "int",
-              "bitWidth" : 64,
-              "isSigned" : true
-            },
-            "children" : [ ]
-          },{
-            "name" : "timestamp-milli",
-            "nullable" : true,
-            "type" : {
-              "name" : "timestamp",
-              "unit" : "MILLISECOND",
-              "timezone" : null
             },
             "children" : [ ]
           }]
@@ -221,153 +121,93 @@
     }]
   },
   "batches" : [{
-    "count" : 5,
+    "count" : 2,
     "columns" : [{
       "name" : "column",
-      "count" : 5,
-      "VALIDITY" : [1,1,1,1,1],
-      "OFFSET" : [0,3,13,19,27,32],
-      "DATA" : ["_id","_tombstone","_tx-id","_tx-time","month"]
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "OFFSET" : [0,3,8],
+      "DATA" : ["_id","month"]
     },{
       "name" : "count",
-      "count" : 5,
-      "VALIDITY" : [1,1,1,1,1],
-      "DATA" : ["4","1","4","4","1"]
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["4","1"]
     },{
       "name" : "min-row-id",
-      "count" : 5,
-      "VALIDITY" : [1,1,1,1,1],
-      "DATA" : ["0","2","0","0","3"]
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["0","3"]
     },{
       "name" : "max-row-id",
-      "count" : 5,
-      "VALIDITY" : [1,1,1,1,1],
-      "DATA" : ["3","2","3","3","3"]
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["3","3"]
     },{
       "name" : "min",
-      "count" : 5,
-      "VALIDITY" : [1,1,1,1,1],
+      "count" : 2,
+      "VALIDITY" : [1,1],
       "children" : [{
         "name" : "varchar",
-        "count" : 5,
-        "VALIDITY" : [1,0,0,0,1],
-        "OFFSET" : [0,3,3,3,3,8],
-        "DATA" : ["bar","","","","april"]
-      },{
-        "name" : "bit",
-        "count" : 5,
-        "VALIDITY" : [0,1,0,0,0],
-        "DATA" : [0,1,0,0,0]
-      },{
-        "name" : "bigint",
-        "count" : 5,
-        "VALIDITY" : [0,0,1,0,0],
-        "DATA" : ["0","0","0","0","0"]
-      },{
-        "name" : "timestamp-milli",
-        "count" : 5,
-        "VALIDITY" : [0,0,0,1,0],
-        "DATA" : [0,0,0,1577836800000,0]
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "OFFSET" : [0,3,8],
+        "DATA" : ["bar","april"]
       }]
     },{
       "name" : "max",
-      "count" : 5,
-      "VALIDITY" : [1,1,1,1,1],
+      "count" : 2,
+      "VALIDITY" : [1,1],
       "children" : [{
         "name" : "varchar",
-        "count" : 5,
-        "VALIDITY" : [1,0,0,0,1],
-        "OFFSET" : [0,3,3,3,3,8],
-        "DATA" : ["foo","","","","april"]
-      },{
-        "name" : "bit",
-        "count" : 5,
-        "VALIDITY" : [0,1,0,0,0],
-        "DATA" : [0,1,0,0,0]
-      },{
-        "name" : "bigint",
-        "count" : 5,
-        "VALIDITY" : [0,0,1,0,0],
-        "DATA" : ["0","0","1981","0","0"]
-      },{
-        "name" : "timestamp-milli",
-        "count" : 5,
-        "VALIDITY" : [0,0,0,1,0],
-        "DATA" : [0,0,0,1577923200000,0]
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "OFFSET" : [0,3,8],
+        "DATA" : ["foo","april"]
       }]
     },{
       "name" : "bloom",
-      "count" : 5,
-      "VALIDITY" : [1,1,1,1,1],
-      "OFFSET" : [0,38,60,128,196,234],
-      "DATA" : ["3a3000000300000006000000090000000b000000200000002200000024000000a9e94357ddc4","3a300000010000000000020010000000130026003900","3a30000006000000020000000500000006000000080000000d0000000f000000380000003a0000003c0000003e00000040000000420000004500fc2a28c85465fff322fa","3a30000006000000010000000a0000000b0000000c0000000d0000000f000000380000003a0000003c0000003e00000040000000420000007223a95f2af37ae5ab867604","3a3000000300000003000000070000000e00000020000000220000002400000030112c5a34c8"]
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "OFFSET" : [0,38,76],
+      "DATA" : ["3a3000000300000006000000090000000b000000200000002200000024000000a9e94357ddc4","3a3000000300000003000000070000000e00000020000000220000002400000030112c5a34c8"]
     },{
       "name" : "blocks",
-      "count" : 5,
-      "VALIDITY" : [1,1,1,1,1],
-      "OFFSET" : [0,1,2,3,4,5],
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "OFFSET" : [0,1,2],
       "children" : [{
         "name" : "$data$",
-        "count" : 5,
-        "VALIDITY" : [1,1,1,1,1],
+        "count" : 2,
+        "VALIDITY" : [1,1],
         "children" : [{
           "name" : "min",
-          "count" : 5,
-          "VALIDITY" : [1,1,1,1,1],
+          "count" : 2,
+          "VALIDITY" : [1,1],
           "children" : [{
             "name" : "varchar",
-            "count" : 5,
-            "VALIDITY" : [1,0,0,0,1],
-            "OFFSET" : [0,3,3,3,3,8],
-            "DATA" : ["bar","","","","april"]
-          },{
-            "name" : "bit",
-            "count" : 5,
-            "VALIDITY" : [0,1,0,0,0],
-            "DATA" : [0,1,0,0,0]
-          },{
-            "name" : "bigint",
-            "count" : 5,
-            "VALIDITY" : [0,0,1,0,0],
-            "DATA" : ["0","0","0","0","0"]
-          },{
-            "name" : "timestamp-milli",
-            "count" : 5,
-            "VALIDITY" : [0,0,0,1,0],
-            "DATA" : [0,0,0,1577836800000,0]
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "OFFSET" : [0,3,8],
+            "DATA" : ["bar","april"]
           }]
         },{
           "name" : "max",
-          "count" : 5,
-          "VALIDITY" : [1,1,1,1,1],
+          "count" : 2,
+          "VALIDITY" : [1,1],
           "children" : [{
             "name" : "varchar",
-            "count" : 5,
-            "VALIDITY" : [1,0,0,0,1],
-            "OFFSET" : [0,3,3,3,3,8],
-            "DATA" : ["foo","","","","april"]
-          },{
-            "name" : "bit",
-            "count" : 5,
-            "VALIDITY" : [0,1,0,0,0],
-            "DATA" : [0,1,0,0,0]
-          },{
-            "name" : "bigint",
-            "count" : 5,
-            "VALIDITY" : [0,0,1,0,0],
-            "DATA" : ["0","0","1981","0","0"]
-          },{
-            "name" : "timestamp-milli",
-            "count" : 5,
-            "VALIDITY" : [0,0,0,1,0],
-            "DATA" : [0,0,0,1577923200000,0]
+            "count" : 2,
+            "VALIDITY" : [1,1],
+            "OFFSET" : [0,3,8],
+            "DATA" : ["foo","april"]
           }]
         },{
           "name" : "bloom",
-          "count" : 5,
-          "VALIDITY" : [1,1,1,1,1],
-          "OFFSET" : [0,38,60,128,196,234],
-          "DATA" : ["3a3000000300000006000000090000000b000000200000002200000024000000a9e94357ddc4","3a300000010000000000020010000000130026003900","3a30000006000000020000000500000006000000080000000d0000000f000000380000003a0000003c0000003e00000040000000420000004500fc2a28c85465fff322fa","3a30000006000000010000000a0000000b0000000c0000000d0000000f000000380000003a0000003c0000003e00000040000000420000007223a95f2af37ae5ab867604","3a3000000300000003000000070000000e00000020000000220000002400000030112c5a34c8"]
+          "count" : 2,
+          "VALIDITY" : [1,1],
+          "OFFSET" : [0,38,76],
+          "DATA" : ["3a3000000300000006000000090000000b000000200000002200000024000000a9e94357ddc4","3a3000000300000003000000070000000e00000020000000220000002400000030112c5a34c8"]
         }]
       }]
     }]

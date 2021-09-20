@@ -154,7 +154,7 @@
             (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
                         record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
               (.load (VectorLoader. metadata-batch) record-batch)
-              (t/is (= 20 (.getRowCount metadata-batch)))
+              (t/is (= 18 (.getRowCount metadata-batch)))
               (t/is (= "_id" (-> (.getVector metadata-batch "column")
                                  (ty/get-object 0))))
               (t/is (= "device-info-demo000000"
@@ -172,10 +172,10 @@
                     tp (.getTransferPair from a)]
                 (with-open [to (.getTo tp)]
                   (t/is (zero? (.getValueCount to)))
-                  (.splitAndTransfer tp 0 20)
+                  (.splitAndTransfer tp 0 18)
                   (t/is  (= (.memoryAddress (.getDataBuffer from))
                             (.memoryAddress (.getDataBuffer to))))
-                  (t/is (= 20 (.getValueCount to))))))
+                  (t/is (= 18 (.getValueCount to))))))
 
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
@@ -317,7 +317,7 @@
         (t/is (= [[0 299 300] [300 599 300] [600 899 300] [900 1199 300]
                   [1200 1499 300] [1500 1799 300] [1800 2099 300]
                   [2100 2399 300] [2400 2699 300] [2700 2999 300]]
-                 (row-id-ranges "chunk-0000000000000000-_tx-id.arrow.json")))
+                 (row-id-ranges "chunk-0000000000000000-_id.arrow.json")))
 
         (t/is (= [[0 298 150] [300 598 150] [600 898 150] [900 1198 150]
                   [1200 1498 150] [1500 1798 150] [1800 1998 100]]
@@ -331,7 +331,7 @@
         (t/is (= [[3000 3299 300] [3300 3599 300] [3600 3899 300] [3900 4199 300]
                   [4200 4499 300] [4500 4799 300] [4800 5099 300]
                   [5100 5399 300] [5400 5699 300] [5700 5999 300]]
-                 (row-id-ranges "chunk-0000000000000bb8-_tx-id.arrow.json")))
+                 (row-id-ranges "chunk-0000000000000bb8-_id.arrow.json")))
 
         (t/is (= [[3000 3299 300] [3300 3599 300] [3600 3899 300] [3900 4199 300]
                   [4200 4499 300] [4500 4799 300] [4800 5099 300]

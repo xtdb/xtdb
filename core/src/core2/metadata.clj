@@ -194,9 +194,9 @@
             block-idx)))))
 
   (blockCount [this]
-    (let [tx-id-idx (.columnIndex this "_tx-id")]
-      (- (.getElementEndIndex blocks-vec tx-id-idx)
-         (.getElementStartIndex blocks-vec tx-id-idx)))))
+    (let [id-idx (.columnIndex this "_id")]
+      (- (.getElementEndIndex blocks-vec id-idx)
+         (.getElementStartIndex blocks-vec id-idx)))))
 
 (defn ->metadata-idxs ^core2.metadata.IMetadataIndices [^VectorSchemaRoot metadata-root]
   (MetadataIndices. (HashMap.)

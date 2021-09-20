@@ -79,46 +79,6 @@
 
     (util/set-vector-schema-root-row-count content-root (inc value-count))))
 
-(def ^:private ^Field tx-time-field
-  (t/->primitive-dense-union-field "_tx-time" #{:timestamp-milli}))
-
-(def ^:private timestampmilli-type-id
-  (-> (t/->arrow-type :timestamp-milli) (t/arrow-type->type-id)))
-
-(defn ->tx-time-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^Date tx-time]
-  (doto ^DenseUnionVector (.createVector tx-time-field allocator)
-    (util/set-value-count 1)
-    (DenseUnionUtil/writeTypeId 0 timestampmilli-type-id)
-    (-> (.getTimeStampMilliVector timestampmilli-type-id)
-        (.setSafe 0 (.getTime tx-time)))))
-
-(def ^:private ^Field tx-id-field
-  (t/->primitive-dense-union-field "_tx-id" #{:bigint}))
-
-(def ^:private bigint-type-id
-  (-> (t/->arrow-type :bigint)
-      (t/arrow-type->type-id)))
-
-(defn ->tx-id-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^long tx-id]
-  (doto ^DenseUnionVector (.createVector tx-id-field allocator)
-    (util/set-value-count 1)
-    (DenseUnionUtil/writeTypeId 0 bigint-type-id)
-    (-> (.getBigIntVector bigint-type-id)
-        (.setSafe 0 tx-id))))
-
-(def ^:private ^Field tombstone-field
-  (t/->primitive-dense-union-field "_tombstone" #{:bit}))
-
-(def ^:private bit-type-id
-  (-> (t/arrow-type->type-id (t/->arrow-type :bit))))
-
-(defn ->tombstone-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^Boolean tombstone?]
-  (doto ^DenseUnionVector (.createVector tombstone-field allocator)
-    (util/set-value-count 1)
-    (DenseUnionUtil/writeTypeId 0 bit-type-id)
-    (-> (.getBitVector bit-type-id)
-        (.setSafe 0 (if tombstone? 1 0)))))
-
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
 
@@ -391,10 +351,7 @@
   (indexTx [this tx-instant tx-ops next-row-id]
     (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
                 sr (ArrowStreamReader. tx-ops-ch allocator)
-                tx-root (.getVectorSchemaRoot sr)
-                ^DenseUnionVector tx-id-vec (->tx-id-vec allocator (.tx-id tx-instant))
-                ^DenseUnionVector tx-time-vec (->tx-time-vec allocator (.tx-time tx-instant))
-                ^DenseUnionVector tombstone-vec (->tombstone-vec allocator true)]
+                tx-root (.getVectorSchemaRoot sr)]
 
       (.loadNextBatch sr)
 
@@ -432,20 +389,11 @@
                                       valid-time-start-vec valid-time-end-vec per-op-offset)
 
                         (copy-safe! (.getLiveRoot this (.getName id-vec))
-                                    id-vec per-op-offset row-id)
-
-                        (copy-safe! (.getLiveRoot this (.getName tombstone-vec))
-                                    tombstone-vec 0 row-id))
+                                    id-vec per-op-offset row-id))
 
               :evict (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
                        (.logEvict log-op-idxer row-id tx-op-idx)
-                       (.indexEvict temporal-idxer (t/get-object id-vec per-op-offset) row-id)))
-
-            (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
-                        tx-time-vec 0 row-id)
-
-            (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
-                        tx-id-vec 0 row-id)))
+                       (.indexEvict temporal-idxer (t/get-object id-vec per-op-offset) row-id)))))
 
         (.endTx log-op-idxer)
         (let [evicted-row-ids (.endTx temporal-idxer)]
