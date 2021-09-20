@@ -1,7 +1,7 @@
 (ns core2.expression.comparator
   (:require [core2.expression :as expr]
             [core2.types :as types])
-  (:import core2.relation.IReadColumn
+  (:import core2.relation.IColumnReader
            java.util.Date
            org.apache.arrow.vector.types.pojo.ArrowType))
 

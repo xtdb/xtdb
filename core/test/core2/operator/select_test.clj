@@ -22,8 +22,8 @@
                                                       (reify IRelationSelector
                                                         (select [_ in-rel]
                                                           (let [idxs (RoaringBitmap.)
-                                                                ^BigIntVector a-vec (.getVector (.readColumn in-rel "a"))
-                                                                ^BigIntVector b-vec (.getVector (.readColumn in-rel "b"))]
+                                                                ^BigIntVector a-vec (.getVector (.columnReader in-rel "a"))
+                                                                ^BigIntVector b-vec (.getVector (.columnReader in-rel "b"))]
                                                             (dotimes [idx (.rowCount in-rel)]
                                                               (when (> (.get a-vec idx)
                                                                        (.get b-vec idx))

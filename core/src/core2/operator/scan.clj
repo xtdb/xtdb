@@ -111,7 +111,7 @@
                                      (.select col-pred (rel/<-vector (.getVector in-root col-name))))
                                    (.getVector in-root t/row-id-field)))))
 
-(defn- align-roots ^core2.relation.IReadRelation [^List col-names ^Map in-roots ^TemporalRoots temporal-roots row-id-bitmap]
+(defn- align-roots ^core2.relation.IRelationReader [^List col-names ^Map in-roots ^TemporalRoots temporal-roots row-id-bitmap]
   (let [roots (for [col-name col-names]
                 (if (temporal/temporal-column? col-name)
                   (.get ^Map (.roots temporal-roots) col-name)

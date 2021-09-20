@@ -8,7 +8,7 @@
   (:import clojure.lang.MapEntry
            core2.operator.project.ProjectionSpec
            [core2.operator.select IColumnSelector IRelationSelector]
-           [core2.relation IReadColumn IReadRelation]
+           [core2.relation IColumnReader IRelationReader]
            java.lang.reflect.Method
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
@@ -507,11 +507,11 @@
                            (util/map-values (fn [_param-k param-v]
                                               (normalize-union-value param-v)))))}))
 
-(defn- expression-in-cols [^IReadRelation in-rel expr]
+(defn- expression-in-cols [^IRelationReader in-rel expr]
   (->> (variables expr)
        (util/into-linked-map
-        (map (fn [variable]
-               (MapEntry/create variable (.readColumn in-rel (name variable))))))))
+         (map (fn [variable]
+               (MapEntry/create variable (.columnReader in-rel (name variable))))))))
 
 (def ^:private return-type->type-kw
   {Boolean :bit
@@ -555,7 +555,7 @@
   (let [codegen-opts {:var->types var-types, :param->type param-types}
         {:keys [code return-type]} (postwalk-expr #(codegen-expr % codegen-opts) expr)
         variables (->> (keys var-types)
-                       (map #(with-tag % IReadColumn)))
+                       (map #(with-tag % IColumnReader)))
 
         allocator-sym (gensym 'allocator)
         out-vec-sym (gensym 'out-vec)]
@@ -586,7 +586,7 @@
         (let [in-cols (expression-in-cols in-rel expr)
               var-types (->> in-cols
                              (util/into-linked-map
-                              (util/map-values (fn [_variable ^IReadColumn read-col]
+                              (util/map-values (fn [_variable ^IColumnReader read-col]
                                                  (rel/col->arrow-types read-col)))))
               expr-fn (-> (memo-generate-projection col-name expr var-types param-types)
                           (memo-eval))]
@@ -596,7 +596,7 @@
   (let [codegen-opts {:var->types var-types, :param->type param-types}
         {:keys [code return-type]} (postwalk-expr #(codegen-expr % codegen-opts) expr)
         variables (->> (keys var-types)
-                       (map #(with-tag % IReadColumn)))]
+                       (map #(with-tag % IColumnReader)))]
 
     (assert (= Boolean return-type))
     `(fn [[~@variables] [~@(keys param-types)] ^long row-count#]
@@ -619,7 +619,7 @@
           (let [in-cols (expression-in-cols in expr)
                 var-types (->> in-cols
                                (util/into-linked-map
-                                (util/map-values (fn [_variable ^IReadColumn read-col]
+                                (util/map-values (fn [_variable ^IColumnReader read-col]
                                                    (rel/col->arrow-types read-col)))))
                 expr-code (memo-generate-selection expr var-types param-types)
                 expr-fn (memo-eval expr-code)]

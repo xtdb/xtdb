@@ -4,7 +4,7 @@
             [core2.types.nested :as nested]
             [core2.util :as util])
   (:import core2.ICursor
-           core2.relation.IReadRelation
+           core2.relation.IRelationReader
            [java.util ArrayList Comparator DoubleSummaryStatistics HashMap LinkedList List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer ObjDoubleConsumer ObjIntConsumer ObjLongConsumer Supplier]
            [java.util.stream Collector Collector$Characteristics Collectors IntStream]
@@ -18,7 +18,7 @@
 
 (definterface AggregateSpec
   (^String columnName [])
-  (^Object aggregate [^core2.relation.IReadRelation inRelation ^Object container ^org.roaringbitmap.RoaringBitmap idx-bitmap])
+  (^Object aggregate [^core2.relation.IRelationReader inRelation ^Object container ^org.roaringbitmap.RoaringBitmap idx-bitmap])
   (^Object finish [^Object container]))
 
 (deftype GroupSpec [^String col-name]
@@ -27,7 +27,7 @@
 
   (aggregate [_ in-rel container idx-bitmap]
     (or container
-        (let [col (.readColumn in-rel col-name)]
+        (let [col (.columnReader in-rel col-name)]
           (nested/get-value (.getVector col)
                             (.getIndex col (.first idx-bitmap))))))
 
@@ -47,7 +47,7 @@
   (columnName [_] to-name)
 
   (aggregate [_ in-rel container idx-bitmap]
-    (let [from-col (.readColumn in-rel from-name)
+    (let [from-col (.columnReader in-rel from-name)
           from-vec (.getVector from-col)
           accumulator (.accumulator collector)]
       (.collect ^IntStream (.stream idx-bitmap)
@@ -76,7 +76,7 @@
   (columnName [_] to-name)
 
   (aggregate [_ in-rel container idx-bitmap]
-    (let [from-col (.readColumn in-rel from-name)
+    (let [from-col (.columnReader in-rel from-name)
           acc (if (some? container)
                 container
                 (.get supplier))
@@ -249,14 +249,14 @@
     (util/try-close (.getBuf ^ArrowBufPointer x)))
   k)
 
-(defn- ->group-key [^IReadRelation in-rel ^List group-specs ^long idx]
+(defn- ->group-key [^IRelationReader in-rel ^List group-specs ^long idx]
   (let [ks (ArrayList. (.size group-specs))]
     (doseq [^GroupSpec group-spec group-specs]
-      (let [from-col (.readColumn in-rel (.col-name group-spec))]
+      (let [from-col (.columnReader in-rel (.col-name group-spec))]
         (.add ks (util/pointer-or-object (.getVector from-col) (.getIndex from-col idx)))))
     ks))
 
-(defn- aggregate-groups [^BufferAllocator allocator ^IReadRelation in-rel ^List aggregate-specs ^Map group->accs]
+(defn- aggregate-groups [^BufferAllocator allocator ^IRelationReader in-rel ^List aggregate-specs ^Map group->accs]
   (let [group->idx-bitmap (HashMap.)
         ^List group-specs (vec (filter #(instance? GroupSpec %) aggregate-specs))]
 
@@ -280,7 +280,7 @@
                                  (aget accs n)
                                  idx-bitmap))))))
 
-(defn- finish-groups ^core2.relation.IReadRelation [^BufferAllocator allocator
+(defn- finish-groups ^core2.relation.IRelationReader [^BufferAllocator allocator
                                                     ^List aggregate-specs
                                                     ^Map group->accs]
   (let [all-accs (ArrayList. ^List (vals group->accs))

@@ -38,7 +38,7 @@
             (.add res idx)))))
     (int-array res)))
 
-(defn align-vectors ^core2.relation.IReadRelation [^List roots, ^Roaring64Bitmap row-id-bitmap ^Map row-id->repeat-count]
+(defn align-vectors ^core2.relation.IRelationReader [^List roots, ^Roaring64Bitmap row-id-bitmap ^Map row-id->repeat-count]
   (let [read-cols (LinkedList.)]
     (doseq [^VectorSchemaRoot root roots
             :let [row-id-vec (.getVector root 0)

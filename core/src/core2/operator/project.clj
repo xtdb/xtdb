@@ -10,13 +10,13 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface ProjectionSpec
-  (^core2.relation.IReadColumn project [^org.apache.arrow.memory.BufferAllocator allocator
-                                        ^core2.relation.IReadRelation readRelation]))
+  (^core2.relation.IColumnReader project [^org.apache.arrow.memory.BufferAllocator allocator
+                                        ^core2.relation.IRelationReader readRelation]))
 
 (deftype IdentityProjectionSpec [^String col-name]
   ProjectionSpec
   (project [_ _allocator in-rel]
-    (.readColumn in-rel col-name)))
+    (.columnReader in-rel col-name)))
 
 (defn ->identity-projection-spec ^core2.operator.project.ProjectionSpec [^String col-name]
   (IdentityProjectionSpec. col-name))

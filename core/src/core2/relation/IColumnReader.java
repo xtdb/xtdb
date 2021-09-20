@@ -3,7 +3,7 @@ package core2.relation;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.ValueVector;
 
-public interface IReadColumn<V extends ValueVector> extends AutoCloseable {
+public interface IColumnReader<V extends ValueVector> extends AutoCloseable {
 
     V getVector();
 
@@ -13,11 +13,11 @@ public interface IReadColumn<V extends ValueVector> extends AutoCloseable {
 
     int getValueCount();
 
-    IReadColumn<V> withName(String colName);
+    IColumnReader<V> withName(String colName);
 
-    IReadColumn<V> copy(BufferAllocator allocator);
+    IColumnReader<V> copy(BufferAllocator allocator);
 
-    IReadColumn<V> select(int[] idxs);
+    IColumnReader<V> select(int[] idxs);
 
     @Override
     default void close() {

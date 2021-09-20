@@ -3,17 +3,17 @@
             [core2.relation :as rel]
             [core2.util :as util])
   (:import core2.ICursor
-           core2.relation.IReadRelation
+           core2.relation.IRelationReader
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IRelationSelector
-  (^org.roaringbitmap.RoaringBitmap select [^core2.relation.IReadRelation in-rel]))
+  (^org.roaringbitmap.RoaringBitmap select [^core2.relation.IRelationReader in-rel]))
 
 (definterface IColumnSelector
-  (^org.roaringbitmap.RoaringBitmap select [^core2.relation.IReadColumn in-col]))
+  (^org.roaringbitmap.RoaringBitmap select [^core2.relation.IColumnReader in-col]))
 
 (deftype SelectCursor [^ICursor in-cursor
                        ^IRelationSelector selector]
@@ -23,7 +23,7 @@
       (while (and (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
-                                   (let [^IReadRelation in-rel in-rel]
+                                   (let [^IRelationReader in-rel in-rel]
                                      (when-let [idxs (.select selector in-rel)]
                                        (when-not (.isEmpty idxs)
                                          (.accept c (rel/select in-rel (.toArray idxs)))

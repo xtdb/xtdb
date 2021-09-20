@@ -43,7 +43,7 @@ only a single type. This was done for simplicity.
 
 On the write side, which is the complex part, there's functional
 overlap between `core2.types.nested.ArrowAppendable`, and
-`core2.relation.IAppendColumn` and `core2.types.PValueVector`.
+`core2.relation.IColumnWriter` and `core2.types.PValueVector`.
 
 On the read side, there's also functional overlap between
 `core2.types.nested.ArrowReadable`, `core2.relation.ReadColumn` and

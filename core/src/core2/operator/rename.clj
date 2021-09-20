@@ -5,7 +5,7 @@
             [core2.relation :as rel]
             [core2.util :as util])
   (:import core2.ICursor
-           [core2.relation IReadColumn IReadRelation]
+           [core2.relation IColumnReader IRelationReader]
            [java.util LinkedList Map]
            java.util.function.Consumer))
 
@@ -28,10 +28,10 @@
       (.tryAdvance in-cursor
                    (reify Consumer
                      (accept [_ in-rel]
-                       (let [^IReadRelation in-rel in-rel
+                       (let [^IRelationReader in-rel in-rel
                              out-cols (LinkedList.)]
 
-                         (doseq [^IReadColumn in-col in-rel
+                         (doseq [^IColumnReader in-col in-rel
                                  :let [old-name (.getName in-col)
                                        col-name (cond->> (get rename-map old-name old-name)
                                                   prefix (str prefix relation-prefix-delimiter))]]

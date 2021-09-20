@@ -2,10 +2,9 @@
   (:require [core2.relation :as rel]
             [core2.util :as util])
   (:import core2.ICursor
-           [core2.relation IAppendRelation IReadRelation]
+           [core2.relation IRelationWriter IRelationReader]
            java.util.function.Consumer
-           org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.util.AutoCloseables))
+           org.apache.arrow.memory.BufferAllocator))
 
 ;; We pass the first 100 results through immediately, so that any limit-like queries don't need to wait for a full block to return rows.
 ;; Then, we coalesce small blocks together into blocks of at least 100, to share the per-block costs.
@@ -17,14 +16,14 @@
                            ^:unsynchronized-mutable ^int seen-rows]
   ICursor
   (tryAdvance [this c]
-    (let [!append-rel (volatile! nil)
+    (let [!rel-writer (volatile! nil)
           !rows-appended (volatile! 0)]
       (try
         (loop []
           (let [!passed-on? (volatile! false)
                 advanced? (.tryAdvance cursor (reify Consumer
                                                 (accept [_ read-rel]
-                                                  (let [^IReadRelation read-rel read-rel
+                                                  (let [^IRelationReader read-rel read-rel
                                                         row-count (.rowCount read-rel)
                                                         seen-rows (.seen-rows this)]
                                                     (cond
@@ -38,15 +37,15 @@
                                                       ;; this block is big enough, and we don't have rows waiting
                                                       ;; send it straight through, no copy.
                                                       (and (>= row-count ideal-min-block-size)
-                                                           (nil? @!append-rel))
+                                                           (nil? @!rel-writer))
                                                       (do
                                                         (.accept c read-rel)
                                                         (vreset! !passed-on? true))
 
                                                       ;; otherwise, add it to the pending rows.
                                                       :else
-                                                      (let [^IAppendRelation append-rel (vswap! !append-rel #(or % (rel/->append-relation allocator)))]
-                                                        (.appendRelation append-rel read-rel)
+                                                      (let [^IRelationWriter rel-writer (vswap! !rel-writer #(or % (rel/->rel-writer allocator)))]
+                                                        (.appendRelation rel-writer read-rel)
                                                         (vswap! !rows-appended + row-count)))))))
                 rows-appended @!rows-appended]
 
@@ -59,14 +58,14 @@
 
               ;; we've got rows, and either the source is done or there's enough already - send them through
               (pos? rows-appended) (do
-                                     (.accept c (.read ^IAppendRelation @!append-rel))
+                                     (.accept c (.read ^IRelationWriter @!rel-writer))
                                      true)
 
               ;; no more rows in input, and none to pass through, we're done
               :else false)))
 
         (finally
-          (util/try-close @!append-rel)))))
+          (util/try-close @!rel-writer)))))
 
   (close [_]
     (.close cursor)))

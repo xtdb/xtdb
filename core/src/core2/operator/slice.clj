@@ -1,7 +1,7 @@
 (ns core2.operator.slice
   (:require [core2.relation :as rel])
   (:import core2.ICursor
-           core2.relation.IReadRelation
+           core2.relation.IRelationReader
            java.util.function.Consumer
            java.util.stream.IntStream))
 
@@ -28,7 +28,7 @@
                   (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
-                                   (let [^IReadRelation in-rel in-rel
+                                   (let [^IRelationReader in-rel in-rel
                                          row-count (.rowCount in-rel)
                                          old-idx (.idx this)]
 

@@ -4,7 +4,7 @@
             [core2.util :as util])
   (:import clojure.lang.Keyword
            core2.ICursor
-           core2.relation.IReadRelation
+           core2.relation.IRelationReader
            [java.util Comparator List]
            [java.util.function Consumer ToIntFunction]
            java.util.stream.IntStream
@@ -18,25 +18,25 @@
 (defn ->order-spec [col-name direction]
   (OrderSpec. col-name direction))
 
-(defn- accumulate-relations ^core2.relation.IReadRelation [allocator ^ICursor in-cursor]
-  (let [append-rel (rel/->append-relation allocator)]
+(defn- accumulate-relations ^core2.relation.IRelationReader [allocator ^ICursor in-cursor]
+  (let [rel-writer (rel/->rel-writer allocator)]
     (try
       (.forEachRemaining in-cursor
                          (reify Consumer
                            (accept [_ src-rel]
-                             (.appendRelation append-rel src-rel))))
+                             (.appendRelation rel-writer src-rel))))
       (catch Exception e
-        (.close append-rel)
+        (.close rel-writer)
         (throw e)))
 
-    (.read append-rel)))
+    (.read rel-writer)))
 
-(defn- sorted-idxs ^ints [^IReadRelation read-rel, ^List #_<OrderSpec> order-specs]
+(defn- sorted-idxs ^ints [^IRelationReader read-rel, ^List #_<OrderSpec> order-specs]
   (-> (IntStream/range 0 (.rowCount read-rel))
       (.boxed)
       (.sorted (reduce (fn [^Comparator acc ^OrderSpec order-spec]
                          (let [^String col-name (.col-name order-spec)
-                               read-col (.readColumn read-rel col-name)
+                               read-col (.columnReader read-rel col-name)
                                arrow-types (rel/col->arrow-types read-col)
                                ^ArrowType arrow-type (if (= 1 (count arrow-types))
                                                        (first arrow-types)

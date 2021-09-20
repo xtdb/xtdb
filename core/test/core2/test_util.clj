@@ -12,7 +12,7 @@
   (:import core2.ICursor
            core2.local_node.Node
            core2.object_store.FileSystemObjectStore
-           core2.relation.IReadColumn
+           core2.relation.IColumnReader
            java.net.ServerSocket
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
@@ -89,7 +89,7 @@
   (.finishChunk ^core2.indexer.Indexer (.indexer node))
   (await-temporal-snapshot-build node))
 
-(defn populate-root ^core2.relation.IReadRelation [^VectorSchemaRoot root rows]
+(defn populate-root ^core2.relation.IRelationReader [^VectorSchemaRoot root rows]
   (.clear root)
 
   (let [field-vecs (.getFieldVectors root)
@@ -101,7 +101,7 @@
                                         (get (keyword (.getName (.getField field-vec))))))))
     root))
 
-(defn ->relation ^core2.relation.IReadRelation [schema rows]
+(defn ->relation ^core2.relation.IRelationReader [schema rows]
   (let [root (VectorSchemaRoot/create schema *allocator*)]
     (populate-root root rows)
     (rel/<-root root)))
@@ -121,7 +121,7 @@
       (close [_]
         (.close root)))))
 
-(defn <-column [^IReadColumn col]
+(defn <-column [^IColumnReader col]
   (mapv (fn [idx]
           (.getObject (.getVector col) (.getIndex col idx)))
         (range (.getValueCount col))))

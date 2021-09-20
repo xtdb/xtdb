@@ -178,7 +178,7 @@
                                       (.createCursor cursor-factory)
                                       [(reify ProjectionSpec
                                          (project [_ allocator in-rel]
-                                           (let [a-col (.readColumn in-rel "a")
+                                           (let [a-col (.columnReader in-rel "a")
                                                  ^BigIntVector a-vec (.getVector a-col)
                                                  row-count (.rowCount in-rel)
                                                  out-vec (doto (BigIntVector. "a" allocator)
@@ -190,9 +190,9 @@
                                        (reify ProjectionSpec
                                          (project [_ allocator in-rel]
                                            (let [row-count (.rowCount in-rel)
-                                                 a-col (.readColumn in-rel "a")
+                                                 a-col (.columnReader in-rel "a")
                                                  ^BigIntVector a-vec (.getVector a-col)
-                                                 b-col (.readColumn in-rel "b")
+                                                 b-col (.columnReader in-rel "b")
                                                  ^BigIntVector b-vec (.getVector b-col)
 
                                                  out-vec (doto (BigIntVector. "b" allocator)
@@ -205,7 +205,7 @@
                                      (reify IRelationSelector
                                        (select [_ in-rel]
                                          (let [idx-bitmap (RoaringBitmap.)
-                                               a-col (.readColumn in-rel "a")
+                                               a-col (.columnReader in-rel "a")
                                                ^BigIntVector a-vec (.getVector a-col)]
                                            (dotimes [idx (.rowCount in-rel)]
                                              (when (<= (.get a-vec idx) 8)

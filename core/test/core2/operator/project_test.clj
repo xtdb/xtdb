@@ -26,11 +26,11 @@
                                                           (project [_ allocator in-rel]
                                                             (let [row-count (.rowCount in-rel)
 
-                                                                  a-col (-> (.readColumn in-rel "a")
+                                                                  a-col (-> (.columnReader in-rel "a")
                                                                             (rel/nested-read-col bigint-type))
                                                                   ^BigIntVector a-vec (.getVector a-col)
 
-                                                                  b-col (-> (.readColumn in-rel "b")
+                                                                  b-col (-> (.columnReader in-rel "b")
                                                                             (rel/nested-read-col bigint-type))
                                                                   ^BigIntVector b-vec (.getVector b-col)
 
