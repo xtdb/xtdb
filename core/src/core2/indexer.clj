@@ -386,10 +386,7 @@
               :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
                         (.logDelete log-op-idxer row-id tx-op-idx)
                         (.indexDelete temporal-idxer (t/get-object id-vec per-op-offset) row-id
-                                      valid-time-start-vec valid-time-end-vec per-op-offset)
-
-                        (copy-safe! (.getLiveRoot this (.getName id-vec))
-                                    id-vec per-op-offset row-id))
+                                      valid-time-start-vec valid-time-end-vec per-op-offset))
 
               :evict (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
                        (.logEvict log-op-idxer row-id tx-op-idx)

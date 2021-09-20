@@ -132,7 +132,7 @@
       "name" : "count",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : ["4","1"]
+      "DATA" : ["3","1"]
     },{
       "name" : "min-row-id",
       "count" : 2,
