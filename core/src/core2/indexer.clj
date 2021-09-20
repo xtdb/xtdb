@@ -157,18 +157,20 @@
             (t/->field "ops" t/list-type true
                        (t/->field "ops" t/struct-type false
                                   (t/->field "_row-id" (t/->arrow-type :bigint) false)
-                                  (t/->field "op" (ArrowType$Union. UnionMode/Dense (int-array [0 1])) false
+                                  (t/->field "op" (ArrowType$Union. UnionMode/Dense (int-array [0 1 2])) false
                                              (t/->field "put" t/struct-type false
                                                         (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true)
                                                         (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
                                              (t/->field "delete" t/struct-type false
                                                         (t/->primitive-dense-union-field "_id")
                                                         (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true)
-                                                        (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true)))))]))
+                                                        (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
+                                             (t/->field "evict" t/struct-type false))))]))
 
 (definterface ILogOpIndexer
   (^void logPut [^long rowId, ^long txOpIdx])
   (^void logDelete [^long rowId, ^long txOpIdx])
+  (^void logEvict [^long rowId, ^long txOpIdx])
   (^void endTx []))
 
 (definterface ILogIndexer
@@ -195,7 +197,9 @@
         ^StructVector delete-vec (.getStruct op-vec 1)
         delete-id-vec (.getChild delete-vec "_id")
         ^TimeStampMilliVector delete-vt-start-vec (.getChild delete-vec "_valid-time-start")
-        ^TimeStampMilliVector delete-vt-end-vec (.getChild delete-vec "_valid-time-end")]
+        ^TimeStampMilliVector delete-vt-end-vec (.getChild delete-vec "_valid-time-end")
+
+        ^StructVector evict-vec (.getStruct op-vec 2)]
 
     (reify ILogIndexer
       (startTx [_ tx-instant tx-root]
@@ -242,6 +246,11 @@
                     (.copyFromSafe delete-vt-end-vec src-offset dest-offset tx-delete-vt-end-vec)
 
                     (copy-duv-safe! tx-delete-id-vec src-offset delete-id-vec dest-offset)))
+
+                (logEvict [_ row-id tx-op-idx]
+                  (let [op-idx (log-op row-id)
+                        dest-offset (DenseUnionUtil/writeTypeId op-vec op-idx 2)]
+                    (.setIndexDefined evict-vec dest-offset)))
 
                 (endTx [_]
                   (.endValue ops-vec tx-idx (- (.getValueCount ops-data-vec) start-op-idx))))))))
@@ -401,7 +410,7 @@
                                     tombstone-vec 0 row-id))
 
               :evict (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
-                       ;; TODO should we log the evict in the log-op-idxer?
+                       (.logEvict log-op-idxer row-id tx-op-idx)
                        (.indexEvict temporal-idxer (t/get-object id-vec per-op-offset) row-id)))
 
             (copy-safe! (.getLiveRoot this (.getName tx-time-vec))

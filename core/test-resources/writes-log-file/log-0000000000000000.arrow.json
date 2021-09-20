@@ -45,7 +45,7 @@
           "type" : {
             "name" : "union",
             "mode" : "Dense",
-            "typeIds" : [0,1]
+            "typeIds" : [0,1,2]
           },
           "children" : [{
             "name" : "put",
@@ -168,6 +168,13 @@
               },
               "children" : [ ]
             }]
+          },{
+            "name" : "evict",
+            "nullable" : false,
+            "type" : {
+              "name" : "struct"
+            },
+            "children" : [ ]
           }]
         }]
       }]
@@ -280,6 +287,10 @@
               "VALIDITY" : [0],
               "DATA" : [0]
             }]
+          },{
+            "name" : "evict",
+            "count" : 0,
+            "VALIDITY" : [ ]
           }]
         }]
       }]
