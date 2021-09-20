@@ -41,22 +41,6 @@
         "name" : "struct"
       },
       "children" : [{
-        "name" : "null",
-        "nullable" : true,
-        "type" : {
-          "name" : "null"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bigint",
-        "nullable" : true,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
         "name" : "float8",
         "nullable" : true,
         "type" : {
@@ -65,24 +49,10 @@
         },
         "children" : [ ]
       },{
-        "name" : "varbinary",
-        "nullable" : true,
-        "type" : {
-          "name" : "binary"
-        },
-        "children" : [ ]
-      },{
         "name" : "varchar",
         "nullable" : true,
         "type" : {
           "name" : "utf8"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bit",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
         },
         "children" : [ ]
       },{
@@ -95,11 +65,12 @@
         },
         "children" : [ ]
       },{
-        "name" : "duration-milli",
+        "name" : "bigint",
         "nullable" : true,
         "type" : {
-          "name" : "duration",
-          "unit" : "MILLISECOND"
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
         },
         "children" : [ ]
       }]
@@ -110,22 +81,6 @@
         "name" : "struct"
       },
       "children" : [{
-        "name" : "null",
-        "nullable" : true,
-        "type" : {
-          "name" : "null"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bigint",
-        "nullable" : true,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
         "name" : "float8",
         "nullable" : true,
         "type" : {
@@ -134,24 +89,10 @@
         },
         "children" : [ ]
       },{
-        "name" : "varbinary",
-        "nullable" : true,
-        "type" : {
-          "name" : "binary"
-        },
-        "children" : [ ]
-      },{
         "name" : "varchar",
         "nullable" : true,
         "type" : {
           "name" : "utf8"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bit",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
         },
         "children" : [ ]
       },{
@@ -164,11 +105,12 @@
         },
         "children" : [ ]
       },{
-        "name" : "duration-milli",
+        "name" : "bigint",
         "nullable" : true,
         "type" : {
-          "name" : "duration",
-          "unit" : "MILLISECOND"
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
         },
         "children" : [ ]
       }]
@@ -186,7 +128,7 @@
         "name" : "list"
       },
       "children" : [{
-        "name" : "block-meta",
+        "name" : "$data$",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -198,22 +140,6 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "null",
-            "nullable" : true,
-            "type" : {
-              "name" : "null"
-            },
-            "children" : [ ]
-          },{
-            "name" : "bigint",
-            "nullable" : true,
-            "type" : {
-              "name" : "int",
-              "bitWidth" : 64,
-              "isSigned" : true
-            },
-            "children" : [ ]
-          },{
             "name" : "float8",
             "nullable" : true,
             "type" : {
@@ -222,24 +148,10 @@
             },
             "children" : [ ]
           },{
-            "name" : "varbinary",
-            "nullable" : true,
-            "type" : {
-              "name" : "binary"
-            },
-            "children" : [ ]
-          },{
             "name" : "varchar",
             "nullable" : true,
             "type" : {
               "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "bit",
-            "nullable" : true,
-            "type" : {
-              "name" : "bool"
             },
             "children" : [ ]
           },{
@@ -252,11 +164,12 @@
             },
             "children" : [ ]
           },{
-            "name" : "duration-milli",
+            "name" : "bigint",
             "nullable" : true,
             "type" : {
-              "name" : "duration",
-              "unit" : "MILLISECOND"
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
             },
             "children" : [ ]
           }]
@@ -267,22 +180,6 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "null",
-            "nullable" : true,
-            "type" : {
-              "name" : "null"
-            },
-            "children" : [ ]
-          },{
-            "name" : "bigint",
-            "nullable" : true,
-            "type" : {
-              "name" : "int",
-              "bitWidth" : 64,
-              "isSigned" : true
-            },
-            "children" : [ ]
-          },{
             "name" : "float8",
             "nullable" : true,
             "type" : {
@@ -291,24 +188,10 @@
             },
             "children" : [ ]
           },{
-            "name" : "varbinary",
-            "nullable" : true,
-            "type" : {
-              "name" : "binary"
-            },
-            "children" : [ ]
-          },{
             "name" : "varchar",
             "nullable" : true,
             "type" : {
               "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "bit",
-            "nullable" : true,
-            "type" : {
-              "name" : "bool"
             },
             "children" : [ ]
           },{
@@ -321,11 +204,12 @@
             },
             "children" : [ ]
           },{
-            "name" : "duration-milli",
+            "name" : "bigint",
             "nullable" : true,
             "type" : {
-              "name" : "duration",
-              "unit" : "MILLISECOND"
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
             },
             "children" : [ ]
           }]
@@ -368,24 +252,10 @@
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "children" : [{
-        "name" : "null",
-        "count" : 3
-      },{
-        "name" : "bigint",
-        "count" : 3,
-        "VALIDITY" : [0,1,0],
-        "DATA" : ["0","0","0"]
-      },{
         "name" : "float8",
         "count" : 3,
         "VALIDITY" : [1,0,0],
         "DATA" : [24.0,0.0,0.0]
-      },{
-        "name" : "varbinary",
-        "count" : 3,
-        "VALIDITY" : [0,0,0],
-        "OFFSET" : [0,0,0,0],
-        "DATA" : ["","",""]
       },{
         "name" : "varchar",
         "count" : 3,
@@ -393,44 +263,25 @@
         "OFFSET" : [0,3,3,3],
         "DATA" : ["bar","",""]
       },{
-        "name" : "bit",
-        "count" : 3,
-        "VALIDITY" : [0,0,0],
-        "DATA" : [0,0,0]
-      },{
         "name" : "timestamp-milli",
         "count" : 3,
         "VALIDITY" : [1,0,1],
         "DATA" : [1577836800000,0,1577836800000]
       },{
-        "name" : "duration-milli",
+        "name" : "bigint",
         "count" : 3,
-        "VALIDITY" : [0,0,0],
-        "DATA" : [0,0,0]
+        "VALIDITY" : [0,1,0],
+        "DATA" : ["0","0","0"]
       }]
     },{
       "name" : "max",
       "count" : 3,
       "VALIDITY" : [1,1,1],
       "children" : [{
-        "name" : "null",
-        "count" : 3
-      },{
-        "name" : "bigint",
-        "count" : 3,
-        "VALIDITY" : [0,1,0],
-        "DATA" : ["0","0","0"]
-      },{
         "name" : "float8",
         "count" : 3,
         "VALIDITY" : [1,0,0],
         "DATA" : [52.0,0.0,0.0]
-      },{
-        "name" : "varbinary",
-        "count" : 3,
-        "VALIDITY" : [0,0,0],
-        "OFFSET" : [0,0,0,0],
-        "DATA" : ["","",""]
       },{
         "name" : "varchar",
         "count" : 3,
@@ -438,20 +289,15 @@
         "OFFSET" : [0,3,3,3],
         "DATA" : ["foo","",""]
       },{
-        "name" : "bit",
-        "count" : 3,
-        "VALIDITY" : [0,0,0],
-        "DATA" : [0,0,0]
-      },{
         "name" : "timestamp-milli",
         "count" : 3,
         "VALIDITY" : [1,0,1],
         "DATA" : [1609459200000,0,1577836800000]
       },{
-        "name" : "duration-milli",
+        "name" : "bigint",
         "count" : 3,
-        "VALIDITY" : [0,0,0],
-        "DATA" : [0,0,0]
+        "VALIDITY" : [0,1,0],
+        "DATA" : ["0","0","0"]
       }]
     },{
       "name" : "bloom",
@@ -465,7 +311,7 @@
       "VALIDITY" : [1,1,1],
       "OFFSET" : [0,1,2,3],
       "children" : [{
-        "name" : "block-meta",
+        "name" : "$data$",
         "count" : 3,
         "VALIDITY" : [1,1,1],
         "children" : [{
@@ -473,24 +319,10 @@
           "count" : 3,
           "VALIDITY" : [1,1,1],
           "children" : [{
-            "name" : "null",
-            "count" : 3
-          },{
-            "name" : "bigint",
-            "count" : 3,
-            "VALIDITY" : [0,1,0],
-            "DATA" : ["0","0","0"]
-          },{
             "name" : "float8",
             "count" : 3,
             "VALIDITY" : [1,0,0],
             "DATA" : [24.0,0.0,0.0]
-          },{
-            "name" : "varbinary",
-            "count" : 3,
-            "VALIDITY" : [0,0,0],
-            "OFFSET" : [0,0,0,0],
-            "DATA" : ["","",""]
           },{
             "name" : "varchar",
             "count" : 3,
@@ -498,44 +330,25 @@
             "OFFSET" : [0,3,3,3],
             "DATA" : ["bar","",""]
           },{
-            "name" : "bit",
-            "count" : 3,
-            "VALIDITY" : [0,0,0],
-            "DATA" : [0,0,0]
-          },{
             "name" : "timestamp-milli",
             "count" : 3,
             "VALIDITY" : [1,0,1],
             "DATA" : [1577836800000,0,1577836800000]
           },{
-            "name" : "duration-milli",
+            "name" : "bigint",
             "count" : 3,
-            "VALIDITY" : [0,0,0],
-            "DATA" : [0,0,0]
+            "VALIDITY" : [0,1,0],
+            "DATA" : ["0","0","0"]
           }]
         },{
           "name" : "max",
           "count" : 3,
           "VALIDITY" : [1,1,1],
           "children" : [{
-            "name" : "null",
-            "count" : 3
-          },{
-            "name" : "bigint",
-            "count" : 3,
-            "VALIDITY" : [0,1,0],
-            "DATA" : ["0","0","0"]
-          },{
             "name" : "float8",
             "count" : 3,
             "VALIDITY" : [1,0,0],
             "DATA" : [52.0,0.0,0.0]
-          },{
-            "name" : "varbinary",
-            "count" : 3,
-            "VALIDITY" : [0,0,0],
-            "OFFSET" : [0,0,0,0],
-            "DATA" : ["","",""]
           },{
             "name" : "varchar",
             "count" : 3,
@@ -543,20 +356,15 @@
             "OFFSET" : [0,3,3,3],
             "DATA" : ["foo","",""]
           },{
-            "name" : "bit",
-            "count" : 3,
-            "VALIDITY" : [0,0,0],
-            "DATA" : [0,0,0]
-          },{
             "name" : "timestamp-milli",
             "count" : 3,
             "VALIDITY" : [1,0,1],
             "DATA" : [1609459200000,0,1577836800000]
           },{
-            "name" : "duration-milli",
+            "name" : "bigint",
             "count" : 3,
-            "VALIDITY" : [0,0,0],
-            "DATA" : [0,0,0]
+            "VALIDITY" : [0,1,0],
+            "DATA" : ["0","0","0"]
           }]
         },{
           "name" : "bloom",

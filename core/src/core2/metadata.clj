@@ -4,8 +4,7 @@
             [core2.bloom :as bloom]
             core2.buffer-pool
             [core2.expression.comparator :as expr.comp]
-            core2.object-store
-            [core2.tx :as tx]
+            core2.tx
             [core2.types :as t]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
@@ -20,7 +19,7 @@
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List Schema]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List FieldType Schema]
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
@@ -41,10 +40,6 @@
 (defn type->field-name [^ArrowType arrow-type]
   (name (t/<-arrow-type arrow-type)))
 
-(def ^:private type-meta-fields
-  (for [^ArrowType arrow-type (sort-by t/arrow-type->type-id (keys t/arrow-type->java-type))]
-    (t/->field (type->field-name arrow-type) arrow-type true)))
-
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
   (Schema. [(t/->field "column" (t/->arrow-type :varchar) false)
 
@@ -52,14 +47,14 @@
             (t/->field "min-row-id" (t/->arrow-type :bigint) false)
             (t/->field "max-row-id" (t/->arrow-type :bigint) false)
 
-            (apply t/->field "min" t/struct-type false type-meta-fields)
-            (apply t/->field "max" t/struct-type false type-meta-fields)
+            (t/->field "min" t/struct-type false)
+            (t/->field "max" t/struct-type false)
             (t/->field "bloom" (t/->arrow-type :varbinary) false)
 
             (t/->field "blocks" (ArrowType$List.) false
                        (t/->field "block-meta" t/struct-type true
-                                  (apply t/->field "min" t/struct-type false type-meta-fields)
-                                  (apply t/->field "max" t/struct-type false type-meta-fields)
+                                  (t/->field "min" t/struct-type false)
+                                  (t/->field "max" t/struct-type false)
                                   (t/->field "bloom" (t/->arrow-type :varbinary) false)))]))
 
 (defn- ->metadata-obj-key [chunk-idx]
@@ -72,15 +67,20 @@
   (some-> (second (re-matches #"metadata-(\p{XDigit}{16}).arrow" obj-key))
           (Long/parseLong 16)))
 
+(defn- get-or-add-child ^org.apache.arrow.vector.ValueVector [^StructVector parent, ^ArrowType arrow-type]
+  (let [field-name (type->field-name arrow-type)]
+    (or (.getChild parent field-name)
+        (doto (.addOrGet parent field-name (FieldType/nullable arrow-type) ValueVector)
+          (.setValueCount (.getValueCount parent))))))
+
 (defn- write-min-max [^ValueVector field-vec,
                       ^StructVector min-meta-vec, ^StructVector max-meta-vec,
                       ^long meta-idx]
   (when (pos? (.getValueCount field-vec))
     (let [arrow-type (.getType (.getField field-vec))
-          type-name (type->field-name arrow-type)
 
-          min-vec (.getChild min-meta-vec type-name)
-          max-vec (.getChild max-meta-vec type-name)
+          min-vec (get-or-add-child min-meta-vec arrow-type)
+          max-vec (get-or-add-child max-meta-vec arrow-type)
 
           col-comparator (expr.comp/->comparator arrow-type)]
 
@@ -168,7 +168,8 @@
     ;; - at the beginning to allocate memory
     ;; - at the end to finalise the offset vectors of the variable width vectors
     ;; there may be a more idiomatic way to achieve this
-    (.setRowCount metadata-root col-count)))
+    (.setRowCount metadata-root col-count)
+    (.syncSchema metadata-root)))
 
 (deftype MetadataIndices [^Map col-idx-cache
                           ^long col-count

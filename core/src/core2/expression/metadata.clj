@@ -150,8 +150,8 @@
                         variable-code (expr/codegen-expr
                                        {:op :variable, :variable col-sym}
                                        {:var->types {col-sym #{arrow-type}}})]
-                    `(let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
-                           (.getChild ~vec-sym ~(meta/type->field-name arrow-type))]
+                    `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
+                                (.getChild ~vec-sym ~(meta/type->field-name arrow-type))]
                        (when-not (.isNull ~vec-sym ~expr/idx-sym)
                          (let [~(-> col-sym (expr/with-tag IColumnReader)) (rel/<-vector ~vec-sym)]
                            ~(:code (expr/codegen-expr

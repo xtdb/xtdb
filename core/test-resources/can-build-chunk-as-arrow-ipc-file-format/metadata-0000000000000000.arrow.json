@@ -41,10 +41,10 @@
         "name" : "struct"
       },
       "children" : [{
-        "name" : "null",
+        "name" : "varchar",
         "nullable" : true,
         "type" : {
-          "name" : "null"
+          "name" : "utf8"
         },
         "children" : [ ]
       },{
@@ -57,35 +57,6 @@
         },
         "children" : [ ]
       },{
-        "name" : "float8",
-        "nullable" : true,
-        "type" : {
-          "name" : "floatingpoint",
-          "precision" : "DOUBLE"
-        },
-        "children" : [ ]
-      },{
-        "name" : "varbinary",
-        "nullable" : true,
-        "type" : {
-          "name" : "binary"
-        },
-        "children" : [ ]
-      },{
-        "name" : "varchar",
-        "nullable" : true,
-        "type" : {
-          "name" : "utf8"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bit",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
-        },
-        "children" : [ ]
-      },{
         "name" : "timestamp-milli",
         "nullable" : true,
         "type" : {
@@ -95,11 +66,11 @@
         },
         "children" : [ ]
       },{
-        "name" : "duration-milli",
+        "name" : "float8",
         "nullable" : true,
         "type" : {
-          "name" : "duration",
-          "unit" : "MILLISECOND"
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
         },
         "children" : [ ]
       }]
@@ -110,10 +81,10 @@
         "name" : "struct"
       },
       "children" : [{
-        "name" : "null",
+        "name" : "varchar",
         "nullable" : true,
         "type" : {
-          "name" : "null"
+          "name" : "utf8"
         },
         "children" : [ ]
       },{
@@ -126,35 +97,6 @@
         },
         "children" : [ ]
       },{
-        "name" : "float8",
-        "nullable" : true,
-        "type" : {
-          "name" : "floatingpoint",
-          "precision" : "DOUBLE"
-        },
-        "children" : [ ]
-      },{
-        "name" : "varbinary",
-        "nullable" : true,
-        "type" : {
-          "name" : "binary"
-        },
-        "children" : [ ]
-      },{
-        "name" : "varchar",
-        "nullable" : true,
-        "type" : {
-          "name" : "utf8"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bit",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
-        },
-        "children" : [ ]
-      },{
         "name" : "timestamp-milli",
         "nullable" : true,
         "type" : {
@@ -164,11 +106,11 @@
         },
         "children" : [ ]
       },{
-        "name" : "duration-milli",
+        "name" : "float8",
         "nullable" : true,
         "type" : {
-          "name" : "duration",
-          "unit" : "MILLISECOND"
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
         },
         "children" : [ ]
       }]
@@ -186,7 +128,7 @@
         "name" : "list"
       },
       "children" : [{
-        "name" : "block-meta",
+        "name" : "$data$",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -198,10 +140,10 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "null",
+            "name" : "varchar",
             "nullable" : true,
             "type" : {
-              "name" : "null"
+              "name" : "utf8"
             },
             "children" : [ ]
           },{
@@ -214,35 +156,6 @@
             },
             "children" : [ ]
           },{
-            "name" : "float8",
-            "nullable" : true,
-            "type" : {
-              "name" : "floatingpoint",
-              "precision" : "DOUBLE"
-            },
-            "children" : [ ]
-          },{
-            "name" : "varbinary",
-            "nullable" : true,
-            "type" : {
-              "name" : "binary"
-            },
-            "children" : [ ]
-          },{
-            "name" : "varchar",
-            "nullable" : true,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "bit",
-            "nullable" : true,
-            "type" : {
-              "name" : "bool"
-            },
-            "children" : [ ]
-          },{
             "name" : "timestamp-milli",
             "nullable" : true,
             "type" : {
@@ -252,11 +165,11 @@
             },
             "children" : [ ]
           },{
-            "name" : "duration-milli",
+            "name" : "float8",
             "nullable" : true,
             "type" : {
-              "name" : "duration",
-              "unit" : "MILLISECOND"
+              "name" : "floatingpoint",
+              "precision" : "DOUBLE"
             },
             "children" : [ ]
           }]
@@ -267,10 +180,10 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "null",
+            "name" : "varchar",
             "nullable" : true,
             "type" : {
-              "name" : "null"
+              "name" : "utf8"
             },
             "children" : [ ]
           },{
@@ -283,35 +196,6 @@
             },
             "children" : [ ]
           },{
-            "name" : "float8",
-            "nullable" : true,
-            "type" : {
-              "name" : "floatingpoint",
-              "precision" : "DOUBLE"
-            },
-            "children" : [ ]
-          },{
-            "name" : "varbinary",
-            "nullable" : true,
-            "type" : {
-              "name" : "binary"
-            },
-            "children" : [ ]
-          },{
-            "name" : "varchar",
-            "nullable" : true,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          },{
-            "name" : "bit",
-            "nullable" : true,
-            "type" : {
-              "name" : "bool"
-            },
-            "children" : [ ]
-          },{
             "name" : "timestamp-milli",
             "nullable" : true,
             "type" : {
@@ -321,11 +205,11 @@
             },
             "children" : [ ]
           },{
-            "name" : "duration-milli",
+            "name" : "float8",
             "nullable" : true,
             "type" : {
-              "name" : "duration",
-              "unit" : "MILLISECOND"
+              "name" : "floatingpoint",
+              "precision" : "DOUBLE"
             },
             "children" : [ ]
           }]
@@ -368,90 +252,52 @@
       "count" : 20,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       "children" : [{
-        "name" : "null",
-        "count" : 20
-      },{
-        "name" : "bigint",
-        "count" : 20,
-        "VALIDITY" : [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "DATA" : ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
-      },{
-        "name" : "float8",
-        "count" : 20,
-        "VALIDITY" : [0,0,0,0,1,0,1,0,1,1,1,0,0,1,1,0,0,1,0,0],
-        "DATA" : [0.0,0.0,0.0,0.0,59.0,0.0,89.5,0.0,8.654,4.93,8.106,0.0,0.0,4.10011078E8,2.79257668E8,0.0,0.0,-61.0,0.0,0.0]
-      },{
-        "name" : "varbinary",
-        "count" : 20,
-        "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "OFFSET" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "DATA" : ["","","","","","","","","","","","","","","","","","","",""]
-      },{
         "name" : "varchar",
         "count" : 20,
         "VALIDITY" : [1,0,0,1,0,1,0,1,0,0,0,1,1,0,0,1,1,0,1,0],
         "OFFSET" : [0,22,22,22,24,24,35,35,52,52,52,52,74,80,80,80,87,92,92,100,100],
         "DATA" : ["device-info-demo000000","","","23","","discharging","","01:02:03:04:05:06","","","","device-info-demo000000","iobeam","","","mustang","6.0.1","","demo-net",""]
       },{
-        "name" : "bit",
+        "name" : "bigint",
         "count" : 20,
-        "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        "VALIDITY" : [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        "DATA" : ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
       },{
         "name" : "timestamp-milli",
         "count" : 20,
         "VALIDITY" : [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
         "DATA" : [0,0,1577836800000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1479211200000]
       },{
-        "name" : "duration-milli",
+        "name" : "float8",
         "count" : 20,
-        "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        "VALIDITY" : [0,0,0,0,1,0,1,0,1,1,1,0,0,1,1,0,0,1,0,0],
+        "DATA" : [0.0,0.0,0.0,0.0,59.0,0.0,89.5,0.0,8.654,4.93,8.106,0.0,0.0,4.10011078E8,2.79257668E8,0.0,0.0,-61.0,0.0,0.0]
       }]
     },{
       "name" : "max",
       "count" : 20,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       "children" : [{
-        "name" : "null",
-        "count" : 20
-      },{
-        "name" : "bigint",
-        "count" : 20,
-        "VALIDITY" : [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "DATA" : ["0","6573","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
-      },{
-        "name" : "float8",
-        "count" : 20,
-        "VALIDITY" : [0,0,0,0,1,0,1,0,1,1,1,0,0,1,1,0,0,1,0,0],
-        "DATA" : [0.0,0.0,0.0,0.0,86.0,0.0,93.7,0.0,8.822,24.81,10.802,0.0,0.0,7.20742332E8,5.89988922E8,0.0,0.0,-50.0,0.0,0.0]
-      },{
-        "name" : "varbinary",
-        "count" : 20,
-        "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "OFFSET" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "DATA" : ["","","","","","","","","","","","","","","","","","","",""]
-      },{
         "name" : "varchar",
         "count" : 20,
         "VALIDITY" : [1,0,0,1,0,1,0,1,0,0,0,1,1,0,0,1,1,0,1,0],
         "OFFSET" : [0,18,18,18,20,20,31,31,48,48,48,48,70,76,76,76,81,86,86,97,97],
         "DATA" : ["reading-demo000001","","","23","","discharging","","A0:B1:C5:D2:E0:F3","","","","device-info-demo000001","iobeam","","","pinto","6.0.1","","stealth-net",""]
       },{
-        "name" : "bit",
+        "name" : "bigint",
         "count" : 20,
-        "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        "VALIDITY" : [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        "DATA" : ["0","6573","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
       },{
         "name" : "timestamp-milli",
         "count" : 20,
         "VALIDITY" : [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
         "DATA" : [0,0,1577923200000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1479211200000]
       },{
-        "name" : "duration-milli",
+        "name" : "float8",
         "count" : 20,
-        "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        "VALIDITY" : [0,0,0,0,1,0,1,0,1,1,1,0,0,1,1,0,0,1,0,0],
+        "DATA" : [0.0,0.0,0.0,0.0,86.0,0.0,93.7,0.0,8.822,24.81,10.802,0.0,0.0,7.20742332E8,5.89988922E8,0.0,0.0,-50.0,0.0,0.0]
       }]
     },{
       "name" : "bloom",
@@ -465,7 +311,7 @@
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       "OFFSET" : [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],
       "children" : [{
-        "name" : "block-meta",
+        "name" : "$data$",
         "count" : 20,
         "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
         "children" : [{
@@ -473,90 +319,52 @@
           "count" : 20,
           "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
           "children" : [{
-            "name" : "null",
-            "count" : 20
-          },{
-            "name" : "bigint",
-            "count" : 20,
-            "VALIDITY" : [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "DATA" : ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
-          },{
-            "name" : "float8",
-            "count" : 20,
-            "VALIDITY" : [0,0,0,0,1,0,1,0,1,1,1,0,0,1,1,0,0,1,0,0],
-            "DATA" : [0.0,0.0,0.0,0.0,59.0,0.0,89.5,0.0,8.654,4.93,8.106,0.0,0.0,4.10011078E8,2.79257668E8,0.0,0.0,-61.0,0.0,0.0]
-          },{
-            "name" : "varbinary",
-            "count" : 20,
-            "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "OFFSET" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "DATA" : ["","","","","","","","","","","","","","","","","","","",""]
-          },{
             "name" : "varchar",
             "count" : 20,
             "VALIDITY" : [1,0,0,1,0,1,0,1,0,0,0,1,1,0,0,1,1,0,1,0],
             "OFFSET" : [0,22,22,22,24,24,35,35,52,52,52,52,74,80,80,80,87,92,92,100,100],
             "DATA" : ["device-info-demo000000","","","23","","discharging","","01:02:03:04:05:06","","","","device-info-demo000000","iobeam","","","mustang","6.0.1","","demo-net",""]
           },{
-            "name" : "bit",
+            "name" : "bigint",
             "count" : 20,
-            "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            "VALIDITY" : [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            "DATA" : ["0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
           },{
             "name" : "timestamp-milli",
             "count" : 20,
             "VALIDITY" : [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
             "DATA" : [0,0,1577836800000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1479211200000]
           },{
-            "name" : "duration-milli",
+            "name" : "float8",
             "count" : 20,
-            "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            "VALIDITY" : [0,0,0,0,1,0,1,0,1,1,1,0,0,1,1,0,0,1,0,0],
+            "DATA" : [0.0,0.0,0.0,0.0,59.0,0.0,89.5,0.0,8.654,4.93,8.106,0.0,0.0,4.10011078E8,2.79257668E8,0.0,0.0,-61.0,0.0,0.0]
           }]
         },{
           "name" : "max",
           "count" : 20,
           "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
           "children" : [{
-            "name" : "null",
-            "count" : 20
-          },{
-            "name" : "bigint",
-            "count" : 20,
-            "VALIDITY" : [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "DATA" : ["0","6573","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
-          },{
-            "name" : "float8",
-            "count" : 20,
-            "VALIDITY" : [0,0,0,0,1,0,1,0,1,1,1,0,0,1,1,0,0,1,0,0],
-            "DATA" : [0.0,0.0,0.0,0.0,86.0,0.0,93.7,0.0,8.822,24.81,10.802,0.0,0.0,7.20742332E8,5.89988922E8,0.0,0.0,-50.0,0.0,0.0]
-          },{
-            "name" : "varbinary",
-            "count" : 20,
-            "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "OFFSET" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "DATA" : ["","","","","","","","","","","","","","","","","","","",""]
-          },{
             "name" : "varchar",
             "count" : 20,
             "VALIDITY" : [1,0,0,1,0,1,0,1,0,0,0,1,1,0,0,1,1,0,1,0],
             "OFFSET" : [0,18,18,18,20,20,31,31,48,48,48,48,70,76,76,76,81,86,86,97,97],
             "DATA" : ["reading-demo000001","","","23","","discharging","","A0:B1:C5:D2:E0:F3","","","","device-info-demo000001","iobeam","","","pinto","6.0.1","","stealth-net",""]
           },{
-            "name" : "bit",
+            "name" : "bigint",
             "count" : 20,
-            "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            "VALIDITY" : [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            "DATA" : ["0","6573","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0"]
           },{
             "name" : "timestamp-milli",
             "count" : 20,
             "VALIDITY" : [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
             "DATA" : [0,0,1577923200000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1479211200000]
           },{
-            "name" : "duration-milli",
+            "name" : "float8",
             "count" : 20,
-            "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            "VALIDITY" : [0,0,0,0,1,0,1,0,1,1,1,0,0,1,1,0,0,1,0,0],
+            "DATA" : [0.0,0.0,0.0,0.0,86.0,0.0,93.7,0.0,8.822,24.81,10.802,0.0,0.0,7.20742332E8,5.89988922E8,0.0,0.0,-50.0,0.0,0.0]
           }]
         },{
           "name" : "bloom",

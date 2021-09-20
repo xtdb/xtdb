@@ -152,7 +152,6 @@
 
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-            (t/is (= meta/metadata-schema (.getSchema footer)))
             (t/is (= 1 (count (.getRecordBatches footer))))
             (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
                         record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
