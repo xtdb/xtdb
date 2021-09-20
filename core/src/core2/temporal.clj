@@ -21,7 +21,8 @@
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector TimeStampVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.types.pojo.Schema
+           [org.apache.arrow.vector.types.pojo ArrowType$Union Schema]
+           org.apache.arrow.vector.types.UnionMode
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
 ;; Temporal proof-of-concept plan:
@@ -141,15 +142,16 @@
 
 (def ->temporal-field
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
-         [col-name (t/->primitive-dense-union-field col-name #{:timestamp-milli})])
+         [col-name (t/->field col-name
+                              (ArrowType$Union. UnionMode/Dense (int-array [0]))
+                              false
+                              (t/->field (name :timestamp-milli)
+                                         (t/->arrow-type :timestamp-milli)
+                                         false))])
        (into {})))
 
 (defn temporal-column? [col-name]
   (contains? ->temporal-field (name col-name)))
-
-(def ^:private timestampmilli-type-id
-  (-> (t/->arrow-type :timestamp-milli)
-      (t/arrow-type->type-id)))
 
 (defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]
   (Schema. [t/row-id-field (get ->temporal-field (name col-name))]))
@@ -550,10 +552,10 @@
                   out-root (VectorSchemaRoot/create (->temporal-root-schema col-name) allocator)
                   ^BigIntVector row-id-vec (.getVector out-root 0)
                   ^DenseUnionVector temporal-duv-vec (.getVector out-root 1)
-                  ^TimeStampMilliVector temporal-vec (.getVectorByType temporal-duv-vec timestampmilli-type-id)]
+                  ^TimeStampMilliVector temporal-vec (.getVectorByType temporal-duv-vec 0)]
               (util/set-value-count row-id-vec value-count)
               (dotimes [n value-count]
-                (let [offset (DenseUnionUtil/writeTypeId temporal-duv-vec n timestampmilli-type-id)
+                (let [offset (DenseUnionUtil/writeTypeId temporal-duv-vec n 0)
                       ^longs coordinate (aget coordinates n)
                       row-id (aget coordinate row-id-idx)]
                   (.addLong row-id-bitmap-out row-id)
