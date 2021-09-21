@@ -1,5 +1,6 @@
 (ns core2.log
-  (:require [core2.util :as util]
+  (:require core2.api
+            [core2.util :as util]
             [clojure.tools.logging :as log])
   (:import core2.api.TransactionInstant
            java.lang.AutoCloseable

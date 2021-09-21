@@ -30,6 +30,9 @@
 
 (def <-arrow-type (set/map-invert ->arrow-type))
 
+(defn type->field-name [^ArrowType arrow-type]
+  (name (<-arrow-type arrow-type)))
+
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (.getType Types$MinorType/DENSEUNION))
 (def list-type (.getType Types$MinorType/LIST))

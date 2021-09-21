@@ -87,7 +87,7 @@
                 "typeIds" : [0]
               },
               "children" : [{
-                "name" : "type-5",
+                "name" : "varchar",
                 "nullable" : false,
                 "type" : {
                   "name" : "utf8"
@@ -131,7 +131,7 @@
       "name" : "_tx-id",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : ["0","6573"]
+      "DATA" : ["0","6581"]
     },{
       "name" : "_tx-time",
       "count" : 2,
@@ -181,7 +181,7 @@
               "TYPE_ID" : [ ],
               "OFFSET" : [ ],
               "children" : [{
-                "name" : "type-5",
+                "name" : "varchar",
                 "count" : 0,
                 "VALIDITY" : [ ],
                 "OFFSET" : [0],

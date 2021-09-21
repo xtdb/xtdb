@@ -87,7 +87,7 @@
                 "typeIds" : [0]
               },
               "children" : [{
-                "name" : "type-5",
+                "name" : "varchar",
                 "nullable" : false,
                 "type" : {
                   "name" : "utf8"
@@ -181,7 +181,7 @@
               "TYPE_ID" : [0],
               "OFFSET" : [0],
               "children" : [{
-                "name" : "type-5",
+                "name" : "varchar",
                 "count" : 1,
                 "VALIDITY" : [1],
                 "OFFSET" : [0,3],

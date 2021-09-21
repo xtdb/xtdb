@@ -37,9 +37,6 @@
 
 (defrecord ChunkMatch [^long chunk-idx, ^RoaringBitmap block-idxs])
 
-(defn type->field-name [^ArrowType arrow-type]
-  (name (t/<-arrow-type arrow-type)))
-
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
   (Schema. [(t/->field "column" (t/->arrow-type :varchar) false)
 
@@ -68,7 +65,7 @@
           (Long/parseLong 16)))
 
 (defn- get-or-add-child ^org.apache.arrow.vector.ValueVector [^StructVector parent, ^ArrowType arrow-type]
-  (let [field-name (type->field-name arrow-type)]
+  (let [field-name (t/type->field-name arrow-type)]
     (or (.getChild parent field-name)
         (doto (.addOrGet parent field-name (FieldType/nullable arrow-type) ValueVector)
           (.setValueCount (.getValueCount parent))))))

@@ -53,7 +53,7 @@
   (^void finishChunk []))
 
 (defn- ->live-root [field-name allocator]
-  (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
+  (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->field field-name t/dense-union-type false)]) allocator))
 
 (defn ->live-slices [^Watermark watermark, col-names]
   (into {}
@@ -265,7 +265,8 @@
               (.setValueCount row-id-vec (inc dest-idx))
               (.set row-id-vec dest-idx (aget row-ids src-idx)))
             (.appendRow row-appender src-idx)
-            (util/set-vector-schema-root-row-count live-root (inc (.getRowCount live-root)))))))))
+            (util/set-vector-schema-root-row-count live-root (inc (.getRowCount live-root)))))
+        (.syncSchema live-root)))))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store

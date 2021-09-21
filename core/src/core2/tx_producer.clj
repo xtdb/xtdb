@@ -73,7 +73,7 @@
                              (int-array (map t/arrow-type->type-id v-types)))
            false
            (for [^ArrowType v-type v-types]
-             (t/->field (str "type-" (t/arrow-type->type-id v-type)) v-type false)))))
+             (t/->field (t/type->field-name v-type) v-type false)))))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-start-field
   (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true))

@@ -15,68 +15,13 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [1,2,3,4,5,6,10,18]
+        "typeIds" : [0]
       },
       "children" : [{
-        "name" : "$data$",
-        "nullable" : true,
-        "type" : {
-          "name" : "null"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bigint",
-        "nullable" : false,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "float8",
-        "nullable" : false,
-        "type" : {
-          "name" : "floatingpoint",
-          "precision" : "DOUBLE"
-        },
-        "children" : [ ]
-      },{
-        "name" : "varbinary",
-        "nullable" : false,
-        "type" : {
-          "name" : "binary"
-        },
-        "children" : [ ]
-      },{
         "name" : "varchar",
         "nullable" : false,
         "type" : {
           "name" : "utf8"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bit",
-        "nullable" : false,
-        "type" : {
-          "name" : "bool"
-        },
-        "children" : [ ]
-      },{
-        "name" : "timestamp-milli",
-        "nullable" : false,
-        "type" : {
-          "name" : "timestamp",
-          "unit" : "MILLISECOND",
-          "timezone" : null
-        },
-        "children" : [ ]
-      },{
-        "name" : "duration-milli",
-        "nullable" : false,
-        "type" : {
-          "name" : "duration",
-          "unit" : "MILLISECOND"
         },
         "children" : [ ]
       }]
@@ -92,48 +37,14 @@
     },{
       "name" : "device-id",
       "count" : 2,
-      "TYPE_ID" : [5,5],
+      "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
       "children" : [{
-        "name" : "$data$",
-        "count" : 0
-      },{
-        "name" : "bigint",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
-      },{
-        "name" : "float8",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
-      },{
-        "name" : "varbinary",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "OFFSET" : [0],
-        "DATA" : [ ]
-      },{
         "name" : "varchar",
         "count" : 2,
         "VALIDITY" : [1,1],
         "OFFSET" : [0,22,44],
         "DATA" : ["device-info-demo000000","device-info-demo000001"]
-      },{
-        "name" : "bit",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
-      },{
-        "name" : "timestamp-milli",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
-      },{
-        "name" : "duration-milli",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
       }]
     }]
   }]
