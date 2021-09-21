@@ -169,26 +169,24 @@
         src-type (.getType src-field)
         type-ids (.getTypeIds ^ArrowType$Union src-type)
         type-id-count (inc (apply max type-ids))
-        type-id-mapping (byte-array type-id-count)
+        type-id-mapping (byte-array type-id-count)]
 
-        ^"[Lorg.apache.arrow.vector.ValueVector;"
-        dest-vec-mapping (make-array ValueVector type-id-count)]
     (dotimes [n (alength type-ids)]
       (let [src-type-id (aget type-ids n)
             ^Field nested-src-field (.get (.getChildren src-field) n)
             dest-type-id (or (duv-type-id dest-duv (.getType nested-src-field))
-                             (.registerNewTypeId dest-duv nested-src-field))
-            dest-vec (or (.getVectorByType dest-duv dest-type-id)
-                         (.addVector dest-duv dest-type-id
-                                     (.createVector nested-src-field allocator)))]
-        (aset type-id-mapping src-type-id (byte dest-type-id))
-        (aset dest-vec-mapping src-type-id dest-vec)))
+                             (.registerNewTypeId dest-duv nested-src-field))]
+        (when-not (.getVectorByType dest-duv dest-type-id)
+          (.addVector dest-duv dest-type-id
+                      (.createVector nested-src-field allocator)))
+        (aset type-id-mapping src-type-id (byte dest-type-id))))
 
     (reify IRowAppender
       (appendRow [_ src-idx]
         (let [src-type-id (.getTypeId src-vec (.getIndex src-col src-idx))
-              dest-idx (DenseUnionUtil/writeTypeId dest-duv (.getValueCount dest-duv) (aget type-id-mapping src-type-id))]
-          (.copyFromSafe ^ValueVector (aget dest-vec-mapping src-type-id)
+              dest-type-id (aget type-id-mapping src-type-id)
+              dest-idx (DenseUnionUtil/writeTypeId dest-duv (.getValueCount dest-duv) dest-type-id)]
+          (.copyFromSafe (.getVectorByType dest-duv dest-type-id)
                          (.getOffset src-vec (.getIndex src-col src-idx))
                          dest-idx
                          (.getVectorByType src-vec src-type-id)))))))

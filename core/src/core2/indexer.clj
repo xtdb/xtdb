@@ -52,15 +52,6 @@
   (^void closeCols [])
   (^void finishChunk []))
 
-(defn- copy-duv-safe! [^DenseUnionVector src-vec, src-idx,
-                       ^DenseUnionVector dest-vec, dest-idx]
-  (let [type-id (.getTypeId src-vec src-idx)
-        offset (DenseUnionUtil/writeTypeId dest-vec dest-idx type-id)]
-    (.copyFromSafe (.getVectorByType dest-vec type-id)
-                   (.getOffset src-vec src-idx)
-                   offset
-                   (.getVectorByType src-vec type-id))))
-
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
 
@@ -107,7 +98,7 @@
                                                         (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true)
                                                         (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
                                              (t/->field "delete" t/struct-type false
-                                                        (t/->primitive-dense-union-field "_id")
+                                                        (t/->field "_id" t/dense-union-type false)
                                                         (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true)
                                                         (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
                                              (t/->field "evict" t/struct-type false))))]))
@@ -141,6 +132,7 @@
 
         ^StructVector delete-vec (.getStruct op-vec 1)
         delete-id-vec (.getChild delete-vec "_id")
+        delete-id-writer (rel/vec->col-writer delete-id-vec)
         ^TimeStampMilliVector delete-vt-start-vec (.getChild delete-vec "_valid-time-start")
         ^TimeStampMilliVector delete-vt-end-vec (.getChild delete-vec "_valid-time-end")
 
@@ -164,7 +156,8 @@
                 tx-delete-vec (.getStruct tx-ops-vec 1)
                 tx-delete-id-vec (.getChild tx-delete-vec "_id")
                 tx-delete-vt-start-vec (.getChild tx-delete-vec "_valid-time-start")
-                tx-delete-vt-end-vec (.getChild tx-delete-vec "_valid-time-end")]
+                tx-delete-vt-end-vec (.getChild tx-delete-vec "_valid-time-end")
+                delete-id-row-appender (.rowAppender delete-id-writer (rel/<-vector tx-delete-id-vec))]
 
             (letfn [(log-op [^long row-id]
                       (let [op-idx (.getValueCount ops-data-vec)]
@@ -190,7 +183,12 @@
                     (.copyFromSafe delete-vt-start-vec src-offset dest-offset tx-delete-vt-start-vec)
                     (.copyFromSafe delete-vt-end-vec src-offset dest-offset tx-delete-vt-end-vec)
 
-                    (copy-duv-safe! tx-delete-id-vec src-offset delete-id-vec dest-offset)))
+                    ;; HACK: otherwise this is incremented twice
+                    ;; - once in the writeTypeId of op-vec (somehow), once in append-row
+                    ;; I'm not clear on who should be responsible for this
+                    (util/set-value-count delete-id-vec (dec (.getValueCount delete-id-vec)))
+
+                    (.appendRow delete-id-row-appender src-offset)))
 
                 (logEvict [_ row-id tx-op-idx]
                   (let [op-idx (log-op row-id)
@@ -201,7 +199,8 @@
                   (.endValue ops-vec tx-idx (- (.getValueCount ops-data-vec) start-op-idx))))))))
 
       (writeLog [_]
-        (with-open [write-root (VectorSchemaRoot/create log-schema allocator)]
+        (.syncSchema log-root)
+        (with-open [write-root (VectorSchemaRoot/create (.getSchema log-root) allocator)]
           (let [loader (VectorLoader. write-root)
                 row-counts (blocks/list-count-blocks ops-vec max-rows-per-block)]
             (with-open [^ICursor slices (blocks/->slices log-root row-counts)]

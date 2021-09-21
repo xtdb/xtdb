@@ -25,7 +25,7 @@
         "name" : "list"
       },
       "children" : [{
-        "name" : "ops",
+        "name" : "$data$",
         "nullable" : false,
         "type" : {
           "name" : "struct"
@@ -84,68 +84,13 @@
               "type" : {
                 "name" : "union",
                 "mode" : "Dense",
-                "typeIds" : [1,2,3,4,5,6,10,18]
+                "typeIds" : [0]
               },
               "children" : [{
-                "name" : "$data$",
-                "nullable" : true,
-                "type" : {
-                  "name" : "null"
-                },
-                "children" : [ ]
-              },{
-                "name" : "bigint",
-                "nullable" : false,
-                "type" : {
-                  "name" : "int",
-                  "bitWidth" : 64,
-                  "isSigned" : true
-                },
-                "children" : [ ]
-              },{
-                "name" : "float8",
-                "nullable" : false,
-                "type" : {
-                  "name" : "floatingpoint",
-                  "precision" : "DOUBLE"
-                },
-                "children" : [ ]
-              },{
-                "name" : "varbinary",
-                "nullable" : false,
-                "type" : {
-                  "name" : "binary"
-                },
-                "children" : [ ]
-              },{
-                "name" : "varchar",
+                "name" : "type-5",
                 "nullable" : false,
                 "type" : {
                   "name" : "utf8"
-                },
-                "children" : [ ]
-              },{
-                "name" : "bit",
-                "nullable" : false,
-                "type" : {
-                  "name" : "bool"
-                },
-                "children" : [ ]
-              },{
-                "name" : "timestamp-milli",
-                "nullable" : false,
-                "type" : {
-                  "name" : "timestamp",
-                  "unit" : "MILLISECOND",
-                  "timezone" : null
-                },
-                "children" : [ ]
-              },{
-                "name" : "duration-milli",
-                "nullable" : false,
-                "type" : {
-                  "name" : "duration",
-                  "unit" : "MILLISECOND"
                 },
                 "children" : [ ]
               }]
@@ -198,7 +143,7 @@
       "VALIDITY" : [1,1],
       "OFFSET" : [0,2,4],
       "children" : [{
-        "name" : "ops",
+        "name" : "$data$",
         "count" : 4,
         "VALIDITY" : [1,1,1,1],
         "children" : [{
@@ -236,44 +181,10 @@
               "TYPE_ID" : [ ],
               "OFFSET" : [ ],
               "children" : [{
-                "name" : "$data$",
-                "count" : 0
-              },{
-                "name" : "bigint",
-                "count" : 0,
-                "VALIDITY" : [ ],
-                "DATA" : [ ]
-              },{
-                "name" : "float8",
-                "count" : 0,
-                "VALIDITY" : [ ],
-                "DATA" : [ ]
-              },{
-                "name" : "varbinary",
+                "name" : "type-5",
                 "count" : 0,
                 "VALIDITY" : [ ],
                 "OFFSET" : [0],
-                "DATA" : [ ]
-              },{
-                "name" : "varchar",
-                "count" : 0,
-                "VALIDITY" : [ ],
-                "OFFSET" : [0],
-                "DATA" : [ ]
-              },{
-                "name" : "bit",
-                "count" : 0,
-                "VALIDITY" : [ ],
-                "DATA" : [ ]
-              },{
-                "name" : "timestamp-milli",
-                "count" : 0,
-                "VALIDITY" : [ ],
-                "DATA" : [ ]
-              },{
-                "name" : "duration-milli",
-                "count" : 0,
-                "VALIDITY" : [ ],
                 "DATA" : [ ]
               }]
             },{
