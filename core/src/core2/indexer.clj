@@ -4,13 +4,14 @@
             [core2.await :as await]
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
+            [core2.buffer-pool :as bp]
             [core2.metadata :as meta]
+            [core2.relation :as rel]
             [core2.temporal :as temporal]
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [core2.buffer-pool :as bp])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            [core2 DenseUnionUtil ICursor]
            core2.api.TransactionInstant
@@ -26,13 +27,13 @@
            java.util.concurrent.atomic.AtomicInteger
            java.util.concurrent.locks.StampedLock
            [java.util.function Consumer Function]
+           java.util.stream.IntStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema]
-           org.apache.arrow.vector.types.UnionMode
-           org.roaringbitmap.RoaringBitmap))
+           org.apache.arrow.vector.types.UnionMode))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -59,25 +60,6 @@
                    (.getOffset src-vec src-idx)
                    offset
                    (.getVectorByType src-vec type-id))))
-
-(defn- copy-safe! [^VectorSchemaRoot content-root ^ValueVector src-vec src-idx row-id]
-  (let [^BigIntVector row-id-vec (.getVector content-root 0)
-        ^DenseUnionVector field-vec (.getVector content-root 1)
-        value-count (.getRowCount content-root)]
-
-    (.setSafe row-id-vec value-count ^int row-id)
-
-    (if (instance? DenseUnionVector src-vec)
-      (copy-duv-safe! src-vec src-idx field-vec value-count)
-
-      (let [type-id (t/arrow-type->type-id (.getType (.getField src-vec)))
-            offset (DenseUnionUtil/writeTypeId field-vec (.getValueCount field-vec) type-id)]
-        (.copyFromSafe (.getVectorByType field-vec type-id)
-                       src-idx
-                       offset
-                       src-vec)))
-
-    (util/set-vector-schema-root-row-count content-root (inc value-count))))
 
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
@@ -264,6 +246,28 @@
                                                  (Date. (.get tx-time-vec (dec tx-count))))
              :latest-row-id (.get row-id-vec (dec (.getValueCount row-id-vec)))}))))))
 
+(defn- copy-docs [^IChunkManager chunk-manager, ^DenseUnionVector tx-ops-vec, ^long base-row-id]
+  (let [row-ids (let [row-ids (IntStream/builder)]
+                  (dotimes [op-idx (.getValueCount tx-ops-vec)]
+                    (when (zero? (.getTypeId tx-ops-vec op-idx))
+                      (.add row-ids (+ base-row-id op-idx))))
+                  (.toArray (.build row-ids)))
+        doc-vec (-> (.getStruct tx-ops-vec 0)
+                    (.getChild "document" StructVector))]
+    (doseq [^DenseUnionVector child-vec doc-vec]
+      (let [col-name (.getName child-vec)
+            live-root (.getLiveRoot chunk-manager col-name)
+            ^BigIntVector row-id-vec (.getVector live-root "_row-id")
+            vec-writer (rel/vec->col-writer (.getVector live-root col-name))
+            row-appender (.rowAppender vec-writer (rel/<-vector child-vec))]
+        (dotimes [src-idx (.getValueCount doc-vec)]
+          (when-not (neg? (.getTypeId child-vec src-idx))
+            (let [dest-idx (.getValueCount row-id-vec)]
+              (.setValueCount row-id-vec (inc dest-idx))
+              (.set row-id-vec dest-idx (aget row-ids src-idx)))
+            (.appendRow row-appender src-idx)
+            (util/set-vector-schema-root-row-count live-root (inc (.getRowCount live-root)))))))))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -373,15 +377,11 @@
                 row-id (+ next-row-id tx-op-idx)
                 op (aget op-type-ids op-type-id)]
             (case op
-              :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
+              :put (let [id-vec (-> ^StructVector (.getChild op-vec "document" StructVector)
+                                    (.getChild "_id"))]
                      (.logPut log-op-idxer row-id tx-op-idx)
-                     (.indexPut temporal-idxer (t/get-object (.getChild document-vec "_id") per-op-offset) row-id
-                                valid-time-start-vec valid-time-end-vec per-op-offset)
-
-                     (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
-                             :when (not (neg? (.getTypeId value-vec per-op-offset)))]
-                       (copy-safe! (.getLiveRoot this (.getName value-vec))
-                                   value-vec per-op-offset row-id)))
+                     (.indexPut temporal-idxer (t/get-object id-vec per-op-offset) row-id
+                                valid-time-start-vec valid-time-end-vec per-op-offset))
 
               :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
                         (.logDelete log-op-idxer row-id tx-op-idx)
@@ -391,6 +391,8 @@
               :evict (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
                        (.logEvict log-op-idxer row-id tx-op-idx)
                        (.indexEvict temporal-idxer (t/get-object id-vec per-op-offset) row-id)))))
+
+        (copy-docs this tx-ops-vec next-row-id)
 
         (.endTx log-op-idxer)
         (let [evicted-row-ids (.endTx temporal-idxer)]

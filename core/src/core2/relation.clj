@@ -162,8 +162,9 @@
                   (.getType (.getField vv))))
       #{(.getType field)})))
 
-(defn- duv->duv-appender ^core2.relation.IRowAppender [^BufferAllocator allocator, ^IColumnReader src-col, ^DenseUnionVector dest-duv]
-  (let [^DenseUnionVector src-vec (.getVector src-col)
+(defn- duv->duv-appender ^core2.relation.IRowAppender [^IColumnReader src-col, ^DenseUnionVector dest-duv]
+  (let [allocator (.getAllocator dest-duv)
+        ^DenseUnionVector src-vec (.getVector src-col)
         src-field (.getField src-vec)
         src-type (.getType src-field)
         type-ids (.getTypeIds ^ArrowType$Union src-type)
@@ -192,8 +193,9 @@
                          dest-idx
                          (.getVectorByType src-vec src-type-id)))))))
 
-(defn- vec->duv-appender ^core2.relation.IRowAppender [^BufferAllocator allocator, ^IColumnReader src-col, ^DenseUnionVector dest-duv]
-  (let [src-vec (.getVector src-col)
+(defn- vec->duv-appender ^core2.relation.IRowAppender [^IColumnReader src-col, ^DenseUnionVector dest-duv]
+  (let [allocator (.getAllocator dest-duv)
+        src-vec (.getVector src-col)
         src-field (.getField src-vec)
         src-type (.getType src-field)
         type-id (or (duv-type-id dest-duv src-type)
@@ -205,17 +207,19 @@
         (let [dest-idx (DenseUnionUtil/writeTypeId dest-duv (.getValueCount dest-duv) type-id)]
           (.copyFromSafe dest-vec (.getIndex src-col src-idx) dest-idx src-vec))))))
 
-(defn ->col-writer [^BufferAllocator allocator, ^String col-name]
-  (let [dest-vec (DenseUnionVector/empty col-name allocator)]
-    (reify IColumnWriter
-      (rowAppender [_ src-col]
-        (if (instance? DenseUnionVector (.getVector src-col))
-          (duv->duv-appender allocator src-col dest-vec)
-          (vec->duv-appender allocator src-col dest-vec)))
+(deftype DuvWriter [^DenseUnionVector dest-duv]
+  IColumnWriter
+  (rowAppender [_ src-col]
+    (if (instance? DenseUnionVector (.getVector src-col))
+      (duv->duv-appender src-col dest-duv)
+      (vec->duv-appender src-col dest-duv)))
 
-      (read [_] (<-vector dest-vec))
-      (clear [_] (.clear dest-vec))
-      (close [_] (.close dest-vec)))))
+  (read [_] (<-vector dest-duv))
+  (clear [_] (.clear dest-duv))
+  (close [_] (.close dest-duv)))
+
+(defn vec->col-writer ^core2.relation.IColumnWriter [^DenseUnionVector dest-duv]
+  (DuvWriter. dest-duv))
 
 (defn append-col [^IColumnWriter col-writer, ^IColumnReader col-reader]
   (let [row-appender (.rowAppender col-writer col-reader)]
@@ -229,7 +233,7 @@
         (.computeIfAbsent col-writers col-name
                           (reify Function
                             (apply [_ col-name]
-                              (->col-writer allocator col-name)))))
+                              (vec->col-writer (DenseUnionVector/empty col-name allocator))))))
 
       (appendRelation [this src-rel]
         (doseq [^IColumnReader src-col src-rel

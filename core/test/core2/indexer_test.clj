@@ -407,7 +407,6 @@
             (let [system @(:!system node)
                   ^ObjectStore os (::os/file-system-object-store system)
                   ^BufferPool bp (::bp/buffer-pool system)
-                  ^IMetadataManager mm (::meta/metadata-manager system)
                   ^TemporalManager tm (::temporal/temporal-manager system)]
               (t/is (= first-half-tx-instant
                        (-> first-half-tx-instant
@@ -471,8 +470,8 @@
                     (t/is (= 2000 (count (.id->internal-id tm))))))))))))))
 
 (t/deftest test-await-fails-fast
-  (with-redefs [idx/copy-safe! (fn [& _args]
-                                 (throw (UnsupportedOperationException. "oh no!")))
+  (with-redefs [idx/->live-root (fn [& _args]
+                                  (throw (UnsupportedOperationException. "oh no!")))
                 log/log* (let [log* log/log*]
                            (fn [logger level throwable message]
                              (when-not (instance? UnsupportedOperationException throwable)
