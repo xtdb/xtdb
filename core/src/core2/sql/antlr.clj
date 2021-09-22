@@ -29,12 +29,13 @@
                     (.accept node this))
 
                   (visitChildren [this ^RuleNode node]
-                    (loop [n 0
-                           acc [(keyword (aget rule-names (.getRuleIndex (.getRuleContext node))))]]
-                      (if (= n (.getChildCount node))
-                        acc
-                        (recur (inc n)
-                               (conj acc (.accept (.getChild node n) this))))))
+                    (let [child-count (.getChildCount node)]
+                      (loop [n 0
+                             acc (transient [(keyword (aget rule-names (.getRuleIndex (.getRuleContext node))))])]
+                        (if (= n child-count)
+                          (persistent! acc)
+                          (recur (inc n)
+                                 (conj! acc (.accept (.getChild node n) this)))))))
 
                   (visitErrorNode [_ ^ErrorNode node]
                     (let [token (.getSymbol node)]
@@ -115,7 +116,7 @@ INT     : [0-9]+ ;"
 
     ast)
 
-  (let [parser (core2.expr.ExprParser. (CommonTokenStream. (core2.expr.ExprLexer.  (CharStreams/fromString "100+2*34\n"))))
+  (let [parser (core2.expr.ExprParser. (CommonTokenStream. (core2.expr.ExprLexer. (CharStreams/fromString "100+2*34\n"))))
         rule-names (.getRuleNames parser)
         vocabulary (.getVocabulary parser)
         tree (time (.prog parser))
@@ -124,11 +125,11 @@ INT     : [0-9]+ ;"
 
   (require 'instaparse.core)
   (let [expr-bnf "
-prog: (expr NEWLINE)* ;
-expr: expr ('*'|'/') expr
-    |  expr ('+'|'-') expr
-    |  INT
-    |  '(' expr ')'
+prog:	(expr NEWLINE)* ;
+expr:	expr ('*'|'/') expr
+    |	expr ('+'|'-') expr
+    |	INT
+    |	'(' expr ')'
     ;
 NEWLINE : #\"[\\r\\n]+\" ;
 INT     : #\"[0-9]+\" ;"
