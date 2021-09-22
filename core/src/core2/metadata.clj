@@ -37,9 +37,6 @@
 
 (defrecord ChunkMatch [^long chunk-idx, ^RoaringBitmap block-idxs])
 
-(defn type->field-name [^ArrowType arrow-type]
-  (name (t/<-arrow-type arrow-type)))
-
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
   (Schema. [(t/->field "column" (t/->arrow-type :varchar) false)
 
@@ -68,7 +65,7 @@
           (Long/parseLong 16)))
 
 (defn- get-or-add-child ^org.apache.arrow.vector.ValueVector [^StructVector parent, ^ArrowType arrow-type]
-  (let [field-name (type->field-name arrow-type)]
+  (let [field-name (t/type->field-name arrow-type)]
     (or (.getChild parent field-name)
         (doto (.addOrGet parent field-name (FieldType/nullable arrow-type) ValueVector)
           (.setValueCount (.getValueCount parent))))))
@@ -194,9 +191,9 @@
             block-idx)))))
 
   (blockCount [this]
-    (let [tx-id-idx (.columnIndex this "_tx-id")]
-      (- (.getElementEndIndex blocks-vec tx-id-idx)
-         (.getElementStartIndex blocks-vec tx-id-idx)))))
+    (let [id-idx (.columnIndex this "_id")]
+      (- (.getElementEndIndex blocks-vec id-idx)
+         (.getElementStartIndex blocks-vec id-idx)))))
 
 (defn ->metadata-idxs ^core2.metadata.IMetadataIndices [^VectorSchemaRoot metadata-root]
   (MetadataIndices. (HashMap.)
@@ -206,28 +203,6 @@
 
 (defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, f]
   (.withMetadata metadata-mgr chunk-idx (util/->jbifn f)))
-
-(defn with-latest-metadata [^IMetadataManager metadata-mgr, f]
-  (if-let [chunk-idx (last (.knownChunks metadata-mgr))]
-    (with-metadata metadata-mgr chunk-idx f)
-    (CompletableFuture/completedFuture nil)))
-
-(defn latest-tx [_chunk-idx ^VectorSchemaRoot metadata-root]
-  (let [metadata-idxs (->metadata-idxs metadata-root)
-        ^StructVector max-vec (.getVector metadata-root "max")]
-    (c2/->TransactionInstant (-> max-vec
-                                 ^BigIntVector
-                                 (.getChild (type->field-name (t/->arrow-type :bigint)))
-                                 (.get (.columnIndex metadata-idxs "_tx-id")))
-                             (Date. (-> max-vec
-                                        ^TimeStampMilliVector
-                                        (.getChild (type->field-name (t/->arrow-type :timestamp-milli)))
-                                        (.get (.columnIndex metadata-idxs "_tx-time")))))))
-
-(defn latest-row-id [_chunk-idx ^VectorSchemaRoot metadata-root]
-  (let [metadata-idxs (->metadata-idxs metadata-root)]
-    (.get ^BigIntVector (.getVector metadata-root "max-row-id")
-          (.columnIndex metadata-idxs "_tx-id"))))
 
 (defn matching-chunks [^IMetadataManager metadata-mgr, ^Watermark watermark, metadata-pred]
   (->> (for [^long chunk-idx (.knownChunks metadata-mgr)

@@ -15,125 +15,36 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [1,2,3,4,5,6,10,18]
+        "typeIds" : [0]
       },
       "children" : [{
-        "name" : "$data$",
-        "nullable" : true,
-        "type" : {
-          "name" : "null"
-        },
-        "children" : [ ]
-      },{
-        "name" : "bigint",
-        "nullable" : false,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "float8",
-        "nullable" : false,
-        "type" : {
-          "name" : "floatingpoint",
-          "precision" : "DOUBLE"
-        },
-        "children" : [ ]
-      },{
-        "name" : "varbinary",
-        "nullable" : false,
-        "type" : {
-          "name" : "binary"
-        },
-        "children" : [ ]
-      },{
         "name" : "varchar",
         "nullable" : false,
         "type" : {
           "name" : "utf8"
         },
         "children" : [ ]
-      },{
-        "name" : "bit",
-        "nullable" : false,
-        "type" : {
-          "name" : "bool"
-        },
-        "children" : [ ]
-      },{
-        "name" : "timestamp-milli",
-        "nullable" : false,
-        "type" : {
-          "name" : "timestamp",
-          "unit" : "MILLISECOND",
-          "timezone" : null
-        },
-        "children" : [ ]
-      },{
-        "name" : "duration-milli",
-        "nullable" : false,
-        "type" : {
-          "name" : "duration",
-          "unit" : "MILLISECOND"
-        },
-        "children" : [ ]
       }]
     }]
   },
   "batches" : [{
-    "count" : 4,
+    "count" : 3,
     "columns" : [{
       "name" : "_row-id",
-      "count" : 4,
-      "VALIDITY" : [1,1,1,1],
-      "DATA" : ["0","1","2","3"]
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["0","1","3"]
     },{
       "name" : "_id",
-      "count" : 4,
-      "TYPE_ID" : [5,5,5,5],
-      "OFFSET" : [0,1,2,3],
+      "count" : 3,
+      "TYPE_ID" : [0,0,0],
+      "OFFSET" : [0,1,2],
       "children" : [{
-        "name" : "$data$",
-        "count" : 0
-      },{
-        "name" : "bigint",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
-      },{
-        "name" : "float8",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
-      },{
-        "name" : "varbinary",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "OFFSET" : [0],
-        "DATA" : [ ]
-      },{
         "name" : "varchar",
-        "count" : 4,
-        "VALIDITY" : [1,1,1,1],
-        "OFFSET" : [0,3,6,9,12],
-        "DATA" : ["foo","bar","foo","bar"]
-      },{
-        "name" : "bit",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
-      },{
-        "name" : "timestamp-milli",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
-      },{
-        "name" : "duration-milli",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "OFFSET" : [0,3,6,9],
+        "DATA" : ["foo","bar","bar"]
       }]
     }]
   }]

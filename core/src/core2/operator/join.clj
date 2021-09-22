@@ -182,13 +182,13 @@
                                       (accept [_ probe-rel]
                                         (probe-phase rel-writer probe-rel join-key->build-pointers
                                                      probe-column-name semi-join? anti-join?)
-                                        (let [out-rel (.read rel-writer)]
+                                        (let [out-rel (rel/rel-writer->reader rel-writer)]
                                           (try
                                             (when (pos? (.rowCount out-rel))
                                               (reset! !advanced true)
                                               (.accept c out-rel))
                                             (finally
-                                              (.clear rel-writer)
+                                              (rel/clear-rel rel-writer)
                                               (util/try-close out-rel))))))))))
          @!advanced))))
 

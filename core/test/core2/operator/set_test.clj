@@ -185,7 +185,7 @@
                                                            (.setValueCount row-count))]
                                              (dotimes [idx row-count]
                                                (.set out-vec idx (inc (.get a-vec idx))))
-                                             (rel/<-vector out-vec))))
+                                             (rel/vec->reader out-vec))))
 
                                        (reify ProjectionSpec
                                          (project [_ allocator in-rel]
@@ -200,7 +200,7 @@
                                              (dotimes [idx row-count]
                                                (.set out-vec idx (* (inc (.get a-vec idx))
                                                                     (.get b-vec idx))))
-                                             (rel/<-vector out-vec))))])
+                                             (rel/vec->reader out-vec))))])
 
                                      (reify IRelationSelector
                                        (select [_ in-rel]

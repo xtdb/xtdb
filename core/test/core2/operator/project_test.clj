@@ -27,11 +27,11 @@
                                                             (let [row-count (.rowCount in-rel)
 
                                                                   a-col (-> (.columnReader in-rel "a")
-                                                                            (rel/nested-read-col bigint-type))
+                                                                            (rel/reader-for-type bigint-type))
                                                                   ^BigIntVector a-vec (.getVector a-col)
 
                                                                   b-col (-> (.columnReader in-rel "b")
-                                                                            (rel/nested-read-col bigint-type))
+                                                                            (rel/reader-for-type bigint-type))
                                                                   ^BigIntVector b-vec (.getVector b-col)
 
                                                                   out (BigIntVector. "c" allocator)]
@@ -39,7 +39,7 @@
                                                               (dotimes [idx row-count]
                                                                 (.set out idx (+ (.get a-vec (.getIndex a-col idx))
                                                                                  (.get b-vec (.getIndex b-col idx)))))
-                                                              (rel/<-vector out))))])]
+                                                              (rel/vec->reader out))))])]
     (t/is (= [[{:a 12, :c 22}, {:a 0, :c 15}]
               [{:a 100, :c 183}]]
              (tu/<-cursor project-cursor)))))

@@ -17,7 +17,7 @@
            [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList List Map$Entry Queue UUID]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
-           [java.util.function BiFunction Function IntUnaryOperator Supplier]
+           [java.util.function BiFunction Consumer Function IntUnaryOperator Supplier]
            [org.apache.arrow.compression CommonsCompressionFactory ZstdCompressionCodec]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator RootAllocator]
@@ -488,6 +488,19 @@
                    (VectorLoader. root CommonsCompressionFactory/INSTANCE)
                    nil
                    (boolean close-buffer?)))))
+
+(defn with-last-block [^ArrowBuf buf, f]
+  (let [res (promise)
+        last-block-idx (-> (.getRecordBatches (read-arrow-footer buf))
+                           (count) (dec))]
+    (with-open [chunk (->chunks buf {:block-idxs (doto (RoaringBitmap.)
+                                                   (.add last-block-idx))
+                                     :close-buffer? true})]
+      (when (.tryAdvance chunk
+                         (reify Consumer
+                           (accept [_ root]
+                             (deliver res (f root)))))
+        @res))))
 
 (defn ^core2.ICursor and-also-close [^ICursor cursor, ^AutoCloseable closeable]
   (reify ICursor

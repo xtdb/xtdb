@@ -2,16 +2,16 @@
   (:require [core2.types :as ty]
             [core2.util :as util])
   (:import core2.DenseUnionUtil
-           [core2.relation IColumnWriter IRelationWriter IColumnReader IRelationReader IRowAppender]
+           [core2.relation IColumnReader IColumnWriter IRelationReader IRelationWriter IRowAppender]
            java.lang.AutoCloseable
-           [java.util LinkedHashMap Map]
+           [java.util HashMap LinkedHashMap Map]
            java.util.function.Function
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.util.AutoCloseables
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field]))
+           [org.apache.arrow.vector.complex DenseUnionVector StructVector]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType]))
 
 (declare ->IndirectVectorReader)
 
@@ -73,7 +73,7 @@
                                    (.setValueCount (alength idxs)))
                                  col-name))))
 
-(defn ^core2.relation.IColumnReader <-vector
+(defn ^core2.relation.IColumnReader vec->reader
   ([^ValueVector in-vec]
    (DirectVectorReader. in-vec (.getName in-vec)))
 
@@ -101,7 +101,7 @@
 (defn <-root [^VectorSchemaRoot root]
   (let [cols (LinkedHashMap.)]
     (doseq [^ValueVector in-vec (.getFieldVectors root)]
-      (.put cols (.getName in-vec) (<-vector in-vec)))
+      (.put cols (.getName in-vec) (vec->reader in-vec)))
     (ReadRelation. cols (.getRowCount root))))
 
 (defn select ^core2.relation.IRelationReader [^IRelationReader in-rel, ^ints idxs]
@@ -121,15 +121,19 @@
                       (ty/get-object (.getVector col) (.getIndex col idx)))))
           (range (.rowCount rel)))))
 
-(deftype NestedReadColumn [^IColumnReader parent-col
-                           ^byte type-id
-                           ^ValueVector type-vec]
+(deftype DuvChildReader [^IColumnReader parent-col
+                         ^DenseUnionVector parent-duv
+                         ^byte type-id
+                         ^ValueVector type-vec]
   IColumnReader
   (getVector [_] type-vec)
-  (getIndex [_ idx] (.getOffset ^DenseUnionVector (.getVector parent-col)
-                                (.getIndex parent-col idx)))
+  (getIndex [_ idx] (.getOffset parent-duv (.getIndex parent-col idx)))
   (getName [_] (.getName parent-col))
-  (withName [_ name] (NestedReadColumn. (.withName parent-col name) type-id type-vec)))
+  (withName [_ name] (DuvChildReader. (.withName parent-col name) parent-duv type-id type-vec)))
+
+(defn reader-for-type-id ^core2.relation.IColumnReader [^IColumnReader col, type-id]
+  (let [^DenseUnionVector parent-duv (.getVector col)]
+    (DuvChildReader. col parent-duv type-id (.getVectorByType parent-duv type-id))))
 
 (defn duv-type-id ^java.lang.Byte [^DenseUnionVector duv, ^ArrowType arrow-type]
   (let [field (.getField duv)
@@ -140,7 +144,7 @@
                       (.getChildren field))
         (first))))
 
-(defn nested-read-col ^core2.relation.IColumnReader [^IColumnReader col, ^ArrowType arrow-type]
+(defn reader-for-type ^core2.relation.IColumnReader [^IColumnReader col, ^ArrowType arrow-type]
   (let [v (.getVector col)
         field (.getField v)
         v-type (.getType field)]
@@ -151,7 +155,7 @@
       (let [type-id (or (duv-type-id v arrow-type)
                         (throw (UnsupportedOperationException.)))
             type-vec (.getVectorByType ^DenseUnionVector v type-id)]
-        (NestedReadColumn. col type-id type-vec)))))
+        (DuvChildReader. col v type-id type-vec)))))
 
 (defn col->arrow-types [^IColumnReader col]
   (let [col-vec (.getVector col)
@@ -162,65 +166,124 @@
                   (.getType (.getField vv))))
       #{(.getType field)})))
 
-(defn- duv->duv-appender ^core2.relation.IRowAppender [^BufferAllocator allocator, ^IColumnReader src-col, ^DenseUnionVector dest-duv]
+(deftype DuvChildWriter [^IColumnWriter parent-writer,
+                         ^DenseUnionVector parent-duv
+                         ^byte type-id
+                         ^ValueVector child-vec]
+  IColumnWriter
+  (getVector [_] child-vec)
+
+  (appendIndex [this]
+    (.appendIndex this (.appendIndex parent-writer)))
+
+  (appendIndex [_ parent-idx]
+    (DenseUnionUtil/writeTypeId parent-duv parent-idx type-id))
+
+  (rowAppender [this src-col]
+    (let [src-vec (.getVector src-col)]
+      (reify IRowAppender
+        (appendRow [this src-idx]
+          (.appendRow this src-idx (.appendIndex parent-writer)))
+
+        (appendRow [_ src-idx parent-idx]
+          (.copyFromSafe child-vec
+                         (.getIndex src-col src-idx)
+                         (.appendIndex this parent-idx)
+                         src-vec))))))
+
+(defn- duv->duv-appender ^core2.relation.IRowAppender [^IColumnReader src-col, ^IColumnWriter dest-col]
   (let [^DenseUnionVector src-vec (.getVector src-col)
         src-field (.getField src-vec)
         src-type (.getType src-field)
         type-ids (.getTypeIds ^ArrowType$Union src-type)
-        type-id-count (inc (apply max type-ids))
-        type-id-mapping (byte-array type-id-count)
+        type-id-count (inc (apply max -1 type-ids))
+        appender-mapping (object-array type-id-count)]
 
-        ^"[Lorg.apache.arrow.vector.ValueVector;"
-        dest-vec-mapping (make-array ValueVector type-id-count)]
     (dotimes [n (alength type-ids)]
       (let [src-type-id (aget type-ids n)
-            ^Field nested-src-field (.get (.getChildren src-field) n)
-            dest-type-id (or (duv-type-id dest-duv (.getType nested-src-field))
-                             (.registerNewTypeId dest-duv nested-src-field))
-            dest-vec (or (.getVectorByType dest-duv dest-type-id)
-                         (.addVector dest-duv dest-type-id
-                                     (.createVector nested-src-field allocator)))]
-        (aset type-id-mapping src-type-id (byte dest-type-id))
-        (aset dest-vec-mapping src-type-id dest-vec)))
+            arrow-type (-> ^Field (.get (.getChildren src-field) n)
+                           (.getType))]
+        (aset appender-mapping src-type-id (.rowAppender (.writerForType dest-col arrow-type)
+                                                         (reader-for-type-id src-col src-type-id)))))
 
     (reify IRowAppender
       (appendRow [_ src-idx]
-        (let [src-type-id (.getTypeId src-vec (.getIndex src-col src-idx))
-              dest-idx (DenseUnionUtil/writeTypeId dest-duv (.getValueCount dest-duv) (aget type-id-mapping src-type-id))]
-          (.copyFromSafe ^ValueVector (aget dest-vec-mapping src-type-id)
-                         (.getOffset src-vec (.getIndex src-col src-idx))
-                         dest-idx
-                         (.getVectorByType src-vec src-type-id)))))))
+        (-> ^IRowAppender (aget appender-mapping (.getTypeId src-vec (.getIndex src-col src-idx)))
+            (.appendRow src-idx)))
 
-(defn- vec->duv-appender ^core2.relation.IRowAppender [^BufferAllocator allocator, ^IColumnReader src-col, ^DenseUnionVector dest-duv]
-  (let [src-vec (.getVector src-col)
-        src-field (.getField src-vec)
-        src-type (.getType src-field)
-        type-id (or (duv-type-id dest-duv src-type)
-                    (.registerNewTypeId dest-duv src-field))
-        ^ValueVector dest-vec (or (.getVectorByType dest-duv type-id)
-                                  (.addVector dest-duv type-id (.createVector src-field allocator)))]
-    (reify IRowAppender
-      (appendRow [_ src-idx]
-        (let [dest-idx (DenseUnionUtil/writeTypeId dest-duv (.getValueCount dest-duv) type-id)]
-          (.copyFromSafe dest-vec (.getIndex src-col src-idx) dest-idx src-vec))))))
+      (appendRow [_ src-idx parent-idx]
+        (-> ^IRowAppender (aget appender-mapping (.getTypeId src-vec (.getIndex src-col src-idx)))
+            (.appendRow src-idx parent-idx))))))
 
-(defn ->col-writer [^BufferAllocator allocator, ^String col-name]
-  (let [dest-vec (DenseUnionVector/empty col-name allocator)]
-    (reify IColumnWriter
-      (rowAppender [_ src-col]
-        (if (instance? DenseUnionVector (.getVector src-col))
-          (duv->duv-appender allocator src-col dest-vec)
-          (vec->duv-appender allocator src-col dest-vec)))
+(defn- vec->duv-appender ^core2.relation.IRowAppender [^IColumnReader src-col, ^IColumnWriter dest-col]
+  (-> (.writerForType dest-col (-> (.getVector src-col) (.getField) (.getType)))
+      (.rowAppender src-col)))
 
-      (read [_] (<-vector dest-vec))
-      (clear [_] (.clear dest-vec))
-      (close [_] (.close dest-vec)))))
+(deftype DuvWriter [^DenseUnionVector dest-duv, ^Map writers]
+  IColumnWriter
+  (getVector [_] dest-duv)
 
-(defn append-col [^IColumnWriter col-writer, ^IColumnReader col-reader]
-  (let [row-appender (.rowAppender col-writer col-reader)]
-    (dotimes [src-idx (.getValueCount col-reader)]
-      (.appendRow row-appender src-idx))))
+  (appendIndex [_]
+    (let [idx (.getValueCount dest-duv)]
+      (util/set-value-count dest-duv (inc idx))
+      idx))
+
+  (rowAppender [this src-col]
+    (if (instance? DenseUnionVector (.getVector src-col))
+      (duv->duv-appender src-col this)
+      (vec->duv-appender src-col this)))
+
+  (writerForTypeId [this type-id]
+    (let [inner-vec (or (.getVectorByType dest-duv type-id)
+                        (throw (IllegalArgumentException.)))]
+      (DuvChildWriter. this dest-duv type-id inner-vec)))
+
+  (writerForType [this arrow-type]
+    (.computeIfAbsent writers arrow-type
+                      (reify Function
+                        (apply [_ arrow-type]
+                          (let [^Field field (ty/->field (ty/type->field-name arrow-type) arrow-type false)
+                                type-id (or (duv-type-id dest-duv arrow-type)
+                                            (.registerNewTypeId dest-duv field))]
+                            (when-not (.getVectorByType dest-duv type-id)
+                              (.addVector dest-duv type-id
+                                          (.createVector field (.getAllocator dest-duv))))
+
+                            (.writerForTypeId this type-id)))))))
+
+(declare vec->writer)
+
+(deftype StructWriter [^StructVector dest-vec, ^Map writers]
+  IColumnWriter
+  (getVector [_] dest-vec)
+
+  (appendIndex [_]
+    (let [idx (.getValueCount dest-vec)]
+      (util/set-value-count dest-vec (inc idx))
+      (.setIndexDefined dest-vec idx)
+      idx))
+
+  (writerForName [_ col-name]
+    (.computeIfAbsent writers col-name
+                      (reify Function
+                        (apply [_ col-name]
+                          (-> (doto (.addOrGet dest-vec col-name
+                                               (FieldType/nullable ty/dense-union-type)
+                                               DenseUnionVector)
+                                (util/set-value-count (.getValueCount dest-vec)))
+                              (vec->writer)))))))
+
+(defn vec->writer ^core2.relation.IColumnWriter [^ValueVector dest-vec]
+  (cond
+    (instance? DenseUnionVector dest-vec) (DuvWriter. dest-vec (HashMap.))
+    (instance? StructVector dest-vec) (StructWriter. dest-vec (HashMap.))
+    :else (reify IColumnWriter
+            (getVector [_] dest-vec)
+
+            (appendIndex [_]
+              (let [idx (.getValueCount dest-vec)]
+                (util/set-value-count dest-vec (inc idx))
+                idx)))))
 
 (defn ->rel-writer ^core2.relation.IRelationWriter [^BufferAllocator allocator]
   (let [col-writers (LinkedHashMap.)]
@@ -229,21 +292,34 @@
         (.computeIfAbsent col-writers col-name
                           (reify Function
                             (apply [_ col-name]
-                              (->col-writer allocator col-name)))))
+                              (vec->writer (DenseUnionVector/empty col-name allocator))))))
 
-      (appendRelation [this src-rel]
-        (doseq [^IColumnReader src-col src-rel
-                :let [^IColumnWriter col-writer (.columnWriter this (.getName src-col))]]
-          (append-col col-writer src-col)))
-
-      (read [_]
-        (->read-relation (for [^IColumnWriter col (.values col-writers)]
-                           (.read col))))
-
-      (clear [_]
-        (doseq [^IColumnWriter col (.values col-writers)]
-          (.clear col)))
+      (iterator [_]
+        (.iterator (.values col-writers)))
 
       AutoCloseable
       (close [_]
         (AutoCloseables/close (.values col-writers))))))
+
+(defn col-writer->reader ^core2.relation.IColumnReader [^IColumnWriter col-writer]
+  (vec->reader (.getVector col-writer)))
+
+(defn rel-writer->reader ^core2.relation.IRelationReader [^IRelationWriter rel-writer]
+  (->read-relation (for [^IColumnWriter col-writer rel-writer]
+                     (col-writer->reader col-writer))))
+
+(defn append-col [^IColumnWriter col-writer, ^IColumnReader col-reader]
+  (let [row-appender (.rowAppender col-writer col-reader)]
+    (dotimes [src-idx (.getValueCount col-reader)]
+      (.appendRow row-appender src-idx))))
+
+(defn append-rel [^IRelationWriter dest-rel, ^IRelationReader src-rel]
+  (doseq [^IColumnReader src-col src-rel
+          :let [^IColumnWriter col-writer (.columnWriter dest-rel (.getName src-col))]]
+    (append-col col-writer src-col)))
+
+(defn clear-col [^IColumnWriter writer]
+  (.clear (.getVector writer)))
+
+(defn clear-rel [^IRelationWriter writer]
+  (run! clear-col writer))

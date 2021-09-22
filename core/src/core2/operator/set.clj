@@ -34,7 +34,7 @@
                    (throw (union-incompatible))
 
                    (= t/dense-union-type x-type y-type)
-                   (t/->primitive-dense-union-field x-name)
+                   (t/->field x-name t/dense-union-type true)
 
                    :else x-field))))))
 
