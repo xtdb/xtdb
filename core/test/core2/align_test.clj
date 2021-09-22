@@ -50,10 +50,10 @@
                           (VectorSchemaRoot. vecs))]
 
     (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-column-selector '(<= age 30) {})
-                                                        (rel/<-vector age-vec))
+                                                        (rel/vec->reader age-vec))
                                                age-row-id-vec)
                     (.and (align/->row-id-bitmap (.select (expr/->expression-column-selector '(<= name "Frank") {})
-                                                          (rel/<-vector name-vec))
+                                                          (rel/vec->reader name-vec))
                                                  name-row-id-vec)))
           roots [name-root age-root]]
       (t/is (= [{:name "Dave", :age 12}

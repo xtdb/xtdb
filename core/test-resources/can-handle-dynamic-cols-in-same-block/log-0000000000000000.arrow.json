@@ -84,33 +84,9 @@
               "type" : {
                 "name" : "union",
                 "mode" : "Dense",
-                "typeIds" : [0,1,2]
+                "typeIds" : [ ]
               },
-              "children" : [{
-                "name" : "float8",
-                "nullable" : false,
-                "type" : {
-                  "name" : "floatingpoint",
-                  "precision" : "DOUBLE"
-                },
-                "children" : [ ]
-              },{
-                "name" : "varchar",
-                "nullable" : false,
-                "type" : {
-                  "name" : "utf8"
-                },
-                "children" : [ ]
-              },{
-                "name" : "timestamp-milli",
-                "nullable" : false,
-                "type" : {
-                  "name" : "timestamp",
-                  "unit" : "MILLISECOND",
-                  "timezone" : null
-                },
-                "children" : [ ]
-              }]
+              "children" : [ ]
             },{
               "name" : "_valid-time-start",
               "nullable" : true,
@@ -196,24 +172,7 @@
               "name" : "_id",
               "count" : 0,
               "TYPE_ID" : [ ],
-              "OFFSET" : [ ],
-              "children" : [{
-                "name" : "float8",
-                "count" : 0,
-                "VALIDITY" : [ ],
-                "DATA" : [ ]
-              },{
-                "name" : "varchar",
-                "count" : 0,
-                "VALIDITY" : [ ],
-                "OFFSET" : [0],
-                "DATA" : [ ]
-              },{
-                "name" : "timestamp-milli",
-                "count" : 0,
-                "VALIDITY" : [ ],
-                "DATA" : [ ]
-              }]
+              "OFFSET" : [ ]
             },{
               "name" : "_valid-time-start",
               "count" : 0,

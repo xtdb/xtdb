@@ -132,7 +132,7 @@
 
         ^StructVector delete-vec (.getStruct op-vec 1)
         delete-id-vec (.getChild delete-vec "_id")
-        delete-id-writer (rel/vec->col-writer delete-id-vec)
+        delete-id-writer (rel/vec->writer delete-id-vec)
         ^TimeStampMilliVector delete-vt-start-vec (.getChild delete-vec "_valid-time-start")
         ^TimeStampMilliVector delete-vt-end-vec (.getChild delete-vec "_valid-time-end")
 
@@ -157,7 +157,7 @@
                 tx-delete-id-vec (.getChild tx-delete-vec "_id")
                 tx-delete-vt-start-vec (.getChild tx-delete-vec "_valid-time-start")
                 tx-delete-vt-end-vec (.getChild tx-delete-vec "_valid-time-end")
-                delete-id-row-appender (.rowAppender delete-id-writer (rel/<-vector tx-delete-id-vec))]
+                delete-id-row-appender (.rowAppender delete-id-writer (rel/vec->reader tx-delete-id-vec))]
 
             (letfn [(log-op [^long row-id]
                       (let [op-idx (.getValueCount ops-data-vec)]
@@ -183,12 +183,7 @@
                     (.copyFromSafe delete-vt-start-vec src-offset dest-offset tx-delete-vt-start-vec)
                     (.copyFromSafe delete-vt-end-vec src-offset dest-offset tx-delete-vt-end-vec)
 
-                    ;; HACK: otherwise this is incremented twice
-                    ;; - once in the writeTypeId of op-vec (somehow), once in append-row
-                    ;; I'm not clear on who should be responsible for this
-                    (util/set-value-count delete-id-vec (dec (.getValueCount delete-id-vec)))
-
-                    (.appendRow delete-id-row-appender src-offset)))
+                    (.appendRow delete-id-row-appender src-offset dest-offset)))
 
                 (logEvict [_ row-id tx-op-idx]
                   (let [op-idx (log-op row-id)
@@ -257,8 +252,8 @@
       (let [col-name (.getName child-vec)
             live-root (.getLiveRoot chunk-manager col-name)
             ^BigIntVector row-id-vec (.getVector live-root "_row-id")
-            vec-writer (rel/vec->col-writer (.getVector live-root col-name))
-            row-appender (.rowAppender vec-writer (rel/<-vector child-vec))]
+            vec-writer (rel/vec->writer (.getVector live-root col-name))
+            row-appender (.rowAppender vec-writer (rel/vec->reader child-vec))]
         (dotimes [src-idx (.getValueCount doc-vec)]
           (when-not (neg? (.getTypeId child-vec src-idx))
             (let [dest-idx (.getValueCount row-id-vec)]

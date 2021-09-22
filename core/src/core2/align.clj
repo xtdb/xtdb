@@ -44,7 +44,7 @@
             :let [row-id-vec (.getVector root 0)
                   in-vec (.getVector root 1)]]
       (.add read-cols
-            (rel/<-vector in-vec
+            (rel/vec->reader in-vec
                           (if row-id->repeat-count
                             (<-row-id-bitmap-with-repetitions row-id->repeat-count row-id-vec)
                             (<-row-id-bitmap row-id-bitmap row-id-vec)))))

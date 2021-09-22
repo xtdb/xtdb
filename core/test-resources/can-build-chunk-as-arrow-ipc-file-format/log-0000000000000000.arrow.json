@@ -84,16 +84,9 @@
               "type" : {
                 "name" : "union",
                 "mode" : "Dense",
-                "typeIds" : [0]
+                "typeIds" : [ ]
               },
-              "children" : [{
-                "name" : "varchar",
-                "nullable" : false,
-                "type" : {
-                  "name" : "utf8"
-                },
-                "children" : [ ]
-              }]
+              "children" : [ ]
             },{
               "name" : "_valid-time-start",
               "nullable" : true,
@@ -131,7 +124,7 @@
       "name" : "_tx-id",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : ["0","6581"]
+      "DATA" : ["0","6341"]
     },{
       "name" : "_tx-time",
       "count" : 2,
@@ -179,14 +172,7 @@
               "name" : "_id",
               "count" : 0,
               "TYPE_ID" : [ ],
-              "OFFSET" : [ ],
-              "children" : [{
-                "name" : "varchar",
-                "count" : 0,
-                "VALIDITY" : [ ],
-                "OFFSET" : [0],
-                "DATA" : [ ]
-              }]
+              "OFFSET" : [ ]
             },{
               "name" : "_valid-time-start",
               "count" : 0,

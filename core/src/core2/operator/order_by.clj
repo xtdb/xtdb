@@ -24,12 +24,12 @@
       (.forEachRemaining in-cursor
                          (reify Consumer
                            (accept [_ src-rel]
-                             (.appendRelation rel-writer src-rel))))
+                             (rel/append-rel rel-writer src-rel))))
       (catch Exception e
         (.close rel-writer)
         (throw e)))
 
-    (.read rel-writer)))
+    (rel/rel-writer->reader rel-writer)))
 
 (defn- sorted-idxs ^ints [^IRelationReader read-rel, ^List #_<OrderSpec> order-specs]
   (-> (IntStream/range 0 (.rowCount read-rel))
@@ -41,7 +41,7 @@
                                ^ArrowType arrow-type (if (= 1 (count arrow-types))
                                                        (first arrow-types)
                                                        (throw (UnsupportedOperationException.)))
-                               read-col (rel/nested-read-col read-col arrow-type)
+                               read-col (rel/reader-for-type read-col arrow-type)
                                read-vec (.getVector read-col)
                                col-comparator (expr.comp/->comparator arrow-type)
 

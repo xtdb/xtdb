@@ -231,9 +231,9 @@
                      Comparable)
         arrow-type (types/class->arrow-type var-type)
         vec-sym (gensym 'vec)]
-    ;; TODO the `nested-read-col` call doesn't need to be per-elem
+    ;; TODO the `reader-for-type` call doesn't need to be per-elem
     {:code `(let [~vec-sym (-> ~variable
-                               (rel/nested-read-col (-> ~(types/<-arrow-type arrow-type)
+                               (rel/reader-for-type (-> ~(types/<-arrow-type arrow-type)
                                                         (types/->arrow-type)))
                                (.getVector))
                   ~idx-sym (.getIndex ~variable ~idx-sym)]
@@ -573,7 +573,7 @@
          (dotimes [~idx-sym row-count#]
            ~(set-value-form return-type out-vec-sym idx-sym code))
 
-         (rel/<-vector ~out-vec-sym)))))
+         (rel/vec->reader ~out-vec-sym)))))
 
 (def ^:private memo-generate-projection (memoize generate-projection))
 (def ^:private memo-eval (memoize eval))

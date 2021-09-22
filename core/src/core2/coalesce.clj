@@ -44,8 +44,8 @@
 
                                                       ;; otherwise, add it to the pending rows.
                                                       :else
-                                                      (let [^IRelationWriter rel-writer (vswap! !rel-writer #(or % (rel/->rel-writer allocator)))]
-                                                        (.appendRelation rel-writer read-rel)
+                                                      (let [rel-writer (vswap! !rel-writer #(or % (rel/->rel-writer allocator)))]
+                                                        (rel/append-rel rel-writer read-rel)
                                                         (vswap! !rows-appended + row-count)))))))
                 rows-appended @!rows-appended]
 
@@ -58,7 +58,7 @@
 
               ;; we've got rows, and either the source is done or there's enough already - send them through
               (pos? rows-appended) (do
-                                     (.accept c (.read ^IRelationWriter @!rel-writer))
+                                     (.accept c (rel/rel-writer->reader @!rel-writer))
                                      true)
 
               ;; no more rows in input, and none to pass through, we're done

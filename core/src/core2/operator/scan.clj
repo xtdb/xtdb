@@ -53,7 +53,7 @@
                      :let [^IColumnSelector col-pred (.get col-preds col-name)
                            ^VectorSchemaRoot in-root (.get in-roots col-name)]]
                  (align/->row-id-bitmap (when col-pred
-                                          (.select col-pred (rel/<-vector (.getVector in-root col-name))))
+                                          (.select col-pred (rel/vec->reader (.getVector in-root col-name))))
                                         (.getVector in-root t/row-id-field)))
        (reduce roaring64-and)))
 
@@ -108,7 +108,7 @@
                 :let [^IColumnSelector col-pred (.get col-preds col-name)
                       ^VectorSchemaRoot in-root (.get ^Map (.roots temporal-roots) col-name)]]
             (align/->row-id-bitmap (when col-pred
-                                     (.select col-pred (rel/<-vector (.getVector in-root col-name))))
+                                     (.select col-pred (rel/vec->reader (.getVector in-root col-name))))
                                    (.getVector in-root t/row-id-field)))))
 
 (defn- align-roots ^core2.relation.IRelationReader [^List col-names ^Map in-roots ^TemporalRoots temporal-roots row-id-bitmap]

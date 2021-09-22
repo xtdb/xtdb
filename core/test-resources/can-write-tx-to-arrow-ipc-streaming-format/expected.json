@@ -22,11 +22,11 @@
           },
           "children" : [{
             "name" : "_id",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [5]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "varchar",
@@ -38,11 +38,11 @@
             }]
           },{
             "name" : "api-version",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [5]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "varchar",
@@ -54,11 +54,11 @@
             }]
           },{
             "name" : "manufacturer",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [5]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "varchar",
@@ -70,11 +70,11 @@
             }]
           },{
             "name" : "model",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [5]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "varchar",
@@ -86,11 +86,11 @@
             }]
           },{
             "name" : "os-name",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [5]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "varchar",
@@ -102,11 +102,11 @@
             }]
           },{
             "name" : "cpu-avg-15min",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [3]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "float8",
@@ -119,11 +119,11 @@
             }]
           },{
             "name" : "rssi",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [3]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "float8",
@@ -136,11 +136,11 @@
             }]
           },{
             "name" : "cpu-avg-5min",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [3]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "float8",
@@ -153,11 +153,11 @@
             }]
           },{
             "name" : "battery-status",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [5]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "varchar",
@@ -169,11 +169,11 @@
             }]
           },{
             "name" : "ssid",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [5]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "varchar",
@@ -185,11 +185,11 @@
             }]
           },{
             "name" : "time",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [10]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "timestamp-milli",
@@ -203,11 +203,11 @@
             }]
           },{
             "name" : "battery-level",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [3]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "float8",
@@ -220,11 +220,11 @@
             }]
           },{
             "name" : "bssid",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [5]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "varchar",
@@ -236,11 +236,11 @@
             }]
           },{
             "name" : "battery-temperature",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [3]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "float8",
@@ -253,11 +253,11 @@
             }]
           },{
             "name" : "cpu-avg-1min",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [3]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "float8",
@@ -270,11 +270,11 @@
             }]
           },{
             "name" : "mem-free",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [3]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "float8",
@@ -287,11 +287,11 @@
             }]
           },{
             "name" : "mem-used",
-            "nullable" : false,
+            "nullable" : true,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
-              "typeIds" : [3]
+              "typeIds" : [0]
             },
             "children" : [{
               "name" : "float8",
@@ -334,16 +334,9 @@
           "type" : {
             "name" : "union",
             "mode" : "Dense",
-            "typeIds" : [5]
+            "typeIds" : [ ]
           },
-          "children" : [{
-            "name" : "varchar",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
+          "children" : [ ]
         },{
           "name" : "_valid-time-start",
           "nullable" : true,
@@ -375,16 +368,9 @@
           "type" : {
             "name" : "union",
             "mode" : "Dense",
-            "typeIds" : [5]
+            "typeIds" : [ ]
           },
-          "children" : [{
-            "name" : "varchar",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
+          "children" : [ ]
         }]
       }]
     }]
@@ -407,7 +393,7 @@
           "children" : [{
             "name" : "_id",
             "count" : 2,
-            "TYPE_ID" : [5,5],
+            "TYPE_ID" : [0,0],
             "OFFSET" : [0,1],
             "children" : [{
               "name" : "varchar",
@@ -419,7 +405,7 @@
           },{
             "name" : "api-version",
             "count" : 2,
-            "TYPE_ID" : [5,-1],
+            "TYPE_ID" : [0,-1],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "varchar",
@@ -431,7 +417,7 @@
           },{
             "name" : "manufacturer",
             "count" : 2,
-            "TYPE_ID" : [5,-1],
+            "TYPE_ID" : [0,-1],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "varchar",
@@ -443,7 +429,7 @@
           },{
             "name" : "model",
             "count" : 2,
-            "TYPE_ID" : [5,-1],
+            "TYPE_ID" : [0,-1],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "varchar",
@@ -455,7 +441,7 @@
           },{
             "name" : "os-name",
             "count" : 2,
-            "TYPE_ID" : [5,-1],
+            "TYPE_ID" : [0,-1],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "varchar",
@@ -467,7 +453,7 @@
           },{
             "name" : "cpu-avg-15min",
             "count" : 2,
-            "TYPE_ID" : [-1,3],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "float8",
@@ -478,7 +464,7 @@
           },{
             "name" : "rssi",
             "count" : 2,
-            "TYPE_ID" : [-1,3],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "float8",
@@ -489,7 +475,7 @@
           },{
             "name" : "cpu-avg-5min",
             "count" : 2,
-            "TYPE_ID" : [-1,3],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "float8",
@@ -500,7 +486,7 @@
           },{
             "name" : "battery-status",
             "count" : 2,
-            "TYPE_ID" : [-1,5],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "varchar",
@@ -512,7 +498,7 @@
           },{
             "name" : "ssid",
             "count" : 2,
-            "TYPE_ID" : [-1,5],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "varchar",
@@ -524,7 +510,7 @@
           },{
             "name" : "time",
             "count" : 2,
-            "TYPE_ID" : [-1,10],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "timestamp-milli",
@@ -535,7 +521,7 @@
           },{
             "name" : "battery-level",
             "count" : 2,
-            "TYPE_ID" : [-1,3],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "float8",
@@ -546,7 +532,7 @@
           },{
             "name" : "bssid",
             "count" : 2,
-            "TYPE_ID" : [-1,5],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "varchar",
@@ -558,7 +544,7 @@
           },{
             "name" : "battery-temperature",
             "count" : 2,
-            "TYPE_ID" : [-1,3],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "float8",
@@ -569,7 +555,7 @@
           },{
             "name" : "cpu-avg-1min",
             "count" : 2,
-            "TYPE_ID" : [-1,3],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "float8",
@@ -580,7 +566,7 @@
           },{
             "name" : "mem-free",
             "count" : 2,
-            "TYPE_ID" : [-1,3],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "float8",
@@ -591,7 +577,7 @@
           },{
             "name" : "mem-used",
             "count" : 2,
-            "TYPE_ID" : [-1,3],
+            "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
               "name" : "float8",
@@ -619,14 +605,7 @@
           "name" : "_id",
           "count" : 0,
           "TYPE_ID" : [ ],
-          "OFFSET" : [ ],
-          "children" : [{
-            "name" : "varchar",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          }]
+          "OFFSET" : [ ]
         },{
           "name" : "_valid-time-start",
           "count" : 0,
@@ -646,14 +625,7 @@
           "name" : "_id",
           "count" : 0,
           "TYPE_ID" : [ ],
-          "OFFSET" : [ ],
-          "children" : [{
-            "name" : "varchar",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          }]
+          "OFFSET" : [ ]
         }]
       }]
     }]

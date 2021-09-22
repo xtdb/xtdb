@@ -23,7 +23,7 @@
           (try
             (doseq [k (keys (first rows))]
               (let [out-vec (.createVector (ty/->primitive-dense-union-field (name k)) allocator)]
-                (.add out-cols (rel/<-vector out-vec))
+                (.add out-cols (rel/vec->reader out-vec))
                 (dorun
                  (map-indexed (fn [idx row]
                                 (ty/set-safe! out-vec idx (get row k)))

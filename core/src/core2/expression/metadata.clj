@@ -153,7 +153,7 @@
                     `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
                                 (.getChild ~vec-sym ~(types/type->field-name arrow-type))]
                        (when-not (.isNull ~vec-sym ~expr/idx-sym)
-                         (let [~(-> col-sym (expr/with-tag IColumnReader)) (rel/<-vector ~vec-sym)]
+                         (let [~(-> col-sym (expr/with-tag IColumnReader)) (rel/vec->reader ~vec-sym)]
                            ~(:code (expr/codegen-expr
                                     {:op :call
                                      :f f

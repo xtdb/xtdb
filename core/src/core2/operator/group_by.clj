@@ -84,7 +84,7 @@
           consumer (cond
                      (= #{(types/->arrow-type :bigint)} arrow-types)
                      (let [from-col (-> from-col
-                                        (rel/nested-read-col (types/->arrow-type :bigint)))
+                                        (rel/reader-for-type (types/->arrow-type :bigint)))
                            ^BigIntVector from-vec (.getVector from-col)]
                        (reify IntConsumer
                          (accept [_ idx]
@@ -93,7 +93,7 @@
 
                      (= #{(types/->arrow-type :float8)} arrow-types)
                      (let [from-col (-> from-col
-                                        (rel/nested-read-col (types/->arrow-type :float8)))
+                                        (rel/reader-for-type (types/->arrow-type :float8)))
                            ^Float8Vector from-vec (.getVector from-col)]
                        (reify IntConsumer
                          (accept [_ idx]
@@ -296,7 +296,7 @@
             ;; we'll want to incorporate this when we bring in a consistent DUV approach.
             (nested/append-value (.finish aggregate-spec (aget accs n)) append-vec)))
 
-        (.add out-cols (rel/<-vector append-vec))))
+        (.add out-cols (rel/vec->reader append-vec))))
     (rel/->read-relation out-cols)))
 
 (deftype GroupByCursor [^BufferAllocator allocator

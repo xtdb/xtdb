@@ -18,18 +18,18 @@
         "typeIds" : [0,1,2]
       },
       "children" : [{
+        "name" : "varchar",
+        "nullable" : false,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
         "name" : "float8",
         "nullable" : false,
         "type" : {
           "name" : "floatingpoint",
           "precision" : "DOUBLE"
-        },
-        "children" : [ ]
-      },{
-        "name" : "varchar",
-        "nullable" : false,
-        "type" : {
-          "name" : "utf8"
         },
         "children" : [ ]
       },{
@@ -54,19 +54,19 @@
     },{
       "name" : "_id",
       "count" : 6,
-      "TYPE_ID" : [1,0,1,2,0,2],
+      "TYPE_ID" : [0,1,0,2,1,2],
       "OFFSET" : [0,0,1,0,1,1],
       "children" : [{
-        "name" : "float8",
-        "count" : 2,
-        "VALIDITY" : [1,1],
-        "DATA" : [24.0,52.0]
-      },{
         "name" : "varchar",
         "count" : 2,
         "VALIDITY" : [1,1],
         "OFFSET" : [0,3,6],
         "DATA" : ["foo","bar"]
+      },{
+        "name" : "float8",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "DATA" : [24.0,52.0]
       },{
         "name" : "timestamp-milli",
         "count" : 2,

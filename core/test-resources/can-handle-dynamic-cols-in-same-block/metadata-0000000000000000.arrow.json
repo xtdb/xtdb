@@ -41,18 +41,18 @@
         "name" : "struct"
       },
       "children" : [{
+        "name" : "varchar",
+        "nullable" : true,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
         "name" : "float8",
         "nullable" : true,
         "type" : {
           "name" : "floatingpoint",
           "precision" : "DOUBLE"
-        },
-        "children" : [ ]
-      },{
-        "name" : "varchar",
-        "nullable" : true,
-        "type" : {
-          "name" : "utf8"
         },
         "children" : [ ]
       },{
@@ -72,18 +72,18 @@
         "name" : "struct"
       },
       "children" : [{
+        "name" : "varchar",
+        "nullable" : true,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
         "name" : "float8",
         "nullable" : true,
         "type" : {
           "name" : "floatingpoint",
           "precision" : "DOUBLE"
-        },
-        "children" : [ ]
-      },{
-        "name" : "varchar",
-        "nullable" : true,
-        "type" : {
-          "name" : "utf8"
         },
         "children" : [ ]
       },{
@@ -122,18 +122,18 @@
             "name" : "struct"
           },
           "children" : [{
+            "name" : "varchar",
+            "nullable" : true,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
             "name" : "float8",
             "nullable" : true,
             "type" : {
               "name" : "floatingpoint",
               "precision" : "DOUBLE"
-            },
-            "children" : [ ]
-          },{
-            "name" : "varchar",
-            "nullable" : true,
-            "type" : {
-              "name" : "utf8"
             },
             "children" : [ ]
           },{
@@ -153,18 +153,18 @@
             "name" : "struct"
           },
           "children" : [{
+            "name" : "varchar",
+            "nullable" : true,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
             "name" : "float8",
             "nullable" : true,
             "type" : {
               "name" : "floatingpoint",
               "precision" : "DOUBLE"
-            },
-            "children" : [ ]
-          },{
-            "name" : "varchar",
-            "nullable" : true,
-            "type" : {
-              "name" : "utf8"
             },
             "children" : [ ]
           },{
@@ -216,16 +216,16 @@
       "count" : 1,
       "VALIDITY" : [1],
       "children" : [{
-        "name" : "float8",
-        "count" : 1,
-        "VALIDITY" : [1],
-        "DATA" : [24.0]
-      },{
         "name" : "varchar",
         "count" : 1,
         "VALIDITY" : [1],
         "OFFSET" : [0,3],
         "DATA" : ["bar"]
+      },{
+        "name" : "float8",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [24.0]
       },{
         "name" : "timestamp-milli",
         "count" : 1,
@@ -237,16 +237,16 @@
       "count" : 1,
       "VALIDITY" : [1],
       "children" : [{
-        "name" : "float8",
-        "count" : 1,
-        "VALIDITY" : [1],
-        "DATA" : [52.0]
-      },{
         "name" : "varchar",
         "count" : 1,
         "VALIDITY" : [1],
         "OFFSET" : [0,3],
         "DATA" : ["foo"]
+      },{
+        "name" : "float8",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [52.0]
       },{
         "name" : "timestamp-milli",
         "count" : 1,
@@ -273,16 +273,16 @@
           "count" : 1,
           "VALIDITY" : [1],
           "children" : [{
-            "name" : "float8",
-            "count" : 1,
-            "VALIDITY" : [1],
-            "DATA" : [24.0]
-          },{
             "name" : "varchar",
             "count" : 1,
             "VALIDITY" : [1],
             "OFFSET" : [0,3],
             "DATA" : ["bar"]
+          },{
+            "name" : "float8",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [24.0]
           },{
             "name" : "timestamp-milli",
             "count" : 1,
@@ -294,16 +294,16 @@
           "count" : 1,
           "VALIDITY" : [1],
           "children" : [{
-            "name" : "float8",
-            "count" : 1,
-            "VALIDITY" : [1],
-            "DATA" : [52.0]
-          },{
             "name" : "varchar",
             "count" : 1,
             "VALIDITY" : [1],
             "OFFSET" : [0,3],
             "DATA" : ["foo"]
+          },{
+            "name" : "float8",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [52.0]
           },{
             "name" : "timestamp-milli",
             "count" : 1,
