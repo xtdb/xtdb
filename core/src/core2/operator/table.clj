@@ -5,7 +5,8 @@
             [core2.util :as util])
   (:import core2.ICursor
            [java.util ArrayList LinkedList List]
-           org.apache.arrow.memory.BufferAllocator))
+           org.apache.arrow.memory.BufferAllocator
+           org.apache.arrow.vector.complex.DenseUnionVector))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -22,14 +23,21 @@
         (let [out-cols (LinkedList.)]
           (try
             (doseq [k (keys (first rows))]
-              (let [out-vec (.createVector (ty/->primitive-dense-union-field (name k)) allocator)]
+              (let [out-vec (DenseUnionVector/empty (name k) allocator)
+                    out-writer (rel/vec->writer out-vec)]
                 (.add out-cols (rel/vec->reader out-vec))
                 (dorun
                  (map-indexed (fn [idx row]
-                                (ty/set-safe! out-vec idx (get row k)))
+                                (util/set-value-count out-vec idx)
+
+                                (let [v (get row k)
+                                      writer (.writerForType out-writer (ty/class->arrow-type (class v)))]
+                                  (ty/set-safe! (.getVector writer) (.appendIndex writer) v)))
+
                               rows))))
-            (catch Exception _
-              (run! util/try-close out-cols)))
+            (catch Exception e
+              (run! util/try-close out-cols)
+              (throw e)))
 
           (with-open [out-rel (rel/->read-relation out-cols)]
             (.accept c out-rel)

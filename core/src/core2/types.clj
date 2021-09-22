@@ -37,6 +37,9 @@
 (def dense-union-type (.getType Types$MinorType/DENSEUNION))
 (def list-type (.getType Types$MinorType/LIST))
 
+(defn ->dense-union-type [type-ids]
+  (ArrowType$Union. UnionMode/Dense (int-array type-ids)))
+
 (def class->arrow-type
   {nil (->arrow-type :null)
    Long (->arrow-type :bigint)
@@ -69,16 +72,6 @@
    (->arrow-type :timestamp-milli) Date
    (->arrow-type :duration-milli) Duration
    (->arrow-type :bit) Boolean})
-
-(def arrow-type->type-id
-  {(->arrow-type :null) 1,
-   (->arrow-type :bigint) 2,
-   (->arrow-type :float8) 3,
-   (->arrow-type :varbinary) 4,
-   (->arrow-type :varchar) 5,
-   (->arrow-type :bit) 6,
-   (->arrow-type :timestamp-milli) 10,
-   (->arrow-type :duration-milli) 18})
 
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
@@ -169,33 +162,9 @@
   (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
 
   DenseUnionVector
-  (set-safe! [this idx v]
-    (let [type-id (arrow-type->type-id (class->arrow-type (class v)))
-          offset (DenseUnionUtil/writeTypeId this idx type-id)]
-      (set-safe! (.getVectorByType this (.getTypeId this idx)) offset v)))
-
   (set-null! [this idx]
     (set-safe! this idx nil))
 
   (get-object [this idx]
     (get-object (.getVectorByType this (.getTypeId this idx))
                 (.getOffset this idx))))
-
-(defn ->primitive-dense-union-field
-  (^org.apache.arrow.vector.types.pojo.Field [field-name]
-   (->primitive-dense-union-field field-name (keys ->arrow-type)))
-  (^org.apache.arrow.vector.types.pojo.Field [^String field-name type-ks]
-   (let [type-ks (sort-by (comp arrow-type->type-id ->arrow-type) type-ks)
-         type-ids (int-array (for [type-k type-ks]
-                               (-> type-k ->arrow-type arrow-type->type-id)))]
-     (apply ->field field-name
-            (ArrowType$Union. UnionMode/Dense type-ids)
-            false
-            (for [type-k type-ks]
-              (if (= type-k :null)
-                (->field "$data$"
-                         (->arrow-type type-k)
-                         true)
-                (->field (name type-k)
-                         (->arrow-type type-k)
-                         false)))))))

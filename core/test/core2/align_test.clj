@@ -3,7 +3,6 @@
             [core2.align :as align]
             [core2.test-util :as tu]
             [core2.types :as ty]
-            [core2.util :as util]
             [core2.expression :as expr]
             [core2.relation :as rel])
   (:import java.util.List
@@ -13,13 +12,7 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-align
-  (with-open [age-vec (doto ^DenseUnionVector (.createVector (ty/->primitive-dense-union-field "age" #{:bigint}) tu/*allocator*)
-                        (util/set-value-count 5)
-                        (ty/set-safe! 0 12)
-                        (ty/set-safe! 1 42)
-                        (ty/set-safe! 2 15)
-                        (ty/set-safe! 3 83)
-                        (ty/set-safe! 4 25))
+  (with-open [age-vec (DenseUnionVector/empty "age" tu/*allocator*)
 
               age-row-id-vec (doto (BigIntVector. "_row-id" tu/*allocator*)
                                (.setValueCount 5)
@@ -32,12 +25,7 @@
               age-root (let [^List vecs [age-row-id-vec age-vec]]
                          (VectorSchemaRoot. vecs))
 
-              name-vec (doto ^DenseUnionVector (.createVector (ty/->primitive-dense-union-field "name" #{:varchar}) tu/*allocator*)
-                         (util/set-value-count 4)
-                         (ty/set-safe! 0 "Al")
-                         (ty/set-safe! 1 "Dave")
-                         (ty/set-safe! 2 "Bob")
-                         (ty/set-safe! 3 "Steve"))
+              name-vec (DenseUnionVector/empty "name" tu/*allocator*)
 
               name-row-id-vec (doto (BigIntVector. "_row-id" tu/*allocator*)
                                 (.setValueCount 4)
@@ -48,6 +36,16 @@
 
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
+
+    (let [age-writer (-> (rel/vec->writer age-vec)
+                         (.writerForType (ty/->arrow-type :bigint)))]
+      (doseq [age [12 42 15 83 25]]
+        (ty/set-safe! (.getVector age-writer) (.appendIndex age-writer) age)))
+
+    (let [name-writer (-> (rel/vec->writer name-vec)
+                         (.writerForType (ty/->arrow-type :varchar)))]
+      (doseq [name ["Al" "Dave" "Bob" "Steve"]]
+        (ty/set-safe! (.getVector name-writer) (.appendIndex name-writer) name)))
 
     (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-column-selector '(<= age 30) {})
                                                         (rel/vec->reader age-vec))
