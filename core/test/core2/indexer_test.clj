@@ -212,6 +212,20 @@
 
         (tu/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
 
+(t/deftest round-trips-nils
+  (with-open [node (node/start-node {})]
+    (-> (c2/submit-tx node [[:put {:_id "nil-bar"
+                                   :foo "foo"
+                                   :bar nil}]
+                            [:put {:_id "no-bar"
+                                   :foo "foo"}]])
+        (tu/then-await-tx node (Duration/ofMillis 2000)))
+    (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}]
+             (c2/query node '{:find [?id ?foo ?bar]
+                              :where [[?e :_id ?id]
+                                      [?e :foo ?foo]
+                                      [?e :bar ?bar]]})))))
+
 (t/deftest writes-log-file
   (let [node-dir (util/->path "target/writes-log-file")
         mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02" #inst "2020-01-03"])]

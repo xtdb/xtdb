@@ -179,17 +179,22 @@
   (appendIndex [_ parent-idx]
     (DenseUnionUtil/writeTypeId parent-duv parent-idx type-id))
 
-  (rowAppender [this src-col]
+  (rowAppender [this-writer src-col]
     (let [src-vec (.getVector src-col)]
-      (reify IRowAppender
-        (appendRow [this src-idx]
-          (.appendRow this src-idx (.appendIndex parent-writer)))
+      (if (= (ty/->arrow-type :null) (.getType (.getField src-vec)))
+        (reify IRowAppender
+          (appendRow [_ src-idx] (.appendIndex this-writer))
+          (appendRow [_ src-idx parent-idx] (.appendIndex this-writer parent-idx)))
 
-        (appendRow [_ src-idx parent-idx]
-          (.copyFromSafe child-vec
-                         (.getIndex src-col src-idx)
-                         (.appendIndex this parent-idx)
-                         src-vec))))))
+        (reify IRowAppender
+          (appendRow [this src-idx]
+            (.appendRow this src-idx (.appendIndex parent-writer)))
+
+          (appendRow [_ src-idx parent-idx]
+            (.copyFromSafe child-vec
+                           (.getIndex src-col src-idx)
+                           (.appendIndex this-writer parent-idx)
+                           src-vec)))))))
 
 (defn- duv->duv-appender ^core2.relation.IRowAppender [^IColumnReader src-col, ^IColumnWriter dest-col]
   (let [^DenseUnionVector src-vec (.getVector src-col)
