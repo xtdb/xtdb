@@ -2,7 +2,7 @@
   (:import java.io.File
            org.antlr.v4.Tool
            org.antlr.v4.tool.Grammar
-           [org.antlr.v4.runtime CharStreams CommonTokenStream ParserRuleContext Vocabulary]
+           [org.antlr.v4.runtime CharStream CharStreams CommonTokenStream ParserRuleContext Vocabulary]
            [org.antlr.v4.runtime.tree ErrorNode ParseTree ParseTreeVisitor RuleNode TerminalNode]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -48,11 +48,44 @@
                       [(keyword symbol) (.getText node)]
                       (.getText node))))))
 
+(defn- upper-case-char-stream ^org.antlr.v4.runtime.CharStream [^CharStream in]
+  (reify CharStream
+    (getText [_ interval]
+      (.getText in interval))
+
+    (consume [_]
+      (.consume in))
+
+    (LA [_ i]
+      (let [c (.LA in i)]
+        (if (pos? c)
+          (Character/toUpperCase c)
+          c)))
+
+    (mark [_]
+      (.mark in))
+
+    (release [_ marker]
+      (.release in marker))
+
+    (index [_]
+      (.index in))
+
+    (seek [_ index]
+      (.seek in index))
+
+    (size [_]
+      (.size in))
+
+    (getSourceName [_]
+      (.getSourceName in))))
+
 (defn parse
   (^org.antlr.v4.runtime.ParserRuleContext [^Grammar grammar ^String s]
    (parse grammar s {}))
-  (^org.antlr.v4.runtime.ParserRuleContext [^Grammar grammar ^String s {:keys [start]}]
-   (let [lexer (.createLexerInterpreter grammar (CharStreams/fromString s))
+  (^org.antlr.v4.runtime.ParserRuleContext [^Grammar grammar ^String s {:keys [start string-ci]}]
+   (let [lexer (.createLexerInterpreter grammar (cond-> (CharStreams/fromString s)
+                                                  string-ci (upper-case-char-stream)))
          parser (.createParserInterpreter grammar (CommonTokenStream. lexer))]
      (.parse parser (if start
                       (.index (.getRule grammar (name start)))
