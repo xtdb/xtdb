@@ -142,12 +142,7 @@
 
 (def ->temporal-field
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
-         [col-name (t/->field col-name
-                              (ArrowType$Union. UnionMode/Dense (int-array [0]))
-                              false
-                              (t/->field (name :timestamp-milli)
-                                         (t/->arrow-type :timestamp-milli)
-                                         false))])
+         [col-name (t/->field col-name (t/->arrow-type :timestamp-milli) false)])
        (into {})))
 
 (defn temporal-column? [col-name]
@@ -551,17 +546,14 @@
             (let [col-idx (->temporal-column-idx col-name)
                   out-root (VectorSchemaRoot/create (->temporal-root-schema col-name) allocator)
                   ^BigIntVector row-id-vec (.getVector out-root 0)
-                  ^DenseUnionVector temporal-duv-vec (.getVector out-root 1)
-                  ^TimeStampMilliVector temporal-vec (.getVectorByType temporal-duv-vec 0)]
-              (util/set-value-count row-id-vec value-count)
+                  ^TimeStampMilliVector temporal-vec (.getVector out-root 1)]
+              (util/set-vector-schema-root-row-count out-root value-count)
               (dotimes [n value-count]
-                (let [offset (DenseUnionUtil/writeTypeId temporal-duv-vec n 0)
-                      ^longs coordinate (aget coordinates n)
+                (let [^longs coordinate (aget coordinates n)
                       row-id (aget coordinate row-id-idx)]
                   (.addLong row-id-bitmap-out row-id)
                   (.set row-id-vec n row-id)
-                  (.set temporal-vec offset (aget coordinate col-idx))))
-              (util/set-vector-schema-root-row-count out-root value-count)
+                  (.set temporal-vec n (aget coordinate col-idx))))
               (.put roots col-name out-root)))
           (->TemporalRoots (doto row-id-bitmap-out
                              (.and row-id-bitmap))
