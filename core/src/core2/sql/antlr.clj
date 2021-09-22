@@ -2,7 +2,7 @@
   (:import java.io.File
            org.antlr.v4.Tool
            org.antlr.v4.tool.Grammar
-           [org.antlr.v4.runtime CharStreams CommonTokenStream ParserRuleContext]
+           [org.antlr.v4.runtime CharStreams CommonTokenStream ParserRuleContext Vocabulary]
            [org.antlr.v4.runtime.tree ErrorNode ParseTree ParseTreeVisitor RuleNode TerminalNode]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -21,7 +21,9 @@
     (-> (Tool. (into-array ["-package" package-name (str grammar-file)]))
         (.processGrammarsOnCommandLine))))
 
-(defn ->ast [^"[Ljava.lang.String;" rule-names ^ParseTree tree]
+(defn ->ast [^"[Ljava.lang.String;" rule-names
+             ^Vocabulary vocabulary
+             ^ParseTree tree]
   (.accept tree (reify ParseTreeVisitor
                   (visit [this ^ParseTree node]
                     (.accept node this))
@@ -42,7 +44,9 @@
                                        :col (.getCharPositionInLine token)})) ))
 
                   (visitTerminal [_ ^TerminalNode node]
-                    (.getText node)))))
+                    (if-let [symbol (.getSymbolicName vocabulary (.getType (.getSymbol node)))]
+                      [(keyword symbol) (.getText node)]
+                      (.getText node))))))
 
 (defn parse
   (^org.antlr.v4.runtime.ParserRuleContext [^Grammar grammar ^String s]
@@ -68,8 +72,9 @@ NEWLINE : [\\r\\n]+ ;
 INT     : [0-9]+ ;"
         expr-grammar (parse-grammar-from-string expr-g4)
         rule-names (.getRuleNames expr-grammar)
+        vocabulary (.getVocabulary expr-grammar)
         tree (time (parse expr-grammar "100+2*34\n"))
-        ast (time (->ast rule-names tree))]
+        ast (time (->ast rule-names vocabulary tree))]
 
     #_(generate-parser expr-g4
                        "core2.expr"
@@ -79,6 +84,21 @@ INT     : [0-9]+ ;"
 
   (let [parser (core2.expr.ExprParser. (CommonTokenStream. (core2.expr.ExprLexer.  (CharStreams/fromString "100+2*34\n"))))
         rule-names (.getRuleNames parser)
+        vocabulary (.getVocabulary parser)
         tree (time (.prog parser))
-        ast (time (->ast rule-names tree))]
+        ast (time (->ast rule-names vocabulary tree))]
+    ast)
+
+  (require 'instaparse.core)
+  (let [expr-bnf "
+prog: (expr NEWLINE)* ;
+expr: expr ('*'|'/') expr
+    |  expr ('+'|'-') expr
+    |  INT
+    |  '(' expr ')'
+    ;
+NEWLINE : #\"[\\r\\n]+\" ;
+INT     : #\"[0-9]+\"" ;
+        parser (instaparse.core/parser expr-bnf)
+        ast (time (parser "100+2*34\n"))]
     ast))
