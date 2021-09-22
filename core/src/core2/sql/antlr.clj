@@ -98,7 +98,7 @@ expr: expr ('*'|'/') expr
     |  '(' expr ')'
     ;
 NEWLINE : #\"[\\r\\n]+\" ;
-INT     : #\"[0-9]+\"" ;
+INT     : #\"[0-9]+\" ;"
         parser (instaparse.core/parser expr-bnf)
         ast (time (parser "100+2*34\n"))]
     ast))
