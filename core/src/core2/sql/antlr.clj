@@ -66,14 +66,19 @@ expr:	expr ('*'|'/') expr
     ;
 NEWLINE : [\\r\\n]+ ;
 INT     : [0-9]+ ;"
-
         expr-grammar (parse-grammar-from-string expr-g4)
         rule-names (.getRuleNames expr-grammar)
         tree (time (parse expr-grammar "100+2*34\n"))
         ast (time (->ast rule-names tree))]
 
-    (generate-parser expr-g4
-                     "core2.expr"
-                     "target/codegen/core2/expr/Expr.g4")
+    #_(generate-parser expr-g4
+                       "core2.expr"
+                       "core/target/codegen/core2/expr/Expr.g4")
 
+    ast)
+
+  (let [parser (core2.expr.ExprParser. (CommonTokenStream. (core2.expr.ExprLexer.  (CharStreams/fromString "100+2*34\n"))))
+        rule-names (.getRuleNames parser)
+        tree (time (.prog parser))
+        ast (time (->ast rule-names tree))]
     ast))
