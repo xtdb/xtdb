@@ -3,7 +3,7 @@
       "dev-SNAPSHOT"))
 
 (defproject pro.juxt.crux-labs/core2-dev core2-version
-  :url "https://github.com/juxt/crux-rnd"
+  :url "https://github.com/xtdb/crux-rnd"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
 
