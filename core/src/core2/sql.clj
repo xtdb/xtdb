@@ -366,3 +366,18 @@
 
 ;; SQL-99 Complete, Really
 ;; https://crate.io/docs/sql-99/en/latest/index.html
+
+;; TODO:
+
+;; Convert relevant parts SQL:2011 to Antlr, including DML so we have
+;; it ready. Figure out what the top-level is, how to represent
+;; transactions with select constraints in the standards compliant
+;; way.
+
+;; 2011 and 2016 grammars are very similar apart from the new 2016
+;; features. Missing functions we want from 2016 in 2011:
+
+;; <numeric value function> ::=
+;;   | <trigonometric function>
+;;   | <general logarithm function>
+;;   | <common logarithm>
