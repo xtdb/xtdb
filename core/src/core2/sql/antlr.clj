@@ -164,4 +164,4 @@ COMMENT: '//' .*? '\\n'-> skip ;
     (binding [*print-length* nil
               *print-level* nil
               *print-namespace-maps* false]
-      (spit "target/sql2011-ast.edn" (pr-str sql2011-ast)))))
+      (spit "target/sql2011-ast.edn" (pr-str ast)))))
