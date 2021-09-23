@@ -135,4 +135,33 @@ NEWLINE : #\"[\\r\\n]+\" ;
 INT     : #\"[0-9]+\" ;"
         parser (instaparse.core/parser expr-bnf)
         ast (time (parser "100+2*34\n"))]
-    ast))
+    ast)
+
+
+  (let [sql-g4 "
+grammar SQLSpecGrammar;
+
+spec:	definition* ;
+definition: NAME '::=' syntax+ ;
+syntax:  (NAME | TOKEN | optional | mandatory | SEE_THE_SYNTAX_RULES) REPEATABLE? ('|' syntax)* ;
+optional: '[' syntax+ ']' ;
+mandatory: '{' syntax+ '}' ;
+REPEATABLE: '...' ;
+SEE_THE_SYNTAX_RULES: '!!' .*? '\\n' ;
+NAME: '<' [-_:/a-zA-Z 0-9]+ '>' ;
+TOKEN: ~[ \\n\\r\\t.!]+ ;
+WS: [ \\n\\r\\t]+ -> skip ;
+COMMENT: '//' .*? '\\n'-> skip ;
+        "
+        sql-spec-grammar (parse-grammar-from-string sql-g4)
+        rule-names (.getRuleNames sql-spec-grammar)
+        vocabulary (.getVocabulary sql-spec-grammar)
+        tree (time (parse sql-spec-grammar
+                          (slurp "core/src/core2/sql/SQL2011.txt")
+                          {:start "spec"}))
+        ast (time (->ast rule-names vocabulary tree))]
+
+    (binding [*print-length* nil
+              *print-level* nil
+              *print-namespace-maps* false]
+      (spit "target/sql2011-ast.edn" (pr-str sql2011-ast)))))
