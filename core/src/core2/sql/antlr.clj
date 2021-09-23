@@ -164,4 +164,148 @@ COMMENT: '//' .*? '\\n'-> skip ;
     (binding [*print-length* nil
               *print-level* nil
               *print-namespace-maps* false]
-      (spit "target/sql2011-ast.edn" (pr-str ast)))))
+      (spit "target/sql2011-ast.edn" (pr-str ast))))
+
+  (def sql2011-ast (clojure.edn/read-string (slurp "target/sql2011-ast.edn")))
+
+  (def literal-set
+    (-> (set (take-while (complement #{"<identifier>"}) (map (comp second second) (rest core2.sql.antlr/sql2011-ast))))
+        (conj "<character set specification>"
+              "<standard character set name>"
+              "<implementation-defined character set name>"
+              "<user-defined character set name>"
+              "<interval qualifier>"
+              "<start field>"
+              "<end field>"
+              "<single datetime field>"
+              "<primary datetime field>"
+              "<non-second primary datetime field>"
+              "<interval fractional seconds precision>"
+              "<interval leading field precision>"
+              "<SQL language identifier>"
+              "<SQL language identifier start>"
+              "<SQL language identifier part>"
+              "<schema name>"
+              "<unqualified schema name>"
+              "<catalog name>"
+              "<character set name>"
+              "<identifier>"
+              "<actual identifier>"
+              "<non-escaped character>"
+              "<escaped character>")))
+
+  (def syntax-rules-overrides
+    {'SPACE "' '"
+     'QUOTE "'\\''"
+     'PERIOD "'.'"
+     'REVERSE_SOLIDUS "'\\\\'"
+     'LEFT_BRACKET "'['"
+     'RIGHT_BRACKET "']'"
+     'VERTICAL_BAR "'|'"
+     'LEFT_BRACE "'{'"
+     'RIGHT_BRACE "'}'"
+     'IDENTIFIER_START "SIMPLE_LATIN_LETTER"
+     'IDENTIFIER_EXTEND "SIMPLE_LATIN_LETTER | DIGIT | UNDERSCORE"
+     'UNICODE_ESCAPE_CHARACTER "'\\\\'"
+     'NONDOUBLEQUOTE_CHARACTER "~'\"'"
+     'DOUBLEQUOTE_SYMBOL ""
+     'DOUBLE_PERIOD "'..'"
+     'WHITE_SPACE "[\\n\\r\\t ]+"
+     'BRACKETED_COMMENT_CONTENTS "."
+     'NEWLINE "[\\r\\n]+"
+     'NONQUOTE_CHARACTER "~'\\''"
+     'NON_ESCAPED_CHARACTER "."
+     'ESCAPED_CHARACTER "'\\\\' ."})
+
+  (spit "core/src/core2/sql/SQL2011.g"
+        (-> (with-out-str
+              (println "grammar SQL2011;")
+              (println)
+              (doseq [[n _ & body]
+                      (clojure.walk/postwalk
+                       (fn [x]
+                         (cond
+                           (and (vector? x) (= :NAME (first x)))
+                           (let [[_ n] x
+                                 terminal? (contains? core2.sql.antlr/literal-set n)
+                                 n (subs n 1 (dec (count n)))
+                                 n (clojure.string/replace n #"[ :-]" "_")]
+                             (symbol (if terminal?
+                                       (clojure.string/upper-case n)
+                                       (clojure.string/lower-case n))))
+
+                           (and (vector? x) (= :TOKEN (first x)))
+                           (str "'" (clojure.string/replace  (second x) "'" "\\'") "'")
+
+                           (and (vector? x) (= :REPEATABLE (first x)))
+                           '+
+
+                           (and (vector? x) (= :SEE_THE_SYNTAX_RULES (first x)))
+                           (first x)
+
+                           (and (vector? x) (= :syntax (first x)))
+                           (let [wrap-repeatable (fn [x]
+                                                   (if (= '+ (last x))
+                                                     (list (butlast x) '+)
+                                                     x))]
+                             (if (= "|" (last (butlast x)))
+                               (concat (rest (butlast (butlast x))) ['|] (last x))
+                               (rest x)))
+
+                           (and (sequential? x) (= :spec (first x)))
+                           (rest x)
+
+                           (and (vector? x) (= :definition (first x)))
+                           (concat (cons (second x)
+                                         (cons (symbol ":") (apply concat (nthrest x 3))))
+                                   [(symbol ";")])
+
+                           (and (vector? x) (= :optional (first x)))
+                           (let [x (apply concat (rest (rest (butlast x))))]
+                             (if (= '+ (last x))
+                               (list (butlast x) '*)
+                               (list x '?)))
+
+                           (and (vector? x) (= :mandatory (first x)))
+                           (apply concat (rest (rest (butlast x))))
+
+                           :else
+                           x))
+                       core2.sql.antlr/sql2011-ast)]
+                #_(when (Character/isUpperCase (char (first (str n))))
+                    (println "fragment"))
+                (println n ":")
+                (println "    " (clojure.string/join " " (clojure.walk/postwalk
+                                                          #(cond
+                                                             (string? %)
+                                                             (symbol %)
+
+                                                             (= :SEE_THE_SYNTAX_RULES %)
+                                                             (symbol (get syntax-rules-overrides n %))
+
+                                                             (sequential? %)
+                                                             (let [x (vec %)]
+                                                               (cond
+                                                                 (= 1 (count x))
+                                                                 (first x)
+
+                                                                 (and (= 2 (count x)) (contains? '#{* ? +} (last x)))
+                                                                 (symbol (clojure.string/join x))
+
+                                                                 :else
+                                                                 (seq x)))
+
+                                                             :else
+                                                             %)
+                                                          body)))
+                (println)))
+            (clojure.string/replace " +" "+")
+            (str "application_time_period_name : IDENTIFIER ;
+
+embedded_variable_name : IDENTIFIER ;
+
+transition_table_name : IDENTIFIER ;
+")))
+
+  (-> (Tool. (into-array ["-package" "core2.sql" "-no-listener" "-no-visitor" "core/src/core2/sql/SQL2011.g"]))
+      (.processGrammarsOnCommandLine)))
