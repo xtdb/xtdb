@@ -276,7 +276,7 @@ REGULAR_IDENTIFIER:
 
 fragment
 IDENTIFIER_BODY:
-    IDENTIFIER_START IDENTIFIER_PART +?
+    IDENTIFIER_START IDENTIFIER_PART*
     ;
 
 fragment
@@ -295,7 +295,7 @@ IDENTIFIER_EXTEND:
     ;
 
 LARGE_OBJECT_LENGTH_TOKEN:
-    DIGIT + MULTIPLIER
+    DIGIT+ MULTIPLIER
     ;
 
 MULTIPLIER:
@@ -313,7 +313,7 @@ DELIMITED_IDENTIFIER:
 
 fragment
 DELIMITED_IDENTIFIER_BODY:
-    DELIMITED_IDENTIFIER_PART +
+    DELIMITED_IDENTIFIER_PART+
     ;
 
 fragment
@@ -334,7 +334,7 @@ UNICODE_ESCAPE_SPECIFIER:
 
 fragment
 UNICODE_DELIMITER_BODY:
-    UNICODE_IDENTIFIER_PART +
+    UNICODE_IDENTIFIER_PART+
     ;
 
 fragment
@@ -432,7 +432,7 @@ NAMED_ARGUMENT_ASSIGNMENT_TOKEN:
 
 fragment
 SEPARATOR:
-    (COMMENT | WHITE_SPACE) +
+    (COMMENT | WHITE_SPACE)+
     ;
 
 WHITE_SPACE:
@@ -446,7 +446,7 @@ COMMENT:
 
 fragment
 SIMPLE_COMMENT:
-    SIMPLE_COMMENT_INTRODUCER COMMENT_CHARACTER +? NEWLINE
+    SIMPLE_COMMENT_INTRODUCER COMMENT_CHARACTER* NEWLINE
     ;
 
 fragment
@@ -471,7 +471,7 @@ BRACKETED_COMMENT_TERMINATOR:
 
 fragment
 BRACKETED_COMMENT_CONTENTS:
-    (COMMENT_CHARACTER | SEPARATOR) +? .
+    (COMMENT_CHARACTER | SEPARATOR)* .
     ;
 
 fragment
@@ -1061,7 +1061,7 @@ GENERAL_LITERAL:
     ;
 
 CHARACTER_STRING_LITERAL:
-    (INTRODUCER CHARACTER_SET_SPECIFICATION)? QUOTE CHARACTER_REPRESENTATION +? QUOTE (SEPARATOR QUOTE CHARACTER_REPRESENTATION +? QUOTE) +?
+    (INTRODUCER CHARACTER_SET_SPECIFICATION)? QUOTE CHARACTER_REPRESENTATION* QUOTE (SEPARATOR QUOTE CHARACTER_REPRESENTATION* QUOTE)*
     ;
 
 INTRODUCER:
@@ -1082,11 +1082,11 @@ QUOTE_SYMBOL:
     ;
 
 NATIONAL_CHARACTER_STRING_LITERAL:
-    'N' QUOTE CHARACTER_REPRESENTATION +? QUOTE (SEPARATOR QUOTE CHARACTER_REPRESENTATION +? QUOTE) +?
+    'N' QUOTE CHARACTER_REPRESENTATION* QUOTE (SEPARATOR QUOTE CHARACTER_REPRESENTATION* QUOTE)*
     ;
 
 UNICODE_CHARACTER_STRING_LITERAL:
-    (INTRODUCER CHARACTER_SET_SPECIFICATION)? 'U' AMPERSAND QUOTE UNICODE_REPRESENTATION +? QUOTE (SEPARATOR QUOTE UNICODE_REPRESENTATION +? QUOTE) +? UNICODE_ESCAPE_SPECIFIER
+    (INTRODUCER CHARACTER_SET_SPECIFICATION)? 'U' AMPERSAND QUOTE UNICODE_REPRESENTATION* QUOTE (SEPARATOR QUOTE UNICODE_REPRESENTATION* QUOTE)* UNICODE_ESCAPE_SPECIFIER
     ;
 
 UNICODE_REPRESENTATION:
@@ -1095,7 +1095,7 @@ UNICODE_REPRESENTATION:
     ;
 
 BINARY_STRING_LITERAL:
-    'X' QUOTE SPACE +? (HEXIT SPACE +? HEXIT SPACE +?) +? QUOTE (SEPARATOR QUOTE SPACE +? (HEXIT SPACE +? HEXIT SPACE +?) +? QUOTE) +?
+    'X' QUOTE SPACE* (HEXIT SPACE* HEXIT SPACE*)* QUOTE (SEPARATOR QUOTE SPACE* (HEXIT SPACE* HEXIT SPACE*)* QUOTE)*
     ;
 
 fragment
@@ -1152,7 +1152,7 @@ SIGNED_INTEGER:
 
 fragment
 UNSIGNED_INTEGER:
-    DIGIT +
+    DIGIT+
     ;
 
 DATETIME_LITERAL:
@@ -1298,7 +1298,7 @@ ACTUAL_IDENTIFIER:
 
 fragment
 SQL_LANGUAGE_IDENTIFIER:
-    SQL_LANGUAGE_IDENTIFIER_START SQL_LANGUAGE_IDENTIFIER_PART +?
+    SQL_LANGUAGE_IDENTIFIER_START SQL_LANGUAGE_IDENTIFIER_PART*
     ;
 
 fragment
@@ -1674,7 +1674,7 @@ row_type:
     ;
 
 row_type_body:
-    LEFT_PAREN field_definition (COMMA field_definition) +? RIGHT_PAREN
+    LEFT_PAREN field_definition (COMMA field_definition)* RIGHT_PAREN
     ;
 
 reference_type:
@@ -1856,7 +1856,7 @@ default_specification:
 // 6.6        <identifier chain>
 
 identifier_chain:
-    IDENTIFIER (PERIOD IDENTIFIER) +?
+    IDENTIFIER (PERIOD IDENTIFIER)*
     ;
 
 basic_identifier_chain:
@@ -1884,7 +1884,7 @@ set_function_specification:
     ;
 
 grouping_operation:
-    'GROUPING' LEFT_PAREN column_reference (COMMA column_reference) +? RIGHT_PAREN
+    'GROUPING' LEFT_PAREN column_reference (COMMA column_reference)* RIGHT_PAREN
     ;
 
 // 6.10 <window function>
@@ -2028,7 +2028,7 @@ case_expression:
 
 case_abbreviation:
     'NULLIF' LEFT_PAREN value_expression COMMA value_expression RIGHT_PAREN
-  | 'COALESCE' LEFT_PAREN value_expression (COMMA value_expression) + RIGHT_PAREN
+  | 'COALESCE' LEFT_PAREN value_expression (COMMA value_expression)+ RIGHT_PAREN
     ;
 
 case_specification:
@@ -2037,11 +2037,11 @@ case_specification:
     ;
 
 simple_case:
-    'CASE' case_operand simple_when_clause + else_clause? 'END'
+    'CASE' case_operand simple_when_clause+ else_clause? 'END'
     ;
 
 searched_case:
-    'CASE' searched_when_clause + else_clause? 'END'
+    'CASE' searched_when_clause+ else_clause? 'END'
     ;
 
 simple_when_clause:
@@ -2062,7 +2062,7 @@ case_operand:
     ;
 
 when_operand_list:
-    when_operand (COMMA when_operand) +?
+    when_operand (COMMA when_operand)*
     ;
 
 when_operand:
@@ -2805,7 +2805,7 @@ array_value_constructor_by_enumeration:
     ;
 
 array_element_list:
-    array_element (COMMA array_element) +?
+    array_element (COMMA array_element)*
     ;
 
 array_element:
@@ -2857,7 +2857,7 @@ multiset_value_constructor_by_enumeration:
     ;
 
 multiset_element_list:
-    multiset_element (COMMA multiset_element) +?
+    multiset_element (COMMA multiset_element)*
     ;
 
 multiset_element:
@@ -2887,7 +2887,7 @@ explicit_row_value_constructor:
     ;
 
 row_value_constructor_element_list:
-    row_value_constructor_element (COMMA row_value_constructor_element) +?
+    row_value_constructor_element (COMMA row_value_constructor_element)*
     ;
 
 row_value_constructor_element:
@@ -2904,7 +2904,7 @@ contextually_typed_row_value_constructor:
     ;
 
 contextually_typed_row_value_constructor_element_list:
-    contextually_typed_row_value_constructor_element (COMMA contextually_typed_row_value_constructor_element) +?
+    contextually_typed_row_value_constructor_element (COMMA contextually_typed_row_value_constructor_element)*
     ;
 
 contextually_typed_row_value_constructor_element:
@@ -2951,7 +2951,7 @@ table_value_constructor:
     ;
 
 row_value_expression_list:
-    table_row_value_expression (COMMA table_row_value_expression) +?
+    table_row_value_expression (COMMA table_row_value_expression)*
     ;
 
 contextually_typed_table_value_constructor:
@@ -2959,7 +2959,7 @@ contextually_typed_table_value_constructor:
     ;
 
 contextually_typed_row_value_expression_list:
-    contextually_typed_row_value_expression (COMMA contextually_typed_row_value_expression) +?
+    contextually_typed_row_value_expression (COMMA contextually_typed_row_value_expression)*
     ;
 
 // 7.4      <table expression>
@@ -2975,7 +2975,7 @@ from_clause:
     ;
 
 table_reference_list:
-    table_reference (COMMA table_reference) +?
+    table_reference (COMMA table_reference)*
     ;
 
 // 7.6     <table reference>
@@ -3052,7 +3052,7 @@ lateral_derived_table:
     ;
 
 collection_derived_table:
-    'UNNEST' LEFT_PAREN collection_value_expression (COMMA collection_value_expression) +? RIGHT_PAREN ('WITH' 'ORDINALITY')?
+    'UNNEST' LEFT_PAREN collection_value_expression (COMMA collection_value_expression)* RIGHT_PAREN ('WITH' 'ORDINALITY')?
     ;
 
 table_function_derived_table:
@@ -3074,7 +3074,7 @@ derived_column_list:
     ;
 
 column_name_list:
-    column_name (COMMA column_name) +?
+    column_name (COMMA column_name)*
     ;
 
 data_change_delta_table:
@@ -3101,7 +3101,7 @@ partitioned_join_table:
     ;
 
 partitioned_join_column_reference_list:
-    LEFT_PAREN partitioned_join_column_reference (COMMA partitioned_join_column_reference) +? RIGHT_PAREN
+    LEFT_PAREN partitioned_join_column_reference (COMMA partitioned_join_column_reference)* RIGHT_PAREN
     ;
 
 partitioned_join_column_reference:
@@ -3149,7 +3149,7 @@ group_by_clause:
     ;
 
 grouping_element_list:
-    grouping_element (COMMA grouping_element) +?
+    grouping_element (COMMA grouping_element)*
     ;
 
 grouping_element:
@@ -3170,7 +3170,7 @@ grouping_column_reference:
     ;
 
 grouping_column_reference_list:
-    grouping_column_reference (COMMA grouping_column_reference) +?
+    grouping_column_reference (COMMA grouping_column_reference)*
     ;
 
 rollup_list:
@@ -3178,7 +3178,7 @@ rollup_list:
     ;
 
 ordinary_grouping_set_list:
-    ordinary_grouping_set (COMMA ordinary_grouping_set) +?
+    ordinary_grouping_set (COMMA ordinary_grouping_set)*
     ;
 
 cube_list:
@@ -3190,7 +3190,7 @@ grouping_sets_specification:
     ;
 
 grouping_set_list:
-    grouping_set (COMMA grouping_set) +?
+    grouping_set (COMMA grouping_set)*
     ;
 
 grouping_set:
@@ -3218,7 +3218,7 @@ window_clause:
     ;
 
 window_definition_list:
-    window_definition (COMMA window_definition) +?
+    window_definition (COMMA window_definition)*
     ;
 
 window_definition:
@@ -3246,7 +3246,7 @@ window_partition_clause:
     ;
 
 window_partition_column_reference_list:
-    window_partition_column_reference (COMMA window_partition_column_reference) +?
+    window_partition_column_reference (COMMA window_partition_column_reference)*
     ;
 
 window_partition_column_reference:
@@ -3319,7 +3319,7 @@ query_specification:
 
 select_list:
     ASTERISK
-  | select_sublist (COMMA select_sublist) +?
+  | select_sublist (COMMA select_sublist)*
     ;
 
 select_sublist:
@@ -3333,7 +3333,7 @@ qualified_asterisk:
     ;
 
 asterisked_identifier_chain:
-    asterisked_identifier (PERIOD asterisked_identifier) +?
+    asterisked_identifier (PERIOD asterisked_identifier)*
     ;
 
 asterisked_identifier:
@@ -3367,7 +3367,7 @@ with_clause:
     ;
 
 with_list:
-    with_list_element (COMMA with_list_element) +?
+    with_list_element (COMMA with_list_element)*
     ;
 
 with_list_element:
@@ -3467,7 +3467,7 @@ cycle_clause:
     ;
 
 cycle_column_list:
-    cycle_column (COMMA cycle_column) +?
+    cycle_column (COMMA cycle_column)*
     ;
 
 cycle_column:
@@ -3577,7 +3577,7 @@ in_predicate_value:
     ;
 
 in_value_list:
-    row_value_expression (COMMA row_value_expression) +?
+    row_value_expression (COMMA row_value_expression)*
     ;
 
 // 8.5        <like predicate>
@@ -3689,9 +3689,9 @@ ESCAPED_CHARACTER:
 
 regular_character_set:
     UNDERSCORE
-  | LEFT_BRACKET character_enumeration + RIGHT_BRACKET
-  | LEFT_BRACKET CIRCUMFLEX character_enumeration + RIGHT_BRACKET
-  | LEFT_BRACKET character_enumeration_include + CIRCUMFLEX character_enumeration_exclude + RIGHT_BRACKET
+  | LEFT_BRACKET character_enumeration+ RIGHT_BRACKET
+  | LEFT_BRACKET CIRCUMFLEX character_enumeration+ RIGHT_BRACKET
+  | LEFT_BRACKET character_enumeration_include+ CIRCUMFLEX character_enumeration_exclude+ RIGHT_BRACKET
     ;
 
 character_enumeration_include:
@@ -3869,7 +3869,7 @@ type_predicate_part_2:
     ;
 
 type_list:
-    user_defined_type_specification (COMMA user_defined_type_specification) +?
+    user_defined_type_specification (COMMA user_defined_type_specification)*
     ;
 
 user_defined_type_specification:
@@ -4050,7 +4050,7 @@ path_specification:
     ;
 
 schema_name_list:
-    SCHEMA_NAME (COMMA SCHEMA_NAME) +?
+    SCHEMA_NAME (COMMA SCHEMA_NAME)*
     ;
 
 routine_invocation:
@@ -4062,7 +4062,7 @@ routine_name:
     ;
 
 sql_argument_list:
-    LEFT_PAREN (sql_argument (COMMA sql_argument) +?)? RIGHT_PAREN
+    LEFT_PAREN (sql_argument (COMMA sql_argument)*)? RIGHT_PAREN
     ;
 
 sql_argument:
@@ -4127,7 +4127,7 @@ member_name_alternatives:
     ;
 
 data_type_list:
-    LEFT_PAREN (data_type (COMMA data_type) +?)? RIGHT_PAREN
+    LEFT_PAREN (data_type (COMMA data_type)*)? RIGHT_PAREN
     ;
 
 collate_clause:
@@ -4237,7 +4237,7 @@ within_group_specification:
     ;
 
 hypothetical_set_function_value_expression_list:
-    value_expression (COMMA value_expression) +?
+    value_expression (COMMA value_expression)*
     ;
 
 inverse_distribution_function:
@@ -4258,7 +4258,7 @@ array_aggregate_function:
     ;
 
 sort_specification_list:
-    sort_specification (COMMA sort_specification) +?
+    sort_specification (COMMA sort_specification)*
     ;
 
 sort_specification:
@@ -4333,7 +4333,7 @@ fetch_orientation:
     ;
 
 fetch_target_list:
-    target_specification (COMMA target_specification) +?
+    target_specification (COMMA target_specification)*
     ;
 
 close_statement:
@@ -4345,7 +4345,7 @@ select_statement__single_row:
     ;
 
 select_target_list:
-    target_specification (COMMA target_specification) +?
+    target_specification (COMMA target_specification)*
     ;
 
 delete_statement__positioned:
@@ -4414,7 +4414,7 @@ merge_correlation_name:
     ;
 
 merge_operation_specification:
-    merge_when_clause +
+    merge_when_clause+
     ;
 
 merge_when_clause:
@@ -4448,7 +4448,7 @@ merge_insert_specification:
     ;
 
 merge_insert_value_list:
-    LEFT_PAREN merge_insert_value_element (COMMA merge_insert_value_element) +? RIGHT_PAREN
+    LEFT_PAREN merge_insert_value_element (COMMA merge_insert_value_element)* RIGHT_PAREN
     ;
 
 merge_insert_value_element:
@@ -4465,7 +4465,7 @@ update_statement__searched:
     ;
 
 set_clause_list:
-    set_clause (COMMA set_clause) +?
+    set_clause (COMMA set_clause)*
     ;
 
 set_clause:
@@ -4483,7 +4483,7 @@ multiple_column_assignment:
     ;
 
 set_target_list:
-    LEFT_PAREN set_target (COMMA set_target) +? RIGHT_PAREN
+    LEFT_PAREN set_target (COMMA set_target)* RIGHT_PAREN
     ;
 
 assigned_row:
@@ -4531,7 +4531,7 @@ set_transaction_statement:
     ;
 
 transaction_characteristics:
-    (transaction_mode (COMMA transaction_mode) +?)?
+    (transaction_mode (COMMA transaction_mode)*)?
     ;
 
 transaction_mode:
@@ -4570,7 +4570,7 @@ set_constraints_mode_statement:
 
 constraint_name_list:
     'ALL'
-  | constraint_name (COMMA constraint_name) +?
+  | constraint_name (COMMA constraint_name)*
     ;
 
 savepoint_statement:

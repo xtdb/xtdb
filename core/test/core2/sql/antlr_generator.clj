@@ -256,10 +256,12 @@ common_logarithm:
 (defmulti print-sql-ast first)
 
 (defn print-sql-ast-list [xs]
-  (doseq [x (interpose " " xs)]
-    (if (= " " x)
-      (print x)
-      (print-sql-ast x))))
+  (loop [[x & [next-x :as xs]] xs]
+    (when x
+      (print-sql-ast x)
+      (when (and next-x (not= [:REPEATABLE "..."] next-x))
+        (print " "))
+      (recur xs))))
 
 (defmethod print-sql-ast :spec [[_ & xs]]
   (doseq [x xs]
@@ -337,15 +339,18 @@ common_logarithm:
           (println ";"))))))
 
 (defn sql-spec-ast->antlr-grammar-string [grammar-name sql-ast]
-  (->> (with-out-str
-         (println (str "grammar " grammar-name ";"))
-         (println)
-         (print-sql-ast sql-ast)
-         (println)
-         (println extra-rules))
-       (str/split-lines)
-       (map str/trimr)
-       (str/join "\n")))
+  (str/replace
+   (->> (with-out-str
+          (println (str "grammar " grammar-name ";"))
+          (println)
+          (print-sql-ast sql-ast)
+          (println)
+          (println extra-rules))
+        (str/split-lines)
+        (map str/trimr)
+        (str/join "\n"))
+   "+?"
+   "*"))
 
 (def sql2011-grammar-file (File. (.toURI (io/resource "core2/sql/SQL2011.g"))))
 (def sql2011-spec-file (File. (.toURI (io/resource "core2/sql/SQL2011.txt"))))
