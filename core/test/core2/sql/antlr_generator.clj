@@ -131,9 +131,9 @@ embedded_variable_name : IDENTIFIER ;
 transition_table_name : IDENTIFIER ;
 ")
 
-(defn ast->antlr-grammar-string [sql2011-ast]
+(defn sql-spec-ast->antlr-grammar-string [grammar-name sql-ast]
   (-> (with-out-str
-        (println "grammar SQL2011;")
+        (println "grammar " grammar-name ";")
         (println)
         (doseq [[n _ & body]
                 (w/postwalk
@@ -184,7 +184,7 @@ transition_table_name : IDENTIFIER ;
                        (apply concat (rest (rest (butlast x))))
 
                        x)))
-                 (vec sql2011-ast))
+                 (vec sql-ast))
                 :when (not (contains? skip-rule-set n))]
           (when (contains? fragment-set n)
             (println "fragment"))
@@ -228,7 +228,7 @@ transition_table_name : IDENTIFIER ;
    (generate-parser sql2011-spec-file sql2011-grammar-file))
   ([sql-spec-file antlr-grammar-file]
    (->> (parse-sql-spec (slurp sql-spec-file))
-        (ast->antlr-grammar-string)
+        (sql-spec-ast->antlr-grammar-string "SQL2011")
         (spit antlr-grammar-file))
    (-> (Tool. (into-array ["-package" "core2.sql" "-no-listener" "-no-visitor" (str antlr-grammar-file)]))
        (.processGrammarsOnCommandLine))))
