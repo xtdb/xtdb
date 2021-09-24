@@ -1,7 +1,6 @@
 (ns core2.sql.antlr-generator
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.walk :as w]
             [core2.sql.antlr :as antlr])
   (:import java.io.File
            org.antlr.v4.Tool
