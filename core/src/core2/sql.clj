@@ -382,9 +382,4 @@
 ;;   | <general logarithm function>
 ;;   | <common logarithm>
 
-;; Make process repeatable.
-;; Add skipped rules, replaced rules.
-;; Name Antlr alternatives based on the rules they replaced.
-;; Add fragments.
-;; Make top-level alternatives in a rule break lines for readability.
-;; Clean-up code, move Tool dependent stuff to dev/test, add Lein target.
+;; Fix Lexer warnings. Testing.

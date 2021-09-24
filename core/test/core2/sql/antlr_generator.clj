@@ -31,17 +31,19 @@
 (def sql-spec-grammar-g4 "
 grammar SQLSpecGrammar;
 
-spec:	definition* ;
+spec: (HEADER_COMMENT | definition)* ;
 definition: NAME '::=' syntax+ ;
-syntax:  (NAME | TOKEN | optional | mandatory | SEE_THE_SYNTAX_RULES) REPEATABLE? ('|' syntax)* ;
+syntax:  (NAME | TOKEN | optional | mandatory | SEE_THE_SYNTAX_RULES) REPEATABLE? choice* ;
 optional: '[' syntax+ ']' ;
 mandatory: '{' syntax+ '}' ;
+choice: ('|' syntax) ;
 REPEATABLE: '...' ;
 SEE_THE_SYNTAX_RULES: '!!' .*? '\\n' ;
 NAME: '<' [-_:/a-zA-Z 0-9]+ '>' ;
 TOKEN: ~[ \\n\\r\\t.!]+ ;
 WS: [ \\n\\r\\t]+ -> skip ;
-COMMENT: '//' .*? '\\n';
+HEADER_COMMENT: '//' [ ]* [0-9] [.] .*? '\\n' ;
+COMMENT: '//' .*? '\\n' -> skip ;
         ")
 
 (defn parse-sql-spec [sql-spec-string]
@@ -55,6 +57,9 @@ COMMENT: '//' .*? '\\n';
 
 (def literal-set
   #{"<signed integer>" "<seconds value>" "<plus sign>" "<simple Latin lower case letter>" "<time literal>" "<white space>" "<equals operator>" "<double period>" "<escaped character>" "<Unicode escape character>" "<Unicode 4 digit escape value>" "<seconds integer value>" "<separator>" "<interval qualifier>" "<hexit>" "<actual identifier>" "<date string>" "<percent>" "<datetime literal>" "<comment character>" "<interval string>" "<bracketed comment introducer>" "<question mark>" "<SQL terminal character>" "<delimited identifier part>" "<left bracket trigraph>" "<minus sign>" "<timestamp literal>" "<left paren>" "<semicolon>" "<timestamp string>" "<interval fractional seconds precision>" "<exponent>" "<unsigned literal>" "<binary string literal>" "<not equals operator>" "<time interval>" "<SQL language identifier start>" "<left bracket>" "<time value>" "<right paren>" "<time string>" "<years value>" "<single datetime field>" "<comment>" "<minutes value>" "<multiplier>" "<ampersand>" "<simple Latin upper case letter>" "<unsigned integer>" "<right brace>" "<approximate numeric literal>" "<interval literal>" "<nonquote character>" "<unqualified schema name>" "<Unicode escape value>" "<primary datetime field>" "<Unicode delimiter body>" "<delimiter token>" "<hours value>" "<regular identifier>" "<time zone interval>" "<implementation-defined character set name>" "<SQL language identifier>" "<newline>" "<Unicode escape specifier>" "<less than operator>" "<signed numeric literal>" "<date value>" "<seconds fraction>" "<SQL language identifier part>" "<identifier start>" "<days value>" "<day-time literal>" "<delimited identifier>" "<Unicode identifier part>" "<identifier extend>" "<solidus>" "<digit>" "<unquoted date string>" "<reserved word>" "<right bracket trigraph>" "<bracketed comment terminator>" "<user-defined character set name>" "<non-second primary datetime field>" "<boolean literal>" "<period>" "<non-reserved word>" "<nondelimiter token>" "<identifier body>" "<asterisk>" "<unsigned numeric literal>" "<simple Latin letter>" "<simple comment introducer>" "<character string literal>" "<Unicode delimited identifier>" "<underscore>" "<months value>" "<double colon>" "<greater than operator>" "<less than or equals operator>" "<comma>" "<doublequote symbol>" "<delimited identifier body>" "<identifier>" "<literal>" "<quote>" "<mantissa>" "<right arrow>" "<SQL special character>" "<reverse solidus>" "<double quote>" "<character set specification>" "<Unicode representation>" "<Unicode character string literal>" "<quote symbol>" "<year-month literal>" "<date literal>" "<Unicode 6 digit escape value>" "<catalog name>" "<non-escaped character>" "<SQL language character>" "<simple comment>" "<sign>" "<Unicode character escape value>" "<circumflex>" "<colon>" "<concatenation operator>" "<start field>" "<right bracket or trigraph>" "<right bracket>" "<token>" "<unquoted timestamp string>" "<national character string literal>" "<named argument assignment token>" "<space>" "<schema name>" "<greater than or equals operator>" "<interval leading field precision>" "<left bracket or trigraph>" "<end field>" "<vertical bar>" "<bracketed comment contents>" "<bracketed comment>" "<left brace>" "<unquoted interval string>" "<nondoublequote character>" "<key word>" "<introducer>" "<standard character set name>" "<character set name>" "<exact numeric literal>" "<character representation>" "<large object length token>" "<identifier part>" "<day-time interval>" "<unquoted time string>" "<datetime value>" "<general literal>"})
+
+(def fragment-set
+  #{"<simple Latin lower case letter>" "<Unicode escape character>" "<Unicode 4 digit escape value>" "<separator>" "<hexit>" "<comment character>" "<bracketed comment introducer>" "<SQL terminal character>" "<delimited identifier part>" "<SQL language identifier start>" "<simple Latin upper case letter>" "<unsigned integer>" "<nonquote character>" "<Unicode escape value>" "<Unicode delimiter body>" "<delimiter token>" "<SQL language identifier>" "<Unicode escape specifier>" "<delimited identifier>" "<Unicode identifier part>" "<identifier extend>" "<digit>" "<bracketed comment terminator>" "<identifier body>" "<simple Latin letter>" "<simple comment introducer>" "<Unicode delimited identifier>" "<delimited identifier body>" "<identifier>" "<SQL special character>" "<reverse solidus>" "<Unicode 6 digit escape value>" "<non-escaped character>" "<SQL language character>" "<simple comment>" "<Unicode character escape value>" "<identifier part>"})
 
 (def syntax-rules-overrides
   {'SPACE "' '"
@@ -79,8 +84,6 @@ COMMENT: '//' .*? '\\n';
    'NON_ESCAPED_CHARACTER "."
    'ESCAPED_CHARACTER "'\\\\' ."})
 
-(def fragment-set #{})
-
 (def skip-rule-set '#{collection_type
                       array_type
                       multiset_type
@@ -102,123 +105,243 @@ COMMENT: '//' .*? '\\n';
 
 (def rule-overrides
   {'data_type
-   "predefined_type | row_type | path_resolved_user_defined_type_name | reference_type | data_type 'ARRAY' (LEFT_BRACKET_OR_TRIGRAPH maximum_cardinality RIGHT_BRACKET_OR_TRIGRAPH)? | data_type 'MULTISET'"
+   "    predefined_type
+  | row_type
+  | path_resolved_user_defined_type_name
+  | reference_type
+  | data_type 'ARRAY' (LEFT_BRACKET_OR_TRIGRAPH maximum_cardinality RIGHT_BRACKET_OR_TRIGRAPH)?
+  | data_type 'MULTISET'"
    'value_expression_primary
-   "parenthesized_value_expression | unsigned_value_specification | column_reference | set_function_specification | window_function | nested_window_function | scalar_subquery | case_expression | cast_specification | value_expression_primary PERIOD field_name | subtype_treatment | value_expression_primary PERIOD method_name sql_argument_list? | generalized_invocation | static_method_invocation | new_specification | value_expression_primary dereference_operator qualified_identifier sql_argument_list? | reference_resolution | collection_value_constructor | value_expression_primary CONCATENATION_OPERATOR array_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH | array_value_function LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH | value_expression_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH | multiset_element_reference | next_value_expression | routine_invocation"
+   "    parenthesized_value_expression
+  | unsigned_value_specification
+  | column_reference
+  | set_function_specification
+  | window_function
+  | nested_window_function
+  | scalar_subquery
+  | case_expression
+  | cast_specification
+  | value_expression_primary PERIOD field_name
+  | subtype_treatment
+  | value_expression_primary PERIOD method_name sql_argument_list?
+  | generalized_invocation
+  | static_method_invocation
+  | new_specification
+  | value_expression_primary dereference_operator qualified_identifier sql_argument_list?
+  | reference_resolution
+  | collection_value_constructor
+  | value_expression_primary CONCATENATION_OPERATOR array_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH
+  | array_value_function LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH
+  | value_expression_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH
+  | multiset_element_reference
+  | next_value_expression
+  | routine_invocation"
+   'numeric_value_function
+   "    position_expression
+  | regex_occurrences_function
+  | regex_position_expression
+  | extract_expression
+  | length_expression
+  | cardinality_expression
+  | max_cardinality_expression
+  | absolute_value_expression
+  | modulus_expression
+  | trigonometric_function
+  | general_logarithm_function
+  | common_logarithm
+  | natural_logarithm
+  | exponential_function
+  | power_function
+  | square_root
+  | floor_function
+  | ceiling_function
+  | width_bucket_function"
    'character_value_expression
-   "character_value_expression CONCATENATION_OPERATOR character_factor | character_factor"
+   "    character_value_expression CONCATENATION_OPERATOR character_factor
+  | character_factor"
    'binary_value_expression
-   "binary_value_expression CONCATENATION_OPERATOR binary_factor | binary_factor"
+   "    binary_value_expression CONCATENATION_OPERATOR binary_factor
+  | binary_factor"
    'interval_value_expression
-   "interval_term | interval_value_expression PLUS_SIGN interval_term_1 | interval_value_expression MINUS_SIGN interval_term_1 | LEFT_PAREN datetime_value_expression MINUS_SIGN datetime_term RIGHT_PAREN INTERVAL_QUALIFIER"
+   "    interval_term
+  | interval_value_expression PLUS_SIGN interval_term_1
+  | interval_value_expression MINUS_SIGN interval_term_1
+  | LEFT_PAREN datetime_value_expression MINUS_SIGN datetime_term RIGHT_PAREN INTERVAL_QUALIFIER"
    'interval_term
-   "interval_factor | interval_term ASTERISK factor | interval_term SOLIDUS factor | term ASTERISK interval_factor"
+   "    interval_factor
+  | interval_term ASTERISK factor
+  | interval_term SOLIDUS factor
+  | term ASTERISK interval_factor"
    'boolean_predicand
-   "parenthesized_boolean_value_expression | value_expression_primary"
+   "    parenthesized_boolean_value_expression
+  | value_expression_primary"
    'array_value_expression
-   "array_value_expression CONCATENATION_OPERATOR array_primary | array_primary"
+   "    array_value_expression CONCATENATION_OPERATOR array_primary
+  | array_primary"
    'row_value_special_case
-   "value_expression_primary"
+   "    value_expression_primary"
    'table_reference
-   "table_factor | table_reference 'CROSS' 'JOIN' table_factor | table_reference join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification | partitioned_join_table join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification | table_reference 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table) | partitioned_join_table 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table) | LEFT_PAREN table_reference RIGHT_PAREN"
+   "    table_factor
+  | table_reference 'CROSS' 'JOIN' table_factor
+  | table_reference join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification
+  | partitioned_join_table join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification
+  | table_reference 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table)
+  | partitioned_join_table 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table)
+  | LEFT_PAREN table_reference RIGHT_PAREN"
    'table_primary
-   "table_or_query_name query_system_time_period_specification? ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)? | derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | lateral_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | collection_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | table_function_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | only_spec ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)? | data_change_delta_table ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?"})
+   "    table_or_query_name query_system_time_period_specification? ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?
+  | derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
+  | lateral_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
+  | collection_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
+  | table_function_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
+  | only_spec ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?
+  | data_change_delta_table ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?"
+   'mutated_set_clause
+   "    object_column PERIOD method_name
+  | mutated_set_clause PERIOD method_name"})
 
-(def extra-rules "application_time_period_name : IDENTIFIER ;
+(def extra-rules "application_time_period_name:
+    IDENTIFIER
+    ;
 
-embedded_variable_name : IDENTIFIER ;
+embedded_variable_name:
+    IDENTIFIER
+    ;
 
-transition_table_name : IDENTIFIER ;
-")
+transition_table_name:
+    IDENTIFIER
+    ;
+
+// SQL:2016 6.30 <numeric value function>
+
+trigonometric_function:
+    trigonometric_function_name LEFT_PAREN numeric_value_expression RIGHT_PAREN
+    ;
+
+trigonometric_function_name:
+    'SIN'
+  | 'COS'
+  | 'TAN'
+  | 'SINH'
+  | 'COSH'
+  | 'TANH'
+  | 'ASIN'
+  | 'ACOS'
+  | 'ATAN'
+    ;
+
+general_logarithm_function:
+    'LOG' LEFT_PAREN general_logarithm_base COMMA general_logarithm_argument RIGHT_PAREN
+    ;
+
+general_logarithm_base:
+    numeric_value_expression
+    ;
+
+general_logarithm_argument:
+    numeric_value_expression
+    ;
+
+common_logarithm:
+    'LOG10' LEFT_PAREN numeric_value_expression RIGHT_PAREN
+    ;")
+
+(def ^:private ^:dynamic *sql-ast-print-nesting* 0)
+(def ^:private ^:dynamic *sql-ast-current-name*)
+(def ^:private sql-print-indent "    ")
+
+(defn print-sql-ast-list [xs]
+  (doseq [x (interpose " " xs)]
+    (if (= " " x)
+      (print x)
+      (print-sql-ast x))))
+
+(defmulti print-sql-ast first)
+
+(defmethod print-sql-ast :spec [[_ & xs]]
+  (doseq [x xs]
+    (print-sql-ast x)))
+
+(defmethod print-sql-ast :HEADER_COMMENT [[_ x]]
+  (println)
+  (println (str/trim x)))
+
+(defmethod print-sql-ast :SEE_THE_SYNTAX_RULES [[_ x]]
+  (print (get syntax-rules-overrides *sql-ast-current-name*)))
+
+(defmethod print-sql-ast :TOKEN [[_ x]]
+  (print (str "'" x "'")))
+
+(defmethod print-sql-ast :NAME [[_ x]]
+  (let [x (if (contains? literal-set x)
+            (str/upper-case x)
+            (str/lower-case x))
+        x (subs x 1 (dec (count x)))
+        x (str/replace x #"[-: ]" "_")]
+    (print x)))
+
+(defmethod print-sql-ast :REPEATABLE [[_ x]]
+  (print "+"))
+
+(defmethod print-sql-ast :choice [[_ _ x]]
+  (if (pos? (long *sql-ast-print-nesting*))
+    (do (print "| ")
+        (print-sql-ast x))
+    (do (println)
+        (print (subs sql-print-indent 3) "| ")
+        (print-sql-ast x))))
+
+(defmethod print-sql-ast :optional [[_ _ & xs]]
+  (binding [*sql-ast-print-nesting* (inc (long *sql-ast-print-nesting*))]
+    (let [xs (butlast xs)
+          single? (= 1 (count xs))]
+      (when-not single?
+        (print "("))
+      (print-sql-ast-list xs)
+      (if single?
+        (print "?")
+        (print ")?")))))
+
+(defmethod print-sql-ast :mandatory [[_ _ & xs]]
+  (binding [*sql-ast-print-nesting* (inc (long *sql-ast-print-nesting*))]
+    (let [xs (butlast xs)]
+      (print "(")
+      (print-sql-ast-list xs)
+      (print ")"))))
+
+(defmethod print-sql-ast :syntax [[_ & xs]]
+  (print-sql-ast-list xs))
+
+(defmethod print-sql-ast :definition [[_ n _ & xs]]
+  (let [fragment? (contains? fragment-set (second n))
+        n (symbol (with-out-str
+                    (print-sql-ast n)))]
+    (when-not (contains? skip-rule-set n)
+      (println)
+      (when fragment?
+        (println "fragment"))
+      (print n)
+      (println ":")
+      (if-let [override (get rule-overrides n)]
+        (do (println override)
+            (print sql-print-indent)
+            (println ";"))
+        (binding [*sql-ast-current-name* n]
+          (print sql-print-indent)
+          (print-sql-ast-list xs)
+          (println)
+          (print sql-print-indent)
+          (println ";"))))))
 
 (defn sql-spec-ast->antlr-grammar-string [grammar-name sql-ast]
-  (-> (with-out-str
-        (println "grammar " grammar-name ";")
-        (println)
-        (doseq [[n _ & body]
-                (w/postwalk
-                 (fn [x]
-                   (if (vector? x)
-                     (case (first x)
-                       :NAME
-                       (let [[_ n] x
-                             terminal? (contains? literal-set n)
-                             n (subs n 1 (dec (count n)))
-                             n (str/replace n #"[ :-]" "_")]
-                         (symbol (if terminal?
-                                   (str/upper-case n)
-                                   (str/lower-case n))))
-
-                       :TOKEN
-                       (str "'" (str/replace  (second x) "'" "\\'") "'")
-
-                       :REPEATABLE
-                       '+
-
-                       :SEE_THE_SYNTAX_RULES
-                       (first x)
-
-                       :COMMENT
-                       (first x)
-
-                       :syntax
-                       (if (= "|" (last (butlast x)))
-                         (concat (rest (butlast (butlast x))) ['|] (last x))
-                         (rest x))
-
-                       :spec
-                       (rest x)
-
-                       :definition
-                       (concat (cons (second x)
-                                     (cons (symbol ":") (apply concat (nthrest x 3))))
-                               [(symbol ";")])
-
-                       :optional
-                       (let [x (apply concat (rest (rest (butlast x))))]
-                         (if (= '+ (last x))
-                           (list (butlast x) '*)
-                           (list x '?)))
-
-                       :mandatory
-                       (apply concat (rest (rest (butlast x))))
-
-                       x)))
-                 (vec sql-ast))
-                :when (not (contains? skip-rule-set n))]
-          (when (contains? fragment-set n)
-            (println "fragment"))
-          (println n ":")
-          (println "    " (or (get rule-overrides n)
-                              (str/join
-                               " "
-                               (w/postwalk
-                                (fn [x]
-                                  (cond
-                                    (string? x)
-                                    (symbol x)
-
-                                    (= :SEE_THE_SYNTAX_RULES x)
-                                    (symbol (get syntax-rules-overrides n x))
-
-                                    (sequential? x)
-                                    (let [x (vec x)]
-                                      (cond
-                                        (= 1 (count x))
-                                        (first x)
-
-                                        (and (= 2 (count x)) (contains? '#{* ? +} (last x)))
-                                        (symbol (str/join x))
-
-                                        :else
-                                        (seq x)))
-
-                                    :else
-                                    x))
-                                body))))
-          (println)))
-      (str/replace " +" "+")
-      extra-rules))
+  (->> (with-out-str
+         (println (str "grammar " grammar-name ";"))
+         (println)
+         (print-sql-ast sql-ast)
+         (println extra-rules))
+       (str/split-lines)
+       (map str/trimr)
+       (str/join "\n")))
 
 (def sql2011-grammar-file (File. (.toURI (io/resource "core2/sql/SQL2011.g"))))
 (def sql2011-spec-file (File. (.toURI (io/resource "core2/sql/SQL2011.txt"))))
