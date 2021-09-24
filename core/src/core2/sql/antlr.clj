@@ -151,13 +151,13 @@ SEE_THE_SYNTAX_RULES: '!!' .*? '\\n' ;
 NAME: '<' [-_:/a-zA-Z 0-9]+ '>' ;
 TOKEN: ~[ \\n\\r\\t.!]+ ;
 WS: [ \\n\\r\\t]+ -> skip ;
-COMMENT: '//' .*? '\\n'-> skip ;
+COMMENT: '//' .*? '\\n';
         "
         sql-spec-grammar (parse-grammar-from-string sql-g4)
         rule-names (.getRuleNames sql-spec-grammar)
         vocabulary (.getVocabulary sql-spec-grammar)
         tree (time (parse sql-spec-grammar
-                          (slurp "core/src/core2/sql/SQL2011.txt")
+                          (slurp (clojure.java.io/resource "core2/sql/SQL2011.txt"))
                           {:start "spec"}))
         ast (time (->ast rule-names vocabulary tree))]
 
@@ -210,12 +210,25 @@ COMMENT: '//' .*? '\\n'-> skip ;
      'NONDOUBLEQUOTE_CHARACTER "~'\"'"
      'DOUBLEQUOTE_SYMBOL ""
      'DOUBLE_PERIOD "'..'"
-     'WHITE_SPACE "[\\n\\r\\t ]+"
+     'WHITE_SPACE "[\\n\\r\\t ]+ -> skip"
      'BRACKETED_COMMENT_CONTENTS "."
      'NEWLINE "[\\r\\n]+"
      'NONQUOTE_CHARACTER "~'\\''"
      'NON_ESCAPED_CHARACTER "."
      'ESCAPED_CHARACTER "'\\\\' ."})
+
+  (def fragment-set #{})
+
+  (def skip-rule-set #{})
+
+  (def rule-overrides {})
+
+  (def extra-rules "application_time_period_name : IDENTIFIER ;
+
+embedded_variable_name : IDENTIFIER ;
+
+transition_table_name : IDENTIFIER ;
+")
 
   (spit "core/src/core2/sql/SQL2011.g"
         (-> (with-out-str
@@ -224,88 +237,84 @@ COMMENT: '//' .*? '\\n'-> skip ;
               (doseq [[n _ & body]
                       (clojure.walk/postwalk
                        (fn [x]
-                         (cond
-                           (and (vector? x) (= :NAME (first x)))
-                           (let [[_ n] x
-                                 terminal? (contains? core2.sql.antlr/literal-set n)
-                                 n (subs n 1 (dec (count n)))
-                                 n (clojure.string/replace n #"[ :-]" "_")]
-                             (symbol (if terminal?
-                                       (clojure.string/upper-case n)
-                                       (clojure.string/lower-case n))))
+                         (if (vector? x)
+                           (case (first x)
+                             :NAME
+                             (let [[_ n] x
+                                   terminal? (contains? literal-set n)
+                                   n (subs n 1 (dec (count n)))
+                                   n (clojure.string/replace n #"[ :-]" "_")]
+                               (symbol (if terminal?
+                                         (clojure.string/upper-case n)
+                                         (clojure.string/lower-case n))))
 
-                           (and (vector? x) (= :TOKEN (first x)))
-                           (str "'" (clojure.string/replace  (second x) "'" "\\'") "'")
+                             :TOKEN
+                             (str "'" (clojure.string/replace  (second x) "'" "\\'") "'")
 
-                           (and (vector? x) (= :REPEATABLE (first x)))
-                           '+
+                             :REPEATABLE
+                             '+
 
-                           (and (vector? x) (= :SEE_THE_SYNTAX_RULES (first x)))
-                           (first x)
+                             :SEE_THE_SYNTAX_RULES
+                             (first x)
 
-                           (and (vector? x) (= :syntax (first x)))
-                           (let [wrap-repeatable (fn [x]
-                                                   (if (= '+ (last x))
-                                                     (list (butlast x) '+)
-                                                     x))]
+                             :COMMENT
+                             (first x)
+
+                             :syntax
                              (if (= "|" (last (butlast x)))
                                (concat (rest (butlast (butlast x))) ['|] (last x))
-                               (rest x)))
+                               (rest x))
 
-                           (and (sequential? x) (= :spec (first x)))
-                           (rest x)
+                             :spec
+                             (rest x)
 
-                           (and (vector? x) (= :definition (first x)))
-                           (concat (cons (second x)
-                                         (cons (symbol ":") (apply concat (nthrest x 3))))
-                                   [(symbol ";")])
+                             :definition
+                             (concat (cons (second x)
+                                           (cons (symbol ":") (apply concat (nthrest x 3))))
+                                     [(symbol ";")])
 
-                           (and (vector? x) (= :optional (first x)))
-                           (let [x (apply concat (rest (rest (butlast x))))]
-                             (if (= '+ (last x))
-                               (list (butlast x) '*)
-                               (list x '?)))
+                             :optional
+                             (let [x (apply concat (rest (rest (butlast x))))]
+                               (if (= '+ (last x))
+                                 (list (butlast x) '*)
+                                 (list x '?)))
 
-                           (and (vector? x) (= :mandatory (first x)))
-                           (apply concat (rest (rest (butlast x))))
+                             :mandatory
+                             (apply concat (rest (rest (butlast x))))
 
-                           :else
-                           x))
-                       core2.sql.antlr/sql2011-ast)]
-                #_(when (Character/isUpperCase (char (first (str n))))
-                    (println "fragment"))
+                             x)))
+                       (vec sql2011-ast))
+                      :when (not (contains? skip-rule-set? n))]
+                (when (contains? fragment-set n)
+                  (println "fragment"))
                 (println n ":")
-                (println "    " (clojure.string/join " " (clojure.walk/postwalk
-                                                          #(cond
-                                                             (string? %)
-                                                             (symbol %)
+                (println "    " (or (get rule-overrides n)
+                                    (clojure.string/join " " (clojure.walk/postwalk
+                                                              #(cond
+                                                                 (string? %)
+                                                                 (symbol %)
 
-                                                             (= :SEE_THE_SYNTAX_RULES %)
-                                                             (symbol (get syntax-rules-overrides n %))
+                                                                 (= :SEE_THE_SYNTAX_RULES %)
+                                                                 (symbol (get syntax-rules-overrides n %))
 
-                                                             (sequential? %)
-                                                             (let [x (vec %)]
-                                                               (cond
-                                                                 (= 1 (count x))
-                                                                 (first x)
+                                                                 (sequential? %)
+                                                                 (let [x (vec %)]
+                                                                   (cond
+                                                                     (= 1 (count x))
+                                                                     (first x)
 
-                                                                 (and (= 2 (count x)) (contains? '#{* ? +} (last x)))
-                                                                 (symbol (clojure.string/join x))
+                                                                     (and (= 2 (count x)) (contains? '#{* ? +} (last x)))
+                                                                     (symbol (clojure.string/join x))
+
+                                                                     :else
+                                                                     (seq x)))
 
                                                                  :else
-                                                                 (seq x)))
-
-                                                             :else
-                                                             %)
-                                                          body)))
+                                                                 %)
+                                                              body))))
                 (println)))
             (clojure.string/replace " +" "+")
-            (str "application_time_period_name : IDENTIFIER ;
-
-embedded_variable_name : IDENTIFIER ;
-
-transition_table_name : IDENTIFIER ;
-")))
+            extra-rules))
 
   (-> (Tool. (into-array ["-package" "core2.sql" "-no-listener" "-no-visitor" "core/src/core2/sql/SQL2011.g"]))
       (.processGrammarsOnCommandLine)))
