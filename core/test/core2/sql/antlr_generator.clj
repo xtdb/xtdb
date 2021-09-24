@@ -106,147 +106,147 @@ COMMENT: '//' .*? '\\n' -> skip ;
 
 (def rule-overrides
   {'data_type
-   "    predefined_type
-  | row_type
-  | path_resolved_user_defined_type_name
-  | reference_type
-  | data_type 'ARRAY' (LEFT_BRACKET_OR_TRIGRAPH maximum_cardinality RIGHT_BRACKET_OR_TRIGRAPH)?
-  | data_type 'MULTISET'"
+   "predefined_type
+    | row_type
+    | path_resolved_user_defined_type_name
+    | reference_type
+    | data_type 'ARRAY' (LEFT_BRACKET_OR_TRIGRAPH maximum_cardinality RIGHT_BRACKET_OR_TRIGRAPH)?
+    | data_type 'MULTISET'"
    'value_expression_primary
-   "    parenthesized_value_expression
-  | unsigned_value_specification
-  | column_reference
-  | set_function_specification
-  | window_function
-  | nested_window_function
-  | scalar_subquery
-  | case_expression
-  | cast_specification
-  | value_expression_primary PERIOD field_name
-  | subtype_treatment
-  | value_expression_primary PERIOD method_name sql_argument_list?
-  | generalized_invocation
-  | static_method_invocation
-  | new_specification
-  | value_expression_primary dereference_operator qualified_identifier sql_argument_list?
-  | reference_resolution
-  | collection_value_constructor
-  | value_expression_primary CONCATENATION_OPERATOR array_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH
-  | array_value_function LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH
-  | value_expression_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH
-  | multiset_element_reference
-  | next_value_expression
-  | routine_invocation"
+   "parenthesized_value_expression
+    | unsigned_value_specification
+    | column_reference
+    | set_function_specification
+    | window_function
+    | nested_window_function
+    | scalar_subquery
+    | case_expression
+    | cast_specification
+    | value_expression_primary PERIOD field_name
+    | subtype_treatment
+    | value_expression_primary PERIOD method_name sql_argument_list?
+    | generalized_invocation
+    | static_method_invocation
+    | new_specification
+    | value_expression_primary dereference_operator qualified_identifier sql_argument_list?
+    | reference_resolution
+    | collection_value_constructor
+    | value_expression_primary CONCATENATION_OPERATOR array_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH
+    | array_value_function LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH
+    | value_expression_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH
+    | multiset_element_reference
+    | next_value_expression
+    | routine_invocation"
    'numeric_value_function
-   "    position_expression
-  | regex_occurrences_function
-  | regex_position_expression
-  | extract_expression
-  | length_expression
-  | cardinality_expression
-  | max_cardinality_expression
-  | absolute_value_expression
-  | modulus_expression
-  | trigonometric_function
-  | general_logarithm_function
-  | common_logarithm
-  | natural_logarithm
-  | exponential_function
-  | power_function
-  | square_root
-  | floor_function
-  | ceiling_function
-  | width_bucket_function"
+   "position_expression
+    | regex_occurrences_function
+    | regex_position_expression
+    | extract_expression
+    | length_expression
+    | cardinality_expression
+    | max_cardinality_expression
+    | absolute_value_expression
+    | modulus_expression
+    | trigonometric_function
+    | general_logarithm_function
+    | common_logarithm
+    | natural_logarithm
+    | exponential_function
+    | power_function
+    | square_root
+    | floor_function
+    | ceiling_function
+    | width_bucket_function"
    'character_value_expression
-   "    character_value_expression CONCATENATION_OPERATOR character_factor
-  | character_factor"
+   "character_value_expression CONCATENATION_OPERATOR character_factor
+    | character_factor"
    'binary_value_expression
-   "    binary_value_expression CONCATENATION_OPERATOR binary_factor
-  | binary_factor"
+   "binary_value_expression CONCATENATION_OPERATOR binary_factor
+    | binary_factor"
    'interval_value_expression
-   "    interval_term
-  | interval_value_expression PLUS_SIGN interval_term_1
-  | interval_value_expression MINUS_SIGN interval_term_1
-  | LEFT_PAREN datetime_value_expression MINUS_SIGN datetime_term RIGHT_PAREN INTERVAL_QUALIFIER"
+   "interval_term
+    | interval_value_expression PLUS_SIGN interval_term_1
+    | interval_value_expression MINUS_SIGN interval_term_1
+    | LEFT_PAREN datetime_value_expression MINUS_SIGN datetime_term RIGHT_PAREN INTERVAL_QUALIFIER"
    'interval_term
-   "    interval_factor
-  | interval_term ASTERISK factor
-  | interval_term SOLIDUS factor
-  | term ASTERISK interval_factor"
+   "interval_factor
+    | interval_term ASTERISK factor
+    | interval_term SOLIDUS factor
+    | term ASTERISK interval_factor"
    'boolean_predicand
-   "    parenthesized_boolean_value_expression
-  | value_expression_primary"
+   "parenthesized_boolean_value_expression
+    | value_expression_primary"
    'array_value_expression
-   "    array_value_expression CONCATENATION_OPERATOR array_primary
-  | array_primary"
+   "array_value_expression CONCATENATION_OPERATOR array_primary
+    | array_primary"
    'row_value_special_case
-   "    value_expression_primary"
+   "value_expression_primary"
    'table_reference
-   "    table_factor
-  | table_reference 'CROSS' 'JOIN' table_factor
-  | table_reference join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification
-  | partitioned_join_table join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification
-  | table_reference 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table)
-  | partitioned_join_table 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table)
-  | LEFT_PAREN table_reference RIGHT_PAREN"
+   "table_factor
+    | table_reference 'CROSS' 'JOIN' table_factor
+    | table_reference join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification
+    | partitioned_join_table join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification
+    | table_reference 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table)
+    | partitioned_join_table 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table)
+    | LEFT_PAREN table_reference RIGHT_PAREN"
    'table_primary
-   "    table_or_query_name query_system_time_period_specification? ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?
-  | derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
-  | lateral_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
-  | collection_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
-  | table_function_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
-  | only_spec ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?
-  | data_change_delta_table ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?"
+   "table_or_query_name query_system_time_period_specification? ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?
+    | derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
+    | lateral_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
+    | collection_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
+    | table_function_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?
+    | only_spec ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?
+    | data_change_delta_table ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?"
    'mutated_set_clause
-   "    object_column PERIOD method_name
-  | mutated_set_clause PERIOD method_name"})
+   "object_column PERIOD method_name
+    | mutated_set_clause PERIOD method_name"})
 
 (def extra-rules "// SQL:2011 needed definitions in parts not generated.
 
-application_time_period_name:
-    IDENTIFIER
+application_time_period_name
+    : IDENTIFIER
     ;
 
-embedded_variable_name:
-    IDENTIFIER
+embedded_variable_name
+    : IDENTIFIER
     ;
 
-transition_table_name:
-    IDENTIFIER
+transition_table_name
+    : IDENTIFIER
     ;
 
 // SQL:2016 6.30 <numeric value function>
 
-trigonometric_function:
-    trigonometric_function_name LEFT_PAREN numeric_value_expression RIGHT_PAREN
+trigonometric_function
+    : trigonometric_function_name LEFT_PAREN numeric_value_expression RIGHT_PAREN
     ;
 
-trigonometric_function_name:
-    'SIN'
-  | 'COS'
-  | 'TAN'
-  | 'SINH'
-  | 'COSH'
-  | 'TANH'
-  | 'ASIN'
-  | 'ACOS'
-  | 'ATAN'
+trigonometric_function_name
+    : 'SIN'
+    | 'COS'
+    | 'TAN'
+    | 'SINH'
+    | 'COSH'
+    | 'TANH'
+    | 'ASIN'
+    | 'ACOS'
+    | 'ATAN'
     ;
 
-general_logarithm_function:
-    'LOG' LEFT_PAREN general_logarithm_base COMMA general_logarithm_argument RIGHT_PAREN
+general_logarithm_function
+    : 'LOG' LEFT_PAREN general_logarithm_base COMMA general_logarithm_argument RIGHT_PAREN
     ;
 
-general_logarithm_base:
-    numeric_value_expression
+general_logarithm_base
+    : numeric_value_expression
     ;
 
-general_logarithm_argument:
-    numeric_value_expression
+general_logarithm_argument
+    : numeric_value_expression
     ;
 
-common_logarithm:
-    'LOG10' LEFT_PAREN numeric_value_expression RIGHT_PAREN
+common_logarithm
+    : 'LOG10' LEFT_PAREN numeric_value_expression RIGHT_PAREN
     ;")
 
 (def ^:private ^:dynamic *sql-ast-print-nesting* 0)
@@ -293,7 +293,7 @@ common_logarithm:
     (do (print "| ")
         (print-sql-ast x))
     (do (println)
-        (print (subs sql-print-indent 3) "| ")
+        (print (str sql-print-indent "| "))
         (print-sql-ast x))))
 
 (defmethod print-sql-ast :optional [[_ _ & xs]]
@@ -325,14 +325,14 @@ common_logarithm:
       (println)
       (when fragment?
         (println "fragment"))
-      (print n)
-      (println ":")
+      (println n)
+      (print sql-print-indent)
+      (print ": ")
       (if-let [override (get rule-overrides n)]
         (do (println override)
             (print sql-print-indent)
             (println ";"))
         (binding [*sql-ast-current-name* n]
-          (print sql-print-indent)
           (print-sql-ast-list xs)
           (println)
           (print sql-print-indent)
