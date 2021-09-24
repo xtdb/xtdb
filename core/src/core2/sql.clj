@@ -381,3 +381,13 @@
 ;;   | <trigonometric function>
 ;;   | <general logarithm function>
 ;;   | <common logarithm>
+
+;; Validate that we have all rules we care about (DML, parameters).
+;; Make meta parser keep the comments so we can output them in the generated grammar.
+;; Make process repeatable.
+;; Fix white space and comment handling.
+;; Add skipped rules, replaced rules.
+;; Name Antlr alternatives based on the rules they replaced.
+;; Add fragments.
+;; Make top-level alternatives in a rule break lines for readability.
+;; Clean-up code, move Tool dependent stuff to dev/test, add Lein target.
