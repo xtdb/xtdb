@@ -31,7 +31,6 @@
 
                  [instaparse "1.4.10"]
                  [org.antlr/antlr4-runtime "4.9.2"]
-                 [org.antlr/antlr4 "4.9.2"]
 
                  [pro.juxt.clojars-mirrors.integrant/integrant "0.8.0"]]
 
@@ -40,9 +39,12 @@
   :profiles {:dev [:test]
              :test {:dependencies [[pro.juxt.crux-labs/core2-datasets]
                                    [cheshire]
+                                   [org.antlr/antlr4 "4.9.2"]
                                    [ch.qos.logback/logback-classic]]
 
                     :resource-paths ["test-resources"]}}
+
+  :aliases {"generate-sql-parser" ["do" ["run" "-m" "core2.sql.antlr-generator"] "javac"]}
 
   :test-selectors {:default (complement (some-fn :integration :timescale))
                    :integration :integration
