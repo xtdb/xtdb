@@ -177,7 +177,6 @@ SOLIDUS:
     '/'
     ;
 
-fragment
 REVERSE_SOLIDUS:
     '\\'
     ;
@@ -379,7 +378,6 @@ DOUBLEQUOTE_SYMBOL:
     '""'
     ;
 
-fragment
 DELIMITER_TOKEN:
     CHARACTER_STRING_LITERAL
   | DATE_STRING
@@ -456,6 +454,7 @@ SIMPLE_COMMENT_INTRODUCER:
     MINUS_SIGN MINUS_SIGN
     ;
 
+fragment
 BRACKETED_COMMENT:
     BRACKETED_COMMENT_INTRODUCER BRACKETED_COMMENT_CONTENTS BRACKETED_COMMENT_TERMINATOR
     ;
@@ -470,6 +469,7 @@ BRACKETED_COMMENT_TERMINATOR:
     '*/'
     ;
 
+fragment
 BRACKETED_COMMENT_CONTENTS:
     (COMMENT_CHARACTER | SEPARATOR) +? .
     ;
@@ -1073,7 +1073,6 @@ CHARACTER_REPRESENTATION:
   | QUOTE_SYMBOL
     ;
 
-fragment
 NONQUOTE_CHARACTER:
     ~'\''
     ;
@@ -3680,7 +3679,6 @@ character_specifier:
   | ESCAPED_CHARACTER
     ;
 
-fragment
 NON_ESCAPED_CHARACTER:
     .
     ;
@@ -4619,6 +4617,9 @@ direct_sql_data_statement:
 direct_select_statement__multiple_rows:
     cursor_specification
     ;
+
+// SQL:2011 needed definitions in parts not generated.
+
 application_time_period_name:
     IDENTIFIER
     ;
