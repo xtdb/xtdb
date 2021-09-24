@@ -45,8 +45,6 @@ HEADER_COMMENT: '//' [ ]* [0-9] [.] .*? '\\n' ;
 COMMENT: '//' .*? '\\n' -> skip ;
         ")
 
-;; NOTE: this takes about a minute, so its best to store the AST
-;; somewhere and call the next steps manually while developing.
 (defn parse-sql-spec [sql-spec-string]
   (let [sql-spec-grammar (parse-grammar-from-string sql-spec-grammar-g4)
         rule-names (.getRuleNames sql-spec-grammar)
@@ -57,10 +55,10 @@ COMMENT: '//' .*? '\\n' -> skip ;
     (antlr/->ast rule-names vocabulary tree)))
 
 (def literal-set
-  #{"<signed integer>" "<seconds value>" "<plus sign>" "<simple Latin lower case letter>" "<time literal>" "<white space>" "<equals operator>" "<double period>" "<escaped character>" "<Unicode escape character>" "<Unicode 4 digit escape value>" "<seconds integer value>" "<separator>" "<interval qualifier>" "<hexit>" "<actual identifier>" "<date string>" "<percent>" "<datetime literal>" "<comment character>" "<interval string>" "<bracketed comment introducer>" "<question mark>" "<SQL terminal character>" "<delimited identifier part>" "<left bracket trigraph>" "<minus sign>" "<timestamp literal>" "<left paren>" "<semicolon>" "<timestamp string>" "<interval fractional seconds precision>" "<exponent>" "<unsigned literal>" "<binary string literal>" "<not equals operator>" "<time interval>" "<SQL language identifier start>" "<left bracket>" "<time value>" "<right paren>" "<time string>" "<years value>" "<single datetime field>" "<comment>" "<minutes value>" "<multiplier>" "<ampersand>" "<simple Latin upper case letter>" "<unsigned integer>" "<right brace>" "<approximate numeric literal>" "<interval literal>" "<nonquote character>" "<unqualified schema name>" "<Unicode escape value>" "<primary datetime field>" "<Unicode delimiter body>" "<delimiter token>" "<hours value>" "<regular identifier>" "<time zone interval>" "<implementation-defined character set name>" "<SQL language identifier>" "<newline>" "<Unicode escape specifier>" "<less than operator>" "<signed numeric literal>" "<date value>" "<seconds fraction>" "<SQL language identifier part>" "<identifier start>" "<days value>" "<day-time literal>" "<delimited identifier>" "<Unicode identifier part>" "<identifier extend>" "<solidus>" "<digit>" "<unquoted date string>" "<reserved word>" "<right bracket trigraph>" "<bracketed comment terminator>" "<user-defined character set name>" "<non-second primary datetime field>" "<boolean literal>" "<period>" "<non-reserved word>" "<nondelimiter token>" "<identifier body>" "<asterisk>" "<unsigned numeric literal>" "<simple Latin letter>" "<simple comment introducer>" "<character string literal>" "<Unicode delimited identifier>" "<underscore>" "<months value>" "<double colon>" "<greater than operator>" "<less than or equals operator>" "<comma>" "<doublequote symbol>" "<delimited identifier body>" "<identifier>" "<literal>" "<quote>" "<mantissa>" "<right arrow>" "<SQL special character>" "<reverse solidus>" "<double quote>" "<character set specification>" "<Unicode representation>" "<Unicode character string literal>" "<quote symbol>" "<year-month literal>" "<date literal>" "<Unicode 6 digit escape value>" "<catalog name>" "<non-escaped character>" "<SQL language character>" "<simple comment>" "<sign>" "<Unicode character escape value>" "<circumflex>" "<colon>" "<concatenation operator>" "<start field>" "<right bracket or trigraph>" "<right bracket>" "<token>" "<unquoted timestamp string>" "<national character string literal>" "<named argument assignment token>" "<space>" "<schema name>" "<greater than or equals operator>" "<interval leading field precision>" "<left bracket or trigraph>" "<end field>" "<vertical bar>" "<bracketed comment contents>" "<bracketed comment>" "<left brace>" "<unquoted interval string>" "<nondoublequote character>" "<key word>" "<introducer>" "<standard character set name>" "<character set name>" "<exact numeric literal>" "<character representation>" "<large object length token>" "<identifier part>" "<day-time interval>" "<unquoted time string>" "<datetime value>" "<general literal>"})
+  #{"<signed integer>" "<seconds value>" "<plus sign>" "<simple Latin lower case letter>" "<time literal>" "<white space>" "<equals operator>" "<double period>" "<escaped character>" "<Unicode escape character>" "<Unicode 4 digit escape value>" "<seconds integer value>" "<separator>" "<interval qualifier>" "<hexit>" "<actual identifier>" "<date string>" "<percent>" "<datetime literal>" "<comment character>" "<interval string>" "<bracketed comment introducer>" "<question mark>" "<delimited identifier part>" "<left bracket trigraph>" "<minus sign>" "<timestamp literal>" "<left paren>" "<semicolon>" "<timestamp string>" "<interval fractional seconds precision>" "<exponent>" "<unsigned literal>" "<binary string literal>" "<not equals operator>" "<time interval>" "<SQL language identifier start>" "<left bracket>" "<time value>" "<right paren>" "<time string>" "<years value>" "<single datetime field>" "<comment>" "<minutes value>" "<multiplier>" "<ampersand>" "<simple Latin upper case letter>" "<unsigned integer>" "<right brace>" "<approximate numeric literal>" "<interval literal>" "<nonquote character>" "<unqualified schema name>" "<Unicode escape value>" "<primary datetime field>" "<Unicode delimiter body>" "<delimiter token>" "<hours value>" "<regular identifier>" "<time zone interval>" "<implementation-defined character set name>" "<SQL language identifier>" "<newline>" "<Unicode escape specifier>" "<less than operator>" "<signed numeric literal>" "<date value>" "<seconds fraction>" "<SQL language identifier part>" "<identifier start>" "<days value>" "<day-time literal>" "<delimited identifier>" "<Unicode identifier part>" "<identifier extend>" "<solidus>" "<digit>" "<unquoted date string>" "<right bracket trigraph>" "<bracketed comment terminator>" "<user-defined character set name>" "<non-second primary datetime field>" "<boolean literal>" "<period>" "<nondelimiter token>" "<identifier body>" "<asterisk>" "<unsigned numeric literal>" "<simple Latin letter>" "<simple comment introducer>" "<character string literal>" "<Unicode delimited identifier>" "<underscore>" "<months value>" "<double colon>" "<greater than operator>" "<less than or equals operator>" "<comma>" "<doublequote symbol>" "<delimited identifier body>" "<identifier>" "<literal>" "<quote>" "<mantissa>" "<right arrow>" "<SQL special character>" "<reverse solidus>" "<double quote>" "<character set specification>" "<Unicode representation>" "<Unicode character string literal>" "<quote symbol>" "<year-month literal>" "<date literal>" "<Unicode 6 digit escape value>" "<catalog name>" "<non-escaped character>" "<simple comment>" "<sign>" "<Unicode character escape value>" "<circumflex>" "<colon>" "<concatenation operator>" "<start field>" "<right bracket or trigraph>" "<right bracket>" "<token>" "<unquoted timestamp string>" "<named argument assignment token>" "<space>" "<schema name>" "<greater than or equals operator>" "<interval leading field precision>" "<left bracket or trigraph>" "<end field>" "<vertical bar>" "<bracketed comment contents>" "<bracketed comment>" "<left brace>" "<unquoted interval string>" "<nondoublequote character>" "<introducer>" "<standard character set name>" "<character set name>" "<exact numeric literal>" "<character representation>" "<large object length token>" "<identifier part>" "<day-time interval>" "<unquoted time string>" "<datetime value>" "<general literal>"})
 
 (def fragment-set
-  #{"<simple Latin lower case letter>" "<Unicode escape character>" "<Unicode 4 digit escape value>" "<separator>" "<hexit>" "<comment character>" "<bracketed comment introducer>" "<SQL terminal character>" "<delimited identifier part>" "<SQL language identifier start>" "<simple Latin upper case letter>" "<Unicode escape value>" "<Unicode delimiter body>" "<Unicode escape specifier>" "<SQL language identifier part>" "<identifier start>" "<Unicode identifier part>" "<identifier extend>" "<digit>" "<bracketed comment terminator>" "<identifier body>" "<simple Latin letter>" "<simple comment introducer>" "<delimited identifier body>" "<SQL special character>" "<Unicode 6 digit escape value>" "<SQL language character>" "<simple comment>" "<Unicode character escape value>" "<bracketed comment contents>" "<bracketed comment>" "<identifier part>"})
+  #{"<simple Latin lower case letter>" "<Unicode escape character>" "<Unicode 4 digit escape value>" "<separator>" "<hexit>" "<comment character>" "<bracketed comment introducer>" "<delimited identifier part>" "<SQL language identifier start>" "<simple Latin upper case letter>" "<Unicode escape value>" "<Unicode delimiter body>" "<Unicode escape specifier>" "<SQL language identifier part>" "<identifier start>" "<Unicode identifier part>" "<identifier extend>" "<digit>" "<bracketed comment terminator>" "<identifier body>" "<simple Latin letter>" "<simple comment introducer>" "<delimited identifier body>" "<SQL special character>" "<Unicode 6 digit escape value>" "<simple comment>" "<Unicode character escape value>" "<bracketed comment contents>" "<bracketed comment>" "<identifier part>"})
 
 (def syntax-rules-overrides
   {'SPACE "' '"
@@ -73,7 +71,9 @@ COMMENT: '//' .*? '\\n' -> skip ;
    'LEFT_BRACE "'{'"
    'RIGHT_BRACE "'}'"
    'IDENTIFIER_START "SIMPLE_LATIN_LETTER"
-   'IDENTIFIER_EXTEND "SIMPLE_LATIN_LETTER | DIGIT | UNDERSCORE"
+   'IDENTIFIER_EXTEND "SIMPLE_LATIN_LETTER
+    | DIGIT
+    | UNDERSCORE"
    'UNICODE_ESCAPE_CHARACTER "'\\\\'"
    'NONDOUBLEQUOTE_CHARACTER "~'\"'"
    'DOUBLEQUOTE_SYMBOL ""
@@ -85,27 +85,13 @@ COMMENT: '//' .*? '\\n' -> skip ;
    'NON_ESCAPED_CHARACTER "."
    'ESCAPED_CHARACTER "'\\\\' ."})
 
-(def skip-rule-set '#{collection_type
-                      array_type
-                      multiset_type
-                      nonparenthesized_value_expression_primary
-                      field_reference
-                      attribute_or_method_reference
-                      concatenation
-                      binary_concatenation
-                      interval_value_expression_1
-                      interval_term_2
-                      array_concatenation
-                      array_value_expression_1
-                      parenthesized_joined_table
-                      joined_table
-                      cross_join
-                      qualified_join
-                      natural_join
-                      mutated_target})
-
+;; NOTE: A rule must exist to be overridden and cannot be commented
+;; out. This is to ensure the override ends up in the right place in
+;; the grammar.
 (def rule-overrides
-  {'data_type
+  {'COMMENT
+   "(SIMPLE_COMMENT | BRACKETED_COMMENT) -> skip"
+   'data_type
    "predefined_type
     | row_type
     | path_resolved_user_defined_type_name
@@ -199,7 +185,9 @@ COMMENT: '//' .*? '\\n' -> skip ;
     | data_change_delta_table ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?"
    'mutated_set_clause
    "object_column PERIOD method_name
-    | mutated_set_clause PERIOD method_name"})
+    | mutated_set_clause PERIOD method_name"
+   'start_transaction_statement
+   "'START' 'TRANSACTION' (transaction_mode (COMMA transaction_mode)*)?"})
 
 (def extra-rules "// SQL:2011 needed definitions in parts not generated.
 
@@ -208,10 +196,6 @@ application_time_period_name
     ;
 
 embedded_variable_name
-    : IDENTIFIER
-    ;
-
-transition_table_name
     : IDENTIFIER
     ;
 
@@ -321,22 +305,21 @@ common_logarithm
   (let [fragment? (contains? fragment-set (second n))
         n (symbol (with-out-str
                     (print-sql-ast n)))]
-    (when-not (contains? skip-rule-set n)
-      (println)
-      (when fragment?
-        (println "fragment"))
-      (println n)
-      (print sql-print-indent)
-      (print ": ")
-      (if-let [override (get rule-overrides n)]
-        (do (println override)
-            (print sql-print-indent)
-            (println ";"))
-        (binding [*sql-ast-current-name* n]
-          (print-sql-ast-list xs)
-          (println)
+    (println)
+    (when fragment?
+      (println "fragment"))
+    (println n)
+    (print sql-print-indent)
+    (print ": ")
+    (if-let [override (get rule-overrides n)]
+      (do (println override)
           (print sql-print-indent)
-          (println ";"))))))
+          (println ";"))
+      (binding [*sql-ast-current-name* n]
+        (print-sql-ast-list xs)
+        (println)
+        (print sql-print-indent)
+        (println ";")))))
 
 (defn sql-spec-ast->antlr-grammar-string [grammar-name sql-ast]
   (str/replace
