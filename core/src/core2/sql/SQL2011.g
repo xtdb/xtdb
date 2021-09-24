@@ -307,7 +307,6 @@ MULTIPLIER
     | 'P'
     ;
 
-fragment
 DELIMITED_IDENTIFIER
     : DOUBLE_QUOTE DELIMITED_IDENTIFIER_BODY DOUBLE_QUOTE
     ;
@@ -1151,7 +1150,6 @@ SIGNED_INTEGER
     : SIGN? UNSIGNED_INTEGER
     ;
 
-fragment
 UNSIGNED_INTEGER
     : DIGIT+
     ;
@@ -1286,7 +1284,6 @@ BOOLEAN_LITERAL
 
 // 5.4    Names and identifiers
 
-fragment
 IDENTIFIER
     : ACTUAL_IDENTIFIER
     ;
