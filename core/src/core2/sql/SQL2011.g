@@ -577,7 +577,7 @@ window_name :
      IDENTIFIER ;
 
 data_type :
-     predefined_type | row_type | path_resolved_user_defined_type_name | reference_type | collection_type ;
+     predefined_type | row_type | path_resolved_user_defined_type_name | reference_type | data_type 'ARRAY' (LEFT_BRACKET_OR_TRIGRAPH maximum_cardinality RIGHT_BRACKET_OR_TRIGRAPH)? | data_type 'MULTISET' ;
 
 predefined_type :
      character_string_type ('CHARACTER' 'SET' CHARACTER_SET_SPECIFICATION)? collate_clause? | national_character_string_type collate_clause? | binary_string_type | numeric_type | boolean_type | datetime_type | interval_type ;
@@ -669,29 +669,29 @@ referenced_type :
 path_resolved_user_defined_type_name :
      user_defined_type_name ;
 
-collection_type :
-     array_type | multiset_type ;
+// collection_type :
+//      array_type | multiset_type ;
 
-array_type :
-     data_type 'ARRAY' (LEFT_BRACKET_OR_TRIGRAPH maximum_cardinality RIGHT_BRACKET_OR_TRIGRAPH)? ;
+// array_type :
+//      data_type 'ARRAY' (LEFT_BRACKET_OR_TRIGRAPH maximum_cardinality RIGHT_BRACKET_OR_TRIGRAPH)? ;
 
 maximum_cardinality :
      UNSIGNED_INTEGER ;
 
-multiset_type :
-     data_type 'MULTISET' ;
+// multiset_type :
+//      data_type 'MULTISET' ;
 
 field_definition :
      field_name data_type ;
 
 value_expression_primary :
-     parenthesized_value_expression | nonparenthesized_value_expression_primary ;
+     parenthesized_value_expression | unsigned_value_specification | column_reference | set_function_specification | window_function | nested_window_function | scalar_subquery | case_expression | cast_specification | value_expression_primary PERIOD field_name | subtype_treatment | value_expression_primary PERIOD method_name sql_argument_list? | generalized_invocation | static_method_invocation | new_specification | value_expression_primary dereference_operator qualified_identifier sql_argument_list? | reference_resolution | collection_value_constructor | value_expression_primary CONCATENATION_OPERATOR array_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH | array_value_function LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH | value_expression_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH | multiset_element_reference | next_value_expression | routine_invocation ;
 
 parenthesized_value_expression :
      LEFT_PAREN value_expression RIGHT_PAREN ;
 
-nonparenthesized_value_expression_primary :
-     unsigned_value_specification | column_reference | set_function_specification | window_function | nested_window_function | scalar_subquery | case_expression | cast_specification | field_reference | subtype_treatment | method_invocation | static_method_invocation | new_specification | attribute_or_method_reference | reference_resolution | collection_value_constructor | array_element_reference | multiset_element_reference | next_value_expression | routine_invocation ;
+// nonparenthesized_value_expression_primary :
+//      unsigned_value_specification | column_reference | set_function_specification | window_function | nested_window_function | scalar_subquery | case_expression | cast_specification | field_reference | subtype_treatment | method_invocation | static_method_invocation | new_specification | attribute_or_method_reference | reference_resolution | collection_value_constructor | array_element_reference | multiset_element_reference | next_value_expression | routine_invocation ;
 
 collection_value_constructor :
      array_value_constructor | multiset_value_constructor ;
@@ -900,8 +900,8 @@ cast_target :
 next_value_expression :
      'NEXT' 'VALUE' 'FOR' sequence_generator_name ;
 
-field_reference :
-     value_expression_primary PERIOD field_name ;
+// field_reference :
+//      value_expression_primary PERIOD field_name ;
 
 subtype_treatment :
      'TREAT' LEFT_PAREN subtype_operand 'AS' target_subtype RIGHT_PAREN ;
@@ -939,8 +939,8 @@ new_specification :
 new_invocation :
      method_invocation | routine_invocation ;
 
-attribute_or_method_reference :
-     value_expression_primary dereference_operator qualified_identifier sql_argument_list? ;
+// attribute_or_method_reference :
+//      value_expression_primary dereference_operator qualified_identifier sql_argument_list? ;
 
 dereference_operator :
      RIGHT_ARROW ;
@@ -1111,10 +1111,10 @@ string_value_expression :
      character_value_expression | binary_value_expression ;
 
 character_value_expression :
-     concatenation | character_factor ;
+     character_value_expression CONCATENATION_OPERATOR character_factor | character_factor ;
 
-concatenation :
-     character_value_expression CONCATENATION_OPERATOR character_factor ;
+// concatenation :
+//      character_value_expression CONCATENATION_OPERATOR character_factor ;
 
 character_factor :
      character_primary collate_clause? ;
@@ -1123,7 +1123,7 @@ character_primary :
      value_expression_primary | string_value_function ;
 
 binary_value_expression :
-     binary_concatenation | binary_factor ;
+     binary_value_expression CONCATENATION_OPERATOR binary_factor | binary_factor ;
 
 binary_factor :
      binary_primary ;
@@ -1131,8 +1131,8 @@ binary_factor :
 binary_primary :
      value_expression_primary | string_value_function ;
 
-binary_concatenation :
-     binary_value_expression CONCATENATION_OPERATOR binary_factor ;
+// binary_concatenation :
+//      binary_value_expression CONCATENATION_OPERATOR binary_factor ;
 
 string_value_function :
      character_value_function | binary_value_function ;
@@ -1261,10 +1261,10 @@ current_local_timestamp_value_function :
      'LOCALTIMESTAMP' (LEFT_PAREN timestamp_precision RIGHT_PAREN)? ;
 
 interval_value_expression :
-     interval_term | interval_value_expression_1 PLUS_SIGN interval_term_1 | interval_value_expression_1 MINUS_SIGN interval_term_1 | LEFT_PAREN datetime_value_expression MINUS_SIGN datetime_term RIGHT_PAREN INTERVAL_QUALIFIER ;
+     interval_term | interval_value_expression PLUS_SIGN interval_term_1 | interval_value_expression MINUS_SIGN interval_term_1 | LEFT_PAREN datetime_value_expression MINUS_SIGN datetime_term RIGHT_PAREN INTERVAL_QUALIFIER ;
 
 interval_term :
-     interval_factor | interval_term_2 ASTERISK factor | interval_term_2 SOLIDUS factor | term ASTERISK interval_factor ;
+     interval_factor | interval_term ASTERISK factor | interval_term SOLIDUS factor | term ASTERISK interval_factor ;
 
 interval_factor :
      SIGN? interval_primary ;
@@ -1272,14 +1272,14 @@ interval_factor :
 interval_primary :
      value_expression_primary INTERVAL_QUALIFIER? | interval_value_function ;
 
-interval_value_expression_1 :
-     interval_value_expression ;
+// interval_value_expression_1 :
+//      interval_value_expression ;
 
 interval_term_1 :
      interval_term ;
 
-interval_term_2 :
-     interval_term ;
+// interval_term_2 :
+//      interval_term ;
 
 interval_value_function :
      interval_absolute_value_function ;
@@ -1306,19 +1306,19 @@ boolean_primary :
      predicate | boolean_predicand ;
 
 boolean_predicand :
-     parenthesized_boolean_value_expression | nonparenthesized_value_expression_primary ;
+     parenthesized_boolean_value_expression | value_expression_primary ;
 
 parenthesized_boolean_value_expression :
      LEFT_PAREN boolean_value_expression RIGHT_PAREN ;
 
 array_value_expression :
-     array_concatenation | array_primary ;
+     array_value_expression CONCATENATION_OPERATOR array_primary | array_primary ;
 
-array_concatenation :
-     array_value_expression_1 CONCATENATION_OPERATOR array_primary ;
+// array_concatenation :
+//      array_value_expression_1 CONCATENATION_OPERATOR array_primary ;
 
-array_value_expression_1 :
-     array_value_expression ;
+// array_value_expression_1 :
+//      array_value_expression ;
 
 array_primary :
      array_value_function | value_expression_primary ;
@@ -1414,7 +1414,7 @@ row_value_predicand :
      row_value_special_case | row_value_constructor_predicand ;
 
 row_value_special_case :
-     nonparenthesized_value_expression_primary ;
+     value_expression_primary ;
 
 table_value_constructor :
      'VALUES' row_value_expression_list ;
@@ -1438,7 +1438,7 @@ table_reference_list :
      table_reference (COMMA table_reference)* ;
 
 table_reference :
-     table_factor | joined_table ;
+     table_factor | table_reference 'CROSS' 'JOIN' table_factor | table_reference join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification | partitioned_join_table join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification | table_reference 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table) | partitioned_join_table 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table) | LEFT_PAREN table_reference RIGHT_PAREN ;
 
 table_factor :
      table_primary sample_clause? ;
@@ -1459,7 +1459,7 @@ repeat_argument :
      numeric_value_expression ;
 
 table_primary :
-     table_or_query_name query_system_time_period_specification? ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)? | derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | lateral_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | collection_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | table_function_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | only_spec ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)? | data_change_delta_table ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)? | parenthesized_joined_table ;
+     table_or_query_name query_system_time_period_specification? ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)? | derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | lateral_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | collection_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | table_function_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | only_spec ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)? | data_change_delta_table ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)? ;
 
 query_system_time_period_specification :
      'FOR' 'SYSTEM_TIME' 'AS' 'OF' point_in_time_1 | 'FOR' 'SYSTEM_TIME' 'BETWEEN' ('ASYMMETRIC' | 'SYMMETRIC')? point_in_time_1 'AND' point_in_time_2 | 'FOR' 'SYSTEM_TIME' 'FROM' point_in_time_1 'TO' point_in_time_2 ;
@@ -1506,17 +1506,17 @@ data_change_statement :
 result_option :
      'FINAL' | 'NEW' | 'OLD' ;
 
-parenthesized_joined_table :
-     LEFT_PAREN parenthesized_joined_table RIGHT_PAREN | LEFT_PAREN joined_table RIGHT_PAREN ;
+// parenthesized_joined_table :
+//      LEFT_PAREN parenthesized_joined_table RIGHT_PAREN | LEFT_PAREN joined_table RIGHT_PAREN ;
 
-joined_table :
-     cross_join | qualified_join | natural_join ;
+// joined_table :
+//      cross_join | qualified_join | natural_join ;
 
-cross_join :
-     table_reference 'CROSS' 'JOIN' table_factor ;
+// cross_join :
+//      table_reference 'CROSS' 'JOIN' table_factor ;
 
-qualified_join :
-     (table_reference | partitioned_join_table) join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification ;
+// qualified_join :
+//      (table_reference | partitioned_join_table) join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification ;
 
 partitioned_join_table :
      table_factor 'PARTITION' 'BY' partitioned_join_column_reference_list ;
@@ -1527,8 +1527,8 @@ partitioned_join_column_reference_list :
 partitioned_join_column_reference :
      column_reference ;
 
-natural_join :
-     (table_reference | partitioned_join_table) 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table) ;
+// natural_join :
+//      (table_reference | partitioned_join_table) 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table) ;
 
 join_specification :
      join_condition | named_columns_join ;
@@ -2401,10 +2401,10 @@ object_column :
      column_name ;
 
 mutated_set_clause :
-     mutated_target PERIOD method_name ;
+     mutated_set_clause PERIOD method_name | object_column PERIOD method_name;
 
-mutated_target :
-     object_column | mutated_set_clause ;
+// mutated_target :
+//      object_column | mutated_set_clause ;
 
 update_source :
      value_expression | contextually_typed_value_specification ;
