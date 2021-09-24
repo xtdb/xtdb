@@ -46,6 +46,8 @@ HEADER_COMMENT: '//' [ ]* [0-9] [.] .*? '\\n' ;
 COMMENT: '//' .*? '\\n' -> skip ;
         ")
 
+;; NOTE: this takes about a minute, so its best to store the AST
+;; somewhere and call the next steps manually while developing.
 (defn parse-sql-spec [sql-spec-string]
   (let [sql-spec-grammar (parse-grammar-from-string sql-spec-grammar-g4)
         rule-names (.getRuleNames sql-spec-grammar)
@@ -250,13 +252,13 @@ common_logarithm:
 (def ^:private ^:dynamic *sql-ast-current-name*)
 (def ^:private sql-print-indent "    ")
 
+(defmulti print-sql-ast first)
+
 (defn print-sql-ast-list [xs]
   (doseq [x (interpose " " xs)]
     (if (= " " x)
       (print x)
       (print-sql-ast x))))
-
-(defmulti print-sql-ast first)
 
 (defmethod print-sql-ast :spec [[_ & xs]]
   (doseq [x xs]
@@ -346,15 +348,15 @@ common_logarithm:
 (def sql2011-grammar-file (File. (.toURI (io/resource "core2/sql/SQL2011.g"))))
 (def sql2011-spec-file (File. (.toURI (io/resource "core2/sql/SQL2011.txt"))))
 
-(defn generate-parser
-  ([]
-   (generate-parser sql2011-spec-file sql2011-grammar-file))
-  ([sql-spec-file antlr-grammar-file]
-   (->> (parse-sql-spec (slurp sql-spec-file))
-        (sql-spec-ast->antlr-grammar-string "SQL2011")
-        (spit antlr-grammar-file))
-   (-> (Tool. (into-array ["-package" "core2.sql" "-no-listener" "-no-visitor" (str antlr-grammar-file)]))
-       (.processGrammarsOnCommandLine))))
+(defn generate-parser [grammar-name sql-spec-file antlr-grammar-file]
+  (->> (parse-sql-spec (slurp sql-spec-file))
+       (sql-spec-ast->antlr-grammar-string grammar-name)
+       (spit antlr-grammar-file))
+  (-> (Tool. (into-array ["-package" "core2.sql" "-no-listener" "-no-visitor" (str antlr-grammar-file)]))
+      (.processGrammarsOnCommandLine)))
+
+(defn -main [& args]
+  (generate-parser "SQL2011" sql2011-spec-file sql2011-grammar-file))
 
 (comment
   (let [expr-g4 "
