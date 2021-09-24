@@ -219,9 +219,48 @@ COMMENT: '//' .*? '\\n';
 
   (def fragment-set #{})
 
-  (def skip-rule-set #{})
+  (def skip-rule-set '#{collection_type
+                        array_type
+                        multiset_type
+                        nonparenthesized_value_expression_primary
+                        field_reference
+                        attribute_or_method_reference
+                        concatenation
+                        binary_concatenation
+                        interval_value_expression_1
+                        interval_term_2
+                        array_concatenation
+                        array_value_expression_1
+                        parenthesized_joined_table
+                        joined_table
+                        cross_join
+                        qualified_join
+                        natural_join
+                        mutated_target})
 
-  (def rule-overrides {})
+  (def rule-overrides
+    {'data_type
+     "predefined_type | row_type | path_resolved_user_defined_type_name | reference_type | data_type 'ARRAY' (LEFT_BRACKET_OR_TRIGRAPH maximum_cardinality RIGHT_BRACKET_OR_TRIGRAPH)? | data_type 'MULTISET'"
+     'value_expression_primary
+     "parenthesized_value_expression | unsigned_value_specification | column_reference | set_function_specification | window_function | nested_window_function | scalar_subquery | case_expression | cast_specification | value_expression_primary PERIOD field_name | subtype_treatment | value_expression_primary PERIOD method_name sql_argument_list? | generalized_invocation | static_method_invocation | new_specification | value_expression_primary dereference_operator qualified_identifier sql_argument_list? | reference_resolution | collection_value_constructor | value_expression_primary CONCATENATION_OPERATOR array_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH | array_value_function LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH | value_expression_primary LEFT_BRACKET_OR_TRIGRAPH numeric_value_expression RIGHT_BRACKET_OR_TRIGRAPH | multiset_element_reference | next_value_expression | routine_invocation"
+     'character_value_expression
+     "character_value_expression CONCATENATION_OPERATOR character_factor | character_factor"
+     'binary_value_expression
+     "binary_value_expression CONCATENATION_OPERATOR binary_factor | binary_factor"
+     'interval_value_expression
+     "interval_term | interval_value_expression PLUS_SIGN interval_term_1 | interval_value_expression MINUS_SIGN interval_term_1 | LEFT_PAREN datetime_value_expression MINUS_SIGN datetime_term RIGHT_PAREN INTERVAL_QUALIFIER"
+     'interval_term
+     "interval_factor | interval_term ASTERISK factor | interval_term SOLIDUS factor | term ASTERISK interval_factor"
+     'boolean_predicand
+     "parenthesized_boolean_value_expression | value_expression_primary"
+     'array_value_expression
+     "array_value_expression CONCATENATION_OPERATOR array_primary | array_primary"
+     'row_value_special_case
+     "value_expression_primary"
+     'table_reference
+     "table_factor | table_reference 'CROSS' 'JOIN' table_factor | table_reference join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification | partitioned_join_table join_type? 'JOIN' (table_reference | partitioned_join_table) join_specification | table_reference 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table) | partitioned_join_table 'NATURAL' join_type? 'JOIN' (table_factor | partitioned_join_table) | LEFT_PAREN table_reference RIGHT_PAREN"
+     'table_primary
+     "table_or_query_name query_system_time_period_specification? ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)? | derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | lateral_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | collection_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | table_function_derived_table 'AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)? | only_spec ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)? | data_change_delta_table ('AS'? correlation_name (LEFT_PAREN derived_column_list RIGHT_PAREN)?)?"})
 
   (def extra-rules "application_time_period_name : IDENTIFIER ;
 
