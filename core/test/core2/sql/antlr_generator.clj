@@ -191,12 +191,20 @@ COMMENT: '//' .*? '\\n' -> skip ;
 
 (def extra-rules "// SQL:2011 needed definitions in parts not generated.
 
+// 11 Schema definition and manipulation
+
+// 11.3 <table definition>
+
 application_time_period_name
     : IDENTIFIER
     ;
 
+// 21 Embedded SQL
+
+// 21.1 <embedded SQL host program>
+
 embedded_variable_name
-    : IDENTIFIER
+    : COLON IDENTIFIER
     ;
 
 // SQL:2016 6.30 <numeric value function>
