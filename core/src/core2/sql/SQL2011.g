@@ -1,6 +1,8 @@
 grammar SQL2011;
 
 
+// 5 Lexical elements
+
 // 5.1     <SQL terminal character>
 
 fragment
@@ -932,6 +934,8 @@ scope_option
 window_name
     : IDENTIFIER
     ;
+
+// 6 Scalar expressions
 
 // 6.1     <data type>
 
@@ -2265,6 +2269,8 @@ table_value_constructor_by_query
     : 'TABLE' table_subquery
     ;
 
+// 7 Query expressions
+
 // 7.1     <row value constructor>
 
 row_value_constructor
@@ -2900,6 +2906,8 @@ subquery
     : LEFT_PAREN query_expression RIGHT_PAREN
     ;
 
+// 8 Predicates
+
 // 8.1      <predicate>
 
 predicate
@@ -3381,6 +3389,10 @@ search_condition
     : boolean_value_expression
     ;
 
+// 10 Additional common elements
+
+// 10.1 <interval qualifier>
+
 INTERVAL_QUALIFIER
     : START_FIELD 'TO' END_FIELD
     | SINGLE_DATETIME_FIELD
@@ -3421,6 +3433,8 @@ INTERVAL_LEADING_FIELD_PRECISION
     : UNSIGNED_INTEGER
     ;
 
+// 10.2 <language clause>
+
 language_clause
     : 'LANGUAGE' language_name
     ;
@@ -3437,6 +3451,8 @@ language_name
     | 'SQL'
     ;
 
+// 10.3 <path specification>
+
 path_specification
     : 'PATH' schema_name_list
     ;
@@ -3444,6 +3460,8 @@ path_specification
 schema_name_list
     : SCHEMA_NAME (COMMA SCHEMA_NAME)*
     ;
+
+// 10.4 <routine invocation>
 
 routine_invocation
     : routine_name sql_argument_list
@@ -3479,6 +3497,8 @@ named_argument_sql_argument
     | contextually_typed_value_specification
     ;
 
+// 10.5 <character set specification>
+
 CHARACTER_SET_SPECIFICATION
     : STANDARD_CHARACTER_SET_NAME
     | IMPLEMENTATION_DEFINED_CHARACTER_SET_NAME
@@ -3496,6 +3516,8 @@ IMPLEMENTATION_DEFINED_CHARACTER_SET_NAME
 USER_DEFINED_CHARACTER_SET_NAME
     : CHARACTER_SET_NAME
     ;
+
+// 10.6 <specific routine designator>
 
 specific_routine_designator
     : 'SPECIFIC' routine_type specific_name
@@ -3522,9 +3544,13 @@ data_type_list
     : LEFT_PAREN (data_type (COMMA data_type)*)? RIGHT_PAREN
     ;
 
+// 10.7 <collate clause>
+
 collate_clause
     : 'COLLATE' collation_name
     ;
+
+// 10.8 <constraint name definition> and <constraint characteristics>
 
 constraint_name_definition
     : 'CONSTRAINT' constraint_name
@@ -3544,6 +3570,8 @@ constraint_check_time
 constraint_enforcement
     : 'NOT'? 'ENFORCED'
     ;
+
+// 10.9 <aggregate function>
 
 aggregate_function
     : 'COUNT' LEFT_PAREN ASTERISK RIGHT_PAREN filter_clause?
@@ -3649,6 +3677,8 @@ array_aggregate_function
     : 'ARRAY_AGG' LEFT_PAREN value_expression ('ORDER' 'BY' sort_specification_list)? RIGHT_PAREN
     ;
 
+// 10.10 <sort specification list>
+
 sort_specification_list
     : sort_specification (COMMA sort_specification)*
     ;
@@ -3671,9 +3701,15 @@ null_ordering
     | 'NULLS' 'LAST'
     ;
 
+// 14 Data manipulation
+
+// 14.1 <declare cursor>
+
 declare_cursor
     : 'DECLARE' cursor_name cursor_properties 'FOR' cursor_specification
     ;
+
+// 14.2 <cursor properties>
 
 cursor_properties
     : cursor_sensitivity? cursor_scrollability? 'CURSOR' cursor_holdability? cursor_returnability?
@@ -3700,6 +3736,8 @@ cursor_returnability
     | 'WITHOUT' 'RETURN'
     ;
 
+// 14.3 <cursor specification>
+
 cursor_specification
     : query_expression updatability_clause?
     ;
@@ -3708,9 +3746,13 @@ updatability_clause
     : 'FOR' ('READ' 'ONLY' | 'UPDATE' ('OF' column_name_list)?)
     ;
 
+// 14.4 <open statement>
+
 open_statement
     : 'OPEN' cursor_name
     ;
+
+// 14.5 <fetch statement>
 
 fetch_statement
     : 'FETCH' (fetch_orientation? 'FROM')? cursor_name 'INTO' fetch_target_list
@@ -3728,9 +3770,13 @@ fetch_target_list
     : target_specification (COMMA target_specification)*
     ;
 
+// 14.6 <close statement>
+
 close_statement
     : 'CLOSE' cursor_name
     ;
+
+// 14.7 <select statement: single row>
 
 select_statement__single_row
     : 'SELECT' set_quantifier? select_list 'INTO' select_target_list table_expression
@@ -3739,6 +3785,8 @@ select_statement__single_row
 select_target_list
     : target_specification (COMMA target_specification)*
     ;
+
+// 14.8 <delete statement: positioned>
 
 delete_statement__positioned
     : 'DELETE' 'FROM' target_table ('AS'? correlation_name)? 'WHERE' 'CURRENT' 'OF' cursor_name
@@ -3749,9 +3797,13 @@ target_table
     | 'ONLY' LEFT_PAREN table_name RIGHT_PAREN
     ;
 
+// 14.9 <delete statement: searched>
+
 delete_statement__searched
     : 'DELETE' 'FROM' target_table ('FOR' 'PORTION' 'OF' application_time_period_name 'FROM' point_in_time_1 'TO' point_in_time_2)? ('AS'? correlation_name)? ('WHERE' search_condition)?
     ;
+
+// 14.10 <truncate table statement>
 
 truncate_table_statement
     : 'TRUNCATE' 'TABLE' target_table identity_column_restart_option?
@@ -3761,6 +3813,8 @@ identity_column_restart_option
     : 'CONTINUE' 'IDENTITY'
     | 'RESTART' 'IDENTITY'
     ;
+
+// 14.11 <insert statement>
 
 insert_statement
     : 'INSERT' 'INTO' insertion_target insert_columns_and_source
@@ -3796,6 +3850,8 @@ from_default
 insert_column_list
     : column_name_list
     ;
+
+// 14.12 <merge statement>
 
 merge_statement
     : 'MERGE' 'INTO' target_table ('AS'? merge_correlation_name)? 'USING' table_reference 'ON' search_condition merge_operation_specification
@@ -3848,13 +3904,19 @@ merge_insert_value_element
     | contextually_typed_value_specification
     ;
 
+// 14.13 <update statement: positioned>
+
 update_statement__positioned
     : 'UPDATE' target_table ('AS'? correlation_name)? 'SET' set_clause_list 'WHERE' 'CURRENT' 'OF' cursor_name
     ;
 
+// 14.14 <update statement: searched>
+
 update_statement__searched
     : 'UPDATE' target_table ('FOR' 'PORTION' 'OF' application_time_period_name 'FROM' point_in_time_1 'TO' point_in_time_2)? ('AS'? correlation_name)? 'SET' set_clause_list ('WHERE' search_condition)?
     ;
+
+// 14.15 <set clause list>
 
 set_clause_list
     : set_clause (COMMA set_clause)*
@@ -3901,9 +3963,15 @@ update_source
     | contextually_typed_value_specification
     ;
 
+// 16 Control statements
+
+// 16.1 <call statement>
+
 call_statement
     : 'CALL' routine_invocation
     ;
+
+// 16.2 <return statement>
 
 return_statement
     : 'RETURN' return_value
@@ -3914,13 +3982,21 @@ return_value
     | 'NULL'
     ;
 
+// 17 Transaction management
+
+// 17.1 <start transaction statement>
+
 start_transaction_statement
     : 'START' 'TRANSACTION' (transaction_mode (COMMA transaction_mode)*)?
     ;
 
+// 17.2 <set transaction statement>
+
 set_transaction_statement
     : 'SET' 'LOCAL'? 'TRANSACTION' transaction_characteristics
     ;
+
+// 17.3 <transaction characteristics>
 
 transaction_characteristics
     : (transaction_mode (COMMA transaction_mode)*)?
@@ -3956,6 +4032,8 @@ number_of_conditions
     : simple_value_specification
     ;
 
+// 17.4 <set constraints mode statement>
+
 set_constraints_mode_statement
     : 'SET' 'CONSTRAINTS' constraint_name_list ('DEFERRED' | 'IMMEDIATE')
     ;
@@ -3965,6 +4043,8 @@ constraint_name_list
     | constraint_name (COMMA constraint_name)*
     ;
 
+// 17.5 <savepoint statement>
+
 savepoint_statement
     : 'SAVEPOINT' savepoint_specifier
     ;
@@ -3973,13 +4053,19 @@ savepoint_specifier
     : savepoint_name
     ;
 
+// 17.6 <release savepoint statement>
+
 release_savepoint_statement
     : 'RELEASE' 'SAVEPOINT' savepoint_specifier
     ;
 
+// 17.7 <commit statement>
+
 commit_statement
     : 'COMMIT' 'WORK'? ('AND' 'NO'? 'CHAIN')?
     ;
+
+// 17.8 <rollback statement>
 
 rollback_statement
     : 'ROLLBACK' 'WORK'? ('AND' 'NO'? 'CHAIN')? savepoint_clause?

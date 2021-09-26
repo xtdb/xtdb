@@ -41,7 +41,7 @@ SEE_THE_SYNTAX_RULES: '!!' .*? '\\n' ;
 NAME: '<' [-_:/a-zA-Z 0-9]+ '>' ;
 TOKEN: ~[ \\n\\r\\t.!]+ ;
 WS: [ \\n\\r\\t]+ -> skip ;
-HEADER_COMMENT: '//' [ ]* [0-9] [.] .*? '\\n' ;
+HEADER_COMMENT: '//' [ ]* [0-9] .*? '\\n' ;
 COMMENT: '//' .*? '\\n' -> skip ;
         ")
 
