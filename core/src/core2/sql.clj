@@ -362,16 +362,7 @@
 
   (let [lexer (sql2011-lexer "SELECT * FROM user WHERE user.id = -2")
         ts (CommonTokenStream. lexer)]
-    (.consume ts)
-    (.consume ts)
-    (.consume ts)
-    (.consume ts)
-    (.consume ts)
-    (.consume ts)
-    (.consume ts)
-    (.consume ts)
-    (.consume ts)
-    (.consume ts)
+    (.fill ts)
     (for [t (.getTokens ts)]
       [t
        (.getDisplayName (.getVocabulary lexer) (.getType t))
