@@ -55,13 +55,13 @@ COMMENT: '//' .*? '\\n' -> skip ;
     (antlr/->ast rule-names vocabulary tree)))
 
 (def literal-set
-  #{"<signed integer>" "<seconds value>" "<plus sign>" "<simple Latin lower case letter>" "<time literal>" "<white space>" "<equals operator>" "<double period>" "<escaped character>" "<Unicode escape character>" "<Unicode 4 digit escape value>" "<seconds integer value>" "<separator>" "<interval qualifier>" "<hexit>" "<actual identifier>" "<date string>" "<percent>" "<datetime literal>" "<comment character>" "<interval string>" "<bracketed comment introducer>" "<question mark>" "<delimited identifier part>" "<left bracket trigraph>" "<minus sign>" "<timestamp literal>" "<left paren>" "<semicolon>" "<timestamp string>" "<interval fractional seconds precision>" "<exponent>" "<unsigned literal>" "<binary string literal>" "<not equals operator>" "<time interval>" "<SQL language identifier start>" "<left bracket>" "<time value>" "<right paren>" "<time string>" "<years value>" "<single datetime field>" "<comment>" "<minutes value>" "<multiplier>" "<ampersand>" "<simple Latin upper case letter>" "<unsigned integer>" "<right brace>" "<approximate numeric literal>" "<interval literal>" "<nonquote character>" "<unqualified schema name>" "<Unicode escape value>" "<primary datetime field>" "<Unicode delimiter body>" "<delimiter token>" "<hours value>" "<regular identifier>" "<time zone interval>" "<implementation-defined character set name>" "<SQL language identifier>" "<newline>" "<Unicode escape specifier>" "<less than operator>" "<signed numeric literal>" "<date value>" "<seconds fraction>" "<SQL language identifier part>" "<identifier start>" "<days value>" "<day-time literal>" "<delimited identifier>" "<Unicode identifier part>" "<identifier extend>" "<solidus>" "<digit>" "<unquoted date string>" "<right bracket trigraph>" "<bracketed comment terminator>" "<user-defined character set name>" "<non-second primary datetime field>" "<boolean literal>" "<period>" "<nondelimiter token>" "<identifier body>" "<asterisk>" "<unsigned numeric literal>" "<simple Latin letter>" "<simple comment introducer>" "<character string literal>" "<Unicode delimited identifier>" "<underscore>" "<months value>" "<double colon>" "<greater than operator>" "<less than or equals operator>" "<comma>" "<doublequote symbol>" "<delimited identifier body>" "<identifier>" "<literal>" "<quote>" "<mantissa>" "<right arrow>" "<SQL special character>" "<reverse solidus>" "<double quote>" "<character set specification>" "<Unicode representation>" "<Unicode character string literal>" "<quote symbol>" "<year-month literal>" "<date literal>" "<Unicode 6 digit escape value>" "<catalog name>" "<non-escaped character>" "<simple comment>" "<sign>" "<Unicode character escape value>" "<circumflex>" "<colon>" "<concatenation operator>" "<start field>" "<right bracket or trigraph>" "<right bracket>" "<token>" "<unquoted timestamp string>" "<named argument assignment token>" "<space>" "<schema name>" "<greater than or equals operator>" "<interval leading field precision>" "<left bracket or trigraph>" "<end field>" "<vertical bar>" "<bracketed comment contents>" "<bracketed comment>" "<left brace>" "<unquoted interval string>" "<nondoublequote character>" "<introducer>" "<standard character set name>" "<character set name>" "<exact numeric literal>" "<character representation>" "<large object length token>" "<identifier part>" "<day-time interval>" "<unquoted time string>" "<datetime value>" "<general literal>"})
+  #{"<seconds value>" "<plus sign>" "<simple Latin lower case letter>" "<character string literal>" "<Unicode character string literal>" "<time literal>" "<white space>" "<equals operator>" "<double period>" "<escaped character>" "<Unicode escape character>" "<Unicode 4 digit escape value>" "<seconds integer value>" "<separator>" "<interval qualifier>" "<hexit>" "<date string>" "<percent>" "<datetime literal>" "<comment character>" "<interval string>" "<bracketed comment introducer>" "<question mark>" "<delimited identifier part>" "<left bracket trigraph>" "<minus sign>" "<timestamp literal>" "<left paren>" "<semicolon>" "<timestamp string>" "<interval fractional seconds precision>" "<binary string literal>" "<not equals operator>" "<time interval>" "<left bracket>" "<time value>" "<right paren>" "<time string>" "<years value>" "<single datetime field>" "<comment>" "<minutes value>" "<multiplier>" "<ampersand>" "<simple Latin upper case letter>" "<unsigned integer>" "<right brace>" "<interval literal>" "<nonquote character>" "<Unicode escape value>" "<primary datetime field>" "<Unicode delimited identifier>"  "<Unicode delimiter body>" "<hours value>" "<time zone interval>" "<newline>" "<Unicode escape specifier>" "<less than operator>" "<date value>" "<seconds fraction>" "<identifier start>" "<days value>" "<day-time literal>" "<delimited identifier>" "<Unicode identifier part>" "<identifier extend>" "<solidus>" "<digit>" "<unquoted date string>" "<right bracket trigraph>" "<bracketed comment terminator>" "<non-second primary datetime field>" "<boolean literal>" "<period>" "<nondelimiter token>" "<identifier body>" "<asterisk>" "<simple Latin letter>" "<simple comment introducer>" "<underscore>" "<months value>" "<double colon>" "<greater than operator>" "<less than or equals operator>" "<comma>" "<doublequote symbol>" "<delimited identifier body>" "<quote>" "<right arrow>" "<reverse solidus>" "<double quote>" "<Unicode representation>" "<quote symbol>" "<year-month literal>" "<date literal>" "<Unicode 6 digit escape value>" "<non-escaped character>" "<simple comment>" "<sign>" "<Unicode character escape value>" "<circumflex>" "<colon>" "<concatenation operator>" "<start field>" "<right bracket or trigraph>" "<right bracket>" "<token>" "<unquoted timestamp string>" "<named argument assignment token>" "<space>" "<greater than or equals operator>" "<interval leading field precision>" "<left bracket or trigraph>" "<end field>" "<vertical bar>" "<bracketed comment contents>" "<bracketed comment>" "<left brace>" "<unquoted interval string>" "<nondoublequote character>" "<introducer>" "<character representation>" "<large object length token>" "<identifier part>" "<day-time interval>" "<unquoted time string>" "<datetime value>"})
 
 (def fragment-set
-  #{"<simple Latin lower case letter>" "<Unicode escape character>" "<Unicode 4 digit escape value>" "<separator>" "<hexit>" "<comment character>" "<bracketed comment introducer>" "<delimited identifier part>" "<SQL language identifier start>" "<simple Latin upper case letter>" "<Unicode escape value>" "<Unicode delimiter body>" "<Unicode escape specifier>" "<SQL language identifier part>" "<identifier start>" "<Unicode identifier part>" "<identifier extend>" "<digit>" "<bracketed comment terminator>" "<identifier body>" "<simple Latin letter>" "<simple comment introducer>" "<delimited identifier body>" "<SQL special character>" "<Unicode 6 digit escape value>" "<simple comment>" "<Unicode character escape value>" "<bracketed comment contents>" "<bracketed comment>" "<identifier part>"})
+  #{"<simple Latin lower case letter>" "<Unicode escape character>" "<Unicode 4 digit escape value>" "<hexit>" "<comment character>" "<bracketed comment introducer>" "<delimited identifier part>" "<nondoublequote character>" "<doublequote symbol>" "<simple Latin upper case letter>" "<character representation>" "<Unicode escape value>" "<Unicode delimiter body>" "<identifier start>" "<Unicode identifier part>" "<identifier extend>" "<digit>" "<bracketed comment terminator>" "<simple Latin letter>" "<simple comment introducer>" "<delimited identifier body>" "<Unicode 6 digit escape value>" "<simple comment>" "<Unicode representation>" "<Unicode escape specifier>" "<Unicode character escape value>" "<bracketed comment contents>" "<bracketed comment>" "<identifier part>" "<nonquote character>" "<quote symbol>" "<date string>" "<time string>" "<timestamp string>" "<time zone interval>" "<date value>" "<time value>" "<interval string>" "<unquoted date string>" "<unquoted time string>""<unquoted timestamp string>" "<unquoted interval string>" "<year-month literal>" "<day-time literal>" "<day-time interval>" "<time interval>" "<years value>" "<months value>" "<days value>" "<hours value>" "<minutes value>" "<seconds value>" "<seconds integer value>" "<seconds fraction>" "<datetime value>"})
 
 (def syntax-rules-overrides
-  {'SPACE "' '"
+  {'SPACE "' ' -> skip"
    'QUOTE "'\\''"
    'PERIOD "'.'"
    'REVERSE_SOLIDUS "'\\\\'"
@@ -89,8 +89,16 @@ COMMENT: '//' .*? '\\n' -> skip ;
 ;; out. This is to ensure the override ends up in the right place in
 ;; the grammar.
 (def rule-overrides
-  {'COMMENT
+  {'SEPARATOR
+   "(COMMENT | WHITE_SPACE)+ -> skip"
+   'COMMENT
    "(SIMPLE_COMMENT | BRACKETED_COMMENT) -> skip"
+   'CHARACTER_STRING_LITERAL
+   "QUOTE CHARACTER_REPRESENTATION* QUOTE (SEPARATOR QUOTE CHARACTER_REPRESENTATION* QUOTE)*"
+   'UNICODE_CHARACTER_STRING_LITERAL
+   "'U' AMPERSAND QUOTE UNICODE_REPRESENTATION* QUOTE (SEPARATOR QUOTE UNICODE_REPRESENTATION* QUOTE)* UNICODE_ESCAPE_SPECIFIER"
+   'character_set_name
+   "(schema_name PERIOD)? identifier"
    'data_type
    "predefined_type
     | row_type
@@ -196,7 +204,7 @@ COMMENT: '//' .*? '\\n' -> skip ;
 // 11.3 <table definition>
 
 application_time_period_name
-    : IDENTIFIER
+    : identifier
     ;
 
 // 21 Embedded SQL
@@ -204,7 +212,7 @@ application_time_period_name
 // 21.1 <embedded SQL host program>
 
 embedded_variable_name
-    : COLON IDENTIFIER
+    : COLON identifier
     ;
 
 // SQL:2016 6.30 <numeric value function>

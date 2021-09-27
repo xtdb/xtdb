@@ -85,38 +85,8 @@ DIGIT
     | '9'
     ;
 
-fragment
-SQL_SPECIAL_CHARACTER
-    : SPACE
-    | DOUBLE_QUOTE
-    | PERCENT
-    | AMPERSAND
-    | QUOTE
-    | LEFT_PAREN
-    | RIGHT_PAREN
-    | ASTERISK
-    | PLUS_SIGN
-    | COMMA
-    | MINUS_SIGN
-    | PERIOD
-    | SOLIDUS
-    | COLON
-    | SEMICOLON
-    | LESS_THAN_OPERATOR
-    | EQUALS_OPERATOR
-    | GREATER_THAN_OPERATOR
-    | QUESTION_MARK
-    | LEFT_BRACKET
-    | RIGHT_BRACKET
-    | CIRCUMFLEX
-    | UNDERSCORE
-    | VERTICAL_BAR
-    | LEFT_BRACE
-    | RIGHT_BRACE
-    ;
-
 SPACE
-    : ' '
+    : ' ' -> skip
     ;
 
 DOUBLE_QUOTE
@@ -243,11 +213,10 @@ RIGHT_BRACE
 
 // 5.2     <token> and <separator>
 
-REGULAR_IDENTIFIER
+regular_identifier
     : IDENTIFIER_BODY
     ;
 
-fragment
 IDENTIFIER_BODY
     : IDENTIFIER_START IDENTIFIER_PART*
     ;
@@ -344,32 +313,14 @@ UNICODE_ESCAPE_CHARACTER
     : '\\'
     ;
 
+fragment
 NONDOUBLEQUOTE_CHARACTER
     : ~'"'
     ;
 
+fragment
 DOUBLEQUOTE_SYMBOL
     : '""'
-    ;
-
-DELIMITER_TOKEN
-    : CHARACTER_STRING_LITERAL
-    | DATE_STRING
-    | TIME_STRING
-    | TIMESTAMP_STRING
-    | INTERVAL_STRING
-    | DELIMITED_IDENTIFIER
-    | SQL_SPECIAL_CHARACTER
-    | NOT_EQUALS_OPERATOR
-    | GREATER_THAN_OR_EQUALS_OPERATOR
-    | LESS_THAN_OR_EQUALS_OPERATOR
-    | CONCATENATION_OPERATOR
-    | RIGHT_ARROW
-    | LEFT_BRACKET_TRIGRAPH
-    | RIGHT_BRACKET_TRIGRAPH
-    | DOUBLE_COLON
-    | DOUBLE_PERIOD
-    | NAMED_ARGUMENT_ASSIGNMENT_TOKEN
     ;
 
 NOT_EQUALS_OPERATOR
@@ -404,9 +355,8 @@ NAMED_ARGUMENT_ASSIGNMENT_TOKEN
     : '=>'
     ;
 
-fragment
 SEPARATOR
-    : (COMMENT | WHITE_SPACE)+
+    : (COMMENT | WHITE_SPACE)+ -> skip
     ;
 
 WHITE_SPACE
@@ -459,17 +409,17 @@ NEWLINE
 
 // 5.3     <literal>
 
-LITERAL
-    : SIGNED_NUMERIC_LITERAL
-    | GENERAL_LITERAL
+literal
+    : signed_numeric_literal
+    | general_literal
     ;
 
-UNSIGNED_LITERAL
-    : UNSIGNED_NUMERIC_LITERAL
-    | GENERAL_LITERAL
+unsigned_literal
+    : unsigned_numeric_literal
+    | general_literal
     ;
 
-GENERAL_LITERAL
+general_literal
     : CHARACTER_STRING_LITERAL
     | UNICODE_CHARACTER_STRING_LITERAL
     | BINARY_STRING_LITERAL
@@ -479,30 +429,30 @@ GENERAL_LITERAL
     ;
 
 CHARACTER_STRING_LITERAL
-    : (INTRODUCER CHARACTER_SET_SPECIFICATION)? QUOTE CHARACTER_REPRESENTATION* QUOTE (SEPARATOR QUOTE CHARACTER_REPRESENTATION* QUOTE)*
+    : QUOTE CHARACTER_REPRESENTATION* QUOTE (SEPARATOR QUOTE CHARACTER_REPRESENTATION* QUOTE)*
     ;
 
-INTRODUCER
-    : UNDERSCORE
-    ;
-
+fragment
 CHARACTER_REPRESENTATION
     : NONQUOTE_CHARACTER
     | QUOTE_SYMBOL
     ;
 
+fragment
 NONQUOTE_CHARACTER
     : ~'\''
     ;
 
+fragment
 QUOTE_SYMBOL
     : QUOTE QUOTE
     ;
 
 UNICODE_CHARACTER_STRING_LITERAL
-    : (INTRODUCER CHARACTER_SET_SPECIFICATION)? 'U' AMPERSAND QUOTE UNICODE_REPRESENTATION* QUOTE (SEPARATOR QUOTE UNICODE_REPRESENTATION* QUOTE)* UNICODE_ESCAPE_SPECIFIER
+    : 'U' AMPERSAND QUOTE UNICODE_REPRESENTATION* QUOTE (SEPARATOR QUOTE UNICODE_REPRESENTATION* QUOTE)* UNICODE_ESCAPE_SPECIFIER
     ;
 
+fragment
 UNICODE_REPRESENTATION
     : CHARACTER_REPRESENTATION
     | UNICODE_ESCAPE_VALUE
@@ -529,16 +479,16 @@ HEXIT
     | 'f'
     ;
 
-SIGNED_NUMERIC_LITERAL
-    : SIGN? UNSIGNED_NUMERIC_LITERAL
+signed_numeric_literal
+    : SIGN? unsigned_numeric_literal
     ;
 
-UNSIGNED_NUMERIC_LITERAL
-    : EXACT_NUMERIC_LITERAL
-    | APPROXIMATE_NUMERIC_LITERAL
+unsigned_numeric_literal
+    : exact_numeric_literal
+    | approximate_numeric_literal
     ;
 
-EXACT_NUMERIC_LITERAL
+exact_numeric_literal
     : UNSIGNED_INTEGER (PERIOD UNSIGNED_INTEGER?)?
     | PERIOD UNSIGNED_INTEGER
     ;
@@ -548,19 +498,19 @@ SIGN
     | MINUS_SIGN
     ;
 
-APPROXIMATE_NUMERIC_LITERAL
-    : MANTISSA 'E' EXPONENT
+approximate_numeric_literal
+    : mantissa 'E' exponent
     ;
 
-MANTISSA
-    : EXACT_NUMERIC_LITERAL
+mantissa
+    : exact_numeric_literal
     ;
 
-EXPONENT
-    : SIGNED_INTEGER
+exponent
+    : signed_integer
     ;
 
-SIGNED_INTEGER
+signed_integer
     : SIGN? UNSIGNED_INTEGER
     ;
 
@@ -586,26 +536,32 @@ TIMESTAMP_LITERAL
     : 'TIMESTAMP' TIMESTAMP_STRING
     ;
 
+fragment
 DATE_STRING
     : QUOTE UNQUOTED_DATE_STRING QUOTE
     ;
 
+fragment
 TIME_STRING
     : QUOTE UNQUOTED_TIME_STRING QUOTE
     ;
 
+fragment
 TIMESTAMP_STRING
     : QUOTE UNQUOTED_TIMESTAMP_STRING QUOTE
     ;
 
+fragment
 TIME_ZONE_INTERVAL
     : SIGN HOURS_VALUE COLON MINUTES_VALUE
     ;
 
+fragment
 DATE_VALUE
     : YEARS_VALUE MINUS_SIGN MONTHS_VALUE MINUS_SIGN DAYS_VALUE
     ;
 
+fragment
 TIME_VALUE
     : HOURS_VALUE COLON MINUTES_VALUE COLON SECONDS_VALUE
     ;
@@ -614,78 +570,96 @@ INTERVAL_LITERAL
     : 'INTERVAL' SIGN? INTERVAL_STRING INTERVAL_QUALIFIER
     ;
 
+fragment
 INTERVAL_STRING
     : QUOTE UNQUOTED_INTERVAL_STRING QUOTE
     ;
 
+fragment
 UNQUOTED_DATE_STRING
     : DATE_VALUE
     ;
 
+fragment
 UNQUOTED_TIME_STRING
     : TIME_VALUE TIME_ZONE_INTERVAL?
     ;
 
+fragment
 UNQUOTED_TIMESTAMP_STRING
     : UNQUOTED_DATE_STRING SPACE UNQUOTED_TIME_STRING
     ;
 
+fragment
 UNQUOTED_INTERVAL_STRING
     : SIGN? (YEAR_MONTH_LITERAL | DAY_TIME_LITERAL)
     ;
 
+fragment
 YEAR_MONTH_LITERAL
     : YEARS_VALUE (MINUS_SIGN MONTHS_VALUE)?
     | MONTHS_VALUE
     ;
 
+fragment
 DAY_TIME_LITERAL
     : DAY_TIME_INTERVAL
     | TIME_INTERVAL
     ;
 
+fragment
 DAY_TIME_INTERVAL
     : DAYS_VALUE (SPACE HOURS_VALUE (COLON MINUTES_VALUE (COLON SECONDS_VALUE)?)?)?
     ;
 
+fragment
 TIME_INTERVAL
     : HOURS_VALUE (COLON MINUTES_VALUE (COLON SECONDS_VALUE)?)?
     | MINUTES_VALUE (COLON SECONDS_VALUE)?
     | SECONDS_VALUE
     ;
 
+fragment
 YEARS_VALUE
     : DATETIME_VALUE
     ;
 
+fragment
 MONTHS_VALUE
     : DATETIME_VALUE
     ;
 
+fragment
 DAYS_VALUE
     : DATETIME_VALUE
     ;
 
+fragment
 HOURS_VALUE
     : DATETIME_VALUE
     ;
 
+fragment
 MINUTES_VALUE
     : DATETIME_VALUE
     ;
 
+fragment
 SECONDS_VALUE
     : SECONDS_INTEGER_VALUE (PERIOD SECONDS_FRACTION?)?
     ;
 
+fragment
 SECONDS_INTEGER_VALUE
     : UNSIGNED_INTEGER
     ;
 
+fragment
 SECONDS_FRACTION
     : UNSIGNED_INTEGER
     ;
 
+fragment
 DATETIME_VALUE
     : UNSIGNED_INTEGER
     ;
@@ -698,30 +672,14 @@ BOOLEAN_LITERAL
 
 // 5.4    Names and identifiers
 
-IDENTIFIER
-    : ACTUAL_IDENTIFIER
+identifier
+    : actual_identifier
     ;
 
-ACTUAL_IDENTIFIER
-    : REGULAR_IDENTIFIER
+actual_identifier
+    : regular_identifier
     | DELIMITED_IDENTIFIER
     | UNICODE_DELIMITED_IDENTIFIER
-    ;
-
-SQL_LANGUAGE_IDENTIFIER
-    : SQL_LANGUAGE_IDENTIFIER_START SQL_LANGUAGE_IDENTIFIER_PART*
-    ;
-
-fragment
-SQL_LANGUAGE_IDENTIFIER_START
-    : SIMPLE_LATIN_LETTER
-    ;
-
-fragment
-SQL_LANGUAGE_IDENTIFIER_PART
-    : SIMPLE_LATIN_LETTER
-    | DIGIT
-    | UNDERSCORE
     ;
 
 authorization_identifier
@@ -737,20 +695,20 @@ domain_name
     : schema_qualified_name
     ;
 
-SCHEMA_NAME
-    : (CATALOG_NAME PERIOD)? UNQUALIFIED_SCHEMA_NAME
+schema_name
+    : (catalog_name PERIOD)? unqualified_schema_name
     ;
 
-UNQUALIFIED_SCHEMA_NAME
-    : IDENTIFIER
+unqualified_schema_name
+    : identifier
     ;
 
-CATALOG_NAME
-    : IDENTIFIER
+catalog_name
+    : identifier
     ;
 
 schema_qualified_name
-    : (SCHEMA_NAME PERIOD)? qualified_identifier
+    : (schema_name PERIOD)? qualified_identifier
     ;
 
 local_or_schema_qualified_name
@@ -758,32 +716,32 @@ local_or_schema_qualified_name
     ;
 
 local_or_schema_qualifier
-    : SCHEMA_NAME
+    : schema_name
     | local_qualifier
     ;
 
 qualified_identifier
-    : IDENTIFIER
+    : identifier
     ;
 
 column_name
-    : IDENTIFIER
+    : identifier
     ;
 
 correlation_name
-    : IDENTIFIER
+    : identifier
     ;
 
 query_name
-    : IDENTIFIER
+    : identifier
     ;
 
 sql_client_module_name
-    : IDENTIFIER
+    : identifier
     ;
 
 procedure_name
-    : IDENTIFIER
+    : identifier
     ;
 
 schema_qualified_routine_name
@@ -791,7 +749,7 @@ schema_qualified_routine_name
     ;
 
 method_name
-    : IDENTIFIER
+    : identifier
     ;
 
 specific_name
@@ -811,11 +769,11 @@ local_qualifier
     ;
 
 host_parameter_name
-    : COLON IDENTIFIER
+    : COLON identifier
     ;
 
 sql_parameter_name
-    : IDENTIFIER
+    : identifier
     ;
 
 constraint_name
@@ -823,7 +781,7 @@ constraint_name
     ;
 
 external_routine_name
-    : IDENTIFIER
+    : identifier
     | CHARACTER_STRING_LITERAL
     ;
 
@@ -835,8 +793,8 @@ collation_name
     : schema_qualified_name
     ;
 
-CHARACTER_SET_NAME
-    : (SCHEMA_NAME PERIOD)? SQL_LANGUAGE_IDENTIFIER
+character_set_name
+    : (schema_name PERIOD)? identifier
     ;
 
 transliteration_name
@@ -852,19 +810,19 @@ schema_resolved_user_defined_type_name
     ;
 
 user_defined_type_name
-    : (SCHEMA_NAME PERIOD)? qualified_identifier
+    : (schema_name PERIOD)? qualified_identifier
     ;
 
 attribute_name
-    : IDENTIFIER
+    : identifier
     ;
 
 field_name
-    : IDENTIFIER
+    : identifier
     ;
 
 savepoint_name
-    : IDENTIFIER
+    : identifier
     ;
 
 sequence_generator_name
@@ -872,11 +830,11 @@ sequence_generator_name
     ;
 
 role_name
-    : IDENTIFIER
+    : identifier
     ;
 
 user_identifier
-    : IDENTIFIER
+    : identifier
     ;
 
 connection_name
@@ -897,7 +855,7 @@ sql_statement_name
     ;
 
 statement_name
-    : IDENTIFIER
+    : identifier
     ;
 
 extended_statement_name
@@ -919,7 +877,7 @@ descriptor_name
     ;
 
 non_extended_descriptor_name
-    : IDENTIFIER
+    : identifier
     ;
 
 extended_descriptor_name
@@ -932,7 +890,7 @@ scope_option
     ;
 
 window_name
-    : IDENTIFIER
+    : identifier
     ;
 
 // 6 Scalar expressions
@@ -949,7 +907,7 @@ data_type
     ;
 
 predefined_type
-    : character_string_type ('CHARACTER' 'SET' CHARACTER_SET_SPECIFICATION)? collate_clause?
+    : character_string_type ('CHARACTER' 'SET' character_set_specification)? collate_clause?
     | binary_string_type
     | numeric_type
     | boolean_type
@@ -1141,12 +1099,12 @@ collection_value_constructor
 // 6.4     <value specification> and <target specification>
 
 value_specification
-    : LITERAL
+    : literal
     | general_value_specification
     ;
 
 unsigned_value_specification
-    : UNSIGNED_LITERAL
+    : unsigned_literal
     | general_value_specification
     ;
 
@@ -1170,7 +1128,7 @@ general_value_specification
     ;
 
 simple_value_specification
-    : LITERAL
+    : literal
     | host_parameter_name
     | sql_parameter_reference
     | embedded_variable_name
@@ -1253,7 +1211,7 @@ default_specification
 // 6.6        <identifier chain>
 
 identifier_chain
-    : IDENTIFIER (PERIOD IDENTIFIER)*
+    : identifier (PERIOD identifier)*
     ;
 
 basic_identifier_chain
@@ -1330,7 +1288,7 @@ lead_or_lag_extent
     ;
 
 offset
-    : EXACT_NUMERIC_LITERAL
+    : exact_numeric_literal
     ;
 
 default_expression
@@ -2735,7 +2693,7 @@ asterisked_identifier_chain
     ;
 
 asterisked_identifier
-    : IDENTIFIER
+    : identifier
     ;
 
 derived_column
@@ -3109,7 +3067,7 @@ character_enumeration
     ;
 
 regular_character_set_identifier
-    : IDENTIFIER
+    : identifier
     ;
 
 // 8.7        <regex like predicate>
@@ -3458,7 +3416,7 @@ path_specification
     ;
 
 schema_name_list
-    : SCHEMA_NAME (COMMA SCHEMA_NAME)*
+    : schema_name (COMMA schema_name)*
     ;
 
 // 10.4 <routine invocation>
@@ -3468,7 +3426,7 @@ routine_invocation
     ;
 
 routine_name
-    : (SCHEMA_NAME PERIOD)? qualified_identifier
+    : (schema_name PERIOD)? qualified_identifier
     ;
 
 sql_argument_list
@@ -3499,22 +3457,22 @@ named_argument_sql_argument
 
 // 10.5 <character set specification>
 
-CHARACTER_SET_SPECIFICATION
-    : STANDARD_CHARACTER_SET_NAME
-    | IMPLEMENTATION_DEFINED_CHARACTER_SET_NAME
-    | USER_DEFINED_CHARACTER_SET_NAME
+character_set_specification
+    : standard_character_set_name
+    | implementation_defined_character_set_name
+    | user_defined_character_set_name
     ;
 
-STANDARD_CHARACTER_SET_NAME
-    : CHARACTER_SET_NAME
+standard_character_set_name
+    : character_set_name
     ;
 
-IMPLEMENTATION_DEFINED_CHARACTER_SET_NAME
-    : CHARACTER_SET_NAME
+implementation_defined_character_set_name
+    : character_set_name
     ;
 
-USER_DEFINED_CHARACTER_SET_NAME
-    : CHARACTER_SET_NAME
+user_defined_character_set_name
+    : character_set_name
     ;
 
 // 10.6 <specific routine designator>
@@ -4103,7 +4061,7 @@ direct_select_statement__multiple_rows
 // 11.3 <table definition>
 
 application_time_period_name
-    : IDENTIFIER
+    : identifier
     ;
 
 // 21 Embedded SQL
@@ -4111,7 +4069,7 @@ application_time_period_name
 // 21.1 <embedded SQL host program>
 
 embedded_variable_name
-    : COLON IDENTIFIER
+    : COLON identifier
     ;
 
 // SQL:2016 6.30 <numeric value function>

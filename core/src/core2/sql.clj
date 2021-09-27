@@ -4,10 +4,13 @@
             [clojure.instant :as i]
             [clojure.set :as set]
             [clojure.string :as s]
+            [core2.sql.antlr :as antlr]
             [instaparse.core :as insta])
   (:import [java.util Date]
            [java.time Duration LocalTime Period ZoneOffset]
-           [java.time.temporal TemporalAmount]))
+           [java.time.temporal TemporalAmount]
+           [org.antlr.v4.runtime CharStreams CommonTokenStream]
+           [core2.sql SQL2011Lexer SQL2011Parser]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -313,6 +316,26 @@
                 :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*?([*]/\\s*|$)'")
                 :string-ci true))
 
+;; Antlr-based SQL:2011 parser generated from the official grammar:
+;; TODO: does not yet work.
+
+(defn- sql2011-lexer ^core2.sql.SQL2011Lexer [^String s]
+  (-> (CharStreams/fromString s)
+      #_(antlr/upper-case-char-stream)
+      (SQL2011Lexer.)))
+
+(defn- sql2011-token-stream ^org.antlr.v4.runtime.CommonTokenStream [^String s]
+  (CommonTokenStream. (sql2011-lexer s)))
+
+(defn- sql2011-parser ^core2.sql.SQL2011Parser [^String s]
+  (SQL2011Parser. (sql2011-token-stream s)))
+
+(defn parse-sql2011-query-expression [^String s]
+  (let [parser (sql2011-parser s)
+        rule-names (.getRuleNames parser)
+        vocabulary (.getVocabulary parser)]
+    (antlr/->ast rule-names vocabulary (.query_expression parser))))
+
 (comment
   (count
    (insta/parses
@@ -335,7 +358,28 @@
   (time
    (parse-sql-92
     "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
-    :start :dynamic-select-statement)))
+    :start :dynamic-select-statement))
+
+  (let [lexer (sql2011-lexer "SELECT * FROM user WHERE user.id = -2")
+        ts (CommonTokenStream. lexer)]
+    (.consume ts)
+    (.consume ts)
+    (.consume ts)
+    (.consume ts)
+    (.consume ts)
+    (.consume ts)
+    (.consume ts)
+    (.consume ts)
+    (.consume ts)
+    (.consume ts)
+    (for [t (.getTokens ts)]
+      [t
+       (.getDisplayName (.getVocabulary lexer) (.getType t))
+       (.getSymbolicName (.getVocabulary lexer) (.getType t))]))
+
+  (time
+   (parse-sql2011-query-expression
+    "SELECT * FROM user WHERE user.id = 2")))
 
 ;; SQL:2011 official grammar:
 
