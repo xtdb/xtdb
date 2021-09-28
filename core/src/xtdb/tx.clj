@@ -232,7 +232,7 @@
                                                           :crux.db.fn/message (format "Missing tx-fn: `%s`" fn-id)}})}
 
                 (nil? fn-body) (if (or (:crux.db/fn tx-fn) (:crux.db.fn/body tx-fn))
-                                 (let [msg (format "Legacy Crux tx-fn found: `%s` - see XTDB (v2.0.0) migration guide." (:xt/id tx-fn))]
+                                 (let [msg (format "Legacy Crux tx-fn found: `%s` - see XTDB (v1.19.0) migration guide." (:xt/id tx-fn))]
                                    (log/error msg)
                                    (throw (IllegalStateException. msg)))
                                  {:abort? true
