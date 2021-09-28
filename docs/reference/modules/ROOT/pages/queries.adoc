@@ -923,7 +923,7 @@ XTDB does _not yet_ support:
 - `get-else` (see https://github.com/xtdb/xtdb/blob/7f7b50fcc7c766c8e5913ea7195138c9d1e5314a/crux-test/test/crux/query_test.clj#L1056[`get-attr`] which returns a relation instead)
 - `get-some`
 - `missing?` (however, instead of `[(missing? $ ?e :height)]` you can use `(not-join [?e] [?e :height])`)
-- backref attribute syntax (i.e. `[?child :example/_child ?parent]`)
+- reverse attribute syntax in triple clauses (i.e. `[?child :example/_child ?parent]`), however reverse attribute joins (like `:example/_child`) are supported in `pull`
 
 [#custom-functions]
 == Custom Functions and Advanced Examples
