@@ -336,6 +336,12 @@
         vocabulary (.getVocabulary parser)]
     (antlr/->ast rule-names vocabulary (.query_expression parser))))
 
+(defn parse-sql2011-literal [^String s]
+  (let [parser (sql2011-parser s)
+        rule-names (.getRuleNames parser)
+        vocabulary (.getVocabulary parser)]
+    (antlr/->ast rule-names vocabulary (.literal parser))))
+
 (comment
   (count
    (insta/parses
@@ -360,7 +366,7 @@
     "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
     :start :dynamic-select-statement))
 
-  (let [lexer (sql2011-lexer "SELECT * FROM user WHERE user.id = -2")
+  (let [lexer (sql2011-lexer "DATE '2000-01-01'")
         ts (CommonTokenStream. lexer)]
     (.fill ts)
     (for [t (.getTokens ts)]
@@ -370,7 +376,11 @@
 
   (time
    (parse-sql2011-query-expression
-    "SELECT * FROM user WHERE user.id = 2")))
+    "SELECT * FROM user WHERE user.id = 2"))
+
+  (time
+   (parse-sql2011-literal
+    "DATE '2000-01-01'")))
 
 ;; SQL:2011 official grammar:
 

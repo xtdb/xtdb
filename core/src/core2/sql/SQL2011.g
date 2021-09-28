@@ -85,8 +85,9 @@ DIGIT
     | '9'
     ;
 
+fragment
 SPACE
-    : ' ' -> skip
+    : ' '
     ;
 
 DOUBLE_QUOTE
@@ -403,6 +404,7 @@ COMMENT_CHARACTER
     | QUOTE
     ;
 
+fragment
 NEWLINE
     : [\r\n]+
     ;
