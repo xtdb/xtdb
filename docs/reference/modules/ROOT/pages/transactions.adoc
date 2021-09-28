@@ -263,7 +263,7 @@ include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags
 Clojure::
 +
 --
-The document should use the `::xt/fn` key.
+The document should use the `:xt/fn` key (note, not `::xt/fn`).
 
 [source,clojure]
 ----
@@ -291,6 +291,8 @@ include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags
 Clojure::
 +
 --
+Note that the transaction function operation `::xt/fn` is Clojure shorthand for `:xtdb.api/fn` (assuming the `xt` require alias is used) - be careful not to confuse this keyword with the `:xt/fn` keyword used inside the transaction function document.
+
 [source,clojure]
 ----
 include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=fn-use,indent=0]
