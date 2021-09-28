@@ -482,7 +482,7 @@ HEXIT
     ;
 
 signed_numeric_literal
-    : SIGN? unsigned_numeric_literal
+    : sign? unsigned_numeric_literal
     ;
 
 unsigned_numeric_literal
@@ -495,7 +495,7 @@ exact_numeric_literal
     | PERIOD UNSIGNED_INTEGER
     ;
 
-SIGN
+sign
     : PLUS_SIGN
     | MINUS_SIGN
     ;
@@ -513,7 +513,7 @@ exponent
     ;
 
 signed_integer
-    : SIGN? UNSIGNED_INTEGER
+    : sign? UNSIGNED_INTEGER
     ;
 
 UNSIGNED_INTEGER
@@ -555,7 +555,7 @@ TIMESTAMP_STRING
 
 fragment
 TIME_ZONE_INTERVAL
-    : SIGN HOURS_VALUE COLON MINUTES_VALUE
+    : (PLUS_SIGN | MINUS_SIGN) HOURS_VALUE COLON MINUTES_VALUE
     ;
 
 fragment
@@ -569,7 +569,7 @@ TIME_VALUE
     ;
 
 INTERVAL_LITERAL
-    : 'INTERVAL' SPACE* SIGN? SPACE* INTERVAL_STRING SPACE* INTERVAL_QUALIFIER
+    : 'INTERVAL' SPACE* (PLUS_SIGN | MINUS_SIGN)? SPACE* INTERVAL_STRING SPACE* INTERVAL_QUALIFIER
     ;
 
 fragment
@@ -594,7 +594,7 @@ UNQUOTED_TIMESTAMP_STRING
 
 fragment
 UNQUOTED_INTERVAL_STRING
-    : SIGN? (YEAR_MONTH_LITERAL | DAY_TIME_LITERAL)
+    : (PLUS_SIGN | MINUS_SIGN)? (YEAR_MONTH_LITERAL | DAY_TIME_LITERAL)
     ;
 
 fragment
@@ -1617,7 +1617,7 @@ term
     ;
 
 factor
-    : SIGN? numeric_primary
+    : sign? numeric_primary
     ;
 
 numeric_primary
@@ -2066,7 +2066,7 @@ interval_term
     ;
 
 interval_factor
-    : SIGN? interval_primary
+    : sign? interval_primary
     ;
 
 interval_primary
