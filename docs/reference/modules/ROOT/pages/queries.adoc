@@ -929,4 +929,4 @@ Many advanced query requirements can be addressed using custom predicate functio
 
 Be aware during development that query compilation internalizes function definitions and this means that subsequent re-definitions of your custom functions may not be reflected until the query is modified and therefore re-compiled.
 
-Many examples of advanced queries are showcased across the https://github.com/xtdb/xtdb/blob/main/test/test/crux/query_test.clj[query tests] and the suite of benchmarks maintained in the `bench` sub-project.
+Many examples of advanced queries are showcased across the https://github.com/xtdb/xtdb/blob/main/test/test/xtdb/query_test.clj[query tests] and the suite of benchmarks maintained in the `bench` sub-project.
