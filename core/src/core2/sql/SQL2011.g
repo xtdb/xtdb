@@ -486,11 +486,11 @@ signed_numeric_literal
     ;
 
 unsigned_numeric_literal
-    : exact_numeric_literal
-    | approximate_numeric_literal
+    : EXACT_NUMERIC_LITERAL
+    | APPROXIMATE_NUMERIC_LITERAL
     ;
 
-exact_numeric_literal
+EXACT_NUMERIC_LITERAL
     : UNSIGNED_INTEGER (PERIOD UNSIGNED_INTEGER?)?
     | PERIOD UNSIGNED_INTEGER
     ;
@@ -500,20 +500,23 @@ sign
     | MINUS_SIGN
     ;
 
-approximate_numeric_literal
-    : mantissa 'E' exponent
+APPROXIMATE_NUMERIC_LITERAL
+    : MANTISSA 'E' EXPONENT
     ;
 
-mantissa
-    : exact_numeric_literal
+fragment
+MANTISSA
+    : EXACT_NUMERIC_LITERAL
     ;
 
-exponent
-    : signed_integer
+fragment
+EXPONENT
+    : SIGNED_INTEGER
     ;
 
-signed_integer
-    : sign? UNSIGNED_INTEGER
+fragment
+SIGNED_INTEGER
+    : (PLUS_SIGN | MINUS_SIGN)? UNSIGNED_INTEGER
     ;
 
 UNSIGNED_INTEGER
@@ -1290,7 +1293,7 @@ lead_or_lag_extent
     ;
 
 offset
-    : exact_numeric_literal
+    : EXACT_NUMERIC_LITERAL
     ;
 
 default_expression
