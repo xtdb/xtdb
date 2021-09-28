@@ -376,7 +376,7 @@
 
   (time
    (parse-sql2011-query-expression
-    "SELECT * FROM user WHERE user.id = 2"))
+    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"))
 
   (time
    (parse-sql2011-literal
