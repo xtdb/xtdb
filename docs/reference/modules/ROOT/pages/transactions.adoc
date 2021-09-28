@@ -495,3 +495,10 @@ include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags
 ====
 
 The entities submitted by the speculative Put take their valid time (if not explicitly specified) from the valid time of the `db` from which they were forked.
+
+[#dropping-the-database]
+== Dropping the database
+
+XTDB does not currently provide any API to perform a "drop" operation (physical deletion) of the entire database. To drop the database, you must first manually `.stop` the node(s), then delete the underlying index-store directory, and then delete the relevant data (or directories) for the backend modules used for the transaction log and document store components.
+
+For testing purposes you can use `Files/createTempDirectory` or equivalent.
