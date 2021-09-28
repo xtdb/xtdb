@@ -69,7 +69,7 @@
   (let [opts {:xtdb.http-server/server {:port (xio/free-port)}}
 
         process (.. (ProcessBuilder. (string-array
-                                      "timeout" "30s"
+                                      "timeout" "60s"
                                       "lein" "with-profiles" "+cli-e2e-test" "run" "-m" "xtdb.main"
                                       "--edn" (pr-str opts)))
                     (redirectErrorStream true)
