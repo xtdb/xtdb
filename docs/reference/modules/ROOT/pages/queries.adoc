@@ -824,6 +824,9 @@ All coordinates are inclusive. All coordinates can be null.
 include::example$test/xtdb/docs/examples_test.clj[tags=history-range,indent=0]
 ----
 
+=== Lazy Iteration
+See the `open-entity-history` (Clojure) and `openEntityHistory` (Java) APIs.
+
 [#clojure-tips]
 == Clojure Tips
 
