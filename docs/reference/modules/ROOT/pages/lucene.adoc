@@ -4,7 +4,8 @@ Full-text search module for XTDB making use of https://lucene.apache.org/[Apache
 Lucene].
 
 `xtdb-lucene` runs in-process as part of the XTDB node as an XTDB module.
-The Lucene index is kept up-to-date asynchronously as a "secondary index" that hooks into the underlying XTDB transaction processing.
+The Lucene index is kept up-to-date asynchronously as a "secondary index" that hooks into the underlying XTDB transaction processing, however the node's `latest-completed-tx` is updated synchronously to ensure that queries are always consistent by default.
+The Lucene index and querying does not reflect any speculative transactions that can be applied to the rest of the Datalog query when using the `with-tx` API.
 
 == Setup
 
