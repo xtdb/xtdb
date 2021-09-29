@@ -88,6 +88,10 @@ whitespace: (#'\\s*//.*?\\n\\s*' | #'\\s*')+")))
    "'U' ampersand quote unicode_representation* quote (separator quote unicode_representation* quote)* unicode_escape_specifier"
    'character_set_name
    "(schema_name period)? identifier"
+   'cast_target
+   "data_type"
+   'target_array_reference
+   "column_reference"
    'numeric_value_function
    "position_expression
     | regex_occurrences_function
