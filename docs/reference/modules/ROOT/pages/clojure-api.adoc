@@ -15,7 +15,7 @@ with few lifecycle members added.
     [node db-basis]
     ^:deprecated [node valid-time]
     ^:deprecated [node valid-time tx-time]
-    "Returns a DB snapshot at the given time.
+    "Returns a DB snapshot at the given time. The snapshot is not thread-safe.
 
      db-basis: (optional map, all keys optional)
        - `::xt/valid-time` (Date):

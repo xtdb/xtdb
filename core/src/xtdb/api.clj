@@ -297,7 +297,7 @@
     [node]
     [node valid-time-or-basis]
     ^:deprecated [node valid-time tx-time]
-    "Returns a DB snapshot at the given time.
+    "Returns a DB snapshot at the given time. The snapshot is not thread-safe.
 
   db-basis: (optional map, all keys optional)
     - `:xtdb.api/valid-time` (Date):
