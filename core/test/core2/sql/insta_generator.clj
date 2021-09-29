@@ -123,7 +123,11 @@ whitespace: (#'\\s*//\\s*' !#'\\d' #'.*?\\n\\s*' | #'\\s*')+")))
    'aggregate_function
    "'COUNT' left_paren asterisk right_paren
     / general_set_function
-    / array_aggregate_function"})
+    / array_aggregate_function"
+   'qualified_join
+   "table_reference [ join_type ] 'JOIN' table_reference join_specification"
+   'natural_join
+   "table_reference 'NATURAL' [ join_type ] 'JOIN' table_factor"})
 
 (def extra-rules "(* SQL:2011 needed definitions in parts not generated. *)
 
