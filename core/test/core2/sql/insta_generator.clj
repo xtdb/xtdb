@@ -43,7 +43,7 @@ whitespace: (#'\\s*//.*?\\n\\s*' | #'\\s*')+")))
     | digit
     | underscore"
    'unicode_escape_character "'\\\\'"
-   'nondoublequote_character "#'[^\\\"]'"
+   'nondoublequote_character "#'[^\"]'"
    'doublequote_symbol ""
    'double_period "'..'"
    'nonquote_character "#'[^\\']'"
@@ -185,16 +185,16 @@ common_logarithm
 (defmethod print-sql-ast :optional [[_ _ & xs]]
   (binding [*sql-ast-print-nesting* (inc (long *sql-ast-print-nesting*))]
     (let [xs (butlast xs)]
-      (print "(")
+      (print "[ ")
       (print-sql-ast-list xs)
-      (print ")?"))))
+      (print " ]"))))
 
 (defmethod print-sql-ast :mandatory [[_ _ & xs]]
   (binding [*sql-ast-print-nesting* (inc (long *sql-ast-print-nesting*))]
     (let [xs (butlast xs)]
-      (print "(")
+      (print "( ")
       (print-sql-ast-list xs)
-      (print ")"))))
+      (print " )"))))
 
 (defmethod print-sql-ast :syntax_element [[_ x repeatable?]]
   (print-sql-ast x)
@@ -222,16 +222,13 @@ common_logarithm
         (println ";")))))
 
 (defn sql-spec-ast->ebnf-grammar-string [_ sql-ast]
-  (str/replace
-   (->> (with-out-str
-          (print-sql-ast sql-ast)
-          (println)
-          (println extra-rules))
-        (str/split-lines)
-        (map str/trimr)
-        (str/join "\n"))
-   "+?"
-   "*"))
+  (->> (with-out-str
+         (print-sql-ast sql-ast)
+         (println)
+         (println extra-rules))
+       (str/split-lines)
+       (map str/trimr)
+       (str/join "\n")))
 
 (def sql2011-grammar-file (File. (.toURI (io/resource "core2/sql/SQL2011.ebnf"))))
 (def sql2011-spec-file (File. (.toURI (io/resource "core2/sql/SQL2011_insta.txt"))))
