@@ -56,6 +56,32 @@ whitespace: (#'\\s*//.*?\\n\\s*' | #'\\s*')+")))
 (def rule-overrides
   {'separator
    "EPSILON"
+   'simple_latin_upper_case_letter
+   "#'[A-Z]'"
+   'simple_latin_lower_case_letter
+   "#'[a-z]'"
+   'digit
+   "#'[0-9]'"
+   'hexit
+   "#'[a-fA-F0-9]'"
+   'identifier_body
+   "#'[a-zA-Z][a-zA-Z0-9_]+'"
+   'identifier_start
+   "#'[a-zA-Z]'"
+   'identifier_part
+   "#'[a-zA-Z0-9_]'"
+   'identifier_extend
+   "#'[a-zA-Z0-9_]'"
+   'delimited_identifier_body
+   "#'(\"\"|[^\"])+'"
+   'delimited_identifier_part
+   "#'(\"\"|[^\"])'"
+   'unsigned_integer
+   "#'[0-9]+'"
+   'large_object_length_token
+   "#'[0-9]+' multiplier"
+   'character_representation
+   "#'(\\'\\'|[^\\'])*'"
    'character_string_literal
    "quote character_representation* quote (separator quote character_representation* quote)*"
    'unicode_character_string_literal
