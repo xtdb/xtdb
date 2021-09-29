@@ -324,21 +324,42 @@
                 :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*?([*]/\\s*|$)'")
                 :string-ci true))
 
+(def ^:private delimiter-set #{[:colon ":"]
+                               [:quote "'"]
+                               [:double_quote "'"]
+                               [:period "."]
+                               [:left_paren "("]
+                               [:right_paren ")"]
+                               [:left_bracket "["]
+                               [:right_bracket "]"]
+                               [:left_bracket_trigraph "??("]
+                               [:right_bracket_trigraph "??)"]
+                               [:left_brace "{"]
+                               [:right_brace "}"]})
+
 (defn simplify-ast [x]
   (w/postwalk
    (fn [x]
-     (if (vector? x)
-       (cond
-         (and (= 2 (count x)) (not (string? (second x))))
-         (second x)
-
-         (> (count x) 2)
-         (filterv (complement string?) x)
-
-         :else
-         x)
+     ;; remove keywords
+     (if (and (vector? x) (> (count x) 2))
+       (filterv (complement string?) x)
        x))
-   x))
+   (w/postwalk
+    (fn [x]
+      (if (vector? x)
+        ;; remove delimiters
+        (let [x (filterv (complement delimiter-set) x)]
+          ;; single child
+          (if (and (= 2 (count x))
+                   (vector? (second x)))
+            (if (= 2 (count (second x)))
+              ;; replace this with child with this name
+              [(first x) (second (second x))]
+              ;; replace this with child
+              (second x))
+            x))
+        x))
+    x)))
 
 ;; Antlr-based SQL:2011 parser generated from the official grammar:
 ;; TODO: does not yet work.
