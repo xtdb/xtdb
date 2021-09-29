@@ -155,7 +155,8 @@
     (doseq [row (iterator-seq res)]
       ...))
 
-  Once the sequence is closed, attempting to iterate it is undefined.")
+  Once the sequence is closed, attempting to iterate it is undefined.
+  Therefore, be cautious with lazy evaluation.")
 
   (pull [db query eid]
     "Returns the requested data for the given entity ID, based on the projection spec
@@ -335,9 +336,9 @@
 
   If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
 
-  This DB opens up shared resources to make multiple requests faster - it must
-  be `.close`d when you've finished using it (for example, in a `with-open`
-  block)"))
+  This DB opens up shared resources to make multiple requests faster - it must be `.close`d when you've finished
+  using it (for example, in a `with-open` block). Be cautious with lazy evaluation that may attempt to make requests
+  after the DB is closed."))
 
 (let [db-args '(^java.io.Closeable [node]
                 ^java.io.Closeable [node db-basis]
@@ -370,7 +371,8 @@
     (doseq [row (iterator-seq res)]
       ...))
 
-  Once the sequence is closed, attempting to iterate it is undefined."
+  Once the sequence is closed, attempting to iterate it is undefined.
+  Therefore, be cautious with lazy evaluation."
   ^xtdb.api.ICursor [db q & args]
   (open-q* db q (object-array args)))
 
