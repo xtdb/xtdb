@@ -24,7 +24,7 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 (def parse-sql-spec
   (insta/parser sql-spec-grammar-g4
                 :auto-whitespace (insta/parser "
-whitespace: (#'\\s*//.*?\\n\\s*' | #'\\s*')+")))
+whitespace: (#'\\s*//\\s*' !#'\\d' #'.*?\\n\\s*' | #'\\s*')+")))
 
 (def syntax-rules-overrides
   {'space "' '"
@@ -98,6 +98,8 @@ whitespace: (#'\\s*//.*?\\n\\s*' | #'\\s*')+")))
    "data_type"
    'target_array_reference
    "column_reference"
+   'table_factor
+   "table_primary"
    'numeric_value_function
    "position_expression
     / regex_occurrences_function
