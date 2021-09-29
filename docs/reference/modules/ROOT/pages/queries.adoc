@@ -852,6 +852,8 @@ map rather than each individual use of every logic variable, for instance:
     :where [[?e :event/employee-code ?code]]}))
 ----
 
+Note that use of Clojure's syntax quoting may cause confusion and is therefore not recommended. This is because Datalog built-ins like range predicates, unification predicates and rules (`or`, `not` etc.) will be mistakenly coerced into corresponding Clojure core functions (`clojure.core/or`, `clojure.core/==` etc.) and produce invalid queries.
+
 === Maps and Vectors in data
 
 Say you have a document like so and you want to add it to an XTDB db:
