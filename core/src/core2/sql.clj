@@ -4,6 +4,7 @@
             [clojure.instant :as i]
             [clojure.set :as set]
             [clojure.string :as s]
+            [clojure.walk :as w]
             [core2.sql.antlr :as antlr]
             [instaparse.core :as insta])
   (:import [java.util Date]
@@ -316,10 +317,28 @@
                 :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*?([*]/\\s*|$)'")
                 :string-ci true))
 
+;; Instaparse SQL:2011 parser generator from the official grammar:
+
 (def parse-sql2011
   (insta/parser (io/resource "core2/sql/SQL2011.ebnf")
                 :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*?([*]/\\s*|$)'")
                 :string-ci true))
+
+(defn simplify-ast [x]
+  (w/postwalk
+   (fn [x]
+     (if (vector? x)
+       (cond
+         (and (= 2 (count x)) (not (string? (second x))))
+         (second x)
+
+         (> (count x) 2)
+         (filterv (complement string?) x)
+
+         :else
+         x)
+       x))
+   x))
 
 ;; Antlr-based SQL:2011 parser generated from the official grammar:
 ;; TODO: does not yet work.
@@ -388,14 +407,16 @@
     "DATE '2000-01-01'"))
 
   (time
-   (parse-sql2011
-    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
-    :start :query_expression))
+   (simplify-ast
+    (parse-sql2011
+     "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
+     :start :query_expression)))
 
   (time
-   (parse-sql2011
-    "TIME '20:00:00.000'"
-    :start :literal)))
+   (simplify-ast
+    (parse-sql2011
+     "TIME '20:00:00.000'"
+     :start :literal))))
 
 ;; SQL:2011 official grammar:
 

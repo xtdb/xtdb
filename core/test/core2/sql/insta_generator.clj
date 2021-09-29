@@ -206,10 +206,10 @@ common_logarithm
 
 (defmethod print-sql-ast :choice [[_ _ & xs]]
   (if (pos? (long *sql-ast-print-nesting*))
-    (do (print "| ")
+    (do (print "/ ")
         (print-sql-ast-list xs))
     (do (println)
-        (print (str sql-print-indent "| "))
+        (print (str sql-print-indent "/ "))
         (print-sql-ast-list xs))))
 
 (defmethod print-sql-ast :optional [[_ _ & xs]]
