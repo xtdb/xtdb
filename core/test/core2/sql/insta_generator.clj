@@ -86,32 +86,42 @@ whitespace: (#'\\s*//.*?\\n\\s*' | #'\\s*')+")))
    "quote character_representation* quote (separator quote character_representation* quote)*"
    'unicode_character_string_literal
    "'U' ampersand quote unicode_representation* quote (separator quote unicode_representation* quote)* unicode_escape_specifier"
-   'character_set_name
-   "(schema_name period)? identifier"
+   'predefined_type
+   "character_string_type [ collate_clause ]
+    / binary_string_type
+    / numeric_type
+    / boolean_type
+    / datetime_type
+    / interval_type
+    "
    'cast_target
    "data_type"
    'target_array_reference
    "column_reference"
    'numeric_value_function
    "position_expression
-    | regex_occurrences_function
-    | regex_position_expression
-    | extract_expression
-    | length_expression
-    | cardinality_expression
-    | max_cardinality_expression
-    | absolute_value_expression
-    | modulus_expression
-    | trigonometric_function
-    | general_logarithm_function
-    | common_logarithm
-    | natural_logarithm
-    | exponential_function
-    | power_function
-    | square_root
-    | floor_function
-    | ceiling_function
-    | width_bucket_function"})
+    / regex_occurrences_function
+    / regex_position_expression
+    / extract_expression
+    / length_expression
+    / cardinality_expression
+    / max_cardinality_expression
+    / absolute_value_expression
+    / modulus_expression
+    / trigonometric_function
+    / general_logarithm_function
+    / common_logarithm
+    / natural_logarithm
+    / exponential_function
+    / power_function
+    / square_root
+    / floor_function
+    / ceiling_function
+    / width_bucket_function"
+   'aggregate_function
+   "'COUNT' left_paren asterisk right_paren
+    / general_set_function
+    / array_aggregate_function"})
 
 (def extra-rules "(* SQL:2011 needed definitions in parts not generated. *)
 
