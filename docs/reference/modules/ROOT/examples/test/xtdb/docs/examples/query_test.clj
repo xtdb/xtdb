@@ -925,3 +925,36 @@
            ))
 
     ))
+
+(t/deftest test-get-in
+  (fix/submit+await-tx
+   (fix/maps->tx-ops
+    ;; tag::get-in-data[]
+    [{:xt/id :foo
+      :bar {:baz {:qux {:qaz 123}}}}] ;;<1>
+    ;; end::get-in-data[]
+    ))
+
+  (let [node *api*]
+    (t/is (=
+           ;; tag::get-in-r[]
+           #{[123]} ;;<4>
+           ;; end::get-in-r[]
+           ;; tag::get-in[]
+           (xt/q
+            (xt/db node)
+            '{:find [v]
+              :where [[:foo :bar bar-val]
+                      [(get-in bar-val [:baz :qux :qaz]) v]]}) ;;<2>
+           ;; end::get-in[]
+           ;; tag::get-in-2[]
+           (xt/q
+            (xt/db node)
+            '{:find [v]
+              :in [k1 k2]
+              :where [[(vector k1 k2 :qaz) ks] ;;<3>
+                      [:foo :bar bar-val]
+                      [(get-in bar-val ks) v]]}
+            :baz :qux)
+           ;; end::get-in-2[]
+           ))))

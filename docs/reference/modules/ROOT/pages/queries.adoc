@@ -11,9 +11,6 @@ XTDB is also a graph database.
 The central characteristic of a graph database is that it can support arbitrary-depth graph queries (recursive traversals) very efficiently by default, without any need for schema-level optimisations.
 Graph queries are possible through the XTDB dialect of the Datalog query language.
 
-//This page walks through many of the more interesting queries that run as part of XTDB's default test suite.
-//See the https://github.com/xtdb/xtdb/blob/main/test/test/xtdb/query_test.clj[`XTDB query test file`] for the full suite of query tests and how each test listed below runs in the wider context.
-
 === SQL
 
 XTDB 1.x supports both Datalog and SQL, but SQL support is provided through a module.
@@ -930,8 +927,27 @@ XTDB does _not yet_ support:
 [#custom-functions]
 == Custom Functions and Advanced Examples
 
-Many advanced query requirements can be addressed using custom predicate function calls since you can reference any function that is loaded by using its fully qualified name in a Datalog clause, e.g. `[(clojure.core/+ x y) z)]`. These custom functions can be passed the `db` query context using the `$` argument convention for sophisticated nesting of queries and other lookups. Destructuring the results of a function as a relation is also supported, similarly to `:in` bindings.
+Many advanced query requirements can be addressed using custom predicate function calls since you can reference any function that is loaded (and available on the classpath) by using its fully qualified name in a Datalog clause, e.g. `[(clojure.core/+ x y) z)]`.
+These custom functions can be passed the `db` query context using the `$` argument convention for sophisticated nesting of queries and other lookups. Destructuring the results of a function as a relation is also supported, similarly to `:in` bindings.
+The suite of functions in the `clojure.core` namespace may be referred to without the fully qualified prefix, including `clojure.core/eval`, however an xref:reference::query-configuration.adoc#fn-allowlist[allowlist feature] is available to help maintain security (particularly relevant when the HTTP server is being used).
 
-Be aware during development that query compilation internalizes function definitions and this means that subsequent re-definitions of your custom functions may not be reflected until the query is modified and therefore re-compiled.
+These functions can be used, for example, to access data that is deeply nested with a given top-level value.
+
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/query_test.clj[tags=get-in-data,indent=0]
+
+include::example$test/xtdb/docs/examples/query_test.clj[tags=get-in,indent=0]
+
+include::example$test/xtdb/docs/examples/query_test.clj[tags=get-in-2,indent=0]
+
+include::example$test/xtdb/docs/examples/query_test.clj[tags=get-in-r,indent=0]
+----
+<1> Data
+<3> Usage of `clojure.core/get-in` function with literal vector of keys
+<3> Usage of `clojure.core/vector` function to construct intermediate vector value
+<4> Result
+
+Be aware during development that query compilation internalizes function definitions and this means that subsequent re-definitions of your custom functions may not be reflected until the query is modified and therefore re-compiled. During development, you can introduce a dummy predicate clause like `[(any? 1)]` (which always evaluates to `true` and has no effect on the query) and increment the integer when needed to bypass the effects of query caching.
 
 Many examples of advanced queries are showcased across the https://github.com/xtdb/xtdb/blob/main/test/test/xtdb/query_test.clj[query tests] and the suite of benchmarks maintained in the `bench` sub-project.
