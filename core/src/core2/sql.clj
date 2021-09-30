@@ -7,9 +7,10 @@
 ;; Instaparse SQL:2011 parser generator from the official grammar:
 
 (def parse-sql2011
-  (insta/parser (io/resource "core2/sql/SQL2011.ebnf")
-                :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*?([*]/\\s*|$)'")
-                :string-ci true))
+  (insta/parser
+   (io/resource "core2/sql/SQL2011.ebnf")
+   :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*?([*]/\\s*|$)'")
+   :string-ci true))
 
 (def ^:private delimiter-set
   #{[:colon ":"]
@@ -58,12 +59,25 @@
         x))
     x)))
 
+(def parse
+  (memoize
+   (fn self
+     ([s]
+      (self s :query_expression))
+     ([s start-rule]
+      (simplify-ast
+       (parse-sql2011 s :start start-rule))))))
+
 (comment
   (time
    (simplify-ast
     (parse-sql2011
      "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
      :start :query_expression)))
+
+  (time
+   (parse
+    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"))
 
   (time
    (simplify-ast
