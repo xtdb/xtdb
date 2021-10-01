@@ -1,5 +1,6 @@
 (ns core2.sql
-  (:require [clojure.walk :as w]
+  (:require [clojure.java.io :as io]
+            [clojure.walk :as w]
             [instaparse.core :as insta]))
 
 (set! *unchecked-math* :warn-on-boxed)
