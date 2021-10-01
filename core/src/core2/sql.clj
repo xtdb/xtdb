@@ -114,3 +114,6 @@
 
 ;; SQL-99 Complete, Really
 ;; https://crate.io/docs/sql-99/en/latest/index.html
+
+;; Why CockroachDB and PostgreSQL Are Compatible
+;; https://www.cockroachlabs.com/blog/why-postgres/
