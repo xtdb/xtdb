@@ -135,3 +135,6 @@
 
 ;; GQL Parser
 ;; https://github.com/OlofMorra/GQL-parser
+
+;; Graph database applications with SQL/PGQ
+;; https://download.oracle.com/otndocs/products/spatial/pdf/AnD2020/AD_Develop_Graph_Apps_SQL_PGQ.pdf
