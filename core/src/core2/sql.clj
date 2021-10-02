@@ -18,6 +18,7 @@
     [:quote "'"]
     [:double_quote "'"]
     [:period "."]
+    [:comma ","]
     [:left_paren "("]
     [:right_paren ")"]
     [:left_bracket "["]
@@ -84,7 +85,20 @@
    (simplify-ast
     (parse-sql2011
      "TIME '20:00:00.000'"
-     :start :literal))))
+     :start :literal)))
+
+  (simplify-ast
+   (parse-sql2011
+    "GRAPH_TABLE ( myGraph,
+    MATCH
+      (Creator IS Person WHERE Creator.email = :email1)
+      -[ IS Created ]->
+      (M IS Message)
+      <-[ IS Commented ]-
+      (Commenter IS Person WHERE Commenter.email = :email2)
+    COLUMNS ( M.creationDate, M.content )
+    )"
+    :start :graph_table)))
 
 ;; SQL:2011 official grammar:
 
@@ -118,3 +132,6 @@
 
 ;; Why CockroachDB and PostgreSQL Are Compatible
 ;; https://www.cockroachlabs.com/blog/why-postgres/
+
+;; GQL Parser
+;; https://github.com/OlofMorra/GQL-parser
