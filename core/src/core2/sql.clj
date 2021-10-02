@@ -33,31 +33,41 @@
     :binary_string_literal
     :exact_numeric_literal
     :boolean_literal
-    :regular_identifier
-    :delimited_identifier})
+    :host_parameter_name})
+
+(def ^:private remove-tag-set
+  #{:identifier
+    :actual_identifier
+    :regular_identifier})
 
 (defn simplify-ast [x]
   (w/postwalk
    (fn [x]
-     ;; remove keywords
-     (if (and (vector? x) (> (count x) 2))
-       (filterv (complement string?) x)
+     (if (vector? x)
+       ;; remove delimiters
+       (let [x (filterv (complement delimiter-set) x)]
+         ;; single child
+         (cond
+           (contains? remove-tag-set (first x))
+           (second x)
+
+           (and (= 2 (count x))
+                (vector? (second x)))
+           (if (and (= 2 (count (second x)))
+                    (not (contains? keep-tag-set (first (second x)))))
+             ;; replace this with child with this name
+             [(first x) (second (second x))]
+             ;; replace this with child
+             (second x))
+
+           :else
+           x))
        x))
    (w/postwalk
     (fn [x]
-      (if (vector? x)
-        ;; remove delimiters
-        (let [x (filterv (complement delimiter-set) x)]
-          ;; single child
-          (if (and (= 2 (count x))
-                   (vector? (second x)))
-            (if (and (= 2 (count (second x)))
-                     (not (contains? keep-tag-set (first (second x)))))
-              ;; replace this with child with this name
-              [(first x) (second (second x))]
-              ;; replace this with child
-              (second x))
-            x))
+      ;; remove keywords
+      (if (and (vector? x) (> (count x) 2))
+        (filterv (complement string?) x)
         x))
     x)))
 
