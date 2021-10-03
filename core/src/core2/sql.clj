@@ -31,45 +31,43 @@
 (def ^:private keep-tag-set
   #{:character_string_literal
     :binary_string_literal
+    :signed_numeric_literal
     :exact_numeric_literal
+    :approximate_numeric_literal
     :boolean_literal
-    :host_parameter_name})
+    :date_literal
+    :time_literal
+    :timestamp_literal
+    :interval_literal
+    :year_month_literal
+    :day_time_literal
+    :host_parameter_name
+    :identifier
+    :identifier_chain
+    :character_string_type
+    :binary_string_type
+    :numeric_type
+    :boolean_type
+    :datetime_type
+    :interval_type})
 
-(def ^:private remove-tag-set
-  #{:identifier
-    :actual_identifier
-    :regular_identifier})
-
-(defn simplify-ast [x]
+(defn cst->ast [x]
   (w/postwalk
    (fn [x]
      (if (vector? x)
-       ;; remove delimiters
-       (let [x (filterv (complement delimiter-set) x)]
+       (let [;; remove delimiters
+             x (filterv (complement delimiter-set) x)]
          ;; single child
-         (cond
-           (contains? remove-tag-set (first x))
-           (second x)
-
-           (and (= 2 (count x))
-                (vector? (second x)))
-           (if (and (= 2 (count (second x)))
-                    (not (contains? keep-tag-set (first (second x)))))
-             ;; replace this with child with this name
-             [(first x) (second (second x))]
+         (if (and (= (count x) 2)
+                  (vector? (second x)))
+           (if (contains? keep-tag-set (first (second x)))
              ;; replace this with child
-             (second x))
-
-           :else
+             (second x)
+             ;; replace this with child with this name
+             (into [(first x)] (rest (second x))))
            x))
        x))
-   (w/postwalk
-    (fn [x]
-      ;; remove keywords
-      (if (and (vector? x) (> (count x) 2))
-        (filterv (complement string?) x)
-        x))
-    x)))
+   x))
 
 (def parse
   (memoize
@@ -77,12 +75,12 @@
      ([s]
       (self s :query_expression))
      ([s start-rule]
-      (simplify-ast
+      (cst->ast
        (parse-sql2011 s :start start-rule))))))
 
 (comment
   (time
-   (simplify-ast
+   (cst->ast
     (parse-sql2011
      "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
      :start :query_expression)))
@@ -92,12 +90,18 @@
     "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"))
 
   (time
-   (simplify-ast
+   (cst->ast
     (parse-sql2011
      "TIME '20:00:00.000'"
      :start :literal)))
 
-  (simplify-ast
+  (time
+   (cst->ast
+    (parse-sql2011
+     "TIME (3) WITH TIME ZONE"
+     :start :data_type)))
+
+  (cst->ast
    (parse-sql2011
     "GRAPH_TABLE ( myGraph,
     MATCH
