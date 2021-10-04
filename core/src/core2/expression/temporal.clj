@@ -5,78 +5,92 @@
             [core2.expression.metadata :as expr.meta]
             [core2.types :as types])
   (:import java.util.Date
-           java.time.Duration))
+           [org.apache.arrow.vector.types.pojo ArrowType$Bool ArrowType$Timestamp ArrowType$Duration]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 ;; SQL:2011 Time-related-predicates
 
-(defmethod expr/codegen-call [:overlaps Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
-  {:code `(and (< x-start y-end) (> x-end y-start))
-   :return-type Boolean})
+(defmethod expr/codegen-call [:overlaps ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
+  [{[{x-start :code} {x-end :code} {y-start :code} {y-end :code}] :args}]
 
-(defmethod expr/codegen-call [:contains Date Date Date] [{[{x-start :code} {x-end :code} {y :code}] :args}]
+  {:code `(and (< ~x-start ~y-end) (> ~x-end ~y-start))
+   :return-type ArrowType$Bool/INSTANCE})
+
+(defmethod expr/codegen-call [:contains ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
+  [{[{x-start :code} {x-end :code} {y :code}] :args}]
+
   {:code `(let [y# ~y]
             (and (<= ~x-start y#) (> ~x-end y#)))
-   :return-type Boolean})
+   :return-type ArrowType$Bool/INSTANCE})
 
-(defmethod expr/codegen-call [:contains Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
+(defmethod expr/codegen-call [:contains ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
+  [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
+
   {:code `(and (<= ~x-start ~y-start) (>= ~x-end ~y-end))
-   :return-type Boolean})
+   :return-type ArrowType$Bool/INSTANCE})
 
-(defmethod expr/codegen-call [:precedes Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
+(defmethod expr/codegen-call [:precedes ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
+  [{[_x-start {x-end :code} {y-start :code} _y-end] :args}]
+
   {:code `(<= ~x-end ~y-start)
-   :return-type Boolean})
+   :return-type ArrowType$Bool/INSTANCE})
 
-(defmethod expr/codegen-call [:succeeds Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
+(defmethod expr/codegen-call [:succeeds ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
+  [{[{x-start :code} _x-end _y-start {y-end :code}] :args}]
+
   {:code `(>= ~x-start ~y-end)
-   :return-type Boolean})
+   :return-type ArrowType$Bool/INSTANCE})
 
-(defmethod expr/codegen-call [:immediately-precedes Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code}] :args}]
+(defmethod expr/codegen-call [:immediately-precedes ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
+  [{[_x-start {x-end :code} {y-start :code} _y-end] :args}]
+
   {:code `(= ~x-end ~y-start)
-   :return-type Boolean})
+   :return-type ArrowType$Bool/INSTANCE})
 
-(defmethod expr/codegen-call [:immediately-succeeds Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
+(defmethod expr/codegen-call [:immediately-succeeds ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
+  [{[{x-start :code} _x-end _y-start {y-end :code}] :args}]
+
   {:code `(= ~x-start ~y-end)
-   :return-type Boolean})
+   :return-type ArrowType$Bool/INSTANCE})
 
 ;; SQL:2011 Operations involving datetimes and intervals
 
-(defmethod expr/codegen-call [:- Date Date] [{:keys [emitted-args]}]
+(defmethod expr/codegen-call [:- ArrowType$Timestamp ArrowType$Timestamp] [{:keys [emitted-args]}]
   {:code `(- ~@emitted-args)
-   :return-type Duration})
+   :return-type (types/->arrow-type :duration-milli)})
 
-(defmethod expr/codegen-call [:- Date Duration] [{:keys [emitted-args]}]
+(defmethod expr/codegen-call [:- ArrowType$Timestamp ArrowType$Duration] [{:keys [emitted-args]}]
   {:code `(- ~@emitted-args)
-   :return-type Date})
+   :return-type (types/->arrow-type :timestamp-milli)})
 
-(defmethod expr/codegen-call [:+ Date Duration] [{:keys [emitted-args]}]
+(defmethod expr/codegen-call [:+ ArrowType$Timestamp ArrowType$Duration] [{:keys [emitted-args]}]
   {:code `(+ ~@emitted-args)
-   :return-type Date})
+   :return-type (types/->arrow-type :timestamp-milli)})
 
-(defmethod expr/codegen-call [:- Duration Duration] [{:keys [emitted-args]}]
+(defmethod expr/codegen-call [:- ArrowType$Duration ArrowType$Duration] [{:keys [emitted-args]}]
   {:code `(+ ~@emitted-args)
-   :return-type Duration})
+   :return-type (types/->arrow-type :duration-milli)})
 
-(defmethod expr/codegen-call [:+ Duration Date] [{:keys [emitted-args]}]
+(defmethod expr/codegen-call [:+ ArrowType$Duration ArrowType$Timestamp] [{:keys [emitted-args]}]
   {:code `(+ ~@emitted-args)
-   :return-type Date})
+   :return-type (types/->arrow-type :timestamp-milli)})
 
-(defmethod expr/codegen-call [:+ Duration Duration] [{:keys [emitted-args]}]
+(defmethod expr/codegen-call [:+ ArrowType$Duration ArrowType$Duration] [{:keys [emitted-args]}]
   {:code `(+ ~@emitted-args)
-   :return-type Duration})
+   :return-type (types/->arrow-type :duration-milli)})
 
-(defmethod expr/codegen-call [:* Duration Number] [{:keys [emitted-args]}]
+(defmethod expr/codegen-call [:* ArrowType$Duration ::types/Number] [{:keys [emitted-args]}]
   {:code `(* ~@emitted-args)
-   :return-type Duration})
+   :return-type (types/->arrow-type :duration-milli)})
 
-(defmethod expr/codegen-call [:* Number Duration] [{:keys [emitted-args]}]
+(defmethod expr/codegen-call [:* ::types/Number ArrowType$Duration] [{:keys [emitted-args]}]
   {:code `(* ~@emitted-args)
-   :return-type Duration})
+   :return-type (types/->arrow-type :duration-milli)})
 
-(defmethod expr/codegen-call [:/ Duration Number] [{:keys [emitted-args]}]
+(defmethod expr/codegen-call [:/ ArrowType$Duration ::types/Number] [{:keys [emitted-args]}]
   {:code `(quot ~@emitted-args)
-   :return-type Duration})
+   :return-type (types/->arrow-type :duration-milli)})
 
 (defn apply-constraint [^longs min-range ^longs max-range
                         f col-name ^Date time]

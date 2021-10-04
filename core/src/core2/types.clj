@@ -1,15 +1,14 @@
 (ns core2.types
-  (:require [core2.util :as util]
-            [clojure.set :as set])
-  (:import core2.DenseUnionUtil
-           java.nio.ByteBuffer
+  (:require [clojure.set :as set]
+            [core2.util :as util])
+  (:import java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
            [java.time Duration LocalDateTime]
            java.util.Date
            [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types Types$MinorType TimeUnit UnionMode]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Duration ArrowType$Union Field FieldType]
+           [org.apache.arrow.vector.types TimeUnit Types$MinorType UnionMode]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$FloatingPoint ArrowType$Int ArrowType$Duration ArrowType$Union Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -37,9 +36,6 @@
 (def dense-union-type (.getType Types$MinorType/DENSEUNION))
 (def list-type (.getType Types$MinorType/LIST))
 
-(defn ->dense-union-type [type-ids]
-  (ArrowType$Union. UnionMode/Dense (int-array type-ids)))
-
 (def class->arrow-type
   {nil (->arrow-type :null)
    Long (->arrow-type :bigint)
@@ -63,21 +59,39 @@
    (->arrow-type :duration-milli) DurationVector
    (->arrow-type :bit) BitVector})
 
-(def arrow-type->java-type
-  {(->arrow-type :null) nil
-   (->arrow-type :bigint) Long
-   (->arrow-type :float8) Double
-   (->arrow-type :varbinary) byte-array-class
-   (->arrow-type :varchar) String
-   (->arrow-type :timestamp-milli) Date
-   (->arrow-type :duration-milli) Duration
-   (->arrow-type :bit) Boolean})
+(def arrow-type-hierarchy
+  (-> (make-hierarchy)
+      (derive ArrowType$FloatingPoint ::Number)
+      (derive ArrowType$Int ::Number)
+      (derive ArrowType ::Object)))
+
+(defmulti least-upper-bound2
+  (fn [x-type y-type] [(class x-type) (class y-type)])
+  :hierarchy #'arrow-type-hierarchy)
+
+(defmethod least-upper-bound2 [::Number ::Number] [x-type y-type]
+  ;; TODO this is naive of the different types of Ints/Floats
+  (if (and (instance? ArrowType$Int x-type) (instance? ArrowType$Int y-type))
+    (->arrow-type :bigint)
+    (->arrow-type :float8)))
+
+(defmethod least-upper-bound2 :default [x-type y-type]
+  (throw (UnsupportedOperationException. (format "Can't LUB: %s ⊔ %s" x-type y-type))))
+
+(alter-meta! #'least-upper-bound2 assoc :private true)
+
+(defn least-upper-bound [arrow-types]
+  (reduce (fn [lub arrow-type]
+            (if (= lub arrow-type)
+              lub
+              (least-upper-bound2 lub arrow-type)))
+          arrow-types))
 
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
-  (->field "_row-id" (class->arrow-type Long) false))
+  (->field "_row-id" (->arrow-type :bigint) false))
 
 (defprotocol PValueVector
   (set-safe! [value-vector idx v])

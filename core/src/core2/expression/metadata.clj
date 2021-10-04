@@ -3,15 +3,14 @@
             [core2.expression :as expr]
             [core2.metadata :as meta]
             [core2.types :as types]
-            [core2.relation :as rel]
-            [core2.util :as util])
+            [core2.relation :as rel])
   (:import clojure.lang.MapEntry
            core2.metadata.IMetadataIndices
            core2.relation.IColumnReader
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex ListVector StructVector]
-           org.apache.arrow.vector.types.Types
+           [org.apache.arrow.vector.types.pojo ArrowType$Bool]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -45,16 +44,14 @@
             (simplify-and-or-expr
              {:op :call
               :f 'or
-              :args (vec (let [field-type (get types/arrow-type->java-type
-                                               (get param-types param)
-                                               Comparable)]
-                           (for [field-type (if (.isAssignableFrom Number field-type)
-                                              expr/numeric-types
-                                              [field-type])]
+              :args (vec (let [arrow-type (get param-types param)]
+                           (for [arrow-type (if (isa? types/arrow-type-hierarchy arrow-type ::types/Number)
+                                              [(types/->arrow-type :bigint) (types/->arrow-type :float8)]
+                                              [arrow-type])]
                              {:op :metadata-vp-call,
                               :f f
                               :meta-value meta-value
-                              :field-type field-type
+                              :arrow-type arrow-type
                               :field field,
                               :param param
                               :bloom-hash-sym (when (= meta-value :bloom-filter)
@@ -133,9 +130,9 @@
              (if ~block-idx-sym
                (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
                (.columnIndex ~metadata-idxs-sym ~field-name)))
-     :return-type Boolean}))
+     :return-type ArrowType$Bool/INSTANCE}))
 
-(defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param field-type bloom-hash-sym]} opts]
+(defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param arrow-type bloom-hash-sym]} opts]
   (let [field-name (str field)]
     {:code `(boolean
              (when-let [~expr/idx-sym (if ~block-idx-sym
@@ -144,12 +141,11 @@
                ~(if (= meta-value :bloom-filter)
                   `(bloom/bloom-contains? ~(:bloom metadata-vec-syms) ~expr/idx-sym ~bloom-hash-sym)
 
-                  (let [arrow-type (types/class->arrow-type field-type)
-                        vec-sym (get metadata-vec-syms meta-value)
+                  (let [vec-sym (get metadata-vec-syms meta-value)
                         col-sym (gensym 'meta-col)
                         variable-code (expr/codegen-expr
                                        {:op :variable, :variable col-sym}
-                                       {:var->types {col-sym #{arrow-type}}})]
+                                       {:var->type {col-sym arrow-type}})]
                     `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
                                 (.getChild ~vec-sym ~(types/type->field-name arrow-type))]
                        (when-not (.isNull ~vec-sym ~expr/idx-sym)
@@ -157,14 +153,14 @@
                            ~(:code (expr/codegen-expr
                                     {:op :call
                                      :f f
-                                     :args [(if-let [cast (expr/type->cast field-type)]
+                                     :args [(if-let [cast (expr/type->cast arrow-type)]
                                               {:code (list cast (:code variable-code)),
-                                               :return-type field-type}
+                                               :return-type arrow-type}
                                               variable-code)
                                             (expr/codegen-expr {:op :param, :param param}
                                                                opts)]}
                                     opts)))))))))
-     :return-type Boolean}))
+     :return-type ArrowType$Bool/INSTANCE}))
 
 (defn check-meta [chunk-idx ^VectorSchemaRoot metadata-root ^IMetadataIndices metadata-idxs check-meta-f]
   (when (check-meta-f (.getVector metadata-root "min")

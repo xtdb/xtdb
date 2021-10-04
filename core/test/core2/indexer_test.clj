@@ -8,21 +8,18 @@
             [core2.buffer-pool :as bp]
             [core2.indexer :as idx]
             [core2.json :as c2-json]
-            [core2.metadata :as meta]
             [core2.local-node :as node]
             [core2.object-store :as os]
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd]
             [core2.test-util :as tu]
             [core2.ts-devices :as ts]
-            [core2.tx :as tx]
             [core2.types :as ty]
             [core2.util :as util])
   (:import core2.api.TransactionInstant
            [core2.buffer_pool BufferPool IBufferPool]
            core2.local_node.Node
            core2.indexer.IChunkManager
-           core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.TemporalManager
            java.nio.file.Files
