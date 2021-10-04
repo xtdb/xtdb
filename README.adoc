@@ -78,8 +78,8 @@ The CLI parameters, and EDN/JSON configuration file formats are the same as Clas
 
 Transactions are slightly different to Classic:
 
-- `[:crux.tx/put <doc>]` -> `[:put <doc>]`. Put and delete supported thus far.
-- `:crux.db/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
+- `[:xtdb.api/put <doc>]` -> `[:put <doc>]`. Put and delete supported thus far.
+- `:xt/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
 - `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
 
 === Queries
@@ -174,8 +174,8 @@ First time:
 
 === Links
 
-- https://github.com/juxt/crux-rnd/projects/1[Kanban board]
-- https://app.circleci.com/pipelines/github/juxt/crux-rnd[Continuous Integration (CircleCI)]
+- https://github.com/juxt/xtdb-rnd/projects/1[Kanban board]
+- https://app.circleci.com/pipelines/github/juxt/xtdb-rnd[Continuous Integration (CircleCI)]
 - link:bibliography.org[bibliography.org] - a list of light bedtime reading.
 
 === Testing
@@ -209,7 +209,7 @@ Core2 artifacts are deployed to Maven Central.
 
 ==== Docker
 
-* `./bin/build-docker.sh [--clean]` => `juxt.crux-labs/core2:latest`
+* `./bin/build-docker.sh [--clean]` => `juxt.xtdb-labs/core2:latest`
 * `CORE2_VERSION=<version> ./bin/build-docker.sh` to tag as a different version.
 
 == Arrow Fork

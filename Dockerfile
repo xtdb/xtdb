@@ -1,6 +1,6 @@
 FROM openjdk:15-alpine
 
-WORKDIR /usr/local/lib/crux
+WORKDIR /usr/local/lib/xtdb
 
 RUN apk --no-cache add curl
 
