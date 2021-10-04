@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux-labs/core2-bench "<inherited>"
+(defproject com.xtdb.labs/core2-bench "<inherited>"
   :description "Core2 Benchmark suite"
 
   :plugins [[lein-parent "0.3.8"]]
@@ -11,12 +11,12 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[pro.juxt.crux-labs/core2-api]
-                 [pro.juxt.crux-labs/core2-core]
-                 [pro.juxt.crux-labs/core2-datasets]
-                 [pro.juxt.crux-labs/core2-kafka]
-                 [pro.juxt.crux-labs/core2-s3]
-                 [pro.juxt.crux-labs/core2-jdbc]
+  :dependencies [[com.xtdb.labs/core2-api]
+                 [com.xtdb.labs/core2-core]
+                 [com.xtdb.labs/core2-datasets]
+                 [com.xtdb.labs/core2-kafka]
+                 [com.xtdb.labs/core2-s3]
+                 [com.xtdb.labs/core2-jdbc]
                  [org.clojure/data.csv]
                  [ch.qos.logback/logback-classic]]
 

@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux-labs/core2-jdbc "<inherited>"
+(defproject com.xtdb.labs/core2-jdbc "<inherited>"
   :description "Core2 JDBC integration"
 
   :plugins [[lein-parent "0.3.8"]]
@@ -11,8 +11,8 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[pro.juxt.crux-labs/core2-api]
-                 [pro.juxt.crux-labs/core2-core]
+  :dependencies [[com.xtdb.labs/core2-api]
+                 [com.xtdb.labs/core2-core]
                  [org.clojure/java.data "1.0.86"]
                  [pro.juxt.clojars-mirrors.com.github.seancorfield/next.jdbc "1.2.674"]
                  [com.zaxxer/HikariCP "4.0.3"]

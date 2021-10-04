@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux-labs/core2-server "<inherited>"
+(defproject com.xtdb.labs/core2-server "<inherited>"
   :description "Core2 Server"
 
   :plugins [[lein-parent "0.3.8"]]
@@ -11,8 +11,8 @@
 
   :scm {:dir ".."}
 
-  :dependencies [[pro.juxt.crux-labs/core2-api]
-                 [pro.juxt.crux-labs/core2-core]
+  :dependencies [[com.xtdb.labs/core2-api]
+                 [com.xtdb.labs/core2-core]
 
                  [ring/ring-core "1.9.4"]
                  [info.sunng/ring-jetty9-adapter "0.15.2"]

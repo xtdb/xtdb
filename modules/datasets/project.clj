@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux-labs/core2-datasets "<inherited>"
+(defproject com.xtdb.labs/core2-datasets "<inherited>"
   :description "Core2 Datasets"
 
   :plugins [[lein-parent "0.3.8"]]
@@ -11,8 +11,8 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[pro.juxt.crux-labs/core2-api]
-                 [pro.juxt.crux-labs/core2-core]
+  :dependencies [[com.xtdb.labs/core2-api]
+                 [com.xtdb.labs/core2-core]
                  [io.airlift.tpch/tpch "0.10"]
                  [org.clojure/data.csv "1.0.0"]
                  [software.amazon.awssdk/s3]]

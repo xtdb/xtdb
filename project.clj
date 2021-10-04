@@ -2,20 +2,20 @@
   (or (System/getenv "CORE2_VERSION")
       "dev-SNAPSHOT"))
 
-(defproject pro.juxt.crux-labs/core2-dev core2-version
+(defproject com.xtdb.labs/core2-dev core2-version
   :url "https://github.com/xtdb/crux-rnd"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
 
-  :managed-dependencies [[pro.juxt.crux-labs/core2-api ~core2-version]
-                         [pro.juxt.crux-labs/core2-core ~core2-version]
-                         [pro.juxt.crux-labs/core2-server ~core2-version]
-                         [pro.juxt.crux-labs/core2-client ~core2-version]
-                         [pro.juxt.crux-labs/core2-datasets ~core2-version]
-                         [pro.juxt.crux-labs/core2-kafka ~core2-version]
-                         [pro.juxt.crux-labs/core2-s3 ~core2-version]
-                         [pro.juxt.crux-labs/core2-jdbc ~core2-version]
-                         [pro.juxt.crux-labs/core2-bench ~core2-version]
+  :managed-dependencies [[com.xtdb.labs/core2-api ~core2-version]
+                         [com.xtdb.labs/core2-core ~core2-version]
+                         [com.xtdb.labs/core2-server ~core2-version]
+                         [com.xtdb.labs/core2-client ~core2-version]
+                         [com.xtdb.labs/core2-datasets ~core2-version]
+                         [com.xtdb.labs/core2-kafka ~core2-version]
+                         [com.xtdb.labs/core2-s3 ~core2-version]
+                         [com.xtdb.labs/core2-jdbc ~core2-version]
+                         [com.xtdb.labs/core2-bench ~core2-version]
 
                          [org.clojure/clojure "1.10.3"]
                          [software.amazon.awssdk/s3 "2.16.76"]
@@ -30,15 +30,15 @@
                          [pro.juxt.clojars-mirrors.metosin/reitit-core "0.5.15"]]
 
   :profiles {:dev [:test
-                   {:dependencies [[pro.juxt.crux-labs/core2-api]
-                                   [pro.juxt.crux-labs/core2-core]
-                                   [pro.juxt.crux-labs/core2-server]
-                                   [pro.juxt.crux-labs/core2-client]
-                                   [pro.juxt.crux-labs/core2-datasets]
-                                   [pro.juxt.crux-labs/core2-kafka]
-                                   [pro.juxt.crux-labs/core2-s3]
-                                   [pro.juxt.crux-labs/core2-jdbc]
-                                   [pro.juxt.crux-labs/core2-bench]
+                   {:dependencies [[com.xtdb.labs/core2-api]
+                                   [com.xtdb.labs/core2-core]
+                                   [com.xtdb.labs/core2-server]
+                                   [com.xtdb.labs/core2-client]
+                                   [com.xtdb.labs/core2-datasets]
+                                   [com.xtdb.labs/core2-kafka]
+                                   [com.xtdb.labs/core2-s3]
+                                   [com.xtdb.labs/core2-jdbc]
+                                   [com.xtdb.labs/core2-bench]
 
                                    [ch.qos.logback/logback-classic]
                                    [org.clojure/tools.namespace "1.1.0"]
@@ -50,7 +50,7 @@
 
              :test {:dependencies [[org.clojure/test.check "1.1.0"]
                                    [org.clojure/data.csv "1.0.0"]
-                                   [pro.juxt.crux-labs/core2-datasets]
+                                   [com.xtdb.labs/core2-datasets]
 
                                    [cheshire "5.10.0"]
                                    [pro.juxt.clojars-mirrors.hato/hato]]
@@ -63,12 +63,12 @@
 
              :attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
 
-             :uberjar {:dependencies [[pro.juxt.crux-labs/core2-core]
-                                      [pro.juxt.crux-labs/core2-server]
-                                      [pro.juxt.crux-labs/core2-client]
-                                      [pro.juxt.crux-labs/core2-kafka]
-                                      [pro.juxt.crux-labs/core2-s3]
-                                      [pro.juxt.crux-labs/core2-jdbc]]
+             :uberjar {:dependencies [[com.xtdb.labs/core2-core]
+                                      [com.xtdb.labs/core2-server]
+                                      [com.xtdb.labs/core2-client]
+                                      [com.xtdb.labs/core2-kafka]
+                                      [com.xtdb.labs/core2-s3]
+                                      [com.xtdb.labs/core2-jdbc]]
                        :uberjar-name "core2-standalone.jar"
                        :resource-paths ["uberjar"]
                        :main ^:skip-aot core2.main}
@@ -108,11 +108,11 @@
                    [:id "juxt"]
                    [:name "JUXT"]]])
 
-  :repositories {"snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"}}
+  :repositories {"snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
 
-  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+  :deploy-repositories {"releases" {:url "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2"
                                     :username [:gpg :env/sonatype_username]
                                     :password [:gpg :env/sonatype_password]}
-                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                        "snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"
                                      :username [:gpg :env/sonatype_username]
                                      :password [:gpg :env/sonatype_password]}})

@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux-labs/core2-api "<inherited>"
+(defproject com.xtdb.labs/core2-api "<inherited>"
   :description "Core2 API"
 
   :plugins [[lein-parent "0.3.8"]]
@@ -17,7 +17,7 @@
 
   :java-source-paths ["src"]
 
-  :profiles {:test {:dependencies [[pro.juxt.crux-labs/core2-core nil :scope "test"]
-                                   [pro.juxt.crux-labs/core2-server nil :scope "test"]
-                                   [pro.juxt.crux-labs/core2-client nil :scope "test"]
+  :profiles {:test {:dependencies [[com.xtdb.labs/core2-core nil :scope "test"]
+                                   [com.xtdb.labs/core2-server nil :scope "test"]
+                                   [com.xtdb.labs/core2-client nil :scope "test"]
                                    [cheshire nil :scope "test"]]}})

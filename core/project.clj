@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux-labs/core2-core "<inherited>"
+(defproject com.xtdb.labs/core2-core "<inherited>"
   :description "Core2 Initiative"
 
   :plugins [[lein-parent "0.3.8"]]
@@ -14,7 +14,7 @@
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure]
-                 [pro.juxt.crux-labs/core2-api]
+                 [com.xtdb.labs/core2-api]
 
                  [org.clojure/tools.logging "1.1.0"]
                  [org.clojure/spec.alpha "0.2.194"]
@@ -36,7 +36,7 @@
   :java-source-paths ["src"]
 
   :profiles {:dev [:test]
-             :test {:dependencies [[pro.juxt.crux-labs/core2-datasets]
+             :test {:dependencies [[com.xtdb.labs/core2-datasets]
                                    [cheshire]
                                    [ch.qos.logback/logback-classic]]
 

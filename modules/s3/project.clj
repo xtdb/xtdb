@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux-labs/core2-s3 "<inherited>"
+(defproject com.xtdb.labs/core2-s3 "<inherited>"
   :description "Core2 S3 integration"
 
   :plugins [[lein-parent "0.3.8"]]
@@ -14,8 +14,8 @@
 
   :java-source-paths ["src"]
 
-  :dependencies [[pro.juxt.crux-labs/core2-api]
-                 [pro.juxt.crux-labs/core2-core]
+  :dependencies [[com.xtdb.labs/core2-api]
+                 [com.xtdb.labs/core2-core]
                  [software.amazon.awssdk/s3]
 
                  [cheshire nil :scope "test"]]

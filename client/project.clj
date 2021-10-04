@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux-labs/core2-client "<inherited>"
+(defproject com.xtdb.labs/core2-client "<inherited>"
   :description "Core2 Client"
 
   :plugins [[lein-parent "0.3.8"]]
@@ -11,11 +11,11 @@
 
   :scm {:dir ".."}
 
-  :dependencies [[pro.juxt.crux-labs/core2-api]
+  :dependencies [[com.xtdb.labs/core2-api]
                  [pro.juxt.clojars-mirrors.hato/hato]
                  [pro.juxt.clojars-mirrors.metosin/reitit-core]
                  [com.cognitect/transit-clj]]
 
-  :profiles {:test {:dependencies [[pro.juxt.crux-labs/core2-core]
-                                   [pro.juxt.crux-labs/core2-server]
+  :profiles {:test {:dependencies [[com.xtdb.labs/core2-core]
+                                   [com.xtdb.labs/core2-server]
                                    [cheshire]]}})

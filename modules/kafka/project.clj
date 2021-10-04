@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux-labs/core2-kafka "<inherited>"
+(defproject com.xtdb.labs/core2-kafka "<inherited>"
   :description "Core2 Kafka integration"
 
   :plugins [[lein-parent "0.3.8"]]
@@ -11,8 +11,8 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[pro.juxt.crux-labs/core2-api]
-                 [pro.juxt.crux-labs/core2-core]
+  :dependencies [[com.xtdb.labs/core2-api]
+                 [com.xtdb.labs/core2-core]
                  [org.apache.kafka/kafka-clients "2.8.0"]]
 
   :profiles {:test {:dependencies [[cheshire]]}}
