@@ -30,8 +30,6 @@
                  [org.roaringbitmap/RoaringBitmap "0.9.15"]
 
                  [instaparse "1.4.10"]
-                 [org.antlr/antlr4-runtime "4.9.2"]
-                 [org.antlr/antlr4 "4.9.2"]
 
                  [pro.juxt.clojars-mirrors.integrant/integrant "0.8.0"]]
 
@@ -43,6 +41,8 @@
                                    [ch.qos.logback/logback-classic]]
 
                     :resource-paths ["test-resources"]}}
+
+  :aliases {"generate-sql-parser" ["do" ["run" "-m" "core2.sql.parser-generator"] "javac"]}
 
   :test-selectors {:default (complement (some-fn :integration :timescale))
                    :integration :integration
