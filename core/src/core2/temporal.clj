@@ -142,7 +142,7 @@
 
 (def ->temporal-field
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
-         [col-name (t/->field col-name (t/->arrow-type :timestamp-milli) false)])
+         [col-name (t/->field col-name t/timestamp-milli-type false)])
        (into {})))
 
 (defn temporal-column? [col-name]

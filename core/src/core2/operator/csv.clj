@@ -10,6 +10,7 @@
            java.time.Duration
            [java.util Base64 Date Iterator]
            org.apache.arrow.memory.BufferAllocator
+           org.apache.arrow.vector.types.Types$MinorType
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.util.Text
            org.apache.arrow.vector.VectorSchemaRoot))
@@ -56,6 +57,15 @@
    :timestamp-milli #(.getTime ^Date (inst/read-instant-date %))
    :duration-milli #(.toMillis (Duration/parse %))})
 
+(def ->arrow-type
+  {:bigint (.getType Types$MinorType/BIGINT)
+   :float8 (.getType Types$MinorType/FLOAT8)
+   :varbinary (.getType Types$MinorType/VARBINARY)
+   :varchar (.getType Types$MinorType/VARCHAR)
+   :bit (.getType Types$MinorType/BIT)
+   :timestamp-milli (.getType Types$MinorType/TIMESTAMPMILLI)
+   :duration-milli types/duration-milli-type})
+
 (defn ^core2.ICursor ->csv-cursor
   ([^BufferAllocator allocator, ^Path path, col-types]
    (->csv-cursor allocator path col-types {}))
@@ -66,7 +76,7 @@
          col-types (map #(get col-types % :varchar) col-names)
          schema (Schema. (map (fn [col-name col-type]
                                 (types/->field col-name
-                                               (types/->arrow-type col-type)
+                                               (->arrow-type col-type)
                                                false))
                               col-names col-types))]
      (CSVCursor. allocator rdr

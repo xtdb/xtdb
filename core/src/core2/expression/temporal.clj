@@ -58,39 +58,39 @@
 
 (defmethod expr/codegen-call [:- ArrowType$Timestamp ArrowType$Timestamp] [{:keys [emitted-args]}]
   {:code `(- ~@emitted-args)
-   :return-type (types/->arrow-type :duration-milli)})
+   :return-type types/duration-milli-type})
 
 (defmethod expr/codegen-call [:- ArrowType$Timestamp ArrowType$Duration] [{:keys [emitted-args]}]
   {:code `(- ~@emitted-args)
-   :return-type (types/->arrow-type :timestamp-milli)})
+   :return-type types/timestamp-milli-type})
 
 (defmethod expr/codegen-call [:+ ArrowType$Timestamp ArrowType$Duration] [{:keys [emitted-args]}]
   {:code `(+ ~@emitted-args)
-   :return-type (types/->arrow-type :timestamp-milli)})
+   :return-type types/timestamp-milli-type})
 
 (defmethod expr/codegen-call [:- ArrowType$Duration ArrowType$Duration] [{:keys [emitted-args]}]
   {:code `(+ ~@emitted-args)
-   :return-type (types/->arrow-type :duration-milli)})
+   :return-type types/duration-milli-type})
 
 (defmethod expr/codegen-call [:+ ArrowType$Duration ArrowType$Timestamp] [{:keys [emitted-args]}]
   {:code `(+ ~@emitted-args)
-   :return-type (types/->arrow-type :timestamp-milli)})
+   :return-type types/timestamp-milli-type})
 
 (defmethod expr/codegen-call [:+ ArrowType$Duration ArrowType$Duration] [{:keys [emitted-args]}]
   {:code `(+ ~@emitted-args)
-   :return-type (types/->arrow-type :duration-milli)})
+   :return-type types/duration-milli-type})
 
 (defmethod expr/codegen-call [:* ArrowType$Duration ::types/Number] [{:keys [emitted-args]}]
   {:code `(* ~@emitted-args)
-   :return-type (types/->arrow-type :duration-milli)})
+   :return-type types/duration-milli-type})
 
 (defmethod expr/codegen-call [:* ::types/Number ArrowType$Duration] [{:keys [emitted-args]}]
   {:code `(* ~@emitted-args)
-   :return-type (types/->arrow-type :duration-milli)})
+   :return-type types/duration-milli-type})
 
 (defmethod expr/codegen-call [:/ ArrowType$Duration ::types/Number] [{:keys [emitted-args]}]
   {:code `(quot ~@emitted-args)
-   :return-type (types/->arrow-type :duration-milli)})
+   :return-type types/duration-milli-type})
 
 (defn apply-constraint [^longs min-range ^longs max-range
                         f col-name ^Date time]

@@ -46,7 +46,7 @@
               :f 'or
               :args (vec (let [arrow-type (get param-types param)]
                            (for [arrow-type (if (isa? types/arrow-type-hierarchy arrow-type ::types/Number)
-                                              [(types/->arrow-type :bigint) (types/->arrow-type :float8)]
+                                              [types/bigint-type types/float8-type]
                                               [arrow-type])]
                              {:op :metadata-vp-call,
                               :f f

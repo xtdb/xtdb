@@ -38,21 +38,21 @@
 (defrecord ChunkMatch [^long chunk-idx, ^RoaringBitmap block-idxs])
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
-  (Schema. [(t/->field "column" (t/->arrow-type :varchar) false)
+  (Schema. [(t/->field "column" t/varchar-type false)
 
-            (t/->field "count" (t/->arrow-type :bigint) false)
-            (t/->field "min-row-id" (t/->arrow-type :bigint) false)
-            (t/->field "max-row-id" (t/->arrow-type :bigint) false)
+            (t/->field "count" t/bigint-type false)
+            (t/->field "min-row-id" t/bigint-type false)
+            (t/->field "max-row-id" t/bigint-type false)
 
             (t/->field "min" t/struct-type false)
             (t/->field "max" t/struct-type false)
-            (t/->field "bloom" (t/->arrow-type :varbinary) false)
+            (t/->field "bloom" t/varbinary-type false)
 
             (t/->field "blocks" (ArrowType$List.) false
                        (t/->field "block-meta" t/struct-type true
                                   (t/->field "min" t/struct-type false)
                                   (t/->field "max" t/struct-type false)
-                                  (t/->field "bloom" (t/->arrow-type :varbinary) false)))]))
+                                  (t/->field "bloom" t/varbinary-type false)))]))
 
 (defn- ->metadata-obj-key [chunk-idx]
   (format "metadata-%016x.arrow" chunk-idx))

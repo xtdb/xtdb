@@ -8,9 +8,9 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-cross-join
-  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
-        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)
-        c-field (ty/->field "c" (ty/->arrow-type :bigint) false)]
+  (let [a-field (ty/->field "a" ty/bigint-type false)
+        b-field (ty/->field "b" ty/bigint-type false)
+        c-field (ty/->field "c" ty/bigint-type false)]
     (with-open [left-cursor (tu/->cursor (Schema. [a-field])
                                          [[{:a 12}, {:a 0}]
                                           [{:a 100}]])
@@ -42,9 +42,9 @@
 
 
 (t/deftest test-equi-join
-  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
-        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)
-        c-field (ty/->field "c" (ty/->arrow-type :bigint) false)]
+  (let [a-field (ty/->field "a" ty/bigint-type false)
+        b-field (ty/->field "b" ty/bigint-type false)
+        c-field (ty/->field "c" ty/bigint-type false)]
 
     (with-open [left-cursor (tu/->cursor (Schema. [a-field])
                                          [[{:a 12}, {:a 0}]
@@ -114,9 +114,9 @@
         (t/is (empty? (tu/<-cursor join-cursor)))))))
 
 (t/deftest test-semi-equi-join
-  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
-        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)
-        c-field (ty/->field "c" (ty/->arrow-type :bigint) false)]
+  (let [a-field (ty/->field "a" ty/bigint-type false)
+        b-field (ty/->field "b" ty/bigint-type false)
+        c-field (ty/->field "c" ty/bigint-type false)]
 
     (with-open [left-cursor (tu/->cursor (Schema. [a-field])
                                          [[{:a 12}, {:a 0}]
@@ -170,8 +170,8 @@
         (t/is (empty? (tu/<-cursor join-cursor)))))))
 
 (t/deftest test-anti-equi-join
-  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
-        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
+  (let [a-field (ty/->field "a" ty/bigint-type false)
+        b-field (ty/->field "b" ty/bigint-type false)]
 
     (with-open [left-cursor (tu/->cursor (Schema. [a-field])
                                          [[{:a 12}, {:a 0}]

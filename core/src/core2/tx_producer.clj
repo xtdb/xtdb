@@ -56,10 +56,10 @@
     parsed-tx-ops))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-start-field
-  (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true))
+  (t/->field "_valid-time-start" t/timestamp-milli-type true))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-end-field
-  (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
+  (t/->field "_valid-time-end" t/timestamp-milli-type true))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(t/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false

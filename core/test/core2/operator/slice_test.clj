@@ -49,7 +49,7 @@
   (let [blocks [[{:idx 0}, {:idx 1}]
                 [{:idx 2}, {:idx 3}]]]
     (letfn [(slice [offset length]
-              (with-open [cursor (tu/->cursor (Schema. [(ty/->field "idx" (ty/->arrow-type :bigint) false)])
+              (with-open [cursor (tu/->cursor (Schema. [(ty/->field "idx" ty/bigint-type false)])
                                               blocks)
                           slice-cursor (slice/->slice-cursor cursor offset length)]
                 (tu/<-cursor slice-cursor)))]

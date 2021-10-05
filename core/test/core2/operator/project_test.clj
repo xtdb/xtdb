@@ -10,12 +10,9 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
-(def ^:private bigint-type
-  (ty/->arrow-type :bigint))
-
 (t/deftest test-project
-  (with-open [cursor (tu/->cursor (Schema. [(ty/->field "a" bigint-type false)
-                                            (ty/->field "b" bigint-type false)])
+  (with-open [cursor (tu/->cursor (Schema. [(ty/->field "a" ty/bigint-type false)
+                                            (ty/->field "b" ty/bigint-type false)])
                                   [[{:a 12, :b 10}
                                     {:a 0, :b 15}]
                                    [{:a 100, :b 83}]])
@@ -27,11 +24,11 @@
                                                             (let [row-count (.rowCount in-rel)
 
                                                                   a-col (-> (.columnReader in-rel "a")
-                                                                            (rel/reader-for-type bigint-type))
+                                                                            (rel/reader-for-type ty/bigint-type))
                                                                   ^BigIntVector a-vec (.getVector a-col)
 
                                                                   b-col (-> (.columnReader in-rel "b")
-                                                                            (rel/reader-for-type bigint-type))
+                                                                            (rel/reader-for-type ty/bigint-type))
                                                                   ^BigIntVector b-vec (.getVector b-col)
 
                                                                   out (BigIntVector. "c" allocator)]

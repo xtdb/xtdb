@@ -8,8 +8,8 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-rename
-  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
-        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
+  (let [a-field (ty/->field "a" ty/bigint-type false)
+        b-field (ty/->field "b" ty/bigint-type false)]
     (with-open [cursor (tu/->cursor (Schema. [a-field b-field])
                                     [[{:a 12, :b 10}, {:a 0, :b 15}]
                                      [{:a 100, :b 83}]])

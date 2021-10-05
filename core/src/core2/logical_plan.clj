@@ -42,7 +42,7 @@
          :table (s/or :rows (s/coll-of (s/map-of simple-ident? any?))
                       :source ::source)))
 
-(s/def ::csv-col-type (set (keys types/->arrow-type)))
+(s/def ::csv-col-type #{:bit :bigint :float8 :varchar :varbinary :timestamp-milli :duration-milli})
 
 (s/def ::csv
   (s/cat :op #{:csv}

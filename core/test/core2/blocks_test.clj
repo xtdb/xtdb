@@ -12,7 +12,7 @@
   (letfn [(row-count-seq [el-counts max-el-count]
             (with-open [^ListVector
                         list-vec (.createVector (ty/->field "my-list" ty/list-type false
-                                                            (ty/->field "els" (ty/->arrow-type :bigint) false))
+                                                            (ty/->field "els" ty/bigint-type false))
                                                 tu/*allocator*)]
               (.setValueCount list-vec (count el-counts))
               (let [^BigIntVector el-vec (.getDataVector list-vec)]

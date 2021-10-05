@@ -8,8 +8,8 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-group-by
-  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
-        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)
+  (let [a-field (ty/->field "a" ty/bigint-type false)
+        b-field (ty/->field "b" ty/bigint-type false)
         aggregate-spec [(group-by/->group-spec "a")
                         (group-by/->sum-number-spec "b" "sum")
                         (group-by/->avg-number-spec "b" "avg")

@@ -7,24 +7,22 @@
            [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Utf8 Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (def byte-array-class (Class/forName "[B"))
 
-(def duration-milli-arrow-type (ArrowType$Duration. TimeUnit/MILLISECOND))
-
-(def ->arrow-type
-  {:null (.getType Types$MinorType/NULL)
-   :bigint (.getType Types$MinorType/BIGINT)
-   :float8 (.getType Types$MinorType/FLOAT8)
-   :varbinary (.getType Types$MinorType/VARBINARY)
-   :varchar (.getType Types$MinorType/VARCHAR)
-   :bit (.getType Types$MinorType/BIT)
-   :timestamp-milli (.getType Types$MinorType/TIMESTAMPMILLI)
-   :duration-milli duration-milli-arrow-type})
+(def bigint-type (.getType Types$MinorType/BIGINT))
+(def float8-type (.getType Types$MinorType/FLOAT8))
+(def varchar-type (.getType Types$MinorType/VARCHAR))
+(def varbinary-type (.getType Types$MinorType/VARBINARY))
+(def timestamp-milli-type (.getType Types$MinorType/TIMESTAMPMILLI))
+(def duration-milli-type (ArrowType$Duration. TimeUnit/MILLISECOND))
+(def struct-type (.getType Types$MinorType/STRUCT))
+(def dense-union-type (.getType Types$MinorType/DENSEUNION))
+(def list-type (.getType Types$MinorType/LIST))
 
 (defn type->field-name [^ArrowType arrow-type]
   (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
@@ -32,32 +30,28 @@
       "DURATION" (format "%s-%s" (.toLowerCase minor-type-name) (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))
       (.toLowerCase minor-type-name))))
 
-(def struct-type (.getType Types$MinorType/STRUCT))
-(def dense-union-type (.getType Types$MinorType/DENSEUNION))
-(def list-type (.getType Types$MinorType/LIST))
-
 (def class->arrow-type
-  {nil (->arrow-type :null)
-   Long (->arrow-type :bigint)
-   Double (->arrow-type :float8)
-   byte-array-class (->arrow-type :varbinary)
-   ByteBuffer (->arrow-type :varbinary)
-   String (->arrow-type :varchar)
-   Text (->arrow-type :varchar)
-   Boolean (->arrow-type :bit)
-   Date (->arrow-type :timestamp-milli)
-   Duration (->arrow-type :duration-milli)
-   LocalDateTime (->arrow-type :timestamp-milli)})
+  {nil ArrowType$Null/INSTANCE
+   Long bigint-type
+   Double float8-type
+   byte-array-class ArrowType$Binary/INSTANCE
+   ByteBuffer ArrowType$Binary/INSTANCE
+   String ArrowType$Utf8/INSTANCE
+   Text ArrowType$Utf8/INSTANCE
+   Boolean ArrowType$Bool/INSTANCE
+   Date timestamp-milli-type
+   Duration duration-milli-type
+   LocalDateTime timestamp-milli-type})
 
 (def arrow-type->vector-type
-  {(->arrow-type :null) NullVector
-   (->arrow-type :bigint) BigIntVector
-   (->arrow-type :float8) Float8Vector
-   (->arrow-type :varbinary) VarBinaryVector
-   (->arrow-type :varchar) VarCharVector
-   (->arrow-type :timestamp-milli) TimeStampMilliVector
-   (->arrow-type :duration-milli) DurationVector
-   (->arrow-type :bit) BitVector})
+  {ArrowType$Null/INSTANCE NullVector
+   bigint-type BigIntVector
+   float8-type Float8Vector
+   ArrowType$Binary/INSTANCE VarBinaryVector
+   ArrowType$Utf8/INSTANCE VarCharVector
+   timestamp-milli-type TimeStampMilliVector
+   duration-milli-type DurationVector
+   ArrowType$Bool/INSTANCE BitVector})
 
 (def arrow-type-hierarchy
   (-> (make-hierarchy)
@@ -72,8 +66,8 @@
 (defmethod least-upper-bound2 [::Number ::Number] [x-type y-type]
   ;; TODO this is naive of the different types of Ints/Floats
   (if (and (instance? ArrowType$Int x-type) (instance? ArrowType$Int y-type))
-    (->arrow-type :bigint)
-    (->arrow-type :float8)))
+    bigint-type
+    float8-type))
 
 (defmethod least-upper-bound2 :default [x-type y-type]
   (throw (UnsupportedOperationException. (format "Can't LUB: %s ⊔ %s" x-type y-type))))
@@ -91,7 +85,7 @@
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
-  (->field "_row-id" (->arrow-type :bigint) false))
+  (->field "_row-id" bigint-type false))
 
 (defprotocol PValueVector
   (set-safe! [value-vector idx v])

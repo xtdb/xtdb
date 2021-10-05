@@ -139,11 +139,11 @@
                       (distinct)))))
 
 (def type->cast
-  {(types/->arrow-type :bigint) 'long
-   (types/->arrow-type :float8) 'double
-   (types/->arrow-type :timestamp-milli) 'long
-   (types/->arrow-type :duration-milli) 'long
-   (types/->arrow-type :bit) 'boolean})
+  {types/bigint-type 'long
+   types/float8-type 'double
+   types/timestamp-milli-type 'long
+   types/duration-milli-type 'long
+   ArrowType$Bool/INSTANCE 'boolean})
 
 (def idx-sym (gensym "idx"))
 
@@ -437,7 +437,7 @@
                    "DAY" `ChronoField/DAY_OF_MONTH
                    "HOUR" `ChronoField/HOUR_OF_DAY
                    "MINUTE" `ChronoField/MINUTE_OF_HOUR))
-   :return-type (types/->arrow-type :bigint)})
+   :return-type types/bigint-type})
 
 (defmethod codegen-call [:date-trunc ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} {x :code, date-type :return-type}] :args}]
   {:code `(.toEpochMilli (.truncatedTo (Instant/ofEpochMilli ~x)
@@ -450,8 +450,8 @@
    :return-type date-type})
 
 (def ^:private type->arrow-type
-  {Double/TYPE (types/->arrow-type :float8)
-   Long/TYPE (types/->arrow-type :bigint)
+  {Double/TYPE types/float8-type
+   Long/TYPE types/bigint-type
    Boolean/TYPE ArrowType$Bool/INSTANCE})
 
 (doseq [^Method method (.getDeclaredMethods Math)

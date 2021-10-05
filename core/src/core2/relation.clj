@@ -11,7 +11,7 @@
            org.apache.arrow.util.AutoCloseables
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType]))
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union ArrowType$Null Field FieldType]))
 
 (declare ->IndirectVectorReader)
 
@@ -181,7 +181,7 @@
 
   (rowAppender [this-writer src-col]
     (let [src-vec (.getVector src-col)]
-      (if (= (ty/->arrow-type :null) (.getType (.getField src-vec)))
+      (if (= ArrowType$Null/INSTANCE (.getType (.getField src-vec)))
         (reify IRowAppender
           (appendRow [_ src-idx] (.appendIndex this-writer))
           (appendRow [_ src-idx parent-idx] (.appendIndex this-writer parent-idx)))

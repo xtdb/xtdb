@@ -82,18 +82,18 @@
                 (.get supplier))
           arrow-types (rel/col->arrow-types from-col)
           consumer (cond
-                     (= #{(types/->arrow-type :bigint)} arrow-types)
+                     (= #{types/bigint-type} arrow-types)
                      (let [from-col (-> from-col
-                                        (rel/reader-for-type (types/->arrow-type :bigint)))
+                                        (rel/reader-for-type types/bigint-type))
                            ^BigIntVector from-vec (.getVector from-col)]
                        (reify IntConsumer
                          (accept [_ idx]
                            (.accept ^ObjLongConsumer accumulator acc
                                     (.get from-vec (.getIndex from-col idx))))))
 
-                     (= #{(types/->arrow-type :float8)} arrow-types)
+                     (= #{types/float8-type} arrow-types)
                      (let [from-col (-> from-col
-                                        (rel/reader-for-type (types/->arrow-type :float8)))
+                                        (rel/reader-for-type types/float8-type))
                            ^Float8Vector from-vec (.getVector from-col)]
                        (reify IntConsumer
                          (accept [_ idx]

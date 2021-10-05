@@ -15,8 +15,8 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-union-all
-  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
-        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
+  (let [a-field (ty/->field "a" ty/bigint-type false)
+        b-field (ty/->field "b" ty/bigint-type false)]
     (with-open [left-cursor (tu/->cursor (Schema. [a-field b-field])
                                          [[{:a 12 :b 10}, {:a 0 :b 15}]
                                           [{:a 100 :b 15}]])
@@ -43,8 +43,8 @@
         (t/is (empty? (tu/<-cursor union-cursor)))))))
 
 (t/deftest test-intersection
-  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
-        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
+  (let [a-field (ty/->field "a" ty/bigint-type false)
+        b-field (ty/->field "b" ty/bigint-type false)]
     (with-open [left-cursor (tu/->cursor (Schema. [a-field b-field])
                                          [[{:a 12 :b 10}, {:a 0 :b 15}]
                                           [{:a 100 :b 15}]])
@@ -90,8 +90,8 @@
         (t/is (empty? (tu/<-cursor intersection-cursor)))))))
 
 (t/deftest test-difference
-  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
-        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
+  (let [a-field (ty/->field "a" ty/bigint-type false)
+        b-field (ty/->field "b" ty/bigint-type false)]
     (with-open [left-cursor (tu/->cursor (Schema. [a-field b-field])
                                          [[{:a 12 :b 10}, {:a 0 :b 15}]
                                           [{:a 100 :b 15}]])
@@ -130,8 +130,8 @@
         (t/is (= [#{{:a 10} {:a 15}}] (mapv set (tu/<-cursor difference-cursor))))))))
 
 (t/deftest test-distinct
-  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
-        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
+  (let [a-field (ty/->field "a" ty/bigint-type false)
+        b-field (ty/->field "b" ty/bigint-type false)]
 
     (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
                                        [[{:a 12 :b 10}, {:a 0 :b 15}]
@@ -164,8 +164,8 @@
         (t/is (empty? (tu/<-cursor distinct-cursor)))))))
 
 (t/deftest test-fixpoint
-  (with-open [in-cursor (tu/->cursor (Schema. [(ty/->field "a" (ty/->arrow-type :bigint) false)
-                                               (ty/->field "b" (ty/->arrow-type :bigint) false)])
+  (with-open [in-cursor (tu/->cursor (Schema. [(ty/->field "a" ty/bigint-type false)
+                                               (ty/->field "b" ty/bigint-type false)])
                                      [[{:a 0 :b 1}]])
               factorial-cursor (set-op/->fixpoint-cursor
                                 tu/*allocator* in-cursor

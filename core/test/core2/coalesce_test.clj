@@ -4,11 +4,12 @@
             [core2.test-util :as tu]
             [core2.types :as types])
   (:import core2.ICursor
-           org.apache.arrow.vector.types.pojo.Schema))
+           org.apache.arrow.vector.types.pojo.Schema
+           org.apache.arrow.vector.types.Types$MinorType))
 
 (t/use-fixtures :each tu/with-allocator)
 
-(def ^:private schema (Schema. [(types/->field "foo" (types/->arrow-type :varchar) false)]))
+(def ^:private schema (Schema. [(types/->field "foo" (.getType Types$MinorType/VARCHAR) false)]))
 
 (t/deftest test-coalesce
   (letfn [(coalesced-counts [counts]

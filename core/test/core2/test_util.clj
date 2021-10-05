@@ -22,6 +22,7 @@
            java.util.function.Consumer
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
+           org.apache.arrow.vector.types.Types$MinorType
            org.apache.arrow.vector.types.pojo.Schema))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -140,8 +141,8 @@
       (let [blocks [[{:name "foo", :age 20}
                      {:name "bar", :age 25}]
                     [{:name "baz", :age 30}]]]
-        (with-open [cursor (->cursor (Schema. [(ty/->field "name" (ty/->arrow-type :varchar) false)
-                                               (ty/->field "age" (ty/->arrow-type :bigint) false)])
+        (with-open [cursor (->cursor (Schema. [(ty/->field "name" ty/varchar-type false)
+                                               (ty/->field "age" ty/bigint-type false)])
                                      blocks)]
 
           (t/is (= blocks (<-cursor cursor))))))))

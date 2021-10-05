@@ -12,10 +12,10 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
-(def a-field (ty/->field "a" (ty/->arrow-type :float8) false))
-(def b-field (ty/->field "b" (ty/->arrow-type :float8) false))
-(def d-field (ty/->field "d" (ty/->arrow-type :bigint) false))
-(def e-field (ty/->field "e" (ty/->arrow-type :varchar) false))
+(def a-field (ty/->field "a" ty/float8-type false))
+(def b-field (ty/->field "b" ty/float8-type false))
+(def d-field (ty/->field "d" ty/bigint-type false))
+(def e-field (ty/->field "e" ty/varchar-type false))
 
 (def data
   (for [n (range 1000)]

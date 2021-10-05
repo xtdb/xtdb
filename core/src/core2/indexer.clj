@@ -88,19 +88,19 @@
           (.remove i))))))
 
 (def ^:private log-schema
-  (Schema. [(t/->field "_tx-id" (t/->arrow-type :bigint) false)
-            (t/->field "_tx-time" (t/->arrow-type :timestamp-milli) false)
+  (Schema. [(t/->field "_tx-id" t/bigint-type false)
+            (t/->field "_tx-time" t/timestamp-milli-type false)
             (t/->field "ops" t/list-type true
                        (t/->field "ops" t/struct-type false
-                                  (t/->field "_row-id" (t/->arrow-type :bigint) false)
+                                  (t/->field "_row-id" t/bigint-type false)
                                   (t/->field "op" (ArrowType$Union. UnionMode/Dense (int-array [0 1 2])) false
                                              (t/->field "put" t/struct-type false
-                                                        (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true)
-                                                        (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
+                                                        (t/->field "_valid-time-start" t/timestamp-milli-type true)
+                                                        (t/->field "_valid-time-end" t/timestamp-milli-type true))
                                              (t/->field "delete" t/struct-type false
                                                         (t/->field "_id" t/dense-union-type false)
-                                                        (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true)
-                                                        (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
+                                                        (t/->field "_valid-time-start" t/timestamp-milli-type true)
+                                                        (t/->field "_valid-time-end" t/timestamp-milli-type true))
                                              (t/->field "evict" t/struct-type false))))]))
 
 (definterface ILogOpIndexer

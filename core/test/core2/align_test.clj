@@ -38,12 +38,12 @@
                           (VectorSchemaRoot. vecs))]
 
     (let [age-writer (-> (rel/vec->writer age-vec)
-                         (.writerForType (ty/->arrow-type :bigint)))]
+                         (.writerForType ty/bigint-type))]
       (doseq [age [12 42 15 83 25]]
         (ty/set-safe! (.getVector age-writer) (.appendIndex age-writer) age)))
 
     (let [name-writer (-> (rel/vec->writer name-vec)
-                         (.writerForType (ty/->arrow-type :varchar)))]
+                         (.writerForType ty/varchar-type))]
       (doseq [name ["Al" "Dave" "Bob" "Steve"]]
         (ty/set-safe! (.getVector name-writer) (.appendIndex name-writer) name)))
 
