@@ -2,9 +2,16 @@
   (:import clojure.lang.IReduceInit
            core2.IResultSet
            java.io.Writer
+           java.time.Duration
            java.util.concurrent.ExecutionException
            java.util.Date
            java.util.function.Function))
+
+(defn -duration-reader [s] (Duration/parse s))
+
+(when-not (System/getenv "CORE2_DISABLE_EDN_PRINT_METHODS")
+  (defmethod print-method Duration [^Duration d, ^Writer w]
+    (.write w (format "#core2/duration \"%s\"" d))))
 
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time]
   Comparable
