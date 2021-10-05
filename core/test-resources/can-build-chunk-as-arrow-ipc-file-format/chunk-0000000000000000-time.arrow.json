@@ -18,7 +18,7 @@
         "typeIds" : [0]
       },
       "children" : [{
-        "name" : "timestamp-milli",
+        "name" : "timestampmilli",
         "nullable" : false,
         "type" : {
           "name" : "timestamp",
@@ -42,7 +42,7 @@
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
       "children" : [{
-        "name" : "timestamp-milli",
+        "name" : "timestampmilli",
         "count" : 2,
         "VALIDITY" : [1,1],
         "DATA" : [1479211200000,1479211200000]

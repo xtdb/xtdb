@@ -1,14 +1,13 @@
 (ns core2.types
-  (:require [clojure.set :as set]
-            [core2.util :as util])
+  (:require [core2.util :as util])
   (:import java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
            [java.time Duration LocalDateTime]
            java.util.Date
            [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types TimeUnit Types$MinorType UnionMode]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$FloatingPoint ArrowType$Int ArrowType$Duration ArrowType$Union Field FieldType]
+           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -27,10 +26,11 @@
    :timestamp-milli (.getType Types$MinorType/TIMESTAMPMILLI)
    :duration-milli duration-milli-arrow-type})
 
-(def <-arrow-type (set/map-invert ->arrow-type))
-
 (defn type->field-name [^ArrowType arrow-type]
-  (name (<-arrow-type arrow-type)))
+  (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
+    (case minor-type-name
+      "DURATION" (format "%s-%s" (.toLowerCase minor-type-name) (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))
+      (.toLowerCase minor-type-name))))
 
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (.getType Types$MinorType/DENSEUNION))

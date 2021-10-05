@@ -33,7 +33,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "timestamp-milli",
+        "name" : "timestampmilli",
         "nullable" : false,
         "type" : {
           "name" : "timestamp",
@@ -68,7 +68,7 @@
         "VALIDITY" : [1,1],
         "DATA" : [24.0,52.0]
       },{
-        "name" : "timestamp-milli",
+        "name" : "timestampmilli",
         "count" : 2,
         "VALIDITY" : [1,1],
         "DATA" : [1609459200000,1577836800000]

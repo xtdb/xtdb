@@ -16,10 +16,8 @@
            [java.time.temporal ChronoField ChronoUnit]
            [java.util Date LinkedHashMap]
            org.apache.arrow.vector.BaseVariableWidthVector
-           [org.apache.arrow.vector.types.pojo
-            ArrowType$Bool ArrowType$Int ArrowType$FloatingPoint
-            ArrowType$Binary ArrowType$Utf8
-            ArrowType$Timestamp ArrowType$Duration]
+           [org.apache.arrow.vector.types Types Types$MinorType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -210,6 +208,13 @@
 (defmethod get-value-form ArrowType$Binary [_ vec-sym idx-sym] `(element->nio-buffer ~vec-sym ~idx-sym))
 (defmethod get-value-form :default [_ vec-sym idx-sym] `(normalize-union-value (.getObject ~vec-sym ~idx-sym)))
 
+(defn- arrow-type-literal-form [^ArrowType arrow-type]
+  (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
+    (case minor-type-name
+      "DURATION" (throw (UnsupportedOperationException.))
+      ;; TODO there are other minor types that don't have a single corresponding ArrowType
+      `(.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name)))))
+
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->type]}]
   (let [arrow-type (or (get var->type variable)
                        (throw (IllegalArgumentException. (str "unknown variable: " variable))))
@@ -219,8 +224,7 @@
                        (with-tag (or (-> arrow-type types/arrow-type->vector-type)
                                      (throw (UnsupportedOperationException.)))))
                   (-> ~variable
-                      (rel/reader-for-type (-> ~(types/<-arrow-type arrow-type)
-                                               (types/->arrow-type)))
+                      (rel/reader-for-type ~(arrow-type-literal-form arrow-type))
                       (.getVector))
                   ~idx-sym (.getIndex ~variable ~idx-sym)]
               ~(get-value-form arrow-type vec-sym idx-sym))
