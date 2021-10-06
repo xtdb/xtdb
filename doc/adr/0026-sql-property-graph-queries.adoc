@@ -11,6 +11,37 @@ Proposed
 XTDB needs a simple way to do graph traversals. SQL/PGQ provides basic
 path queries without resorting to WITH RECURSIVE.
 
+Supporting SQL/PGQ we also avoid the need to drop into Datalog for
+many cases, making SQL more competitive when querying graphs.
+
+SQL/PGQ is a read-only subset of the upcoming
+https://www.gqlstandards.org/[GQL standard] embedded in SQL via
+the GRAPH_TABLE construct. It looks somewhat like this:
+
+SELECT g.* FROM GRAPH_TABLE ( myGraph,
+    MATCH
+      (Creator IS Person WHERE Creator.email = :email1)
+      -[ IS Created ]->
+      (M IS Message)
+      <-[ IS Commented ]-
+      (Commenter IS Person WHERE Commenter.email = :email2)
+    COLUMNS ( M.creationDate, M.content )
+    ) AS g
+
+As can be seen, the contents of the MATCH clause are inspired by
+https://opencypher.org/[openCypher].
+
+How to interpret the edges properly is open for analysis. Something
+like IS Created (can also be written as :Created) could be seen as the
+attribute to follow from the source table. We won't have properties on
+the edges, so we could consider only supporting the subset we can
+support. The graph names are not directly relevant either.
+
+SQL/PGQ is expected to be part of SQL:2022.
+
+https://download.oracle.com/otndocs/products/spatial/pdf/AnD2020/AD_Develop_Graph_Apps_SQL_PGQ.pdf[Graph database applications with SQL/PGQ]
+https://github.com/OlofMorra/GQL-parser[GQL-parser]
+
 ## Decision
 
 ## Consequences
