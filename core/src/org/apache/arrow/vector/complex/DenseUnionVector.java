@@ -888,7 +888,7 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     typeBuffer.getReferenceManager().release(1);
     typeBuffer = newBuf;
     typeBufferAllocationSizeInBytes = (int)newAllocationSize;
-    setNegative(currentBufferCapacity, newBuf.capacity() - currentBufferCapacity);
+    setNegative(currentBufferCapacity, newBuf.capacity());
   }
 
   private void reallocOffsetBuffer() {
