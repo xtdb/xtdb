@@ -1,0 +1,16 @@
+# 26. SQL property graph queries
+
+Date: 2021-10-06
+
+## Status
+
+Proposed
+
+## Context
+
+XTDB needs a simple way to do graph traversals. SQL/PGQ provides basic
+path queries without resorting to WITH RECURSIVE.
+
+## Decision
+
+## Consequences

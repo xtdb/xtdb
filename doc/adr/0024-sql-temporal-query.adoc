@@ -1,0 +1,16 @@
+# 24. SQL temporal query
+
+Date: 2021-10-06
+
+## Status
+
+Proposed
+
+## Context
+
+SQL:2011 by default queries all of application time. This is likely
+not what we want.
+
+## Decision
+
+## Consequences

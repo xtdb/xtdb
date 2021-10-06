@@ -1,0 +1,17 @@
+# 27. SQL basic DML
+
+Date: 2021-10-06
+
+## Status
+
+Proposed
+
+## Context
+
+XTDB needs a simple way to manipulate data from SQL even if we don't
+initially support full SQL DML. This is so a user can use XTDB with
+SQL only end to end.
+
+## Decision
+
+## Consequences

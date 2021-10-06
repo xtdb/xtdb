@@ -1,0 +1,18 @@
+# 23. SQL nested data
+
+Date: 2021-10-06
+
+## Status
+
+Proposed
+
+## Context
+
+XTDB needs easy ways of working with dynamic, nested data. SQL:1999
+provides most (or all) of the primitives to do this in a standards
+compliant way. In some places we will want to mildly extend or abuse
+existing syntax to make it less verbose.
+
+## Decision
+
+## Consequences
