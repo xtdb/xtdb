@@ -46,41 +46,16 @@ public class DenseUnionUtil {
         }
     }
 
-    public static void ensureDuvCapacity(DenseUnionVector duv, int capacity) {
-        var offsetBuffer = duv.getOffsetBuffer();
-        while ((long) capacity * DenseUnionVector.OFFSET_WIDTH > offsetBuffer.capacity()) {
-            duv.reAlloc();
-            offsetBuffer = duv.getOffsetBuffer();
-        }
-    }
-
     public static int writeTypeId(DenseUnionVector duv, int idx, byte typeId) {
         // NOTE: also updates value count of the vector.
         var subVec = duv.getVectorByType(typeId);
         var offset = subVec.getValueCount();
-        var offsetIdx = DenseUnionVector.OFFSET_WIDTH * idx;
-
-        ensureDuvCapacity(duv, idx + 1);
-
-        var offsetBuffer = duv.getOffsetBuffer();
 
         duv.setTypeId(idx, typeId);
-        offsetBuffer.setInt(offsetIdx, offset);
+        duv.setOffset(idx, offset);
 
-        setValueCount(subVec, offset + 1);
-        setValueCount(duv, idx + 1);
+        duv.setValueCount(idx + 1);
 
         return offset;
-    }
-
-    public static void copyIdxSafe(DenseUnionVector srcVec, int srcIdx,
-                                   DenseUnionVector destVec, int destIdx) {
-        var typeId = srcVec.getTypeId(srcIdx);
-        var offset = writeTypeId(destVec, destIdx, typeId);
-
-        var srcSubVec = srcVec.getVectorByType(typeId);
-        var destSubVec = destVec.getVectorByType(typeId);
-
-        destSubVec.copyFromSafe(srcIdx, offset, srcSubVec);
     }
 }
