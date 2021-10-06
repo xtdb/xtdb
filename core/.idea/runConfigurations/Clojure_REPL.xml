@@ -1,0 +1,15 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Clojure REPL" type="ClojureREPL" factoryName="Local" activateToolWindowBeforeRun="false">
+    <module name="core2-core" />
+    <setting name="displayName" value="Clojure REPL" />
+    <setting name="replType" value="NREPL" />
+    <setting name="execution" value="LEININGEN" />
+    <setting name="jvmArgs" value="" />
+    <setting name="parameters" value="" />
+    <setting name="workingDir" value="$PROJECT_DIR$" />
+    <setting name="profiles" value="" />
+    <setting name="aliases" value="" />
+    <setting name="fixLineNumbers" value="false" />
+    <method v="2" />
+  </configuration>
+</component>
