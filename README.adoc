@@ -220,9 +220,9 @@ To upgrade Arrow:
 
 * Usual bump in `project.clj`
 * Clone the [Arrow repo](https://github.com/apache/arrow), add the [JUXT fork](https://github.com/juxt/arrow) as a remote.
-* Rebase `juxt/master` on `apache/master`
-* `cd java`, `mvn package`
-* `cp vector/target/classes/org/apache/arrow/vector/complex/DenseUnionVector* <path-to-core2>/core/resources/org/apache/arrow/vector/complex/`
+* Rebase `juxt/master` on the upstream tag.
+* `cd java`, `mvn -pl vector -am package`
+* `cp vector/target/generated-sources/org/apache/arrow/vector/complex/DenseUnionVector.java <path-to-core2>/core/src/org/apache/arrow/vector/complex/`
 * Test
 * Push (`--force-with-lease`) to JUXT fork, and commit to Core2.
 
