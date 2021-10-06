@@ -1,0 +1,1155 @@
+= HTTP
+
+This document explains how to query XTDB over HTTP.
+To configure your HTTP module, see the
+xref:extensions::http.adoc[HTTP module documentation].
+
+There is also an link:https://docs.xtdb.com/clients/http/openapi[OpenAPI Reference]
+describing the HTTP endpoint.
+
+[#start-remote-client]
+== Using a Remote API Client
+
+In addition to calling the HTTP endpoints directly you can also use the remote API client, which implements the same interfaces/protocols as a local XTDB node, where possible.
+
+=== Project Dependency
+
+[source,clojure, subs=attributes+]
+----
+com.xtdb/xtdb-http-client {:mvn/version "{xtdb_version}"}
+----
+
+To connect to a pre-existing remote node, you need a URL to the node and the above on your classpath.
+We can then call `xtdb.api/new-api-client`, passing the URL.
+If the node was started on `localhost:3000`, you can connect to it by doing the following:
+
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples_test.clj[tags=start-http-client]
+----
+
+[#rest-api]
+== Using the REST API
+
+All of the REST endpoints return `application/edn`, `application/json` and https://github.com/cognitect/transit-clj[`application/transit+json`].
+Individual endpoints may return additional types - see their docs below, or see the
+Swagger documentation link:https://xtdb-api-docs.s3.eu-west-1.amazonaws.com/redoc/{page-version}/xtdb-redoc.html[here].
+
+[NOTE]
+All endpoints with query-parameters accept them in both a kebab-case and camel cased format, (ie: if `valid-time` is taken, `validTime` will also be taken)
+
+[#status]
+=== GET `/_xtdb/status`
+
+Returns the current status information of the node.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/status
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/status
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json,subs=attributes+]
+----
+{
+    "version": "{xtdb_version}",
+    "revision": null,
+    "indexVersion": 13,
+    "consumerState": null,
+    "kvStore": "xtdb.rocksdb.RocksKv",
+    "estimateNumKeys": 3,
+    "size": 1326658
+}
+----
+
+EDN::
++
+[source,clojure,subs=attributes+]
+----
+{:xtdb.version/version "{xtdb_version}",
+ :xtdb.version/revision nil, :xtdb.index/index-version 18,
+ :xtdb.tx-log/consumer-state nil,
+ :xtdb.kv/kv-store "xtdb.rocksdb.RocksKv",
+ :xtdb.kv/estimate-num-keys 3,
+ :xtdb.kv/size 132665
+----
+====
+
+[#entity]
+=== GET `/_xtdb/entity`
+
+Returns the document map for a particular entity.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/entity?eid=tommy
+----
+
+EDN::
++
+
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/entity?eid-edn=:tommy
+----
+====
+
+==== Query Parameters
+
+.*Required Parameters*
+* One of the following:
+** `eid-edn` (EDN formatted XTDB ID)
+** `eid-json` (JSON formatted XTDB ID)
+** `eid` (String IDs)
+
+.*Optional Parameters*
+* `valid-time` (date, defaulting to now)
+* `tx-time` (date, defaulting to latest transaction time)
+* `tx-id` (date, defaulting to latest transaction id)
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+    "xt/id": "tommy",
+    "first-name": "Tommy",
+    "last-name": "Tutorial"
+}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xt/id :tommy,
+ :first-name "Tommy",
+ :last-name "Tutorial"}
+----
+====
+
+[#entity-history]
+=== GET `/_xtdb/entity?history=true`
+
+Returns the history of a particular entity.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/entity?eid=tommy&history=true&sortOrder=asc
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/entity?eid-edn=:tommy&history=true&sort-order=asc
+----
+====
+
+==== Query Parameters
+
+.*Required Parameters*
+* One of the following:
+** `eid-edn` (EDN formatted XTDB ID)
+** `eid-json` (JSON formatted XTDB ID)
+** `eid` (String IDs)
+* `sort-order` (either `asc` or `desc`)
+
+.*Optional Parameters*
+* `with-corrections` (boolean, default false): includes bitemporal corrections in the response, inline, sorted by valid-time then tx-id
+* `with-docs` (boolean, default false): includes the documents in the response sequence, under the `doc` key
+* `start-valid-time`, `start-tx-time`, `start-tx-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
+* `end-valid-time`, `end-tx-time`, `end-tx-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[
+    {
+        "txTime": "2020-10-16T14:24:17Z",
+        "txId": 3,
+        "validTime": "2020-10-16T14:24:17Z",
+        "contentHash": "99747f80357c336ee5efd073c878313bf85b07f9"
+    },
+    {
+        "txTime": "2020-10-16T14:29:31Z",
+        "txId": 4,
+        "validTime": "2020-10-16T14:29:31Z",
+        "contentHash": "88d61c8de82eda2a53784bb0438e1a751cd68f96"
+    },
+    {
+        "txTime": "2020-10-16T14:29:35Z",
+        "txId": 5,
+        "validTime": "2020-10-16T14:29:35Z",
+        "contentHash": "99747f80357c336ee5efd073c878313bf85b07f9"
+    }
+]
+----
+
+EDN::
++
+[source,clojure]
+----
+({:xtdb.api/tx-time #inst "2020-10-16T14:24:17.025-00:00",
+  :xtdb.api/tx-id 3,
+  :xtdb.api/valid-time #inst "2020-10-16T14:24:17.025-00:00",
+  :xtdb.api/content-hash #xtdb/id "99747f80357c336ee5efd073c878313bf85b07f9"}
+ {:xtdb.api/tx-time #inst "2020-10-16T14:29:31.928-00:00",
+  :xtdb.api/tx-id 4,
+  :xtdb.api/valid-time #inst "2020-10-16T14:29:31.928-00:00",
+  :xtdb.api/content-hash #xtdb/id "88d61c8de82eda2a53784bb0438e1a751cd68f96"}
+ {:xtdb.api/tx-time #inst "2020-10-16T14:29:35.664-00:00",
+  :xtdb.api/tx-id 5,
+  :xtdb.api/valid-time #inst "2020-10-16T14:29:35.664-00:00",
+  :xtdb.api/content-hash #xtdb/id "99747f80357c336ee5efd073c878313bf85b07f9"})
+----
+====
+
+[#entity-tx]
+=== GET `/_xtdb/entity-tx`
+
+Returns the transaction details for an entity - returns a map containing the tx-id and tx-time.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/entity-tx?eid=tommy
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/entity-tx?eid-edn=:tommy
+----
+====
+
+==== Query Parameters
+
+.*Required Parameters*
+* One of the following:
+** `eid-edn` (EDN formatted XTDB ID)
+** `eid-json` (JSON formatted XTDB ID)
+** `eid` (String IDs)
+
+.*Optional Parameters*
+* `valid-time` (date, defaulting to now)
+* `tx-time` (date, defaulting to latest transaction time)
+* `tx-id` (date, defaulting to latest transaction id)
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+    "id": "5aeebab117b892fa42002146e4c62be676bc4621",
+    "contentHash": "99747f80357c336ee5efd073c878313bf85b07f9",
+    "validTime": "2020-10-16T14:29:35Z",
+    "txTime": "2020-10-16T14:29:35Z",
+    "txId": 5
+}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xt/id #xtdb/id "5aeebab117b892fa42002146e4c62be676bc4621",
+ :xtdb.api/content-hash #xtdb/id "99747f80357c336ee5efd073c878313bf85b07f9",
+ :xtdb.api/valid-time #inst "2020-10-16T14:29:35.664-00:00",
+ :xtdb.api/tx-time #inst "2020-10-16T14:29:35.664-00:00",
+ :xtdb.api/tx-id 5}
+----
+====
+
+[#get-query]
+=== GET `/_xtdb/query`
+
+Takes a datalog query and returns its results. Results are also available in `text/csv` and `text/tsv` formats (can force negotiation of these by using the `/_xtdb/query.csv` and `/_xtdb/query.tsv` endpoints respectively).
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -g \
+     -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/query?queryEdn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
+----
+
+EDN::
++
+[source,bash]
+----
+curl -g \
+     -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/query?query-edn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
+----
+====
+
+==== Query Parameters
+
+.*Required Parameters*
+* `query-edn` (URL encoded datalog query)
+
+.*Optional Parameters*
+* `valid-time` (date, defaulting to now)
+* `tx-time` (date, defaulting to latest transaction time)
+* `tx-id` (date, defaulting to latest transaction id)
+* `in-args-edn` (EDN URL encoded :in binding arguments)
+* `in-args-json` (JSON URL encoded :in binding arguments)
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[["tommy"],["james"]]
+----
+
+EDN::
++
+[source,clojure]
+----
+([:tommy] ["james"])
+----
+====
+
+[#post-query]
+=== POST `/_xtdb/query`
+
+Takes a datalog query and returns its results. Results are also available in `text/csv` and `text/tsv` formats (can force negotiation of these by using the `/_xtdb/query.csv` and `/_xtdb/query.tsv` endpoints respectively).
+
+==== Request
+
+[tabs]
+====
+EDN::
++
+[source,bash]
+----
+curl -g \
+     -X POST \
+     -H "Accept: application/edn" \
+     -H "Content-Type: application/edn" \
+     -d '{:query {:find [e first-name] :where [[e :first-name first-name] [e :last-name "Tutorial"]]}}' \
+     $XTDB_URL/_xtdb/query
+----
+====
+
+[NOTE]
+You can also accept `application/json` from this endpoint, but currently the only supported `Content-Type` for posting queries is `application/edn`.
+
+==== Parameters
+
+===== Body Parameters
+
+.*Required Parameters*
+* `query` (EDN encoded datalog query)
+
+.*Optional Parameters*
+* `in-args` (EDN encoded :in binding arguments)
+
+===== Query Parameters
+
+.*Optional Parameters*
+* `valid-time` (date, defaulting to now)
+* `tx-time` (date, defaulting to latest transaction time)
+* `tx-id` (date, defaulting to latest transaction id)
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[["tommy","Tommy"]]
+----
+
+EDN::
++
+[source,clojure]
+----
+([:tommy "Tommy"])
+----
+====
+
+[#attribute-stats]
+=== GET `/_xtdb/attribute-stats`
+
+Returns frequencies of indexed attributes
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/attribute-stats
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/attribute-stats
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+    "age": 1,
+    "firstName": 1,
+    "lastName": 1,
+    "xt/id": 3,
+    "first-name": 2,
+    "last-name": 2
+}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:age 1,
+ :firstName 1,
+ :lastName 1,
+ :xt/id 3,
+ :first-name 2,
+ :last-name 2}
+----
+====
+
+[#sync]
+=== GET `/_xtdb/sync`
+
+Wait until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write).  Returns the transaction time of the most recent transaction.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/sync?timeout=500
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/sync?timeout=500
+----
+====
+
+==== Query Parameters
+
+.*Optional Parameters*
+* `timeout` (integer): specified in milliseconds
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txTime":"2020-10-16T14:29:35Z"}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb.api/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+----
+====
+
+[#await-tx]
+=== GET `/_xtdb/await-tx`
+
+Waits until the node has indexed a transaction that is at or past the supplied tx-id. Returns the most recent tx indexed by the node.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/await-tx?txId=1
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/await-tx?tx-id=1
+----
+====
+
+==== Query Parameters
+
+.*Required Parameters*
+* `tx-id` (integer): tx-id of transaction to wait for
+
+.*Optional Parameters*
+* `timeout` (integer): specified in milliseconds (defaulting to 10 seconds)
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txId":5,"txTime":"2020-10-16T14:29:35Z"}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb.api/tx-id 5, :xtdb.api/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+----
+====
+
+[#await-tx-time]
+=== GET `/_xtdb/await-tx-time`
+
+Blocks until the node has indexed a transaction that is past the supplied tx-time. The returned date is the latest index time when this node has caught up as of this call.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/await-tx-time?tx-time=2020-10-16T14:29:35Z
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/await-tx-time?tx-time=2020-10-16T14:29:35Z
+----
+====
+
+==== Query Parameters
+
+.*Required Parameters*
+* `tx-time` (date): tx-time of to wait for
+
+.*Optional Parameters*
+* `timeout` (integer): specified in milliseconds (defaulting to 10 seconds)
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txTime":"2020-10-16T14:29:35Z"}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb.api/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+----
+====
+
+[#tx-log]
+=== GET `/_xtdb/tx-log`
+
+Returns a list of all transactions, from oldest to newest transaction time - optionally including documents.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+      $XTDB_URL/_xtdb/tx-log
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+      $XTDB_URL/_xtdb/tx-log
+----
+====
+
+==== Query Parameters
+
+.*Optional Parameters*
+* `after-tx-id` (integer, default unbounded): transaction id to start after.
+* `with-ops?` (boolean, defaults to false): should the operations with documents be included?
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[
+    {
+        "txId": 0,
+        "txTime": "2020-10-16T09:02:43Z",
+        "txEvents": [
+            [
+                "put",
+                "83bed47ace572cb94c2f137f58bce73b9b7d0039",
+                "f441402b3c5d37365203947aabe85cf471498bf0",
+                "2020-06-20T20:05:50Z"
+            ]
+        ]
+    },
+    {
+        "txId": 1,
+        "txTime": "2020-10-16T09:28:27Z",
+        "txEvents": [
+            [
+                "put",
+                "83bed47ace572cb94c2f137f58bce73b9b7d0039",
+                "f441402b3c5d37365203947aabe85cf471498bf0",
+                "2020-06-20T20:05:50Z"
+            ]
+        ]
+    }
+]
+----
+
+EDN::
++
+[source,clojure]
+----
+({:xtdb.api/tx-id 0,
+  :xtdb.api/tx-time #inst "2020-10-16T09:02:43.429-00:00",
+  :xtdb.api/tx-events [
+    [:xtdb.api/put
+  		#xtdb/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
+			#xtdb/id "f441402b3c5d37365203947aabe85cf471498bf0"
+			#inst "2020-06-20T20:05:50.000-00:00"]]}
+ {:xtdb.api/tx-id 1,
+  :xtdb.api/tx-time #inst "2020-10-16T09:28:27.785-00:00",
+  :xtdb.api/tx-events [
+    [:xtdb.api/put
+  		#xtdb/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
+			#xtdb/id "f441402b3c5d37365203947aabe85cf471498bf0"
+			#inst "2020-06-20T20:05:50.000-00:00"]]})
+----
+====
+
+[#submit-tx]
+=== POST `/_xtdb/submit-tx`
+
+Takes a vector of transactions (any combination of `put`, `delete`, `match`, `evict` and `fn`) and executes them in order. This is the only "write" endpoint.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+--
+[source,bash]
+----
+curl -X POST \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json" \
+     -d '{"tx-ops": [["put", {"xt/id": "ivan", "name": "Ivan", "last-name": "Petrov"}],
+          	         ["put", {"xt/id": "boris", "name": "Boris", "last-name": "Petrov"}],
+          	         ["delete", "maria", "2012-05-07T14:57:08.462-00:00"]]}' \
+     $XTDB_URL/_xtdb/submit-tx
+----
+
+Note:
+xref:language-reference::datalog-transactions#transaction-functions[Transaction functions]
+should be submitted as strings containing clojure code, and read in as EDN.
+--
+
+EDN::
++
+[source,bash]
+----
+curl -X POST \
+     -H "Content-Type: application/edn" \
+     -H "Accept: application/edn" \
+     -d '{:tx-ops [[:xtdb.api/put {:xt/id :ivan, :name "Ivan" :last-name "Petrov"}],
+          	       [:xtdb.api/put {:xt/id :boris, :name "Boris" :last-name "Petrov"}],
+          	       [:xtdb.api/delete :maria #inst "2012-05-07T14:57:08.462-00:00"]]}' \
+     $XTDB_URL/_xtdb/submit-tx
+----
+====
+
+==== Parameters
+
+===== Body Parameters
+
+.*Required Parameters*
+* `tx-ops` (Content-type formatted list of transaction ops to send)
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txId":6,"txTime":"2020-10-19T09:21:29Z"}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb.api/tx-id 6, :xtdb.api/tx-time #inst "2020-10-19T09:21:29Z"}
+----
+====
+
+=== GET `/_xtdb/tx-committed`
+
+Checks if a submitted tx was successfully committed, returning a map with tx-committed and either `true` or `false` (or a `NodeOutOfSyncException` exception response if the node has not yet indexed the transaction).
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/tx-committed?txId=1
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/tx-committed?tx-id=1
+----
+====
+
+==== Query Parameters
+
+.*Required Parameters*
+* `tx-id` (integer): tx-id of transaction to check
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txCommitted?":true}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:tx-committed? true}
+----
+====
+
+
+=== GET `/_xtdb/latest-completed-tx`
+
+Returns the latest transaction to have been indexed by this node.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/latest-completed-tx
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/latest-completed-tx
+----
+
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txId":5,"txTime":"2020-10-16T14:29:35Z"}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb.api/tx-id 5, :xtdb.api/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+----
+====
+
+=== GET `/_xtdb/latest-submitted-tx`
+
+Returns the latest transaction to have been submitted to this cluster.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/latest-submitted-tx
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/latest-submitted-tx
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{"txId":5}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb.api/tx-id 5}
+----
+====
+
+=== GET `/_xtdb/active-queries`
+
+Returns a list of currently running queries.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/active-queries
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/active-queries
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[
+    {
+        "status": "in-progress",
+        "queryId": "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+        "query": "{:find [e first-name], :where [[e :first-name first-name] [e :last-name \"Tutorial\"]]}",
+        "startedAt": "2020-10-16T15:48:52Z",
+        "finishedAt": null,
+        "error": null
+    }
+]
+----
+
+EDN::
++
+[source,clojure]
+----
+({:status :in-progress
+  :query-id "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+  :query {:find [e first-name], :where [[e :first-name first-name] [e :last-name "Tutorial"]]},
+  :started-at #inst "2020-10-16T15:48:52.656-00:00",
+  :finished-at nil
+  :error nil})
+----
+====
+
+=== GET `/_xtdb/recent-queries`
+
+Returns a list of recently completed/failed queries.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/recent-queries
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/recent-queries
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[
+    {
+        "status": "completed",
+        "queryId": "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+        "query": "{:find [e first-name], :where [[e :first-name first-name] [e :last-name \"Tutorial\"]]}",
+        "startedAt": "2020-10-16T15:48:52Z",
+        "finishedAt": "2020-10-16T15:48:52Z",
+        "error": null
+    }
+]
+----
+
+EDN::
++
+[source,clojure]
+----
+({:status :completed,
+  :query-id "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+  :query {:find [e first-name], :where [[e :first-name first-name] [e :last-name "Tutorial"]]},
+  :started-at #inst "2020-10-16T15:48:52.656-00:00",
+  :finished-at #inst "2020-10-16T15:48:52.835-00:00",
+  :error nil})
+----
+====
+
+=== GET `/_xtdb/slowest-queries`
+
+Returns a list of slowest completed/failed queries ran on the node.
+
+==== Request
+
+[tabs]
+====
+JSON::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/json" \
+     $XTDB_URL/_xtdb/slowest-queries
+----
+
+EDN::
++
+[source,bash]
+----
+curl -X GET \
+     -H "Accept: application/edn" \
+     $XTDB_URL/_xtdb/slowest-queries
+----
+====
+
+==== Response
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+[
+    {
+        "status": "completed",
+        "queryId": "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+        "query": "{:find [e first-name], :where [[e :first-name first-name] [e :last-name \"Tutorial\"]]}",
+        "startedAt": "2020-10-16T15:48:52Z",
+        "finishedAt": "2020-10-16T15:48:52Z",
+        "error": null
+    }
+]
+----
+
+EDN::
++
+[source,clojure]
+----
+({:status :completed,
+  :query-id "ae17c599-dcd2-47ee-bebd-47a3122f8d34",
+  :query {:find [e first-name], :where [[e :first-name first-name] [e :last-name "Tutorial"]]},
+  :started-at #inst "2020-10-16T15:48:52.656-00:00",
+  :finished-at #inst "2020-10-16T15:48:52.835-00:00",
+  :error nil})
+----
+====

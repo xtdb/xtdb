@@ -1,0 +1,11 @@
+= XTDB style for Javadoc
+
+link:./styles.css[`styles.css`] is stylesheets to use with Javadoc.
+
+== Usage
+
+[source,sh]
+----
+# Add these parameters to your javadoc command to generate docs with XTDB CSS styles.
+-encoding UTF-8 -docencoding utf-8 -charset utf-8 -stylesheetfile <path_to_styles.css>
+----

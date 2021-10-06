@@ -1,5 +1,0 @@
-.How-To Guides
-* xref:quickstart.adoc[Quickstart]
-* xref:command-line-xtdb.adoc[Command Line XTDB]
-* xref:in-a-box.adoc[XTDB-in-a-Box (on RocksDB)]
-* xref:confluent-cloud.adoc[XTDB on Confluent Cloud]

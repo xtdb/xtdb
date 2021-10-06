@@ -1,0 +1,233 @@
+= Bibliography
+
+[#highlights]
+== Highlights
+
+We have highlighted a shortlist of papers and books for anyone interested in the philosophy and
+architecture of XTDB. We consider these works to be of high value and directly relevant to the
+current design of XTDB.
+
+* https://cs.stanford.edu/people/chrismre/papers/paper49.Ngo.pdf[Worst-case Optimal Join Algorithms], Ngo, Porat, et al. Journal of the ACM, Vol. 64, No. 3, Article 16. 2018.
+* https://arxiv.org/abs/1310.3314[Skew Strikes Back: New Developments in the Theory of Join Algorithms], Ngo, Re, Rudra. ACM SIGMOD Record, Vol. 42, No. 4, Pages 5-16. 2014.
+* http://people.cs.aau.dk/~csj/Thesis/[Temporal Database Management], Jensen. 2000.
+* https://www2.cs.arizona.edu/~rts/tdbbook.pdf[Developing Time-Oriented Database Applications in SQL], Snodgrass. ISBN 1-55860-436-7. 2000.
+* http://hermanntropf.de/media/multidimensionalrangequery.pdf[Multidimensional Range Search in Dynamically Balanced Trees], Tropf, Herzog. Applied Informatics, Pages 71-77. 1981.
+* https://www.infoq.com/presentations/Deconstructing-Database/[Deconstructing the Database], Hickey. InfoQ. 2013.
+
+
+[#bibliography]
+== Bibliography
+
+The bibliography contains papers, books, and other materials which are directly relevant to XTDB
+and its architecture -- past, present, and very-near-future.
+
+[#columnar]
+=== Columnar Stores
+
+* https://www.cs.umd.edu/class/spring2015/cmsc724/abadi-column-stores.pdf[The Design and Implementation of Modern Column-Oriented Database Systems], Abadi, Boncz, et al. Foundations and Trends in Databases, Vol. 5, No. 3, Pages 197–280. 2012.
+* https://web.stanford.edu/class/cs345d-01/rl/cstore.pdf[C-Store: A Column-oriented DBMS], Stonebraker, Abadi, et al. Proceedings of the 31st VLDB Conference. 2005.
+* https://arxiv.org/pdf/2004.14471.pdf[Mainlining Databases: SupportingFast Transactional Workloads onUniversal Columnar Data File Format], Li, Butrovich, et al. April 2020.
+* https://db.in.tum.de/~muehlbau/papers/mvcc.pdf[Fast Serializable Multi-Version Concurrency Controlfor Main-Memory Database Systems], Neumann, Mühlbauer, Kemper. SIGMOD’15. 2015.
+* https://www.cs.cmu.edu/~pavlo/courses/fall2013/static/papers/p731-sikka.pdf[Efficient Transaction Processing in SAP HANA Database – The End of a Column Store Myth], Sikka, Färber, et al. SIGMOD ’12. 2012.
+* https://www.inf.ufpr.br/eduardo/ensino/ci809/papers/DSM-columns.pdf[A Decomposition Storage Model], Copeland, Khoshafian. ACM SIGMOD Record, Vol. 14, No. 4, Pages 268-279. May 1985.
+
+[#monetdb]
+=== Columnar Stores: MonetDB / VectorWise
+
+* http://www.cs.cmu.edu/~natassa/courses/15-823/syllabus/papers/boncz99database.pdf[Database Architecture Optimized for the new Bottleneck: Memory Access], Boncz, Manegold, Kersten. Proceedings of the 25th VLDB Conference. 1999.
+* https://strum355.netsoc.co/books/PDF/MonetDB-X100%20-%20Hyper-Pipelining%20Query%20Execution%20(CIDR%202005%20P19).pdf[MonetDB/X100: Hyper-Pipelining Query Execution], Boncz, Zukowski, Nes. CIDR. 2005.
+* https://www.semanticscholar.org/paper/Database-Architecture-Evolution%3A-Mammals-Flourished-Boncz-Manegold/6986b4b3ee2420d136b7392a39f182dc7d95a6f4?p2df[Database Architecture Evolution: Mammals Flourished long before Dinosaurs became Extinct], Boncz, Manegold, Kersten. Proceedings VLDB Endowment, Vol. 2, Pages 1648-1653. 2009.
+* https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.43.8552&rep=rep1&type=pdf[MIL Primatives for Querying a Fragmented World], Boncz, Kersten. VLDB Journal. 1999.
+* https://ir.cwi.nl/pub/18687/18687B.pdf[The Story of VectorWise], Boncz. Base de Donnees Avancees (BDA). 2011.
+* https://www.monetdb.org/Assets/MonetDB-wiki/MonetDB-Insight.pdf[MonetDB: Open-source Database Technology Beyond Textbooks], Manegold.
+
+[#singlestore]
+=== Columnar Stores: SingleStore
+
+* https://www.singlestore.com/blog/linux-off-cpu-investigation/[Investigating Linux Performance with Off-CPU Flame Graphs], Reece. January 2016.
+* https://www.singlestore.com/blog/memsql-singlestore-then-there-was-one/[SingleStore Universal Storage – And Then There Was One], Hanson. September 2019.
+
+[#storagevscompute]
+=== Storage vs. Compute
+
+* http://pages.cs.wisc.edu/~yxy/cs839-s20/papers/p2170-tan.pdf[Choosing A Cloud DBMS: Architectures and Tradeoffs], Tan, Ghanem, et al. Proceedings of the VLDB Endowment, Vol. 12, No. 12. August 2019.
+* https://people.csail.mit.edu/kraska/pub/sigmod08-s3.pdf[Building a Database on S3], Brantner, Florescu, et al. 2008.
+* https://www.usenix.org/system/files/nsdi20-paper-vuppalapati.pdf[Building An Elastic Query Engine on Disaggregated Storage], Vuppalapati, Miron, et al. 17th USENIX Symposium on Networked Systems Design and Implementation. 2020.
+** Building an elastic query engine on disaggregated storage: https://blog.acolyer.org/2020/03/09/snowflake/[Summary], Colyer. March 2020.
+* https://www.microsoft.com/en-us/research/uploads/prod/2019/05/socrates.pdf[Socrates: The New SQL Server in the Cloud],  Antonopoulos, Budovski, et al. SIGMOD '19: Proceedings of the 2019 International Conference on Management of Data, Pages 1743–1756. June 2019.
+* https://www.vertica.com/wp-content/uploads/2018/05/Vertica_EON_SIGMOD_Paper.pdf[Eon Mode: Bringing the Vertica Columnar Database to the Cloud], Vandiver, Prasad, et al.  SIGMOD '18: Proceedings of the 2018 International Conference on Management of Data, Pages 797–809. May 2018.
+* https://media.amazonwebservices.com/blog/2017/aurora-design-considerations-paper.pdf[Amazon Aurora: Design Considerations for High Throughput Cloud-Native Relational Databases], Verbitski, Gupta, et al. SIGMOD '17: Proceedings of the 2017 ACM International Conference on Management of Data, Pages 1041–1052. May 2017.
+* https://www.eecg.utoronto.ca/~ashvin/publications/hailstorm.pdf[Hailstorm: Disaggregated Compute and Storage forDistributed LSM-based Databases], Bindschaedler, Goel, Zwaenepoel. ASPLOS '20: Proceedings of the Twenty-Fifth International Conference on Architectural Support for Programming Languages and Operating Systems, Pages 301–316. March 2020.
+* https://ajstorm.medium.com/separating-compute-and-storage-59def4f27d64[Separating compute and storage: What it means, and why it’s important for databases], Storm. Adam Storm's Weblog. January 2019.
+* https://www.teradata.co.uk/Trends/Cloud/The-Power-of-Separating-Cloud-Compute-and-Cloud-Storage[The Power of Separating Cloud Compute and Cloud Storage: Why decoupling maximizes flexibility and business value]. Teradata Weblog.
+* https://www.vertica.com/blog/verticas-architectural-direction-separation-of-compute-and-storage/[Vertica’s Architectural Direction – Separation of Compute and Storage], Bear. Vertica Weblog. June 2019.
+
+[#temporal]
+=== Bi-Temporality
+
+* https://www2.cs.arizona.edu/~rts/tdbbook.pdf[Developing Time-Oriented Database Applications in SQL], Snodgrass, ISBN 1-55860-436-7. 2000.
+* http://people.cs.aau.dk/~csj/Thesis/[Temporal Database Management], Jensen. 2000.
+** https://people.cs.aau.dk/~csj/Thesis/pdf/chapter2.pdf[Chapter 2: Semantics of Time-Varying Information], Jensen, Snodgrass. 2000.
+** https://people.cs.aau.dk/~csj/Thesis/pdf/chapter4.pdf[Chapter 4: On the Semantics of “Now” in Databases], Clifford, Dyreson, et al. 2000.
+** http://people.cs.aau.dk/~csj/Glossary/[The Consensus Glossary of Temporal Database Concepts]
+* https://opus.bibliothek.uni-augsburg.de/opus4/frontdoor/deliver/index/docId/59490/file/ICDE15-bitemporal-timeline.pdf[Bi-temporal Timeline Index: A Data Structure forProcessing Queries on Bi-temporal Data], Kaufmann et al. 2015 IEEE 31st International Conference on Data Engineering, April 2015.
+* https://www2.cs.arizona.edu/~rts/pubs/ISDec94.pdf[Unifying Temporal Data Models via a Conceptual Model], Jensen, Snodgrass. Information Systems, Volume 19, Issue 7, October 1994, Pages 513-547.
+* https://www.marklogic.com/blog/bitemporal/[A Deep Dive into Bitemporal], Woolridge. MarkLogic Weblog. 2016.
+* https://web.archive.org/web/20201001052833/https://kx.com/blog/kx-insights-powering-business-decisions-bitemporal-data/[Kx Insights: Powering Business Decisions with Bitemporal Data], Tomczak. Kx Weblog. 2017.
+* http://blog.podsnap.com/bitemp.html[Sign of the Times - Managing inhomogeneously bitemporal data with Datomic and Clojure], Fraenkel. May 2014.
+* https://standards.iso.org/ittf/PubliclyAvailableStandards/c060394_ISO_IEC_TR_19075-2_2015.zip[ISO/IEC JTC 1/SC 32: SQL Technical Reports — Part 2: SQL Support for Time-Related Information], ISO/IEC TR 19075-2:2015(E). 2015.
+* https://www2.cs.arizona.edu/~rts/pubs/ISDec04.pdf[Modification Semantics in Now-Relative Databases], Torp, Jensen, Snodgrass. Information Systems, Vol. 29, No. 8, Pages 653–683. 2004.
+* https://www.researchgate.net/publication/3892903_A_split_operator_for_now-relative_bitemporal_databases[A split operator for now-relative bitemporal databases], Agesen, Böhlen, et al. Proceedings of 17th International Conference on Data Engineering. 2001.
+* https://www2.cs.arizona.edu/~rts/pubs/TODS87.pdf[The Temporal Query Language TQuel], Snodgrass. ACM Transactions on Database Systems, Vol. 12, No. 2. 1987.
+
+[#datalog]
+=== Datalog
+
+* https://www.semanticscholar.org/paper/What-you-Always-Wanted-to-Know-About-Datalog-(And-Ceri-Gottlob/fa1570dc4e7853c2c6d0ff21a1ac8327e4ebe4b5[What you Always Wanted to Know About Datalog (And Never Dared to Ask)], Ceri, Gottlob, Tanca. IEEE Trans. Knowl. Data Eng. 1989.
+* https://www2.eecs.berkeley.edu/Pubs/TechRpts/2009/EECS-2009-173.html[Dedalus: Datalog in Time and Space], Alvaro, Marczak, et al. Technical Report No. UCB/EECS-2009-173. December 2009.
+
+[#queryplanner]
+=== Query Planner
+
+* https://cs.stanford.edu/people/chrismre/papers/paper49.Ngo.pdf[Worst-case Optimal Join Algorithms], Ngo, Porat, et al. Journal of the ACM, Vol. 64, No. 3, Article 16. 2018.
+* https://arxiv.org/abs/1310.3314[Skew Strikes Back: New Developments in the Theory of Join Algorithms], Ngo, Re, Rudra. ACM SIGMOD Record, Vol. 42, No. 4, Pages 5-16. 2014.
+* http://db.in.tum.de/~freitag/papers/techreport-freitag-tum-i2082.pdf[Combining Worst-Case Optimal and Traditional Binary Join Processing], Freitag et al.
+* https://users.dcc.uchile.cl/~gnavarro/ps/sigmod21.pdf[Worst-Case Optimal Graph Joins in Almost No Space], Arroyuelo, Hogan, et al. SIGMOD '21. 2021.
+* http://citeseerx.ist.psu.edu/viewdoc/download;jsessionid=CFD3DCD1A3AECA50776F3A913BF541B4?doi=10.1.1.498.5779&rep=rep1&type=pdf[Execution Strategies for SQL Subqueries], Elhemali, Galindo-Legaria, et al. Proceedings of the ACM SIGMOD International Conference on Management of Data. 2007.
+* https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf[Translating SQL into the Relational Algebra], Bussche, Vansummeren. 2009.
+* https://subs.emis.de/LNI/Proceedings/Proceedings241/383.pdf[Unnesting Arbitrary Queries], Neumann, Kemper. BTW. 2015.
+
+[#graph]
+=== Graph Representation and Traversal
+
+* http://www.vldb.org/pvldb/vol11/p1978-jamour.pdf[A Demonstration of MAGiQ: Matrix Algebra Approach for Solving RDF Graph Queries], Jamour, Abdelaziz, Kalnis. Proceedings of the VLDB Endowment. August 2018.
+* https://www.researchgate.net/publication/273399902_Data_structures_for_temporal_graphs_based_on_compact_sequence_representations[Data structures for temporal graphs based on compact sequence representations], Caro, Rodriguez, Brisaboa. Information Systems 51. 2015.
+
+[#datastructures]
+=== Data Structures
+
+* https://www.cs.cmu.edu/~huanche1/publications/surf_paper.pdf[SuRF: Practical Range Query Filtering with Fast Succinct Tries], Zhang, Lim, et al. SIGMOD '18: Proceedings of the 2018 International Conference on Management of Data, Pages 323–336. May 2018.
+
+[#trees]
+=== Data Structures: Trees
+
+* https://www.researchgate.net/publication/221580271_k2-Trees_for_Compact_Web_Graph_Representation[k2-Trees for Compact Web Graph Representation], Brisaboa, Ladra, Navarro. String Processing and Information Retrieval, 16th International Symposium. 2009.
+* https://en.wikipedia.org/wiki/K-d_tree[k-d Tree]. Wikipedia.
+* https://en.wikipedia.org/wiki/R*_tree[R* Tree]. Wikipedia.
+* https://research-repository.griffith.edu.au/bitstream/handle/10072/43351/76130_1.pdf?sequence=1&isAllowed=y[A Triangular Decomposition Access Method for Temporal Data - TD-tree], Stantic, Topor, et al. ADC '11: Proceedings of the Twenty-Second Australasian Database Conference, Vol. 115, Pages 113–122. 2011.
+* https://arxiv.org/abs/2104.13793[Fast Parallel Hypertree Decompositions in Logarithmic Recursion Depth], Gottlob, Lanzinger, et al. 2021.
+** https://github.com/cem-okulmus/log-k-decomp[Reference Implementation], GitHub.
+* https://arxiv.org/abs/2104.13457[Hypersuccinct Trees -- New universal tree source codes for optimal compressed tree data structures], Munro, Nicholson, et al. 2021.
+* https://arxiv.org/pdf/1912.01668.pdf[Learning Multi-dimensional Indexes], Nathan, Ding, et al. Proceedings of the 2020 ACM SIGMOD International Conference on Management of Data, Pages 985-1000. 2020.
+* https://arxiv.org/pdf/2004.02335.pdf[The n-dimensional k-vector and its application to orthogonal range searching], Arnas, Leake, Mortari. Applied Mathematics and Computation, Vol. 372. 2020.
+
+[#raytracing]
+=== Data Structures: Raytracing
+
+* https://www.uni-weimar.de/fileadmin/user/fak/medien/professuren/Virtual_Reality/pictures/asrtrt01/bih_presentation.pdf[BIH (Bounding Interval Hierarchy)], Gründl.
+* https://people.cs.clemson.edu/~dhouse/courses/405/papers/bounding-interval-WK06.pdf[Instant Ray Tracing: The Bounding Interval Hierarchy], Wächter, Keller. Eurographics Symposium on Rendering. 2006.
+* https://cs.swansea.ac.uk/wordpressvc/wp-content/uploads/2012/10/d-and-c-ray-tracing.pdf[Naive Ray-Tracing: A Divide-And-Conquer Approach], Mora. ACM Trans. Graph. 30, 5, Article 117. October 2011.
+
+[#closestpoint]
+=== Data Structures: Closest Point
+
+* https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.366.9611&rep=rep1&type=pdf[DIVIDE-AND-CONQUER IN MULTIDIMENSIONAL SPACE], Bentley, Shamos. Proceedings of the Eighth Annual ACM Symposium on Theory of Computing. 1976.
+* https://arxiv.org/pdf/cs/9912014.pdf[Fast Hierarchical Clustering and Other Applications ofDynamic Closest Pairs], Eppstein. ACM Journal of Experimental Algorithmics, Vol. 5. 2000.
+* https://epubs.siam.org/doi/pdf/10.1137/1.9781611976014.6[Dynamic Generalized Closest Pair: Revisiting Eppstein’s Technique], Chan. Symposium on Simplicity in Algorithms. 2020.
+
+[#temporaldatastructures]
+=== Data Structures: Temporal
+
+* http://people.cs.aau.dk/~csj/Thesis/[Temporal Database Management], Jensen. 2000.
+** https://people.cs.aau.dk/~csj/Thesis/pdf/chapter36.pdf[Chapter 36: R-Tree Based Indexing of Now-Relative Bitemporal Data], Bliuj ̄ut ̇e, Jensen, et al. 2000.
+** https://people.cs.aau.dk/~csj/Thesis/pdf/chapter37.pdf[Chapter 37: Light-Weight Indexing of General Bitemporal Data], Bliuj ̄ut ̇e, Jensen, et al. 2000.
+* https://core.ac.uk/download/pdf/143854032.pdf[The POINT Approach to Represent _now_ in Bitemporal Databases], Stantic, Sattar, et al. Journal of Intelligent Information Systems, Vol. 32, Pages 297–323. 2009.
+* https://drum.lib.umd.edu/bitstream/handle/1903/889/CS-TR-3764.pdf[Designing Access Methods for Bitemporal Databases], Kumar, Tsotras, Faloutsos. IEEE Transactions on Knowledge and Data Engineering, Vol. 10, No. 1, Pages 1-20. 1998.
+* https://opus.bibliothek.uni-augsburg.de/opus4/frontdoor/deliver/index/docId/59478/file/ssdbm2015-bitemporal-windows.pdf[Indexing Bi-temporal Windows], Ge, Kaufmann, et al. Proceedings of the 27th International Conference on Scientific and Statistical Database Management, No. 19. 2015.
+* https://research-repository.griffith.edu.au/bitstream/handle/10072/58356/91581_1.pdf?sequence=1[Querying now-relative data], Anselma, Luca, et al. Journal of Intelligent Information Systems, No. 41, Pages 285–311. 2013.
+* http://www.cs.ucr.edu/~tsotras/cs236/W15/tempDB-survey.pdf[Comparison of Access Methods for Time-Evolving Data], Salzberg, Tsotras. ACM Computing Surveys, Vol. 31, No. 2. June 1999.
+
+[#zcurves]
+=== Data Structures: Z-Curves
+* http://hermanntropf.de/media/multidimensionalrangequery.pdf[Multidimensional Range Search in Dynamically Balanced Trees], Tropf, Herzog. Applied Informatics, Pages 71-77. 1981.
+* https://redis.io/topics/indexes#multi-dimensional-indexes[Redis Multi-Dimensional Indexes]
+
+[#relationalalgebra]
+=== Relational Algebra
+
+* http://www.thethirdmanifesto.com/[The Third Manifesto], Darwen, Date.
+* https://www.dcs.warwick.ac.uk/~hugh/TTM/DTATRM.pdf[Databases, Types, and The Relational Model: The Third Manifesto], Date, Darwen. 3rd edition, Addison-Wesley, 2006 (ISBN: 0-321-39942-0).
+* https://www.dcs.warwick.ac.uk/~hugh/TTM/OnTSQL2.pdf[An  Overview  and  Analysis of Proposals Based on the TSQL2 Approach], Date, Darwen. 2005.
+
+[#arrayprogramming]
+=== Array Programming
+
+* https://www.eecg.utoronto.ca/~jzhu/csc326/readings/iverson.pdf[Notation as a Tool of Thought], Iverson. Communications of the ACM, Vol. 23, No. 8, Pages 444–465. August 1980.
+* https://www.jsoftware.com/help/learning/contents.htm[Learning J: An Introduction to the J Programming Language], Stokes. 2015.
+* https://code.kx.com/q4m3/[Q for Mortals: An introduction to q programming], Borror.
+
+
+[#inspiration]
+== Inspiration
+
+These resources do not necessarily reflect algorithms, datastructures, or concepts which apply directly
+to the current XTDB architecture. These resources have been useful for the XTDB team in the past, for one
+reason or another. They may: reflect past XTDB architectures, have helped onboard team members, influence
+our overall philosophy, or simply be something we find interesting in the field.
+
+[#inspiration-graph]
+=== Graph Representation and Traversal
+
+* https://people.engr.tamu.edu/davis/GraphBLAS.html[SuiteSparse: GraphBLAS. Graph algorithms in the language of linear algebra.]
+* https://oss.redislabs.com/redisgraph/design/[RedisGraph: A High Performance In-Memory Graph Database]
+
+[#inspiration-datastructures]
+=== Data Structures
+
+* https://arxiv.org/abs/2104.10939[HINT: A Hierarchical Index for Intervals in Main Memory], Christodoulou, Bouros, Mamoulis. April 2021.
+* https://arxiv.org/abs/2103.15203[Mathematics of Digital Hyperspace], Kepner, Davis, et al. March 2021.
+* https://www.youtube.com/watch?v=rX0ItVEVjHc[Data-Oriented Design and C++], Acton. CppCon (YouTube). 2014.
+
+[#philosophy]
+=== Design Philosophy
+
+* https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/[Designing Data-Intensive Applications], Kleppmann. O'Reilly, ISBN: 9781449373320. 2017.
+* https://martin.kleppmann.com/2015/03/04/turning-the-database-inside-out.html[Turning the Database Inside-Out], Kleppmann. StrangeLoop. 2014.
+* https://www.infoq.com/presentations/Datomic-Database-Value/[The Database as a Value], Hickey. InfoQ. 2012.
+* https://www.infoq.com/presentations/Deconstructing-Database/[Deconstructing the Database], Hickey. InfoQ. 2013.
+
+[#misc]
+=== Miscellaneous
+
+* http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf[The End of an Architectural Era (It’s Time for a Complete Rewrite)], Stonebraker, Hachem, et al. VLDB '07: Proceedings of the 33rd international conference on Very large data bases, Pages 1150–1160. 2007.
+* https://arxiv.org/pdf/1610.09166.pdf[Push vs. Pull-Based Loop Fusion in Query Engines], Shaikhha, Dashti, Koch. Journal of Functional Programming, Vol. 28. 2018.
+* https://www.youtube.com/watch?v=BuE6JvQE_CY[Is Kafka a Database?], Kleppmann. Kafka Summit London (YouTube). 2019.
+
+[#courses]
+=== Courses
+
+* https://15445.courses.cs.cmu.edu/fall2020/schedule.html[CMU: Introduction to Database Systems (Fall 2020)]
+* https://15721.courses.cs.cmu.edu/spring2020/schedule.html[CMU: Advanced Database Systems (Spring 2020)]
+
+[#juxt]
+== JUXT Resources
+
+Our own talks and articles are listed in reverse-chronological order. Although older resources are still
+relevant to the philosophy and design of XTDB, newer resources will always provide a better undersatnding
+of implementation details.
+
+=== Talks and Articles
+
+* https://xtdb.com/articles/strength-of-the-record.html[The Strength of the Record], Deobald. xtdb.com. 2021.
+* https://xtdb.com/blog/crux-sql.html[XTDB SQL: Query your Datalog database with SQL], Pither. XTDB Weblog. 2020.
+* https://juxt.pro/blog/value-of-bitemporality[The Value of Bitemporality], Pither. JUXT Weblog. 2019.
+* https://www.youtube.com/watch?v=YjAVsvYGbuU[The Design and Implementation of a Bitemporal DBMS], Råberg. ClojuTRE (YouTube). September 2019.
+* https://www.youtube.com/watch?v=ykbYNBE-V3k[Temporal Databases for Stream Architectures], Taylor, Pither. StrangeLoop (YouTube). September 2019.
+* https://www.youtube.com/watch?v=3Stja6YUB94[The XTDB of Bitemporality], Pither. Clojure/north (YouTube). May 2019.
+* https://soundcloud.com/defn-771544745/49-crux-with-jon-and-jeremy[defn Podcast #49: XTDB with Jon and Jeremy], Pither, Taylor. Soundcloud. May 2019.
+
+=== Prior Art
+
+* https://github.com/hraberg/datascript-mapdb[datascript-mapdb: Durable Datascript backed by MapDB], Råberg. GitHub (archived). 2016.
+* https://github.com/hraberg/eyvind[Eyvind: distributed rule engine], Råberg. GitHub (archived). 2016.
+* https://github.com/crux-labs/crux-datascript[crux-datascript: Replicate XTDB data into DataScript], Taylor. Github.

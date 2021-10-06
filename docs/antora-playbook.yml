@@ -1,35 +1,71 @@
 site:
-  title: XTDB
-  start_page: reference::index.adoc
-  url: https://xtdb.com/
+  title: XTDB Docs
+  start_page: main::index.adoc
+  url: https://docs.xtdb.com
+  # homeUrl: &home_url /xyz/5.2/index.html
+  keys:
+    mainSiteUrl: "https://xtdb.com/"
+    mainSiteTitle: XTDB - Home
+    # Uncomment these to enable Matomo Analytics Snippets
+    # matomoUrl: "//bunseki.juxt.pro/"
+    # matomoSiteId: "4"
+    typesenseHost: xtagzc25w84ufq37p-1.a1.typesense.net
+    typesenseApiKey: 0zVHpGQFDUhgP9hazp1laLklfy00AlGD
+    typesenseCollectionName: xtdb-site-2-s3
+    hiddenComponent: main
+
 content:
   sources:
-    - url: ../
-      start_path: docs/main # index
-      branches: HEAD
-    - url: ../
-      start_path: docs/reference
+    - url: https://github.com/xtdb/xtdb
+      start_path: docs/main # index - Only necessary to read self-hosted docs.
+      branches: master
+    - url: https://github.com/xtdb/xtdb
+      start_path: docs/language-reference
       branches:
-        - HEAD
-        - docs-v*
-    - url: ../
+        - master
+        - docs-v1.19.0
+    - url: https://github.com/xtdb/xtdb
+      start_path: docs/clients
+      branches:
+        - master
+        - docs-v1.19.0
+    - url: https://github.com/xtdb/xtdb
+      start_path: docs/administration
+      branches:
+        - master
+        - docs-v1.19.0
+    - url: https://github.com/xtdb/xtdb
+      start_path: docs/extensions
+      branches:
+        - master
+        - docs-v1.19.0
+    - url: https://github.com/xtdb/xtdb
+      start_path: docs/storage
+      branches:
+        - master
+        - docs-v1.19.0
+
+    - url: https://github.com/xtdb/xtdb
       start_path: docs/tutorials
-      branches: HEAD
-    - url: ../
-      start_path: docs/howto
-      branches: HEAD
-    - url: ../
-      start_path: docs/articles
-      branches: main
-    # TODO: the remaining components do not belong in xtdb/docs:
-    - url: ../
-      start_path: docs/community
-      branches: main
+      branches: master
+    - url: https://github.com/xtdb/xtdb
+      start_path: docs/guides
+      branches: master
+    - url: https://github.com/xtdb/xtdb
+      start_path: docs/concepts
+      branches: master
+    - url: https://github.com/xtdb/xtdb
+      start_path: docs/resources
+      branches: master
+
+urls:
+  html_extension_style: indexify
 
 ui:
   bundle:
-    url: https://crux-ui-bundle.s3.eu-west-2.amazonaws.com/ui-bundle.zip
+    url: https://xtdb-ui-bundle.s3.eu-west-1.amazonaws.com/xtdb-docs-ui-v2-bundle.zip
     snapshot: true
+
 asciidoc:
   attributes:
     page-pagination: true

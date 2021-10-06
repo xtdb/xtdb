@@ -1,0 +1,313 @@
+= Kafka
+:page-aliases: reference::kafka.adoc
+
+When using XTDB at scale it is recommended to use multiple XTDB nodes connected via a Kafka cluster. Use of multiple nodes provides availability and Kafka itself provides strong fault-tolerance guarantees.
+Kafka can be used for XTDB's transaction log and document store components.
+
+image::local-cluster-mode.svg[Local Cluster Mode,450,150,align="center"]
+
+[NOTE]
+====
+Kafka's document store requires a copy of the documents kept locally for random access - these can be stored in a KV store like xref:rocksdb.adoc[RocksDB] or xref:lmdb.adoc[LMDB].
+
+For this reason, unless you want to keep both transactions and documents on Kafka (for simplicity, say, or historical reasons), we'd now recommend a different document store implementation - xref:jdbc.adoc[JDBC] or xref:aws-s3.adoc[S3], for example.
+
+(The Kafka transaction log does not have this requirement)
+====
+
+== Project Dependencies
+
+[tabs]
+====
+deps.edn::
++
+[source,clojure, subs=attributes+]
+----
+com.xtdb/xtdb-kafka {:mvn/version "{xtdb_version}"}
+----
+
+pom.xml::
++
+[source,xml, subs=attributes+]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-kafka</artifactId>
+    <version>{xtdb_version}</version>
+</dependency>
+----
+====
+
+== Example configuration
+
+=== Kafka as a Transaction Log
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "xtdb/tx-log": {
+    "xtdb/module": "xtdb.kafka/->tx-log",
+    "kafka-config": {
+      "bootstrap-servers": "localhost:9092",
+      ...
+    },
+
+    "tx-topic-opts": {
+      "topic-name": "crux-transaction-log",
+      ...
+    },
+
+    "poll-wait-duration": "PT1S"
+  },
+
+  ...
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:xtdb/tx-log {:xtdb/module 'xtdb.kafka/->tx-log
+               :kafka-config {:bootstrap-servers "localhost:9092"}
+               :tx-topic-opts {:topic-name "crux-transaction-log"}
+               :poll-wait-duration (Duration/ofSeconds 1)}
+ ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb/tx-log {:xtdb/module xtdb.kafka/->tx-log
+               :kafka-config {:bootstrap-servers "localhost:9092"}
+               :tx-topic-opts {:topic-name "crux-transaction-log"}
+               :poll-wait-duration "PT1S"}
+ ...}
+----
+====
+
+=== Kafka as a Document Store
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.kafka/->document-store",
+    "kafka-config": {
+      "bootstrap-servers": "localhost:9092",
+      ...
+    },
+    "doc-topic-opts": {
+      "topic-name": "crux-docs",
+      ...
+    },
+    "local-document-store": {
+      "kv-store": {
+        "xtdb/module": "xtdb.rocksdb/->kv-store",
+        "db-dir": "/tmp/rocksdb"
+      }
+    },
+    "poll-wait-duration": "PT1S"
+  },
+
+  ...
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:xtdb/document-store {:xtdb/module 'xtdb.kafka/->document-store
+                       :kafka-config {:bootstrap-servers "localhost:9092"
+                                      ...}
+                       :doc-topic-opts {:topic-name "crux-docs"
+                                        ...}
+                       :local-document-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
+                                                         :db-dir (io/file "/tmp/rocksdb")}}
+                       :poll-wait-duration (Duration/ofSeconds 1)}
+ ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb/document-store {:xtdb/module xtdb.kafka/->document-store
+                       :kafka-config {:bootstrap-servers "localhost:9092"
+                                      ...}
+                       :doc-topic-opts {:topic-name "crux-docs"
+                                        ...}
+                       :local-document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
+                                                         :db-dir "/tmp/rocksdb"}}
+                       :poll-wait-duration "PT1S"}
+ ...}
+----
+====
+
+If you do not want the local node to index transactions, you can use the xref:submit-only-doc-store[`+xtdb.kafka/->submit-only-document-store+`] module.
+
+==== Sharing the local KV store
+
+You can use the same local document store as the query indices, as follows:
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "local-rocksdb": {
+    "xtdb/module": "xtdb.rocksdb/->kv-store",
+    "db-dir": "/tmp/rocksdb"
+  },
+
+  "xtdb/document-store": {
+    ...
+    "local-document-store": {
+      "kv-store": "local-rocksdb"
+    }
+  },
+
+  "xtdb/index-store": {
+    "kv-store": "local-rocksdb"
+  }
+
+  ...
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{...
+ :local-rocksdb {:xtdb/module 'xtdb.rocksdb/->kv-store
+                 :db-dir (io/file "/tmp/rocksdb")}
+ :xtdb/document-store {...
+                       :local-document-store {:kv-store :local-rocksdb}}
+ :xtdb/index-store {:kv-store :local-rocksdb}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{...
+ :local-rocksdb {:xtdb/module xtdb.rocksdb/->kv-store
+                 :db-dir "/tmp/rocksdb"}
+ :xtdb/document-store {...
+                       :local-document-store {:kv-store :local-rocksdb}}
+ :xtdb/index-store {:kv-store :local-rocksdb}}
+----
+====
+
+=== Sharing connection config between the transaction log and the document store
+
+If you're using Kafka for both the transaction log and the document store, you can share connection config between them:
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "kafka-config": {
+    "xtdb/module": "xtdb.kafka/->kafka-config",
+    "bootstrap-servers": "localhost:9092",
+    ...
+  },
+
+  "xtdb/tx-log": {
+    "xtdb/module": "xtdb.kafka/->tx-log",
+    "kafka-config": "kafka-config",
+    ...
+  }
+
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.kafka/->document-store",
+    "kafka-config": "kafka-config",
+    ...
+  }
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:kafka-config {:xtdb/module 'xtdb.kafka/->kafka-config
+                :bootstrap-servers "localhost:9092"
+                ...}
+ :xtdb/tx-log {:xtdb/module 'xtdb.kafka/->tx-log
+               :kafka-config :kafka-config
+               ...}
+ :xtdb/document-store {:xtdb/module 'xtdb.kafka/->document-store
+                       :kafka-config :kafka-config
+                       ...}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:kafka-config {:xtdb/module xtdb.kafka/->kafka-config
+                :bootstrap-servers "localhost:9092"
+                ...}
+ :xtdb/tx-log {:xtdb/module xtdb.kafka/->tx-log
+               :kafka-config :kafka-config
+               ...}
+ :xtdb/document-store {:xtdb/module xtdb.kafka/->document-store
+                       :kafka-config :kafka-config
+                       ...}}
+----
+====
+
+== Parameters
+
+=== Connection config (`+xtdb.kafka/->kafka-config+`)
+
+* `tx-topic-opts` (topic options)
+* `bootstrap-servers` (string, default `"localhost:9092"`): URL for connecting to Kafka
+* `properties-file` (string/`File`/`Path`): Kafka connection properties file, supplied directly to Kafka
+* `properties-map` (map): Kafka connection properties map, supplied directly to Kafka
+
+=== Topic options (`+xtdb.kafka/->topic-opts+`)
+
+* `topic-name` (string, required, default `"tx-topic"` for tx-log, `"doc-topic"` for document-store)
+* `num-partitions` (int, default 1)
+* `replication-factor` (int, default 1): level of durability for Kafka
+* `create-topics?` (boolean, default true): whether to create topics if they do not exist
+* `topic-config` (map): any further topic config to pass directly to Kafka
+
+=== Transaction log (`+xtdb.kafka/->tx-log+`)
+
+* `kafka-config` (connection config)
+* `tx-topic-opts` (topic options)
+* `poll-wait-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to wait on each Kafka poll.
+* `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
+
+=== Document store (`+xtdb.kafka/->document-store+`)
+
+* `kafka-config` (connection config)
+* `doc-topic-opts` (topic options)
+* `local-document-store` (document store, default local in-memory kv-store)
+* `poll-wait-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to wait on each Kafka poll.
+* `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
+
+[#submit-only-doc-store]
+=== Submit-only document store (`+xtdb.kafka/->submit-only-document-store+`)
+
+* `kafka-config` (connection config)
+* `tx-topic-opts` (topic options)

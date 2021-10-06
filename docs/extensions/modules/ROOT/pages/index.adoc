@@ -1,0 +1,7 @@
+= Extensions
+
+* xref:full-text-search.adoc[Full Text Search]
+* xref:http.adoc[HTTP]
+* xref:kafka-connect.adoc[Kafka Connect]
+* xref:kafka-embedded.adoc[Kafka Embedded]
+* xref:sql.adoc[SQL]

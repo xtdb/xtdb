@@ -1,0 +1,334 @@
+= Quickstart
+:page-subtitle: Setup, Ingest, Query
+:page-author: Steven Deobald
+:page-header: aurora-1197753_1920.jpg
+:page-published: 2021-04-30T22:55Z
+:thumbnail: quickstart
+
+
+
+This quickstart guide shows you how to set up XTDB, ingest a document, and query it. In a few minutes, you will
+have a single XTDB node that persists records to disk using an in-process RocksDB instance. This means you do not
+need to install RocksDB separately -- it will just work out of the box.
+
+Examples are provided in Java and Clojure.
+Your data will be stored on the same computer your Java or Clojure process is running.
+This configuration is sufficient for fault-tolerant, low-load production services.
+It is an easy way to get familiar with XTDB in a minimal production-like environment.
+The section "Advanced XTDB Configuration" below contains more advanced configuration options.
+
+This guide was extracted from the "XTDB-in-a-Box" guide, which has minimal (working) project examples for Clojure and Java you can see in the
+https://github.com/xtdb/xtdb-in-a-box[xtdb-in-a-box] GitHub repo.
+If you prefer to see all the code at once, head there first.
+We also have thorough
+https://xtdb.com/docs/[Reference Docs],
+if that's your speed.
+
+Each step below contains some advanced options in collapsible notes. You can safely ignore all of these if you
+just want to get up and running quickly. You can always revisit them later.
+
+
+== 1. Setup
+
+=== Install Dependencies
+
+Ensure you are using Java 8 or higher:
+
+[source,shell]
+----
+java -version
+----
+
++++ <details><summary> +++
+All System Requirements
++++ </summary><div> +++
+
+* Java: JDK 8 or higher
+** JDK 16 requires https://github.com/xtdb/xtdb/issues/1462#issuecomment-802739964[an extra JVM option] to access JVM internals due to  https://openjdk.java.net/jeps/396[JEP 396]. (See https://github.com/xtdb/xtdb/issues/1462[xtdb#1462].)
+* Clojure: Clojure 1.10.3 or higher
+* macOS: 10.14.3 (Mojave) or higher
+** MacOS 10.14.3 is a RocksDB `libc` dependency for macOS users. (See https://github.com/facebook/rocksdb/issues/5064[rocksdb#5064].)
+** JDK: You _may_ require AdoptOpenJDK on certain macOS versions. (See https://github.com/xtdb/xtdb/issues/894[xtdb#894].)
+** Native Arm64 RocksDB Java is currently unspported on Apple M1 processors, causing an `UnsatisfiedLinkError`. M1 users can still run an x86 JVM on Rosetta, however. (See https://github.com/facebook/rocksdb/issues/7720[rocksdb#7720].)
+* Linux: No known version constraints
+* Windows: No known version constraints
+
++++ </div></details> +++
+
+
+Add XTDB to your Clojure or Java project:
+
+[tabs]
+====
+deps.edn::
++
+[source,clojure,subs=attributes+]
+----
+com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{xtdb_version}"}
+----
+project.clj::
++
+[source,clojure,subs=attributes+]
+----
+[com.xtdb/xtdb-core "{xtdb_version}"]
+[com.xtdb/xtdb-rocksdb "{xtdb_version}"]
+----
+pom.xml::
++
+[source,xml,subs=attributes+]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-core</artifactId>
+    <version>{xtdb_version}</version>
+</dependency>
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-rocksdb</artifactId>
+    <version>{xtdb_version}</version>
+</dependency>
+----
+====
+
+
++++ <details><summary> +++
+Advanced Installation
++++ </summary><div> +++
+This guide will walk you through the installation process. If you would prefer to see all available installation options --
+including pre-built JARs, custom Docker containers, and Clojure CLI tooling -- you will want to read the
+xref:administration::installing.adoc[Reference Docs: Installation] page.
++++ </div></details> +++
+
++++ <details><summary> +++
+Advanced Logging
++++ </summary><div> +++
+Ignore this note if you just want to get up and running quickly. It's completely optional, but nice to have.
+
+Without setting up logging, you will see a `SLF4J: Defaulting to no-operation (NOP) logger implementation` message on STDOUT from XTDB. This is harmless, but in a real application you will want to configure `Logback` with the http://www.slf4j.org[SLF4J] API to see INFO messages from XTDB.
+
+To do this in Clojure:
+
+. https://github.com/deobald/crux-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/project.clj#L10[Add Logback, SLF4J, and `tools.logging` as dependencies]
+. Set the https://github.com/deobald/crux-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/project.clj#L20[`clojure.tools.logging.factory`] JVM option
+. Create a https://github.com/deobald/crux-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/resources/logback.xml[`crux-in-a-box/resources/logback.xml`] file
+
+To do this in Java:
+
+. https://github.com/deobald/crux-in-a-box/blob/1ba9ed4d85bd15e90adec46b19523b262f8480ae/java/pom.xml#L25[Add Logback, SLF4J, and `tools.logging` as dependencies]
+. Set the https://github.com/deobald/crux-in-a-box/blob/1ba9ed4d85bd15e90adec46b19523b262f8480ae/java/Makefile#L8[`clojure.tools.logging.factory` JVM option]
+. Create a https://github.com/deobald/crux-in-a-box/blob/1ba9ed4d85bd15e90adec46b19523b262f8480ae/java/src/main/resources/logback.xml[`crux-in-a-box/src/main/resources/logback.xml`] file
++++ </div></details> +++
+
+=== Configure XTDB
+
+The following configuration uses an in-process RocksDB instance to write your data to disk. It will save your data in a directory named `./data/dev`, relative to your project root. You do not need to create this directory. XTDB will create it for you.
+
+[tabs]
+====
+Clojure::
++
+[source,clojure,subs=attributes+]
+----
+(ns xtdb-in-a-box.db
+  (:require [clojure.java.io :as io]
+            [xtdb.api :as xt]))
+
+(defn start-xtdb! []
+  (letfn [(kv-store [dir]
+            {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
+                        :db-dir (io/file dir)
+                        :sync? true}})]
+    (xt/start-node
+     {:xtdb/tx-log (kv-store "data/dev/tx-log")
+      :xtdb/document-store (kv-store "data/dev/doc-store")
+      :xtdb/index-store (kv-store "data/dev/index-store")})))
+
+(def xtdb-node (start-xtdb!))
+
+(defn stop-xtdb! []
+  (.close xtdb-node))
+
+----
+Java::
++
+[source,java,subs=attributes+]
+----
+package xtdbinabox;
+
+import java.io.File;
+import java.io.IOException;
+import xtdb.api.XTDB;
+import xtdb.api.IXtdb;
+
+import java.util.HashMap;
+import java.util.List;
+
+import xtdb.api.IXtdbDatasource;
+import xtdb.api.ICursor;
+import xtdb.api.XtdbDocument;
+import xtdb.api.TransactionInstant;
+import xtdb.api.tx.Transaction;
+
+class Box {
+    public static void main(String[] args) {
+        try(IXtdb xtdbNode = IXtdb.startNode(new File("config.json"))) {
+            System.out.println("XTDB Started.");
+            // ... ingest goes here
+            // ... query goes here
+        }
+        catch (IOException e) {
+            // ...
+        }
+    }
+}
+
+----
+config.json::
++
+[source,json,subs=attributes+]
+----
+{
+  "xtdb/index-store": {
+    "kv-store": {
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
+      "db-dir": "data/index-store"
+    }
+  },
+  "xtdb/document-store": {
+    "kv-store": {
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
+      "db-dir": "data/doc-store"
+    }
+  },
+  "xtdb/tx-log": {
+    "kv-store": {
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
+      "db-dir": "data/tx-log"
+    }
+  },
+  "xtdb.lucene/lucene-store": {
+    "db-dir": "data/dev/lucene-dir"
+  },
+  "xtdb.http-server/server": {
+    "port": 9999
+  }
+}
+
+----
+====
+
+
++++ <details><summary> +++
+Advanced Config Libraries
++++ </summary><div> +++
+This guide gets you up and running quickly by hard-coding configuration values. Store these configuration values with your favourite configuration library. In Clojure, you might use  https://github.com/juxt/aero[Aero].
+
+This guide also does not make any assumptions about how you manage stateful services. XTDB is a stateful service, however, and you should store the XTDB node in your favourite state management library. In Clojure, you might use https://github.com/tolitius/mount[Mount].
++++ </div></details> +++
+
++++ <details><summary> +++
+Advanced XTDB Configuration
++++ </summary><div> +++
+XTDB configuration has three components:
+
+. Transaction Log
+. Document Store
+. Index Store
+
+For more advanced configuration, XTDB allows you to choose the underlying data storage technology
+(for each of the three components) from a number of different modules. The Reference Docs contain a
+xref:administration::configuring.adoc#_modules[list of available modules], each with instructions on
+how to configure them.
++++ </div></details> +++
+
+
+== 2. Ingest
+
+[tabs]
+====
+Clojure REPL::
++
+[source,clojure,subs=attributes+]
+----
+xtdb-in-a-box.db> (xt/submit-tx xtdb-node [[::xt/put
+                                            {:xt/id "hi2u"
+                                             :user/name "zig"}]])
+;; => #::xt{:tx-id 0, :tx-time #inst "2021-03-11T02:27:09.176-00:00"}
+----
+Java::
++
+[source,java,subs=attributes+]
+----
+HashMap<String, Object> data = new HashMap<>();
+data.put("user/name", "zig");
+XtdbDocument document = XtdbDocument.create("hi2u", data);
+TransactionInstant transaction = node.submitTx(Transaction.buildTx(tx -> {
+    tx.put(document);
+}));
+System.out.println(data.toString());
+----
+====
+
++++ <details><summary> +++
+Advanced Transactions
++++ </summary><div> +++
+This is the simplest possible transaction. XTDB has more advanced transaction features including _synchronous awaits_, _eviction_, _transaction functions_, _speculative transactions_, and bitemporal _valid-time put/delete_. You can read about them in
+xref:language-reference::datalog-transactions.adoc[Reference Docs: Transactions].
++++ </div></details> +++
+
+
+== 3. Query
+
+[tabs]
+====
+Clojure REPL::
++
+[source,clojure,subs=attributes+]
+----
+xtdb-in-a-box.db> (xt/q (xt/db xtdb-node) '{:find [e]
+                                            :where [[e :user/name "zig"]]} )
+;; => #{["hi2u"]}
+
+xtdb-in-a-box.db> (stop-xtdb!)
+;; => nil
+----
+Java::
++
+[source,java,subs=attributes+]
+----
+String query = "{:find [e] :where [[e :user/name \"zig\"]]}";
+IXtdbDatasource db = node.db();
+ICursor<List<?>> results = db.openQuery(query);
+if (results.hasNext()) {
+    List<?> result = results.next();
+    System.out.println(result.toString());
+}
+db.close();
+node.close();
+----
+====
+
+
++++ <details><summary> +++
+Advanced Queries
++++ </summary><div> +++
+This is the simplest possible query. XTDB has very powerful bitemporal graph queries with Datalog and SQL. To
+learn more about _aggregates_, _pull syntax_, _returning maps_, _binding_, _subqueries_, _predicates_, _ordering_,
+_pagination_, _rules_, _bitemporal time-travel_, _streaming_, and _entity history_ you can
+read more in
+xref:language-reference::datalog-queries.adoc[Reference Docs: Queries] and
+xref:language-reference::sql-queries.adoc[Reference Docs: SQL].
++++ </div></details> +++
+
+== Further Reading
+
+XTDB requires very little effort to set up and start using immediately. Now that you are comfortable with the basics,
+you can read through the
+https://xtdb.com/docs[Reference Docs] or try
+the https://www.xtdb.com/tutorials[Tutorial]. We also have https://www.xtdb.com/articles[Articles] and
+https://www.xtdb.com/blog/index.html[blog posts] talking about the philosophy and history of XTDB. If you are feeling
+particularly excited, you can browse our https://www.xtdb.com/articles/references.html[Bibliography].
+
+As always, we encourage you to chat with us on https://juxt-oss.zulipchat.com/#narrow/stream/194466-xtdb[Zulip] or `#xtdb` on
+Clojurians if you have questions or ideas. Enjoy XTDB!

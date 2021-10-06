@@ -1,0 +1,6 @@
+= Learn Datalog
+
+Adapted from the classic _"Learn Datalog Today"_ tutorials, you can now
+learn the XTDB dialect of Datalog interactively.
+
+link:https://nextjournal.com/try/learn-xtdb-datalog-today/learn-xtdb-datalog-today[Try the tutorial on NextJournal.]

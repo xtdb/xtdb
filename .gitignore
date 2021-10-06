@@ -18,3 +18,12 @@ target/
 docs/build/
 .calva/
 .lsp/
+
+xtdb-javadoc/
+
+node_modules/
+redoc/
+package-lock.json
+package.json
+swagger.json
+

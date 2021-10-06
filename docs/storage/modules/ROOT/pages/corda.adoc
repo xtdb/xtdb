@@ -1,0 +1,118 @@
+= Corda
+:page-aliases: reference::corda.adoc
+
+Development Status: Alpha
+
+A XTDB module that allows you to pipe verified https://www.corda.net/[Corda] transactions into an XTDB node, to then query using XTDB's bitemporal Datalog query engine.
+
+NOTE: For an introduction to Corda, check out the  https://docs.corda.net/docs/corda-os/4.8/tutorials-index.html[tutorials on the Corda site].
+
+== Setup
+
+[tabs]
+====
+build.gradle.kts::
++
+[source,kotlin,subs=attributes+]
+----
+// Main library
+implementation("com.xtdb.labs", "xtdb-corda", "1.19.0")
+
+// Library for inclusion in contract JARs
+implementation("com.xtdb.labs", "xtdb-corda-state", "1.19.0")
+----
+
+pom.xml::
++
+[source,xml,subs=attributes+]
+----
+<dependency>
+    <groupId>com.xtdb.labs</groupId>
+    <artifactId>xtdb-corda</artifactId>
+    <version>1.19.0</version>
+</dependency>
+
+<!-- Library for inclusion in contract JARs -->
+<dependency>
+    <groupId>com.xtdb.labs</groupId>
+    <artifactId>xtdb-corda-state</artifactId>
+    <version>1.19.0</version>
+</dependency>
+----
+====
+
+=== Corda Service
+
+To set up an XTDB node within Corda, create a Corda Service:
+
+[source,kotlin]
+----
+@CordaService
+class XtdbService(private val serviceHub: AppServiceHub) : SingletonSerializableAsToken() {
+    val node = serviceHub.startXtdbNode {
+        withCordaTxLog { }
+        ...
+    }
+}
+----
+
+This is a minimal configuration - see the main xref:administration::configuring.adoc[Configuring XTDB] documentation for how to further configure the XTDB node within the `startXtdbNode` block.
+
+== Mapping Corda documents into XTDB
+
+By default, any Corda states that implement `xtdb.corda.state.XtdbState` will be indexed into XTDB:
+
+[source,kotlin]
+----
+@BelongsToContract(IOUContract::class)
+data class IOUState(val value: Int,
+                    val lender: Party,
+                    val borrower: Party,
+                    override val linearId: UniqueIdentifier = UniqueIdentifier()) :
+    LinearState, XtdbState {
+
+    override val xtdbId = linearId.id
+
+    override val xtdbDoc: Map<String, Any> = mapOf(
+        "iou-state/value" to value,
+        "iou-state/lender" to lender.name.toString(),
+        "iou-state/borrower" to borrower.name.toString())
+}
+----
+
+This mapping can be customised further by overriding the document mapping in the tx-log configuration - providing a function taking each Corda state and returning a collection of `XtdbState` objects:
+
+[source,kotlin]
+----
+@CordaService
+class XtdbService(private val serviceHub: AppServiceHub) : SingletonSerializableAsToken() {
+    val node = serviceHub.startXtdbNode {
+        withCordaTxLog {
+            // This replicates the default behaviour.
+            withDocumentMapping { state ->
+                if (state is XtdbState) listOf(state)
+                else null
+            }
+        }
+    }
+}
+----
+
+In the same way as each Corda node will only see a subset of transactions of the wider Corda network, the XTDB node will only be able to index the transactions of its associated Corda node.
+
+== Querying XTDB
+
+To access the standard XTDB query API, you can make the XTDB node available as a field on your Corda service (as above), and then
+xref:language-reference::datalog-queries.adoc[query XTDB as normal].
+
+[source,kotlin]
+----
+val xtdbNode = serviceHub.cordaService(XtdbService::class.java).node
+
+xtdbNode.db().query("""
+    {:find [?l ?b ?v]
+     :where [[?iou :iou-state/lender ?l]
+             [?iou :iou-state/borrower ?b]
+             [?iou :iou-state/value ?v]]}
+    """.trimIndent())
+----

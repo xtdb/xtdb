@@ -1,0 +1,124 @@
+= SQL
+:page-aliases: reference::sql.adoc
+
+SQL module for XTDB built on https://calcite.apache.org/[Apache Calcite].
+
+This document describes setup and configuration for the SQL module.
+To query using the SQL module,
+see the xref:language-reference::sql-queries.adoc[SQL Query Reference].
+
+
+== Setup
+
+`xtdb-sql` runs in-process as part of the XTDB node as an XTDB module.
+
+First, add the `xtdb-sql` dependency to your project:
+
+[tabs]
+====
+pom.xml::
++
+[source,xml, subs=attributes+]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-sql</artifactId>
+    <version>{xtdb_version}</version>
+</dependency>
+----
+
+deps.edn::
++
+[source,clojure, subs=attributes+]
+----
+com.xtdb/xtdb-sql {:mvn/version "{xtdb_version}"}
+----
+====
+
+== Connecting
+
+You can either obtain a JDBC connection in-process, or start a server port and connect through a number of external SQL tools.
+
+To get a connection in-process, call `xtdb.calcite/jdbc-connection`, passing it an XTDB node:
+
+[source,clojure]
+----
+(require '[xtdb.calcite])
+
+(with-open [conn (xtdb.calcite/jdbc-connection node)]
+  ;; ...
+  )
+----
+
+=== SQL server
+
+We use https://calcite.apache.org/avatica/[Apache Avatica] to open up a SQL server port.
+
+Add the following to your node configuration:
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  ...
+  "xtdb.calcite/server": {
+    "port": 1501
+  }
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{...
+ :xtdb.calcite/server {:port 1501}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{...
+ :xtdb.calcite/server {:port 1501}}
+----
+====
+
+==== Properties
+
+* `port` (int, default 1501)
+* `scan-only?` (boolean, default false): only use table scans in queries
+
+==== Connecting via JDBC
+
+Add to the https://mvnrepository.com/artifact/org.apache.calcite.avatica/avatica-core[Avatica SQL driver] to your project and use the connection string:
+
+[source]
+----
+jdbc:avatica:remote:url=http://<server-hostname>:1501;serialization=protobuf;timeZone=UTC
+----
+
+You can then connect using the Avatica JDBC driver, for example:
+
+[source,clojure]
+----
+(java.sql.DriverManager/getConnection "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf;timeZone=UTC")
+----
+
+==== Connecting via SQLLine
+
+To connect via the https://github.com/julianhyde/sqlline[SQLLine] CLI tool, install https://get-coursier.io/docs/cli-installation[Coursier] and run:
+
+[source,bash]
+----
+coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.16.0 -M sqlline.SqlLine -- -n xtdb -p xtdb -u "jdbc:avatica:remote:url=http://localhost:1501;serialization=protobuf;timeZone=UTC" -d org.apache.calcite.avatica.remote.Driver
+----
+
+
+[#sql-query-reference]
+== SQL Query Reference
+
+See the xref:language-reference::sql-queries.adoc[SQL Query Reference].

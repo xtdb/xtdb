@@ -1,0 +1,442 @@
+= Clojure
+:page-aliases: reference::clojure-api.adoc
+
+The `xtdb.api` namespace exposes a union of methods from `IXtdb` and `IXtdbDatasource`,
+with few lifecycle members added.
+
+[#ixtdb]
+== IXtdb
+
+=== db
+
+[source,clojure]
+----
+  (db
+    [node]
+    [node db-basis]
+    ^:deprecated [node valid-time]
+    ^:deprecated [node valid-time tx-time]
+    "Returns a DB snapshot at the given time. The snapshot is not thread-safe.
+
+     db-basis: (optional map, all keys optional)
+       - `::xt/valid-time` (Date):
+           If provided, DB won't return any data with a valid-time greater than the given time.
+           Defaults to now.
+       - `::xt/tx` (Map):
+           If provided, DB will be a snapshot as of the given transaction.
+           Defaults to the latest completed transaction.
+       - `::xt/tx-time` (Date):
+           Shorthand for `{::xt/tx {::xt/tx-time <>}}`
+
+     Providing both `::xt/tx` and `::xt/tx-time` is undefined.
+     Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+     If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
+----
+
+=== open-db
+
+[source,clojure]
+----
+  (open-db
+    [node]
+    [node db-basis]
+    ^:deprecated [node valid-time]
+    ^:deprecated [node valid-time tx-time]
+    "Opens a DB snapshot at the given time.
+
+     db-basis: (optional map, all keys optional)
+       - `::xt/valid-time` (Date):
+           If provided, DB won't return any data with a valid-time greater than the given time.
+           Defaults to now.
+       - `::xt/tx` (Map):
+           If provided, DB will be a snapshot as of the given transaction.
+           Defaults to the latest completed transaction.
+       - `::xt/tx-time` (Date):
+           Shorthand for `{::xt/tx {::xt/tx-time <>}}`
+
+     Providing both `::xt/tx` and `::xt/tx-time` is undefined.
+     Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+     If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
+
+     This DB opens up shared resources to make multiple requests faster - it must be `.close`d when you've finished
+     using it (for example, in a `with-open` block). Be cautious with lazy evaluation that may attempt to make requests
+     after the DB is closed.")
+----
+
+=== status
+
+[source,clojure]
+----
+  (status [node]
+    "Returns the status of this node as a map.")
+----
+
+=== submit-tx
+
+[source,clojure]
+----
+  (submit-tx [node tx-ops]
+    "Writes transactions to the log for processing
+     tx-ops datalog style transactions.
+     Returns a map with details about the submitted transaction,
+     including tx-time and tx-id.")
+----
+
+=== tx-committed?
+
+[source,clojure]
+----
+  (tx-committed? [node submitted-tx]
+    "Checks if a submitted tx was successfully committed.
+     submitted-tx must be a map returned from `submit-tx`.
+     Returns true if the submitted transaction was committed,
+     false if the transaction was not committed, and throws `NodeOutOfSyncException`
+     if the node has not yet indexed the transaction.")
+----
+
+=== await-tx
+
+[source,clojure]
+----
+  (await-tx
+    [node tx]
+    [node tx ^Duration timeout]
+    "Blocks until the node has indexed a transaction that is at or past the
+  supplied tx. Will throw on timeout. Returns the most recent tx indexed by the
+  node.")
+----
+
+=== await-tx-time
+
+[source,clojure]
+----
+  (await-tx-time
+    [node ^Date tx-time]
+    [node ^Date tx-time ^Duration timeout]
+    "Blocks until the node has indexed a transaction that is past the supplied
+  txTime. Will throw on timeout. The returned date is the latest index time when
+  this node has caught up as of this call.")
+----
+
+=== sync
+
+[source,clojure]
+----
+ (sync
+    [node]
+    [node ^Duration timeout]
+    "Blocks until the node has caught up indexing to the latest tx available at
+  the time this method is called. Will throw an exception on timeout. The
+  returned date is the latest transaction time indexed by this node. This can be
+  used as the second parameter in (db valid-time, transaction-time) for
+  consistent reads.
+
+  timeout – max time to wait, can be nil for the default.
+  Returns the latest known transaction time.")
+
+----
+
+=== listen
+[source,clojure]
+----
+  (listen ^java.lang.AutoCloseable [node event-opts f]
+    "Attaches a listener to XTDB's event bus.
+
+  `event-opts` should contain `::xt/event-type`, along with any other options the event-type requires.
+
+  We currently only support one public event-type: `::xt/indexed-tx`.
+  Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
+
+  `(.close ...)` the return value to detach the listener.
+
+  This is an experimental API, subject to change.")
+----
+
+=== open-tx-log
+
+[source,clojure]
+----
+(open-tx-log ^ICursor [this after-tx-id with-ops?]
+  "Reads the transaction log. Optionally includes
+  operations, which allow the contents under the ::xt/tx-ops
+  key to be piped into (submit-tx tx-ops) of another
+  XTDB instance.
+  after-tx-id      optional transaction id to start after.
+  with-ops?        should the operations with documents be included?
+  Returns a cursor over the TxLog.")
+----
+
+=== latest-completed-tx
+
+[source,clojure]
+----
+  (latest-completed-tx [node]
+    "Returns the latest transaction to have been indexed by this node.")
+----
+
+=== latest-submitted-tx
+
+[source,clojure]
+----
+  (latest-submitted-tx [node]
+    "Returns the latest transaction to have been submitted to this cluster")
+----
+
+=== attribute-stats
+
+[source,clojure]
+----
+  (attribute-stats [node]
+    "Returns frequencies of indexed attributes")
+----
+
+=== active-queries
+
+[source,clojure]
+----
+  (active-queries [node]
+    "Returns a list of currently running queries")
+----
+
+=== recent-queries
+
+[source,clojure]
+----
+  (recent-queries [node]
+    "Returns a list of recently completed/failed queries")
+----
+
+=== slowest-queries
+
+[source,clojure]
+----
+  (slowest-queries [node]
+    "Returns a list of slowest completed/failed queries ran on the node")
+----
+
+[#ixtdbdatasource]
+== IXtdbDatasource
+Represents the database as of a specific valid and transaction time.
+
+=== entity
+
+[source,clojure]
+----
+  (entity [db eid]
+    "queries a document map for an entity.
+    eid is an object which can be coerced into an entity id.
+    returns the entity document map.")
+----
+
+=== entity-tx
+
+[source,clojure]
+----
+  (entity-tx [db eid]
+    "returns the transaction details for an entity. Details
+    include tx-id and tx-time.
+    eid is an object that can be coerced into an entity id.")
+----
+
+=== q
+
+[source,clojure]
+----
+  (q
+    [db query]
+    "q[uery] an XTDB db.
+
+     This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
+     otherwise, it will return a vector of result tuples.)
+----
+
+=== open-q
+
+[source,clojure]
+----
+  (open-q
+    [db query]
+    "lazily q[uery] an XTDB db.
+     query param is a datalog query in map, vector or string form.
+
+     This function returns a Cursor of result tuples - once you've consumed
+     as much of the sequence as you need to, you'll need to `.close` the sequence.
+     A common way to do this is using `with-open`:
+
+     (with-open [res (xt/open-q db '{:find [...]
+                                       :where [...]})]
+       (doseq [row (iterator-seq res)]
+         ...))
+
+     Once the sequence is closed, attempting to iterate it is undefined.
+     Therefore, be cautious with lazy evaluation.")
+----
+
+=== pull
+[source,clojure]
+----
+  (pull [db query eid]
+    "Returns the requested data for the given entity ID, based on the projection spec
+
+     e.g. `(pull db [:film/name :film/year] :spectre)`
+       => `{:film/name \"Spectre\", :film/year 2015}`
+
+     See https://xtdb.com/reference/queries.html#pull for details of the spec format.")
+----
+
+=== pull-many
+[source,clojure]
+----
+  (pull-many [db query eids]
+    "Returns the requested data for the given entity IDs, based on the projection spec
+
+     e.g. `(pull-many db [:film/name :film/year] #{:spectre :skyfall})`
+       => `[{:film/name \"Spectre\", :film/year 2015}, {:film/name \"Skyfall\", :film/year 2012}]`
+
+     See https://xtdb.com/reference/queries.html#pull for details of the spec format.")
+----
+
+=== entity-history
+
+[source,clojure]
+----
+  (entity-history
+    [db eid sort-order]
+    [db eid sort-order {:keys [with-docs?
+                               with-corrections?
+                               start-valid-time
+                               end-valid-time
+                               start-tx-time
+                               end-tx-time
+                               start-tx-id
+                               end-tx-id]}]
+    "Eagerly retrieves entity history for the given entity.
+
+    Options:
+    * `sort-order`: `#{:asc :desc}`
+    * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `::xt/doc` key
+    * `:with-corrections?` (boolean, default false): specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
+    * `:start-valid-time`, `:start-tx-time`, `:start-tx-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
+    * `:end-valid-time`, `:end-tx-time`, `:end-tx-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
+
+    No matter what `:start-*` and `:end-*` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
+
+    Each entry in the result contains the following keys:
+    * `::xt/valid-time`,
+    * `::xt/tx-time`,
+    * `::xt/tx-id`,
+    * `::xt/content-hash`
+    * `::xt/doc` (see `with-docs?`).")
+----
+
+=== open-entity-history
+
+[source,clojure]
+----
+  (open-entity-history
+    [db eid sort-order]
+    [db eid sort-order {:keys [with-docs?
+                               with-corrections?
+                               start-valid-time
+                               end-valid-time
+                               start-tx-time
+                               end-tx-time
+                               start-tx-id
+                               end-tx-id]}]
+    "Lazily retrieves entity history for the given entity.
+    Don't forget to close the cursor when you've consumed enough history!
+    See `entity-history` for all the options")
+----
+
+=== db-basis
+
+[source,clojure]
+----
+  (db-basis [db]
+    "returns the basis of this db snapshot - a map containing `::xt/valid-time` and `::xt/tx`"))
+----
+
+=== valid-time
+
+[source,clojure]
+----
+  (valid-time [db]
+    "returns the valid time of the db.
+    If valid time wasn't specified at the moment of the db value retrieval
+    then valid time will be time of the latest transaction.")
+----
+
+=== transaction-time
+
+[source,clojure]
+----
+  (transaction-time [db]
+    "returns the time of the latest transaction applied to this db value.
+    If a tx time was specified when db value was acquired then returns
+    the specified time."))
+----
+
+=== with-tx
+
+[source,clojure]
+----
+(with-tx [db tx-ops]
+    "Returns a new db value with the tx-ops speculatively applied.
+  The tx-ops will only be visible in the value returned from this function - they're not submitted to the cluster, nor are they visible to any other database value in your application.
+  If the transaction doesn't commit (eg because of a failed 'match'), this function returns nil.")
+----
+
+== Lifecycle members
+
+=== start-node
+
+[source,clojure]
+----
+(defn start-node ^IXtdb [options])
+----
+
+NOTE: requires any dependencies on the classpath that the XTDB modules may need.
+
+Accepts a map, or a JSON/EDN file or classpath resource.
+
+See https://xtdb.com/reference/configuration.html for details.
+
+Returns a node which implements IXtdb and java.io.Closeable.
+Latter allows the node to be stopped by calling `(.close node)`.
+
+Throws IndexVersionOutOfSyncException if the index needs rebuilding.
+
+=== new-api-client
+
+[source,clojure]
+----
+(defn new-api-client ^IXtdb [url])
+----
+
+Creates a new remote API client IXtdb.
+The remote client requires valid and transaction time to be specified for all calls to `db`.
+
+NOTE: Requires either clj-http or http-kit on the classpath,
+See https://xtdb.com/reference/http.html for more information.
+
+Param `url` the URL to an XTDB HTTP end-point.
+
+Returns a remote API client.
+
+=== new-submit-client
+
+[source,clojure]
+----
+(defn new-submit-client ^IXtdbSubmitClient [options])
+----
+
+Starts a submit client for transacting into XTDB without running a full local node with index.
+
+Accepts a map, or a JSON/EDN file or classpath resource.
+
+For valid options, see https://xtdb.com/reference/configuration.html.
+
+Returns a xtdb.api.IXtdbSubmitClient component that implements java.io.Closeable.
+Latter allows the node to be stopped by calling `(.close node)`.

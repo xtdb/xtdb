@@ -200,7 +200,7 @@ jobs:
 
   deploy-api-docs:
     docker:
-      - image: circleci/clojure:openjdk-8-lein
+      - image: circleci/clojure:openjdk-17-lein
     working_directory: ~/xtdb
     steps:
       - checkout
@@ -214,28 +214,28 @@ jobs:
             else
               echo 'export DOCS_PREFIX="${CIRCLE_BRANCH}"' >> $BASH_ENV
             fi
-      - run: javadoc -Xdoclint:none -d xtdb-javadoc/ -cp `lein classpath` -sourcepath core/src xtdb.api -subpackages xtdb.api.tx
+      - run: javadoc -Xdoclint:none -d xtdb-javadoc/ -cp `lein classpath` -sourcepath core/src xtdb.api -subpackages xtdb.api.tx -encoding UTF-8 -docencoding utf-8 -charset utf-8 -stylesheetfile docs/javadocs/styles.css
       - aws-s3/sync:
           aws-access-key-id: SITE_AWS_ACCESS_KEY
           aws-secret-access-key: SITE_AWS_SECRET_KEY
           arguments: |
             --acl public-read
           from: xtdb-javadoc
-          to: 's3://xtdb-api-docs/xtdb-javadoc/${DOCS_PREFIX}'
+          to: 's3://xtdb-javadocs-2/clients/java/${DOCS_PREFIX}'
       - node/install
       - run:
           command: |
             lein run -m xtdb.http-server.get-swagger
             npm install redoc-cli
             mkdir swagger-doc
-            ./node_modules/redoc-cli/index.js bundle swagger.json -o redoc/xtdb-redoc.html
+            ./node_modules/redoc-cli/index.js bundle swagger.json -o redoc/index.html
       - aws-s3/sync:
           aws-access-key-id: SITE_AWS_ACCESS_KEY
           aws-secret-access-key: SITE_AWS_SECRET_KEY
           arguments: |
             --acl public-read
           from: redoc
-          to: 's3://xtdb-api-docs/redoc/${DOCS_PREFIX}'
+          to: 's3://xtdb-openapi-2/clients/http/openapi/${DOCS_PREFIX}'
 
 
 workflows:

@@ -1,0 +1,433 @@
+= Bitemporality
+:toc: macro
+
+toc::[]
+
+[#overview]
+== Overview
+
+XTDB is optimised for efficient and globally consistent point-in-time queries
+using a pair of `transaction-time` and `valid-time` timestamps.
+
+Ad-hoc systems for bitemporal recordkeeping typically rely on explicitly
+tracking either `valid-from` and `valid-to` timestamps or range types directly
+within relations.  The bitemporal document model that XTDB provides is very
+simple to reason about and it is universal across the entire database,
+therefore it does not require you to consider which historical information is
+worth storing in special "bitemporal tables" upfront.
+
+One or more documents may be inserted into XTDB via a `put` transaction at a
+specific `valid-time`, defaulting to the `transaction time` (i.e. `now`), and
+each document remains valid until explicitly updated with a new version via
+`put` or deleted via `delete`.
+
+[#why]
+== Why?
+
+The rationale for bitemporality is also explained in this
+https://juxt.pro/blog/posts/value-of-bitemporality.html[blog post].
+
+A baseline notion of time that is always available is
+`transaction-time`; the point at which data is transacted into the
+database.
+
+Bitemporality is the addition of another time-axis: `valid-time`.
+
+.Time Axes
+[#table-conversion%header,cols="d,d"]
+|===
+|Time|Purpose
+|`transaction-time`|Used for audit purposes, technical requirements such as event sourcing.
+|`valid-time`|Used for querying data across time, historical analysis.
+|===
+
+`transaction-time` represents the point at which data arrives into the
+database. This gives us an audit trail and we can see what the state
+of the database was at a particular point in time. You cannot write a
+new transaction with a `transaction-time` that is in the past.
+
+*valid-time* is an arbitrary time that can originate from an upstream
+ system, or by default is set to transaction-time. Valid time is
+ what users will typically use for query purposes.
+
+****
+Writes can be made in the past of valid-time as _retroactive operations_. Users
+will normally ask _"what is the value of this entity at valid-time?"_
+regardless if this history has been rewritten several times at multiple
+transaction-times. Writes can also be made in the future of valid-time as
+_proactive operations_.
+
+Typically you only need to consider using both transaction-time and valid-time
+for ensuring globally consistent reads across nodes or to query for audit
+reasons.
+****
+
+NOTE: In XTDB, when `transaction-time` isn't specified, it is set to
+_now_. When writing data, in case there isn’t any specific valid-time
+available, valid-time and transaction-time take the same value.
+
+[#valid]
+== Valid Time
+
+In situations where your database is not the ultimate owner of the data—where
+corrections to data can flow in from various sources and at various times—use
+of *transaction-time* is inappropriate for historical queries.
+
+Imagine you have a financial trading system and you want to perform
+calculations based on the official 'end of day', that occurs each day at 17:00
+hours. Does all the data arrive into your database at exactly 17:00? Or does
+the data arrive from an upstream source where we have to allow for data to
+arrive out of order, and where some might always arrive after 17:00?
+
+This can often be the case with high throughput systems where there
+are clusters of processing nodes, enriching the data before it gets to
+our store.
+
+In this example, we want our queries to include the straggling bits of
+data for our calculation purposes, and this is where *valid-time*
+comes in. When data arrives into our database, it can come with an
+arbitrary time-stamp that we can use for querying purposes.
+
+We can tolerate data arriving out of order, as we're not completely
+dependent on transaction-time.
+
+****
+In a ecosystem of many systems, where one cannot control
+the ultimate time line, or other systems abilities to write into the
+past, one needs bitemporality to ensure evolving but consistent views
+of the data.
+****
+
+[#transaction]
+== Transaction Time
+
+For audit reasons, we might wish to know with certainty the value of a
+given entity-attribute at a given `tx-instant`. In this case, we want to
+exclude the possibility of the valid past being amended, so we need a
+pre-correction view of the data, relying on `tx-instant`.
+
+To achieve this you can use `as-of` using `ts` (`valid-time`) and `tx-ts`
+(`transaction-time`).
+
+****
+Only if you want to ensure consistent reads across nodes or to query
+for audit reasons, would you want to consider using both
+transaction-time and valid-time.
+****
+
+[#domain]
+== Domain Time
+
+Valid time is valuable for tracking a consistent view of the entire state of
+the database, however, unless you explicitly include a timestamp or other
+temporal component within your documents you cannot currently use this
+information about valid time inside of your Datalog queries.
+
+Domain time or "user-defined" time is simply the storing of any additional
+time-related information within your documents, for instance `valid-time`,
+`duration` or timestamps relating to additional temporal life-cycles (e.g.
+decision, receipt, notification, availability).
+
+Queries that use domain times do not automatically benefit from any
+kind of native indexes to support efficient execution, however XTDB
+encourages you to build additional layers of functionality to do
+so. See https://github.com/crux-labs/crux-decorators[decorators] for
+examples.
+
+[#uses]
+== Known Uses
+
+Recording bitemporal information with your data is essential when dealing with
+lag, corrections, and efficient auditability:
+
+- Lag is found wherever there is risk of non-trivial delay until an event can
+  be recorded. This is common between systems that communicate over unreliable
+networks.
+- Corrections are needed as errors are uncovered and as facts are reconciled.
+- Ad-hoc auditing is an otherwise intensive and slow process requiring
+  significant operational complexity.
+
+With XTDB you retain visibility of all historical changes whilst compensating
+for lag, making corrections, and performing audit queries. By default, deleting
+data only erases visibility of that data from the current perspective. You may
+of course still evict data completely as the legal status of information
+changes.
+
+These capabilities are known to be useful for:
+
+- Event Sourcing (e.g.
+  https://fr.slideshare.net/ThomasPierrain/as-time-goes-by-episode-2[retroactive
+and scheduled events] and https://oparu.uni-ulm.de/xmlui/bitstream/handle/123456789/4150/RetroactiveComputing_Mueller2016.pdf?sequence=5&isAllowed=y[event-driven computing on evolving graphs])
+- Ingesting out-of-order temporal data from upstream timestamping systems
+- Maintaining a slowly changing dimension for decision support applications
+- Recovering from accidental data changes and application errors (e.g. billing
+  systems)
+- Auditing all data changes and performing data forensics when necessary
+- Responding to new compliance regulations and audit requirements
+- Avoiding the need to set up additional databases for historical data and
+  improving end-to-end data governance
+- Building historical models that factor in all historical data (e.g. insurance
+  calculations)
+- Accounting and financial calculations (e.g payroll systems)
+- Development, simulation and testing
+- Live migrations from legacy systems using ad-hoc batches of backfilled
+  temporal data
+- Scheduling and previewing future states (e.g. publishing and content
+  management)
+- Reconciling temporal data across eventually consistent systems
+
+Applied industry-specific examples include:
+
+- Legal Documentation – maintain visibility of all critical dates relating to
+  legal documents, including what laws were known to be applicable at the time,
+and any subsequent laws that may be relevant and applied retrospectively
+- Insurance Coverage – assess the level of coverage for a beneficiary across
+  the lifecycle of care and legislation changes
+- Reconstruction of Trades – readily comply with evolving financial regulations
+- Adverse Events in Healthcare – accurately record a patient’s records over
+  time and mitigate human error
+- Intelligence Gathering – build an accurate model of currently known
+  information to aid predictions and understanding of motives across time
+- Criminal Investigations – efficiently organise analysis and evidence whilst
+  enabling a simple retracing of investigative efforts
+
+[#examples]
+== Example Queries
+
+[#crime]
+=== Crime Investigations
+
+This example is based on an academic paper.
+
+.Indexing temporal data using existing B +-trees
+****
+[%hardbreaks]
+https://www.comp.nus.edu.sg/~ooibc/stbtree95.pdf
+Cheng Hian Goh, Hongjun Lu, Kian-Lee Tan, Published in Data Knowl. Eng. 1996
+DOI:10.1016/0169-023X(95)00034-P
+See "7. Support for complex queries in bitemporal databases"
+****
+
+During a criminal investigation it is critical to be able to refine a temporal
+understanding of past events as new evidence is brought to light, errors in
+documentation are accounted for, and speculation is corroborated. The paper
+referenced above gives the following query example:
+
+****
+Find all persons who are known to be present in the United States on day 2
+(valid time), as of day 3 (transaction time)
+****
+
+The paper then lists a sequence of entry and departure events at various United
+States border checkpoints. We as the investigator will step through this
+sequence to monitor a set of suspects. These events will arrive in an
+undetermined chronological order based on how and when each checkpoint is able
+to manually relay the information.
+
+==== Day 0
+
+Assuming Day 0 for the investigation period is `#inst "2018-12-31"`, the
+initial documents are ingested using the Day 0 valid time:
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp0,indent=0]
+
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp1,indent=0]
+----
+
+The first document shows that `Person 2` was recorded entering via `:SFO` and
+the second document shows that `Person 3` was recorded entering `:LA`.
+
+==== Day 1
+
+No new recorded events arrive on Day 1 (`#inst "2019-01-01"`), so there are no
+documents available to ingest.
+
+==== Day 2
+
+A single event arrives on Day 2 showing `Person 4` arriving at `:NY`:
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp2,indent=0]
+----
+
+==== Day 3
+
+Next, we learn on Day 3 that `Person 4` departed from `:NY`, which is
+represented as an update to the existing document using the Day 3 valid time:
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp3,indent=0]
+----
+
+==== Day 4
+
+On Day 4 we begin to receive events relating to the previous days of the
+investigation.
+
+First we receive an event showing that `Person 1` entered `:NY` on Day 0 which
+must ingest using the Day 0 valid time `#inst "2018-12-31"`:
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp4,indent=0]
+----
+
+We then receive an event showing that `Person 1` departed from `:NY` on Day 3,
+so again we ingest this document using the corresponding Day 3 valid time:
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp4b,indent=0]
+----
+
+Finally, we receive two events relating to Day 4, which can be ingested using
+the current valid time:
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp4c,indent=0]
+
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp4d,indent=0]
+----
+
+==== Day 5
+
+On Day 5 there is an event showing that `Person 2`, having arrived on Day 0
+(which we already knew), departed from `:SFO` on Day 5.
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp5,indent=0]
+----
+
+==== Day 6
+
+No new recorded events arrive on Day 6 (`#inst "2019-01-06"`), so there are no
+documents available to ingest.
+
+==== Day 7
+
+On Day 7 two documents arrive. The first document corrects the previous
+assertion that `Person 3` departed on Day 4, which was misrecorded due to human
+error. The second document shows that `Person 3` has only just departed on Day
+7, which is how the previous error was noticed.
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp7a,indent=0]
+
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp7b,indent=0]
+----
+
+==== Day 8
+
+Two documents have been received relating to new arrivals on Day 8. Note that
+`Person 3` has arrived back in the country again.
+
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp8a,indent=0]
+
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp8b,indent=0]
+----
+
+==== Day 9
+
+On Day 9 we learn that `Person 3` also departed on Day 8.
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp9,indent=0]
+----
+
+==== Day 10
+
+A single document arrives showing that `Person 5` entered at `:LA` earlier that
+day.
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp10,indent=0]
+----
+
+==== Day 11
+
+Similarly to the previous day, a single document arrives showing that `Person
+7` entered at `:NY` earlier that day.
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp11,indent=0]
+----
+
+==== Day 12
+
+Finally, on Day 12 we learn that `Person 6` entered at `:NY` that same day.
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitemp12,indent=0]
+----
+
+==== Question Time
+
+Let's review the question we need to answer to aid our investigations:
+
+****
+Find all persons who are known to be present in the United States on day 2
+(valid time), as of day 3 (transaction time)
+****
+
+We are able to easily express this as a query in XTDB:
+
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempq-a,indent=0]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempq-b,indent=12]
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempq-c,indent=2]
+----
+
+The answer given by XTDB is a simple set of the three relevant people along
+with the details of their last entry and confirmation that none of them were
+known to have yet departed at this point:
+
+[source,clj]
+----
+include::example$test/xtdb/docs/examples/bitemporality_test.clj[tags=bitempr]
+----
+
+[#related]
+== Related Concepts
+
+=== Retroactive Data Structures
+
+At a theoretical level XTDB has similar properties to
+https://en.wikipedia.org/wiki/Retroactive_data_structure[retroactive data
+structures], which are data structures that support "efficient modifications to
+a sequence of operations that have been performed on the structure [...]
+modifications can take the form of retroactive insertion, deletion or updating
+of an operation that was performed at some time in the past".
+
+XTDB's bitemporal indexes are
+https://en.wikipedia.org/wiki/Persistent_data_structure#Partial_versus_Full_Persistence[partially
+persistent] due to the immutability of transaction time. This allows you to
+query any previous version, but only update the latest version. The efficient
+representation of valid time in the indexes makes XTDB "fully retroactive",
+which is analogous to partial persistence in the temporal dimension, and
+enables globally-consistent reads.
+
+XTDB does not natively implement "non-oblivious retroactivity" (i.e. persisted
+queries and cascading corrections), although this is an important area of
+investigation for https://github.com/vs-uulm/retro-lambda[event]
+https://dl.acm.org/citation.cfm?doid=3210284.3219499[sourcing]
+https://martinfowler.com/eaaDev/RetroactiveEvent.html[applications],
+https://dl.acm.org/citation.cfm?id=3271883[temporal]
+http://informatique.umons.ac.be/ssi/jef/tic.pdf[constraints], and reactive
+bitemporal queries.
+
+In summary, the XTDB indexes as a whole could be described as a "partially
+persistent and fully retroactive data structure".
+
+.Further reading:
+* https://courses.csail.mit.edu/6.851/fall17/lectures/L02.html[Advanced Data Structures]
+* https://erikdemaine.org/papers/Retroactive_TALG/paper.pdf[Retroactive Data Structures]
+
+[#references]
+== References
+
+* https://juxt.pro/blog/posts/value-of-bitemporality.html[Value of Bitemporality]
+* https://en.wikipedia.org/wiki/Temporal_database[Temporal database]
+* https://martinfowler.com/eaaDev/timeNarrative.html[Temporal Patterns]
+* https://kx.com/blog/kx-insights-powering-business-decisions-bitemporal-data/[Kx Insights: Powering Business Decisions with Bitemporal Data]

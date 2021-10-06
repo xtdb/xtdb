@@ -1,0 +1,452 @@
+= FAQs
+
+[qanda]
+
+[#quickstart]
+== What is the smallest XTDB configuration so I can start quickly?
+
+If you want the smallest on-disk configuration, you can use the https://xtdb.com/howto/quickstart.html[Quickstart Guide] (5 minutes).
+
+If you just want to see XTDB running in-memory without writing any code, try the https://xtdb.com/blog/crux-command-line.html[Command Line XTDB Guide] (10 minutes).
+
+If you want a battle-ready on-disk setup with Kafka, try the https://xtdb.com/blog/crux-confluent-cloud.html[XTDB on Confluent Cloud Guide] (5 minutes).
+
+
+[#bitemporality]
+== Do I need to think about bitemporality to make use of XTDB?
+
+Not at all. Many users don't have an immediate use for business-level time
+travel queries, in which case transaction time is typically regarded as
+"enough". However, use of valid time also enables operational advantages such
+as backfilling and other simple methods for migrating data between live systems
+in ways that isn't _easy_ when relying on transaction time alone (i.e. where
+logs must be replayed, merged and truncated to achieve the same effect).
+Therefore, it is sensible to use valid time in case you have these operational
+needs in the future. Valid time is recorded by default whenever you submit
+transactions.
+
+
+[#observequeries]
+== How can I observe XTDB queries?
+
+You need to add a `logback-classic` dependency to your `project.clj` / `deps.edn` and then create a `logback.xml` file. Set your log level to "INFO".
+
+Look for https://github.com/xtdb/xtdb/search?p=2&q=logback&unscoped_q=logback[code examples] and https://github.com/xtdb/xtdb/blob/0ac595a6df9efcde57e85356e0edfccf00e85248/crux-bench/logback.xml[config examples] in the XTDB repo.
+
+If you want to see the gritty details, turn your log level up to "DEBUG" for the `xtdb.query` namespace in a similar way. Try using the following snippet at the REPL:
+
+[source,clojure]
+----
+(doto
+  (org.slf4j.LoggerFactory/getLogger "xtdb.query")
+  (.setLevel (ch.qos.logback.classic.Level/valueOf "debug")))
+----
+
+
+[#testing]
+== What is the easiest way to write tests with XTDB?
+
+If you are writing acceptance, integration, or end-to-end tests which require an active XTDB node in the mix, you can rely on an in-memory node that you spin up in the tests themselves. There are examples of such tests in the https://github.com/xtdb/xtdb/blob/224a3dc04b0b9d9d5336c54f0ea9ee0d0aeb003b/crux-test/test/crux/bitemporal_tale_test.clj#L6[tutorial source] and in the https://github.com/xtdb/xtdb/blob/d8f251c2f9b3930453239681de1ed87e636ff2a3/crux-core/test/crux/codec_test.clj#L194-L202[crux-core tests themselves].
+
+
+[#uniqueconstraint]
+== How can I add the equivalent of a Unique Constraint?
+
+A uniqueness constraint can be handled 3 ways:
+
+. Encode the unique value in the ID (e.g. store the value(s) in a string ID, or use a map ID) of an entity representing that value, with a reference to the other entity that currently "owns" the value.
+. Use ::xt/match, however this takes time to confirm successful assertions and when there is contention you need to implement retry logic at each client.
+. Use a xref:language-reference::datalog-transactions#transaction-functions[transaction function]. This is slower still, though at least avoids the need to worry about contention & retrying. You can also express very complex constraints in these functions.
+
+
+[#modeling]
+== How should I model my entities?
+
+XTDB imposes very few constraints on the user. How different systems model entities is
+therefore very flexible -- including the option of "no modelling at all," in the case
+of ingesting unstructured data. XTDB stores schemaless documents and queries them with
+EAV triples. The only strict constraint is that every document must contain a
+`:xt/id` key.
+
+=== Modeling Identifiers
+
+The only constraint XTDB places on entity ids (`:xt/id`) is that they must be
+unique. They can be of any type.
+Care should be taken when deciding on the type and structure of an entity id.
+If you are building on top of a legacy system and/or legacy data, you may already
+have unique identifiers you can reuse. For new systems (or for old data with
+new identifiers), many users choose UUIDs, like so:
+
+[source,clojure]
+----
+[[::xt/put
+  {:xt/id (java.util.UUID/randomUUID)
+   :product/sku "KS93528TUT"}]]
+----
+
+=== Modeling Attributes
+
+XTDB puts no constraints on how you name your attributes. However, many users do
+find they prefer to model their keys in a `:type/attr` format. In SQL
+database terms, the `type` namespace loosely corresponds to a table and the `attr`
+name loosely corresponds to a column. An example of this sort of modeling might look
+like this:
+
+[source,clojure]
+----
+[[::xt/put
+  {:xt/id (java.util.UUID/randomUUID)
+   :user/username "satoshi"
+   :user/full-name "Satoshi Nakamoto"
+   :user/dob (java.time.Instant/parse "1975-04-05T00:00:00.00Z")}]]
+----
+
+=== Modeling Types
+
+XTDB puts no constraints on "types" and, as a schemaless database, has no notion of
+"types" regarding the shapes of documents you save. However, some users find it
+useful to track a `type` attribute for their own purposes. The following example is
+not necessarily a recommended approach unless it is needed and it may cause a
+performance bottleneck on XTDB versions prior to `1.17.1`. In the example
+below, `:my.custom.ns` is an example namespace which would likely correspond to
+the name of the system using XTDB. There is no relationship between the "type" of
+`:user` and the attribute `:user/name`. The type is only for the user's own
+convenience:
+
+[source,clojure]
+----
+[[::xt/put
+  {:xt/id (java.util.UUID/randomUUID)
+   :my.custom.ns/type :user
+   :user/name "satoshi"}]]
+----
+
+
+[#matchsemantics]
+== Does `::xt/match` see other operations within its transaction?
+
+Yes. Just as one would expect from SQL transactions, operations performed within the
+scope of the transaction are seen by other operations within the transaction. What
+this means in practice is that the `match` operation in the following code does
+not match, due to the `put` operation immediately preceding it:
+
+[source,clojure,subs=attributes+]
+----
+(with-open [node (xt/start-node {})]
+  (xt/submit-tx
+    node
+    [[::xt/put {:xt/id :a, :a "a"}]])
+  (xt/submit-tx
+    node
+    ; This won't match. Either the match should come first or it should match :a "b"
+    [[::xt/put {:xt/id :a, :a "b"}]
+     [::xt/match :a {:xt/id :a, :a "a"}]])
+  (xt/sync node)
+  (xt/entity (xt/db node) :a)) ; {:xt/id :a, :a "a"}
+----
+
+Thank you to https://github.com/jacobobryant/[Jacob O'Bryant] for this example.
+
+
+[#comparisons]
+== Comparisons
+
+How does Datalog compare to SQL::
+
+  Datalog is a well-established deductive query language that combines facts
+and rules during execution to achieve the same power as relational algebra +
+recursion (e.g. SQL with Common Table Expressions). Datalog makes heavy use of
+efficient joins over granular indexes which removes any need for thinking about
+upfront normalisation and query shapes. Datalog already has significant
+traction in both https://en.wikipedia.org/wiki/Datalog[industry and academia].
++
+The EdgeDB team wrote a popular blog post outlining
+https://edgedb.com/blog/we-can-do-better-than-sql/#critique-of-sql[the
+shortcomings of SQL] and Datalog is the only broadly-proven alternative.
+Additionally the use of EDN Datalog from Clojure makes queries "much more
+programmable" than the equivalent of building SQL strings in any other
+language, as explained in
+http://vvvvalvalval.github.io/posts/2018-01-06-so-yeah-about-clojures-syntax.html[this
+blog post].
++
+We offer a module providing some limited SQL support using https://calcite.apache.org/docs/index.html[Apache Calcite] - read more about it
+xref:language-reference::sql-queries.adoc[**here**].
+
+How does XTDB compare to Datomic (On-Prem)?::
+
+  At a high level XTDB is bitemporal, document-centric, schemaless, and
+designed to work with Kafka as an "unbundled" database. Bitemporality provides
+a user-assigned "valid time" axis for point-in-time queries in addition to the
+underlying system-assigned "transaction time". The main similarities are that
+both systems support EDN Datalog queries (though they not compatible), are
+written using Clojure, and provide elegant use of the database "as a value".
+
+In the excellent talk
+https://www.youtube.com/watch?v=Cym4TZwTCNU["Deconstructing the Database"] by
+Rich Hickey, he outlines many core principles that informed the design of both
+Datomic and XTDB:
+
+. Declarative programming is ideal
+. SQL is the most popular declarative programming language but most SQL
+databases do not provide a consistent "basis" for running these declarative
+queries because they do not store and maintain views of historical data by
+default
+. Client-server considerations should not affect how queries are constructed
+. Recording history is valuable
+. All systems should clearly separate reaction and perception: a transactional
+component that accepts novelty and passes it to an indexer that integrates
+novelty into the indexed view of the world (reaction) + a query support
+component that accepts questions and uses the indexes to answer the questions
+quickly (perception)
+. Traditionally a database was a big complicated thing, it was a special thing,
+and you only had one. You would communicate to it with a foreign language, such
+as SQL strings. These are legacy design choices
+. Questions dominate in most applications, or in other words, most applications
+are read-oriented. Therefore arbitrary read-scalability is a more general
+problem to address than arbitrary write-scalability (if you need arbitrary
+write-scalability then you inevitably have to sacrifice system-wide
+transactions and consistent queries)
+. Using a cache for a database is not simple and should never be viewed an
+architectural necessity: "_When_ does the cache get invalidated? It's your
+problem!"
+. The relational model makes it challenging to record historical data for
+evolving domains and therefore SQL databases do not provide an adequate
+"information model"
+. Accreting "facts" over time provides a real information model and is also
+simpler than recording relations (composite facts) as seen in a typical
+relational database
+. RDF is an attempt to create a universal schema for information using
+`[subject predicate object]` triples as facts. However RDF triples are not
+sufficient because these facts do not have a temporal component (e.g. timestamp
+or transaction coordinate)
+. Perception does not require coordination and therefore queries should not
+affect concurrently executing transactions or cause resource contention (i.e.
+"stop the world")
+. "Reified process" (i.e. transaction metadata and temporal indexing) should
+enable efficient historical queries and make interactive auditing practical
+. Enabling the programmer to use the database "as a value" is dramatically less
+complex than working with typical databases in a client-server model and it
+very naturally aligns with functional programming: "The state of the database
+is a value defined by the set of facts in effect at a given moment in time."
+
+Rich then outlines how these principles are realised in the original design for
+Datomic (now "Datomic On-Prem") and this is where XTDB and Datomic begin to
+diverge:
+
+. Datomic maintains a global index which can be lazily retrieved by peers from
+shared "storage". Conversely, an XTDB node represents an isolated coupling of
+local storage and local indexing components together with the query engine.
+XTDB nodes are therefore fully independent asides from the shared transaction
+log and document log
+. Both systems rely on existing storage technologies for the primary storage of
+data. Datomic's covering indexes are stored in a shared storage service with
+multiple back-end options. XTDB, when used with Kafka, uses basic Kafka topics
+as the primary distributed store for content and transaction logs.
+. Datomic peers lazily read from the global index and therefore automatically
+cache their dynamic working sets. XTDB does not use a global index and
+currently does not offer any node-level sharding either so each node must
+contain the full database. In other words, each XTDB node is like an
+unpartitioned replica of the entire database, except the nodes do not store
+the transaction log locally so there is no "master". XTDB may support manual
+node-level sharding in the future via simple configuration. One benefit of
+manual sharding is that both the size of the XTDB node on disk and the
+long-tail query latency will be more predictable
+. Datomic uses an explicit "transactor" component, whereas the role of the
+transactor in XTDB is fulfilled by a passive transaction log (e.g. a
+single-partition Kafka topic) where unconfirmed transactions are optimistically
+appended, and therefore a transaction in XTDB is not confirmed until a node
+reads from the transaction log and confirms it locally
+. Datomic's transactions and transaction functions are processed via a
+centralised transactor which can be configured for High-Availability using
+standby transactors. Centralised execution of transaction functions is
+effectively an optimisation that is useful for managing contention whilst
+minimising external complexity, and the trade-off is that the use of
+transaction functions will ultimately impact the serialised transaction
+throughput of the entire system. Within XTDB, transaction functions are installed
+via put operations and all invocation arguments are stored separately in the document store.
+Once invoked as an operation, a transaction function has access to a context against which you
+can run a query, and this is how you can update a counter based on its current value. The result of invoking a transaction function is a list of one or more operations which are spliced into the transaction to replace the calling operation. Nodes which are subsequently indexing the transaction log will
+not have to repeat this processing of the transaction function operations because the argument documents
+(to which the transaction log refers under-the-hood) are idempotently mutated and replaced with the
+resulting native operations. In other words, each transaction function invocation replaces itself with its
+result in the upstream document store, and this maintains consistency whilst not precluding later eviction
+operations on the data generated within the results.
+
+Other differences compared to XTDB:
+
+. Datomic's datom model provides a very granular and comprehensive interface
+for expressing novelty through the assertion and retraction of facts. XTDB
+instead uses documents (i.e. schemaless EDN maps) which are atomically ingested
+and processed as groups of facts that correspond to top-level fields with each
+document. This design choice simplifies bitemporal indexing (i.e. the use of
+valid time + transaction time coordinates) whilst satisfying typical
+requirements and improving the ergonomics of integration with other
+document-oriented systems. Additionally, the ordering of fields using the same
+key in a document is naturally preserved and can be readily retrieved, whereas
+Datomic requires explicit modelling of order for cardinality-many attributes.
+The main downside of XTDB's document model is that re-transacting entire
+documents to update a single field can be considered inefficient, but this
+could be mitigated using lower-level compression techniques and
+content-addressable storage. Retractions in XTDB are implicit and deleted documents
+are simply replaced with empty documents
+. Datomic enforces a simple information schema for attributes including
+explicit reference types and cardinality constraints. XTDB is schemaless as we
+believe that schema should be optional and be implemented as higher level
+"decorators" using a spectrum of schema-on-read and/or schema-on write designs.
+Since XTDB does not track any reference types for attributes, Datalog queries
+simply attempt to evaluate and navigate attributes as reference types during
+execution
+. Datomic's Datalog query language is more featureful and has more built-in
+operations than XTDB's equivalent, however XTDB also returns results lazily and
+can spill to disk when sorting large result sets. Both systems provide powerful
+graph query possibilities
+
+Note that Datomic Cloud is separate technology platform that is designed from
+the ground up to run on AWS and it is out of scope for this comparison.
+
+In summary, Datomic (On-Prem) is a proven technology with a well-reasoned
+information model and sophisticated approach to scaling. XTDB offloads primary
+scaling concerns to distributed log storage systems like Kafka (following the
+"unbundled" architecture) and to standard operational features within platforms
+like Kubernetes (e.g. snapshotting of nodes with pre-built indexes for rapid
+horizontal scaling). Unlike Datomic, XTDB is document-centric and uses a
+bitemporal information model to enable business-level use of time-travel
+queries.
+
+[#technical]
+== Technical
+
+Is XTDB eventually consistent? Strongly consistent? Or something else?::
+
+  An _easy_ answer is that XTDB is "strongly consistent" with ACID semantics.
+
+What consistency does XTDB provide?::
+
+  A XTDB ClusterNode system provides sequential consistency by default due to
+the use of a single unpartitioned Kafka topic for the transaction log.
+Transactions are executed non-interleaved (i.e. a serial schedule) on every
+XTDB node independently. Being able to read your writes when using the HTTP
+interface requires stickiness to a particular node. For a cluster of nodes to
+be linearizable as a whole would require that every node always sees the result
+of every transaction immediately after it is written.  This could be achieved
+with the cost of non-trivial additional latency. Further reading: http://www.bailis.org/papers/hat-vldb2014.pdf[_Highly Available Transactions: Virtues and Limitations_], https://jepsen.io/consistency/models/sequential[_Sequential Consistency_].
+
+How is consistency provided by XTDB?::
+
+  XTDB does not try to enforce consistency among nodes. All nodes consume the
+log in the same order, but nodes may be at different points. A client using the
+same node will have a consistent view. Reading your own writes can be achieved
+by providing the transaction details from the transaction log (returned from
+`xtdb.api/submit-tx`), in a call to `xtdb.api/await-tx`. This will block until
+this transaction time has been seen by the cluster node.
++
+Write consistency across nodes is provided via the `::xt/match` operation.
+The user needs to include a match operation in their transaction, wait for the transaction time (as above), and check that the transaction committed.
+More advanced algorithms can be built on top of this.
+As mentioned above, all match operations in a transaction must pass for the transaction to proceed and get indexed, which enables one to enforce consistency across documents.
+
+Will a lack of schema lead to confusion?::
+
+  It of course depends.
++
+While XTDB does not enforce a schema, the user may do so in a layer
+above to achieve the semantics of schema-on-read (per node) and
+schema-on-write (via a gateway node). XTDB only requires that the data
+can be represented as valid EDN documents. Data ingested from different
+systems can still be assigned qualified keys, which does not require a
+shared schema to be defined while still avoiding collision. Defining
+such a common schema up front might be prohibitive and XTDB instead aims
+to enable exploration of the data from different sources early. This
+exploration can also help discover and define the common schema of
+interest.
++
+XTDB only indexes top-level attributes in a document, so to avoid
+indexing certain attributes, one can currently move them down into a
+nested map, as nested values aren't indexed. This is useful both to
+increase throughput and to save disk space. A smaller index also leads
+to more efficient queries. We are considering to eventually give
+further control over what to index more explicitly.
+
+How does XTDB deal with time?::
+
+  The valid time can be set manually per transaction operation,
+and might already be defined by an upstream system before reaching XTDB.
+This also allows to deal with integration concerns like when a message
+queue is down and data arrives later than it should.
++
+If not set, XTDB defaults valid time to the transaction time, which
+is the `LogAppendTime` assigned by the Kafka broker to the transaction
+record. This time is taken from the local clock of the Kafka broker,
+which acts as the master wall clock time.
++
+XTDB does not rely on clock synchronisation or try to make any
+guarantees about valid time. Assigning valid time manually needs
+to be done with care, as there has to be either a clear owner of the
+clock, or that the exact valid time ordering between different nodes
+doesn’t strictly matter for the data where it’s used. NTP can mitigate
+this, potentially to an acceptable degree, but it cannot fully guarantee
+ordering between nodes.
+
+[#features]
+== Feature Support
+
+Does XTDB support RDF/SPARQL?::
+
+  No. We have a simple ingestion mechanism for RDF data in `xtdb.rdf`
+but this is not a core feature. There is a also a query translator for a
+subset of SPARQL. RDF and SPARQL support could eventually be written as
+a layer on top of XTDB as a module, but there are no plans for this by
+the core team.
+
+Does XTDB provide transaction functions?::
+
+  Yes - read more about transaction functions in XTDB xref:language-reference::datalog-transactions#transaction-functions[**here**].
+
+
+Does XTDB support the full Datomic/DataScript dialect of Datalog?::
+
+  No. There is no support for Datomic’s built-in functions, or for
+accessing the log and history directly. There is also no support for variable
+bindings or multiple source vars.
++
+Other differences include that `:rules` and `:args`, which is a relation
+represented as a list of maps which is joined with the query, are being
+provided in the same query map as the `:find` and `:where` clause. XTDB
+additionally supports the built-in `==` for unification as well as the
+`!=`. Both these unification operators can also take sets of literals as
+arguments, requiring at least one to match, which is basically a form of
+or.
++
+Many of these aspects may be subject to change, but compatibility with other
+Datalog databases is not a goal for XTDB.
+
+Any plans for Datalog, Cypher, Gremlin or SPARQL support?::
+
+  The goal is to support different languages, and decouple the query
+engine from its syntax, but this is not currently the case.
+There is a query translator for a subset of SPARQL in `xtdb.sparql`.
+
+Does XTDB support sharding?::
+
+  Not currently. We are considering support for sharding the document topic as
+this would allow nodes to easily consume only the documents they are interested
+in. At the moment the `tx-topic` must use a single partition to guarantee
+transaction ordering. We are also considering support for sharding this topic
+via partitioning or by adding more transaction topics. Each partition / topic
+would have its own independent time line, but XTDB would still support for
+cross shard queries. Sharding is mainly useful to increase throughput.
+
+Does XTDB support pull expressions?::
+
+  Yes - XTDB supports a 'pull' syntax, allowing you to decouple specifying which entities you want from what data you'd like about those entities in your queries. This support is based on the excellent https://edn-query-language.org/eql/1.0.0/what-is-eql.html[EDN Query Language (EQL)^] library. See more xref:language-reference::datalog-queries#pull[**here**].
+
+
+Do you have any benchmarks?::
+
+  We are releasing a public benchmark dashboard in the near future. In the
+meantime feel free to run your own local tests using the scripts in the `/test`
+directory. The RocksDB project has performed some
+https://github.com/facebook/rocksdb/wiki/Performance-Benchmarks[impressive
+benchmarks] which give a strong sense of how large a single XTDB node backed by
+RocksDB can confidently scale to. LMDB is generally faster for reads and
+RocksDB is generally faster for writes.

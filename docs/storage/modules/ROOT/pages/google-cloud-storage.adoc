@@ -1,0 +1,95 @@
+= Google Cloud Storage
+:page-aliases: reference::google-cloud-storage.adoc
+
+You can use Google's Cloud Storage (GCS) as XTDB's 'document store' or 'checkpoint store'.
+
+Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
+
+== Project Dependency
+
+In order to use GCS within XTDB, you must first add this module as a project dependency:
+
+[tabs]
+====
+deps.edn::
++
+[source,clojure, subs=attributes+]
+----
+com.xtdb/xtdb-google-cloud-storage {:mvn/version "{xtdb_version}"}
+----
+
+pom.xml::
++
+[source,xml, subs=attributes+]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-google-cloud-storage</artifactId>
+    <version>{xtdb_version}</version>
+</dependency>
+----
+====
+
+== Using GCS
+
+Replace the implementation of the document store with `+xtdb.google.cloud-storage/->document-store+`
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.google.cloud-storage/->document-store",
+    "root-path": "gs://bucket/prefix"
+  },
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:xtdb/document-store {:xtdb/module 'xtdb.google.cloud-storage/->document-store
+                       :root-path "gs://bucket/prefix"}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb/document-store {:xtdb/module xtdb.google.cloud-storage/->document-store
+                       :root-path "gs://bucket/prefix"}}
+----
+====
+
+Follow the GCS https://github.com/googleapis/google-cloud-java#authentication[Authentication Guide] to get set up.
+
+== Parameters
+
+* `root-path` (string/`Path`, required): path where documents will be stored, `gs://bucket/prefix`
+* `cache-size` (int): size of in-memory document cache
+* `pool-size` (int, default 4): size of thread-pool for GCS operations
+
+
+[#checkpoint-store]
+== Checkpoint store
+
+GCS can be used as a query index xref:administration::checkpointing.adoc[checkpoint store].
+
+Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on GCS to remove older checkpoints.
+
+[source,clojure]
+----
+;; under :xtdb/index-store -> :kv-store -> :checkpointer
+;; see the Checkpointing guide for other parameters
+{:checkpointer {...
+                :store {:xtdb/module 'xtdb.google.cloud-storage/->checkpoint-store
+                        :path "gs://bucket/prefix"}}
+----
+
+=== Parameters
+
+* `path` (string/`URI`, required): URI of the form `"gs://bucket/prefix"`

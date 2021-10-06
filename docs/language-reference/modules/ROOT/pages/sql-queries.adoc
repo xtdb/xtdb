@@ -1,0 +1,138 @@
+= SQL Queries
+
+This document explains how to query XTDB using SQL.
+To configure your XTDB SQL module, see the
+xref:extensions::sql.adoc[SQL module documentation].
+
+[#table-definitions]
+== Table Definitions
+
+To define a table, transact a document into XTDB:
+
+[source,clojure]
+----
+{:xt/id :xtdb.sql/person-schema
+ :xtdb.sql/table-name "person"
+ :xtdb.sql/table-query '{:find [id name homeworld]
+                         :where [[id :name name]
+                                 [id :homeworld homeworld]]}
+ :xtdb.sql/table-columns '{id :keyword, name :varchar, homeworld :varchar}}
+----
+
+A SQL table is a schema that maps XTDB attributes to SQL table columns.
+Any document in XTDB that matches the `:xtdb.sql/table-query` in the schema document is eligible to be returned via the SQL query.
+
+SQL table column names are mapped from the symbols used by the `:xtdb.sql/table-query` query backing the table and referred to by `:xtdb.sql/table-columns`.
+
+Note that in the case where symbols are prefixed with `?`, then `?` is stripped for the SQL column name.
+
+For example with the following XTDB transaction operation:
+
+[source,clojure]
+----
+[::xt/put {:xt/id :ivan :name "Ivan" :homeworld "Earth"}]
+----
+
+Get a connection and query as such:
+
+[source,clojure]
+----
+(require '[xtdb.calcite])
+
+(defn query [node q]
+  (with-open [conn (xtdb.calcite/jdbc-connection node)]
+    (let [stmt (.createStatement conn)]
+      (->> q (.executeQuery stmt) resultset-seq))))
+----
+
+So that:
+
+[source,clojure]
+----
+(query "SELECT PERSON.NAME FROM PERSON")
+----
+
+Returns:
+
+[source,clojure]
+----
+[{:name "Ivan"}]
+----
+
+Note that using JDBC PreparedStatements for queries will be faster.
+
+[#bitemporal-querying]
+== Bitemporal Querying
+
+To query using `VALID TIME`:
+
+[source,sql]
+----
+VALIDTIME ('2016-12-01T10:13:30Z')
+SELECT * FROM PERSON
+----
+
+Use `TRANSACTIONTIME`/`TRANSACTIONID` also for query consistency:
+
+[source,sql]
+----
+VALIDTIME ('2016-12-01T10:13:30Z')
+TRANSACTIONTIME ('2016-12-01T10:13:30Z')
+TRANSACTIONID (4)
+SELECT * FROM PERSON
+----
+
+Both `VALIDTIME` and `TRANSACTIONTIME` take an https://clojuredocs.org/clojure.instant/parse-timestamp[RFC 3339-like] timestamp string, which is compatible with https://en.wikipedia.org/wiki/ISO_8601[ISO-8601].
+
+Examples of RFC 3339-like supported syntax:
+
+[source,sql]
+----
+VALIDTIME ('2016-12-01')
+----
+
+[source,sql]
+----
+VALIDTIME ('2016')
+----
+
+[#column-types]
+== Column Types
+
+We support a subset of https://docs.oracle.com/javase/8/docs/api/java/sql/Types.html[`java.sql.Types`]:
+
+* `:bigint`
+* `:boolean`
+* `:double`
+* `:decimal
+* `:float`
+* `:timestamp`
+* `:varchar`
+* `:keyword`
+* `:uuid`
+
+Note that `bigint` maps to `Long`.
+
+Keyword value are returned as Strings in results.
+If you need to filter against a keyword column, then you can use the `KEYWORD` SQL function, for example:
+
+[source,clojure]
+----
+SELECT ID,NAME FROM PERSON WHERE ID = KEYWORD('human/ivan')
+----
+
+Same for UUID:
+
+[source,clojure]
+----
+SELECT NAME FROM PERSON WHERE AUUID = UUID('e7ae4200-d619-4c20-9d64-87d1f90d0fd2')
+----
+
+Note that currently we do not support UUIDs and Keywords being set inside of prepared statements.
+
+[#current-limitations]
+== Current Limitations
+
+* We support a range of calculations (ceil, lower, upper, concat), but we do not support all.
+* Projections, filters and inner-joins are handled by XTDB.
+  Left outer joins and aggregations are handled by Calcite in memory.

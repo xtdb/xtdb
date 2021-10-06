@@ -1,4 +1,3 @@
-.Tutorials
 * xref:space-adventure.adoc[Space Adventure]
-* xref:bitemporal-tale.adoc[A Bitemporal Tale]
-* xref:essential-edn.adoc[Essential EDN]
+* xref:learn-datalog.adoc[Learn Datalog]
+* xref:xtdb-over-http.adoc[XTDB over HTTP]

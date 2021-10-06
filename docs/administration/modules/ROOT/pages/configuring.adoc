@@ -1,0 +1,444 @@
+= Configuring
+:page-aliases: reference::configuration.adoc
+
+* xref:_modules[Modules]
+* xref:_storage[Storage]
+* xref:_query_engine[Query Engine]
+* xref:_upgrading[Upgrading]
+* xref:_writing_custom_modules[Writing Custom Modules]
+
+== Modules
+
+A XTDB node consists of a number of modules, which can be independently configured and augmented.
+
+Once you have an
+xref:administration::installing.adoc[in-memory XTDB node]
+set up, you can then start to configure the various modules.
+Configure modules using a JSON config file, EDN config file, or programmatically:
+
+[tabs]
+====
+Command Line::
++
+On the command line, you can supply a JSON/EDN configuration file using `-f <file>`.
+
+Java::
++
+--
+For a Java in-process node, the modules are configured using the supplied Configurator, a file, or a classpath resource:
+
+[source,java]
+----
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=import,indent=0]
+
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=from-file,indent=0]
+
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=from-resource,indent=0]
+
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=from-configurator,indent=0]
+----
+--
+Kotlin::
++
+--
+For a Kotlin in-process node, the modules are configured using the supplied Configurator, a file, or a classpath resource:
+
+[source,kotlin]
+----
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=import,indent=0]
+
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=from-file,indent=0]
+
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=from-resource,indent=0]
+
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=from-configurator,indent=0]
+----
+--
+Clojure::
++
+--
+For a Clojure in-process node, the `start-node` function accepts a module tree, a file, or a resource.
+
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=import,indent=0]
+
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=from-file,indent=0]
+
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=from-resource,indent=0]
+
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=from-explicit,indent=0]
+----
+--
+====
+
+Without any explicit configuration, XTDB will start an in-memory node.
+
+**At this point, you can start
+xref:language-reference::datalog-transactions.adoc[submitting transactions] and
+xref:language-reference::datalog-queries.adoc[running queries]!**
+
+== Storage
+
+XTDB has three main pluggable persistence stores: the transaction log, the document store, and the query index store.
+All three are backed by local KV stores by default, but they can be independently configured and overridden - you might choose to host the transaction log in Kafka, the document store in AWS's S3, and the query indices in RocksDB.
+
+[cols="1,3*^"]
+|===
+| | Transaction Log | Document Store | Index Store
+| xref:storage::aws-s3.adoc[AWS S3] | | ✓ |
+| xref:storage::azure-blobs.adoc[Azure Blobs] | | ✓ |
+| xref:storage::corda.adoc[DLT - Corda] footnote:[configured via its own entry point - see the module docs for more information] | ✓ | ✓ |
+| xref:storage::google-cloud-storage.adoc[Google Cloud Storage] | | ✓ |
+| xref:storage::kafka.adoc[Kafka] | ✓ | ✓ |
+| xref:storage::jdbc.adoc[JDBC] | ✓ | ✓ |
+| In-memory KV | ✓ | ✓ | ✓
+| xref:storage::lmdb.adoc[LMDB] (KV) | ✓ | ✓ | ✓
+| xref:storage::rocksdb.adoc[RocksDB] (KV) | ✓ | ✓ | ✓
+| xref:storage::xodus.adoc[Xodus] (KV) footnote:[via third-party `crux-xodus` module] | ✓ | ✓ | ✓
+|===
+
+For specific details and examples of how to configure each of these modules, see their individual sections.
+
+Each module has both an underlying implementation and overridable parameters - for each module, you can choose to keep the implementation and override its parameters, or you can choose to override the implementation entirely.
+
+To add the HTTP server module, and specify its port:
+
+[tabs]
+====
+Java::
++
+[source,java]
+----
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=http-server,indent=0]
+----
+
+Kotlin::
++
+[source,kotlin]
+----
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=http-server,indent=0]
+----
+
+JSON::
++
+[source,json]
+----
+include::example$test/xtdb/docs/examples/configuration/config.json[indent=0]
+----
+
+Clojure::
++
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=http-server,indent=0]
+----
+
+EDN::
++
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/configuration/config.edn[indent=0]
+----
+====
+
+=== Overriding the module implementation
+
+To override the underlying implementation, specify the factory function of the new implementation.
+For example, using S3's `+xtdb.s3/->document-store+` factory:
+
+[tabs]
+====
+Java::
++
+[source,java]
+----
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=override-module,indent=0]
+----
+
+Kotlin::
++
+[source,kotlin]
+----
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=override-module,indent=0]
+----
+
+JSON::
++
+[source,json]
+----
+include::example$test/xtdb/docs/examples/configuration/config_override.json[indent=0]
+----
+
+Clojure::
++
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=override-module,indent=0]
+----
+
+EDN::
++
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/configuration/config_override.edn[indent=0]
+----
+====
+
+=== Nested modules
+
+Modules in XTDB form an arbitrarily nested tree - parent modules depend on child modules.
+For example, the default implementations of the three main XTDB modules are KV store backed implementations - the KV transaction log, the KV document store and the KV index store.
+Each of these implementations depends on being given a concrete KV store implementation - by default, an in-memory KV store.
+To override the implementation and parameters of this KV store (for example, to replace it with RocksDB), we override its `kv-store` dependency, replacing the implementation of the nested module:
+
+[tabs]
+====
+Java::
++
+[source,java]
+----
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-0,indent=0]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-1,indent=4]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-2,indent=0]
+----
+
+Kotlin::
++
+[source,kotlin]
+----
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-0,indent=0]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-1,indent=4]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-2,indent=0]
+----
+
+JSON::
++
+[source,json]
+----
+include::example$test/xtdb/docs/examples/configuration/config_nested.json[indent=0]
+----
+
+Clojure::
++
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=nested-modules-0,indent=0]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=nested-modules-1,indent=18]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=nested-modules-2,indent=0]
+----
+
+EDN::
++
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/configuration/config_nested.edn[indent=0]
+----
+====
+
+
+
+[IMPORTANT]
+====
+The tx-log and document-store are considered 'golden stores'.
+The query indices can, should you wish to, be thrown away and rebuilt from these golden stores.
+
+Ensure that you either persist both or neither of these golden stores.
+If not, XTDB will work fine until you restart the node, at which point some will evaporate, but others will remain.
+XTDB tends to get rather confused in this situation!
+
+Likewise, if you persist the query indices, you'll need to persist both the golden stores.
+====
+
+=== Sharing modules - references
+
+When two modules depend on a similar type of module, by default, they get an instance each.
+For example, if we were to write the following, the transaction log and the document store would get their own RocksDB instance:
+
+[source,json]
+----
+include::example$test/xtdb/docs/examples/configuration/sharing_modules_naive.json[indent=0]
+----
+
+We can store both the transaction log and the document store in the same KV store, to save ourselves some hassle.
+We specify a new top-level module, and then refer to it by name where required:
+
+
+[tabs]
+====
+Java::
++
+[source,java]
+----
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=sharing-modules,indent=0]
+----
+
+Kotlin::
++
+[source,kotlin]
+----
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=sharing-modules,indent=0]
+----
+
+JSON::
++
+[source,json]
+----
+include::example$test/xtdb/docs/examples/configuration/config_shared.json[indent=0]
+----
+
+Clojure::
++
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=sharing-modules,indent=0]
+----
+
+
+EDN::
++
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/configuration/config_shared.edn[indent=0]
+----
+====
+
+== Query Engine
+
+There are a number of different defaults that can be overridden within the XTDB query engine.
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+"xtdb/query-engine": {
+"fn-allow-list": ["foo/bar"]
+}
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:xtdb/query-engine {:fn-allow-list '[foo/bar]}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb/query-engine {:fn-allow-list [foo/bar]}
+----
+====
+
+=== Parameters
+
+* `entity-cache-size` (int, default 32768): query entity cache size.
+* `query-timeout` (int, default 30000): query timeout in milliseconds.
+* `batch-size` (int, default 100): batch size of results.
+* `fn-allow-list` (xref:#fn-allowlist[`Predicate Allowlist`], default nil): list of allowed namespaces/functions in predicate functions.
+
+[#fn-allowlist]
+=== Predicate Allowlist
+
+By default, users can invoke any predicate function in their queries.
+To restrict what functions a user can invoke, you can specify a `:fn-allow-list` of safe functions/namespaces.
+We include a set of pure functions from `clojure.core`, for convenience.
+
+Allowlists can be a list of the following:
+
+* Unqualified symbols/strings, for example, `clojure.set`. These are assumed to be https://clojure.org/reference/namespaces[*namespaces*], and all functions within that namespace are allowed.
+* Fully qualified symbols/strings, for example, `clojure.string/capitalize`. These are assumed to be a permitted function.
+
+== Upgrading
+
+=== Break Versioning
+
+XTDB follows a https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Break Versioning] scheme.
+
+This versioning emphasizes the maximum amount of impact an XTDB version update could have on users, and recognises that there are only two types of version bumps: those that are safe, and those that require you to carefully read the changelog.
+
+It is intented to be comfortable to follow strictly and be reliable in practice.
+
+....
+<major>.<minor>.<non-breaking>[-<optional-qualifier>]:
+------------------------------------------------------
+<major>              - Major breaking changes [or discretionary "major non-breaking changes"]
+<minor>              - Minor breaking changes [or discretionary "minor non-breaking changes"]
+<non-breaking>       - Strictly no breaking changes
+<optional-qualifier> - Tag-style qualifiers: -alpha1, -RC2, etc.
+....
+
+=== Index Rebuilding
+
+Upgrading a node from XTDB version `1.X.n` to `1.Y.n` (a minor bump) often requires rebuilding the node's local KV index-store from the golden stores, i.e. the transaction log and the document store.
+However, it isn't always the case that minor bumps require an index rebuild and this distinction is made clear in the release notes for a given version.
+
+You can perform the rebuild process by simply shutting down the node and removing the index-store's `db-dir` (and similarly for Lucene's `db-dir` indexes where `xtdb-lucene` is enabled).
+XTDB will then rebuild the indices when the node is restarted.
+
+During development and other manual interactions, it is strongly suggested to rename or move the index directories rather than delete them, in case you need to rollback.
+
+== Writing Custom Modules
+
+XTDB modules are (currently) vanilla 1-arg Clojure functions with some optional metadata to specify dependencies and arguments.
+By convention, these are named `+->your-component+`, to signify that it's returning an instance of your component.
+If the value returned implements `AutoCloseable`/`Closeable`, the module will be closed when the XTDB node is stopped.
+
+The most basic component would be just a Clojure function, returning the started module:
+
+[source,clojure]
+----
+(defn ->server [opts]
+;; start your server
+)
+----
+
+You can specify arguments using the `:xtdb.system/args` metadata key - this example declares a required `:port` option, checked against the given spec, defaulting to 3000:
+
+[source,clojure]
+----
+(require '[xtdb.system :as sys])
+
+(defn ->server {::sys/args {:port {:spec ::sys/int
+:doc "Port to start the server on"
+:required? true
+:default 3000}}}
+[{:keys [port] :as options}]
+
+;; start your server
+)
+----
+
+You can specify dependencies using `:xtdb.system/deps` - a map of the dependency key to its options.
+The options takes the same form as the end-user options - you can specify `:xtdb/module` for the default implementation, as well as any parameters.
+The started dependencies are passed to you as part of the function's parameter, with the `args`.
+Bear in mind that any options you do specify can be overridden by end-users!
+
+[source,clojure]
+----
+(defn ->server {::sys/deps {:other-module {:xtdb/module `->other-module
+:param "value"}
+...}}
+[{:keys [other-module]}]
+;; start your server
+)
+----
+
+You can also use refs - for example, to depend on the XTDB node:
+
+[source,clojure]
+----
+(defn ->server {::sys/deps {:xtdb-node :xtdb/node}
+::sys/args {:spec ::sys/int
+:doc "Port to start the server on"
+:required? true
+:default 3000}}
+[{:keys [xtdb-node] :as options}]
+;; start your server
+)
+----

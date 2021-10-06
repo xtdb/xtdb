@@ -1,3 +1,24 @@
-= XTDB
+= XTDB Docs
 :page-layout: homepage
 :page-nav: black-nav
+////
+TODO: Delete the above two frontmatter attributes when we
+      release v2.xtdb.com because they only apply to the
+      Antora-driven `website-old` to create a hole in the
+      docs for the index template to render with. -sd
+////
+
+== Docs
+
+* xref:language-reference::index.adoc[Language Reference]
+* xref:clients::index.adoc[Clients]
+* xref:administration::index.adoc[Administration]
+* xref:extensions::index.adoc[Extensions]
+* xref:storage::index.adoc[Storage]
+
+== Learn
+
+* xref:tutorials::index.adoc[Tutorials]
+* xref:guides::index.adoc[Guides]
+* xref:concepts::index.adoc[Concepts]
+* xref:resources::index.adoc[Resources]

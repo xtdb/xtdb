@@ -1,9 +1,0 @@
-name: articles
-title: XTDB Articles
-version: master
-display_version: main
-start_page: ROOT:what-is-xtdb.adoc
-nav:
-  - modules/ROOT/articles-nav.adoc
-  - modules/ROOT/about-nav.adoc
-

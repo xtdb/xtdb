@@ -1,0 +1,10 @@
+name: guides
+title: Guides
+version: master
+display_version: main
+start_page: ROOT:index.adoc
+nav:
+  - modules/ROOT/nav.adoc
+asciidoc:
+  attributes:
+    xtdb_version: 1.19.0
