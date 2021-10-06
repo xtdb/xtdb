@@ -1,35 +1,40 @@
 site:
-  title: XTDB
-  start_page: reference::index.adoc
-  url: https://xtdb.com/
+  title: XTDB Docs
+  start_page: main::index.adoc
+  # homeUrl: &home_url /xyz/5.2/index.html
+  keys:
+    mainSiteUrl: "https://xtdb.com/"
+    mainSiteTitle: XTDB - Home
+    # Uncomment these to enable Matomo Analytics Snippets
+    # matomoUrl: "//bunseki.juxt.pro/"
+    # matomoSiteId: "4"
+
 content:
   sources:
     - url: ../
       start_path: docs/main # index
-      branches: HEAD
+      branches: v2xtdbcom
     - url: ../
       start_path: docs/reference
       branches:
-        - HEAD
+        - v2xtdbcom
         - docs-v*
     - url: ../
       start_path: docs/tutorials
-      branches: HEAD
+      branches: v2xtdbcom
     - url: ../
       start_path: docs/howto
-      branches: HEAD
+      branches: v2xtdbcom
     - url: ../
       start_path: docs/articles
       branches: main
-    # TODO: the remaining components do not belong in xtdb/docs:
-    - url: ../
-      start_path: docs/community
-      branches: main
+
 
 ui:
   bundle:
-    url: https://crux-ui-bundle.s3.eu-west-2.amazonaws.com/ui-bundle.zip
+    url: https://xtdb-ui-bundle.s3.eu-west-1.amazonaws.com/xtdb-docs-ui-v2-bundle.zip
     snapshot: true
+
 asciidoc:
   attributes:
     page-pagination: true
