@@ -296,12 +296,13 @@
                                        (fn [^Field f]
                                          (= key-set (set (for [^Field f (.getChildren f)]
                                                            (.getName f))))))
-        inner-vec (.getStruct v type-id)
-        offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
-    (.setIndexDefined inner-vec offset)
+        inner-vec (.getStruct v type-id)]
     (doseq [k key-set
             :let [data-vec (.addOrGet inner-vec k dense-union-field-type DenseUnionVector)]]
       (append-value (get x (keyword k)) data-vec))
+
+    (let [offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]
+      (.setIndexDefined inner-vec offset))
     v))
 
 ;; JSON

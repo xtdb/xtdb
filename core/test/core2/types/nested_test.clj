@@ -48,6 +48,8 @@
                '(foo 10)
                {}
                {:B 2 :C 1 :F false}
+               {:B 2 :C 1 :F false}
+               [1 {:B [2]}]
                [1 {:B [2]}]
                {:B 3.14 :D {:E ["hello" -1]} :F nil}
                {1 "foo" 'bar 4.0}]]
@@ -90,6 +92,8 @@
                 '(foo 10)
                 {}
                 {:B 2 :C 1 :F false}
+                {:B 2 :C 1 :F false}
+                [1 {:B [2]}]
                 [1 {:B [2]}]
                 {:B 3.14 :D {:E ["hello" -1]}:F nil}
                 {1 "foo" 'bar 4.0}]
@@ -131,6 +135,8 @@
                 org.apache.arrow.vector.complex.ListVector
                 org.apache.arrow.vector.complex.StructVector
                 org.apache.arrow.vector.complex.StructVector
+                org.apache.arrow.vector.complex.StructVector
+                org.apache.arrow.vector.complex.ListVector
                 org.apache.arrow.vector.complex.ListVector
                 org.apache.arrow.vector.complex.StructVector
                 org.apache.arrow.vector.complex.MapVector]
