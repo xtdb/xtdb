@@ -40,13 +40,15 @@ returned.
 
 #### Arrays
 
-Arrays are accessed as such in the standard, note the cross join:
+Arrays are accessed as such in the standard, note the cross join and
+implicit LATERAL:
 
 SELECT baz.*
 FROM foo, UNNEST(foo.bar) AS baz
 
 Here foo is a correlation name (variable), bar is a column containing
-an array.
+an array. The LATERAL UNNEST is executed once per row in foo, and
+duplicates the row for each value in the array foo.bar.
 
 Note that SQL arrays work differently from cardinality many in Datalog
 or SPARQL, one has to explicitly deal with them.
@@ -76,7 +78,7 @@ could be seen as a user defined routine or struct we provide.
 Another way to create rows is to introduce a syntax similar to the
 SQL:2016 JSON_OBJECT function:
 
-STRUCT('name': 'foo, 'id': 1)
+STRUCT ('name': 'foo, 'id': 1)
 
 Note that the keys are expressions here, and can actually be
 calculated during the query in this approach.
@@ -86,7 +88,12 @@ supports either of the above constructs:
 
 ROW (name => 'foo', id => 1)
 
-A fourth alternative is to leverage SQL/PGQ which has syntactic
+A fourth alternative is using the syntax of
+https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types[BigQuery]:
+
+STRUCT ('foo' AS name, 1 AS id)
+
+A fifth alternative is to leverage SQL/PGQ which has syntactic
 support for embedded maps, though this is really only allowed within
 their sub-language:
 
