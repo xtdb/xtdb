@@ -54,7 +54,7 @@ public class DenseUnionUtil {
         duv.setTypeId(idx, typeId);
         duv.setOffset(idx, offset);
 
-        duv.setValueCount(idx + 1);
+        setValueCount(duv, idx + 1);
 
         return offset;
     }

@@ -108,8 +108,6 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
    */
   private ValueVector[] childVectors = new ValueVector[Byte.MAX_VALUE + 1];
 
-  private int[] typeCounts = new int[Byte.MAX_VALUE + 1];
-
   /**
    * The index is the type id, and the value is the type field.
    */
@@ -201,13 +199,6 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     offsetBufferAllocationSizeInBytes = offsetBuffer.capacity();
 
     this.valueCount = fieldNode.getLength();
-
-    for (int idx = 0; idx < valueCount; idx++) {
-      byte typeId = getTypeId(idx);
-      if (typeId != -1) {
-        typeCounts[typeId]++;
-      }
-    }
   }
 
   @Override
@@ -956,7 +947,6 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     offsetBuffer.getReferenceManager().release();
     offsetBuffer = allocator.getEmpty();
     internalStruct.clear();
-    typeCounts = new int[Byte.MAX_VALUE + 1];
   }
 
   @Override
@@ -965,7 +955,6 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     setNegative(0, typeBuffer.capacity());
     offsetBuffer.setZero(0, offsetBuffer.capacity());
     internalStruct.reset();
-    typeCounts = new int[Byte.MAX_VALUE + 1];
   }
 
   @Override
@@ -1088,7 +1077,6 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
           to.childVectors[typeId] = internalTransferPairs[i].getTo();
         }
       }
-      to.typeCounts = typeCounts;
       to.valueCount = valueCount;
       to.nextTypeId = nextTypeId;
       clear();
@@ -1135,7 +1123,6 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
         }
       }
 
-      to.typeCounts = typeCounts;
       to.setValueCount(length);
       to.nextTypeId = nextTypeId;
     }
@@ -1257,9 +1244,19 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
       reallocTypeBuffer();
       reallocOffsetBuffer();
     }
+    setChildVectorValueCounts();
+  }
 
+  private void setChildVectorValueCounts() {
+    int [] counts = new int[Byte.MAX_VALUE + 1];
+    for (int i = 0; i < this.valueCount; i++) {
+      byte typeId = getTypeId(i);
+      if (typeId != -1) {
+        counts[typeId] += 1;
+      }
+    }
     for (int i = 0; i < nextTypeId; i++) {
-      childVectors[typeMapFields[i]].setValueCount(typeCounts[typeMapFields[i]]);
+      childVectors[typeMapFields[i]].setValueCount(counts[typeMapFields[i]]);
     }
   }
 
@@ -1752,16 +1749,7 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     while (index >= getTypeBufferValueCapacity()) {
       reallocTypeBuffer();
     }
-    byte oldTypeId = getTypeId(index);
-    if (oldTypeId != -1) {
-      typeCounts[oldTypeId]--;
-    }
-
     typeBuffer.setByte(index * TYPE_WIDTH , typeId);
-
-    if (typeId != -1) {
-        typeCounts[typeId]++;
-    }
   }
 
   private int getTypeBufferValueCapacity() {
