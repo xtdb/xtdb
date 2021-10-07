@@ -1,12 +1,11 @@
 = Transactions
 
-Transactions are how you modify data within XTDB.
+Transactions are how you insert and modify data within XTDB.
 
-They are comprised of a series of Transaction Operations to be performed.
+Transactions are atomic, and comprised of a sequence of operations to be performed.
 
-If the transaction contains pre-conditions, all pre-conditions must pass, or the
-entire transaction is aborted. This happens at the query node during indexing,
-and not when submitting the transaction.
+If the transaction contains pre-conditions, all pre-conditions must pass, or the entire transaction is aborted.
+This processing happens at each node during indexing, and not when submitting the transaction.
 
 [tabs]
 ====
