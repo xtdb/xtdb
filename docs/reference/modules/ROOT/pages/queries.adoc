@@ -628,6 +628,8 @@ similar).
 `:limit` may be used in isolation, without `:order-by`, and will also return a
 bag of results that can contain duplicates.
 
+To use `:order-by` with an aggregate, simply restate the aggregate element exactly as it is written in your `:find` vector.
+
 More powerful ordering and pagination features may be provided in the future.
 Feel free to open an issue or get in touch to discuss your ordering
 requirements, e.g. see https://github.com/xtdb/xtdb/discussions/1514[#1514]
