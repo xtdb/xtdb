@@ -291,6 +291,10 @@ include::example$test/xtdb/docs/examples/query_test.clj[tags=triple-3,indent=0]
 <2> This matches all entities, `p`, which have a `:name` of `"Ivan"`.
 <3> This matches all entities, `p`, which have a `:name` which match the `:last-name` of `q`.
 
+Note that the keyword attribute must always be specified and therefore you cannot use a logic variable in the attribute position.
+You can however enumerate combinations of known attributes using rules, or execute independent queries efficiently using `openDB` (`open-db`).
+A list of all known attributes is available via the `attributeStats` (`attribute-stats`) API.
+
 [#clause-pred]
 === Predicates
 
