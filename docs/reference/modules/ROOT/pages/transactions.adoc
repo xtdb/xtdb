@@ -223,7 +223,8 @@ It is important to note that Evict is the only operation which will have effects
 [#transaction-functions]
 === Transaction Functions
 
-Transaction functions are user-supplied functions that run on the individual XTDB nodes when a transaction is being ingested.
+Transaction functions are user-supplied functions, defined using Clojure, that will run on each individual node where a transaction is being ingested and processed after having been read from the transaction log.
+They are conceptually similar to "stored procedures" in traditional databases, except they can only return new transaction operations.
 
 Transaction functions can be used, for example, to safely check the current database state before applying a transaction, for integrity checks, or to patch an entity.
 
@@ -240,6 +241,8 @@ include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags
 If a list of transaction operations is returned, these are indexed as part of the transaction.
 
 If `false` is returned, or an exception is thrown, the whole transaction will roll back.
+
+The `context` reflects the speculative accumulation of all transaction operations applied up to the current point in the processing.
 
 ==== Creating / Updating
 
@@ -301,6 +304,8 @@ include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags
 <2> Parameter(s)
 --
 ====
+
+Transaction functions may return further transaction function invocation operations, which will in turn expand recursively until there are only primitive transaction operations remaining for the given transaction.
 
 [#document]
 == Documents
