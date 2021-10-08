@@ -26,7 +26,7 @@
 
 (s/def ::expression some?)
 
-(s/def ::column-expression (s/map-of ::column ::expression :count 1 :conform-keys true))
+(s/def ::column-expression (s/map-of ::column ::expression :conform-keys true :count 1))
 
 ;; TODO be good to just specify a single expression here and have the interpreter split it
 ;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
@@ -73,7 +73,7 @@
 
 (defmethod ra-expr :order-by [_]
   (s/cat :op '#{:τ :tau :order-by order-by}
-         :order (s/coll-of (s/map-of ::column ::order-direction :count 1) :min-count 1)
+         :order (s/coll-of (s/map-of ::column ::order-direction :conform-keys true :count 1) :min-count 1)
          :relation ::ra-expression))
 
 (s/def ::aggregate-expr
@@ -81,11 +81,11 @@
          :from-column ::column))
 
 (s/def ::aggregate
-  (s/map-of ::column ::aggregate-expr, :count 1))
+  (s/map-of ::column ::aggregate-expr :conform-keys true :count 1))
 
 (defmethod ra-expr :group-by [_]
   (s/cat :op #{:γ :gamma :group-by}
-         :columns (s/coll-of (s/or :group-by ::column, :aggregate ::aggregate), :min-count 1)
+         :columns (s/coll-of (s/or :group-by ::column :aggregate ::aggregate) :min-count 1)
          :relation ::ra-expression))
 
 (s/def ::offset nat-int?)
@@ -154,7 +154,7 @@
 (defmethod ra-expr :relation [_]
   (s/and ::relation
          (s/conformer (fn [rel]
-                        {:op :relation, :relation rel})
+                        {:op :relation :relation rel})
                       :relation)))
 
 (s/def ::ra-expression (s/multi-spec ra-expr :op))
