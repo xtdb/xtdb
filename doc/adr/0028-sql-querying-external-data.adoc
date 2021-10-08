@@ -27,7 +27,13 @@ SELECT foo.bar FROM 'file://tmp/foo.json' AS foo
 https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-file.html[SparkSQL]
 use different schemas to specifiy the format (or source):
 
-SELECT foo.bar FROM json.'file://tmp/foo.json' AS foo
+SELECT foo.bar FROM json.'/tmp/foo.json' AS foo
+
+https://drill.apache.org/docs/querying-a-file-system-introduction/[Drill]
+works similarly, and also has wildcard and directory support so a file
+can be backed by several tables:
+
+SELECT foo.bar FROM dfs.`/tmp/parquet/199?/*` AS foo
 
 Another alternative is to introduce some syntax for this (like
 JSON_TABLE etc.):
