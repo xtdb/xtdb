@@ -69,16 +69,11 @@
          :columns (s/? (s/map-of ::column ::column :conform-keys true))
          :relation ::ra-expression))
 
-(s/def ::order
-  (s/+ (s/& (s/cat :column ::column
-                   :direction (s/? #{:asc :desc}))
-            (s/conformer (fn [el]
-                           (into {:direction :asc} el))
-                         identity))))
+(s/def ::order-direction #{:asc :desc})
 
 (defmethod ra-expr :order-by [_]
   (s/cat :op '#{:τ :tau :order-by order-by}
-         :order (s/spec ::order)
+         :order (s/coll-of (s/map-of ::column ::order-direction :count 1) :min-count 1)
          :relation ::ra-expression))
 
 (s/def ::aggregate-expr
@@ -86,16 +81,7 @@
          :from-column ::column))
 
 (s/def ::aggregate
-  (s/and (s/or :just-expr ::aggregate-expr
-               :named (s/map-of ::column ::aggregate-expr, :min-count 1, :max-count 1))
-         (s/conformer (fn [[agg-type agg-arg]]
-                        (case agg-type
-                          :named (let [[to-column aggregate-expr] (first agg-arg)]
-                                   (assoc aggregate-expr :to-column to-column))
-                          :just-expr (let [{:keys [aggregate-fn from-column]} agg-arg]
-                                       (assoc agg-arg :to-column (symbol (format "%s-%s" aggregate-fn from-column))))))
-                      (fn [{:keys [to-column] :as agg}]
-                        [:named {to-column (dissoc agg :to-column)}]))))
+  (s/map-of ::column ::aggregate-expr, :count 1))
 
 (defmethod ra-expr :group-by [_]
   (s/cat :op #{:γ :gamma :group-by}
@@ -174,25 +160,3 @@
 (s/def ::ra-expression (s/multi-spec ra-expr :op))
 
 (s/def ::logical-plan ::ra-expression)
-
-(comment
-  (s/conform
-   ::logical-plan
-   '[:project [cid]
-     [:select (> sum 1000)
-      [:group-by [cid {sum (sum balance)}]
-       [:join {cid cid}
-        [:project [cid balance] Account]
-        [:project [cid] Customer]]]]])
-
-  (s/explain ::logical-plan '[:assign [X [:table [{:a 1}]]
-                                       Y [:table [{:b 1}]]]
-                              [:join {a b} X Y]])
-
-  ;; left-outer-join
-  (s/conform ::logical-plan
-             '[:union-all
-               [:join {x y} R S]
-               [:cross-join
-                [:anti-join {x y} R S]
-                [:table [{:y nil}]]]]))

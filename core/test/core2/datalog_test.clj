@@ -64,7 +64,7 @@
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?first-name]
                                        :where [[?e :first-name ?first-name]]
-                                       :order-by [?first-name]}
+                                       :order-by [[?first-name]]}
                                      (assoc :basis {:tx tx})))
                   (into []))))
 
@@ -72,7 +72,7 @@
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?first-name]
                                        :where [[?e :first-name ?first-name]]
-                                       :order-by [?first-name :desc]}
+                                       :order-by [[?first-name :desc]]}
                                      (assoc :basis {:tx tx})))
                   (into []))))
 
@@ -80,7 +80,7 @@
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?first-name]
                                        :where [[?e :first-name ?first-name]]
-                                       :order-by [?first-name]
+                                       :order-by [[?first-name]]
                                        :limit 1}
                                      (assoc :basis {:tx tx})))
                   (into []))))
@@ -89,7 +89,7 @@
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?first-name]
                                        :where [[?e :first-name ?first-name]]
-                                       :order-by [?first-name :desc]
+                                       :order-by [[?first-name :desc]]
                                        :limit 1}
                                      (assoc :basis {:tx tx})))
                   (into []))))
@@ -98,7 +98,7 @@
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?first-name]
                                        :where [[?e :first-name ?first-name]]
-                                       :order-by [?first-name]
+                                       :order-by [[?first-name]]
                                        :limit 1
                                        :offset 1}
                                      (assoc :basis {:tx tx})))

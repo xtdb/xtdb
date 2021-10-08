@@ -2,8 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [core2.error :as err]
-            [core2.logical-plan :as lp])
+            [core2.error :as err])
   (:import clojure.lang.MapEntry))
 
 (s/def ::logic-var
@@ -33,8 +32,12 @@
 
 (s/def ::args-list (s/coll-of ::logic-var, :kind vector?, :min-count 1))
 
+(s/def ::source
+  (s/and simple-symbol?
+         (comp #(str/starts-with? % "$") name)))
+
 (s/def ::in-binding
-  (s/or :source ::lp/source
+  (s/or :source ::source
         :scalar ::logic-var
         :tuple ::args-list
         :collection (s/tuple ::logic-var '#{...})
@@ -52,7 +55,7 @@
 (s/def ::triple
   (s/and vector?
          (s/conformer identity vec)
-         (s/cat :src (s/? ::lp/source)
+         (s/cat :src (s/? ::source)
                 :e (s/or :literal ::eid, :logic-var ::logic-var)
                 :a keyword?
                 :v (s/? (s/or :literal ::value, :logic-var ::logic-var)))
@@ -77,7 +80,12 @@
 (s/def ::offset nat-int?)
 (s/def ::limit nat-int?)
 
-(s/def ::order-by ::lp/order)
+(s/def ::order-element (s/and vector?
+                              (s/cat :find-arg (s/or :logic-var ::logic-var
+                                                     :aggregate ::aggregate)
+                                     :direction (s/? #{:asc :desc}))))
+
+(s/def ::order-by (s/coll-of ::order-element :kind vector?))
 
 (s/def ::query
   (s/keys :req-un [::find]
@@ -295,20 +303,30 @@
     (-> (compile-triples triples query {:table-keys table-keys})
         (wrap-predicates predicates))))
 
+(defn- aggregate-logic-var-name [{:keys [aggregate logic-var]}]
+  (symbol (str aggregate "-" logic-var)))
+
 (defn- with-group-by [plan {find-args :find}]
   (if (every? (comp #{:logic-var} first) find-args)
     [:project (mapv second find-args)
      plan]
 
-    [:group-by (for [[arg-type arg :as find-arg] find-args]
-                 (case arg-type
-                   :logic-var arg
-                   :aggregate (s/unform ::find-arg find-arg)))
+    [:group-by (vec (for [[arg-type arg :as find-arg] find-args]
+                      (case arg-type
+                        :logic-var arg
+                        :aggregate {(aggregate-logic-var-name arg)
+                                    (let [{:keys [aggregate logic-var]} arg]
+                                      (list aggregate logic-var))})))
      plan]))
 
 (defn- with-order-by [plan {:keys [order-by]}]
   (if order-by
-    [:order-by (s/unform ::order-by order-by)
+    [:order-by (vec (for [{:keys [find-arg direction]} order-by
+                          :let [[arg-type arg] find-arg]]
+                      {(case arg-type
+                         :logic-var arg
+                         :aggregate (aggregate-logic-var-name arg))
+                       (or direction :asc)}))
      plan]
     plan))
 

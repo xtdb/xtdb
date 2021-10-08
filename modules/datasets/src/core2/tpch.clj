@@ -71,7 +71,7 @@
   (vary-meta q assoc ::params params))
 
 (def tpch-q1-pricing-summary-report
-  (-> '[:order-by [l_returnflag l_linestatus]
+  (-> '[:order-by [{l_returnflag :asc} {l_linestatus :asc}]
         [:group-by [l_returnflag l_linestatus
                     {sum_qty (sum l_quantity)}
                     {sum_base_price (sum l_extendedprice)}
@@ -99,7 +99,7 @@
                             [:scan [s_nationkey s_suppkey s_acctbal s_name s_address s_phone s_comment]]]
                            [:scan [ps_suppkey ps_partkey ps_supplycost]]]]
         [:slice {:limit 100}
-         [:order-by [s_acctbal :desc, n_name s_name p_partkey]
+         [:order-by [{s_acctbal :desc} {n_name :asc} {s_name :asc} {p_partkey :asc}]
           [:project [s_acctbal s_name n_name p_partkey p_mfgr s_address s_phone s_comment]
            [:select (= ps_supplycost min_ps_supplycost)
             [:join {ps_partkey ps_partkey}
@@ -114,7 +114,7 @@
 
 (def tpch-q3-shipping-priority
   (-> '[:slice {:limit 10}
-        [:order-by [revenue :desc, o_orderdate]
+        [:order-by [{revenue :desc} {o_orderdate :desc}]
          [:group-by [l_orderkey
                      {revenue (sum disc_price)}
                      o_orderdate
@@ -132,7 +132,7 @@
                     '?date #inst "1995-03-15"})))
 
 (def tpch-q4-order-priority-checking
-  (-> '[:order-by [o_orderpriority]
+  (-> '[:order-by [{o_orderpriority :asc}]
         [:group-by [o_orderpriority {order_count (count o_orderkey)}]
          [:semi-join {o_orderkey l_orderkey}
           [:scan [{o_orderdate (and (>= o_orderdate ?start-date)
@@ -144,7 +144,7 @@
                     '?end-date #inst "1993-10-01"})))
 
 (def tpch-q5-local-supplier-volume
-  '[:order-by [revenue :desc]
+  '[:order-by [{revenue :desc}]
     [:group-by [n_name {revenue (sum disc_price)}]
      [:project [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]
       [:select (= l_suppkey s_suppkey)
@@ -177,7 +177,7 @@
                     '?max-discount 0.07})))
 
 (def tpch-q7-volume-shipping
-  (-> '[:order-by [supp_nation cust_nation l_year]
+  (-> '[:order-by [{supp_nation :asc} {cust_nation :asc} {l_year :asc}]
         [:group-by [supp_nation cust_nation l_year {revenue (sum volume)}]
          [:project [supp_nation cust_nation
                     {l_year (extract "YEAR" l_shipdate)}
@@ -206,7 +206,7 @@
                     '?nation2 "GERMANY"})))
 
 (def tpch-q8-national-market-share
-  (-> '[:order-by [o_year]
+  (-> '[:order-by [{o_year :asc}]
         [:project [o_year {mkt_share (/ brazil_revenue revenue)}]
          [:group-by [o_year {brazil_revenue (sum brazil_volume)} {revenue (sum volume)}]
           [:project [{o_year (extract "YEAR" o_orderdate)}
@@ -240,7 +240,7 @@
                     '?type "ECONOMY ANODIZED STEEL"})))
 
 (def tpch-q9-product-type-profit-measure
-  (-> '[:order-by [nation, o_year :desc]
+  (-> '[:order-by [{nation :asc} {o_year :desc}]
         [:group-by [nation o_year {sum_profit (sum amount)}]
          [:rename {n_name nation}
           [:project [n_name
@@ -264,7 +264,7 @@
 
 (def tpch-q10-returned-item-reporting
   (-> '[:slice {:limit 20}
-        [:order-by [revenue :desc]
+        [:order-by [{revenue :desc}]
          [:group-by [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
                      {revenue (sum disc_price)}]
           [:project [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
@@ -288,7 +288,7 @@
                              [:scan [n_nationkey {n_name (= n_name ?nation)}]]
                              [:scan [s_nationkey s_suppkey]]]
                             [:scan [ps_partkey ps_suppkey ps_supplycost ps_availqty]]]]]
-        [:order-by [value :desc]
+        [:order-by [{value :desc}]
          [:project [ps_partkey value]
           [:select (> value total)
            [:cross-join
@@ -301,7 +301,7 @@
                     '?fraction 0.0001})))
 
 (def tpch-q12-shipping-modes-and-order-priority
-  (-> '[:order-by [l_shipmode]
+  (-> '[:order-by [{l_shipmode :asc}]
         [:group-by [l_shipmode
                     {high_line_count (sum high_line)}
                     {low_line_count (sum low_line)}]
@@ -331,7 +331,7 @@
 (def tpch-q13-customer-distribution
   (-> '[:assign [Customers [:scan [c_custkey]]
                  Orders [:scan [{o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]
-        [:order-by [custdist :desc, c_count :desc]
+        [:order-by [{custdist :desc} {c_count :desc}]
          [:group-by [c_count {custdist (count c_custkey)}]
           [:group-by [c_custkey {c_count (count-not-null o_comment)}]
            [:union-all
@@ -380,7 +380,7 @@
                     '?end-date #inst "1996-04-01"})))
 
 (def tpch-q16-part-supplier-relationship
-  (-> '[:order-by [supplier_cnt :desc, p_brand p_type p_size]
+  (-> '[:order-by [{supplier_cnt :desc} {p_brand :asc} {p_type :asc} {p_size :asc}]
         [:group-by [p_brand p_type p_size {supplier_cnt (count ps_suppkey)}]
          [:distinct
           [:project [p_brand p_type p_size ps_suppkey]
@@ -416,7 +416,7 @@
 
 (def tpch-q18-large-volume-customer
   (-> '[:slice {:limit 100}
-        [:order-by [o_totalprice :desc, o_orderdate]
+        [:order-by [{o_totalprice :desc} {o_orderdate :desc}]
          [:group-by [c_name c_custkey o_orderkey o_orderdate o_totalprice {sum_qty (sum l_quantity)}]
           [:join {o_orderkey l_orderkey}
            [:join {o_custkey c_custkey}
@@ -468,7 +468,7 @@
                     '?brand1 "Brand#12", '?brand2 "Brand23", '?brand3 "Brand#34"})))
 
 (def tpch-q20-potential-part-promotion
-  (-> '[:order-by [s_name]
+  (-> '[:order-by [{s_name :asc}]
         [:project [s_name s_address]
          [:semi-join {s_suppkey ps_suppkey}
           [:join {n_nationkey s_nationkey}
@@ -505,7 +505,7 @@
                       [:rename l2
                        [:scan [l_orderkey l_suppkey]]]]]]
         [:slice {:limit 100}
-         [:order-by [numwait :desc, s_name]
+         [:order-by [{numwait :desc} {s_name :asc}]
           [:group-by [s_name {numwait (count l1_l_orderkey)}]
            [:distinct
             [:project [s_name l1_l_orderkey]
@@ -524,7 +524,7 @@
                            [:project [c_custkey {cntrycode (substr c_phone 1 2)} c_acctbal]
                             [:scan [c_custkey c_phone c_acctbal]]]
                            [:table $cntrycodes]]]
-        [:order-by [cntrycode]
+        [:order-by [{cntrycode :asc}]
          [:group-by [cntrycode {numcust (count c_custkey)} {totacctbal (sum c_acctbal)}]
           [:anti-join {c_custkey o_custkey}
            [:select (> c_acctbal avg_acctbal)

@@ -218,7 +218,8 @@
   (let [agg-specs (for [[col-type arg] columns]
                     (case col-type
                       :group-by (group-by/->group-spec (name arg))
-                      :aggregate (let [{:keys [to-column aggregate-fn from-column]} arg]
+                      :aggregate (let [[to-column aggregate] (first arg)
+                                       {:keys [aggregate-fn from-column]} aggregate]
                                    (->aggregate-spec (keyword (name aggregate-fn))
                                                      (name from-column)
                                                      (name to-column)))
@@ -228,7 +229,7 @@
                 (group-by/->group-by-cursor allocator inner agg-specs)))))
 
 (defmethod emit-op :order-by [{:keys [order relation]} srcs]
-  (let [order-specs (for [{:keys [column direction]} order]
+  (let [order-specs (for [[[column direction]] (map vec order)]
                       (order-by/->order-spec (name column) direction))]
     (unary-op relation srcs
               (fn [{:keys [allocator]} inner]
