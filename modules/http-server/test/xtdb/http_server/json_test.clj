@@ -70,6 +70,7 @@
              (set (json-get {:url "/_xtdb/query"
                              :qps {"queryEdn" (pr-str '{:find [e]
                                                         :where [[e :xt/id]]})}}))))
+    (Thread/sleep 5) ;; wait for asynchronous bus event to update `!running-queries` in `xtdb.node`
     (t/is (= (pr-str '{:find [e]
                        :where [[e :xt/id]]})
              (-> (json-get {:url "/_xtdb/recent-queries"})
