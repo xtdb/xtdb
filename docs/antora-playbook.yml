@@ -30,7 +30,7 @@ content:
       start_path: docs/howto
       branches: v2xtdbcom
     - url: ../
-      start_path: docs/articles
+      start_path: docs/concepts
       branches: v2xtdbcom
     - url: ../
       start_path: docs/resources

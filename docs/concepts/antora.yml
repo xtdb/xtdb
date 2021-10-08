@@ -2,3 +2,6 @@ name: concepts
 title: Concepts
 version: master
 display_version: main
+start_page: ROOT:what-is-xtdb.adoc
+nav:
+  - modules/ROOT/nav.adoc
