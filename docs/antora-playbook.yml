@@ -32,6 +32,9 @@ content:
     - url: ../
       start_path: docs/articles
       branches: v2xtdbcom
+    - url: ../
+      start_path: docs/resources
+      branches: v2xtdbcom
 
 ui:
   bundle:

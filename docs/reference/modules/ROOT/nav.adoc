@@ -1,4 +1,3 @@
-.Reference
 * xref:installation.adoc[Installation]
 * xref:configuration.adoc[Configuration]
 ** xref:upgrading-configuration.adoc[Upgrading]

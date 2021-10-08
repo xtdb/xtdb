@@ -1,0 +1,4 @@
+.Resources
+* xref:faq.adoc[FAQ]
+* xref:benchmarks.adoc[Benchmarks]
+* xref:bibliography.adoc[Bibliography]
