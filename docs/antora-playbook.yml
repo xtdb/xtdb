@@ -8,6 +8,9 @@ site:
     # Uncomment these to enable Matomo Analytics Snippets
     # matomoUrl: "//bunseki.juxt.pro/"
     # matomoSiteId: "4"
+    typesenseHost: xtagzc25w84ufq37p-1.a1.typesense.net
+    typesenseApiKey: 0zVHpGQFDUhgP9hazp1laLklfy00AlGD
+    typesenseCollectionName: xtdb-site-2-s3
 
 content:
   sources:
@@ -40,4 +43,3 @@ asciidoc:
     page-pagination: true
   extensions:
     - ./antora-extensions/code-tabs.js
-
