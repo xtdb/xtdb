@@ -13,6 +13,7 @@ From here, though, you can build the documentation section in isolation, to chec
 == Build:
 
 * `./bin/build.sh`
+** Troubleshooting: `npm install`
 * `./bin/open-local-site.sh` to open up the built version of the site in your browser.
 * `./bin/run-local-server.sh` to open the site if you require plugins (like Dark Reader) which work poorly with `file://` URLs.
 

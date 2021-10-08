@@ -18,7 +18,7 @@ content:
       start_path: docs/reference
       branches:
         - v2xtdbcom
-        - docs-v*
+#        - docs-v*
     - url: ../
       start_path: docs/tutorials
       branches: v2xtdbcom
@@ -27,7 +27,7 @@ content:
       branches: v2xtdbcom
     - url: ../
       start_path: docs/articles
-      branches: main
+      branches: v2xtdbcom
 
 
 ui:
@@ -40,3 +40,4 @@ asciidoc:
     page-pagination: true
   extensions:
     - ./antora-extensions/code-tabs.js
+
