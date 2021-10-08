@@ -1,9 +1,0 @@
-name: community
-title: XTDB
-version: master
-display_version: main
-start_page: ROOT:faq.adoc
-nav:
-  - modules/ROOT/nav.adoc
-urls:
-  redirect_facility: static

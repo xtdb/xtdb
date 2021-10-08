@@ -1,3 +1,0 @@
-= Training
-:page-layout: training
-:page-nav: black-nav
