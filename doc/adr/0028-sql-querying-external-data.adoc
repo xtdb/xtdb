@@ -8,7 +8,11 @@ Proposed
 
 ## Context
 
-XTDB should be able to access external data in the FROM clause.
+XTDB should be able to access external data in the FROM clause. It
+should be possible to do this without even running the ingestion
+engine. But it should also be possible to query it together with data
+stored within XTDB. Querying external data should not be allowed
+during transaction processing, as XTDB has no control over it.
 
 An external file will be coerced into Arrow if not already an Arrow
 IPC file. Arrow comes with both a datasource (C++) and adapter (Java)
@@ -24,6 +28,8 @@ Some other datbases use levearge different schemas to specifiy the
 format (or source):
 
 SELECT foo.bar FROM json.'file://tmp/foo.json' AS foo
+
+SELECT foo.bar FROM external.'file://tmp/foo.json' AS foo
 
 Another alternative is to introduce some syntax for this (like
 JSON_TABLE etc.):
