@@ -70,11 +70,11 @@
                          (MapEntry/create (name col-name)
                                           (expr/->expression-column-selector select-form srcs)))
                        (into {}))
-        args (vec (concat (for [col-name col-names
-                                :when (not (contains? selects col-name))]
-                            (symbol col-name))
-                          (vals selects)))
-        metadata-pred (expr.meta/->metadata-selector (cons 'and args) srcs)
+        metadata-args (vec (concat (for [col-name col-names
+                                         :when (not (contains? col-preds col-name))]
+                                     (symbol col-name))
+                                   (vals selects)))
+        metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) srcs)
 
         ^ISnapshot db (or (get srcs (or source '$))
                           (throw (err/illegal-arg :unknown-db
