@@ -24,12 +24,10 @@ a URL:
 
 SELECT foo.bar FROM 'file://tmp/foo.json' AS foo
 
-Some other datbases use levearge different schemas to specifiy the
-format (or source):
+https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-file.html[SparkSQL]
+use different schemas to specifiy the format (or source):
 
 SELECT foo.bar FROM json.'file://tmp/foo.json' AS foo
-
-SELECT foo.bar FROM external.'file://tmp/foo.json' AS foo
 
 Another alternative is to introduce some syntax for this (like
 JSON_TABLE etc.):
