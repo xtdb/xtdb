@@ -1,6 +1,7 @@
 site:
   title: XTDB Docs
   start_page: main::index.adoc
+  url: https://docs.xtdb.com
   # homeUrl: &home_url /xyz/5.2/index.html
   keys:
     mainSiteUrl: "https://xtdb.com/"
@@ -31,7 +32,6 @@ content:
     - url: ../
       start_path: docs/articles
       branches: v2xtdbcom
-
 
 ui:
   bundle:
