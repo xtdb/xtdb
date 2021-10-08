@@ -1,0 +1,54 @@
+# 28. SQL querying external data
+
+Date: 2021-10-08
+
+## Status
+
+Proposed
+
+## Context
+
+XTDB should be able to access external data in the FROM clause.
+
+An external file will be coerced into Arrow if not already an Arrow
+IPC file. Arrow comes with both a datasource (C++) and adapter (Java)
+API to help load external formats into Arrow. We may or may not choose
+to use these. They have Parquet, Orc, Avro, JDBC, JSON, CSV.
+
+Example from IBM Cloud, where the table name is simply interpreted as
+a URL:
+
+SELECT foo.bar FROM 'file://tmp/foo.json' AS foo
+
+Some other datbases use levearge different schemas to specifiy the
+format (or source):
+
+SELECT foo.bar FROM json.'file://tmp/foo.json' AS foo
+
+Another alternative is to introduce some syntax for this (like
+JSON_TABLE etc.):
+
+SELECT foo.bar FROM URL_TABLE('file://tmp/foo.json' FORMAT JSON) AS foo
+
+If the format should be inferred or needs to be specified is an open
+question. Sometimes one might want to specify other options.
+
+Many databases provide ways of mapping these external files via
+schemas and views and then access them via normal SQL, hiding the fact
+that they're not stored in the database. We could consider supporting
+this eventually.
+
+It's worth noting that the SQL standard itself has the concepts of
+foreign tables and datalinks, together called
+https://wiki.postgresql.org/wiki/SQL/MED[SQL/MED]. Foreign tables are
+relational tables stored in another database instance, and datalinks
+are URLs to LOBs stored outside the database, but not interpreted as
+relational data. Neither of these are obvious contenders, this would
+use standard syntax, but not be standards compliant, DLVALUE isn't
+supported here:
+
+SELECT foo.bar FROM DLVALUE('file://tmp/foo.json') AS foo
+
+## Decision
+
+## Consequences
