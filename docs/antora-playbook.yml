@@ -27,7 +27,7 @@ content:
       start_path: docs/tutorials
       branches: v2xtdbcom
     - url: ../
-      start_path: docs/howto
+      start_path: docs/guides
       branches: v2xtdbcom
     - url: ../
       start_path: docs/concepts

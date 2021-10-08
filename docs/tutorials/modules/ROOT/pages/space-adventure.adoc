@@ -1,10 +1,7 @@
 = Space Adventure
 
-The "choose your own adventure" style tutorial series is an interactive story
-that you can follow along with and complete assignments.
+Logical queries and dual timelines are often easiest to learn by doing.
+Try this "choose your own adventure" style tutorial series to learn and explore
+in your browser.
 
-For the no-install browser-based tutorial, follow the
-link:https://nextjournal.com/crux-tutorial/[Nextjournal edition].
-
-Otherwise, visit the original version in
-link:https://juxt.pro/blog/posts/crux-tutorial-setup.html[our blog post].
+link:https://nextjournal.com/xtdb-tutorial[Try the tutorial on NextJournal.]

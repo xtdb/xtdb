@@ -1,5 +1,5 @@
-name: howto
-title: XTDB How-To Guides
+name: guides
+title: Guides
 version: master
 display_version: main
 start_page: ROOT:quickstart.adoc

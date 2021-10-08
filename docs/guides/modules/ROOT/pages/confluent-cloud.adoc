@@ -1,4 +1,4 @@
-= XTDB on Confluent Cloud
+= Confluent Cloud
 :page-subtitle: Create an unbundled database with XTDB and Confluent Cloud Kafka in 5 minutes
 :page-author: Jeremy Taylor
 :page-header: aurora-1197753_1920.jpg

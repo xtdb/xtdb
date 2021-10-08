@@ -1,5 +1,5 @@
-= Command Line XTDB
-:page-subtitle: Run an XTDB node and query it over HTTP with curl. A 10-minute guide.
+= XTDB over HTTP
+:page-subtitle: Run an XTDB node and query it over HTTP with curl. A 10-minute tutorial.
 :page-author: John Mone
 :page-header: just-start-laptop.jpg
 :page-published: 2021-02-09T10:00Z
@@ -7,16 +7,15 @@
 :thumbnail: begin-with-coffee
 :page-thumbnail: {thumbnail}
 :page-thumbnailalt: Command Line XTDB
-:page-aliases: howto::command-line-crux.adoc
 
-Without writing a single line of code, this guide will show you how to spin up an in-memory XTDB node on your development machine in less than 2 minutes. Then we'll show you how to talk to it over HTTP from the command line.
+Without writing a single line of code, this tutorial will show you how to spin up an in-memory XTDB node on your development machine in less than 2 minutes. Then we'll show you how to talk to it over HTTP from the command line.
 
-NOTE: This guide will be skipping a large amount of information about XTDB, how it works, and much of its available functionality. For more information about the XTDB HTTP API, please take a look at the https://xtdb.com/reference/http.html[XTDB HTTP module documentation].
-Throughout this guide, you will see links to targeted extra reading and information, should you wish to read more.
+NOTE: This tutorial will be skipping a large amount of information about XTDB, how it works, and much of its available functionality. For more information about the XTDB HTTP API, please take a look at the https://xtdb.com/reference/http.html[XTDB HTTP module documentation].
+Throughout this tutorial, you will see links to targeted extra reading and information, should you wish to read more.
 
 == Part 1: Getting an XTDB node running on your local machine
 
-This guide will install XTDB using the Clojure CLI tools. You can find in the other methods of installing XTDB in the https://xtdb.com/reference/installation.html[XTDB installation docs].
+This tutorial will install XTDB using the Clojure CLI tools. You can find in the other methods of installing XTDB in the https://xtdb.com/reference/installation.html[XTDB installation docs].
 
 If you do not have the Clojure CLI tools installed, installers are available from the https://clojure.org/guides/getting_started#_clojure_installer_and_cli_tools[Clojure Getting Started Guide]. Don't worry, you don't need to know Clojure or the Clojure toolchain to run XTDB. Just copy the commands below.
 
@@ -58,7 +57,7 @@ Two minutes are up and your XTDB node is running. Nice work! To check that every
 
 At the moment, the database is empty. Before we can start to play with some of the features that XTDB has to offer, we need to add some data. We will be using the https://xtdb.com/reference/http.html#rest-api[REST API] to send and receive JSON via https://curl.se[curl].
 
-For this guide, we will be working with facts about the current president of the United States.
+For this tutorial, we will be working with facts about the current president of the United States.
 At the time of writing, the current president is Joe Biden. Lets add that to the database:
 
 [source,curl]
@@ -174,9 +173,9 @@ curl -X POST \
 
 We now have a historically accurate dataset for the last two presidents of the United States that we can query over a temporal plane! You can run the history query again to validate our correction.
 
-Using XTDB, we can do powerful queries over the temporal plane and retrieve data as if we had travelled back in time.footnote:[XTDB is actually more sophisticated than this and supports two-dimensional temporal plane: _bitemporality._ This is a short guide, which is why an explanation wasn't included here. If you would like to read more, we have an https://xtdb.com/about/bitemporality.html[explanation of bitemporality]] XTDB achieves this by maintaining an immutable (write-only) transaction log. This makes XTDB a powerful asset where auditing is important or when looking back at historical data is valuable. Better still, XTDB can build on top of many different DB solutions allowing you to retain the infrastructure you already know and love!
+Using XTDB, we can do powerful queries over the temporal plane and retrieve data as if we had travelled back in time.footnote:[XTDB is actually more sophisticated than this and supports two-dimensional temporal plane: _bitemporality._ This is a short tutorial, which is why an explanation wasn't included here. If you would like to read more, we have an https://xtdb.com/about/bitemporality.html[explanation of bitemporality]] XTDB achieves this by maintaining an immutable (write-only) transaction log. This makes XTDB a powerful asset where auditing is important or when looking back at historical data is valuable. Better still, XTDB can build on top of many different DB solutions allowing you to retain the infrastructure you already know and love!
 
-In this guide, we used 3 operations: storing documents with `submit-tx`, retrieving documents with `entity`, and retrieving document histories with `history=true`. The complete set of 18 REST operations, including RESTful https://xtdb.com/reference/http.html#post-query[Datalog queries], are explained in the https://xtdb.com/reference/http.html#rest-api[XTDB REST API documentation].
+In this tutorial, we used 3 operations: storing documents with `submit-tx`, retrieving documents with `entity`, and retrieving document histories with `history=true`. The complete set of 18 REST operations, including RESTful https://xtdb.com/reference/http.html#post-query[Datalog queries], are explained in the https://xtdb.com/reference/http.html#rest-api[XTDB REST API documentation].
 
 XTDB also supports a number of other protocols and features:
 

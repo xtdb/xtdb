@@ -1,8 +1,0 @@
-= A Bitemporal Tale
-
-For an interactive no-install browser-based tutorial see the
-https://nextjournal.com/crux/a-bitemporal-tale[Nextjournal edition of the
-Tale].
-
-Otherwise, see the original the version in
-https://juxt.pro/blog/posts/a-bitemporal-tale.html[our blog post].
