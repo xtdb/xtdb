@@ -1,4 +1,4 @@
-= Benchmarks
+= Performance
 
 Rigorous benchmarking supports the team's development activities by providing rapid feedback on complex changes and a regular benchmark process allows the team to discover and address performance regressions during day-to-day development, well in advance of any releases.
 

@@ -1,5 +1,4 @@
-= References
-:page-aliases: about::references.adoc
+= Bibliography
 
 [#highlights]
 == Highlights
@@ -169,7 +168,7 @@ and its architecture -- past, present, and very-near-future.
 
 
 [#inspiration]
-== Inspiration and Research
+== Inspiration
 
 These resources do not necessarily reflect algorithms, datastructures, or concepts which apply directly
 to the current XTDB architecture. These resources have been useful for the XTDB team in the past, for one
