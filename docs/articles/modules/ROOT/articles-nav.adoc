@@ -1,0 +1,4 @@
+.Articles
+* xref:what-is-xtdb.adoc[What is XTDB?]
+* xref:bitemporality.adoc[Bitemporality]
+* xref:strength-of-the-record.adoc[Strength of the Record]

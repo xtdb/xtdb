@@ -1,5 +1,6 @@
 = Bitemporality
 :toc: macro
+:page-aliases: about::bitemporality.adoc
 
 toc::[]
 
