@@ -1,0 +1,3 @@
+.Community
+* xref:faq.adoc[FAQs]
+* xref:contributing.adoc[Contributing]
