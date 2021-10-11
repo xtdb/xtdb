@@ -121,33 +121,36 @@
         ^BigIntVector tx-id-vec (.getVector log-root "_tx-id")
         ^TimeStampMilliVector tx-time-vec (.getVector log-root "_tx-time")
 
-        ^ListVector ops-vec (.getVector log-root "ops")
-        ^StructVector ops-data-vec (.getDataVector ops-vec)
-        ^BigIntVector row-id-vec (.getChild ops-data-vec "_row-id")
-        ^DenseUnionVector op-vec (.getChild ops-data-vec "op")
+        ops-vec (.getVector log-root "ops")
+        ops-writer (.asList (rel/vec->writer ops-vec))
+        ops-data-writer (.asStruct (.getDataWriter ops-writer))
+        row-id-writer (.writerForName ops-data-writer "_row-id")
+        ^BigIntVector row-id-vec (.getVector row-id-writer)
+        op-writer (.asDenseUnion (.writerForName ops-data-writer "op"))
 
-        ^StructVector put-vec (.getStruct op-vec 0)
-        ^TimeStampMilliVector put-vt-start-vec (.getChild put-vec "_valid-time-start")
-        ^TimeStampMilliVector put-vt-end-vec (.getChild put-vec "_valid-time-end")
+        put-writer (.asStruct (.writerForTypeId op-writer 0))
+        put-vt-start-writer (.writerForName put-writer "_valid-time-start")
+        ^TimeStampMilliVector put-vt-start-vec (.getVector put-vt-start-writer)
+        put-vt-end-writer (.writerForName put-writer "_valid-time-end")
+        ^TimeStampMilliVector put-vt-end-vec (.getVector put-vt-end-writer)
 
-        ^StructVector delete-vec (.getStruct op-vec 1)
-        delete-id-vec (.getChild delete-vec "_id")
-        delete-id-writer (rel/vec->writer delete-id-vec)
-        ^TimeStampMilliVector delete-vt-start-vec (.getChild delete-vec "_valid-time-start")
-        ^TimeStampMilliVector delete-vt-end-vec (.getChild delete-vec "_valid-time-end")
+        delete-writer (.asStruct (.writerForTypeId op-writer 1))
+        delete-id-writer (.writerForName delete-writer "_id")
+        delete-vt-start-writer (.writerForName delete-writer "_valid-time-start")
+        ^TimeStampMilliVector delete-vt-start-vec (.getVector delete-vt-start-writer)
+        delete-vt-end-writer (.writerForName delete-writer "_valid-time-end")
+        ^TimeStampMilliVector delete-vt-end-vec (.getVector delete-vt-end-writer)
 
-        ^StructVector evict-vec (.getStruct op-vec 2)]
+        evict-writer (.asStruct (.writerForTypeId op-writer 2))]
 
     (reify ILogIndexer
       (startTx [_ tx-instant tx-root]
         (let [tx-idx (.getRowCount log-root)]
+          (.startValue ops-writer)
           (.setSafe tx-id-vec tx-idx (.tx-id tx-instant))
           (.setSafe tx-time-vec tx-idx (.getTime ^Date (.tx-time tx-instant)))
-          (.setRowCount log-root (inc tx-idx))
 
-          (let [start-op-idx (.startNewValue ops-vec tx-idx)
-
-                ^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
+          (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
 
                 tx-put-vec (.getStruct tx-ops-vec 0)
                 tx-put-vt-start-vec (.getChild tx-put-vec "_valid-time-start")
@@ -157,41 +160,41 @@
                 tx-delete-id-vec (.getChild tx-delete-vec "_id")
                 tx-delete-vt-start-vec (.getChild tx-delete-vec "_valid-time-start")
                 tx-delete-vt-end-vec (.getChild tx-delete-vec "_valid-time-end")
-                delete-id-row-appender (.rowAppender delete-id-writer (rel/vec->reader tx-delete-id-vec))]
+                delete-id-row-copier (.rowCopier delete-id-writer (rel/vec->reader tx-delete-id-vec))]
 
-            (letfn [(log-op [^long row-id]
-                      (let [op-idx (.getValueCount ops-data-vec)]
-                        (util/set-value-count ops-data-vec (inc op-idx))
-                        (.setIndexDefined ops-data-vec op-idx)
-                        (.setSafe row-id-vec op-idx row-id)
-                        op-idx))]
+            (reify ILogOpIndexer
+              (logPut [_ row-id tx-op-idx]
+                (let [op-idx (.startValue ops-data-writer)]
+                  (.setSafe row-id-vec op-idx row-id))
 
-              (reify ILogOpIndexer
-                (logPut [_ row-id tx-op-idx]
-                  (let [op-idx (log-op row-id)
-                        dest-offset (DenseUnionUtil/writeTypeId op-vec op-idx 0)
-                        src-offset (.getOffset tx-ops-vec tx-op-idx)]
-                    (.setIndexDefined put-vec dest-offset)
-                    (.copyFromSafe put-vt-start-vec src-offset dest-offset tx-put-vt-start-vec)
-                    (.copyFromSafe put-vt-end-vec src-offset dest-offset tx-put-vt-end-vec)))
+                (let [src-offset (.getOffset tx-ops-vec tx-op-idx)
+                      dest-offset (.startValue put-writer)]
+                  (.copyFromSafe put-vt-start-vec src-offset dest-offset tx-put-vt-start-vec)
+                  (.copyFromSafe put-vt-end-vec src-offset dest-offset tx-put-vt-end-vec))
 
-                (logDelete [_ row-id tx-op-idx]
-                  (let [op-idx (log-op row-id)
-                        dest-offset (DenseUnionUtil/writeTypeId op-vec op-idx 1)
-                        src-offset (.getOffset tx-ops-vec tx-op-idx)]
-                    (.setIndexDefined delete-vec dest-offset)
-                    (.copyFromSafe delete-vt-start-vec src-offset dest-offset tx-delete-vt-start-vec)
-                    (.copyFromSafe delete-vt-end-vec src-offset dest-offset tx-delete-vt-end-vec)
+                (.endValue ops-data-writer))
 
-                    (.appendRow delete-id-row-appender src-offset dest-offset)))
+              (logDelete [_ row-id tx-op-idx]
+                (let [op-idx (.startValue ops-data-writer)]
+                  (.setSafe row-id-vec op-idx row-id))
 
-                (logEvict [_ row-id tx-op-idx]
-                  (let [op-idx (log-op row-id)
-                        dest-offset (DenseUnionUtil/writeTypeId op-vec op-idx 2)]
-                    (.setIndexDefined evict-vec dest-offset)))
+                (let [src-offset (.getOffset tx-ops-vec tx-op-idx)
+                      dest-offset (.startValue delete-writer)]
+                  (.copyFromSafe delete-vt-start-vec src-offset dest-offset tx-delete-vt-start-vec)
+                  (.copyFromSafe delete-vt-end-vec src-offset dest-offset tx-delete-vt-end-vec)
+                  (.copyRow delete-id-row-copier src-offset))
 
-                (endTx [_]
-                  (.endValue ops-vec tx-idx (- (.getValueCount ops-data-vec) start-op-idx))))))))
+                (.endValue ops-data-writer))
+
+              (logEvict [_ row-id tx-op-idx]
+                (let [op-idx (.startValue ops-data-writer)]
+                  (.setSafe row-id-vec op-idx row-id))
+
+                (.startValue evict-writer))
+
+              (endTx [_]
+                (.endValue ops-writer)
+                (.setRowCount log-root (inc tx-idx)))))))
 
       (writeLog [_]
         (.syncSchema log-root)
@@ -209,6 +212,7 @@
                                            (write-batch!)))))))))))
 
       (clear [_]
+        (.clear ops-writer)
         (.clear log-root))
 
       Closeable
@@ -253,13 +257,15 @@
             live-root (.getLiveRoot chunk-manager col-name)
             ^BigIntVector row-id-vec (.getVector live-root "_row-id")
             vec-writer (rel/vec->writer (.getVector live-root col-name))
-            row-appender (.rowAppender vec-writer (rel/vec->reader child-vec))]
+            row-copier (.rowCopier vec-writer (rel/vec->reader child-vec))]
         (dotimes [src-idx (.getValueCount doc-vec)]
           (when-not (neg? (.getTypeId child-vec src-idx))
             (let [dest-idx (.getValueCount row-id-vec)]
               (.setValueCount row-id-vec (inc dest-idx))
               (.set row-id-vec dest-idx (aget row-ids src-idx)))
-            (.appendRow row-appender src-idx)
+            (.startValue vec-writer)
+            (.copyRow row-copier src-idx)
+            (.endValue vec-writer)
             (util/set-vector-schema-root-row-count live-root (inc (.getRowCount live-root)))))
         (.syncSchema live-root)))))
 

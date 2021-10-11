@@ -1,29 +1,31 @@
 package core2.relation;
 
 import org.apache.arrow.vector.ValueVector;
-import org.apache.arrow.vector.types.pojo.ArrowType;
 
 @SuppressWarnings("try")
 public interface IColumnWriter<V extends ValueVector> extends AutoCloseable {
     V getVector();
 
-    int appendIndex();
+    <R extends ValueVector> IRowCopier<R, V> rowCopier(IColumnReader<R> sourceColumn);
 
-    int appendIndex(int parentIndex);
+    int getPosition();
 
-    IRowAppender rowAppender(IColumnReader<?> sourceColumn);
+    int startValue();
+    void endValue();
 
-    default <V extends ValueVector> IColumnWriter<V> writerForName(String columnName) {
-        throw new UnsupportedOperationException();
+    default IStructWriter asStruct() {
+        throw new ClassCastException("not a struct");
     }
 
-    default <V extends ValueVector> IColumnWriter<V> writerForTypeId(byte typeId) {
-        throw new UnsupportedOperationException();
+    default IListWriter asList() {
+        throw new ClassCastException("not a list");
     }
 
-    default <V extends ValueVector> IColumnWriter<V> writerForType(ArrowType arrowType) {
-        throw new UnsupportedOperationException();
+    default IDenseUnionWriter asDenseUnion() {
+        throw new ClassCastException("not a dense union");
     }
+
+    void clear();
 
     @Override
     default void close() throws Exception {

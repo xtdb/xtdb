@@ -38,14 +38,24 @@
                           (VectorSchemaRoot. vecs))]
 
     (let [age-writer (-> (rel/vec->writer age-vec)
-                         (.writerForType ty/bigint-type))]
+                         (.asDenseUnion))
+          age-bigint-writer (-> age-writer
+                                (.writerForType ty/bigint-type))]
       (doseq [age [12 42 15 83 25]]
-        (ty/set-safe! (.getVector age-writer) (.appendIndex age-writer) age)))
+        (.startValue age-writer)
+        (.startValue age-bigint-writer)
+        (ty/write-value! age age-bigint-writer)
+        (.endValue age-writer)))
 
     (let [name-writer (-> (rel/vec->writer name-vec)
-                         (.writerForType ty/varchar-type))]
+                          (.asDenseUnion))
+          name-varchar-writer (-> name-writer
+                                  (.writerForType ty/varchar-type))]
       (doseq [name ["Al" "Dave" "Bob" "Steve"]]
-        (ty/set-safe! (.getVector name-writer) (.appendIndex name-writer) name)))
+        (.startValue name-writer)
+        (.startValue name-varchar-writer)
+        (ty/write-value! name name-varchar-writer)
+        (.endValue name-writer)))
 
     (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-column-selector '(<= age 30) {})
                                                         (rel/vec->reader age-vec))

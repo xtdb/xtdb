@@ -24,15 +24,18 @@
           (try
             (doseq [k (keys (first rows))]
               (let [out-vec (DenseUnionVector/empty (name k) allocator)
-                    out-writer (rel/vec->writer out-vec)]
+                    out-writer (.asDenseUnion (rel/vec->writer out-vec))]
                 (.add out-cols (rel/vec->reader out-vec))
                 (dorun
                  (map-indexed (fn [idx row]
                                 (util/set-value-count out-vec idx)
 
+                                (.startValue out-writer)
                                 (let [v (get row k)
                                       writer (.writerForType out-writer (ty/class->arrow-type (class v)))]
-                                  (ty/set-safe! (.getVector writer) (.appendIndex writer) v)))
+                                  (.startValue writer)
+                                  (ty/write-value! v writer))
+                                (.endValue out-writer))
 
                               rows))))
             (catch Exception e

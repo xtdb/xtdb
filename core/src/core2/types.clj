@@ -1,6 +1,7 @@
 (ns core2.types
   (:require [core2.util :as util])
-  (:import java.nio.ByteBuffer
+  (:import [core2.relation IColumnWriter]
+           [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration LocalDateTime]
            java.util.Date
@@ -86,6 +87,40 @@
 
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
   (->field "_row-id" bigint-type false))
+
+(defprotocol ArrowWriteable
+  (write-value! [v ^core2.relation.IColumnWriter writer]))
+
+(extend-protocol ArrowWriteable
+  nil
+  (write-value! [v ^IColumnWriter writer])
+
+  Boolean
+  (write-value! [v ^IColumnWriter writer]
+    (.setSafe ^BitVector (.getVector writer) (.getPosition writer) (if v 1 0)))
+
+  CharSequence
+  (write-value! [v ^IColumnWriter writer]
+    (let [buf (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap v))]
+      (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer)
+                buf (.position buf) (.remaining buf))))
+
+  Double
+  (write-value! [v ^IColumnWriter writer]
+    (.setSafe ^Float8Vector (.getVector writer) (.getPosition writer) v))
+
+  Long
+  (write-value! [v ^IColumnWriter writer]
+    (.setSafe ^BigIntVector (.getVector writer) (.getPosition writer) v))
+
+  Date
+  (write-value! [v ^IColumnWriter writer]
+    (.setSafe ^TimeStampMilliVector (.getVector writer) (.getPosition writer) (.getTime v)))
+
+  Duration
+  (write-value! [v ^IColumnWriter writer]
+    ;; HACK assumes millis for now
+    (.setSafe ^DurationVector (.getVector writer) (.getPosition writer) (.toMillis v))))
 
 (defprotocol PValueVector
   (set-safe! [value-vector idx v])

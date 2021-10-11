@@ -4,7 +4,7 @@
             [core2.relation :as rel]
             [core2.util :as util])
   (:import core2.ICursor
-           [core2.relation IRelationWriter IColumnReader IRelationReader IRowAppender]
+           [core2.relation IRelationWriter IColumnReader IRelationReader IRowCopier]
            [java.util ArrayList HashMap Iterator List Map]
            [java.util.function Consumer Function]
            java.util.stream.IntStream
@@ -73,7 +73,7 @@
 (defn ->cross-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
   (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))
 
-(deftype BuildPointer [^List #_<IRowAppender> row-appenders, ^int idx, pointer-or-object])
+(deftype BuildPointer [^List #_<IRowCopier> row-copiers, ^int idx, pointer-or-object])
 
 (defn- build-phase [^IRelationWriter rel-writer
                     ^IRelationReader build-rel
@@ -82,11 +82,11 @@
                     ^Map join-key->build-pointers
                     ^MutableRoaringBitmap pushdown-bloom
                     semi-join?]
-  (let [row-appenders (when-not semi-join?
+  (let [row-copiers (when-not semi-join?
                         (vec (for [^IColumnReader col build-rel
                                    :let [col-name (.getName col)]
                                    :when (not= col-name probe-column-name)]
-                               (.rowAppender (.columnWriter rel-writer col-name) col))))
+                               (.rowCopier (.columnWriter rel-writer col-name) col))))
         build-col (.columnReader build-rel build-column-name)
         internal-vec (.getVector build-col)]
     (dotimes [build-idx (.getValueCount build-col)]
@@ -97,17 +97,17 @@
                                       (reify Function
                                         (apply [_ x]
                                           (ArrayList.))))
-          (.add (BuildPointer. row-appenders build-idx
+          (.add (BuildPointer. row-copiers build-idx
                                (util/pointer-or-object internal-vec idx))))))))
 
 (defn- probe-phase ^core2.relation.IRelationReader [^IRelationWriter rel-writer
-                                                  ^IRelationReader probe-rel
-                                                  ^Map join-key->build-pointers
-                                                  ^String probe-column-name
-                                                  semi-join? anti-join?]
+                                                    ^IRelationReader probe-rel
+                                                    ^Map join-key->build-pointers
+                                                    ^String probe-column-name
+                                                    semi-join? anti-join?]
   (when (pos? (.rowCount probe-rel))
-    (let [probe-row-appenders (vec (for [^IColumnReader col probe-rel]
-                                     (.rowAppender (.columnWriter rel-writer (.getName col)) col)))
+    (let [probe-row-copiers (vec (for [^IColumnReader col probe-rel]
+                                     (.rowCopier (.columnWriter rel-writer (.getName col)) col)))
           probe-col (.columnReader probe-rel probe-column-name)
           probe-pointer (ArrowBufPointer.)
           matching-build-pointers (ArrayList.)
@@ -140,13 +140,19 @@
 
       (when-not semi-join?
         (doseq [^BuildPointer build-pointer matching-build-pointers
-                ^IRowAppender row-appender (.row-appenders build-pointer)]
-          (.appendRow row-appender (.idx build-pointer))))
+                ^IRowCopier row-copier (.row-copiers build-pointer)
+                :let [writer (.getWriter row-copier)]]
+          (.startValue writer)
+          (.copyRow row-copier (.idx build-pointer))
+          (.endValue writer)))
 
       (let [probe-idxs (.toArray (.build matching-probe-idxs))]
-        (doseq [^IRowAppender row-appender probe-row-appenders]
+        (doseq [^IRowCopier row-copier probe-row-copiers
+                :let [writer (.getWriter row-copier)]]
           (dotimes [idx (alength probe-idxs)]
-            (.appendRow row-appender (aget probe-idxs idx))))))))
+            (.startValue writer)
+            (.copyRow row-copier (aget probe-idxs idx))
+            (.endValue writer)))))))
 
 (deftype JoinCursor [^BufferAllocator allocator
                      ^ICursor build-cursor, ^String build-column-name

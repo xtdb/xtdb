@@ -2,16 +2,16 @@
   (:require [core2.types :as ty]
             [core2.util :as util])
   (:import core2.DenseUnionUtil
-           [core2.relation IColumnReader IColumnWriter IRelationReader IRelationWriter IRowAppender]
+           [core2.relation IColumnReader IColumnWriter IDenseUnionWriter IListWriter IRelationReader IRelationWriter IRowCopier IStructWriter]
            java.lang.AutoCloseable
            [java.util HashMap LinkedHashMap Map]
            java.util.function.Function
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.util.AutoCloseables
-           [org.apache.arrow.vector ValueVector VectorSchemaRoot]
-           [org.apache.arrow.vector.complex DenseUnionVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union ArrowType$Null Field FieldType]))
+           [org.apache.arrow.vector NullVector ValueVector VectorSchemaRoot]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType]))
 
 (declare ->IndirectVectorReader)
 
@@ -153,7 +153,7 @@
 
       (instance? DenseUnionVector v)
       (let [type-id (or (duv-type-id v arrow-type)
-                        (throw (UnsupportedOperationException.)))
+                        (throw (IllegalArgumentException.)))
             type-vec (.getVectorByType ^DenseUnionVector v type-id)]
         (DuvChildReader. col v type-id type-vec)))))
 
@@ -166,85 +166,138 @@
                   (.getType (.getField vv))))
       #{(.getType field)})))
 
-(deftype DuvChildWriter [^IColumnWriter parent-writer,
-                         ^DenseUnionVector parent-duv
+(deftype DuvChildWriter [^IDenseUnionWriter parent-writer,
                          ^byte type-id
-                         ^ValueVector child-vec]
+                         ^IColumnWriter inner-writer]
   IColumnWriter
-  (getVector [_] child-vec)
+  (getVector [_] (.getVector inner-writer))
+  (getPosition [_] (.getPosition inner-writer))
 
-  (appendIndex [this]
-    (.appendIndex this (.appendIndex parent-writer)))
+  (asStruct [duv-child-writer]
+    (let [^IStructWriter inner-writer (cast IStructWriter inner-writer)] ; cast to throw CCE early
+      (reify
+        IStructWriter
+        (getVector [_] (.getVector inner-writer))
+        (getPosition [_] (.getPosition inner-writer))
+        (writerForName [_ col-name] (.writerForName inner-writer col-name))
+        (startValue [_] (.startValue duv-child-writer))
+        (endValue [_] (.endValue duv-child-writer)))))
 
-  (appendIndex [_ parent-idx]
-    (DenseUnionUtil/writeTypeId parent-duv parent-idx type-id))
+  (asList [duv-child-writer]
+    (let [^IListWriter inner-writer (cast IListWriter inner-writer)] ; cast to throw CCE early
+      (reify
+        IListWriter
+        (getVector [_] (.getVector inner-writer))
+        (getPosition [_] (.getPosition inner-writer))
+        (startValue [_] (.startValue duv-child-writer))
+        (endValue [_] (.endValue duv-child-writer))
+        (getDataWriter [_] (.getDataWriter inner-writer)))))
 
-  (rowAppender [this-writer src-col]
-    (let [src-vec (.getVector src-col)]
-      (if (= ArrowType$Null/INSTANCE (.getType (.getField src-vec)))
-        (reify IRowAppender
-          (appendRow [_ src-idx] (.appendIndex this-writer))
-          (appendRow [_ src-idx parent-idx] (.appendIndex this-writer parent-idx)))
+  (startValue [this]
+    (let [parent-duv (.getVector parent-writer)
+          parent-pos (.getPosition parent-writer)
+          pos (.getPosition this)]
+      (.setTypeId parent-duv parent-pos type-id)
+      (.setOffset parent-duv parent-pos pos)
 
-        (reify IRowAppender
-          (appendRow [this src-idx]
-            (.appendRow this src-idx (.appendIndex parent-writer)))
+      (util/set-value-count parent-duv (inc parent-pos))
+      (util/set-value-count (.getVector this) (inc pos))
 
-          (appendRow [_ src-idx parent-idx]
-            (.copyFromSafe child-vec
-                           (.getIndex src-col src-idx)
-                           (.appendIndex this-writer parent-idx)
-                           src-vec)))))))
+      (.startValue inner-writer)
 
-(defn- duv->duv-appender ^core2.relation.IRowAppender [^IColumnReader src-col, ^IColumnWriter dest-col]
+      pos))
+
+  (endValue [_] (.endValue inner-writer))
+  (clear [_] (.clear inner-writer))
+
+  (rowCopier [this-writer src-col]
+    (let [inner-copier (.rowCopier inner-writer src-col)]
+      (reify IRowCopier
+        (getWriter [_] this-writer)
+        (getReader [_] src-col)
+
+        (copyRow [this src-idx]
+          (.startValue this-writer)
+          (.copyRow inner-copier src-idx))))))
+
+(defn- duv->duv-copier ^core2.relation.IRowCopier [^IColumnReader src-col, ^IDenseUnionWriter dest-col]
   (let [^DenseUnionVector src-vec (.getVector src-col)
         src-field (.getField src-vec)
         src-type (.getType src-field)
         type-ids (.getTypeIds ^ArrowType$Union src-type)
         type-id-count (inc (apply max -1 type-ids))
-        appender-mapping (object-array type-id-count)]
+        copier-mapping (object-array type-id-count)]
 
     (dotimes [n (alength type-ids)]
       (let [src-type-id (aget type-ids n)
             arrow-type (-> ^Field (.get (.getChildren src-field) n)
                            (.getType))]
-        (aset appender-mapping src-type-id (.rowAppender (.writerForType dest-col arrow-type)
-                                                         (reader-for-type-id src-col src-type-id)))))
+        (aset copier-mapping src-type-id (.rowCopier (.writerForType dest-col arrow-type)
+                                                     (reader-for-type-id src-col src-type-id)))))
 
-    (reify IRowAppender
-      (appendRow [_ src-idx]
-        (-> ^IRowAppender (aget appender-mapping (.getTypeId src-vec (.getIndex src-col src-idx)))
-            (.appendRow src-idx)))
+    (reify IRowCopier
+      (getWriter [_] dest-col)
+      (getReader [_] src-col)
 
-      (appendRow [_ src-idx parent-idx]
-        (-> ^IRowAppender (aget appender-mapping (.getTypeId src-vec (.getIndex src-col src-idx)))
-            (.appendRow src-idx parent-idx))))))
+      (copyRow [_ src-idx]
+        (-> ^IRowCopier (aget copier-mapping (.getTypeId src-vec (.getIndex src-col src-idx)))
+            (.copyRow src-idx))))))
 
-(defn- vec->duv-appender ^core2.relation.IRowAppender [^IColumnReader src-col, ^IColumnWriter dest-col]
+(defn- vec->duv-copier ^core2.relation.IRowCopier [^IColumnReader src-col, ^IDenseUnionWriter dest-col]
   (-> (.writerForType dest-col (-> (.getVector src-col) (.getField) (.getType)))
-      (.rowAppender src-col)))
+      (.rowCopier src-col)))
 
-(deftype DuvWriter [^DenseUnionVector dest-duv, ^Map writers]
+(declare ^core2.relation.IColumnWriter vec->writer)
+
+(deftype DuvWriter [^DenseUnionVector dest-duv,
+                    ^"[Lcore2.relation.IColumnWriter;" writers-by-type-id
+                    ^Map writers-by-type
+                    ^:unsynchronized-mutable ^int pos]
   IColumnWriter
   (getVector [_] dest-duv)
+  (getPosition [_] pos)
 
-  (appendIndex [_]
-    (let [idx (.getValueCount dest-duv)]
-      (util/set-value-count dest-duv (inc idx))
-      idx))
+  (startValue [_]
+    ;; allocates memory in the type-id/offset buffers even if the DUV value is null
+    (.setTypeId dest-duv pos -1)
+    (.setOffset dest-duv pos 0)
+    pos)
 
-  (rowAppender [this src-col]
-    (if (instance? DenseUnionVector (.getVector src-col))
-      (duv->duv-appender src-col this)
-      (vec->duv-appender src-col this)))
+  (endValue [this]
+    (let [type-id (.getTypeId dest-duv pos)]
+      (when-not (neg? type-id)
+        (.endValue ^IColumnWriter (aget writers-by-type-id type-id))))
+    (set! (.pos this) (inc pos)))
 
+  (clear [this]
+    (doseq [^IColumnWriter writer writers-by-type-id
+            :when writer]
+      (.clear writer))
+    (set! (.pos this) 0))
+
+  (rowCopier [this-writer src-col]
+    (let [inner-copier (if (instance? DenseUnionVector (.getVector src-col))
+                         (duv->duv-copier src-col this-writer)
+                         (vec->duv-copier src-col this-writer))]
+      (reify IRowCopier
+        (getWriter [_] this-writer)
+        (getReader [_] src-col)
+        (copyRow [_ src-idx] (.copyRow inner-copier src-idx)))))
+
+  (asDenseUnion [this] this)
+
+  IDenseUnionWriter
   (writerForTypeId [this type-id]
-    (let [inner-vec (or (.getVectorByType dest-duv type-id)
-                        (throw (IllegalArgumentException.)))]
-      (DuvChildWriter. this dest-duv type-id inner-vec)))
+    (or (aget writers-by-type-id type-id)
+        (let [inner-vec (or (.getVectorByType dest-duv type-id)
+                            (throw (IllegalArgumentException.)))
+              inner-writer (vec->writer inner-vec)
+              writer (DuvChildWriter. this type-id inner-writer)]
+          (aset writers-by-type-id type-id writer)
+          writer)))
 
   (writerForType [this arrow-type]
-    (.computeIfAbsent writers arrow-type
+    (.computeIfAbsent writers-by-type arrow-type
                       (reify Function
                         (apply [_ arrow-type]
                           (let [^Field field (ty/->field (ty/type->field-name arrow-type) arrow-type false)
@@ -256,39 +309,108 @@
 
                             (.writerForTypeId this type-id)))))))
 
-(declare vec->writer)
-
-(deftype StructWriter [^StructVector dest-vec, ^Map writers]
+(deftype StructWriter [^StructVector dest-vec, ^Map writers,
+                       ^:unsynchronized-mutable ^int pos]
   IColumnWriter
   (getVector [_] dest-vec)
+  (getPosition [_] pos)
 
-  (appendIndex [_]
-    (let [idx (.getValueCount dest-vec)]
-      (util/set-value-count dest-vec (inc idx))
-      (.setIndexDefined dest-vec idx)
-      idx))
+  (startValue [_]
+    (.setIndexDefined dest-vec pos)
+    (doseq [^IColumnWriter writer (vals writers)]
+      (.startValue writer))
+    pos)
 
+  (endValue [this]
+    (doseq [^IColumnWriter writer (vals writers)]
+      (.endValue writer))
+    (set! (.pos this) (inc pos)))
+
+  (clear [this]
+    (doseq [^IColumnWriter writer (vals writers)]
+      (.clear writer))
+    (set! (.pos this) 0))
+
+  (asStruct [this] this)
+
+  IStructWriter
   (writerForName [_ col-name]
     (.computeIfAbsent writers col-name
                       (reify Function
                         (apply [_ col-name]
-                          (-> (doto (.addOrGet dest-vec col-name
-                                               (FieldType/nullable ty/dense-union-type)
-                                               DenseUnionVector)
-                                (util/set-value-count (.getValueCount dest-vec)))
-                              (vec->writer)))))))
+                          (-> (or (.getChild dest-vec col-name)
+                                  (.addOrGet dest-vec col-name
+                                             (FieldType/nullable ty/dense-union-type)
+                                             DenseUnionVector))
+                              (vec->writer pos)))))))
 
-(defn vec->writer ^core2.relation.IColumnWriter [^ValueVector dest-vec]
-  (cond
-    (instance? DenseUnionVector dest-vec) (DuvWriter. dest-vec (HashMap.))
-    (instance? StructVector dest-vec) (StructWriter. dest-vec (HashMap.))
-    :else (reify IColumnWriter
-            (getVector [_] dest-vec)
+(deftype ListWriter [^ListVector dest-vec
+                     ^IColumnWriter data-writer
+                     ^:unsynchronized-mutable ^int pos
+                     ^:unsynchronized-mutable ^int data-start-pos]
+  IColumnWriter
+  (getVector [_] dest-vec)
+  (getPosition [_] pos)
+  (asList [this] this)
 
-            (appendIndex [_]
-              (let [idx (.getValueCount dest-vec)]
-                (util/set-value-count dest-vec (inc idx))
-                idx)))))
+  (startValue [this]
+    (set! (.data-start-pos this) (.startNewValue dest-vec pos))
+    pos)
+
+  (endValue [this]
+    (.endValue dest-vec pos (- (.getPosition data-writer) data-start-pos))
+    (set! (.pos this) (inc pos)))
+
+  (clear [this]
+    (.clear data-writer)
+    (set! (.pos this) 0))
+
+  IListWriter
+  (getDataWriter [_] data-writer))
+
+(deftype ScalarWriter [^ValueVector dest-vec,
+                       ^:unsynchronized-mutable ^int pos]
+  IColumnWriter
+  (getVector [_] dest-vec)
+  (getPosition [_] pos)
+  (startValue [_] pos)
+  (endValue [this] (set! (.pos this) (inc pos)))
+
+  (clear [this] (set! (.pos this) 0))
+
+  (rowCopier [this-writer src-col]
+    (let [src-vec (.getVector src-col)]
+      (if (instance? NullVector dest-vec)
+        ;; `NullVector/.copyFromSafe` throws UOE
+        (reify IRowCopier
+          (getWriter [_] this-writer)
+          (getReader [_] src-col)
+          (copyRow [_ src-idx]))
+
+        (reify IRowCopier
+          (getWriter [_] this-writer)
+          (getReader [_] src-col)
+          (copyRow [_ src-idx]
+            (.copyFromSafe dest-vec
+                           (.getIndex src-col src-idx)
+                           (.getPosition this-writer)
+                           src-vec)))))))
+
+(defn ^core2.relation.IColumnWriter vec->writer
+  ([^ValueVector dest-vec] (vec->writer dest-vec (.getValueCount dest-vec)))
+  ([^ValueVector dest-vec, ^long pos]
+   (cond
+     (instance? DenseUnionVector dest-vec)
+     (DuvWriter. dest-vec (make-array IColumnWriter (inc Byte/MAX_VALUE)) (HashMap.) pos)
+
+     (instance? StructVector dest-vec)
+     (StructWriter. dest-vec (HashMap.) pos)
+
+     (instance? ListVector dest-vec)
+     (ListWriter. dest-vec (vec->writer (.getDataVector ^ListVector dest-vec)) pos 0)
+
+     :else
+     (ScalarWriter. dest-vec pos))))
 
 (defn ->rel-writer ^core2.relation.IRelationWriter [^BufferAllocator allocator]
   (let [col-writers (LinkedHashMap.)]
@@ -314,17 +436,18 @@
                      (col-writer->reader col-writer))))
 
 (defn append-col [^IColumnWriter col-writer, ^IColumnReader col-reader]
-  (let [row-appender (.rowAppender col-writer col-reader)]
+  (let [row-copier (.rowCopier col-writer col-reader)]
     (dotimes [src-idx (.getValueCount col-reader)]
-      (.appendRow row-appender src-idx))))
+      (.startValue col-writer)
+      (.copyRow row-copier src-idx)
+      (.endValue col-writer))))
 
 (defn append-rel [^IRelationWriter dest-rel, ^IRelationReader src-rel]
   (doseq [^IColumnReader src-col src-rel
           :let [^IColumnWriter col-writer (.columnWriter dest-rel (.getName src-col))]]
     (append-col col-writer src-col)))
 
-(defn clear-col [^IColumnWriter writer]
-  (.clear (.getVector writer)))
-
 (defn clear-rel [^IRelationWriter writer]
-  (run! clear-col writer))
+  (doseq [^IColumnWriter col-writer writer]
+    (.clear (.getVector col-writer))
+    (.clear col-writer)))
