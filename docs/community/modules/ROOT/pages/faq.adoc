@@ -1,4 +1,5 @@
 = FAQs
+:page-aliases: about::faq.adoc
 
 [qanda]
 

@@ -18,11 +18,14 @@ content:
     - url: ../
       start_path: docs/main # index
       branches: v2xtdbcom
-    - url: ../
-      start_path: docs/reference
-      branches:
-        - v2xtdbcom
-#        - docs-v*
+
+    # TODO: replace with 4x new categories:
+#     - url: ../
+#       start_path: docs/reference
+#       branches:
+#         - v2xtdbcom
+# #        - docs-v*
+
     - url: ../
       start_path: docs/tutorials
       branches: v2xtdbcom
@@ -35,6 +38,24 @@ content:
     - url: ../
       start_path: docs/resources
       branches: v2xtdbcom
+
+    # when v2.xtdb.com is released, get rid of all this old cruft:
+    - url: ../
+      start_path: docs/reference
+      branches: v2xtdbcom
+    - url: ../
+      start_path: docs/community
+      branches: v2xtdbcom
+    - url: ../
+      start_path: docs/articles
+      branches: v2xtdbcom
+    - url: ../
+      start_path: docs/support
+      branches: v2xtdbcom
+    - url: ../
+      start_path: docs/training
+      branches: v2xtdbcom
+
 
 ui:
   bundle:
