@@ -6,7 +6,7 @@
 
 * Query Reference (TODO)
 * API Reference (TODO)
-* Operations (TODO)
+* xref:operations::index.adoc[Operations]
 * xref:integrations::index.adoc[Integrations]
 * xref:persistence-stores::index.adoc[Persistence Stores]
 
