@@ -23,11 +23,11 @@ content:
                             # https://gitlab.com/antora/antora/-/issues/332
 
     # TODO: replace with 4x new categories:
-#     - url: ../
-#       start_path: docs/reference
-#       branches:
-#         - v2xtdbcom
-# #        - docs-v*
+    - url: ../
+      start_path: docs/persistence-stores
+      branches:
+        - v2xtdbcom
+#        - docs-v*
 
     - url: ../
       start_path: docs/tutorials

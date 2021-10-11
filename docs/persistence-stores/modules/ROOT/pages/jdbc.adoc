@@ -1,0 +1,253 @@
+= JDBC
+:page-aliases: reference::jdbc.adoc
+
+XTDB nodes can use JDBC databases to store their transaction logs and/or document stores.
+
+image::jdbc-modes.svg?sanitize=true[Local Cluster Mode,450,480,align="center"]
+
+== Project Dependencies
+
+[tabs]
+====
+deps.edn::
++
+[source,clojure, subs=attributes+]
+----
+com.xtdb/xtdb-jdbc {:mvn/version "{xtdb_version}"}
+----
+
+pom.xml::
++
+[source,xml, subs=attributes+]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-jdbc</artifactId>
+    <version>{xtdb_version}</version>
+</dependency>
+----
+====
+
+== Example configuration
+
+JDBC transaction logs and document stores depend on a 'connection pool' component - if you use both, they can share the same connection pool.
+
+Connection pools require a JDBC 'dialect' - out of the box, XTDB supports the following:
+
+[#dialects]
+* H2: `+xtdb.jdbc.h2/->dialect+`
+* MySQL: `+xtdb.jdbc.mysql/->dialect+`
+* Microsoft SQL Server: `+xtdb.jdbc.mssql/->dialect+`
+* Oracle: `+xtdb.jdbc.oracle/->dialect+`
+* PostgreSQL: `+xtdb.jdbc.psql/->dialect+`
+* SQLite: `+xtdb.jdbc.sqlite/->dialect+`
+
+Each of these also require an additional dependency to pull in the relevant JDBC driver - see the XTDB JDBC https://github.com/xtdb/xtdb/blob/main/modules/jdbc/project.clj[project.clj] for our latest dependencies.
+
+[#db-spec]
+The connection pool also requires a `db-spec` - a map containing either a full `jdbcUrl` or its component parts, including `dbtype` (provided by the dialect by default), `host`, `port`, `dbname`.
+Any other attributes supplied (`user`, `password`, say) are appended to the URL as query parameters - see your individual JDBC driver for full details.
+
+[#pool-opts]
+XTDB uses https://github.com/brettwooldridge/HikariCP[HikariCP] to provide connection pools.
+You can pass options directly to https://javadoc.io/static/com.zaxxer/HikariCP/3.2.0/com/zaxxer/hikari/HikariConfig.html[`HikariConfig`] via `pool-opts` - for example, to `setMaximumPoolSize`, add `maximumPoolSize` to your configuration.
+
+=== JDBC as a Transaction Log
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "xtdb/tx-log": {
+    "xtdb/module": "xtdb.jdbc/->tx-log",
+    "connection-pool": {
+      "dialect": {
+        "xtdb/module": "xtdb.jdbc.psql/->dialect"
+      },
+      "pool-opts": { ... },
+      "db-spec": {
+        "jdbcUrl": "...",
+        // OR
+        "host":"...",
+        "dbname":"...",
+        "user":"...",
+        "password":"...",
+        ...
+        }
+    },
+
+    "poll-sleep-duration": "PT1S"
+  },
+
+  ...
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:xtdb/tx-log {:xtdb/module 'xtdb.jdbc/->tx-log
+               :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect}
+                                 :pool-opts { ... }
+                                 :db-spec {:jdbcUrl "..."
+                                           ;; OR
+                                           :host "..."
+                                           :dbname "..."
+                                           :user "..."
+                                           :password "..."
+                                           ... }}
+               :poll-sleep-duration (Duration/ofSeconds 1)}
+ ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb/tx-log {:xtdb/module xtdb.jdbc/->tx-log
+               :connection-pool {:dialect {:xtdb/module xtdb.jdbc.psql/->dialect}
+                                 :pool-opts { ... }
+                                 :db-spec {:jdbcUrl "..."
+                                           ;; OR
+                                           :host "..."
+                                           :dbname "..."
+                                           :user "..."
+                                           :password "..."
+                                           ... }}
+               :poll-sleep-duration "PT1S"}
+ ...}
+----
+====
+
+=== JDBC as a Document Store
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.jdbc/->document-store",
+    "connection-pool": {
+      "dialect": {
+        "xtdb/module": "xtdb.jdbc.psql/->dialect"
+      },
+      "pool-opts": { ... },
+      "db-spec": { ... }
+    }
+  },
+
+  ...
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:xtdb/document-store {:xtdb/module 'xtdb.jdbc/->document-store
+                       :connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect}
+                                         :pool-opts { ... }
+                                         :db-spec { ... }}}
+ ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb/document-store {:xtdb/module xtdb.jdbc/->document-store
+                       :connection-pool {:dialect {:xtdb/module xtdb.jdbc.psql/->dialect}
+                                         :pool-opts { ... }
+                                         :db-spec { ... }}}
+ ...}
+----
+====
+
+=== Sharing connection pools
+
+If you use JDBC for both the transaction log and document store, you can share the same connection pool between the two modules as follows:
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "xtdb.jdbc/connection-pool": {
+    "dialect": {
+      "xtdb/module": "xtdb.jdbc.psql/->dialect"
+    },
+    "pool-opts": { ... },
+    "db-spec": { ... }
+  },
+
+
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.jdbc/->document-store",
+    "connection-pool": "xtdb.jdbc/connection-pool"
+  },
+
+  "xtdb/tx-log": {
+    "xtdb/module": "xtdb.jdbc/->tx-log",
+    "connection-pool": "xtdb.jdbc/connection-pool"
+  },
+
+  ...
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:xtdb.jdbc/connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect}
+                             :pool-opts { ... }
+                             :db-spec { ... }}
+ :xtdb/tx-log {:xtdb/module 'xtdb.jdbc/->tx-log
+               :connection-pool :xtdb.jdbc/connection-pool}
+ :xtdb/document-store {:xtdb/module 'xtdb.jdbc/->document-store
+                       :connection-pool :xtdb.jdbc/connection-pool}
+ ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb.jdbc/connection-pool {:dialect {:xtdb/module xtdb.jdbc.psql/->dialect}
+                             :pool-opts { ... }
+                             :db-spec { ... }}
+ :xtdb/tx-log {:xtdb/module xtdb.jdbc/->tx-log
+               :connection-pool :xtdb.jdbc/connection-pool}
+ :xtdb/document-store {:xtdb/module xtdb.jdbc/->document-store
+                       :connection-pool :xtdb.jdbc/connection-pool}
+ ...}
+----
+====
+
+== Parameters
+
+=== Connection pool (`+xtdb.jdbc/->connection-pool+`)
+
+* `dialect` (dialect, required): JDBC xref:#dialects[dialect]
+* `pool-opts` (map): see xref:#pool-opts[above]
+* `db-spec` (map, required): see xref:#db-spec[above]
+
+
+=== Transaction log (`+xtdb.jdbc/->tx-log+`)
+
+* `connection-pool`
+* `poll-sleep-duration` (string/`Duration`, default 100 milliseconds, `"PT0.1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
+
+=== Document store (`+xtdb.jdbc/->document-store+`)
+
+* `connection-pool`
+* `cache-size` (int): size of in-memory document cache

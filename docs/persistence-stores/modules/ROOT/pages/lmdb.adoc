@@ -1,0 +1,84 @@
+= LMDB
+:page-aliases: reference::lmdb.adoc
+
+https://symas.com/lmdb/[LMDB] can be used as the data store for XTDB's query indices, but can also be used as a transaction log and/or document store in single node clusters.
+
+LMDB tends to provide faster queries than xref:rocksdb.adoc[RocksDB] in exchange for a slower ingest rate.
+
+== Project Dependency
+
+In order to use LMDB within XTDB, you must first add LMDB as a project dependency:
+
+[tabs]
+====
+deps.edn::
++
+[source,clojure, subs=attributes+]
+----
+com.xtdb/xtdb-lmdb {:mvn/version "{xtdb_version}"}
+----
+
+pom.xml::
++
+[source,xml, subs=attributes+]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-lmdb</artifactId>
+    <version>{xtdb_version}</version>
+</dependency>
+----
+====
+
+== Using LMDB
+
+Replace the implementation of the desired component with `+xtdb.lmdb/->kv-store+`
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "xtdb/index-store": {
+    "kv-store": {
+      "xtdb/module": "xtdb.lmdb/->kv-store",
+      "db-dir": "/tmp/lmdb"
+    }
+  },
+
+  "xtdb/document-store": { ... },
+  "xtdb/tx-log": { ... }
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:xtdb/index-store {:kv-store {:xtdb/module 'xtdb.lmdb/->kv-store
+                               :db-dir (io/file "/tmp/lmdb")}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:xtdb/index-store {:kv-store {:xtdb/module xtdb.lmdb/->kv-store
+                               :db-dir "/tmp/lmdb"}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
+----
+====
+
+It is generally advised to use independent LMDB instances for each component, although using a single instance for the transaction log and document store is possible. Do not share the LMDB instance used for the index store with other components as you cannot then perform XTDB version upgrades.
+
+== Parameters
+
+* `db-dir` (required, string/`File`/`Path`): path to LMDB data directory
+* `sync?` (boolean, default false): sync to disk after every write
+* `env-flags` (int): LMDB flags
+* `env-mapsize`(int): LMDB map size
