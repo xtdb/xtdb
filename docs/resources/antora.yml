@@ -2,6 +2,6 @@ name: resources
 title: Resources
 version: master
 display_version: main
-start_page: ROOT:faq.adoc
+start_page: ROOT:index.adoc
 nav:
   - modules/ROOT/nav.adoc

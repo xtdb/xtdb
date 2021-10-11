@@ -2,6 +2,6 @@ name: tutorials
 title: Tutorials
 version: master
 display_version: main
-start_page: ROOT:space-adventure.adoc
+start_page: ROOT:index.adoc
 nav:
   - modules/ROOT/nav.adoc

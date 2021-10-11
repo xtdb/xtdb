@@ -16,8 +16,11 @@ site:
 content:
   sources:
     - url: ../
-      start_path: docs/main # index
-      branches: v2xtdbcom
+      start_path: docs/main # index - Only necessary to read self-hosted docs.
+      branches: v2xtdbcom   # There is no way to hide a source from the nav
+                            # bar due to Antora limitations, so we will comment
+                            # this source out for docs.xtdb.com:
+                            # https://gitlab.com/antora/antora/-/issues/332
 
     # TODO: replace with 4x new categories:
 #     - url: ../
@@ -39,22 +42,23 @@ content:
       start_path: docs/resources
       branches: v2xtdbcom
 
-    # when v2.xtdb.com is released, get rid of all this old cruft:
-    - url: ../
-      start_path: docs/reference
-      branches: v2xtdbcom
-    - url: ../
-      start_path: docs/community
-      branches: v2xtdbcom
-    - url: ../
-      start_path: docs/articles
-      branches: v2xtdbcom
-    - url: ../
-      start_path: docs/support
-      branches: v2xtdbcom
-    - url: ../
-      start_path: docs/training
-      branches: v2xtdbcom
+    # Uncomment the sources below to deploy `website-old`.
+    # When v2.xtdb.com is released, get rid of all this old cruft:
+    # - url: ../
+    #   start_path: docs/reference
+    #   branches: v2xtdbcom
+    # - url: ../
+    #   start_path: docs/community
+    #   branches: v2xtdbcom
+    # - url: ../
+    #   start_path: docs/articles
+    #   branches: v2xtdbcom
+    # - url: ../
+    #   start_path: docs/support
+    #   branches: v2xtdbcom
+    # - url: ../
+    #   start_path: docs/training
+    #   branches: v2xtdbcom
 
 
 ui:

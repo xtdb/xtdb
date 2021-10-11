@@ -2,7 +2,7 @@ name: guides
 title: Guides
 version: master
 display_version: main
-start_page: ROOT:quickstart.adoc
+start_page: ROOT:index.adoc
 nav:
   - modules/ROOT/nav.adoc
 asciidoc:

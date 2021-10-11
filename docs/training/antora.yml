@@ -1,5 +1,5 @@
 name: training
-title: XTDB
+title: Training
 version: master
 display_version: main
 start_page: ROOT:training.adoc

@@ -1,0 +1,5 @@
+= Resources
+
+* xref:faq.adoc[FAQ]
+* xref:performance.adoc[Performance]
+* xref:bibliography.adoc[Bibliography]
