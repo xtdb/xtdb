@@ -22,6 +22,12 @@ content:
                             # this source out for docs.xtdb.com:
                             # https://gitlab.com/antora/antora/-/issues/332
 
+
+    - url: ../
+      start_path: docs/api-reference
+      branches:
+        - v2xtdbcom
+#        - docs-v*
     - url: ../
       start_path: docs/operations
       branches:

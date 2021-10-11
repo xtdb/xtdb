@@ -1,0 +1,6 @@
+= Java
+
+TODO: We need to figure out how to combine the Antora path with the JavaDocs path.
+JavaDocs should render at a sensible location like:
+
+https://docs.xtdb.com/api-reference/java/

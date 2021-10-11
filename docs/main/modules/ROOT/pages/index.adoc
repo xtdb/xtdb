@@ -5,7 +5,7 @@
 == Docs
 
 * Query Reference (TODO)
-* API Reference (TODO)
+* xref:api-reference::index.adoc[API Reference]
 * xref:operations::index.adoc[Operations]
 * xref:integrations::index.adoc[Integrations]
 * xref:persistence-stores::index.adoc[Persistence Stores]
