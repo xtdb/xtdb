@@ -14,6 +14,5 @@ set -e
     # echo "If you re-run the CloudFormation setup, you'll need to specify a new Distribution id."
     # echo "CloudFront Distribution id is set manually to: $DISTRIBUTION_ID"
     DISTRIBUTION_ID=`aws cloudfront list-distributions --query "DistributionList.Items[*].{Id:Id,alias:Aliases.Items[0]}[?alias=='docs.xtdb.com'].Id" --output text`
-    aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths '/*' > /tmp/xtdb-docs-last-cf-invalidation.json
-    echo "CloudFront invalidation written to /tmp/xtdb-docs-last-cf-invalidation.json"
+    aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths '/*' --output text
 )
