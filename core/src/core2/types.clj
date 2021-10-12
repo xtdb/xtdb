@@ -54,40 +54,6 @@
    duration-milli-type DurationVector
    ArrowType$Bool/INSTANCE BitVector})
 
-(def arrow-type-hierarchy
-  (-> (make-hierarchy)
-      (derive ArrowType$FloatingPoint ::Number)
-      (derive ArrowType$Int ::Number)
-      (derive ArrowType ::Object)))
-
-(defmulti least-upper-bound2
-  (fn [x-type y-type] [(class x-type) (class y-type)])
-  :hierarchy #'arrow-type-hierarchy)
-
-(defmethod least-upper-bound2 [::Number ::Number] [x-type y-type]
-  ;; TODO this is naive of the different types of Ints/Floats
-  (if (and (instance? ArrowType$Int x-type) (instance? ArrowType$Int y-type))
-    bigint-type
-    float8-type))
-
-(defmethod least-upper-bound2 :default [x-type y-type]
-  (throw (UnsupportedOperationException. (format "Can't LUB: %s ⊔ %s" x-type y-type))))
-
-(alter-meta! #'least-upper-bound2 assoc :private true)
-
-(defn least-upper-bound [arrow-types]
-  (reduce (fn [lub arrow-type]
-            (if (= lub arrow-type)
-              lub
-              (least-upper-bound2 lub arrow-type)))
-          arrow-types))
-
-(defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
-  (Field. field-name (FieldType. nullable arrow-type nil nil) children))
-
-(def ^org.apache.arrow.vector.types.pojo.Field row-id-field
-  (->field "_row-id" bigint-type false))
-
 (defprotocol ArrowWriteable
   (write-value! [v ^core2.relation.IColumnWriter writer]))
 
@@ -123,91 +89,68 @@
     (.setSafe ^DurationVector (.getVector writer) (.getPosition writer) (.toMillis v))))
 
 (defprotocol PValueVector
-  (set-safe! [value-vector idx v])
-  (set-null! [value-vector idx])
   (get-object [value-vector idx]))
 
 (extend-protocol PValueVector
   BigIntVector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^long v))
-  (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (.get this ^int idx))
 
   BitVector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^int (if v 1 0)))
-  (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (.getObject this ^int idx))
 
   TimeStampMilliVector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx (if (int? v)
-                              ^long v
-                              (.getTime (if (instance? LocalDateTime v)
-                                          (util/local-date-time->date v)
-                                          ^Date v)))))
-
-  (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (Date. (.get this ^int idx)))
 
   DurationVector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx (if (int? v)
-                              ^long v
-                              (.toMillis ^Duration v))))
-
-  (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (.getObject this ^int idx))
 
   Float8Vector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^double v))
-  (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (.get this ^int idx))
 
   NullVector
-  (set-safe! [this idx v])
-  (set-null! [this idx])
   (get-object [this idx] (.getObject this ^int idx))
 
   VarBinaryVector
-  (set-safe! [this idx v]
-    (cond
-      (instance? ByteBuffer v)
-      (.setSafe this ^int idx ^ByteBuffer v (.position ^ByteBuffer v) (.remaining ^ByteBuffer v))
-
-      (bytes? v)
-      (.setSafe this ^int idx ^bytes v)
-
-      :else
-      (throw (IllegalArgumentException.))))
-
-  (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (.get this ^int idx))
 
   VarCharVector
-  (set-safe! [this idx v]
-    (cond
-      (instance? ByteBuffer v)
-      (.setSafe this ^int idx ^ByteBuffer v (.position ^ByteBuffer v) (.remaining ^ByteBuffer v))
-
-      (bytes? v)
-      (.setSafe this ^int idx ^bytes v)
-
-      (string? v)
-      (.setSafe this ^int idx (.getBytes ^String v StandardCharsets/UTF_8))
-
-      (instance? Text v)
-      (.setSafe this ^int idx ^Text v)
-
-      :else
-      (throw (IllegalArgumentException.))))
-
-  (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
 
   DenseUnionVector
-  (set-null! [this idx]
-    (set-safe! this idx nil))
-
   (get-object [this idx]
     (get-object (.getVectorByType this (.getTypeId this idx))
                 (.getOffset this idx))))
+
+(def arrow-type-hierarchy
+  (-> (make-hierarchy)
+      (derive ArrowType$FloatingPoint ::Number)
+      (derive ArrowType$Int ::Number)
+      (derive ArrowType ::Object)))
+
+(defmulti least-upper-bound2
+  (fn [x-type y-type] [(class x-type) (class y-type)])
+  :hierarchy #'arrow-type-hierarchy)
+
+(defmethod least-upper-bound2 [::Number ::Number] [x-type y-type]
+  ;; TODO this is naive of the different types of Ints/Floats
+  (if (and (instance? ArrowType$Int x-type) (instance? ArrowType$Int y-type))
+    bigint-type
+    float8-type))
+
+(defmethod least-upper-bound2 :default [x-type y-type]
+  (throw (UnsupportedOperationException. (format "Can't LUB: %s ⊔ %s" x-type y-type))))
+
+(alter-meta! #'least-upper-bound2 assoc :private true)
+
+(defn least-upper-bound [arrow-types]
+  (reduce (fn [lub arrow-type]
+            (if (= lub arrow-type)
+              lub
+              (least-upper-bound2 lub arrow-type)))
+          arrow-types))
+
+(defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
+  (Field. field-name (FieldType. nullable arrow-type nil nil) children))
+
+(def ^org.apache.arrow.vector.types.pojo.Field row-id-field
+  (->field "_row-id" bigint-type false))

@@ -12,7 +12,6 @@
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.types.Types$MinorType
            org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.util.Text
            org.apache.arrow.vector.VectorSchemaRoot))
 
 (deftype CSVCursor [^BufferAllocator allocator
@@ -26,16 +25,22 @@
       (let [row-batch (.next row-batches)
             row-count (count row-batch)]
         (.clear root)
-        (util/set-vector-schema-root-row-count root row-count)
 
         (dorun
          (map-indexed (fn [col-idx fv]
-                        (let [parse-value (nth col-parsers col-idx)]
+                        (let [parse-value (nth col-parsers col-idx)
+                              writer (rel/vec->writer fv)]
                           (dotimes [row-idx row-count]
-                            (types/set-safe! fv row-idx (-> (nth row-batch row-idx)
-                                                            (nth col-idx)
-                                                            parse-value)))))
+                            (.startValue writer)
+                            (types/write-value! (-> (nth row-batch row-idx)
+                                                    (nth col-idx)
+                                                    parse-value)
+                                                writer)
+                            (.endValue writer))))
                       (.getFieldVectors root)))
+
+        (util/set-vector-schema-root-row-count root row-count)
+
         (.accept c (rel/<-root root))
         true)
       false))
@@ -52,10 +57,10 @@
    :bigint #(Long/parseLong %)
    :float8 #(Double/parseDouble %)
    :varbinary #(.decode b64-decoder ^String %)
-   :varchar #(Text. ^String %)
+   :varchar identity
    :bit #(or (= "1" %) (= "true" %))
-   :timestamp-milli #(.getTime ^Date (inst/read-instant-date %))
-   :duration-milli #(.toMillis (Duration/parse %))})
+   :timestamp-milli inst/read-instant-date
+   :duration-milli #(Duration/parse %)})
 
 (def ->arrow-type
   {:bigint (.getType Types$MinorType/BIGINT)

@@ -95,11 +95,17 @@
 
   (let [field-vecs (.getFieldVectors root)
         row-count (count rows)]
-    (.setRowCount root row-count)
-    (doseq [^FieldVector field-vec field-vecs]
+    (doseq [^FieldVector field-vec field-vecs
+            :let [writer (rel/vec->writer field-vec)]]
       (dotimes [idx row-count]
-        (ty/set-safe! field-vec idx (-> (nth rows idx)
-                                        (get (keyword (.getName (.getField field-vec))))))))
+        (.startValue writer)
+        (ty/write-value! (-> (nth rows idx)
+                             (get (keyword (.getName (.getField field-vec)))))
+                         writer)
+        (.endValue writer)))
+
+    (util/set-vector-schema-root-row-count root row-count)
+
     root))
 
 (defn ->relation ^core2.relation.IRelationReader [schema rows]
