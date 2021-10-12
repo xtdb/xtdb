@@ -1,8 +1,8 @@
 = SQL
 
-To configure your XTDB SQL module, see the
-xref:integrations::sql.adoc[documentation for the SQL module].
 This document explains how to query XTDB using SQL.
+To configure your XTDB SQL module, see the
+xref:integrations::sql.adoc[SQL module documentation].
 
 [#table-definitions]
 == Table Definitions
