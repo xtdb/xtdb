@@ -79,6 +79,8 @@ content:
     #   start_path: docs/training
     #   branches: v2xtdbcom
 
+urls:
+  html_extension_style: indexify
 
 ui:
   bundle:
