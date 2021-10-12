@@ -4,7 +4,7 @@
 
 == Docs
 
-* Query Reference (TODO)
+* xref:query-reference::index.adoc[Query Reference]
 * xref:api-reference::index.adoc[API Reference]
 * xref:operations::index.adoc[Operations]
 * xref:integrations::index.adoc[Integrations]
