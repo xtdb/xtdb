@@ -1,4 +1,4 @@
-= SQL
+= SQL Queries
 
 This document explains how to query XTDB using SQL.
 To configure your XTDB SQL module, see the

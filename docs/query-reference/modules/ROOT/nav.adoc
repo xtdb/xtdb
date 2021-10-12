@@ -1,2 +1,0 @@
-* xref:datalog.adoc[Datalog]
-* xref:sql.adoc[SQL]
