@@ -32,7 +32,7 @@
 
                                 (.startValue out-writer)
                                 (let [v (get row k)
-                                      writer (.writerForType out-writer (ty/class->arrow-type (class v)))]
+                                      writer (.writerForType out-writer (ty/value->arrow-type v))]
                                   (.startValue writer)
                                   (ty/write-value! v writer))
                                 (.endValue out-writer))

@@ -102,7 +102,7 @@
                        (doseq [[k v] doc]
                          (let [^IColumnWriter writer (doto (-> (.writerForName put-doc-writer (name k))
                                                                (.asDenseUnion)
-                                                               (.writerForType (t/class->arrow-type (type v))))
+                                                               (.writerForType (t/value->arrow-type v)))
                                                        (.startValue))]
                            (t/write-value! v writer))))
 
@@ -117,7 +117,7 @@
               :delete (let [delete-idx (.startValue delete-writer)]
                         (let [id (:_id tx-op)
                               ^IColumnWriter writer (doto (-> delete-id-writer
-                                                              (.writerForType (t/class->arrow-type (type id))))
+                                                              (.writerForType (t/value->arrow-type id)))
                                                       (.startValue))]
                           (t/write-value! id writer))
 
@@ -133,7 +133,7 @@
                        (.startValue evict-writer)
                        (let [id (:_id tx-op)
                              ^IColumnWriter writer (doto (-> evict-id-writer
-                                                             (.writerForType (t/class->arrow-type (type id))))
+                                                             (.writerForType (t/value->arrow-type id)))
                                                      (.startValue))]
                          (t/write-value! id writer)))))
 

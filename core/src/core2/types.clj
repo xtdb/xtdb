@@ -1,6 +1,5 @@
 (ns core2.types
-  (:require [core2.util :as util])
-  (:import [core2.relation IColumnWriter]
+  (:import core2.relation.IColumnWriter
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration LocalDateTime]
@@ -12,8 +11,6 @@
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(def byte-array-class (Class/forName "[B"))
 
 (def bigint-type (.getType Types$MinorType/BIGINT))
 (def float8-type (.getType Types$MinorType/FLOAT8))
@@ -31,18 +28,23 @@
       "DURATION" (format "%s-%s" (.toLowerCase minor-type-name) (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))
       (.toLowerCase minor-type-name))))
 
-(def class->arrow-type
-  {nil ArrowType$Null/INSTANCE
-   Long bigint-type
-   Double float8-type
-   byte-array-class ArrowType$Binary/INSTANCE
-   ByteBuffer ArrowType$Binary/INSTANCE
-   String ArrowType$Utf8/INSTANCE
-   Text ArrowType$Utf8/INSTANCE
-   Boolean ArrowType$Bool/INSTANCE
-   Date timestamp-milli-type
-   Duration duration-milli-type
-   LocalDateTime timestamp-milli-type})
+(defprotocol ValueToArrowType
+  (value->arrow-type [v]))
+
+(extend-protocol ValueToArrowType
+  nil (value->arrow-type [_] ArrowType$Null/INSTANCE)
+  Long (value->arrow-type [_] bigint-type)
+  Double (value->arrow-type [_] float8-type)
+  Boolean (value->arrow-type [_] ArrowType$Bool/INSTANCE)
+  Date (value->arrow-type [_] timestamp-milli-type)
+  Duration (value->arrow-type [_] duration-milli-type)
+  LocalDateTime (value->arrow-type [_] timestamp-milli-type))
+
+(extend-protocol ValueToArrowType
+  (Class/forName "[B") (value->arrow-type [_] ArrowType$Binary/INSTANCE)
+  ByteBuffer (value->arrow-type [_] ArrowType$Binary/INSTANCE)
+  String (value->arrow-type [_] ArrowType$Utf8/INSTANCE)
+  Text (value->arrow-type [_] ArrowType$Utf8/INSTANCE))
 
 (def arrow-type->vector-type
   {ArrowType$Null/INSTANCE NullVector
