@@ -5,7 +5,7 @@
 == Docs
 
 * xref:language-reference::index.adoc[Language Reference]
-* xref:api-reference::index.adoc[API Reference]
+* xref:clients::index.adoc[Clients]
 * xref:operations::index.adoc[Operations]
 * xref:integrations::index.adoc[Integrations]
 * xref:persistence-stores::index.adoc[Persistence Stores]

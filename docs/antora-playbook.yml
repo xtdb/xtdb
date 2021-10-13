@@ -29,7 +29,7 @@ content:
         - v2xtdbcom
 #        - docs-v*
     - url: ../
-      start_path: docs/api-reference
+      start_path: docs/clients
       branches:
         - v2xtdbcom
 #        - docs-v*
