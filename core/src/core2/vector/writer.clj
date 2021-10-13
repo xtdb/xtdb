@@ -172,6 +172,16 @@
 
   (asStruct [this] this)
 
+  (rowCopier [struct-writer src-vec]
+    (let [^StructVector src-vec (cast StructVector src-vec)
+          copiers (vec (for [^ValueVector child-vec (.getChildrenFromFields src-vec)]
+                         (.rowCopier (.writerForName struct-writer (.getName child-vec))
+                                     child-vec)))]
+      (reify IRowCopier
+        (copyRow [_ src-idx]
+          (doseq [^IRowCopier copier copiers]
+            (.copyRow copier src-idx))))))
+
   IStructWriter
   (writerForName [_ col-name]
     (.computeIfAbsent writers col-name

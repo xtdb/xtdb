@@ -1,9 +1,9 @@
 (ns core2.metadata
-  (:require [core2.api :as c2]
-            [core2.blocks :as blocks]
+  (:require [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             core2.buffer-pool
             [core2.expression.comparator :as expr.comp]
+            core2.object-store
             core2.tx
             [core2.types :as t]
             [core2.util :as util]
@@ -13,13 +13,13 @@
            core2.object_store.ObjectStore
            core2.tx.Watermark
            java.io.Closeable
-           [java.util Date HashMap List Map SortedSet]
-           [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
+           [java.util HashMap List Map SortedSet]
+           java.util.concurrent.ConcurrentSkipListSet
            [java.util.function Consumer Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List FieldType Schema]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List ArrowType$Struct FieldType Schema]
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
@@ -75,7 +75,8 @@
                       ^long meta-idx]
   (when (pos? (.getValueCount field-vec))
     (let [arrow-type (.getType (.getField field-vec))]
-      (when-not (instance? ArrowType$List arrow-type)
+      (when-not (or (instance? ArrowType$List arrow-type)
+                    (instance? ArrowType$Struct arrow-type))
         (let [min-vec (get-or-add-child min-meta-vec arrow-type)
               max-vec (get-or-add-child max-meta-vec arrow-type)
 

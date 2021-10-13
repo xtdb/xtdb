@@ -3,11 +3,11 @@
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration LocalDateTime]
-           [java.util Date List]
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
-           [org.apache.arrow.vector.complex DenseUnionVector ListVector]
+           [java.util Date List Map]
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$List ArrowType$Null ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Utf8 Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -21,6 +21,7 @@
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (.getType Types$MinorType/DENSEUNION))
 (def list-type (.getType Types$MinorType/LIST))
+(def map-type (ArrowType$Map. false))
 
 (defprotocol ValueToArrowType
   (value->arrow-type [v]))
@@ -41,7 +42,13 @@
   Text (value->arrow-type [_] ArrowType$Utf8/INSTANCE))
 
 (extend-protocol ValueToArrowType
-  List (value->arrow-type [_] ArrowType$List/INSTANCE))
+  List (value->arrow-type [_] list-type)
+
+  Map
+  (value->arrow-type [v]
+    (if (every? keyword? (keys v))
+      struct-type
+      map-type)))
 
 (def arrow-type->vector-type
   {ArrowType$Null/INSTANCE NullVector
@@ -97,7 +104,22 @@
         (.startValue data-writer)
         (write-value! el (doto (.writerForType data-duv-writer (value->arrow-type el))
                            (.startValue)))
-        (.endValue data-writer)))))
+        (.endValue data-writer))))
+
+  Map
+  (write-value! [m ^IVectorWriter writer]
+    (let [dest-vec (.getVector writer)]
+      (cond
+        (instance? StructVector dest-vec)
+        (let [writer (.asStruct writer)]
+          (doseq [[k v] m]
+            (write-value! v (doto (-> (.writerForName writer (name k))
+                                      (.asDenseUnion)
+                                      (.writerForType (value->arrow-type v)))
+                              (.startValue)))))
+
+        ;; TODO
+        :else (throw (UnsupportedOperationException.))))))
 
 (defprotocol PValueVector
   (get-object [value-vector idx]))
@@ -137,6 +159,17 @@
                 (recur (inc element-idx)
                        (conj! acc (get-object data-vec element-idx)))))]
       (persistent! x)))
+
+  StructVector
+  (get-object [this idx]
+    (-> (reduce (fn [acc k]
+                  (let [duv (.getChild this k ValueVector)]
+                    (cond-> acc
+                      (not (.isNull duv idx))
+                      (assoc! (keyword k) (get-object duv idx)))))
+                (transient {})
+                (.getChildFieldNames this))
+        (persistent!)))
 
   DenseUnionVector
   (get-object [this idx]
