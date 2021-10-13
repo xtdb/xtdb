@@ -1,0 +1,978 @@
+/*
+ * Javadoc style sheet
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=PT+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap');
+
+/*
+ * Styles for individual HTML elements.
+ *
+ * These are styles that are specific to individual HTML elements. Changing them affects the style of a particular
+ * HTML element throughout the page.
+ */
+
+:root {
+     --color-black: #000;
+     --color-primary-50: #fffbeb;
+     --color-primary-100: #fef3c7;
+     --color-primary-200: #fde68a;
+     --color-primary-300: #fcd34d;
+     --color-primary-400: #fbbf24;
+     --color-primary-500: #f59e0b;
+     --color-primary-600: #d97706;
+     --color-primary-700: #b45309;
+     --color-primary-800: #92400e;
+     --color-primary-900: #78350f;
+     --color-secondary-50: #eff6ff;
+     --color-secondary-100: #dbeafe;
+     --color-secondary-200: #bfdbfe;
+     --color-secondary-300: #93c5fd;
+     --color-secondary-400: #60a5fa;
+     --color-secondary-500: #3b82f6;
+     --color-secondary-600: #2563eb;
+     --color-secondary-700: #1d4ed8;
+     --color-secondary-800: #1e40af;
+     --color-secondary-900: #1e3a8a;
+     --color-gray-50: #fafaf9;
+     --color-gray-100: #f5f5f4;
+     --color-gray-200: #e7e5e4;
+     --color-gray-300: #d6d3d1;
+     --color-gray-400: #a8a29e;
+     --color-gray-500: #78716c;
+     --color-gray-600: #57534e;
+     --color-gray-700: #44403c;
+     --color-gray-800: #292524;
+     --color-gray-900: #1c1917;
+     --color-white: #fff;
+     --color-success-100: #dcfce7;
+     --color-success-500: #22c55e;
+     --color-danger-100: #fee2e2;
+     --color-danger-500: #ef4444;
+     --color-border-400: #d6d3d1;
+     --color-border-accent-400: #fbbf24;
+     --color-shadow: 0, 0%, 0%;
+     --color-overlay-400: rgba(0, 0, 0, .25);
+     --text-shadow-dark: 0 1px 1px rgba(27, 31, 35, .25), 0 1px 25px rgba(27, 31, 35, .75);
+     --text-shadow-light:0 1px 0 rgba(255, 255, 255, .5);
+
+     --font-size-200: .750001875rem;
+     --font-size-300: .928rem;
+     --font-size-400: 1rem;
+     --font-size-500: 1.33333rem;
+     --font-size-600: 1.7777688889rem;
+     --font-size-700: 2.3703525926rem;
+     --font-size-800: 3.1604622223rem;
+     --font-weight-normal: 400;
+     --font-weight-bold: 700;
+     --line-height-200: 1.4815;
+     --line-height-300: 1.4671;
+     --line-height-400: 1.4;
+     --line-height-500: 1.275;
+     --line-height-600: 1.1875;
+     --line-height-700: 1.1163;
+     --line-height-800: 1;
+     --font-size-uppercase: 0.743em;
+     --letter-spacing-uppercase: 0.05234036em;
+ }
+
+@media (prefers-color-scheme: dark) {
+ :root {
+     --color-black: #fff;
+     --color-primary-50: #78350f;
+     --color-primary-100: #92400e;
+     --color-primary-200: #b45309;
+     --color-primary-300: #d97706;
+     --color-primary-400: #f59e0b;
+     --color-primary-500: #fbbf24;
+     --color-primary-600: #fcd34d;
+     --color-primary-700: #fde68a;
+     --color-primary-800: #fef3c7;
+     --color-primary-900: #fffbeb;
+     --color-secondary-50: #1e3a8a;
+     --color-secondary-100: #1e40af;
+     --color-secondary-200: #1d4ed8;
+     --color-secondary-300: #2563eb;
+     --color-secondary-400: #3b82f6;
+     --color-secondary-500: #60a5fa;
+     --color-secondary-600: #93c5fd;
+     --color-secondary-700: #bfdbfe;
+     --color-secondary-800: #dbeafe;
+     --color-secondary-900: #eff6ff;
+     --color-gray-900: #fafaf9;
+     --color-gray-800: #f5f5f4;
+     --color-gray-700: #e7e5e4;
+     --color-gray-600: #d6d3d1;
+     --color-gray-500: #a8a29e;
+     --color-gray-400: #78716c;
+     --color-gray-300: #57534e;
+     --color-gray-200: #44403c;
+     --color-gray-100: #292524;
+     --color-gray-50: #1c1917;
+     --color-white: #000;
+     --color-success-100: #166534;
+     --color-success-500: #4ade80;
+     --color-danger-100: #991b1b;
+     --color-danger-500: #f87171;
+     --color-border-400: #57534e;
+     --color-border-accent-400: #f59e0b;
+     --color-shadow: 0, 0%, 100%;
+     --color-overlay-400: rgba(255, 255, 255, .25);
+     --text-shadow-dark: none;
+     --text-shadow-light:none
+ }
+}
+
+body {
+    background-color:var(--color-white);
+    color:var(--color-gray-700);
+    font-family:'Atkinson Hyperlegible', Arial, Helvetica, sans-serif;
+    font-size:112.5%; /* 18px */
+    line-height: 1.4;
+    margin:0;
+    padding:0;
+    height:100%;
+    width:100%;
+}
+iframe {
+    margin:0;
+    padding:0;
+    height:100%;
+    width:100%;
+    overflow-y:scroll;
+    border:none;
+}
+a:link, a:visited {
+    text-decoration:none;
+    color:var(--color-primary-600);
+}
+a[href]:hover, a[href]:focus {
+    text-decoration: underline;
+    color: var(--color-primary-500);
+}
+a[name] {
+    color:var(--color-gray-700);
+}
+pre {
+    font-family:'PT Mono', monospace;
+}
+code {
+    color: var(--color-gray-900);
+}
+
+h1, h2, h3, h4 {
+    color: var(--color-gray-900);
+}
+
+h1 {
+    font-size:var(--font-size-600);
+    line-height:var(--line-height-600);
+}
+h2 {
+    font-size:var(--font-size-500);
+    line-height:var(--line-height-500);
+}
+h3, h4, h5, h6 {
+    font-size:var(--font-size-400);
+    line-height:var(--line-height-400);
+}
+h3 {
+    font-weight: bold;
+}
+}
+ul {
+    list-style-type:disc;
+}
+code, tt {
+    font-family:'PT Mono', monospace;
+}
+:not(h1, h2, h3, h4, h5, h6) > code,
+:not(h1, h2, h3, h4, h5, h6) > tt {
+    padding-top:4px;
+    margin-top:8px;
+}
+dt code {
+    font-family:'PT Mono', monospace;
+    padding-top:4px;
+}
+.summary-table dt code {
+    font-family:'PT Mono', monospace;
+    vertical-align:top;
+    padding-top:4px;
+}
+sup {
+    font-size:--var(font-size-200);
+    line-height:--var(line-height-200);
+}
+button {
+    font-family: inherit;
+    font-size:inherit;
+}
+/*
+ * Styles for HTML generated by javadoc.
+ *
+ * These are style classes that are used by the standard doclet to generate HTML documentation.
+ */
+
+/*
+ * Styles for document title and copyright.
+ */
+.clear {
+    clear:both;
+    height:0;
+    overflow:hidden;
+}
+.about-language {
+    float:right;
+    padding:0 21px 8px 8px;
+    font-size:var(--font-size-300);
+    line-height:var(--line-height-300);
+    margin-top:-9px;
+    height:2.9em;
+}
+.legal-copy {
+    margin-left:.5em;
+}
+.tab {
+    background-color:var(--color-primary-300);
+    color:var(--color-white);
+    padding:8px;
+    width:5em;
+    font-weight:bold;
+}
+/*
+ * Styles for navigation bar.
+ */
+@media screen {
+    .flex-box {
+        position:fixed;
+        display:flex;
+        flex-direction:column;
+        height: 100%;
+        width: 100%;
+    }
+    .flex-header {
+        flex: 0 0 auto;
+    }
+    .flex-content {
+        flex: 1 1 auto;
+        overflow-y: auto;
+    }
+}
+.top-nav {
+    background-color:var(--color-white);
+    color:var(--color-gray-500);
+    float:left;
+    padding:0;
+    width:100%;
+    clear:right;
+    padding-top:10px;
+    padding-bottom:10px;
+    overflow:hidden;
+}
+.sub-nav {
+    background-color:var(--color-gray-100);
+    float:left;
+    width:100%;
+    overflow:hidden;
+}
+.sub-nav div {
+    clear:left;
+    float:left;
+    padding:0 0 5px 6px;
+    text-transform:uppercase;
+    font-size:var(--font-size-uppercase);
+    letter-spacing:var(--letter-spacing-uppercase);
+}
+.sub-nav .nav-list {
+    padding-top:5px;
+}
+ul.nav-list {
+    display:block;
+    margin:0 25px 0 0;
+    padding:0;
+}
+ul.sub-nav-list {
+    float:left;
+    margin:0 25px 0 0;
+    padding:0;
+}
+ul.nav-list li {
+    list-style:none;
+    float:left;
+    padding: 5px 6px;
+    text-transform:uppercase;
+    font-size:var(--font-size-uppercase);
+    letter-spacing:var(--letter-spacing-uppercase);
+}
+.sub-nav .nav-list-search {
+    float:right;
+    margin:0 0 0 0;
+    padding:5px 6px;
+    clear:none;
+}
+.nav-list-search label {
+    position:relative;
+    right:-16px;
+}
+ul.sub-nav-list li {
+    list-style:none;
+    float:left;
+    padding-top:10px;
+}
+.top-nav a:link, .top-nav a:active, .top-nav a:visited {
+    color:var(--color-gray-900);
+    text-decoration:none;
+}
+.top-nav a:hover {
+    text-decoration:none;
+    color: var(--color-primary-500);
+}
+.nav-bar-cell1-rev {
+    background-color:var(--color-primary-500);
+    color:var(--color-white);
+    margin: auto 5px;
+}
+.skip-nav {
+    position:absolute;
+    top:auto;
+    left:-9999px;
+    overflow:hidden;
+}
+/*
+ * Hide navigation links and search box in print layout
+ */
+@media print {
+    ul.nav-list, div.sub-nav  {
+        display:none;
+    }
+}
+/*
+ * Styles for page header and footer.
+ */
+.title {
+    color:var(--color-gray-900);
+    margin:10px 0;
+}
+.sub-title {
+    margin:5px 0 0 0;
+}
+.header ul {
+    margin:0 0 15px 0;
+    padding:0;
+}
+.header ul li, .footer ul li {
+    list-style:none;
+}
+/*
+ * Styles for headings.
+ */
+body.class-declaration-page .summary h2,
+body.class-declaration-page .details h2,
+body.class-use-page  h2,
+body.module-declaration-page  .block-list h2 {
+    font-weight: bold;
+    padding:0;
+    margin:1rem 0;
+}
+body.class-declaration-page .summary h3,
+body.class-declaration-page .details h3,
+body.class-declaration-page .summary .inherited-list h2 {
+    background-color:var(--color-gray-100);
+    border:1px solid var(--color-white);
+    margin:0 0 6px -8px;
+    padding:7px 5px;
+}
+/*
+ * Styles for page layout containers.
+ */
+main {
+    clear:both;
+    padding:10px 20px;
+    position:relative;
+}
+dl.notes > dt {
+    font-family: 'Atkinson Hyperlegible', Arial, Helvetica, sans-serif;
+    font-size:var(--font-size-300);
+    line-height:var(--line-height-300);
+    font-weight:bold;
+    margin:10px 0 0 0;
+    color:var(--color-gray-700);
+}
+dl.notes > dd {
+    margin:5px 10px 10px 0;
+}
+dl.name-value > dt {
+    margin-left:1px;
+    font-size:var(--font-size-500);
+    line-height:var(--line-height-500);
+    display:inline;
+    font-weight:bold;
+}
+dl.name-value > dd {
+    margin:0 0 0 1px;
+    font-size:var(--font-size-500);
+    line-height:var(--line-height-500);
+    display:inline;
+}
+/*
+ * Styles for lists.
+ */
+li.circle {
+    list-style:circle;
+}
+ul.horizontal li {
+    display:inline;
+}
+div.inheritance {
+    margin:0;
+    padding:0;
+}
+div.inheritance div.inheritance {
+    margin-left:2em;
+}
+ul.block-list,
+ul.details-list,
+ul.member-list,
+ul.summary-list {
+    margin:10px 0 10px 0;
+    padding:0;
+}
+ul.block-list > li,
+ul.details-list > li,
+ul.member-list > li,
+ul.summary-list > li {
+    list-style:none;
+    margin-bottom:15px;
+}
+.summary-table dl, .summary-table dl dt, .summary-table dl dd {
+    margin-top:0;
+    margin-bottom:1px;
+}
+ul.see-list, ul.see-list-long {
+    padding-left: 0;
+    list-style: none;
+}
+ul.see-list li {
+    display: inline;
+}
+ul.see-list li:not(:last-child):after,
+ul.see-list-long li:not(:last-child):after {
+    content: ", ";
+    white-space: pre-wrap;
+}
+/*
+ * Styles for tables.
+ */
+.summary-table, .details-table {
+    width:100%;
+    border-spacing:0;
+    border:1px solid var(--color-white);
+    padding:0;
+}
+.caption {
+    position:relative;
+    text-align:left;
+    background-repeat:no-repeat;
+    color:var(--color-white);
+    font-weight:bold;
+    clear:none;
+    overflow:hidden;
+    padding:0;
+    padding-top:10px;
+    padding-left:1px;
+    margin:0;
+    white-space:pre;
+}
+.caption a:link, .caption a:visited {
+    color:var(--color-primary-600);
+}
+.caption a:hover,
+.caption a:active {
+    color:var(--color-white);
+}
+.caption span {
+    white-space:nowrap;
+    padding: 0.5rem 0.66rem;
+    font-weight: bold;
+    margin-right: 0.16666667rem;
+    font-size:var(--font-size-300);
+    line-height:var(--line-height-300);
+    display:block;
+    float:left;
+    background-color:var(--color-primary-500);
+    border: none;
+}
+div.table-tabs {
+    padding:10px 0 0 1px;
+    margin:0;
+}
+div.table-tabs > button {
+   border: none;
+   cursor: pointer;
+   padding: 0.5rem 0.66rem;
+   font-weight: bold;
+   margin-right: 0.16666667rem;
+   font-size:var(--font-size-300);
+   line-height:var(--line-height-300);
+}
+div.table-tabs > button.active-table-tab {
+   background: var(--color-primary-500);
+   color: var(--color-white);
+}
+div.table-tabs > button.table-tab {
+   background: var(--color-gray-200);
+   color: var(--color-gray-700);
+}
+.two-column-summary {
+    display: grid;
+    grid-template-columns: minmax(15%, max-content) minmax(15%, auto);
+}
+.three-column-summary {
+    display: grid;
+    grid-template-columns: minmax(10%, max-content) minmax(15%, max-content) minmax(15%, auto);
+}
+.four-column-summary {
+    display: grid;
+    grid-template-columns: minmax(10%, max-content) minmax(10%, max-content) minmax(10%, max-content) minmax(10%, auto);
+}
+@media screen and (max-width: 600px) {
+    .two-column-summary {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+}
+@media screen and (max-width: 800px) {
+    .three-column-summary {
+        display: grid;
+        grid-template-columns: minmax(10%, max-content) minmax(25%, auto);
+    }
+    .three-column-summary .col-last {
+        grid-column-end: span 2;
+    }
+}
+@media screen and (max-width: 1000px) {
+    .four-column-summary {
+        display: grid;
+        grid-template-columns: minmax(15%, max-content) minmax(15%, auto);
+    }
+}
+.summary-table > div, .details-table > div {
+    text-align:left;
+    padding: 0.5rem 0.6rem 0.25rem;
+}
+.col-first, .col-second, .col-last, .col-constructor-name, .col-summary-item-name {
+    vertical-align:top;
+    padding-right:0;
+    padding-top:8px;
+    padding-bottom:3px;
+}
+.table-header {
+    background:var(--color-gray-100);
+    font-weight: bold;
+}
+.col-first, .col-first {
+}
+.col-second, .col-second, .col-last, .col-constructor-name, .col-summary-item-name, .col-last {
+}
+.col-first, .col-second, .col-constructor-name {
+    vertical-align:top;
+    overflow: auto;
+}
+.col-last {
+    white-space:normal;
+}
+.col-first a:link, .col-first a:visited,
+.col-second a:link, .col-second a:visited,
+.col-first a:link, .col-first a:visited,
+.col-second a:link, .col-second a:visited,
+.col-constructor-name a:link, .col-constructor-name a:visited,
+.col-summary-item-name a:link, .col-summary-item-name a:visited,
+.constant-values-container a:link, .constant-values-container a:visited,
+.all-classes-container a:link, .all-classes-container a:visited,
+.all-packages-container a:link, .all-packages-container a:visited {
+    font-weight:bold;
+}
+.table-sub-heading-color {
+    background-color:var(--color-gray-200);
+}
+.even-row-color, .even-row-color .table-header {
+    background-color:var(--color-white);
+}
+.odd-row-color, .odd-row-color .table-header {
+    background-color:var(--color-gray-100);
+}
+/*
+ * Styles for contents.
+ */
+.deprecated-content {
+    margin:0;
+    padding:10px 0;
+}
+div.block {
+}
+.col-last div {
+    padding-top:0;
+}
+.col-last a {
+    padding-bottom:3px;
+}
+.module-signature,
+.package-signature,
+.type-signature,
+.member-signature {
+    font-family:'PT Mono', monospace;
+    margin:14px 0;
+    white-space: pre-wrap;
+}
+.module-signature,
+.package-signature,
+.type-signature {
+    margin-top: 0;
+}
+.member-signature .type-parameters-long,
+.member-signature .parameters,
+.member-signature .exceptions {
+    display: inline-block;
+    vertical-align: top;
+    white-space: pre;
+}
+.member-signature .type-parameters {
+    white-space: normal;
+}
+/*
+ * Styles for formatting effect.
+ */
+.source-line-no {
+    color:var(--color-success-500);
+    padding:0 30px 0 0;
+}
+h1.hidden {
+    visibility:hidden;
+    overflow:hidden;
+    font-size:var(--font-size-300);
+    line-height:var(--line-height-300);
+}
+.block {
+    display:block;
+    margin:0 10px 5px 0;
+    color:var(--color-gray-700);
+}
+.deprecated-label, .descfrm-type-label, .implementation-label, .member-name-label, .member-name-link,
+.module-label-in-package, .module-label-in-type, .override-specify-label, .package-label-in-type,
+.package-hierarchy-label, .type-name-label, .type-name-link, .search-tag-link, .preview-label {
+    font-weight:bold;
+}
+.deprecation-comment, .help-footnote, .preview-comment {
+    font-style:italic;
+}
+.deprecation-block {
+    border-style:solid;
+    border-width:thin;
+    border-radius:10px;
+    padding:10px;
+    margin-bottom:10px;
+    margin-right:10px;
+    display:inline-block;
+}
+.preview-block {
+    border-style:solid;
+    border-width:thin;
+    border-radius:10px;
+    padding:10px;
+    margin-bottom:10px;
+    margin-right:10px;
+    display:inline-block;
+}
+div.block div.deprecation-comment {
+    font-style:normal;
+}
+/*
+ * Styles specific to HTML5 elements.
+ */
+main, nav, header, footer, section {
+    display:block;
+}
+/*
+ * Styles for javadoc search.
+ */
+.ui-autocomplete-category {
+    font-weight:bold;
+    font-size:var(--font-size-500);
+    line-height:var(--line-height-500);
+    padding:7px 0 7px 3px;
+    background-color:var(--color-primary-600);
+    color:var(--color-white);
+}
+.result-item {
+}
+.ui-autocomplete {
+    max-height:85%;
+    max-width:65%;
+    overflow-y:scroll;
+    overflow-x:scroll;
+    white-space:nowrap;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
+}
+ul.ui-autocomplete {
+    position:fixed;
+    z-index:999999;
+}
+ul.ui-autocomplete  li {
+    float:left;
+    clear:both;
+    width:100%;
+}
+.result-highlight {
+    font-weight:bold;
+}
+#search-input {
+    background-image:url('resources/glass.png');
+    background-size:13px;
+    background-repeat:no-repeat;
+    background-position:2px 3px;
+    padding-left:20px;
+    position:relative;
+    right:-18px;
+    width:400px;
+}
+#reset-button {
+    background-color: var(--color-white);
+    background-image:url('resources/x.png');
+    background-position:center;
+    background-repeat:no-repeat;
+    background-size:12px;
+    border:none;
+    width:16px;
+    height:16px;
+    position:relative;
+    left:-4px;
+    top:-4px;
+    font-size:0px;
+}
+.watermark {
+    color:var(--color-gray-600);
+}
+.search-tag-desc-result {
+    font-style:italic;
+    font-size:var(--font-size-300);
+    line-height:var(--line-height-300);
+}
+.search-tag-holder-result {
+    font-style:italic;
+    font-size:var(--font-size-300);
+    line-height:var(--line-height-300);
+}
+.search-tag-result:target {
+    background-color: var(--color-primary-400);
+}
+.module-graph span {
+    display:none;
+    position:absolute;
+}
+.module-graph:hover span {
+    display:block;
+    margin: -100px 0 0 100px;
+    z-index: 1;
+}
+.inherited-list {
+    margin: 10px 0 10px 0;
+}
+/* section.class-description {} */
+.summary section[class$="-summary"], .details section[class$="-details"],
+.class-uses .detail, .serialized-class-details {
+    padding: 0 0.5rem 0.5rem;
+    border: 1px solid var(--color-gray-200);
+    background-color: var(--color-gray-100);
+}
+.inherited-list, section[class$="-details"] .detail {
+    padding:0 0 5px 8px;
+    background-color:var(--color-white);
+    border:none;
+}
+.vertical-separator {
+    padding: 0 5px;
+}
+ul.help-section-list {
+    margin: 0;
+}
+ul.help-subtoc > li {
+  display: inline-block;
+  padding-right: 5px;
+  font-size:var(--font-size-300);
+  line-height:var(--line-height-300);
+}
+ul.help-subtoc > li::before {
+  content: "\2022" ;
+  padding-right:2px;
+}
+span.help-note {
+    font-style: italic;
+}
+/*
+ * Indicator icon for external links.
+ */
+main a[href*="://"]::after {
+    content:"";
+    display:inline-block;
+    background-image:url('data:image/svg+xml; utf8, \
+      <svg xmlns="http://www.w3.org/2000/svg" width="768" height="768">\
+        <path d="M584 664H104V184h216V80H0v688h688V448H584zM384 0l132 \
+        132-240 240 120 120 240-240 132 132V0z" fill="%23757575"/>\
+      </svg>');
+    background-size:100% 100%;
+    width:0.65rem;
+    height:0.65rem;
+    margin-left:0.11111111rem; /* 2px / 18px */
+    margin-bottom:0.22222222rem; /* 4px / 18px */
+}
+main a[href*="://"]:hover::after,
+main a[href*="://"]:focus::after {
+    background-image:url('data:image/svg+xml; utf8, \
+      <svg xmlns="http://www.w3.org/2000/svg" width="768" height="768">\
+        <path d="M584 664H104V184h216V80H0v688h688V448H584zM384 0l132 \
+        132-240 240 120 120 240-240 132 132V0z" fill="%23999"/>\
+      </svg>');
+}
+
+/*
+ * Styles for user-provided tables.
+ *
+ * borderless:
+ *      No borders, vertical margins, styled caption.
+ *      This style is provided for use with existing doc comments.
+ *      In general, borderless tables should not be used for layout purposes.
+ *
+ * plain:
+ *      Plain borders around table and cells, vertical margins, styled caption.
+ *      Best for small tables or for complex tables for tables with cells that span
+ *      rows and columns, when the "striped" style does not work well.
+ *
+ * striped:
+ *      Borders around the table and vertical borders between cells, striped rows,
+ *      vertical margins, styled caption.
+ *      Best for tables that have a header row, and a body containing a series of simple rows.
+ */
+
+table.borderless,
+table.plain,
+table.striped {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+table.borderless > caption,
+table.plain > caption,
+table.striped > caption {
+    font-weight: bold;
+    font-size:var(--font-size-300);
+    line-height:var(--line-height-300);
+}
+table.borderless th, table.borderless td,
+table.plain th, table.plain td,
+table.striped th, table.striped td {
+    padding: 2px 5px;
+}
+table.borderless,
+table.borderless > thead > tr > th, table.borderless > tbody > tr > th, table.borderless > tr > th,
+table.borderless > thead > tr > td, table.borderless > tbody > tr > td, table.borderless > tr > td {
+    border: none;
+}
+table.borderless > thead > tr, table.borderless > tbody > tr, table.borderless > tr {
+    background-color: transparent;
+}
+table.plain {
+    border-collapse: collapse;
+    border: 1px solid var(--color-black);
+}
+table.plain > thead > tr, table.plain > tbody tr, table.plain > tr {
+    background-color: transparent;
+}
+table.plain > thead > tr > th, table.plain > tbody > tr > th, table.plain > tr > th,
+table.plain > thead > tr > td, table.plain > tbody > tr > td, table.plain > tr > td {
+    border: 1px solid var(--color-black);
+}
+table.striped {
+    border-collapse: collapse;
+    border: 1px solid var(--color-black);
+}
+table.striped > thead {
+    background-color: var(--color-gray-200);
+}
+table.striped > thead > tr > th, table.striped > thead > tr > td {
+    border: 1px solid var(--color-black);
+}
+table.striped > tbody > tr:nth-child(even) {
+    background-color: var(--color-gray-200);
+}
+table.striped > tbody > tr:nth-child(odd) {
+    background-color: var(--color-white)
+}
+table.striped > tbody > tr > th, table.striped > tbody > tr > td {
+    border-left: 1px solid var(--color-black);
+    border-right: 1px solid var(--color-black);
+}
+table.striped > tbody > tr > th {
+    font-weight: normal;
+}
+/**
+ * Tweak font sizes and paddings for small screens.
+ */
+@media screen and (max-width: 1050px) {
+    #search-input {
+        width: 300px;
+    }
+}
+@media screen and (max-width: 800px) {
+    #search-input {
+        width: 200px;
+    }
+    .top-nav,
+    .bottom-nav {
+        font-size:var(--font-size-300);
+        line-height:var(--line-height-300);
+        padding-top: 6px;
+    }
+    .sub-nav {
+        font-size:var(--font-size-300);
+        line-height:var(--line-height-300);
+    }
+    .about-language {
+        padding-right: 16px;
+    }
+    ul.nav-list li,
+    .sub-nav .nav-list-search {
+        padding: 6px;
+    }
+    ul.sub-nav-list li {
+        padding-top: 5px;
+    }
+    main {
+        padding: 10px;
+    }
+    .summary section[class$="-summary"], .details section[class$="-details"],
+    .class-uses .detail, .serialized-class-details {
+        padding: 0 8px 5px 8px;
+    }
+    body {
+        -webkit-text-size-adjust: none;
+    }
+}
+@media screen and (max-width: 500px) {
+    #search-input {
+        width: 150px;
+    }
+    .top-nav,
+    .bottom-nav {
+        font-size:var(--font-size-300);
+        line-height:var(--line-height-300);
+    }
+    .sub-nav {
+        font-size:var(--font-size-300);
+        line-height:var(--line-height-300);
+    }
+    .about-language {
+        font-size:var(--font-size-300);
+        line-height:var(--line-height-300);
+        padding-right: 12px;
+    }
+}
