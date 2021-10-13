@@ -10,7 +10,7 @@ image::local-cluster-mode.svg?sanitize=true[Local Cluster Mode,450,150,align="ce
 ====
 Kafka's document store requires a copy of the documents kept locally for random access - these can be stored in a KV store like xref:rocksdb.adoc[RocksDB] or xref:lmdb.adoc[LMDB].
 
-For this reason, unless you want to keep both transactions and documents on Kafka (for simplicity, say, or historical reasons), we'd now recommend a different document store implementation - xref:jdbc.adoc[JDBC] or xref:s3.clj[S3], for example.
+For this reason, unless you want to keep both transactions and documents on Kafka (for simplicity, say, or historical reasons), we'd now recommend a different document store implementation - xref:jdbc.adoc[JDBC] or xref:aws-s3.adoc[S3], for example.
 
 (The Kafka transaction log does not have this requirement)
 ====

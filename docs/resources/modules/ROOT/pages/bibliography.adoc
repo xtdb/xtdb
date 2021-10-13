@@ -175,13 +175,13 @@ to the current XTDB architecture. These resources have been useful for the XTDB 
 reason or another. They may: reflect past XTDB architectures, have helped onboard team members, influence
 our overall philosophy, or simply be something we find interesting in the field.
 
-[#graph]
+[#inspiration-graph]
 === Graph Representation and Traversal
 
 * https://people.engr.tamu.edu/davis/GraphBLAS.html[SuiteSparse: GraphBLAS. Graph algorithms in the language of linear algebra.]
 * https://oss.redislabs.com/redisgraph/design/[RedisGraph: A High Performance In-Memory Graph Database]
 
-[#datastructures]
+[#inspiration-datastructures]
 === Data Structures
 
 * https://arxiv.org/abs/2104.10939[HINT: A Hierarchical Index for Intervals in Main Memory], Christodoulou, Bouros, Mamoulis. April 2021.

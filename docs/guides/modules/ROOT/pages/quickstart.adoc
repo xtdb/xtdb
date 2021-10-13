@@ -18,8 +18,8 @@ Configuration" below contains more advanced configuration options.
 
 This guide was extracted from the "XTDB-in-a-Box" guide, which has minimal (working) project examples for Clojure
 and Java you can see in the https://github.com/deobald/crux-in-a-box[crux-in-a-box] GitHub repo. If you prefer to
-see all the code at once, head there first. We also have thorough
-xref:reference::installation.adoc[Reference Docs], if that's your speed.
+see all the code at once, head there first.
+We also have thorough link:https://xtdb.com/docs/[Reference Docs], if that's your speed.
 
 Each step below contains some advanced options in collapsible notes. You can safely ignore all of these if you
 just want to get up and running quickly. You can always revisit them later.
@@ -94,7 +94,7 @@ Advanced Installation
 +++ </summary><div> +++
 This guide will walk you through the installation process. If you would prefer to see all available installation options --
 including pre-built JARs, custom Docker containers, and Clojure CLI tooling -- you will want to read the
-xref:reference::installation.adoc[Reference Docs: Installation] page.
+xref:administration::installing.adoc[Installing] page.
 +++ </div></details> +++
 
 +++ <details><summary> +++
@@ -235,7 +235,7 @@ XTDB configuration has three components:
 
 For more advanced configuration, XTDB allows you to choose the underlying data storage technology
 (for each of the three components) from a number of different modules. The Reference Docs contain a
-xref:reference::configuration.adoc#_modules[list of available modules], each with instructions on
+xref:storage::index.adoc[list of available modules], each with instructions on
 how to configure them.
 +++ </div></details> +++
 
@@ -271,7 +271,7 @@ System.out.println(data.toString());
 Advanced Transactions
 +++ </summary><div> +++
 This is the simplest possible transaction. XTDB has more advanced transaction features including _synchronous awaits_, _eviction_, _transaction functions_, _speculative transactions_, and bitemporal _valid-time put/delete_. You can read about them in
-xref:reference::transactions.adoc[Reference Docs: Transactions].
+xref:language-reference::datalog-transactions.adoc[Transactions].
 +++ </div></details> +++
 
 
@@ -314,15 +314,15 @@ This is the simplest possible query. XTDB has very powerful bitemporal graph que
 learn more about _aggregates_, _pull syntax_, _returning maps_, _binding_, _subqueries_, _predicates_, _ordering_,
 _pagination_, _rules_, _bitemporal time-travel_, _streaming_, and _entity history_ you can
 read more in
-xref:reference::queries.adoc[Reference Docs: Queries] and
-xref:reference::sql.adoc[Reference Docs: SQL].
+xref:language-reference::datalog-queries.adoc[Datalog Queries] and
+xref:language-reference::sql-queries.adoc[SQL Queries].
 +++ </div></details> +++
 
 == Further Reading
 
 XTDB requires very little effort to set up and start using immediately. Now that you are comfortable with the basics,
 you can read through the
-xref:reference::installation.adoc[Reference Docs] or try
+link:https://xtdb.com/docs/[Reference Docs] or try
 the https://www.xtdb.com/tutorials[Tutorial]. We also have https://www.xtdb.com/articles[Articles] and
 https://www.xtdb.com/blog/index.html[blog posts] talking about the philosophy and history of XTDB. If you are feeling
 particularly excited, you can browse our https://www.xtdb.com/articles/references.html[Bibliography].

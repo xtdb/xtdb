@@ -60,7 +60,8 @@ XTDB is ultimately a store of versioned EDN documents. The fields within these
 documents are automatically indexed as Entity-Attribute-Value triples to
 support efficient graph queries.
 
-xref:reference::queries.adoc[Read more about how to query your data with XTDB].
+Read more about
+xref:language-reference::datalog-queries.adoc[how to query your data with Datalog].
 
 [#schemaless]
 == Schemaless

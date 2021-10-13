@@ -12,14 +12,16 @@
 
 === `xtdb-in-memory`
 
-The `xtdb-in-memory` artifact starts up a basic, in-memory XTDB node, with both a HTTP Server _(open on port 3000)_ and the xref:sql.adoc[XTDB SQL] module with a SQL server _(open on port 1501)_.
+The `xtdb-in-memory` artifact starts up a basic, in-memory XTDB node, with both a HTTP Server _(open on port 3000)_ and the
+xref:integrations::sql.adoc[XTDB SQL module] with a SQL server _(open on port 1501)_.
 
 It can be downloaded:
 
 * as a Docker image from https://hub.docker.com/repository/docker/juxt/xtdb-in-memory[JUXT's Docker Hub]
 * as an uberjar, `xtdb-in-memory.jar`, from the relevant https://github.com/xtdb/xtdb/releases[GitHub release]
 
-Communication with the node is done via the XTDB REST API - see the xref:http.adoc[HTTP docs] for more information.
+Communication with the node is done via the XTDB REST API.
+See the xref:integrations::http.adoc[HTTP module documentation] for more information.
 
 == Building Artifacts
 

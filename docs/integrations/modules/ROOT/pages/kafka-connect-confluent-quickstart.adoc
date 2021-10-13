@@ -1,0 +1,80 @@
+= Confluent Platform Quickstart
+
+== Installing the connector
+
+Use `confluent-hub install juxt/kafka-connect-crux:{xtdb_version}` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
+
+The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *XTDB node* to communicate with.
+
+== Creating the XTDB node
+
+To use our connector, you must first have a *XTDB node* connected to Kafka. To do this, we start by adding the following dependencies to a project:
+
+[source,clj, subs=attributes+]
+----
+com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-kafka {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-http-server {:mvn/version "{xtdb_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{xtdb_version}"}
+----
+
+Ensure first that you have a running Kafka broker to connect to. We import the dependencies into a file or REPL, then create our Kafka connected _'node'_ with an associated http server for the connector to communicate with:
+
+[source,clj]
+----
+(require '[xtdb.api :as xt]
+         '[xtdb.http-server :as srv])
+(import (xtdb.api IXtdb))
+
+(def ^xtdb.api.IXtdb node
+  (crux/start-node {:crux.node/topology '[xtdb.kafka/topology crux.http-server/module]
+                    :crux.kafka/bootstrap-servers "localhost:9092"
+                    :xtdb.http-server/port 3000}))
+----
+
+== Sink Connector
+
+Run the following command within the base of the Confluent folder, to create a worker which connects to the _'connect-test'_ topic, ready to *send* messages to the _node_. This also makes use of *connect-file-source*, checking for changes in a file called _'test.txt'_:
+
+----
+./bin/connect-standalone etc/kafka/connect-standalone.properties share/confluent-hub-components/juxt-kafka-connect-crux/etc/local-crux-sink.properties etc/kafka/connect-file-source.properties
+----
+
+Run the following within your Confluent directory, to add a line of JSON to _'test.txt'_:
+
+----
+echo '{"xt/id": "415c45c9-7cbe-4660-801b-dab9edc60c84", "value": "baz"}' >> test.txt
+----
+
+Now, verify that this was transacted within your REPL:
+
+[source,clj]
+----
+(xt/entity (xt/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
+==>
+{:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
+----
+
+== Source Connector
+
+Run the following command within the base of the Confluent folder, to create a worker connects to the 'connect-test' topic, ready to *receive* messages from the _node_. This also makes use of 'connect-file-sink', outputting transactions to your _node_ within _'test.sink.txt'_:
+
+----
+./bin/connect-standalone etc/kafka/connect-standalone.properties share/confluent-hub-components/juxt-kafka-connect-crux/etc/local-crux-source.properties etc/kafka/connect-file-sink.properties
+----
+
+
+Within your REPL, transact an element into XTDB:
+
+[source,clj]
+----
+(xt/submit-tx node [[::xt/put {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"}]])
+----
+
+Check the contents of 'test.sink.txt' using the command below, and you should see that the transactions were outputted to the _'connect-test'_ topic:
+
+----
+tail test.sink.txt
+==>
+[[::xt/put {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"} #inst "2019-09-19T12:31:21.342-00:00"]]
+----

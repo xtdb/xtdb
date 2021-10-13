@@ -1,7 +1,7 @@
 = Configuring
 
 * xref:_modules[Modules]
-* xref:_persistence_stores[Persistence Stores]
+* xref:_storage[Storage]
 * xref:_query_engine[Query Engine]
 * xref:_upgrading[Upgrading]
 * xref:_writing_custom_modules[Writing Custom Modules]
@@ -10,7 +10,10 @@
 
 A XTDB node consists of a number of modules, which can be independently configured and augmented.
 
-Once you have an xref:installation.adoc[in-memory XTDB node] set up, you can then start to configure the various modules - either through a JSON config file, EDN config file, or programmatically:
+Once you have an
+xref:administration::installing.adoc[in-memory XTDB node]
+set up, you can then start to configure the various modules.
+Configure modules using a JSON config file, EDN config file, or programmatically:
 
 [tabs]
 ====
@@ -70,9 +73,11 @@ include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[ta
 
 Without any explicit configuration, XTDB will start an in-memory node.
 
-**At this point, you can start xref:transactions.adoc[submitting transactions] and xref:queries.adoc[running queries]!**
+**At this point, you can start
+xref:language-reference::datalog-transactions.adoc[submitting transactions] and
+xref:language-reference::datalog-queries.adoc[running queries]!**
 
-== Persistence Stores
+== Storage
 
 XTDB has three main pluggable persistence stores: the transaction log, the document store, and the query index store.
 All three are backed by local KV stores by default, but they can be independently configured and overridden - you might choose to host the transaction log in Kafka, the document store in AWS's S3, and the query indices in RocksDB.
@@ -80,16 +85,16 @@ All three are backed by local KV stores by default, but they can be independentl
 [cols="1,3*^"]
 |===
 | | Transaction Log | Document Store | Index Store
-| xref:persistence-stores::aws-s3.adoc[AWS S3] | | ✓ |
-| xref:persistence-stores::azure-blobs.adoc[Azure Blobs] | | ✓ |
-| xref:persistence-stores::corda.adoc[DLT - Corda] footnote:[configured via its own entry point - see the module docs for more information] | ✓ | ✓ |
-| xref:persistence-stores::google-cloud-storage.adoc[Google Cloud Storage] | | ✓ |
-| xref:persistence-stores::kafka.adoc[Kafka] | ✓ | ✓ |
-| xref:persistence-stores::jdbc.adoc[JDBC] | ✓ | ✓ |
+| xref:storage::aws-s3.adoc[AWS S3] | | ✓ |
+| xref:storage::azure-blobs.adoc[Azure Blobs] | | ✓ |
+| xref:storage::corda.adoc[DLT - Corda] footnote:[configured via its own entry point - see the module docs for more information] | ✓ | ✓ |
+| xref:storage::google-cloud-storage.adoc[Google Cloud Storage] | | ✓ |
+| xref:storage::kafka.adoc[Kafka] | ✓ | ✓ |
+| xref:storage::jdbc.adoc[JDBC] | ✓ | ✓ |
 | In-memory KV | ✓ | ✓ | ✓
-| xref:persistence-stores::lmdb.adoc[LMDB] (KV) | ✓ | ✓ | ✓
-| xref:persistence-stores::rocksdb.adoc[RocksDB] (KV) | ✓ | ✓ | ✓
-| xref:persistence-stores::xodus.adoc[Xodus] (KV) footnote:[via third-party `crux-xodus` module] | ✓ | ✓ | ✓
+| xref:storage::lmdb.adoc[LMDB] (KV) | ✓ | ✓ | ✓
+| xref:storage::rocksdb.adoc[RocksDB] (KV) | ✓ | ✓ | ✓
+| xref:storage::xodus.adoc[Xodus] (KV) footnote:[via third-party `crux-xodus` module] | ✓ | ✓ | ✓
 |===
 
 For specific details and examples of how to configure each of these modules, see their individual sections.

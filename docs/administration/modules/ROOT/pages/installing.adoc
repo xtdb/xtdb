@@ -1,0 +1,122 @@
+= Installation
+
+XTDB nodes can be xref:#embedded[embedded within your JVM application], or they can be started standalone through a xref:#uberjar[pre-built XTDB JAR], via xref:#docker[Docker], or using xref:#clojure-cli[Clojure CLI tooling].
+
+This guide will show you how to set up an in-memory node using the `core` module.
+You can then proceed to add further modules (eg for persistence) as required - see the documentation of the individual modules for more information.
+
+[#project-dependency]
+== Project dependency
+
+XTDB depends on Java 8+.
+
+[tabs]
+====
+deps.edn::
++
+[source,clojure, subs=attributes+]
+----
+com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+----
+pom.xml::
++
+[source,xml,subs=attributes+]
+----
+<dependency>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-core</artifactId>
+    <version>{xtdb_version}</version>
+</dependency>
+----
+====
+
+[#embedded]
+== Within your JVM application
+
+First, add the `core` module as a project dependency.
+We can then start up an in-memory XTDB node with:
+
+[tabs]
+====
+Clojure::
++
+[source,clojure]
+----
+(require '[xtdb.api :as xt])
+
+(xt/start-node {})
+----
+
+Java::
++
+[source,java]
+----
+include::example$test/xtdb/docs/Install.java[tag=imports]
+
+include::example$test/xtdb/docs/Install.java[tag=main-0,indent=0]
+include::example$test/xtdb/docs/Install.java[tag=main-1,indent=0]
+----
+
+Kotlin::
++
+[source,kotlin]
+----
+include::example$test/xtdb/docs/Install.kt[tag=imports]
+
+include::example$test/xtdb/docs/Install.kt[tag=main,indent=0]
+----
+====
+
+[#uberjar]
+== Using a pre-built XTDB JAR
+
+You can start a standalone XTDB node, accessible through HTTP, using a pre-built XTDB JAR.
+XTDB pre-built JARs can be found on the relevant https://github.com/xtdb/xtdb/releases[GitHub releases,window=_blank] page - we'll use `xtdb-in-memory.jar`.
+
+Start it in the usual way, with `java -jar xtdb-in-memory.jar`.
+This will open an HTTP port with a console UI on port 3000 - open http://localhost:3000[window=_blank] in your favourite browser.
+
+// TODO build needs its own pages in the main docs, not just a blog
+You can also build custom XTDB JARs with your choice of modules - see the https://juxt.pro/blog/crux-build[XTDB build,window=_blank] blog for more details.
+
+[#docker]
+== Via Docker
+
+You can also start a standalone XTDB node using Docker, using:
+
+`docker run -p 3000:3000 juxt/xtdb-in-memory:1.19.0-beta1`
+
+Again, this opens up an HTTP server at http://localhost:3000[window=_blank].
+
+Likewise, you can build custom XTDB Docker images - see the https://juxt.pro/blog/crux-build[XTDB build,window=_blank] blog for more details.
+
+[#clojure-cli]
+== Clojure CLI tooling
+
+Similarly, to start XTDB using Clojure's CLI tooling:
+
+[tabs]
+====
+deps.edn::
++
+[source,clojure, subs=attributes+]
+----
+{:deps {org.clojure/clojure {:mvn/version "1.10.3"}
+        com.xtdb/xtdb-core {:mvn/version "{xtdb_version}"}
+        com.xtdb/xtdb-http-server {:mvn/version "{xtdb_version}"}}}
+----
+====
+
+[tabs]
+====
+xtdb.edn::
++
+[source,clojure]
+----
+{:xtdb.http-server/server {:port 3000}}
+----
+====
+
+Then, start the node with `clojure -m xtdb.main`.
+
+You can get a listing of CLI flags using `clojure -m xtdb.main -h`.

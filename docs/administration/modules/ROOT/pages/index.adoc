@@ -1,5 +1,6 @@
 = Administration
 
+* xref:installing.adoc[Installing]
 * xref:configuring.adoc[Configuring]
 * xref:building.adoc[Building]
 * xref:monitoring.adoc[Monitoring]

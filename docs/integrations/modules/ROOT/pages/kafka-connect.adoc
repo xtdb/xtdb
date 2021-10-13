@@ -20,12 +20,12 @@ The XTDB *source connector* will publish transacations on a node to a Kafka topi
 To get started with the connector, there are two separate guides (depending on whether you are using a full *<<#confluent-quickstart,Confluent Platform>>* installation, or a basic *<<#kafka-quickstart,Kafka>>* installation):
 
 [#confluent-quickstart]
-include::Confluent-QuickStart.adoc[leveloffset=+1]
+include::kafka-connect-confluent-quickstart.adoc[leveloffset=+1]
 
 '''
 
 [#kafka-quickstart]
-include::Kafka-QuickStart.adoc[leveloffset=+1]
+include::kafka-connect-kafka-quickstart.adoc[leveloffset=+1]
 
 '''
 

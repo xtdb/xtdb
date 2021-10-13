@@ -10,8 +10,8 @@ Checkpointing allows the nodes in a cluster to share checkpoints into a central 
 The checkpoint store is a pluggable module - there are a number of officially supported implementations:
 
 - Java's NIO FileSystem (below)
-- AWS's xref::s3.adoc#checkpoint-store[S3]
-- GCP's xref::google-cloud-storage.adoc#checkpoint-store[Cloud Storage]
+- AWS's xref:storage::aws-s3.adoc#checkpoint-store[S3]
+- GCP's xref:storage::google-cloud-storage.adoc#checkpoint-store[Cloud Storage]
 
 XTDB nodes in a cluster don't explicitly communicate regarding which one is responsible for creating a checkpoint - instead, they check at random intervals to see whether any other node has recently created a checkpoint, and create one if necessary.
 The desired frequency of checkpoints can be set using `approx-frequency`.

@@ -3,7 +3,9 @@
 
 XTDB can expose metrics about a node via https://metrics.dropwizard.io/4.1.2/[Dropwizard] to https://prometheus.io/[Prometheus], AWS's CloudWatch, and Java's JMX.
 
-We expose metrics about transaction ingestion and running queries; if you use RocksDB you can also xref:rocksdb.adoc#monitoring[expose internal RocksDB metrics].
+We expose metrics about transaction ingestion and running queries.
+If you use RocksDB you can also
+xref:storage::rocksdb.adoc#monitoring[expose internal RocksDB metrics].
 
 toc::[levels=1]
 

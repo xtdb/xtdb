@@ -229,7 +229,8 @@ See the https://github.com/xtdb/xtdb/blob/main/modules/lucene/test/xtdb/lucene/e
 
 == Checkpointing Lucene
 
-For more details about checkpointing in XTDB, see the xref:checkpointing.adoc[main Checkpointing docs].
+For more details about checkpointing in XTDB, see the
+xref:administration::checkpointing.adoc[Checkpointing docs].
 
 You can set up checkpointing on your Lucene store too, in addition to the main XTDB query indices.
 This means that a new node starting up will be able to download a checkpoint of a reasonably recent Lucene store from a central location rather than having to replay all of the transactions.

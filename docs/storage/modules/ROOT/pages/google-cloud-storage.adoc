@@ -77,7 +77,7 @@ Follow the GCS https://github.com/googleapis/google-cloud-java#authentication[Au
 [#checkpoint-store]
 == Checkpoint store
 
-GCS can be used as a query index xref:checkpointing.adoc[checkpoint store].
+GCS can be used as a query index xref:administration::checkpointing.adoc[checkpoint store].
 
 Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on GCS to remove older checkpoints.
 
