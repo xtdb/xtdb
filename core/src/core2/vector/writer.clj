@@ -79,8 +79,10 @@
 
     (reify IRowCopier
       (copyRow [_ src-idx]
-        (-> ^IRowCopier (aget copier-mapping (.getTypeId src-vec src-idx))
-            (.copyRow (.getOffset src-vec src-idx)))))))
+        (let [type-id (.getTypeId src-vec src-idx)]
+          (when-not (neg? type-id)
+            (-> ^IRowCopier (aget copier-mapping type-id)
+                (.copyRow (.getOffset src-vec src-idx)))))))))
 
 (defn- vec->duv-copier ^core2.vector.IRowCopier [^ValueVector src-vec, ^IDenseUnionWriter dest-col]
   (-> (.writerForType dest-col (-> src-vec (.getField) (.getType)))
@@ -137,7 +139,7 @@
     (.computeIfAbsent writers-by-type arrow-type
                       (reify Function
                         (apply [_ arrow-type]
-                          (let [^Field field (ty/->field (ty/type->field-name arrow-type) arrow-type false)
+                          (let [^Field field (ty/arrow-type->field arrow-type)
                                 type-id (or (iv/duv-type-id dest-duv arrow-type)
                                             (.registerNewTypeId dest-duv field))]
                             (when-not (.getVectorByType dest-duv type-id)
@@ -201,6 +203,18 @@
   (clear [this]
     (.clear data-writer)
     (set! (.pos this) 0))
+
+  (rowCopier [_ src-vec]
+    (let [^ListVector src-vec (cast ListVector src-vec)
+          src-data-vec (.getDataVector src-vec)
+          inner-copier (.rowCopier data-writer src-data-vec)]
+      (reify IRowCopier
+        (copyRow [_ src-idx]
+          (let [start-idx (.getElementStartIndex src-vec src-idx)]
+            (dotimes [el-idx (- (.getElementEndIndex src-vec src-idx) start-idx)]
+              (.startValue data-writer)
+              (.copyRow inner-copier (+ start-idx el-idx))
+              (.endValue data-writer)))))))
 
   IListWriter
   (getDataWriter [_] data-writer))

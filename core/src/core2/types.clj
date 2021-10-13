@@ -3,11 +3,11 @@
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration LocalDateTime]
-           java.util.Date
+           [java.util Date List]
            [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
-           org.apache.arrow.vector.complex.DenseUnionVector
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$List ArrowType$Null ArrowType$Utf8 Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -21,12 +21,6 @@
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (.getType Types$MinorType/DENSEUNION))
 (def list-type (.getType Types$MinorType/LIST))
-
-(defn type->field-name [^ArrowType arrow-type]
-  (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
-    (case minor-type-name
-      "DURATION" (format "%s-%s" (.toLowerCase minor-type-name) (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))
-      (.toLowerCase minor-type-name))))
 
 (defprotocol ValueToArrowType
   (value->arrow-type [v]))
@@ -45,6 +39,9 @@
   ByteBuffer (value->arrow-type [_] ArrowType$Binary/INSTANCE)
   String (value->arrow-type [_] ArrowType$Utf8/INSTANCE)
   Text (value->arrow-type [_] ArrowType$Utf8/INSTANCE))
+
+(extend-protocol ValueToArrowType
+  List (value->arrow-type [_] ArrowType$List/INSTANCE))
 
 (def arrow-type->vector-type
   {ArrowType$Null/INSTANCE NullVector
@@ -90,6 +87,18 @@
     ;; HACK assumes millis for now
     (.setSafe ^DurationVector (.getVector writer) (.getPosition writer) (.toMillis v))))
 
+(extend-protocol ArrowWriteable
+  List
+  (write-value! [v ^IVectorWriter writer]
+    (let [writer (.asList writer)
+          data-writer (.getDataWriter writer)
+          data-duv-writer (.asDenseUnion data-writer)]
+      (doseq [el v]
+        (.startValue data-writer)
+        (write-value! el (doto (.writerForType data-duv-writer (value->arrow-type el))
+                           (.startValue)))
+        (.endValue data-writer)))))
+
 (defprotocol PValueVector
   (get-object [value-vector idx]))
 
@@ -117,6 +126,17 @@
 
   VarCharVector
   (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
+
+  ListVector
+  (get-object [this idx]
+    (let [data-vec (.getDataVector this)
+          x (loop [element-idx (.getElementStartIndex this idx)
+                   acc (transient [])]
+              (if (= (.getElementEndIndex this idx) element-idx)
+                acc
+                (recur (inc element-idx)
+                       (conj! acc (get-object data-vec element-idx)))))]
+      (persistent! x)))
 
   DenseUnionVector
   (get-object [this idx]
@@ -156,3 +176,16 @@
 
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
   (->field "_row-id" bigint-type false))
+
+(defn type->field-name [^ArrowType arrow-type]
+  (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
+    (case minor-type-name
+      "DURATION" (format "%s-%s" (.toLowerCase minor-type-name) (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))
+      (.toLowerCase minor-type-name))))
+
+(defn arrow-type->field [^ArrowType arrow-type]
+  (let [field-name (type->field-name arrow-type)
+        minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
+    (case minor-type-name
+      "LIST" (->field field-name arrow-type false (->field "$data$" dense-union-type false))
+      (->field field-name arrow-type false))))

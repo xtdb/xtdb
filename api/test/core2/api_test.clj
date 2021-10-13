@@ -70,3 +70,15 @@
                    @(c2/submit-tx *node* [[:put {}]])
                    (catch ExecutionException e
                      (throw (.getCause e)))))))
+
+(t/deftest round-trips-lists
+  (let [!tx (c2/submit-tx *node* [[:put {:_id "foo", :list [1 2 ["foo" "bar"]]}]])]
+    (t/is (= #core2/tx-instant {:tx-id 0, :tx-time #inst "2020-01-01"} @!tx))
+
+    (t/is (= [{:id "foo"
+               :list [1 2 ["foo" "bar"]]}]
+             (c2/query *node*
+                       (-> '{:find [?id ?list]
+                             :where [[?id :list ?list]]}
+                           (assoc :basis {:tx !tx}
+                                  :basis-timeout (Duration/ofSeconds 1))))))))

@@ -74,26 +74,26 @@
                       ^StructVector min-meta-vec, ^StructVector max-meta-vec,
                       ^long meta-idx]
   (when (pos? (.getValueCount field-vec))
-    (let [arrow-type (.getType (.getField field-vec))
+    (let [arrow-type (.getType (.getField field-vec))]
+      (when-not (instance? ArrowType$List arrow-type)
+        (let [min-vec (get-or-add-child min-meta-vec arrow-type)
+              max-vec (get-or-add-child max-meta-vec arrow-type)
 
-          min-vec (get-or-add-child min-meta-vec arrow-type)
-          max-vec (get-or-add-child max-meta-vec arrow-type)
+              col-comparator (expr.comp/->comparator arrow-type)]
 
-          col-comparator (expr.comp/->comparator arrow-type)]
+          (.setIndexDefined min-meta-vec meta-idx)
+          (.setIndexDefined max-meta-vec meta-idx)
 
-      (.setIndexDefined min-meta-vec meta-idx)
-      (.setIndexDefined max-meta-vec meta-idx)
+          (dotimes [field-idx (.getValueCount field-vec)]
+            (when (or (.isNull min-vec meta-idx)
+                      (and (not (.isNull field-vec field-idx))
+                           (neg? (.compareIdx col-comparator field-vec field-idx min-vec meta-idx))))
+              (.copyFromSafe min-vec field-idx meta-idx field-vec))
 
-      (dotimes [field-idx (.getValueCount field-vec)]
-        (when (or (.isNull min-vec meta-idx)
-                  (and (not (.isNull field-vec field-idx))
-                       (neg? (.compareIdx col-comparator field-vec field-idx min-vec meta-idx))))
-          (.copyFromSafe min-vec field-idx meta-idx field-vec))
-
-        (when (or (.isNull max-vec meta-idx)
-                  (and (not (.isNull field-vec field-idx))
-                       (pos? (.compareIdx col-comparator field-vec field-idx max-vec meta-idx))))
-          (.copyFromSafe max-vec field-idx meta-idx field-vec))))))
+            (when (or (.isNull max-vec meta-idx)
+                      (and (not (.isNull field-vec field-idx))
+                           (pos? (.compareIdx col-comparator field-vec field-idx max-vec meta-idx))))
+              (.copyFromSafe max-vec field-idx meta-idx field-vec))))))))
 
 (defn write-meta [^VectorSchemaRoot metadata-root, live-roots, ^long chunk-idx, ^long max-rows-per-block]
   (let [col-count (count live-roots)
