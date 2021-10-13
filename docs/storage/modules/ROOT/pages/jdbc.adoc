@@ -3,7 +3,7 @@
 
 XTDB nodes can use JDBC databases to store their transaction logs and/or document stores.
 
-image::jdbc-modes.svg?sanitize=true[Local Cluster Mode,450,480,align="center"]
+image::jdbc-modes.svg[Local Cluster Mode,450,480,align="center"]
 
 == Project Dependencies
 

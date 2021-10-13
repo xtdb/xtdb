@@ -8,7 +8,7 @@ xref:clients::http.adoc[HTTP Client Reference].
 
 XTDB offers a REST API layer in the `xtdb-http-server` module that allows you to send transactions and run queries over HTTP.
 
-image::remote-cluster-mode.svg?sanitize=true[Remote Cluster Mode,450,145,align="centre"]
+image::remote-cluster-mode.svg[Remote Cluster Mode,450,145,align="centre"]
 
 Using XTDB in this manner is a valid use-case but it cannot support all of the features and benefits that running the XTDB node inside of your application provides, in particular the ability to efficiently combine custom code with multiple in-process Datalog queries.
 
