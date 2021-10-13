@@ -66,7 +66,7 @@
 
             (select-column [form ^String col-name params]
               (-> (.select (expr/->expression-column-selector form params)
-                           (.columnReader in-rel col-name))
+                           (.vectorForName in-rel col-name))
                   (.getCardinality)))]
 
       (t/testing "selector"

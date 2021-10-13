@@ -1,9 +1,8 @@
 (ns core2.vector.writer
-  (:require [core2.relation :as rel]
-            [core2.types :as ty]
-            [core2.util :as util])
-  (:import [core2.relation IColumnReader IRelationReader]
-           [core2.vector IDenseUnionWriter IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter]
+  (:require [core2.types :as ty]
+            [core2.util :as util]
+            [core2.vector.indirect :as iv])
+  (:import [core2.vector IIndirectVector IIndirectRelation IDenseUnionWriter IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter]
            java.lang.AutoCloseable
            [java.util HashMap LinkedHashMap Map]
            java.util.function.Function
@@ -67,7 +66,7 @@
           (.startValue this-writer)
           (.copyRow inner-copier src-idx))))))
 
-(defn- duv->duv-copier ^core2.vector.IRowCopier [^IColumnReader src-col, ^IDenseUnionWriter dest-col]
+(defn- duv->duv-copier ^core2.vector.IRowCopier [^IIndirectVector src-col, ^IDenseUnionWriter dest-col]
   (let [^DenseUnionVector src-vec (.getVector src-col)
         src-field (.getField src-vec)
         src-type (.getType src-field)
@@ -80,7 +79,7 @@
             arrow-type (-> ^Field (.get (.getChildren src-field) n)
                            (.getType))]
         (aset copier-mapping src-type-id (.rowCopier (.writerForType dest-col arrow-type)
-                                                     (rel/reader-for-type-id src-col src-type-id)))))
+                                                     (iv/reader-for-type-id src-col src-type-id)))))
 
     (reify IRowCopier
       (getWriter [_] dest-col)
@@ -90,7 +89,7 @@
         (-> ^IRowCopier (aget copier-mapping (.getTypeId src-vec (.getIndex src-col src-idx)))
             (.copyRow src-idx))))))
 
-(defn- vec->duv-copier ^core2.vector.IRowCopier [^IColumnReader src-col, ^IDenseUnionWriter dest-col]
+(defn- vec->duv-copier ^core2.vector.IRowCopier [^IIndirectVector src-col, ^IDenseUnionWriter dest-col]
   (-> (.writerForType dest-col (-> (.getVector src-col) (.getField) (.getType)))
       (.rowCopier src-col)))
 
@@ -148,7 +147,7 @@
                       (reify Function
                         (apply [_ arrow-type]
                           (let [^Field field (ty/->field (ty/type->field-name arrow-type) arrow-type false)
-                                type-id (or (rel/duv-type-id dest-duv arrow-type)
+                                type-id (or (iv/duv-type-id dest-duv arrow-type)
                                             (.registerNewTypeId dest-duv field))]
                             (when-not (.getVectorByType dest-duv type-id)
                               (.addVector dest-duv type-id
@@ -260,37 +259,34 @@
      (ScalarWriter. dest-vec pos))))
 
 (defn ->rel-writer ^core2.vector.IRelationWriter [^BufferAllocator allocator]
-  (let [vec-writers (LinkedHashMap.)]
+  (let [writers (LinkedHashMap.)]
     (reify IRelationWriter
-      (writerForName [_ vec-name]
-        (.computeIfAbsent vec-writers vec-name
+      (writerForName [_ col-name]
+        (.computeIfAbsent writers col-name
                           (reify Function
-                            (apply [_ vec-name]
-                              (vec->writer (DenseUnionVector/empty vec-name allocator))))))
+                            (apply [_ col-name]
+                              (vec->writer (DenseUnionVector/empty col-name allocator))))))
 
       (iterator [_]
-        (.iterator (.values vec-writers)))
+        (.iterator (.values writers)))
 
       AutoCloseable
       (close [_]
-        (AutoCloseables/close (.values vec-writers))))))
+        (AutoCloseables/close (.values writers))))))
 
-(defn vec-writer->reader ^core2.relation.IColumnReader [^IVectorWriter vec-writer]
-  (rel/vec->reader (.getVector vec-writer)))
+(defn rel-writer->reader ^core2.vector.IIndirectRelation [^IRelationWriter rel-writer]
+  (iv/->indirect-rel (for [^IVectorWriter vec-writer rel-writer]
+                       (iv/->direct-vec (.getVector vec-writer)))))
 
-(defn rel-writer->reader ^core2.relation.IRelationReader [^IRelationWriter rel-writer]
-  (rel/->read-relation (for [^IVectorWriter vec-writer rel-writer]
-                         (vec-writer->reader vec-writer))))
-
-(defn append-vec [^IVectorWriter vec-writer, ^IColumnReader col-reader]
-  (let [row-copier (.rowCopier vec-writer col-reader)]
-    (dotimes [src-idx (.getValueCount col-reader)]
+(defn append-vec [^IVectorWriter vec-writer, ^IIndirectVector in-vec]
+  (let [row-copier (.rowCopier vec-writer in-vec)]
+    (dotimes [src-idx (.getValueCount in-vec)]
       (.startValue vec-writer)
       (.copyRow row-copier src-idx)
       (.endValue vec-writer))))
 
-(defn append-rel [^IRelationWriter dest-rel, ^IRelationReader src-rel]
-  (doseq [^IColumnReader src-col src-rel
+(defn append-rel [^IRelationWriter dest-rel, ^IIndirectRelation src-rel]
+  (doseq [^IIndirectVector src-col src-rel
           :let [^IVectorWriter vec-writer (.writerForName dest-rel (.getName src-col))]]
     (append-vec vec-writer src-col)))
 

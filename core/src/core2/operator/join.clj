@@ -1,12 +1,11 @@
 (ns core2.operator.join
   (:require [core2.bloom :as bloom]
             [core2.operator.scan :as scan]
-            [core2.relation :as rel]
             [core2.util :as util]
+            [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
   (:import core2.ICursor
-           [core2.relation IColumnReader IRelationReader]
-           [core2.vector IRelationWriter IRowCopier]
+           [core2.vector IIndirectRelation IIndirectVector IRelationWriter IRowCopier]
            [java.util ArrayList HashMap Iterator List Map]
            [java.util.function Consumer Function]
            java.util.stream.IntStream
@@ -16,34 +15,34 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- cross-product ^core2.relation.IRelationReader [^IRelationReader left-rel, ^IRelationReader right-rel]
+(defn- cross-product ^core2.vector.IIndirectRelation [^IIndirectRelation left-rel, ^IIndirectRelation right-rel]
   (let [left-row-count (.rowCount left-rel)
         right-row-count (.rowCount right-rel)
         row-count (* left-row-count right-row-count)]
-    (rel/->read-relation (concat (rel/select left-rel
-                                             (let [idxs (int-array row-count)]
-                                               (dotimes [idx row-count]
-                                                 (aset idxs idx ^long (quot idx right-row-count)))
-                                               idxs))
+    (iv/->indirect-rel (concat (iv/select left-rel
+                                          (let [idxs (int-array row-count)]
+                                            (dotimes [idx row-count]
+                                              (aset idxs idx ^long (quot idx right-row-count)))
+                                            idxs))
 
-                                 (rel/select right-rel
-                                             (let [idxs (int-array row-count)]
-                                               (dotimes [idx row-count]
-                                                 (aset idxs idx ^long (rem idx right-row-count)))
-                                               idxs))))))
+                               (iv/select right-rel
+                                          (let [idxs (int-array row-count)]
+                                            (dotimes [idx row-count]
+                                              (aset idxs idx ^long (rem idx right-row-count)))
+                                            idxs))))))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
                           ^ICursor left-cursor
                           ^ICursor right-cursor
                           ^List left-rels
                           ^:unsynchronized-mutable ^Iterator left-rel-iterator
-                          ^:unsynchronized-mutable ^IRelationReader right-rel]
+                          ^:unsynchronized-mutable ^IIndirectRelation right-rel]
   ICursor
   (tryAdvance [this c]
     (.forEachRemaining left-cursor
                        (reify Consumer
                          (accept [_ left-rel]
-                           (.add left-rels (rel/copy left-rel allocator)))))
+                           (.add left-rels (iv/copy left-rel allocator)))))
 
     (boolean
      (when-let [right-rel (or (when (and left-rel-iterator (.hasNext left-rel-iterator))
@@ -55,7 +54,7 @@
                                 (when (.tryAdvance right-cursor
                                                    (reify Consumer
                                                      (accept [_ right-rel]
-                                                       (set! (.right-rel this) (rel/copy right-rel allocator))
+                                                       (set! (.right-rel this) (iv/copy right-rel allocator))
                                                        (set! (.left-rel-iterator this) (.iterator left-rels)))))
                                   (.right-rel this))))]
 
@@ -78,18 +77,18 @@
 (deftype BuildPointer [^List #_<IRowCopier> row-copiers, ^int idx, pointer-or-object])
 
 (defn- build-phase [^IRelationWriter rel-writer
-                    ^IRelationReader build-rel
+                    ^IIndirectRelation build-rel
                     ^String build-column-name
                     ^String probe-column-name
                     ^Map join-key->build-pointers
                     ^MutableRoaringBitmap pushdown-bloom
                     semi-join?]
   (let [row-copiers (when-not semi-join?
-                      (vec (for [^IColumnReader col build-rel
-                                   :let [col-name (.getName col)]
-                                   :when (not= col-name probe-column-name)]
+                      (vec (for [^IIndirectVector col build-rel
+                                 :let [col-name (.getName col)]
+                                 :when (not= col-name probe-column-name)]
                              (.rowCopier (.writerForName rel-writer col-name) col))))
-        build-col (.columnReader build-rel build-column-name)
+        build-col (.vectorForName build-rel build-column-name)
         internal-vec (.getVector build-col)]
     (dotimes [build-idx (.getValueCount build-col)]
       (let [idx (.getIndex build-col build-idx)]
@@ -102,15 +101,15 @@
           (.add (BuildPointer. row-copiers build-idx
                                (util/pointer-or-object internal-vec idx))))))))
 
-(defn- probe-phase ^core2.relation.IRelationReader [^IRelationWriter rel-writer
-                                                    ^IRelationReader probe-rel
+(defn- probe-phase ^core2.vector.IIndirectRelation [^IRelationWriter rel-writer
+                                                    ^IIndirectRelation probe-rel
                                                     ^Map join-key->build-pointers
                                                     ^String probe-column-name
                                                     semi-join? anti-join?]
   (when (pos? (.rowCount probe-rel))
-    (let [probe-row-copiers (vec (for [^IColumnReader col probe-rel]
+    (let [probe-row-copiers (vec (for [^IIndirectVector col probe-rel]
                                    (.rowCopier (.writerForName rel-writer (.getName col)) col)))
-          probe-col (.columnReader probe-rel probe-column-name)
+          probe-col (.vectorForName probe-rel probe-column-name)
           probe-pointer (ArrowBufPointer.)
           matching-build-pointers (ArrayList.)
           matching-probe-idxs (IntStream/builder)
@@ -170,7 +169,7 @@
     (.forEachRemaining build-cursor
                        (reify Consumer
                          (accept [_ build-rel]
-                           (let [build-rel (rel/copy build-rel allocator)]
+                           (let [build-rel (iv/copy build-rel allocator)]
                              (.add build-rels build-rel)
                              (build-phase rel-writer build-rel
                                           build-column-name probe-column-name

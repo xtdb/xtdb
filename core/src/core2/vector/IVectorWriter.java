@@ -1,13 +1,12 @@
 package core2.vector;
 
-import core2.relation.IColumnReader;
 import org.apache.arrow.vector.ValueVector;
 
 @SuppressWarnings("try")
 public interface IVectorWriter<V extends ValueVector> extends AutoCloseable {
     V getVector();
 
-    <R extends ValueVector> IRowCopier<R, V> rowCopier(IColumnReader<R> sourceColumn);
+    <R extends ValueVector> IRowCopier<R, V> rowCopier(IIndirectVector<R> sourceColumn);
 
     int getPosition();
 

@@ -5,15 +5,15 @@
             [core2.json :as c2-json]
             [core2.local-node :as node]
             core2.object-store
-            [core2.relation :as rel]
             [core2.temporal :as temporal]
             [core2.types :as ty]
             [core2.util :as util]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.vector.indirect :as iv])
   (:import core2.ICursor
            core2.local_node.Node
            core2.object_store.FileSystemObjectStore
-           core2.relation.IColumnReader
+           core2.vector.IIndirectVector
            java.net.ServerSocket
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
@@ -90,7 +90,7 @@
   (.finishChunk ^core2.indexer.Indexer (.indexer node))
   (await-temporal-snapshot-build node))
 
-(defn populate-root ^core2.relation.IRelationReader [^VectorSchemaRoot root rows]
+(defn populate-root ^core2.vector.IIndirectRelation [^VectorSchemaRoot root rows]
   (.clear root)
 
   (let [field-vecs (.getFieldVectors root)
@@ -108,10 +108,10 @@
 
     root))
 
-(defn ->relation ^core2.relation.IRelationReader [schema rows]
+(defn ->relation ^core2.vector.IIndirectRelation [schema rows]
   (let [root (VectorSchemaRoot/create schema *allocator*)]
     (populate-root root rows)
-    (rel/<-root root)))
+    (iv/<-root root)))
 
 (defn ->cursor ^core2.ICursor [schema blocks]
   (let [blocks (LinkedList. blocks)
@@ -121,14 +121,14 @@
         (if-let [block (some-> (.poll blocks) vec)]
           (do
             (populate-root root block)
-            (.accept c (rel/<-root root))
+            (.accept c (iv/<-root root))
             true)
           false))
 
       (close [_]
         (.close root)))))
 
-(defn <-column [^IColumnReader col]
+(defn <-column [^IIndirectVector col]
   (mapv (fn [idx]
           (.getObject (.getVector col) (.getIndex col idx)))
         (range (.getValueCount col))))
@@ -138,7 +138,7 @@
     (.forEachRemaining cursor
                        (reify Consumer
                          (accept [_ rel]
-                           (vswap! !res conj! (rel/rel->rows rel)))))
+                           (vswap! !res conj! (iv/rel->rows rel)))))
     (persistent! @!res)))
 
 (t/deftest round-trip-cursor

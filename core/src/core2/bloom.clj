@@ -1,6 +1,5 @@
 (ns core2.bloom
   (:require [core2.types :as types]
-            [core2.relation :as rel]
             [core2.vector.writer :as vw])
   (:import java.nio.ByteBuffer
            org.apache.arrow.memory.BufferAllocator

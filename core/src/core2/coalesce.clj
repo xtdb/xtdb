@@ -2,7 +2,7 @@
   (:require [core2.util :as util]
             [core2.vector.writer :as vw])
   (:import core2.ICursor
-           core2.relation.IRelationReader
+           core2.vector.IIndirectRelation
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator))
 
@@ -23,7 +23,7 @@
           (let [!passed-on? (volatile! false)
                 advanced? (.tryAdvance cursor (reify Consumer
                                                 (accept [_ read-rel]
-                                                  (let [^IRelationReader read-rel read-rel
+                                                  (let [^IIndirectRelation read-rel read-rel
                                                         row-count (.rowCount read-rel)
                                                         seen-rows (.seen-rows this)]
                                                     (cond

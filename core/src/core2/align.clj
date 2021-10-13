@@ -1,11 +1,11 @@
 (ns core2.align
-  (:require [core2.relation :as rel])
   (:import [java.util ArrayList LinkedList List Map]
            java.util.function.IntConsumer
            java.util.stream.IntStream
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            org.roaringbitmap.longlong.Roaring64Bitmap
-           org.roaringbitmap.RoaringBitmap))
+           org.roaringbitmap.RoaringBitmap)
+  (:require [core2.vector.indirect :as iv]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -38,15 +38,15 @@
             (.add res idx)))))
     (int-array res)))
 
-(defn align-vectors ^core2.relation.IRelationReader [^List roots, ^Roaring64Bitmap row-id-bitmap ^Map row-id->repeat-count]
+(defn align-vectors ^core2.vector.IIndirectRelation [^List roots, ^Roaring64Bitmap row-id-bitmap ^Map row-id->repeat-count]
   (let [read-cols (LinkedList.)]
     (doseq [^VectorSchemaRoot root roots
             :let [row-id-vec (.getVector root 0)
                   in-vec (.getVector root 1)]]
       (.add read-cols
-            (rel/vec->reader in-vec
-                          (if row-id->repeat-count
-                            (<-row-id-bitmap-with-repetitions row-id->repeat-count row-id-vec)
-                            (<-row-id-bitmap row-id-bitmap row-id-vec)))))
+            (iv/->indirect-vec in-vec
+                               (if row-id->repeat-count
+                                 (<-row-id-bitmap-with-repetitions row-id->repeat-count row-id-vec)
+                                 (<-row-id-bitmap row-id-bitmap row-id-vec)))))
 
-    (rel/->read-relation read-cols)))
+    (iv/->indirect-rel read-cols)))

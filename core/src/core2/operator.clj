@@ -16,14 +16,14 @@
             [core2.operator.set :as set-op]
             [core2.operator.slice :as slice]
             [core2.operator.table :as table]
-            [core2.relation :as rel]
             core2.snapshot
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
            [core2 ICursor IResultSet]
            [core2.operator.set ICursorFactory IFixpointCursorFactory]
            core2.snapshot.ISnapshot
-           [java.util Date Iterator NoSuchElementException]
+           [java.util Date Iterator]
            java.util.function.Consumer
            [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
@@ -290,7 +290,7 @@
                            (reify Consumer
                              (accept [_ rel]
                                (set! (.-next-values res)
-                                     (.iterator (rel/rel->rows rel))))))
+                                     (.iterator (iv/rel->rows rel))))))
               (.hasNext next-values)))))
 
   (next [_]

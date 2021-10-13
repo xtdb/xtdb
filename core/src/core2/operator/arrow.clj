@@ -1,6 +1,6 @@
 (ns core2.operator.arrow
-  (:require [core2.relation :as rel]
-            [core2.util :as util])
+  (:require [core2.util :as util]
+            [core2.vector.indirect :as iv])
   (:import core2.ICursor
            java.nio.file.Path
            org.apache.arrow.memory.BufferAllocator
@@ -11,7 +11,7 @@
   (tryAdvance [_ c]
     (if (.loadNextBatch rdr)
       (do
-        (.accept c (rel/<-root (.getVectorSchemaRoot rdr)))
+        (.accept c (iv/<-root (.getVectorSchemaRoot rdr)))
         true)
       false))
 

@@ -1,9 +1,9 @@
 (ns core2.operator.slice
-  (:require [core2.relation :as rel])
   (:import core2.ICursor
-           core2.relation.IRelationReader
+           core2.vector.IIndirectRelation
            java.util.function.Consumer
-           java.util.stream.IntStream))
+           java.util.stream.IntStream)
+  (:require [core2.vector.indirect :as iv]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -28,14 +28,14 @@
                   (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
-                                   (let [^IRelationReader in-rel in-rel
+                                   (let [^IIndirectRelation in-rel in-rel
                                          row-count (.rowCount in-rel)
                                          old-idx (.idx this)]
 
                                      (set! (.-idx this) (+ old-idx row-count))
 
                                      (when-let [[^long rel-offset, ^long rel-length] (offset+length offset limit old-idx row-count)]
-                                       (.accept c (rel/select in-rel (.toArray (IntStream/range rel-offset (+ rel-offset rel-length)))))
+                                       (.accept c (iv/select in-rel (.toArray (IntStream/range rel-offset (+ rel-offset rel-length)))))
                                        (reset! !advanced? true))))))))
       @!advanced?))
 

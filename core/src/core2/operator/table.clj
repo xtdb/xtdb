@@ -1,9 +1,9 @@
 (ns core2.operator.table
   (:require [core2.error :as err]
-            [core2.relation :as rel]
             [core2.types :as ty]
             [core2.util :as util]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.vector.indirect :as iv])
   (:import core2.ICursor
            [java.util ArrayList LinkedList List]
            org.apache.arrow.memory.BufferAllocator
@@ -26,7 +26,7 @@
             (doseq [k (keys (first rows))]
               (let [out-vec (DenseUnionVector/empty (name k) allocator)
                     out-writer (.asDenseUnion (vw/vec->writer out-vec))]
-                (.add out-cols (rel/vec->reader out-vec))
+                (.add out-cols (iv/->direct-vec out-vec))
                 (dorun
                  (map-indexed (fn [idx row]
                                 (util/set-value-count out-vec idx)
@@ -43,7 +43,7 @@
               (run! util/try-close out-cols)
               (throw e)))
 
-          (with-open [out-rel (rel/->read-relation out-cols)]
+          (with-open [out-rel (iv/->indirect-rel out-cols)]
             (.accept c out-rel)
             true)))))
 

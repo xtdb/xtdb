@@ -2,10 +2,10 @@
   (:require [clojure.set :as set]
             [clojure.string :as str]
             [core2.operator.scan :as scan]
-            [core2.relation :as rel]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector.indirect :as iv])
   (:import core2.ICursor
-           [core2.relation IColumnReader IRelationReader]
+           [core2.vector IIndirectVector IIndirectRelation]
            [java.util LinkedList Map]
            java.util.function.Consumer))
 
@@ -28,16 +28,16 @@
       (.tryAdvance in-cursor
                    (reify Consumer
                      (accept [_ in-rel]
-                       (let [^IRelationReader in-rel in-rel
+                       (let [^IIndirectRelation in-rel in-rel
                              out-cols (LinkedList.)]
 
-                         (doseq [^IColumnReader in-col in-rel
+                         (doseq [^IIndirectVector in-col in-rel
                                  :let [old-name (.getName in-col)
                                        col-name (cond->> (get rename-map old-name old-name)
                                                   prefix (str prefix relation-prefix-delimiter))]]
                            (.add out-cols (.withName in-col col-name)))
 
-                         (.accept c (rel/->read-relation out-cols))))))))
+                         (.accept c (iv/->indirect-rel out-cols))))))))
 
   (close [_]
     (util/try-close in-cursor)))

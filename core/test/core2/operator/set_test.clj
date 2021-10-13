@@ -3,9 +3,9 @@
             [core2.operator.project :as project]
             [core2.operator.select :as select]
             [core2.operator.set :as set-op]
-            [core2.relation :as rel]
             [core2.test-util :as tu]
-            [core2.types :as ty])
+            [core2.types :as ty]
+            [core2.vector.indirect :as iv])
   (:import core2.operator.project.ProjectionSpec
            core2.operator.select.IRelationSelector
            org.apache.arrow.vector.BigIntVector
@@ -178,21 +178,21 @@
                                       (.createCursor cursor-factory)
                                       [(reify ProjectionSpec
                                          (project [_ allocator in-rel]
-                                           (let [a-col (.columnReader in-rel "a")
+                                           (let [a-col (.vectorForName in-rel "a")
                                                  ^BigIntVector a-vec (.getVector a-col)
                                                  row-count (.rowCount in-rel)
                                                  out-vec (doto (BigIntVector. "a" allocator)
                                                            (.setValueCount row-count))]
                                              (dotimes [idx row-count]
                                                (.set out-vec idx (inc (.get a-vec idx))))
-                                             (rel/vec->reader out-vec))))
+                                             (iv/->direct-vec out-vec))))
 
                                        (reify ProjectionSpec
                                          (project [_ allocator in-rel]
                                            (let [row-count (.rowCount in-rel)
-                                                 a-col (.columnReader in-rel "a")
+                                                 a-col (.vectorForName in-rel "a")
                                                  ^BigIntVector a-vec (.getVector a-col)
-                                                 b-col (.columnReader in-rel "b")
+                                                 b-col (.vectorForName in-rel "b")
                                                  ^BigIntVector b-vec (.getVector b-col)
 
                                                  out-vec (doto (BigIntVector. "b" allocator)
@@ -200,12 +200,12 @@
                                              (dotimes [idx row-count]
                                                (.set out-vec idx (* (inc (.get a-vec idx))
                                                                     (.get b-vec idx))))
-                                             (rel/vec->reader out-vec))))])
+                                             (iv/->direct-vec out-vec))))])
 
                                      (reify IRelationSelector
                                        (select [_ in-rel]
                                          (let [idx-bitmap (RoaringBitmap.)
-                                               a-col (.columnReader in-rel "a")
+                                               a-col (.vectorForName in-rel "a")
                                                ^BigIntVector a-vec (.getVector a-col)]
                                            (dotimes [idx (.rowCount in-rel)]
                                              (when (<= (.get a-vec idx) 8)

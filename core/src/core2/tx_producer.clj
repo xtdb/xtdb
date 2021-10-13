@@ -2,7 +2,6 @@
   (:require [clojure.spec.alpha :as s]
             [core2.error :as err]
             core2.log
-            [core2.relation :as rel]
             [core2.types :as t]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]

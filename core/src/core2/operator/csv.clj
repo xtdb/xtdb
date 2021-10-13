@@ -1,10 +1,10 @@
 (ns core2.operator.csv
   (:require [clojure.data.csv :as csv]
             [clojure.instant :as inst]
-            [core2.relation :as rel]
             [core2.types :as types]
             [core2.util :as util]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.vector.indirect :as iv])
   (:import core2.ICursor
            java.lang.AutoCloseable
            [java.nio.file Files Path]
@@ -42,7 +42,7 @@
 
         (util/set-vector-schema-root-row-count root row-count)
 
-        (.accept c (rel/<-root root))
+        (.accept c (iv/<-root root))
         true)
       false))
 

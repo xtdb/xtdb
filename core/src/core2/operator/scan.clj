@@ -4,10 +4,10 @@
             [core2.coalesce :as coalesce]
             [core2.indexer :as idx]
             [core2.metadata :as meta]
-            [core2.relation :as rel]
             [core2.temporal :as temporal]
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
            core2.buffer_pool.IBufferPool
            core2.ICursor
@@ -53,7 +53,7 @@
                      :let [^IColumnSelector col-pred (.get col-preds col-name)
                            ^VectorSchemaRoot in-root (.get in-roots col-name)]]
                  (align/->row-id-bitmap (when col-pred
-                                          (.select col-pred (rel/vec->reader (.getVector in-root col-name))))
+                                          (.select col-pred (iv/->direct-vec (.getVector in-root col-name))))
                                         (.getVector in-root t/row-id-field)))
        (reduce roaring64-and)))
 
@@ -108,10 +108,10 @@
                 :let [^IColumnSelector col-pred (.get col-preds col-name)
                       ^VectorSchemaRoot in-root (.get ^Map (.roots temporal-roots) col-name)]]
             (align/->row-id-bitmap (when col-pred
-                                     (.select col-pred (rel/vec->reader (.getVector in-root col-name))))
+                                     (.select col-pred (iv/->direct-vec (.getVector in-root col-name))))
                                    (.getVector in-root t/row-id-field)))))
 
-(defn- align-roots ^core2.relation.IRelationReader [^List col-names ^Map in-roots ^TemporalRoots temporal-roots row-id-bitmap]
+(defn- align-roots ^core2.vector.IIndirectRelation [^List col-names ^Map in-roots ^TemporalRoots temporal-roots row-id-bitmap]
   (let [roots (for [col-name col-names]
                 (if (temporal/temporal-column? col-name)
                   (.get ^Map (.roots temporal-roots) col-name)
