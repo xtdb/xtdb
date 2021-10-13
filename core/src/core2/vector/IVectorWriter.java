@@ -6,7 +6,7 @@ import org.apache.arrow.vector.ValueVector;
 public interface IVectorWriter<V extends ValueVector> extends AutoCloseable {
     V getVector();
 
-    <R extends ValueVector> IRowCopier<R, V> rowCopier(IIndirectVector<R> sourceColumn);
+    <R extends ValueVector> IRowCopier rowCopier(ValueVector srcVector);
 
     int getPosition();
 

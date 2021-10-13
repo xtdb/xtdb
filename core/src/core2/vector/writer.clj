@@ -59,16 +59,12 @@
   (rowCopier [this-writer src-col]
     (let [inner-copier (.rowCopier inner-writer src-col)]
       (reify IRowCopier
-        (getWriter [_] this-writer)
-        (getReader [_] src-col)
-
         (copyRow [this src-idx]
           (.startValue this-writer)
           (.copyRow inner-copier src-idx))))))
 
-(defn- duv->duv-copier ^core2.vector.IRowCopier [^IIndirectVector src-col, ^IDenseUnionWriter dest-col]
-  (let [^DenseUnionVector src-vec (.getVector src-col)
-        src-field (.getField src-vec)
+(defn- duv->duv-copier ^core2.vector.IRowCopier [^DenseUnionVector src-vec, ^IDenseUnionWriter dest-col]
+  (let [src-field (.getField src-vec)
         src-type (.getType src-field)
         type-ids (.getTypeIds ^ArrowType$Union src-type)
         type-id-count (inc (apply max -1 type-ids))
@@ -79,19 +75,16 @@
             arrow-type (-> ^Field (.get (.getChildren src-field) n)
                            (.getType))]
         (aset copier-mapping src-type-id (.rowCopier (.writerForType dest-col arrow-type)
-                                                     (iv/reader-for-type-id src-col src-type-id)))))
+                                                     (.getVectorByType src-vec src-type-id)))))
 
     (reify IRowCopier
-      (getWriter [_] dest-col)
-      (getReader [_] src-col)
-
       (copyRow [_ src-idx]
-        (-> ^IRowCopier (aget copier-mapping (.getTypeId src-vec (.getIndex src-col src-idx)))
-            (.copyRow src-idx))))))
+        (-> ^IRowCopier (aget copier-mapping (.getTypeId src-vec src-idx))
+            (.copyRow (.getOffset src-vec src-idx)))))))
 
-(defn- vec->duv-copier ^core2.vector.IRowCopier [^IIndirectVector src-col, ^IDenseUnionWriter dest-col]
-  (-> (.writerForType dest-col (-> (.getVector src-col) (.getField) (.getType)))
-      (.rowCopier src-col)))
+(defn- vec->duv-copier ^core2.vector.IRowCopier [^ValueVector src-vec, ^IDenseUnionWriter dest-col]
+  (-> (.writerForType dest-col (-> src-vec (.getField) (.getType)))
+      (.rowCopier src-vec)))
 
 (declare ^core2.vector.IVectorWriter vec->writer)
 
@@ -121,13 +114,11 @@
       (.clear writer))
     (set! (.pos this) 0))
 
-  (rowCopier [this-writer src-col]
-    (let [inner-copier (if (instance? DenseUnionVector (.getVector src-col))
-                         (duv->duv-copier src-col this-writer)
-                         (vec->duv-copier src-col this-writer))]
+  (rowCopier [this-writer src-vec]
+    (let [inner-copier (if (instance? DenseUnionVector src-vec)
+                         (duv->duv-copier src-vec this-writer)
+                         (vec->duv-copier src-vec this-writer))]
       (reify IRowCopier
-        (getWriter [_] this-writer)
-        (getReader [_] src-col)
         (copyRow [_ src-idx] (.copyRow inner-copier src-idx)))))
 
   (asDenseUnion [this] this)
@@ -224,23 +215,18 @@
 
   (clear [this] (set! (.pos this) 0))
 
-  (rowCopier [this-writer src-col]
-    (let [src-vec (.getVector src-col)]
-      (if (instance? NullVector dest-vec)
-        ;; `NullVector/.copyFromSafe` throws UOE
-        (reify IRowCopier
-          (getWriter [_] this-writer)
-          (getReader [_] src-col)
-          (copyRow [_ src-idx]))
+  (rowCopier [this-writer src-vec]
+    (if (instance? NullVector dest-vec)
+      ;; `NullVector/.copyFromSafe` throws UOE
+      (reify IRowCopier
+        (copyRow [_ src-idx]))
 
-        (reify IRowCopier
-          (getWriter [_] this-writer)
-          (getReader [_] src-col)
-          (copyRow [_ src-idx]
-            (.copyFromSafe dest-vec
-                           (.getIndex src-col src-idx)
-                           (.getPosition this-writer)
-                           src-vec)))))))
+      (reify IRowCopier
+        (copyRow [_ src-idx]
+          (.copyFromSafe dest-vec
+                         src-idx
+                         (.getPosition this-writer)
+                         src-vec))))))
 
 (defn ^core2.vector.IVectorWriter vec->writer
   ([^ValueVector dest-vec] (vec->writer dest-vec (.getValueCount dest-vec)))
@@ -278,12 +264,19 @@
   (iv/->indirect-rel (for [^IVectorWriter vec-writer rel-writer]
                        (iv/->direct-vec (.getVector vec-writer)))))
 
-(defn append-vec [^IVectorWriter vec-writer, ^IIndirectVector in-vec]
-  (let [row-copier (.rowCopier vec-writer in-vec)]
-    (dotimes [src-idx (.getValueCount in-vec)]
-      (.startValue vec-writer)
-      (.copyRow row-copier src-idx)
-      (.endValue vec-writer))))
+(defn ->row-copier ^core2.vector.IRowCopier [^IVectorWriter vec-writer, ^IIndirectVector in-col]
+  (let [in-vec (.getVector in-col)
+        row-copier (.rowCopier vec-writer in-vec)]
+    (reify IRowCopier
+      (copyRow [_ src-idx]
+        (.startValue vec-writer)
+        (.copyRow row-copier (.getIndex in-col src-idx))
+        (.endValue vec-writer)))))
+
+(defn append-vec [^IVectorWriter vec-writer, ^IIndirectVector in-col]
+  (let [row-copier (->row-copier vec-writer in-col)]
+    (dotimes [src-idx (.getValueCount in-col)]
+      (.copyRow row-copier src-idx))))
 
 (defn append-rel [^IRelationWriter dest-rel, ^IIndirectRelation src-rel]
   (doseq [^IIndirectVector src-col src-rel

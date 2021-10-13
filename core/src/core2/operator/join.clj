@@ -87,7 +87,7 @@
                       (vec (for [^IIndirectVector col build-rel
                                  :let [col-name (.getName col)]
                                  :when (not= col-name probe-column-name)]
-                             (.rowCopier (.writerForName rel-writer col-name) col))))
+                             (vw/->row-copier (.writerForName rel-writer col-name) col))))
         build-col (.vectorForName build-rel build-column-name)
         internal-vec (.getVector build-col)]
     (dotimes [build-idx (.getValueCount build-col)]
@@ -108,7 +108,7 @@
                                                     semi-join? anti-join?]
   (when (pos? (.rowCount probe-rel))
     (let [probe-row-copiers (vec (for [^IIndirectVector col probe-rel]
-                                   (.rowCopier (.writerForName rel-writer (.getName col)) col)))
+                                   (vw/->row-copier (.writerForName rel-writer (.getName col)) col)))
           probe-col (.vectorForName probe-rel probe-column-name)
           probe-pointer (ArrowBufPointer.)
           matching-build-pointers (ArrayList.)
@@ -141,19 +141,13 @@
 
       (when-not semi-join?
         (doseq [^BuildPointer build-pointer matching-build-pointers
-                ^IRowCopier row-copier (.row-copiers build-pointer)
-                :let [writer (.getWriter row-copier)]]
-          (.startValue writer)
-          (.copyRow row-copier (.idx build-pointer))
-          (.endValue writer)))
+                ^IRowCopier row-copier (.row-copiers build-pointer)]
+          (.copyRow row-copier (.idx build-pointer))))
 
       (let [probe-idxs (.toArray (.build matching-probe-idxs))]
-        (doseq [^IRowCopier row-copier probe-row-copiers
-                :let [writer (.getWriter row-copier)]]
+        (doseq [^IRowCopier row-copier probe-row-copiers]
           (dotimes [idx (alength probe-idxs)]
-            (.startValue writer)
-            (.copyRow row-copier (aget probe-idxs idx))
-            (.endValue writer)))))))
+            (.copyRow row-copier (aget probe-idxs idx))))))))
 
 (deftype JoinCursor [^BufferAllocator allocator
                      ^ICursor build-cursor, ^String build-column-name

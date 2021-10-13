@@ -161,7 +161,7 @@
                 tx-delete-id-vec (.getChild tx-delete-vec "_id")
                 tx-delete-vt-start-vec (.getChild tx-delete-vec "_valid-time-start")
                 tx-delete-vt-end-vec (.getChild tx-delete-vec "_valid-time-end")
-                delete-id-row-copier (.rowCopier delete-id-writer (iv/->direct-vec tx-delete-id-vec))]
+                delete-id-row-copier (.rowCopier delete-id-writer tx-delete-id-vec)]
 
             (reify ILogOpIndexer
               (logPut [_ row-id tx-op-idx]
@@ -258,7 +258,7 @@
             live-root (.getLiveRoot chunk-manager col-name)
             ^BigIntVector row-id-vec (.getVector live-root "_row-id")
             vec-writer (vw/vec->writer (.getVector live-root col-name))
-            row-copier (.rowCopier vec-writer (iv/->direct-vec child-vec))]
+            row-copier (.rowCopier vec-writer child-vec)]
         (dotimes [src-idx (.getValueCount doc-vec)]
           (when-not (neg? (.getTypeId child-vec src-idx))
             (let [dest-idx (.getValueCount row-id-vec)]

@@ -127,10 +127,6 @@
   (getName [_] (.getName parent-col))
   (withName [_ name] (DuvChildReader. (.withName parent-col name) parent-duv type-id type-vec)))
 
-(defn reader-for-type-id ^core2.vector.IIndirectVector [^IIndirectVector col, type-id]
-  (let [^DenseUnionVector parent-duv (.getVector col)]
-    (DuvChildReader. col parent-duv type-id (.getVectorByType parent-duv type-id))))
-
 (defn duv-type-id ^java.lang.Byte [^DenseUnionVector duv, ^ArrowType arrow-type]
   (let [field (.getField duv)
         type-ids (.getTypeIds ^ArrowType$Union (.getType field))]
