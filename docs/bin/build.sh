@@ -7,6 +7,6 @@ PLAYBOOK="antora-playbook.yml"
     cd $(dirname "$0")/..
     ANTORA="$(npm bin)/antora"
     [[ -e "$ANTORA" ]] || npm install
-    $ANTORA --clean --redirect-facility static --fetch $PLAYBOOK
+    CI=true $ANTORA --clean --redirect-facility static --fetch $PLAYBOOK
     echo "Built: file://$(pwd)/build/site/index.html"
 )
