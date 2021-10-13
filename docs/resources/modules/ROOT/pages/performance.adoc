@@ -10,11 +10,11 @@ Officially published benchmark results are forthcoming, but in the meantime plea
 
 .An example screenshot of the query benchmarks dashboard (May 2021)
 
-image::bench-dash-query.png?sanitize=true[Query benchmarks dashboard example,align="center"]
+image::bench-dash-query.png[Query benchmarks dashboard example,align="center"]
 
 .An example screenshot of the ingest benchmarks dashboard (May 2021)
 
-image::bench-dash-ingest.png?sanitize=true[Ingest benchmarks dashboard example,align="center"]
+image::bench-dash-ingest.png[Ingest benchmarks dashboard example,align="center"]
 
 For an example of independent benchmarking by the community, see the https://odpi.github.io/egeria-connector-crux/cts/testing-overview/["XTDB Connector" performance analysis] by the Linux Foundation's Egeria project, which compares XTDB against an existing JanusGraph Connector.
 
@@ -66,7 +66,7 @@ SELECT ?v0 ?v3 ?v4 ?v8 WHERE {
 
 .A diagram of the graph of the same query
 
-image::wd.png?sanitize=true[WatDiv query visualisation,align="center"]
+image::wd.png[WatDiv query visualisation,align="center"]
 
 == DataScript
 

@@ -19,11 +19,11 @@ as semi-immutable logs
 This decoupled design enables XTDB to be maintained as a small and efficient
 core that can be scaled and evolved to support a large variety of use-cases.
 
-image::xtdb-node-1.svg?sanitize=true[XTDB Kafka Node Diagram,970,443]
+image::xtdb-node-1.svg[XTDB Kafka Node Diagram,970,443]
 
 XTDB is an open source document database with bitemporal graph queries.
 
-image::xtdb-venn-1.svg?sanitize=true[Document database with graph queries,450,320,align="center"]
+image::xtdb-venn-1.svg[Document database with graph queries,450,320,align="center"]
 
 [#bitemporal]
 == Bitemporal
