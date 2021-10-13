@@ -1,4 +1,4 @@
-= Persistence Stores
+= Storage
 
 * xref:aws-s3.adoc[AWS S3]
 * xref:azure-blobs.adoc[Azure Blobs]

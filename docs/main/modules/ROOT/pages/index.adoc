@@ -8,7 +8,7 @@
 * xref:clients::index.adoc[Clients]
 * xref:administration::index.adoc[Administration]
 * xref:integrations::index.adoc[Integrations]
-* xref:persistence-stores::index.adoc[Persistence Stores]
+* xref:storage::index.adoc[Storage]
 
 == Learn
 

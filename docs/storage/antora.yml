@@ -1,5 +1,5 @@
-name: persistence-stores
-title: Persistence Stores
+name: storage
+title: Storage
 version: master
 prerelease: indeed
 display_version: main

@@ -44,7 +44,7 @@ content:
         - v2xtdbcom
 #        - docs-v*
     - url: ../
-      start_path: docs/persistence-stores
+      start_path: docs/storage
       branches:
         - v2xtdbcom
 #        - docs-v*
