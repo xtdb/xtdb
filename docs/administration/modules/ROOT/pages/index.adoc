@@ -1,4 +1,4 @@
-= Operations
+= Administration
 
 * xref:configuring.adoc[Configuring]
 * xref:building.adoc[Building]

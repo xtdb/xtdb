@@ -34,7 +34,7 @@ content:
         - v2xtdbcom
 #        - docs-v*
     - url: ../
-      start_path: docs/operations
+      start_path: docs/administration
       branches:
         - v2xtdbcom
 #        - docs-v*
