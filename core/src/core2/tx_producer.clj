@@ -5,9 +5,10 @@
             [core2.relation :as rel]
             [core2.types :as t]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.vector.writer :as vw])
   (:import [core2.log Log LogRecord]
-           core2.relation.IColumnWriter
+           core2.vector.IVectorWriter
            java.util.Date
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampMilliVector VectorSchemaRoot]
@@ -77,7 +78,7 @@
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
   (let [tx-ops (conform-tx-ops tx-ops)]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
-      (let [tx-ops-writer (.asDenseUnion (rel/vec->writer (.getVector root "tx-ops")))
+      (let [tx-ops-writer (.asDenseUnion (vw/vec->writer (.getVector root "tx-ops")))
 
             put-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
             put-doc-writer (.asStruct (.writerForName put-writer "document"))
@@ -100,7 +101,7 @@
               :put (let [put-idx (.startValue put-writer)]
                      (let [{:keys [doc]} tx-op]
                        (doseq [[k v] doc]
-                         (let [^IColumnWriter writer (doto (-> (.writerForName put-doc-writer (name k))
+                         (let [^IVectorWriter writer (doto (-> (.writerForName put-doc-writer (name k))
                                                                (.asDenseUnion)
                                                                (.writerForType (t/value->arrow-type v)))
                                                        (.startValue))]
@@ -116,7 +117,7 @@
 
               :delete (let [delete-idx (.startValue delete-writer)]
                         (let [id (:_id tx-op)
-                              ^IColumnWriter writer (doto (-> delete-id-writer
+                              ^IVectorWriter writer (doto (-> delete-id-writer
                                                               (.writerForType (t/value->arrow-type id)))
                                                       (.startValue))]
                           (t/write-value! id writer))
@@ -132,7 +133,7 @@
               :evict (do
                        (.startValue evict-writer)
                        (let [id (:_id tx-op)
-                             ^IColumnWriter writer (doto (-> evict-id-writer
+                             ^IVectorWriter writer (doto (-> evict-id-writer
                                                              (.writerForType (t/value->arrow-type id)))
                                                      (.startValue))]
                          (t/write-value! id writer)))))

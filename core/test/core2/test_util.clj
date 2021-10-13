@@ -8,7 +8,8 @@
             [core2.relation :as rel]
             [core2.temporal :as temporal]
             [core2.types :as ty]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector.writer :as vw])
   (:import core2.ICursor
            core2.local_node.Node
            core2.object_store.FileSystemObjectStore
@@ -22,7 +23,6 @@
            java.util.function.Consumer
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
-           org.apache.arrow.vector.types.Types$MinorType
            org.apache.arrow.vector.types.pojo.Schema))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
@@ -96,7 +96,7 @@
   (let [field-vecs (.getFieldVectors root)
         row-count (count rows)]
     (doseq [^FieldVector field-vec field-vecs
-            :let [writer (rel/vec->writer field-vec)]]
+            :let [writer (vw/vec->writer field-vec)]]
       (dotimes [idx row-count]
         (.startValue writer)
         (ty/write-value! (-> (nth rows idx)

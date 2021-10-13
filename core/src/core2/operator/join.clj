@@ -2,9 +2,11 @@
   (:require [core2.bloom :as bloom]
             [core2.operator.scan :as scan]
             [core2.relation :as rel]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector.writer :as vw])
   (:import core2.ICursor
-           [core2.relation IRelationWriter IColumnReader IRelationReader IRowCopier]
+           [core2.relation IColumnReader IRelationReader]
+           [core2.vector IRelationWriter IRowCopier]
            [java.util ArrayList HashMap Iterator List Map]
            [java.util.function Consumer Function]
            java.util.stream.IntStream
@@ -83,10 +85,10 @@
                     ^MutableRoaringBitmap pushdown-bloom
                     semi-join?]
   (let [row-copiers (when-not semi-join?
-                        (vec (for [^IColumnReader col build-rel
+                      (vec (for [^IColumnReader col build-rel
                                    :let [col-name (.getName col)]
                                    :when (not= col-name probe-column-name)]
-                               (.rowCopier (.columnWriter rel-writer col-name) col))))
+                             (.rowCopier (.writerForName rel-writer col-name) col))))
         build-col (.columnReader build-rel build-column-name)
         internal-vec (.getVector build-col)]
     (dotimes [build-idx (.getValueCount build-col)]
@@ -107,7 +109,7 @@
                                                     semi-join? anti-join?]
   (when (pos? (.rowCount probe-rel))
     (let [probe-row-copiers (vec (for [^IColumnReader col probe-rel]
-                                     (.rowCopier (.columnWriter rel-writer (.getName col)) col)))
+                                   (.rowCopier (.writerForName rel-writer (.getName col)) col)))
           probe-col (.columnReader probe-rel probe-column-name)
           probe-pointer (ArrowBufPointer.)
           matching-build-pointers (ArrayList.)
@@ -188,13 +190,13 @@
                                       (accept [_ probe-rel]
                                         (probe-phase rel-writer probe-rel join-key->build-pointers
                                                      probe-column-name semi-join? anti-join?)
-                                        (let [out-rel (rel/rel-writer->reader rel-writer)]
+                                        (let [out-rel (vw/rel-writer->reader rel-writer)]
                                           (try
                                             (when (pos? (.rowCount out-rel))
                                               (reset! !advanced true)
                                               (.accept c out-rel))
                                             (finally
-                                              (rel/clear-rel rel-writer)
+                                              (vw/clear-rel rel-writer)
                                               (util/try-close out-rel))))))))))
          @!advanced))))
 
@@ -212,7 +214,7 @@
                                          ^String right-column-name]
   (JoinCursor. allocator
                left-cursor left-column-name right-cursor right-column-name
-               (rel/->rel-writer allocator)
+               (vw/->rel-writer allocator)
                (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
                false false))
 
@@ -223,7 +225,7 @@
                                               ^String right-column-name]
   (JoinCursor. allocator
                right-cursor right-column-name left-cursor left-column-name
-               (rel/->rel-writer allocator)
+               (vw/->rel-writer allocator)
                (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
                true false))
 
@@ -234,6 +236,6 @@
                                               ^String right-column-name]
   (JoinCursor. allocator
                right-cursor right-column-name left-cursor left-column-name
-               (rel/->rel-writer allocator)
+               (vw/->rel-writer allocator)
                (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
                true true))

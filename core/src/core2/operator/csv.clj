@@ -3,15 +3,16 @@
             [clojure.instant :as inst]
             [core2.relation :as rel]
             [core2.types :as types]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector.writer :as vw])
   (:import core2.ICursor
            java.lang.AutoCloseable
            [java.nio.file Files Path]
            java.time.Duration
-           [java.util Base64 Date Iterator]
+           [java.util Base64 Iterator]
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.types.Types$MinorType
            org.apache.arrow.vector.types.pojo.Schema
+           org.apache.arrow.vector.types.Types$MinorType
            org.apache.arrow.vector.VectorSchemaRoot))
 
 (deftype CSVCursor [^BufferAllocator allocator
@@ -29,7 +30,7 @@
         (dorun
          (map-indexed (fn [col-idx fv]
                         (let [parse-value (nth col-parsers col-idx)
-                              writer (rel/vec->writer fv)]
+                              writer (vw/vec->writer fv)]
                           (dotimes [row-idx row-count]
                             (.startValue writer)
                             (types/write-value! (-> (nth row-batch row-idx)

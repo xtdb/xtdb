@@ -4,7 +4,8 @@
             [core2.test-util :as tu]
             [core2.types :as ty]
             [core2.expression :as expr]
-            [core2.relation :as rel])
+            [core2.relation :as rel]
+            [core2.vector.writer :as vw])
   (:import java.util.List
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector))
@@ -37,7 +38,7 @@
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
 
-    (let [age-writer (-> (rel/vec->writer age-vec)
+    (let [age-writer (-> (vw/vec->writer age-vec)
                          (.asDenseUnion))
           age-bigint-writer (-> age-writer
                                 (.writerForType ty/bigint-type))]
@@ -47,7 +48,7 @@
         (ty/write-value! age age-bigint-writer)
         (.endValue age-writer)))
 
-    (let [name-writer (-> (rel/vec->writer name-vec)
+    (let [name-writer (-> (vw/vec->writer name-vec)
                           (.asDenseUnion))
           name-varchar-writer (-> name-writer
                                   (.writerForType ty/varchar-type))]

@@ -11,7 +11,8 @@
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.vector.writer :as vw])
   (:import clojure.lang.MapEntry
            [core2 DenseUnionUtil ICursor]
            core2.api.TransactionInstant
@@ -122,7 +123,7 @@
         ^TimeStampMilliVector tx-time-vec (.getVector log-root "_tx-time")
 
         ops-vec (.getVector log-root "ops")
-        ops-writer (.asList (rel/vec->writer ops-vec))
+        ops-writer (.asList (vw/vec->writer ops-vec))
         ops-data-writer (.asStruct (.getDataWriter ops-writer))
         row-id-writer (.writerForName ops-data-writer "_row-id")
         ^BigIntVector row-id-vec (.getVector row-id-writer)
@@ -256,7 +257,7 @@
       (let [col-name (.getName child-vec)
             live-root (.getLiveRoot chunk-manager col-name)
             ^BigIntVector row-id-vec (.getVector live-root "_row-id")
-            vec-writer (rel/vec->writer (.getVector live-root col-name))
+            vec-writer (vw/vec->writer (.getVector live-root col-name))
             row-copier (.rowCopier vec-writer (rel/vec->reader child-vec))]
         (dotimes [src-idx (.getValueCount doc-vec)]
           (when-not (neg? (.getTypeId child-vec src-idx))

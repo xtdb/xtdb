@@ -1,7 +1,8 @@
 (ns core2.operator.order-by
   (:require [core2.expression.comparator :as expr.comp]
             [core2.relation :as rel]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector.writer :as vw])
   (:import clojure.lang.Keyword
            core2.ICursor
            core2.relation.IRelationReader
@@ -19,17 +20,17 @@
   (OrderSpec. col-name direction))
 
 (defn- accumulate-relations ^core2.relation.IRelationReader [allocator ^ICursor in-cursor]
-  (let [rel-writer (rel/->rel-writer allocator)]
+  (let [rel-writer (vw/->rel-writer allocator)]
     (try
       (.forEachRemaining in-cursor
                          (reify Consumer
                            (accept [_ src-rel]
-                             (rel/append-rel rel-writer src-rel))))
+                             (vw/append-rel rel-writer src-rel))))
       (catch Exception e
         (.close rel-writer)
         (throw e)))
 
-    (rel/rel-writer->reader rel-writer)))
+    (vw/rel-writer->reader rel-writer)))
 
 (defn- sorted-idxs ^ints [^IRelationReader read-rel, ^List #_<OrderSpec> order-specs]
   (-> (IntStream/range 0 (.rowCount read-rel))

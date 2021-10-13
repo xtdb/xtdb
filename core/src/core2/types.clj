@@ -1,5 +1,5 @@
 (ns core2.types
-  (:import core2.relation.IColumnWriter
+  (:import core2.vector.IVectorWriter
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration LocalDateTime]
@@ -57,36 +57,36 @@
    ArrowType$Bool/INSTANCE BitVector})
 
 (defprotocol ArrowWriteable
-  (write-value! [v ^core2.relation.IColumnWriter writer]))
+  (write-value! [v ^core2.vector.IVectorWriter writer]))
 
 (extend-protocol ArrowWriteable
   nil
-  (write-value! [v ^IColumnWriter writer])
+  (write-value! [v ^IVectorWriter writer])
 
   Boolean
-  (write-value! [v ^IColumnWriter writer]
+  (write-value! [v ^IVectorWriter writer]
     (.setSafe ^BitVector (.getVector writer) (.getPosition writer) (if v 1 0)))
 
   CharSequence
-  (write-value! [v ^IColumnWriter writer]
+  (write-value! [v ^IVectorWriter writer]
     (let [buf (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap v))]
       (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer)
                 buf (.position buf) (.remaining buf))))
 
   Double
-  (write-value! [v ^IColumnWriter writer]
+  (write-value! [v ^IVectorWriter writer]
     (.setSafe ^Float8Vector (.getVector writer) (.getPosition writer) v))
 
   Long
-  (write-value! [v ^IColumnWriter writer]
+  (write-value! [v ^IVectorWriter writer]
     (.setSafe ^BigIntVector (.getVector writer) (.getPosition writer) v))
 
   Date
-  (write-value! [v ^IColumnWriter writer]
+  (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TimeStampMilliVector (.getVector writer) (.getPosition writer) (.getTime v)))
 
   Duration
-  (write-value! [v ^IColumnWriter writer]
+  (write-value! [v ^IVectorWriter writer]
     ;; HACK assumes millis for now
     (.setSafe ^DurationVector (.getVector writer) (.getPosition writer) (.toMillis v))))
 
