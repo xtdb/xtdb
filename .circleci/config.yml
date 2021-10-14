@@ -214,7 +214,7 @@ jobs:
             else
               echo 'export DOCS_PREFIX="${CIRCLE_BRANCH}"' >> $BASH_ENV
             fi
-      - run: javadoc -Xdoclint:none -d xtdb-javadoc/ -cp `lein classpath` -sourcepath core/src xtdb.api -subpackages xtdb.api.tx
+      - run: javadoc -Xdoclint:none -d xtdb-javadoc/ -cp `lein classpath` -sourcepath core/src xtdb.api -subpackages xtdb.api.tx -encoding UTF-8 -docencoding utf-8 -charset utf-8 -stylesheetfile docs/javadocs/styles.css
       - aws-s3/sync:
           aws-access-key-id: SITE_AWS_ACCESS_KEY
           aws-secret-access-key: SITE_AWS_SECRET_KEY
