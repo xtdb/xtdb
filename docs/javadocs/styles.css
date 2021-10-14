@@ -728,26 +728,28 @@ ul.ui-autocomplete  li {
 }
 #search-input {
     background-image:url('resources/glass.png');
-    background-size:13px;
+    background-size:0.7222rem; /* 13px / 18px */
     background-repeat:no-repeat;
-    background-position:2px 3px;
-    padding-left:20px;
+    background-position:0.222rem center; /* 4px / 18px */
+    padding-left:1.222rem; /* 22px / 18px */
     position:relative;
-    right:-18px;
+    right:-1rem; /* 18px / 18px */
     width:400px;
+    font-size:var(--font-size-400);
+    line-height:var(--line-height-400);
 }
 #reset-button {
     background-color: var(--color-white);
     background-image:url('resources/x.png');
     background-position:center;
     background-repeat:no-repeat;
-    background-size:12px;
+    background-size:0.666rem; /* 12px / 18px */
     border:none;
-    width:16px;
-    height:16px;
+    width:0.889rem; /* 16px / 18px */
+    height:0.889rem; /* 16px / 18px */
     position:relative;
-    left:-4px;
-    top:-4px;
+    left:-0.333rem; /* 6px / 18px */
+    top:-0.333rem; /* 6px / 18px */
     font-size:0px;
 }
 .watermark {
