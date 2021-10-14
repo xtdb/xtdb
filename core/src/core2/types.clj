@@ -2,7 +2,7 @@
   (:import core2.vector.IVectorWriter
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
-           [java.time Duration LocalDateTime]
+           java.time.Duration
            [java.util Date List Map]
            [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
@@ -23,79 +23,68 @@
 (def list-type (.getType Types$MinorType/LIST))
 (def map-type (ArrowType$Map. false))
 
-(defprotocol ValueToArrowType
-  (value->arrow-type [v]))
-
-(extend-protocol ValueToArrowType
-  nil (value->arrow-type [_] ArrowType$Null/INSTANCE)
-  Long (value->arrow-type [_] bigint-type)
-  Double (value->arrow-type [_] float8-type)
-  Boolean (value->arrow-type [_] ArrowType$Bool/INSTANCE)
-  Date (value->arrow-type [_] timestamp-milli-type)
-  Duration (value->arrow-type [_] duration-milli-type)
-  LocalDateTime (value->arrow-type [_] timestamp-milli-type))
-
-(extend-protocol ValueToArrowType
-  (Class/forName "[B") (value->arrow-type [_] ArrowType$Binary/INSTANCE)
-  ByteBuffer (value->arrow-type [_] ArrowType$Binary/INSTANCE)
-  String (value->arrow-type [_] ArrowType$Utf8/INSTANCE)
-  Text (value->arrow-type [_] ArrowType$Utf8/INSTANCE))
-
-(extend-protocol ValueToArrowType
-  List (value->arrow-type [_] list-type)
-
-  Map
-  (value->arrow-type [v]
-    (if (every? keyword? (keys v))
-      struct-type
-      map-type)))
-
-(def arrow-type->vector-type
-  {ArrowType$Null/INSTANCE NullVector
-   bigint-type BigIntVector
-   float8-type Float8Vector
-   ArrowType$Binary/INSTANCE VarBinaryVector
-   ArrowType$Utf8/INSTANCE VarCharVector
-   timestamp-milli-type TimeStampMilliVector
-   duration-milli-type DurationVector
-   ArrowType$Bool/INSTANCE BitVector})
-
 (defprotocol ArrowWriteable
+  (value->arrow-type [v])
   (write-value! [v ^core2.vector.IVectorWriter writer]))
 
 (extend-protocol ArrowWriteable
   nil
+  (value->arrow-type [_] ArrowType$Null/INSTANCE)
   (write-value! [v ^IVectorWriter writer])
 
   Boolean
+  (value->arrow-type [_] ArrowType$Bool/INSTANCE)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^BitVector (.getVector writer) (.getPosition writer) (if v 1 0)))
 
+  Long
+  (value->arrow-type [_] bigint-type)
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^BigIntVector (.getVector writer) (.getPosition writer) v))
+
+  Double
+  (value->arrow-type [_] float8-type)
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^Float8Vector (.getVector writer) (.getPosition writer) v)))
+
+(extend-protocol ArrowWriteable
+  Date
+  (value->arrow-type [_] timestamp-milli-type)
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^TimeStampMilliVector (.getVector writer) (.getPosition writer) (.getTime v)))
+
+  Duration ; HACK assumes millis for now
+  (value->arrow-type [_] duration-milli-type)
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^DurationVector (.getVector writer) (.getPosition writer) (.toMillis v))))
+
+(extend-protocol ArrowWriteable
+  (Class/forName "[B")
+  (value->arrow-type [_] ArrowType$Binary/INSTANCE)
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^VarBinaryVector (.getVector writer) (.getPosition writer) ^bytes v))
+
+  ByteBuffer
+  (value->arrow-type [_] ArrowType$Binary/INSTANCE)
+  (write-value! [buf ^IVectorWriter writer]
+    (.setSafe ^VarBinaryVector (.getVector writer) (.getPosition writer)
+              buf (.position buf) (.remaining buf)))
+
   CharSequence
+  (value->arrow-type [_] ArrowType$Utf8/INSTANCE)
   (write-value! [v ^IVectorWriter writer]
     (let [buf (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap v))]
       (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer)
                 buf (.position buf) (.remaining buf))))
 
-  Double
+  Text
+  (value->arrow-type [_] ArrowType$Utf8/INSTANCE)
   (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^Float8Vector (.getVector writer) (.getPosition writer) v))
-
-  Long
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^BigIntVector (.getVector writer) (.getPosition writer) v))
-
-  Date
-  (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^TimeStampMilliVector (.getVector writer) (.getPosition writer) (.getTime v)))
-
-  Duration
-  (write-value! [v ^IVectorWriter writer]
-    ;; HACK assumes millis for now
-    (.setSafe ^DurationVector (.getVector writer) (.getPosition writer) (.toMillis v))))
+    (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer) v)))
 
 (extend-protocol ArrowWriteable
   List
+  (value->arrow-type [_] list-type)
   (write-value! [v ^IVectorWriter writer]
     (let [writer (.asList writer)
           data-writer (.getDataWriter writer)
@@ -107,6 +96,11 @@
         (.endValue data-writer))))
 
   Map
+  (value->arrow-type [v]
+    (if (every? keyword? (keys v))
+      struct-type
+      map-type))
+
   (write-value! [m ^IVectorWriter writer]
     (let [dest-vec (.getVector writer)]
       (cond
@@ -120,6 +114,16 @@
 
         ;; TODO
         :else (throw (UnsupportedOperationException.))))))
+
+(def arrow-type->vector-type
+  {ArrowType$Null/INSTANCE NullVector
+   bigint-type BigIntVector
+   float8-type Float8Vector
+   ArrowType$Binary/INSTANCE VarBinaryVector
+   ArrowType$Utf8/INSTANCE VarCharVector
+   timestamp-milli-type TimeStampMilliVector
+   duration-milli-type DurationVector
+   ArrowType$Bool/INSTANCE BitVector})
 
 (defprotocol ArrowReadable
   (get-object [value-vector idx]))
