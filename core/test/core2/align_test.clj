@@ -4,7 +4,8 @@
             [core2.test-util :as tu]
             [core2.types :as ty]
             [core2.expression :as expr]
-            [core2.relation :as rel])
+            [core2.vector.writer :as vw]
+            [core2.vector.indirect :as iv])
   (:import java.util.List
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector))
@@ -37,23 +38,33 @@
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
 
-    (let [age-writer (-> (rel/vec->writer age-vec)
-                         (.writerForType ty/bigint-type))]
+    (let [age-writer (-> (vw/vec->writer age-vec)
+                         (.asDenseUnion))
+          age-bigint-writer (-> age-writer
+                                (.writerForType ty/bigint-type))]
       (doseq [age [12 42 15 83 25]]
-        (ty/set-safe! (.getVector age-writer) (.appendIndex age-writer) age)))
+        (.startValue age-writer)
+        (.startValue age-bigint-writer)
+        (ty/write-value! age age-bigint-writer)
+        (.endValue age-writer)))
 
-    (let [name-writer (-> (rel/vec->writer name-vec)
-                         (.writerForType ty/varchar-type))]
+    (let [name-writer (-> (vw/vec->writer name-vec)
+                          (.asDenseUnion))
+          name-varchar-writer (-> name-writer
+                                  (.writerForType ty/varchar-type))]
       (doseq [name ["Al" "Dave" "Bob" "Steve"]]
-        (ty/set-safe! (.getVector name-writer) (.appendIndex name-writer) name)))
+        (.startValue name-writer)
+        (.startValue name-varchar-writer)
+        (ty/write-value! name name-varchar-writer)
+        (.endValue name-writer)))
 
     (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-column-selector '(<= age 30) {})
-                                                        (rel/vec->reader age-vec))
+                                                        (iv/->direct-vec age-vec))
                                                age-row-id-vec)
                     (.and (align/->row-id-bitmap (.select (expr/->expression-column-selector '(<= name "Frank") {})
-                                                          (rel/vec->reader name-vec))
+                                                          (iv/->direct-vec name-vec))
                                                  name-row-id-vec)))
           roots [name-root age-root]]
       (t/is (= [{:name "Dave", :age 12}
                 {:name "Bob", :age 15}]
-               (rel/rel->rows (align/align-vectors roots row-ids nil)))))))
+               (iv/rel->rows (align/align-vectors roots row-ids nil)))))))

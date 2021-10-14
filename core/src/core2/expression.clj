@@ -2,13 +2,13 @@
   (:require [clojure.string :as str]
             core2.operator.project
             core2.operator.select
-            [core2.relation :as rel]
             [core2.types :as types]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
            core2.operator.project.ProjectionSpec
            [core2.operator.select IColumnSelector IRelationSelector]
-           [core2.relation IColumnReader IRelationReader]
+           [core2.vector IIndirectRelation IIndirectVector]
            java.lang.reflect.Method
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
@@ -16,7 +16,7 @@
            [java.time.temporal ChronoField ChronoUnit]
            [java.util Date LinkedHashMap]
            org.apache.arrow.vector.BaseVariableWidthVector
-           [org.apache.arrow.vector.types Types Types$MinorType]
+           org.apache.arrow.vector.types.Types
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]
            org.roaringbitmap.RoaringBitmap))
 
@@ -224,7 +224,7 @@
                        (with-tag (or (-> arrow-type types/arrow-type->vector-type)
                                      (throw (UnsupportedOperationException.)))))
                   (-> ~variable
-                      (rel/reader-for-type ~(arrow-type-literal-form arrow-type))
+                      (iv/reader-for-type ~(arrow-type-literal-form arrow-type))
                       (.getVector))
                   ~idx-sym (.getIndex ~variable ~idx-sym)]
               ~(get-value-form arrow-type vec-sym idx-sym))
@@ -490,9 +490,9 @@
      :param-types (->> params
                        (util/into-linked-map
                         (util/map-entries (fn [param-k param-v]
-                                            (let [arrow-type (types/class->arrow-type (class param-v))
+                                            (let [arrow-type (types/value->arrow-type param-v)
                                                   normalized-expr-type (normalize-union-value param-v)
-                                                  primitive-tag (get type->cast (types/class->arrow-type (class normalized-expr-type)))]
+                                                  primitive-tag (get type->cast (types/value->arrow-type normalized-expr-type))]
                                               (MapEntry/create (cond-> param-k
                                                                  primitive-tag (with-tag primitive-tag))
                                                                arrow-type))))))
@@ -502,11 +502,11 @@
                            (util/map-values (fn [_param-k param-v]
                                               (normalize-union-value param-v)))))}))
 
-(defn- expression-in-cols [^IRelationReader in-rel expr]
+(defn- expression-in-cols [^IIndirectRelation in-rel expr]
   (->> (variables expr)
        (util/into-linked-map
-         (map (fn [variable]
-               (MapEntry/create variable (.columnReader in-rel (name variable))))))))
+        (map (fn [variable]
+               (MapEntry/create variable (.vectorForName in-rel (name variable))))))))
 
 (defmulti set-value-form
   (fn [arrow-type out-vec-sym idx-sym code]
@@ -541,7 +541,7 @@
   (let [codegen-opts {:var->type var-types, :param->type param-types}
         {:keys [code return-type]} (postwalk-expr #(codegen-expr % codegen-opts) expr)
         variables (->> (keys var-types)
-                       (map #(with-tag % IColumnReader)))
+                       (map #(with-tag % IIndirectVector)))
 
         out-vec-sym (gensym 'out-vec)]
 
@@ -564,8 +564,9 @@
         (let [in-cols (expression-in-cols in-rel expr)
               var-types (->> in-cols
                              (util/into-linked-map
-                              (util/map-values (fn [_variable ^IColumnReader read-col]
-                                                 (->> (rel/col->arrow-types read-col)
+                              (util/map-values (fn [_variable ^IIndirectVector read-col]
+                                                 (assert read-col)
+                                                 (->> (iv/col->arrow-types read-col)
                                                       (types/least-upper-bound))))))
               {:keys [code return-type]} (memo-generate-projection expr var-types param-types)
               expr-fn (memo-eval code)
@@ -573,13 +574,13 @@
               row-count (.rowCount in-rel)]
           (.setValueCount out-vec row-count)
           (expr-fn out-vec (vals in-cols) (vals emitted-params) row-count)
-          (rel/vec->reader out-vec))))))
+          (iv/->direct-vec out-vec))))))
 
 (defn- generate-selection [expr var-types param-types]
   (let [codegen-opts {:var->type var-types, :param->type param-types}
         {:keys [code return-type]} (postwalk-expr #(codegen-expr % codegen-opts) expr)
         variables (->> (keys var-types)
-                       (map #(with-tag % IColumnReader)))]
+                       (map #(with-tag % IIndirectVector)))]
 
     (assert (= ArrowType$Bool/INSTANCE return-type))
     `(fn [[~@variables] [~@(keys param-types)] ^long row-count#]
@@ -602,8 +603,8 @@
           (let [in-cols (expression-in-cols in expr)
                 var-types (->> in-cols
                                (util/into-linked-map
-                                (util/map-values (fn [_variable ^IColumnReader read-col]
-                                                   (->> (rel/col->arrow-types read-col)
+                                (util/map-values (fn [_variable ^IIndirectVector read-col]
+                                                   (->> (iv/col->arrow-types read-col)
                                                         (types/least-upper-bound))))))
                 expr-code (memo-generate-selection expr var-types param-types)
                 expr-fn (memo-eval expr-code)]
@@ -622,7 +623,7 @@
           (let [in-cols (doto (LinkedHashMap.)
                           (.put variable in-col))
                 var-types (doto (LinkedHashMap.)
-                            (.put variable (->> (rel/col->arrow-types in-col)
+                            (.put variable (->> (iv/col->arrow-types in-col)
                                                 (types/least-upper-bound))))
                 expr-code (memo-generate-selection expr var-types param-types)
                 expr-fn (memo-eval expr-code)]

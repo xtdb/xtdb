@@ -2,12 +2,12 @@
   (:require [clojure.spec.alpha :as s]
             [core2.error :as err]
             core2.log
-            [core2.relation :as rel]
             [core2.types :as t]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.vector.writer :as vw])
   (:import [core2.log Log LogRecord]
-           core2.relation.IColumnWriter
+           core2.vector.IVectorWriter
            java.util.Date
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampMilliVector VectorSchemaRoot]
@@ -77,39 +77,34 @@
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
   (let [tx-ops (conform-tx-ops tx-ops)]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
-      (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")
-            tx-ops-writer (rel/vec->writer tx-ops-duv)
+      (let [tx-ops-writer (.asDenseUnion (vw/vec->writer (.getVector root "tx-ops")))
 
-            put-writer (.writerForTypeId tx-ops-writer 0)
-            ^StructVector put-vec (.getVector put-writer)
-            ^StructVector put-doc-vec (.getChild put-vec "document" StructVector)
-            put-doc-writer (rel/vec->writer put-doc-vec)
-            put-vt-start-writer (rel/vec->writer (.getChild put-vec "_valid-time-start" TimeStampMilliVector))
-            put-vt-end-writer (rel/vec->writer (.getChild put-vec "_valid-time-end" TimeStampMilliVector))
+            put-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
+            put-doc-writer (.asStruct (.writerForName put-writer "document"))
+            put-vt-start-writer (.writerForName put-writer "_valid-time-start")
+            put-vt-end-writer (.writerForName put-writer "_valid-time-end")
 
-            delete-writer (.writerForTypeId tx-ops-writer 1)
-            ^StructVector delete-vec (.getVector delete-writer)
-            delete-id-writer (rel/vec->writer (.getChild delete-vec "_id" DenseUnionVector))
-            delete-vt-start-writer (rel/vec->writer (.getChild delete-vec "_valid-time-start" TimeStampMilliVector))
-            delete-vt-end-writer (rel/vec->writer (.getChild delete-vec "_valid-time-end" TimeStampMilliVector))
+            delete-writer (.asStruct (.writerForTypeId tx-ops-writer 1))
+            delete-id-writer (.asDenseUnion (.writerForName delete-writer "_id"))
+            delete-vt-start-writer (.writerForName delete-writer "_valid-time-start")
+            delete-vt-end-writer (.writerForName delete-writer "_valid-time-end")
 
-            evict-writer (.writerForTypeId tx-ops-writer 2)
-            ^StructVector evict-vec (.getVector evict-writer)
-            evict-id-writer (rel/vec->writer (.getChild evict-vec "_id" DenseUnionVector))]
+            evict-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
+            evict-id-writer (.asDenseUnion (.writerForName evict-writer "_id"))]
 
         (dotimes [tx-op-n (count tx-ops)]
+          (.startValue tx-ops-writer)
+
           (let [{:keys [op vt-opts] :as tx-op} (nth tx-ops tx-op-n)]
             (case op
-              :put (let [put-idx (.appendIndex put-writer)]
-                     (.setIndexDefined put-vec put-idx)
-                     (.setIndexDefined put-doc-vec put-idx)
-
+              :put (let [put-idx (.startValue put-writer)]
                      (let [{:keys [doc]} tx-op]
                        (doseq [[k v] doc]
-                         (let [^IColumnWriter writer (-> (.writerForName put-doc-writer (name k))
-                                                         (.writerForType (t/class->arrow-type (type v))))
-                               dest-idx (.appendIndex writer put-idx)]
-                           (t/set-safe! (.getVector writer) dest-idx v))))
+                         (let [^IVectorWriter writer (doto (-> (.writerForName put-doc-writer (name k))
+                                                               (.asDenseUnion)
+                                                               (.writerForType (t/value->arrow-type v)))
+                                                       (.startValue))]
+                           (t/write-value! v writer))))
 
                      (when-let [^Date vt-start (:_valid-time-start vt-opts)]
                        (.set ^TimeStampMilliVector (.getVector put-vt-start-writer)
@@ -119,14 +114,12 @@
                        (.set ^TimeStampMilliVector (.getVector put-vt-end-writer)
                              put-idx (.getTime vt-end))))
 
-              :delete (let [delete-idx (.appendIndex delete-writer)]
-                        (.setIndexDefined delete-vec delete-idx)
-
+              :delete (let [delete-idx (.startValue delete-writer)]
                         (let [id (:_id tx-op)
-                              ^IColumnWriter writer (-> delete-id-writer
-                                                        (.writerForType (t/class->arrow-type (type id))))
-                              dest-idx (.appendIndex writer delete-idx)]
-                          (t/set-safe! (.getVector writer) dest-idx id))
+                              ^IVectorWriter writer (doto (-> delete-id-writer
+                                                              (.writerForType (t/value->arrow-type id)))
+                                                      (.startValue))]
+                          (t/write-value! id writer))
 
                         (when-let [^Date vt-start (:_valid-time-start vt-opts)]
                           (.set ^TimeStampMilliVector (.getVector delete-vt-start-writer)
@@ -136,14 +129,15 @@
                           (.set ^TimeStampMilliVector (.getVector delete-vt-end-writer)
                                 delete-idx (.getTime vt-end))))
 
-              :evict (let [evict-idx (.appendIndex evict-writer)]
-                       (.setIndexDefined evict-vec evict-idx)
-
+              :evict (do
+                       (.startValue evict-writer)
                        (let [id (:_id tx-op)
-                             ^IColumnWriter writer (-> evict-id-writer
-                                                       (.writerForType (t/class->arrow-type (type id))))
-                             dest-idx (.appendIndex writer evict-idx)]
-                         (t/set-safe! (.getVector writer) dest-idx id))))))
+                             ^IVectorWriter writer (doto (-> evict-id-writer
+                                                             (.writerForType (t/value->arrow-type id)))
+                                                     (.startValue))]
+                         (t/write-value! id writer)))))
+
+          (.endValue tx-ops-writer))
 
         (util/set-vector-schema-root-row-count root (count tx-ops))
         (.syncSchema root)

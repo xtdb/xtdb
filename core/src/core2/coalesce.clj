@@ -1,8 +1,8 @@
 (ns core2.coalesce
-  (:require [core2.relation :as rel]
-            [core2.util :as util])
+  (:require [core2.util :as util]
+            [core2.vector.writer :as vw])
   (:import core2.ICursor
-           [core2.relation IRelationWriter IRelationReader]
+           core2.vector.IIndirectRelation
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator))
 
@@ -23,7 +23,7 @@
           (let [!passed-on? (volatile! false)
                 advanced? (.tryAdvance cursor (reify Consumer
                                                 (accept [_ read-rel]
-                                                  (let [^IRelationReader read-rel read-rel
+                                                  (let [^IIndirectRelation read-rel read-rel
                                                         row-count (.rowCount read-rel)
                                                         seen-rows (.seen-rows this)]
                                                     (cond
@@ -44,8 +44,8 @@
 
                                                       ;; otherwise, add it to the pending rows.
                                                       :else
-                                                      (let [rel-writer (vswap! !rel-writer #(or % (rel/->rel-writer allocator)))]
-                                                        (rel/append-rel rel-writer read-rel)
+                                                      (let [rel-writer (vswap! !rel-writer #(or % (vw/->rel-writer allocator)))]
+                                                        (vw/append-rel rel-writer read-rel)
                                                         (vswap! !rows-appended + row-count)))))))
                 rows-appended @!rows-appended]
 
@@ -58,7 +58,7 @@
 
               ;; we've got rows, and either the source is done or there's enough already - send them through
               (pos? rows-appended) (do
-                                     (.accept c (rel/rel-writer->reader @!rel-writer))
+                                     (.accept c (vw/rel-writer->reader @!rel-writer))
                                      true)
 
               ;; no more rows in input, and none to pass through, we're done

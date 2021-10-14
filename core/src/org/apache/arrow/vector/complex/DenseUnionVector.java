@@ -241,7 +241,9 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     byte typeId = nextTypeId;
     if (fieldType != null) {
       int[] typeIds = ((ArrowType.Union) fieldType.getType()).getTypeIds();
-      if (typeIds != null) {
+      // HACK (JH) I'm not sure how this works for cases when you _do_ want a manual typeId mapping
+      // - I suspect some reused type ids :|
+      if (typeIds != null && nextTypeId < typeIds.length) {
         int thisTypeId = typeIds[nextTypeId];
         if (thisTypeId > Byte.MAX_VALUE) {
           throw new IllegalStateException("Dense union vector types must be bytes. " + thisTypeId + " is too large");
@@ -1107,10 +1109,12 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
 
       for (int i = startIndex; i < startIndex + length; i++) {
         byte typeId = typeBuffer.getByte(i);
-        to.offsetBuffer.setInt((long) (i - startIndex) * OFFSET_WIDTH, typeCounts[typeId]);
-        typeCounts[typeId] += 1;
-        if (typeStarts[typeId] == -1) {
-          typeStarts[typeId] = offsetBuffer.getInt((long) i * OFFSET_WIDTH);
+        if (typeId >= 0) {
+          to.offsetBuffer.setInt((long) (i - startIndex) * OFFSET_WIDTH, typeCounts[typeId]);
+          typeCounts[typeId] += 1;
+          if (typeStarts[typeId] == -1) {
+            typeStarts[typeId] = offsetBuffer.getInt((long) i * OFFSET_WIDTH);
+          }
         }
       }
 
@@ -1222,9 +1226,11 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
    * IMPORTANT: Union types always return non null as there is no validity buffer.
    *
    * To check validity correctly you must check the underlying vector.
+   *
+   * HACK (JH) interpreting negative type-id as null for now, not convinced this is a good idea
    */
   public boolean isNull(int index) {
-    return false;
+    return getTypeId(index) < 0;
   }
 
   @Override

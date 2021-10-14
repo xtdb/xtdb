@@ -1,6 +1,6 @@
 (ns core2.operator.project
   (:require [core2.util :as util]
-            [core2.relation :as rel])
+            [core2.vector.indirect :as iv])
   (:import java.util.List
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
@@ -10,13 +10,13 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface ProjectionSpec
-  (^core2.relation.IColumnReader project [^org.apache.arrow.memory.BufferAllocator allocator
-                                        ^core2.relation.IRelationReader readRelation]))
+  (^core2.vector.IIndirectVector project [^org.apache.arrow.memory.BufferAllocator allocator
+                                          ^core2.vector.IIndirectRelation readRelation]))
 
 (deftype IdentityProjectionSpec [^String col-name]
   ProjectionSpec
   (project [_ _allocator in-rel]
-    (.columnReader in-rel col-name)))
+    (.vectorForName in-rel col-name)))
 
 (defn ->identity-projection-spec ^core2.operator.project.ProjectionSpec [^String col-name]
   (IdentityProjectionSpec. col-name))
@@ -35,7 +35,7 @@
                            (let [out-col (.project projection-spec allocator read-rel)]
                              (.add out-cols out-col)))
 
-                         (.accept c (rel/->read-relation out-cols))
+                         (.accept c (iv/->indirect-rel out-cols))
 
                          (finally
                            (run! util/try-close out-cols))))))))

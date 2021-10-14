@@ -1,10 +1,10 @@
 (ns core2.operator.set
   (:require [core2.error :as err]
-            [core2.relation :as rel]
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector.indirect :as iv])
   (:import core2.ICursor
-           [core2.relation IColumnReader IRelationReader]
+           [core2.vector IIndirectVector IIndirectRelation]
            [java.util ArrayList HashSet LinkedList List Set]
            java.util.function.Consumer
            java.util.stream.IntStream
@@ -46,14 +46,14 @@
      (or (.tryAdvance left-cursor
                       (reify Consumer
                         (accept [_ in-rel]
-                          (let [^IRelationReader in-rel in-rel]
+                          (let [^IIndirectRelation in-rel in-rel]
                             (when (pos? (.rowCount in-rel))
                               (.accept c in-rel))))))
 
          (.tryAdvance right-cursor
                       (reify Consumer
                         (accept [_ in-rel]
-                          (let [^IRelationReader in-rel in-rel]
+                          (let [^IIndirectRelation in-rel in-rel]
                             (when (pos? (.rowCount in-rel))
                               (.accept c in-rel)))))))))
 
@@ -78,7 +78,7 @@
 
 (defn- ->set-key [^List cols ^long idx]
   (let [set-key (ArrayList. (count cols))]
-    (doseq [^IColumnReader col cols]
+    (doseq [^IIndirectVector col cols]
       (.add set-key (util/pointer-or-object (.getVector col) (.getIndex col idx))))
     set-key))
 
@@ -92,7 +92,7 @@
     (.forEachRemaining right-cursor
                        (reify Consumer
                          (accept [_ in-rel]
-                           (let [^IRelationReader in-rel in-rel
+                           (let [^IIndirectRelation in-rel in-rel
                                  row-count (.rowCount in-rel)]
                              (when (pos? row-count)
                                (let [cols (seq in-rel)]
@@ -108,7 +108,7 @@
                      (.tryAdvance left-cursor
                                   (reify Consumer
                                     (accept [_ in-rel]
-                                      (let [^IRelationReader in-rel in-rel
+                                      (let [^IIndirectRelation in-rel in-rel
                                             row-count (.rowCount in-rel)]
 
                                         (when (pos? row-count)
@@ -122,7 +122,7 @@
                                             (let [idxs (.toArray (.build idxs))]
                                               (when-not (empty? idxs)
                                                 (reset! !advanced? true)
-                                                (.accept c (rel/select in-rel idxs))))))))))))
+                                                (.accept c (iv/select in-rel idxs))))))))))))
          @!advanced?))))
 
   (close [_]
@@ -147,7 +147,7 @@
                   (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
-                                   (let [^IRelationReader in-rel in-rel
+                                   (let [^IIndirectRelation in-rel in-rel
                                          row-count (.rowCount in-rel)]
                                      (when (pos? row-count)
                                        (let [in-cols (seq in-rel)
@@ -161,7 +161,7 @@
                                          (let [idxs (.toArray (.build idxs))]
                                            (when-not (empty? idxs)
                                              (reset! !advanced? true)
-                                             (.accept c (rel/select in-rel idxs))))))))))))
+                                             (.accept c (iv/select in-rel idxs))))))))))))
       @!advanced?))
 
   (close [_]
@@ -214,7 +214,7 @@
       (let [!advanced? (atom false)
             inner-c (reify Consumer
                       (accept [_ in-rel]
-                        (let [^IRelationReader in-rel in-rel]
+                        (let [^IIndirectRelation in-rel in-rel]
                           (when (pos? (.rowCount in-rel))
                             (let [cols (seq in-rel)
                                   idxs (IntStream/builder)]
@@ -226,8 +226,8 @@
 
                               (let [idxs (.toArray (.build idxs))]
                                 (when-not (empty? idxs)
-                                  (let [out-rel (-> (rel/select in-rel idxs)
-                                                    (rel/copy allocator))]
+                                  (let [out-rel (-> (iv/select in-rel idxs)
+                                                    (iv/copy allocator))]
                                     (.add rels out-rel)
                                     (.accept c out-rel)
                                     (set! (.continue? this) true)

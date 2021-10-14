@@ -1,9 +1,9 @@
-package core2.relation;
+package core2.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.ValueVector;
 
-public interface IColumnReader<V extends ValueVector> extends AutoCloseable {
+public interface IIndirectVector<V extends ValueVector> extends AutoCloseable {
 
     V getVector();
 
@@ -13,11 +13,11 @@ public interface IColumnReader<V extends ValueVector> extends AutoCloseable {
 
     int getValueCount();
 
-    IColumnReader<V> withName(String colName);
+    IIndirectVector<V> withName(String colName);
 
-    IColumnReader<V> copy(BufferAllocator allocator);
+    IIndirectVector<V> copy(BufferAllocator allocator);
 
-    IColumnReader<V> select(int[] idxs);
+    IIndirectVector<V> select(int[] idxs);
 
     @Override
     default void close() {

@@ -1,9 +1,9 @@
 (ns core2.metadata
-  (:require [core2.api :as c2]
-            [core2.blocks :as blocks]
+  (:require [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             core2.buffer-pool
             [core2.expression.comparator :as expr.comp]
+            core2.object-store
             core2.tx
             [core2.types :as t]
             [core2.util :as util]
@@ -13,13 +13,13 @@
            core2.object_store.ObjectStore
            core2.tx.Watermark
            java.io.Closeable
-           [java.util Date HashMap List Map SortedSet]
-           [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
+           [java.util HashMap List Map SortedSet]
+           java.util.concurrent.ConcurrentSkipListSet
            [java.util.function Consumer Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List FieldType Schema]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List ArrowType$Struct FieldType Schema]
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
@@ -74,26 +74,27 @@
                       ^StructVector min-meta-vec, ^StructVector max-meta-vec,
                       ^long meta-idx]
   (when (pos? (.getValueCount field-vec))
-    (let [arrow-type (.getType (.getField field-vec))
+    (let [arrow-type (.getType (.getField field-vec))]
+      (when-not (or (instance? ArrowType$List arrow-type)
+                    (instance? ArrowType$Struct arrow-type))
+        (let [min-vec (get-or-add-child min-meta-vec arrow-type)
+              max-vec (get-or-add-child max-meta-vec arrow-type)
 
-          min-vec (get-or-add-child min-meta-vec arrow-type)
-          max-vec (get-or-add-child max-meta-vec arrow-type)
+              col-comparator (expr.comp/->comparator arrow-type)]
 
-          col-comparator (expr.comp/->comparator arrow-type)]
+          (.setIndexDefined min-meta-vec meta-idx)
+          (.setIndexDefined max-meta-vec meta-idx)
 
-      (.setIndexDefined min-meta-vec meta-idx)
-      (.setIndexDefined max-meta-vec meta-idx)
+          (dotimes [field-idx (.getValueCount field-vec)]
+            (when (or (.isNull min-vec meta-idx)
+                      (and (not (.isNull field-vec field-idx))
+                           (neg? (.compareIdx col-comparator field-vec field-idx min-vec meta-idx))))
+              (.copyFromSafe min-vec field-idx meta-idx field-vec))
 
-      (dotimes [field-idx (.getValueCount field-vec)]
-        (when (or (.isNull min-vec meta-idx)
-                  (and (not (.isNull field-vec field-idx))
-                       (neg? (.compareIdx col-comparator field-vec field-idx min-vec meta-idx))))
-          (.copyFromSafe min-vec field-idx meta-idx field-vec))
-
-        (when (or (.isNull max-vec meta-idx)
-                  (and (not (.isNull field-vec field-idx))
-                       (pos? (.compareIdx col-comparator field-vec field-idx max-vec meta-idx))))
-          (.copyFromSafe max-vec field-idx meta-idx field-vec))))))
+            (when (or (.isNull max-vec meta-idx)
+                      (and (not (.isNull field-vec field-idx))
+                           (pos? (.compareIdx col-comparator field-vec field-idx max-vec meta-idx))))
+              (.copyFromSafe max-vec field-idx meta-idx field-vec))))))))
 
 (defn write-meta [^VectorSchemaRoot metadata-root, live-roots, ^long chunk-idx, ^long max-rows-per-block]
   (let [col-count (count live-roots)

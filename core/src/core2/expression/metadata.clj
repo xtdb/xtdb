@@ -3,10 +3,10 @@
             [core2.expression :as expr]
             [core2.metadata :as meta]
             [core2.types :as types]
-            [core2.relation :as rel])
+            [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
            core2.metadata.IMetadataIndices
-           core2.relation.IColumnReader
+           core2.vector.IIndirectVector
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex ListVector StructVector]
@@ -149,7 +149,7 @@
                     `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
                                 (.getChild ~vec-sym ~(types/type->field-name arrow-type))]
                        (when-not (.isNull ~vec-sym ~expr/idx-sym)
-                         (let [~(-> col-sym (expr/with-tag IColumnReader)) (rel/vec->reader ~vec-sym)]
+                         (let [~(-> col-sym (expr/with-tag IIndirectVector)) (iv/->direct-vec ~vec-sym)]
                            ~(:code (expr/codegen-expr
                                     {:op :call
                                      :f f

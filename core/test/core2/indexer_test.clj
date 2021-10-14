@@ -191,12 +191,16 @@
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
         mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02" #inst "2020-01-03"])
-        tx-ops [[:put {:_id "foo"}]
+        tx-ops [[:put {:_id "foo"
+                       :list [12.0 "foo"]}]
                 [:put {:_id 24.0}]
-                [:put {:_id "bar"}]
-                [:put {:_id #inst "2021-01-01"}]
+                [:put {:_id "bar"
+                       :list [#inst "2020-01-01" false]}]
+                [:put {:_id #inst "2021-01-01"
+                       :struct {:a 1, :b "b"}}]
                 [:put {:_id 52.0}]
-                [:put {:_id #inst "2020-01-01"}]]]
+                [:put {:_id #inst "2020-01-01"
+                       :struct {:a true, :c "c"}}]]]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]

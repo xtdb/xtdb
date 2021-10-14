@@ -1,18 +1,16 @@
 (ns core2.types
-  (:require [core2.util :as util])
-  (:import java.nio.ByteBuffer
+  (:import core2.vector.IVectorWriter
+           [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration LocalDateTime]
-           java.util.Date
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
-           org.apache.arrow.vector.complex.DenseUnionVector
+           [java.util Date List Map]
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Utf8 Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(def byte-array-class (Class/forName "[B"))
 
 (def bigint-type (.getType Types$MinorType/BIGINT))
 (def float8-type (.getType Types$MinorType/FLOAT8))
@@ -23,25 +21,34 @@
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (.getType Types$MinorType/DENSEUNION))
 (def list-type (.getType Types$MinorType/LIST))
+(def map-type (ArrowType$Map. false))
 
-(defn type->field-name [^ArrowType arrow-type]
-  (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
-    (case minor-type-name
-      "DURATION" (format "%s-%s" (.toLowerCase minor-type-name) (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))
-      (.toLowerCase minor-type-name))))
+(defprotocol ValueToArrowType
+  (value->arrow-type [v]))
 
-(def class->arrow-type
-  {nil ArrowType$Null/INSTANCE
-   Long bigint-type
-   Double float8-type
-   byte-array-class ArrowType$Binary/INSTANCE
-   ByteBuffer ArrowType$Binary/INSTANCE
-   String ArrowType$Utf8/INSTANCE
-   Text ArrowType$Utf8/INSTANCE
-   Boolean ArrowType$Bool/INSTANCE
-   Date timestamp-milli-type
-   Duration duration-milli-type
-   LocalDateTime timestamp-milli-type})
+(extend-protocol ValueToArrowType
+  nil (value->arrow-type [_] ArrowType$Null/INSTANCE)
+  Long (value->arrow-type [_] bigint-type)
+  Double (value->arrow-type [_] float8-type)
+  Boolean (value->arrow-type [_] ArrowType$Bool/INSTANCE)
+  Date (value->arrow-type [_] timestamp-milli-type)
+  Duration (value->arrow-type [_] duration-milli-type)
+  LocalDateTime (value->arrow-type [_] timestamp-milli-type))
+
+(extend-protocol ValueToArrowType
+  (Class/forName "[B") (value->arrow-type [_] ArrowType$Binary/INSTANCE)
+  ByteBuffer (value->arrow-type [_] ArrowType$Binary/INSTANCE)
+  String (value->arrow-type [_] ArrowType$Utf8/INSTANCE)
+  Text (value->arrow-type [_] ArrowType$Utf8/INSTANCE))
+
+(extend-protocol ValueToArrowType
+  List (value->arrow-type [_] list-type)
+
+  Map
+  (value->arrow-type [v]
+    (if (every? keyword? (keys v))
+      struct-type
+      map-type)))
 
 (def arrow-type->vector-type
   {ArrowType$Null/INSTANCE NullVector
@@ -52,6 +59,122 @@
    timestamp-milli-type TimeStampMilliVector
    duration-milli-type DurationVector
    ArrowType$Bool/INSTANCE BitVector})
+
+(defprotocol ArrowWriteable
+  (write-value! [v ^core2.vector.IVectorWriter writer]))
+
+(extend-protocol ArrowWriteable
+  nil
+  (write-value! [v ^IVectorWriter writer])
+
+  Boolean
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^BitVector (.getVector writer) (.getPosition writer) (if v 1 0)))
+
+  CharSequence
+  (write-value! [v ^IVectorWriter writer]
+    (let [buf (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap v))]
+      (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer)
+                buf (.position buf) (.remaining buf))))
+
+  Double
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^Float8Vector (.getVector writer) (.getPosition writer) v))
+
+  Long
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^BigIntVector (.getVector writer) (.getPosition writer) v))
+
+  Date
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^TimeStampMilliVector (.getVector writer) (.getPosition writer) (.getTime v)))
+
+  Duration
+  (write-value! [v ^IVectorWriter writer]
+    ;; HACK assumes millis for now
+    (.setSafe ^DurationVector (.getVector writer) (.getPosition writer) (.toMillis v))))
+
+(extend-protocol ArrowWriteable
+  List
+  (write-value! [v ^IVectorWriter writer]
+    (let [writer (.asList writer)
+          data-writer (.getDataWriter writer)
+          data-duv-writer (.asDenseUnion data-writer)]
+      (doseq [el v]
+        (.startValue data-writer)
+        (write-value! el (doto (.writerForType data-duv-writer (value->arrow-type el))
+                           (.startValue)))
+        (.endValue data-writer))))
+
+  Map
+  (write-value! [m ^IVectorWriter writer]
+    (let [dest-vec (.getVector writer)]
+      (cond
+        (instance? StructVector dest-vec)
+        (let [writer (.asStruct writer)]
+          (doseq [[k v] m]
+            (write-value! v (doto (-> (.writerForName writer (name k))
+                                      (.asDenseUnion)
+                                      (.writerForType (value->arrow-type v)))
+                              (.startValue)))))
+
+        ;; TODO
+        :else (throw (UnsupportedOperationException.))))))
+
+(defprotocol PValueVector
+  (get-object [value-vector idx]))
+
+(extend-protocol PValueVector
+  BigIntVector
+  (get-object [this idx] (.get this ^int idx))
+
+  BitVector
+  (get-object [this idx] (.getObject this ^int idx))
+
+  TimeStampMilliVector
+  (get-object [this idx] (Date. (.get this ^int idx)))
+
+  DurationVector
+  (get-object [this idx] (.getObject this ^int idx))
+
+  Float8Vector
+  (get-object [this idx] (.get this ^int idx))
+
+  NullVector
+  (get-object [this idx] (.getObject this ^int idx))
+
+  VarBinaryVector
+  (get-object [this idx] (.get this ^int idx))
+
+  VarCharVector
+  (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
+
+  ListVector
+  (get-object [this idx]
+    (let [data-vec (.getDataVector this)
+          x (loop [element-idx (.getElementStartIndex this idx)
+                   acc (transient [])]
+              (if (= (.getElementEndIndex this idx) element-idx)
+                acc
+                (recur (inc element-idx)
+                       (conj! acc (get-object data-vec element-idx)))))]
+      (persistent! x)))
+
+  StructVector
+  (get-object [this idx]
+    (-> (reduce (fn [acc k]
+                  (let [duv (.getChild this k ValueVector)]
+                    (cond-> acc
+                      (not (.isNull duv idx))
+                      (assoc! (keyword k) (get-object duv idx)))))
+                (transient {})
+                (.getChildFieldNames this))
+        (persistent!)))
+
+  DenseUnionVector
+  (get-object [this idx]
+    (get-object (.getVectorByType this (.getTypeId this idx))
+                (.getOffset this idx))))
 
 (def arrow-type-hierarchy
   (-> (make-hierarchy)
@@ -87,92 +210,15 @@
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
   (->field "_row-id" bigint-type false))
 
-(defprotocol PValueVector
-  (set-safe! [value-vector idx v])
-  (set-null! [value-vector idx])
-  (get-object [value-vector idx]))
+(defn type->field-name [^ArrowType arrow-type]
+  (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
+    (case minor-type-name
+      "DURATION" (format "%s-%s" (.toLowerCase minor-type-name) (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))
+      (.toLowerCase minor-type-name))))
 
-(extend-protocol PValueVector
-  BigIntVector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^long v))
-  (set-null! [this idx] (.setNull this ^int idx))
-  (get-object [this idx] (.get this ^int idx))
-
-  BitVector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^int (if v 1 0)))
-  (set-null! [this idx] (.setNull this ^int idx))
-  (get-object [this idx] (.getObject this ^int idx))
-
-  TimeStampMilliVector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx (if (int? v)
-                              ^long v
-                              (.getTime (if (instance? LocalDateTime v)
-                                          (util/local-date-time->date v)
-                                          ^Date v)))))
-
-  (set-null! [this idx] (.setNull this ^int idx))
-  (get-object [this idx] (Date. (.get this ^int idx)))
-
-  DurationVector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx (if (int? v)
-                              ^long v
-                              (.toMillis ^Duration v))))
-
-  (set-null! [this idx] (.setNull this ^int idx))
-  (get-object [this idx] (.getObject this ^int idx))
-
-  Float8Vector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^double v))
-  (set-null! [this idx] (.setNull this ^int idx))
-  (get-object [this idx] (.get this ^int idx))
-
-  NullVector
-  (set-safe! [this idx v])
-  (set-null! [this idx])
-  (get-object [this idx] (.getObject this ^int idx))
-
-  VarBinaryVector
-  (set-safe! [this idx v]
-    (cond
-      (instance? ByteBuffer v)
-      (.setSafe this ^int idx ^ByteBuffer v (.position ^ByteBuffer v) (.remaining ^ByteBuffer v))
-
-      (bytes? v)
-      (.setSafe this ^int idx ^bytes v)
-
-      :else
-      (throw (IllegalArgumentException.))))
-
-  (set-null! [this idx] (.setNull this ^int idx))
-  (get-object [this idx] (.get this ^int idx))
-
-  VarCharVector
-  (set-safe! [this idx v]
-    (cond
-      (instance? ByteBuffer v)
-      (.setSafe this ^int idx ^ByteBuffer v (.position ^ByteBuffer v) (.remaining ^ByteBuffer v))
-
-      (bytes? v)
-      (.setSafe this ^int idx ^bytes v)
-
-      (string? v)
-      (.setSafe this ^int idx (.getBytes ^String v StandardCharsets/UTF_8))
-
-      (instance? Text v)
-      (.setSafe this ^int idx ^Text v)
-
-      :else
-      (throw (IllegalArgumentException.))))
-
-  (set-null! [this idx] (.setNull this ^int idx))
-  (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
-
-  DenseUnionVector
-  (set-null! [this idx]
-    (set-safe! this idx nil))
-
-  (get-object [this idx]
-    (get-object (.getVectorByType this (.getTypeId this idx))
-                (.getOffset this idx))))
+(defn arrow-type->field [^ArrowType arrow-type]
+  (let [field-name (type->field-name arrow-type)
+        minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
+    (case minor-type-name
+      "LIST" (->field field-name arrow-type false (->field "$data$" dense-union-type false))
+      (->field field-name arrow-type false))))

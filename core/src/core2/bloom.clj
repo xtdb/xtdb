@@ -1,5 +1,6 @@
 (ns core2.bloom
-  (:require [core2.types :as types])
+  (:require [core2.types :as types]
+            [core2.vector.writer :as vw])
   (:import java.nio.ByteBuffer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.hash.MurmurHasher
@@ -64,9 +65,12 @@
      acc)))
 
 (defn literal-hashes ^ints [^BufferAllocator allocator literal]
-  (let [arrow-type (types/class->arrow-type (class literal))]
+  (let [arrow-type (types/value->arrow-type literal)]
     (with-open [^ValueVector vec (.createVector (types/->field "_" arrow-type false) allocator)]
-      (types/set-safe! vec 0 literal)
+      (let [writer (vw/vec->writer vec)]
+        (.startValue writer)
+        (types/write-value! literal writer)
+        (.endValue writer))
       (bloom-hashes vec 0))))
 
 (defn write-bloom [^VarBinaryVector bloom-vec, ^long meta-idx, ^ValueVector field-vec]
