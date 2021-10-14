@@ -1,0 +1,75 @@
+# 29 Expression engine
+
+Date: 2021-10-14
+
+## Status
+
+Proposed
+
+## Context
+
+XTDB should be able to compile efficient expressions over Arrow
+vectors and support low-level SQL-semantics.
+
+We currently have a basic expression engine that can deal with some of
+this. The expression engine is currently used by the project and
+select operators and supports a limited set of scalar types.
+
+The current expression engine is built around typed multi-methods that
+return code snippets that are stitched together. These are only called
+once per batch, and the entire resulting expression is cached. The
+result is compiled into a tight loop.
+
+### Arrow data model
+
+The expression engine needs to support the full Arrow type system. The
+feature focus should be on types XTDB itself can ingest, but it needs
+to handle other types (fixed width binary and lists, unsigned numbers)
+gracefully.
+
+### SQL-semantics
+
+When numeric of temporal types needs to be widened, or NULLs are
+involved in expressions, we need to be able to do what the SQL
+specification expects. A special common case of this is support for
+three-valued boolean logic.
+
+### SQL-functionality
+
+The engine needs to be extensible and able to support the basic
+expected functions in SQL. This is today possible through a
+multi-method.
+
+### Group by
+
+The group-by operator in the logical plan needs to use the same
+semantics as the operators in the expression engine for
+aggregation. Currently aggregation is handled by a different system.
+
+### Order by
+
+The order-by operator in the logical plan needs to behave the same way
+as the comparison operators of the expression engine. How to compare
+different types, lists and structs needs to be defined, potentially
+taking a hint from PartiQL. Alternatively, we can be strict like SQL.
+
+### Performance
+
+The expression engine needs to compile small, efficient kernels on
+demand. All overhead should move to per-batch and primitive operators
+and stack allocated locals should be used in the inner loop. NULL
+checks should be elided when possible.
+
+### Datalog
+
+EDN Datalog has Clojure-like semantics, and behave different to SQL,
+especially when it comes to dealing with NULLs and use binary boolean
+logic where NULL is treated as FALSE. It also operates on Java types,
+and not the Arrow type system. The easiest is to have both Datalog and
+SQL share the low-level semantics, for reasons of both technical and
+clarity. That said, it would be possible to make the expression engine
+have different modes when it comes to NULL.
+
+## Decision
+
+## Consequences
