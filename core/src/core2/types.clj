@@ -121,10 +121,10 @@
         ;; TODO
         :else (throw (UnsupportedOperationException.))))))
 
-(defprotocol PValueVector
+(defprotocol ArrowReadable
   (get-object [value-vector idx]))
 
-(extend-protocol PValueVector
+(extend-protocol ArrowReadable
   BigIntVector
   (get-object [this idx] (.get this ^int idx))
 
