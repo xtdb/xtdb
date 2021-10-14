@@ -4,7 +4,7 @@
            java.nio.charset.StandardCharsets
            java.time.Duration
            [java.util Date List Map]
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Utf8 Field FieldType]
@@ -37,10 +37,30 @@
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^BitVector (.getVector writer) (.getPosition writer) (if v 1 0)))
 
+  Byte
+  (value->arrow-type [_] (.getType Types$MinorType/TINYINT))
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^TinyIntVector (.getVector writer) (.getPosition writer) v))
+
+  Short
+  (value->arrow-type [_] (.getType Types$MinorType/SMALLINT))
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^SmallIntVector (.getVector writer) (.getPosition writer) v))
+
+  Integer
+  (value->arrow-type [_] (.getType Types$MinorType/INT))
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^IntVector (.getVector writer) (.getPosition writer) v))
+
   Long
   (value->arrow-type [_] bigint-type)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^BigIntVector (.getVector writer) (.getPosition writer) v))
+
+  Float
+  (value->arrow-type [_] (.getType Types$MinorType/FLOAT4))
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^Float4Vector (.getVector writer) (.getPosition writer) v))
 
   Double
   (value->arrow-type [_] float8-type)
@@ -117,38 +137,31 @@
 
 (def arrow-type->vector-type
   {ArrowType$Null/INSTANCE NullVector
+   ArrowType$Bool/INSTANCE BitVector
+   (.getType Types$MinorType/TINYINT) TinyIntVector
+   (.getType Types$MinorType/SMALLINT) SmallIntVector
+   (.getType Types$MinorType/INT) IntVector
    bigint-type BigIntVector
+   (.getType Types$MinorType/FLOAT4) Float4Vector
    float8-type Float8Vector
+
    ArrowType$Binary/INSTANCE VarBinaryVector
    ArrowType$Utf8/INSTANCE VarCharVector
+
    timestamp-milli-type TimeStampMilliVector
-   duration-milli-type DurationVector
-   ArrowType$Bool/INSTANCE BitVector})
+   duration-milli-type DurationVector})
 
 (defprotocol ArrowReadable
   (get-object [value-vector idx]))
 
 (extend-protocol ArrowReadable
-  BigIntVector
-  (get-object [this idx] (.get this ^int idx))
+  ;; NOTE: Vectors not explicitly listed here have useful getObject methods and are handled by `ValueVector`.
+  ValueVector (get-object [this idx] (.getObject this ^int idx))
 
-  BitVector
-  (get-object [this idx] (.getObject this ^int idx))
+  VarBinaryVector (get-object [this idx] (ByteBuffer/wrap (.getObject this ^int idx)))
 
   TimeStampMilliVector
   (get-object [this idx] (Date. (.get this ^int idx)))
-
-  DurationVector
-  (get-object [this idx] (.getObject this ^int idx))
-
-  Float8Vector
-  (get-object [this idx] (.get this ^int idx))
-
-  NullVector
-  (get-object [this idx] (.getObject this ^int idx))
-
-  VarBinaryVector
-  (get-object [this idx] (.get this ^int idx))
 
   VarCharVector
   (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
