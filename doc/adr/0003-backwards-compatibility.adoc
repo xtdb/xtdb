@@ -1,8 +1,8 @@
-# 3. Backwards compatibility
+= 3. Backwards compatibility
 
 Date: 2021-09-09
 
-## Status
+== Status
 
 Superseded by:
 
@@ -18,17 +18,17 @@ Superseded by:
 * Tx-ops link:0021-classic-tx-fns.adoc[ADR-0021]
 * History API link:0022-classic-history-api.adoc[ADR-0022]
 
-## Context
+== Context
 
-XTDB needs some level of compatibility with classic. At the minimum we
-need to import the data and timeline.
+XTDB needs some level of compatibility with Classic.
+At the minimum we need to import the data and timeline.
 
 link:0004-eviction.adoc[Eviction] is assumed to be orthogonal.
 
-## Decision
+== Decision
 
-N/A. This ADR has been superceded as it is too all-encompassing. We
-will need to decide on a case-by-base basis what elements of classic
-compatibility we want to commit to.
+N/A.
+This ADR has been superseded as it is too all-encompassing.
+We will need to decide on a case-by-base basis what elements of classic compatibility we want to commit to.
 
-## Consequences
+== Consequences

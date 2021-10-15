@@ -1,42 +1,39 @@
-# 24. SQL temporal query
+= 24. SQL temporal query
 
 Date: 2021-10-06
 
-## Status
+== Status
 
 Proposed
 
-## Context
+== Context
 
-SQL:2011 by default queries all of application time. This is likely
-not what we want.
+SQL:2011 by default queries all of application time. This is likely not
+what we want.
 
-We could consider augmenting the SQL:2011 <query system time
-specification> with similar clauses for application time:
+We could consider augmenting the SQL:2011 with similar clauses for
+application time:
 
-SELECT foo.x
-FROM foo FOR VALID_TIME AS OF DATE '2001-01-01'
-WHERE foo.id = 1
+SELECT foo.x FROM foo FOR VALID_TIME AS OF DATE `2001-01-01' WHERE
+foo.id = 1
 
 DB2 supports the above, but they call their application time period
-BUSINESS_TIME. The above is redundant though, and can be specified
-like this using the standard:
+BUSINESS_TIME. The above is redundant though, and can be specified like
+this using the standard:
 
-SELECT foo.x
-FROM foo
-WHERE foo.id = 1 AND foo.valid_time CONTAINS DATE '2001-01-01'
+SELECT foo.x FROM foo WHERE foo.id = 1 AND foo.valid_time CONTAINS DATE
+`2001-01-01'
 
 Inner joins between two tables across application time are done via
 OVERLAPS:
 
-SELECT foo.x, bar.y
-FROM foo, bar
-WHERE foo.id = 1 AND foo.valid_time OVERLAPS bar.valid_time
+SELECT foo.x, bar.y FROM foo, bar WHERE foo.id = 1 AND foo.valid_time
+OVERLAPS bar.valid_time
 
-This would return all valid rows across time, according to the
-standard. Note that in joins it's in theory enough to limit the time
-via AS OF or predicates for one of the participating tables, as
-OVERLAPS would propagate this.
+This would return all valid rows across time, according to the standard.
+Note that in joins it’s in theory enough to limit the time via AS OF or
+predicates for one of the participating tables, as OVERLAPS would
+propagate this.
 
 We will only support a single application time period, called either
 VALID_TIME, APPLICATION_TIME or BUSINESS_TIME (DB2). Note that periods
@@ -45,28 +42,27 @@ VALID_TIME_FROM and VALID_TIME_TO. This shorthand can only be used in
 places that explicitly expects a period, and cannot be part of SELECT
 for example.
 
-To be semi-compliant with SQL:2011, one idea is to default VALID_TIME
-to CURRENT_TIMESTAMP (like SYSTEM_TIME), unless one is explicitly
-accessing VALID_TIME or SYSTEM_TIME columns or periods inside the
-query. This is to avoid having to provide AS OF CURRENT_TIMESTAMP for
-every table in the very common case of querying the current state of
-the database.
+To be semi-compliant with SQL:2011, one idea is to default VALID_TIME to
+CURRENT_TIMESTAMP (like SYSTEM_TIME), unless one is explicitly accessing
+VALID_TIME or SYSTEM_TIME columns or periods inside the query. This is
+to avoid having to provide AS OF CURRENT_TIMESTAMP for every table in
+the very common case of querying the current state of the database.
 
-Another alternative is to introduce session variables one can set,
-which provide defaults. This is useful as either wants to override
-VALID_TIME across the entire query. It could also be used to set it to
+Another alternative is to introduce session variables one can set, which
+provide defaults. This is useful as either wants to override VALID_TIME
+across the entire query. It could also be used to set it to
 CURRENT_TIMESTAMP and override standards behaviour. Explicit access to
 VALID_TIME inside the query would override the default.
 
-SYSTEM_TIME semantics can be left as is, as it's both has a sane
-default and is less common to override. If one introduce session
-variables, one could provide one for SYSTEM_TIME as well.
+SYSTEM_TIME semantics can be left as is, as it’s both has a sane default
+and is less common to override. If one introduce session variables, one
+could provide one for SYSTEM_TIME as well.
 
 If we build SQL:2011 compliant semantics first, with an option to keep
 to it, we can then experiment with what extensions we actually need in
-practice. All these extensions will only be sugar and won't change the
+practice. All these extensions will only be sugar and won’t change the
 underlying semantics or feature set.
 
-## Decision
+== Decision
 
-## Consequences
+== Consequences

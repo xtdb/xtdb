@@ -1,28 +1,28 @@
-# 11. Classic tx-fn
+= 11. Classic tx-fn
 
 Date: 2021-09-14
 
-## Status
+== Status
 
 Proposed
 
-## Context
+== Context
 
 Provide classic-like functionality for tx-fns.
 
-Currently users can submit/trigger tx-fns via HTTP or the peer-like
-API, therefore this ADR expects to maintain this.
+Currently users can submit/trigger tx-fns via HTTP or the peer-like API,
+therefore this ADR expects to maintain this.
 
 There is no ADR currently for allowing users to trigger/manage tx-fns
 via SQL, whereby normal SQL transactions would be the expected
 correlating behavour.
 
-## Decision
+== Decision
 
-Transaction functions were not originally to be supported in XTDB SQL
-as it requires strict determinism.
+Transaction functions were not originally to be supported in XTDB SQL as
+it requires strict determinism.
 
-## Consequences
+== Consequences
 
 There may be some confusion/tension/discussion around a clean/pure
 remote-first API supporting what is minimally needed by SQL & Datalog

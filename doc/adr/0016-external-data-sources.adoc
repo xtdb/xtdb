@@ -1,20 +1,20 @@
-# 16 External data sources
+= 16 External data sources
 
 Date: 2021-09-14
 
-## Status
+== Status
 
 Proposed
 
-## Context
+== Context
 
-#### Multiple and external data sources
+=== Multiple and external data sources
 
 The c2 logical plan and Datalog supports multiple data sources. We can
 also relatively easily support other Arrow sources of data, like CSV,
 Avro, JDBC, JSON, Parquet etc. which would bring features classic
-currently doesn't have. There's a CSV spike, but area requires more
+currently doesn’t have. There’s a CSV spike, but area requires more
 work, but with good cost / benefit, and can be farmed out to someone
 else.
 
-## Consequences
+== Consequences

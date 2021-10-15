@@ -1,24 +1,24 @@
-# 27. SQL basic DML
+= 27. SQL basic DML
 
 Date: 2021-10-06
 
-## Status
+== Status
 
 Proposed
 
-## Context
+== Context
 
-XTDB needs a simple way to manipulate data from SQL even if we don't
-initially support full SQL DML. This is so a user can use XTDB with
-SQL only end to end.
+XTDB needs a simple way to manipulate data from SQL even if we don’t
+initially support full SQL DML. This is so a user can use XTDB with SQL
+only end to end.
 
-We want to support the basic INSERT, UPDATE and DELETE
-statements. MERGE can provide some level of conditional processing. We
-probably want to introduce an EVICT statement as well.
+We want to support the basic INSERT, UPDATE and DELETE statements. MERGE
+can provide some level of conditional processing. We probably want to
+introduce an EVICT statement as well.
 
 What constitutes a table will be defined in
 link:0025-sql-dynamic-schema.adoc[SQL dynamic schema].
 
-## Decision
+== Decision
 
-## Consequences
+== Consequences

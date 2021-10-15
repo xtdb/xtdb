@@ -1,18 +1,18 @@
-# 17 Classic Arbitrary Types
+= 17 Classic Arbitrary Types
 
 Date: 2021-09-14
 
-## Status
+== Status
 
 Proposed
 
-## Context
+== Context
 
-We would move towards c2's Arrow based data model, see
+We would move towards c2’s Arrow based data model, see
 link:0002-data-model.adoc[ADR-0002].
 
 Nippy (or arbitrary Java objects) will not be supported in XTDB by
 default but this Arrow extension type can be enabled via a flag. These
 columns will be Arrow varbinary to non-JVM users.
 
-## Consequences
+== Consequences
