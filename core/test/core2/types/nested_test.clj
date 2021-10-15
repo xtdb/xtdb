@@ -1,14 +1,13 @@
 (ns core2.types.nested-test
   (:require [clojure.test :as t]
-            [clojure.spec.alpha :as s]
             [core2.types.nested :as tn]
             [core2.util :as util])
-  (:import [org.apache.arrow.vector.complex DenseUnionVector]
+  (:import java.net.URL
+           java.nio.ByteBuffer
+           [java.time Duration Instant LocalDate LocalDateTime LocalTime OffsetDateTime Period ZonedDateTime ZoneId ZoneOffset]
+           org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.memory RootAllocator]
-           [java.time Duration LocalDate LocalDateTime LocalTime OffsetDateTime Period ZonedDateTime ZoneId ZoneOffset]
-           [java.nio ByteBuffer]
-           [java.net URL]))
+           org.apache.arrow.vector.complex.DenseUnionVector))
 
 (t/deftest can-build-dense-union-vector
   (with-open [allocator (RootAllocator.)
@@ -31,8 +30,9 @@
                (.toInstant #inst "2021-09-02T13:54:35.809Z")
                (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "Europe/Stockholm"))
                (OffsetDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneOffset/ofHours 2))
+               (Instant/ofEpochSecond 3600 1234)
                (LocalDateTime/parse "2021-09-02T13:54:35.809")
-               (.plusDays (Duration/ofMillis 1234) 1)
+               (.plusDays (Duration/ofNanos 1234500) 1)
                (Period/of 1 2 0)
                (LocalDate/of 1999 05 01)
                (LocalTime/of 14 05 10)
@@ -75,8 +75,9 @@
                 (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "UTC"))
                 (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "Europe/Stockholm"))
                 (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneOffset/ofHours 2))
+                (ZonedDateTime/ofInstant (Instant/ofEpochSecond 3600 1000) (ZoneId/of "UTC"))
                 (LocalDateTime/parse "2021-09-02T13:54:35.809")
-                (.plusDays (Duration/ofMillis 1234) 1)
+                (.plusDays (Duration/ofNanos 1234000) 1)
                 (Period/of 1 2 0)
                 (LocalDate/of 1999 05 01)
                 (LocalTime/of 14 05 10)
@@ -114,15 +115,16 @@
                 org.apache.arrow.vector.DecimalVector
                 org.apache.arrow.vector.DecimalVector
                 org.apache.arrow.vector.DecimalVector
-                org.apache.arrow.vector.TimeStampMilliTZVector
-                org.apache.arrow.vector.TimeStampMilliTZVector
-                org.apache.arrow.vector.TimeStampMilliTZVector
-                org.apache.arrow.vector.TimeStampMilliTZVector
-                org.apache.arrow.vector.TimeStampMilliVector
+                org.apache.arrow.vector.TimeStampMicroTZVector
+                org.apache.arrow.vector.TimeStampMicroTZVector
+                org.apache.arrow.vector.TimeStampMicroTZVector
+                org.apache.arrow.vector.TimeStampMicroTZVector
+                org.apache.arrow.vector.TimeStampMicroTZVector
+                org.apache.arrow.vector.TimeStampMicroVector
                 org.apache.arrow.vector.DurationVector
                 org.apache.arrow.vector.IntervalYearVector
                 org.apache.arrow.vector.DateMilliVector
-                org.apache.arrow.vector.TimeMilliVector
+                org.apache.arrow.vector.TimeMicroVector
                 org.apache.arrow.vector.VarBinaryVector
                 org.apache.arrow.vector.VarBinaryVector
                 org.apache.arrow.vector.VarCharVector
