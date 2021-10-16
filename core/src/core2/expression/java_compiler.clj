@@ -8,7 +8,7 @@
             SimpleJavaFileObject StandardJavaFileManager ToolProvider]
            [clojure.lang Compiler DynamicClassLoader]))
 
-(defn- ->class-file-manager [^JavaFileManager file-manager ^Map output-streams]
+(defn- ->class-file-manager ^javax.tools.JavaFileManager [^JavaFileManager file-manager ^Map output-streams]
   (proxy [ForwardingJavaFileManager] [file-manager]
     (getJavaFileForOutput [location class-name kind sibling]
       (proxy [SimpleJavaFileObject]
