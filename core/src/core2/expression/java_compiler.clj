@@ -1,11 +1,11 @@
 (ns core2.expression.java-compiler
   (:import [java.io ByteArrayOutputStream StringWriter]
            [java.nio.charset StandardCharsets]
-           [java.util HashMap LinkedHashMap Map]
+           [java.util LinkedHashMap Map]
            [java.util.function Function]
            [java.net URI]
            [javax.tools ForwardingJavaFileManager JavaCompiler JavaFileManager JavaFileObject$Kind
-            SimpleJavaFileObject StandardJavaFileManager ToolProvider]
+            SimpleJavaFileObject ToolProvider]
            [clojure.lang Compiler DynamicClassLoader]))
 
 (defn- ->class-file-manager ^javax.tools.JavaFileManager [^JavaFileManager file-manager ^Map output-streams]
