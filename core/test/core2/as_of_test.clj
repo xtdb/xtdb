@@ -1,10 +1,13 @@
 (ns core2.as-of-test
   (:require [clojure.test :as t]
             [core2.api :as c2]
-            [core2.test-util :as tu]
-            [core2.temporal :as temporal]
+            [core2.operator :as op]
             [core2.snapshot :as snap]
-            [core2.operator :as op]))
+            [core2.temporal :as temporal]
+            [core2.test-util :as tu])
+  (:import core2.api.TransactionInstant
+           java.time.Instant
+           java.util.Date))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -51,20 +54,22 @@
 
         {:keys [tx-time] :as tx1} @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 1}]
                                                             [:put {:_id "doc-with-vt"}
-                                                             {:_valid-time-start #inst "2021"}]])
+                                                             {:_valid-time-start #c2/instant "2021"}]])
+        tx-time (Date/from tx-time)
+        end-of-time (Date/from temporal/end-of-time)
 
         db (snap/snapshot snapshot-factory tx1)]
 
     (t/is (= {"doc" {:_id "doc",
                      :_valid-time-start tx-time
-                     :_valid-time-end temporal/end-of-time
+                     :_valid-time-end end-of-time
                      :_tx-time-start tx-time
-                     :_tx-time-end temporal/end-of-time}
+                     :_tx-time-end end-of-time}
               "doc-with-vt" {:_id "doc-with-vt",
                              :_valid-time-start #inst "2021"
-                             :_valid-time-end temporal/end-of-time
+                             :_valid-time-end end-of-time
                              :_tx-time-start tx-time
-                             :_tx-time-end temporal/end-of-time}}
+                             :_tx-time-end end-of-time}}
              (->> (op/query-ra '[:scan [_id
                                         _valid-time-start _valid-time-end
                                         _tx-time-start _tx-time-end]]
@@ -75,28 +80,24 @@
   (let [snapshot-factory (tu/component ::snap/snapshot-factory)
 
         {tt1 :tx-time} @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 0}]])
+        tt1 (Date/from tt1)
         _ (Thread/sleep 10) ; prevent same-ms transactions
         {tt2 :tx-time, :as tx2} @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 1}]])
+        tt2 (Date/from tt2)
 
         db (snap/snapshot snapshot-factory tx2)
-
-        original-v0-doc {:_id "doc", :version 0
-                         :_valid-time-start tt1
-                         :_valid-time-end temporal/end-of-time
-                         :_tx-time-start tt1
-                         :_tx-time-end tt2}
 
         replaced-v0-doc {:_id "doc", :version 0
                          :_valid-time-start tt1
                          :_valid-time-end tt2
                          :_tx-time-start tt2
-                         :_tx-time-end temporal/end-of-time}
+                         :_tx-time-end (Date/from temporal/end-of-time)}
 
         v1-doc {:_id "doc", :version 1
                 :_valid-time-start tt2
-                :_valid-time-end temporal/end-of-time
+                :_valid-time-end (Date/from temporal/end-of-time)
                 :_tx-time-start tt2
-                :_tx-time-end temporal/end-of-time}]
+                :_tx-time-end (Date/from temporal/end-of-time)}]
 
     (t/is (= [v1-doc]
              (op/query-ra '[:scan [_id version

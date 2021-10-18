@@ -1,7 +1,7 @@
 (ns core2.await-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
-            [core2.await :as await])
+            [core2.await :as await]
+            [core2.api :as c2])
   (:import java.util.concurrent.PriorityBlockingQueue))
 
 (defn- ->tx [tx-id]

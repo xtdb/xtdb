@@ -9,7 +9,7 @@
            java.io.Closeable
            java.lang.AutoCloseable
            java.nio.file.Path
-           java.time.Duration
+           [java.time Duration Instant]
            [java.util Date Map Properties]
            [java.util.concurrent CompletableFuture ExecutionException]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
@@ -104,7 +104,7 @@
                  (if e
                    (.completeExceptionally fut e)
                    (.complete fut (log/->LogRecord (c2/->TransactionInstant (.offset record-metadata)
-                                                                            (Date. (.timestamp record-metadata)))
+                                                                            (Instant/ofEpochMilli (.timestamp record-metadata)))
                                                    record))))))
       fut))
 

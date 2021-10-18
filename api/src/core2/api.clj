@@ -1,25 +1,23 @@
 (ns core2.api
+  (:require core2.edn)
   (:import clojure.lang.IReduceInit
            core2.IResultSet
            java.io.Writer
-           java.time.Duration
+           java.time.Instant
            java.util.concurrent.ExecutionException
-           java.util.Date
            java.util.function.Function))
 
-(defn -duration-reader [s] (Duration/parse s))
-
-(when-not (System/getenv "CORE2_DISABLE_EDN_PRINT_METHODS")
-  (defmethod print-method Duration [^Duration d, ^Writer w]
-    (.write w (format "#core2/duration \"%s\"" d))))
-
-(defrecord TransactionInstant [^long tx-id, ^Date tx-time]
+(defrecord TransactionInstant [^long tx-id, ^Instant tx-time]
   Comparable
-  (compareTo [_ other]
-    (- tx-id (.tx-id ^TransactionInstant other))))
+  (compareTo [_ tx-key]
+    (Long/compare tx-id (.tx-id ^TransactionInstant tx-key))))
 
-(defmethod print-method TransactionInstant [tx-instant ^Writer w]
-  (.write w (str "#core2/tx-instant " (select-keys tx-instant [:tx-id :tx-time]))))
+(defmethod print-dup TransactionInstant [tx-key ^Writer w]
+  (.write w "#c2/tx-key ")
+  (print-method (into {} tx-key) w))
+
+(defmethod print-method TransactionInstant [tx-key w]
+  (print-dup tx-key w))
 
 (defprotocol PClient
   ;; we may want to go to `Stream` instead, when we have a Java API

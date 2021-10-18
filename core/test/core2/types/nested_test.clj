@@ -27,9 +27,9 @@
                2.718281828459045M
                (biginteger 356)
                #inst "1999"
-               (.toInstant #inst "2021-09-02T13:54:35.809Z")
-               (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "Europe/Stockholm"))
-               (OffsetDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneOffset/ofHours 2))
+               #c2/instant "2021-09-02T13:54:35.809Z"
+               (ZonedDateTime/ofInstant #c2/instant "2021-09-02T13:54:35.809Z" (ZoneId/of "Europe/Stockholm"))
+               (OffsetDateTime/ofInstant #c2/instant "2021-09-02T13:54:35.809Z" (ZoneOffset/ofHours 2))
                (Instant/ofEpochSecond 3600 1234)
                (LocalDateTime/parse "2021-09-02T13:54:35.809")
                (.plusDays (Duration/ofNanos 1234500) 1)
@@ -71,10 +71,10 @@
                 1.41M
                 2.718281828459045M
                 356M
-                (ZonedDateTime/ofInstant (.toInstant #inst "1999-01-01T00:00") (ZoneId/of "UTC"))
-                (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "UTC"))
-                (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "Europe/Stockholm"))
-                (ZonedDateTime/ofInstant (.toInstant #inst "2021-09-02T13:54:35.809Z") (ZoneOffset/ofHours 2))
+                (ZonedDateTime/ofInstant #c2/instant "1999" (ZoneId/of "UTC"))
+                (ZonedDateTime/ofInstant #c2/instant "2021-09-02T13:54:35.809Z" (ZoneId/of "UTC"))
+                (ZonedDateTime/ofInstant #c2/instant "2021-09-02T13:54:35.809Z" (ZoneId/of "Europe/Stockholm"))
+                (ZonedDateTime/ofInstant #c2/instant "2021-09-02T13:54:35.809Z" (ZoneOffset/ofHours 2))
                 (ZonedDateTime/ofInstant (Instant/ofEpochSecond 3600 1000) (ZoneId/of "UTC"))
                 (LocalDateTime/parse "2021-09-02T13:54:35.809")
                 (.plusDays (Duration/ofNanos 1234000) 1)

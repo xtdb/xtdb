@@ -18,7 +18,7 @@
 
 (defmethod print-method core2.IllegalArgumentException
   [e, ^Writer w]
-  (.write w (str "#core2/illegal-arg " (ex-data e))))
+  (.write w (str "#c2/illegal-arg " (ex-data e))))
 
 (defn -iae-reader [data]
   (illegal-arg (::error-key data) data))

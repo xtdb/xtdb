@@ -4,14 +4,13 @@
             core2.log
             [core2.types :as t]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import [core2.log Log LogRecord]
            core2.vector.IVectorWriter
-           java.util.Date
+           java.time.Instant
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampMilliVector VectorSchemaRoot]
-           [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.types.pojo ArrowType$Union Schema]
            org.apache.arrow.vector.types.UnionMode))
 
@@ -106,13 +105,13 @@
                                                        (.startValue))]
                            (t/write-value! v writer))))
 
-                     (when-let [^Date vt-start (:_valid-time-start vt-opts)]
+                     (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
                        (.set ^TimeStampMilliVector (.getVector put-vt-start-writer)
-                             put-idx (.getTime vt-start)))
+                             put-idx (.toEpochMilli vt-start)))
 
-                     (when-let [^Date vt-end (:_valid-time-end vt-opts)]
+                     (when-let [^Instant vt-end (:_valid-time-end vt-opts)]
                        (.set ^TimeStampMilliVector (.getVector put-vt-end-writer)
-                             put-idx (.getTime vt-end))))
+                             put-idx (.toEpochMilli vt-end))))
 
               :delete (let [delete-idx (.startValue delete-writer)]
                         (let [id (:_id tx-op)
@@ -121,13 +120,13 @@
                                                       (.startValue))]
                           (t/write-value! id writer))
 
-                        (when-let [^Date vt-start (:_valid-time-start vt-opts)]
+                        (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
                           (.set ^TimeStampMilliVector (.getVector delete-vt-start-writer)
-                                delete-idx (.getTime vt-start)))
+                                delete-idx (.toEpochMilli vt-start)))
 
-                        (when-let [^Date vt-end (:_valid-time-end vt-opts)]
+                        (when-let [^Instant vt-end (:_valid-time-end vt-opts)]
                           (.set ^TimeStampMilliVector (.getVector delete-vt-end-writer)
-                                delete-idx (.getTime vt-end))))
+                                delete-idx (.toEpochMilli vt-end))))
 
               :evict (do
                        (.startValue evict-writer)

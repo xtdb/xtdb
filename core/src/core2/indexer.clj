@@ -6,31 +6,32 @@
             [core2.bloom :as bloom]
             [core2.buffer-pool :as bp]
             [core2.metadata :as meta]
+            core2.object-store
             [core2.temporal :as temporal]
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig]
             [core2.vector.writer :as vw]
-            [core2.vector.indirect :as iv])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
-           [core2 DenseUnionUtil ICursor]
            core2.api.TransactionInstant
            core2.buffer_pool.BufferPool
+           core2.ICursor
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.ITemporalManager
            core2.tx.Watermark
            java.io.Closeable
            java.lang.AutoCloseable
-           [java.util Collections Date Map Map$Entry Set TreeMap]
+           java.time.Instant
+           [java.util Collections Map Map$Entry Set TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap PriorityBlockingQueue]
            java.util.concurrent.atomic.AtomicInteger
            java.util.concurrent.locks.StampedLock
            [java.util.function Consumer Function]
            java.util.stream.IntStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector TimeStampMilliVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BigIntVector TimeStampMilliVector TimeStampVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema]
@@ -48,7 +49,7 @@
   (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^core2.api.TransactionInstant tx]))
 
 (definterface IndexerPrivate
-  (^int indexTx [^core2.api.TransactionInstant tx-instant, ^java.nio.ByteBuffer tx-ops, ^long nextRowId])
+  (^int indexTx [^core2.api.TransactionInstant tx-key, ^java.nio.ByteBuffer tx-ops, ^long nextRowId])
   (^java.nio.ByteBuffer writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root])
   (^void closeCols [])
   (^void finishChunk []))
@@ -67,8 +68,8 @@
                     (MapEntry/create col-name (blocks/->slices root row-counts))))))
         col-names))
 
-(defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-instant temporal-watermark ^long max-rows-per-block]
-  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-instant temporal-watermark (AtomicInteger. 1) max-rows-per-block (ConcurrentHashMap.)))
+(defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-key temporal-watermark ^long max-rows-per-block]
+  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-key temporal-watermark (AtomicInteger. 1) max-rows-per-block (ConcurrentHashMap.)))
 
 (defn- snapshot-roots [^Map live-roots]
   (Collections/unmodifiableSortedMap
@@ -111,7 +112,7 @@
   (^void endTx []))
 
 (definterface ILogIndexer
-  (^core2.indexer.ILogOpIndexer startTx [^core2.api.TransactionInstant txInstant,
+  (^core2.indexer.ILogOpIndexer startTx [^core2.api.TransactionInstant txKey,
                                          ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
   (^java.nio.ByteBuffer writeLog [])
   (^void clear [])
@@ -145,11 +146,11 @@
         evict-writer (.asStruct (.writerForTypeId op-writer 2))]
 
     (reify ILogIndexer
-      (startTx [_ tx-instant tx-root]
+      (startTx [_ tx-key tx-root]
         (let [tx-idx (.getRowCount log-root)]
           (.startValue ops-writer)
-          (.setSafe tx-id-vec tx-idx (.tx-id tx-instant))
-          (.setSafe tx-time-vec tx-idx (.getTime ^Date (.tx-time tx-instant)))
+          (.setSafe tx-id-vec tx-idx (.tx-id tx-key))
+          (.setSafe tx-time-vec tx-idx (.toEpochMilli ^Instant (.tx-time tx-key)))
 
           (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
 
@@ -242,7 +243,7 @@
                                              ^StructVector (.getDataVector)
                                              (.getChild "_row-id"))]
             {:latest-tx (c2/->TransactionInstant (.get tx-id-vec (dec tx-count))
-                                                 (Date. (.get tx-time-vec (dec tx-count))))
+                                                 (Instant/ofEpochMilli (.get tx-time-vec (dec tx-count))))
              :latest-row-id (.get row-id-vec (dec (.getValueCount row-id-vec)))}))))))
 
 (defn- copy-docs [^IChunkManager chunk-manager, ^DenseUnionVector tx-ops-vec, ^long base-row-id]
@@ -316,19 +317,19 @@
             (recur))))))
 
   TransactionIndexer
-  (indexTx [this tx-instant tx-ops]
+  (indexTx [this tx-key tx-ops]
     (try
       (let [chunk-idx (.chunk-idx watermark)
             row-count (.row-count watermark)
             next-row-id (+ chunk-idx row-count)
-            number-of-new-rows (.indexTx this tx-instant tx-ops next-row-id)
+            number-of-new-rows (.indexTx this tx-key tx-ops next-row-id)
             new-chunk-row-count (+ row-count number-of-new-rows)]
         (with-open [_old-watermark watermark]
           (set! (.watermark this)
                 (tx/->Watermark chunk-idx
                                 new-chunk-row-count
                                 (snapshot-roots live-roots)
-                                tx-instant
+                                tx-key
                                 (.getTemporalWatermark temporal-mgr)
                                 (AtomicInteger. 1)
                                 max-rows-per-block
@@ -336,16 +337,16 @@
         (when (>= new-chunk-row-count max-rows-per-chunk)
           (.finishChunk this)))
 
-      (await/notify-tx tx-instant awaiters)
+      (await/notify-tx tx-key awaiters)
 
-      tx-instant
+      tx-key
       (catch Throwable e
         (set! (.ingester-error this) e)
         (await/notify-ex e awaiters)
         (throw e))))
 
   (latestCompletedTx [_]
-    (some-> watermark .tx-instant))
+    (some-> watermark .tx-key))
 
   (awaitTxAsync [this tx]
     (await/await-tx-async tx
@@ -354,7 +355,7 @@
                           awaiters))
 
   IndexerPrivate
-  (indexTx [this tx-instant tx-ops next-row-id]
+  (indexTx [this tx-key tx-ops next-row-id]
     (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
                 sr (ArrowStreamReader. tx-ops-ch allocator)
                 tx-root (.getVectorSchemaRoot sr)]
@@ -366,8 +367,8 @@
             op-type-ids (object-array (mapv (fn [^Field field]
                                               (keyword (.getName field)))
                                             (.getChildren (.getField tx-ops-vec))))
-            log-op-idxer (.startTx log-indexer tx-instant tx-root)
-            temporal-idxer (.startTx temporal-mgr tx-instant)]
+            log-op-idxer (.startTx log-indexer tx-key tx-root)
+            temporal-idxer (.startTx temporal-mgr tx-key)]
 
         (dotimes [tx-op-idx op-count]
           (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
@@ -440,7 +441,7 @@
           (.registerNewChunk metadata-mgr live-roots chunk-idx max-rows-per-block)
 
           (with-open [old-watermark watermark]
-            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-instant old-watermark)
+            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-key old-watermark)
                                                        (.getTemporalWatermark temporal-mgr) max-rows-per-block)))
           (let [stamp (.writeLock open-watermarks-lock)]
             (try

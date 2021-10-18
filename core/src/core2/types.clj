@@ -2,7 +2,7 @@
   (:import core2.vector.IVectorWriter
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
-           java.time.Duration
+           [java.time Duration Instant]
            [java.util Date List Map]
            [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
@@ -72,6 +72,11 @@
   (value->arrow-type [_] timestamp-milli-type)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TimeStampMilliVector (.getVector writer) (.getPosition writer) (.getTime v)))
+
+  Instant
+  (value->arrow-type [_] timestamp-milli-type)
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^TimeStampMilliVector (.getVector writer) (.getPosition writer) (.toEpochMilli v)))
 
   Duration ; HACK assumes millis for now
   (value->arrow-type [_] duration-milli-type)

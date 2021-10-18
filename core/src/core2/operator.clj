@@ -24,8 +24,9 @@
            [core2 ICursor IResultSet]
            [core2.operator.set ICursorFactory IFixpointCursorFactory]
            core2.snapshot.ISnapshot
-           [java.util Date Iterator]
+           java.time.Instant
            java.util.function.Consumer
+           java.util.Iterator
            [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
 (defmulti emit-op
@@ -320,7 +321,7 @@
     (let [allocator (RootAllocator.)]
       (try
         (let [op-f (emit-op (s/conform ::lp/logical-plan query) srcs)
-              cursor (op-f (-> (merge {:default-valid-time (Date.)} query-opts)
+              cursor (op-f (-> (merge {:default-valid-time (Instant/now)} query-opts)
                                (assoc :allocator allocator)))]
           (CursorResultSet. allocator cursor nil))
         (catch Throwable t

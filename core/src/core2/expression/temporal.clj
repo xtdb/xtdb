@@ -1,11 +1,12 @@
 (ns core2.expression.temporal
   (:require [clojure.walk :as w]
             [core2.expression :as expr]
-            [core2.temporal :as temporal]
             [core2.expression.metadata :as expr.meta]
+            [core2.temporal :as temporal]
             [core2.types :as types])
-  (:import java.util.Date
-           [org.apache.arrow.vector.types.pojo ArrowType$Bool ArrowType$Timestamp ArrowType$Duration]))
+  (:import java.time.Instant
+           java.util.Date
+           [org.apache.arrow.vector.types.pojo ArrowType$Bool ArrowType$Duration ArrowType$Timestamp]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -93,9 +94,9 @@
    :return-type types/duration-milli-type})
 
 (defn apply-constraint [^longs min-range ^longs max-range
-                        f col-name ^Date time]
+                        f col-name ^Instant time]
   (let [range-idx (temporal/->temporal-column-idx col-name)
-        time-ms (.getTime ^Date time)]
+        time-ms (.toEpochMilli time)]
     (case f
       < (aset max-range range-idx (min (dec time-ms)
                                        (aget max-range range-idx)))

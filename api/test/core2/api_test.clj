@@ -6,7 +6,8 @@
             [core2.test-util :as tu :refer [*node*]]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import java.time.Duration
-           java.util.concurrent.ExecutionException))
+           java.util.concurrent.ExecutionException
+           core2.api.TransactionInstant))
 
 (defmethod ig/init-key ::clock [_ _]
   (tu/->mock-clock))
@@ -48,7 +49,7 @@
 
 (t/deftest test-simple-query
   (let [!tx (c2/submit-tx *node* [[:put {:_id "foo"}]])]
-    (t/is (= #core2/tx-instant {:tx-id 0, :tx-time #inst "2020-01-01"} @!tx))
+    (t/is (= #c2/tx-key {:tx-id 0, :tx-time #c2/instant "2020-01-01"} @!tx))
 
     (t/is (= [{:id "foo"}]
              (->> (c2/plan-query *node*
@@ -73,7 +74,7 @@
 
 (t/deftest round-trips-lists
   (let [!tx (c2/submit-tx *node* [[:put {:_id "foo", :list [1 2 ["foo" "bar"]]}]])]
-    (t/is (= #core2/tx-instant {:tx-id 0, :tx-time #inst "2020-01-01"} @!tx))
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time #c2/instant "2020-01-01"}) @!tx))
 
     (t/is (= [{:id "foo"
                :list [1 2 ["foo" "bar"]]}]
@@ -86,7 +87,7 @@
 (t/deftest round-trips-structs
   (let [!tx (c2/submit-tx *node* [[:put {:_id "foo", :struct {:a 1, :b {:c "bar"}}}]
                                   [:put {:_id "bar", :struct {:a true, :d 42.0}}]])]
-    (t/is (= #core2/tx-instant {:tx-id 0, :tx-time #inst "2020-01-01"} @!tx))
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time #c2/instant "2020-01-01"}) @!tx))
 
     (t/is (= #{{:id "foo", :struct {:a 1, :b {:c "bar"}}}
                {:id "bar", :struct {:a true, :d 42.0}}}

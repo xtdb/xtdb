@@ -502,6 +502,8 @@
   (cond
     (instance? Date v)
     (.getTime ^Date v)
+    (instance? Instant v)
+    (.toEpochMilli ^Instant v)
     (instance? Duration v)
     (.toMillis ^Duration v)
     (string? v)

@@ -36,9 +36,9 @@
                                                                  tombstone?]}]
   (TemporalCoordinates. row-id id
                         (.getTime tx-time-start)
-                        (.getTime (or tx-time-end temporal/end-of-time))
+                        (.getTime (or tx-time-end (Date/from temporal/end-of-time)))
                         (.getTime (or valid-time-start tx-time-start))
-                        (.getTime (or valid-time-end temporal/end-of-time))
+                        (.getTime (or valid-time-end (Date/from temporal/end-of-time)))
                         (boolean tombstone?)))
 
 (t/deftest bitemporal-tx-time-split-test

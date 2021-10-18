@@ -3,8 +3,8 @@
             [core2.api :as c2]
             [core2.expression.metadata :as expr.meta]
             [core2.indexer :as idx]
-            [core2.metadata :as meta]
             [core2.local-node :as node]
+            [core2.metadata :as meta]
             [core2.operator :as op]
             [core2.snapshot :as snap]
             [core2.test-util :as tu])
@@ -108,11 +108,9 @@
 
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
-    (let [{tt1 :tx-time} @(c2/submit-tx node
-                                        [[:put {:_id "my-doc", :last-updated "tx1"}]])
+    (let [{tt1 :tx-time} @(c2/submit-tx node [[:put {:_id "my-doc", :last-updated "tx1"}]])
           _ (Thread/sleep 10) ; to prevent same-ms transactions
-          {tt2 :tx-time, :as tx2} @(c2/submit-tx node
-                                                 [[:put {:_id "my-doc", :last-updated "tx2"}]])
+          {tt2 :tx-time, :as tx2} @(c2/submit-tx node [[:put {:_id "my-doc", :last-updated "tx2"}]])
           db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx2)]
       (letfn [(q [& temporal-constraints]
                 (->> (op/query-ra [:scan (into '[last-updated]
@@ -133,7 +131,6 @@
 
         (t/is (= #{"tx2"}
                  (q '{_tx-time-start (> _tx-time-start ?tt1)})))
-
 
         (t/is (= #{}
                  (q '{_tx-time-end (< _tx-time-end ?tt2)})))

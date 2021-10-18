@@ -7,22 +7,20 @@
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
-           core2.DenseUnionUtil
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.temporal.kd_tree IKdTreePointAccess MergedKdTree]
            java.io.Closeable
            java.nio.ByteBuffer
-           [java.util Arrays Collections Comparator Date HashMap Map TreeMap]
+           java.time.Instant
+           [java.util Arrays Collections Comparator HashMap Map TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap Executors ExecutorService]
            java.util.concurrent.atomic.AtomicLong
            [java.util.function Consumer Function LongConsumer LongFunction LongPredicate Predicate ToLongFunction]
            java.util.stream.LongStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector TimeStampVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo ArrowType$Union Schema]
-           org.apache.arrow.vector.types.UnionMode
+           org.apache.arrow.vector.types.pojo.Schema
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
 ;; Temporal proof-of-concept plan:
@@ -82,7 +80,8 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^java.util.Date end-of-time #inst "9999-12-31T23:59:59.999Z")
+(def ^java.time.Instant end-of-time
+  #c2/instant "9999-12-31T23:59:59.999Z")
 
 (def ^:const ^int k 6)
 
@@ -116,7 +115,7 @@
 (definterface ITemporalManager
   (^Object getTemporalWatermark [])
   (^void registerNewChunk [^long chunk-idx])
-  (^core2.temporal.ITemporalTxIndexer startTx [^core2.api.TransactionInstant tx-instant])
+  (^core2.temporal.ITemporalTxIndexer startTx [^core2.api.TransactionInstant tx-key])
   (^core2.temporal.TemporalRoots createTemporalRoots [^core2.tx.Watermark watermark
                                                       ^java.util.List columns
                                                       ^longs temporal-min-range
@@ -199,7 +198,7 @@
         valid-time-start-ms (.validTimeStart coordinates)
         valid-time-end-ms (.validTimeEnd coordinates)
 
-        end-of-time-ms (.getTime end-of-time)
+        end-of-time-ms (.toEpochMilli end-of-time)
 
         min-range (doto (->min-range)
                     (aset id-idx id)
@@ -280,7 +279,7 @@
     (kd-tree-range-search [_ min-range max-range]
       (let [min-range (kd/->longs min-range)
             max-range (kd/->longs max-range)
-            end-of-time-ms (.getTime end-of-time)]
+            end-of-time-ms (.toEpochMilli end-of-time)]
         (if (and (= (aget min-range tx-time-end-idx)
                     (aget max-range tx-time-end-idx)
                     end-of-time-ms)
@@ -459,7 +458,7 @@
             (util/delete-file path)))))
     (.awaitSnapshotBuild this)
     (when kd-tree
-      (with-open [^Closeable old-kd-tree kd-tree]
+      (with-open [^Closeable _old-kd-tree kd-tree]
         (let [snapshot-idx (.latestTemporalSnapshotIndex this chunk-idx)
               fut (.submit snapshot-pool ^Runnable #(.buildTemporalSnapshot this chunk-idx snapshot-idx))]
           (set! (.snapshot-future this) fut)
@@ -467,9 +466,9 @@
             @fut)
           (.reloadTemporalIndex this chunk-idx snapshot-idx)))))
 
-  (startTx [this tx-instant]
-    (let [tx-time-ms (.getTime ^Date (.tx-time tx-instant))
-          end-of-time-ms (.getTime end-of-time)
+  (startTx [this tx-key]
+    (let [tx-time-ms (.toEpochMilli ^Instant (.tx-time tx-key))
+          end-of-time-ms (.toEpochMilli end-of-time)
           row-id->operations (TreeMap.)
           evicted-row-ids (Roaring64Bitmap.)]
       (letfn [(->temporal-coordinates [row-id eid
