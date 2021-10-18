@@ -22,9 +22,9 @@ jobs:
 
       - restore_cache:
           keys:
-            - v1-dependencies-{{ checksum ".circleci-cache-key" }}
+            - v2-dependencies-{{ checksum ".circleci-cache-key" }}
             # fallback to using the latest cache if no exact match is found
-            - v1-dependencies-
+            - v2-dependencies-
 
       - run: './lein-sub install'
       - run: './lein-sub deps'
@@ -42,12 +42,12 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'rm -rf ~/.m2/repository/pro/juxt/crux*'
+      - run: 'rm -rf ~/.m2/repository/com/xtdb/*'
 
       - save_cache:
           paths:
             - ~/.m2
-          key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
+          key: v2-dependencies-{{ checksum ".circleci-cache-key" }}
 
   test:
     executor: clojure-lein
