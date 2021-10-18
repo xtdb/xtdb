@@ -10,6 +10,14 @@
 ;; https://calcite.apache.org/javadocAggregate/org/apache/calcite/tools/RelBuilder.html
 ;; https://github.com/apache/arrow/blob/master/rust/datafusion/src/logical_plan/plan.rs
 
+;; TODO:
+;; Add :ω :unwind (unnest) [:unwind {::column ::column} ::ra-expression]
+;; Rename :slice to :λ, :top with :skip, :limit attributes.
+
+;; See "Formalising openCypher Graph Queries in Relational Algebra",
+;; also contains operators for path expansion:
+;; https://core.ac.uk/download/pdf/148787624.pdf
+
 (s/def ::relation simple-symbol?)
 (s/def ::column simple-symbol?)
 
