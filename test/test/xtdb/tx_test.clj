@@ -1466,3 +1466,22 @@
     ;; "skipped" tx-ids (e.g. handling Kafka offsets), and negative or non-integer tx-ids are also incorrect but not currently detected
     #_
     (t/is (thrown? xtdb.api.NodeOutOfSyncException (xt/tx-committed? *api* {::xt/tx-id -1.5})))))
+
+(t/deftest can-query-documents-with-url-id-1638
+  ;; TODO: the (XT) hash of the URL depends on the serialized form of the URL object,
+  ;; which in turn depends on its cached hashCode field. couple of fun things here:
+  ;; - if nothing has yet computed the hashCode, it serializes `-1`
+  ;; - the hashCode computation depends on the resolved IP address of the domain name (non-deterministic)
+  ;; we (arguably incorrectly) expect the serialized form to be deterministic
+
+  #_ ;
+  (let [url (URL. "https://xtdb.com")
+        doc {:xt/id url}]
+    (fix/submit+await-tx [[::xt/put doc]])
+
+    (let [db (xt/db *api*)]
+      (t/is (= doc (xt/entity db url)))
+
+      (t/is (= #{[url]}
+               (xt/q db '{:find [id]
+                          :where [[id :xt/id]]}))))))
