@@ -203,11 +203,27 @@
   (fn [x-type y-type] [(class x-type) (class y-type)])
   :hierarchy #'arrow-type-hierarchy)
 
-(defmethod least-upper-bound2 [::Number ::Number] [x-type y-type]
-  ;; TODO this is naive of the different types of Ints/Floats
-  (if (and (instance? ArrowType$Int x-type) (instance? ArrowType$Int y-type))
-    bigint-type
-    float8-type))
+(defmethod least-upper-bound2 [ArrowType$Int ArrowType$Int]
+  [^ArrowType$Int x-type, ^ArrowType$Int y-type]
+  (assert (and (.getIsSigned x-type) (.getIsSigned y-type)))
+
+  (ArrowType$Int. (max (.getBitWidth x-type) (.getBitWidth y-type)) true))
+
+(defmethod least-upper-bound2 [ArrowType$Int ArrowType$FloatingPoint]
+  [^ArrowType$Int _x-type, ^ArrowType$FloatingPoint y-type]
+  y-type)
+
+(defmethod least-upper-bound2 [ArrowType$FloatingPoint ArrowType$Int]
+  [^ArrowType$FloatingPoint x-type, ^ArrowType$Int _y-type]
+  x-type)
+
+(defmethod least-upper-bound2 [ArrowType$FloatingPoint ArrowType$FloatingPoint]
+  [^ArrowType$FloatingPoint x-type, ^ArrowType$FloatingPoint y-type]
+  (let [x-precision (.getPrecision x-type)
+        y-precision (.getPrecision y-type)]
+    (ArrowType$FloatingPoint. (if (pos? (compare x-precision y-precision))
+                                x-precision
+                                y-precision))))
 
 (defmethod least-upper-bound2 :default [x-type y-type]
   (throw (UnsupportedOperationException. (format "Can't LUB: %s ⊔ %s" x-type y-type))))

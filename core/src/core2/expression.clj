@@ -16,7 +16,7 @@
            [java.time.temporal ChronoField ChronoUnit]
            [java.util Date LinkedHashMap]
            org.apache.arrow.vector.BaseVariableWidthVector
-           org.apache.arrow.vector.types.Types
+           [org.apache.arrow.vector.types Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]
            org.roaringbitmap.RoaringBitmap))
 
@@ -139,11 +139,14 @@
                       (distinct)))))
 
 (def type->cast
-  {types/bigint-type 'long
+  {ArrowType$Bool/INSTANCE 'boolean
+   (.getType Types$MinorType/TINYINT) 'byte
+   (.getType Types$MinorType/SMALLINT) 'short
+   (.getType Types$MinorType/INT) 'int
+   types/bigint-type 'long
    types/float8-type 'double
    types/timestamp-milli-type 'long
-   types/duration-milli-type 'long
-   ArrowType$Bool/INSTANCE 'boolean})
+   types/duration-milli-type 'long})
 
 (def idx-sym (gensym "idx"))
 
@@ -391,17 +394,49 @@
   {:code `(not ~@emitted-args)
    :return-type ArrowType$Bool/INSTANCE})
 
+(defn- with-math-integer-cast
+  "java.lang.Math's functions only take int or long, so we introduce an up-cast if need be"
+  [^ArrowType$Int arrow-type emitted-args]
+  (let [arg-cast (if (= 64 (.getBitWidth arrow-type)) 'long 'int)]
+    (map #(list arg-cast %) emitted-args)))
+
+(defmethod codegen-call [:+ ArrowType$Int ArrowType$Int] [{:keys [emitted-args arg-types]}]
+  (let [^ArrowType$Int return-type (types/least-upper-bound arg-types)]
+    {:code (list (type->cast return-type)
+                 `(Math/addExact ~@(with-math-integer-cast return-type emitted-args)))
+     :return-type return-type}))
+
 (defmethod codegen-call [:+ ::types/Number ::types/Number] [{:keys [emitted-args arg-types]}]
   {:code `(+ ~@emitted-args)
    :return-type (types/least-upper-bound arg-types)})
+
+(defmethod codegen-call [:- ArrowType$Int ArrowType$Int] [{:keys [emitted-args arg-types]}]
+  (let [^ArrowType$Int return-type (types/least-upper-bound arg-types)]
+    {:code (list (type->cast return-type)
+                 `(Math/subtractExact ~@(with-math-integer-cast return-type emitted-args)))
+     :return-type return-type}))
 
 (defmethod codegen-call [:- ::types/Number ::types/Number] [{:keys [emitted-args arg-types]}]
   {:code `(- ~@emitted-args)
    :return-type (types/least-upper-bound arg-types)})
 
+(defmethod codegen-call [:- ArrowType$Int]
+  [{:keys [emitted-args], [^ArrowType$Int x-type] :arg-types}]
+
+  {:code (list (type->cast x-type)
+               `(Math/negateExact ~@(with-math-integer-cast x-type emitted-args)))
+   :return-type x-type})
+
 (defmethod codegen-call [:- ::types/Number] [{:keys [emitted-args], [x-type] :arg-types}]
   {:code `(- ~@emitted-args)
    :return-type x-type})
+
+(defmethod codegen-call [:* ArrowType$Int ArrowType$Int] [{:keys [emitted-args arg-types]}]
+  (let [^ArrowType$Int return-type (types/least-upper-bound arg-types)
+        arg-cast (if (= 64 (.getBitWidth return-type)) 'long 'int)]
+    {:code (list (type->cast return-type)
+                 `(Math/multiplyExact ~@(map #(list arg-cast %) emitted-args)))
+     :return-type return-type}))
 
 (defmethod codegen-call [:* ::types/Number ::types/Number] [{:keys [emitted-args arg-types]}]
   {:code `(* ~@emitted-args)
@@ -572,9 +607,13 @@
               expr-fn (memo-eval code)
               out-vec (.createVector (types/->field col-name return-type false) allocator)
               row-count (.rowCount in-rel)]
-          (.setValueCount out-vec row-count)
-          (expr-fn out-vec (vals in-cols) (vals emitted-params) row-count)
-          (iv/->direct-vec out-vec))))))
+          (try
+            (.setValueCount out-vec row-count)
+            (expr-fn out-vec (vals in-cols) (vals emitted-params) row-count)
+            (iv/->direct-vec out-vec)
+            (catch Exception e
+              (.close out-vec)
+              (throw e))))))))
 
 (defn- generate-selection [expr var-types param-types]
   (let [codegen-opts {:var->type var-types, :param->type param-types}

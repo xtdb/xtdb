@@ -8,7 +8,8 @@
             [core2.snapshot :as snap]
             [core2.test-util :as tu]
             [core2.types :as ty])
-  (:import org.apache.arrow.vector.types.pojo.Schema))
+  (:import [org.apache.arrow.vector BigIntVector Float4Vector Float8Vector IntVector SmallIntVector]
+           org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -149,3 +150,76 @@
                               [:project [{trunc (date-trunc "MINUTE" date)}]
                                [:scan [date]]]]
                             db))))))
+
+(defn- run-single-row-projection* [fields row form]
+  (with-open [rel (tu/->relation (Schema. fields) [row])]
+    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {})
+                                   tu/*allocator*
+                                   rel)]
+      (let [out-vec (.getVector out-ivec)]
+        {:res (ty/get-object out-vec 0)
+         :vec-type (class out-vec)}))))
+
+(defn- run-single-row-projection
+  ([f x]
+   (run-single-row-projection* [(ty/->field "x" (ty/value->arrow-type x) false)]
+                               {:x x}
+                               (list f 'x)))
+
+  ([f x y]
+   (run-single-row-projection* [(ty/->field "x" (ty/value->arrow-type x) false)
+                                (ty/->field "y" (ty/value->arrow-type y) false)]
+                               {:x x, :y y}
+                               (list f 'x 'y))))
+
+(t/deftest test-mixing-numeric-types
+  (t/is (= {:res 6, :vec-type IntVector}
+           (run-single-row-projection '+ (int 4) (int 2))))
+
+  (t/is (= {:res 6, :vec-type BigIntVector}
+           (run-single-row-projection '+ (int 2) (long 4))))
+
+  (t/is (= {:res 6, :vec-type SmallIntVector}
+           (run-single-row-projection '+ (short 2) (short 4))))
+
+  (t/is (= {:res 6.5, :vec-type Float4Vector}
+           (run-single-row-projection '+ (byte 2) (float 4.5))))
+
+  (t/is (= {:res 6.5, :vec-type Float4Vector}
+           (run-single-row-projection '+ (float 2) (float 4.5))))
+
+  (t/is (= {:res 6.5, :vec-type Float8Vector}
+           (run-single-row-projection '+ (float 2) (double 4.5))))
+
+  (t/is (= {:res 6.5, :vec-type Float8Vector}
+           (run-single-row-projection '+ (int 2) (double 4.5))))
+
+  (t/is (= {:res -2, :vec-type IntVector}
+           (run-single-row-projection '- (short 2) (int 4))))
+
+  (t/is (= {:res 8, :vec-type SmallIntVector}
+           (run-single-row-projection '* (byte 2) (short 4))))
+
+  (t/is (= {:res 2, :vec-type SmallIntVector}
+           (run-single-row-projection '/ (short 4) (byte 2))))
+
+  (t/is (= {:res 2.0, :vec-type Float4Vector}
+           (run-single-row-projection '/ (float 4) (int 2)))))
+
+(t/deftest test-throws-on-overflow
+  (t/is (thrown? ArithmeticException
+                 (run-single-row-projection '+ (Integer/MAX_VALUE) (int 4))))
+
+  (t/is (thrown? ArithmeticException
+                 (run-single-row-projection '- (Integer/MIN_VALUE) (int 4))))
+
+  (t/is (thrown? ArithmeticException
+                 (run-single-row-projection '- (Integer/MIN_VALUE))))
+
+  (t/is (thrown? ArithmeticException
+                 (run-single-row-projection '* (Integer/MIN_VALUE) (int 2))))
+
+  #_ ; TODO this one throws IAE because that's what clojure.lang.Numbers/shortCast throws
+  ;; the others are thrown by java.lang.Math/*Exact, which throw ArithmeticException
+  (t/is (thrown? ArithmeticException
+                 (run-single-row-projection '- (Short/MIN_VALUE)))))
