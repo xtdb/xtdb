@@ -152,7 +152,7 @@
 
 (defmethod ra-expr :unwind [_]
   (s/cat :op #{:ω :unwind}
-         :columns (s/map-of ::column ::column :conform-keys true :min-count 1)
+         :column ::column
          :relation ::ra-expression))
 
 (defmethod ra-expr :assign [_]

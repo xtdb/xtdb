@@ -249,3 +249,27 @@
                             X]
                           '{$x [{:a 1}]
                             $y [{:b 1}]})))))
+
+(t/deftest test-unwind-operator
+  (t/is (= [{:a 1 :b 1} {:a 1 :b 2} {:a 2 :b 3} {:a 2 :b 4} {:a 2 :b 5}]
+           (op/query-ra '[:unwind b
+                          [:table $x]]
+                        '{$x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]})))
+
+  (t/testing "skips rows with empty lists"
+    (t/is (= [{:a 1 :b 1} {:a 1 :b 2}]
+           (op/query-ra '[:unwind b
+                          [:table $x]]
+                        '{$x [{:a 1 :b [1 2]} {:a 2 :b []}]}))))
+
+  (t/testing "skips rows with non-list unwind column"
+    (t/is (= [{:a 1 :b 1} {:a 1 :b 2}]
+           (op/query-ra '[:unwind b
+                          [:table $x]]
+                        '{$x [{:a 2 :b 1} {:a 1 :b [1 2]}]}))))
+
+  (t/testing "handles multiple types"
+    (t/is (= [{:a 1 :b 1} {:a 1 :b "foo"}]
+           (op/query-ra '[:unwind b
+                          [:table $x]]
+                        '{$x [{:a 1 :b [1 "foo"]}]})))))

@@ -14,6 +14,7 @@
             [core2.operator.rename :as rename]
             [core2.operator.select :as select]
             [core2.operator.set :as set-op]
+            [core2.operator.unwind :as unwind]
             [core2.operator.top :as top]
             [core2.operator.table :as table]
             core2.snapshot
@@ -240,6 +241,11 @@
   (unary-op relation srcs
             (fn [_opts inner]
               (top/->top-cursor inner skip limit))))
+
+(defmethod emit-op :unwind [{:keys [column relation]} srcs]
+  (unary-op relation srcs
+            (fn [{:keys [allocator]} inner]
+              (unwind/->unwind-cursor allocator inner (name column)))))
 
 (def ^:dynamic ^:private *relation-variable->cursor-factory* {})
 
