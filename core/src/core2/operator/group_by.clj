@@ -1,8 +1,8 @@
 (ns core2.operator.group-by
   (:require [core2.types :as types]
-            [core2.types.nested :as nested]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw])
   (:import core2.ICursor
            core2.vector.IIndirectRelation
            [java.util ArrayList Comparator DoubleSummaryStatistics HashMap LinkedList List LongSummaryStatistics Map Optional Spliterator]
@@ -28,7 +28,7 @@
   (aggregate [_ in-rel container idx-bitmap]
     (or container
         (let [col (.vectorForName in-rel col-name)]
-          (nested/get-value (.getVector col)
+          (types/get-object (.getVector col)
                             (.getIndex col (.first idx-bitmap))))))
 
   (finish [_ container]
@@ -57,7 +57,7 @@
                   (.supplier collector))
                 (reify ObjIntConsumer
                   (accept [_ acc idx]
-                    (.accept accumulator acc (nested/get-value from-vec (.getIndex from-col idx)))))
+                    (.accept accumulator acc (types/get-object from-vec (.getIndex from-col idx)))))
                 accumulator)))
 
   (finish [_ container]
@@ -104,7 +104,7 @@
                      (let [from-vec (.getVector from-col)]
                        (reify IntConsumer
                          (accept [_ idx]
-                           (let [v (nested/get-value from-vec idx)]
+                           (let [v (types/get-object from-vec idx)]
                              (if (integer? v)
                                (.accept ^ObjLongConsumer accumulator acc v)
                                (.accept ^ObjDoubleConsumer accumulator acc v)))))))]
@@ -281,20 +281,23 @@
                                  idx-bitmap))))))
 
 (defn- finish-groups ^core2.vector.IIndirectRelation [^BufferAllocator allocator
-                                                    ^List aggregate-specs
-                                                    ^Map group->accs]
+                                                      ^List aggregate-specs
+                                                      ^Map group->accs]
   (let [all-accs (ArrayList. ^List (vals group->accs))
         out-cols (LinkedList.)
         row-count (.size all-accs)]
     (dotimes [n (.size aggregate-specs)]
       (let [^AggregateSpec aggregate-spec (.get aggregate-specs n)
             col-name (.columnName aggregate-spec)
-            append-vec (DenseUnionVector/empty col-name allocator)]
+            append-vec (DenseUnionVector/empty col-name allocator)
+            duv-writer (.asDenseUnion (vw/vec->writer append-vec))]
         (dotimes [idx row-count]
-          (let [^objects accs (.get all-accs idx)]
-            ;; HACK: using nested for now to get this working,
-            ;; we'll want to incorporate this when we bring in a consistent DUV approach.
-            (nested/append-value (.finish aggregate-spec (aget accs n)) append-vec)))
+          (.startValue duv-writer)
+          (let [^objects accs (.get all-accs idx)
+                v (.finish aggregate-spec (aget accs n))]
+            (types/write-value! v (doto (.writerForType duv-writer (types/value->arrow-type v))
+                                    (.startValue))))
+          (.endValue duv-writer))
 
         (.add out-cols (iv/->direct-vec append-vec))))
     (iv/->indirect-rel out-cols)))
