@@ -14,7 +14,7 @@
             [core2.operator.rename :as rename]
             [core2.operator.select :as select]
             [core2.operator.set :as set-op]
-            [core2.operator.slice :as slice]
+            [core2.operator.top :as top]
             [core2.operator.table :as table]
             core2.snapshot
             [core2.util :as util]
@@ -236,10 +236,10 @@
               (fn [{:keys [allocator]} inner]
                 (order-by/->order-by-cursor allocator inner order-specs)))))
 
-(defmethod emit-op :slice [{:keys [relation], {:keys [offset limit]} :slice} srcs]
+(defmethod emit-op :top [{:keys [relation], {:keys [skip limit]} :top} srcs]
   (unary-op relation srcs
             (fn [_opts inner]
-              (slice/->slice-cursor inner offset limit))))
+              (top/->top-cursor inner skip limit))))
 
 (def ^:dynamic ^:private *relation-variable->cursor-factory* {})
 

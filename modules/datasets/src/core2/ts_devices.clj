@@ -86,7 +86,7 @@
   ;; ORDER BY time DESC
   ;; LIMIT 10;
 
-  '[:slice {:limit 10}
+  '[:top {:limit 10}
     [:order-by [{time :desc}]
      [:project [time device-id battery-temperature]
       [:scan [time device-id battery-temperature
@@ -101,7 +101,7 @@
   ;; ORDER BY cpu_avg_1min DESC, time DESC
   ;; LIMIT 5;
 
-  '[:slice {:limit 5}
+  '[:top {:limit 5}
     [:order-by [{cpu-avg-1min :desc}
                 {time :desc}]
      [:join {device-id device-id}
@@ -121,7 +121,7 @@
   ;; ORDER BY "hour" ASC
   ;; LIMIT 12;
 
-  '[:slice {:limit 12}
+  '[:top {:limit 12}
     [:order-by [{hour :asc}]
      [:group-by [hour
                  {min-battery-level (min battery-level)}

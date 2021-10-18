@@ -330,9 +330,11 @@
      plan]
     plan))
 
-(defn- with-slice [plan {:keys [limit offset] :as query}]
+(defn- with-top [plan {:keys [limit offset] :as query}]
   (if (or limit offset)
-    [:slice (select-keys query #{:limit :offset})
+    [:top (cond-> {}
+            offset (assoc :skip offset)
+            limit (assoc :limit limit))
      plan]
 
     plan))
@@ -350,7 +352,7 @@
     {:query (-> (compile-where conformed-query {:table-keys table-keys})
                 (with-group-by conformed-query)
                 (with-order-by conformed-query)
-                (with-slice conformed-query)
+                (with-top conformed-query)
                 (with-renamed-find-vars conformed-query))
      :srcs srcs}))
 

@@ -10,10 +10,6 @@
 ;; https://calcite.apache.org/javadocAggregate/org/apache/calcite/tools/RelBuilder.html
 ;; https://github.com/apache/arrow/blob/master/rust/datafusion/src/logical_plan/plan.rs
 
-;; TODO:
-;; Add :ω :unwind (unnest) [:unwind {::column ::column} ::ra-expression]
-;; Rename :slice to :λ, :top with :skip, :limit attributes.
-
 ;; See "Formalising openCypher Graph Queries in Relational Algebra",
 ;; also contains operators for path expansion:
 ;; https://core.ac.uk/download/pdf/148787624.pdf
@@ -96,12 +92,12 @@
          :columns (s/coll-of (s/or :group-by ::column :aggregate ::aggregate) :min-count 1)
          :relation ::ra-expression))
 
-(s/def ::offset nat-int?)
+(s/def ::skip nat-int?)
 (s/def ::limit nat-int?)
 
-(defmethod ra-expr :slice [_]
-  (s/cat :op #{:slice}
-         :slice (s/keys :opt-un [::offset ::limit])
+(defmethod ra-expr :top [_]
+  (s/cat :op #{:λ :top}
+         :top (s/keys :opt-un [::skip ::limit])
          :relation ::ra-expression))
 
 (defmethod ra-expr :distinct [_]
@@ -153,6 +149,11 @@
          :mu-variable ::relation
          :base ::ra-expression
          :recursive ::ra-expression))
+
+(defmethod ra-expr :unwind [_]
+  (s/cat :op #{:ω :unwind}
+         :columns (s/map-of ::column ::column :conform-keys true :min-count 1)
+         :relation ::ra-expression))
 
 (defmethod ra-expr :assign [_]
   (s/cat :op #{:← :assign}

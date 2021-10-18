@@ -98,7 +98,7 @@
                              [:scan [r_regionkey {r_name (= r_name ?region)}]]]
                             [:scan [s_nationkey s_suppkey s_acctbal s_name s_address s_phone s_comment]]]
                            [:scan [ps_suppkey ps_partkey ps_supplycost]]]]
-        [:slice {:limit 100}
+        [:top {:limit 100}
          [:order-by [{s_acctbal :desc} {n_name :asc} {s_name :asc} {p_partkey :asc}]
           [:project [s_acctbal s_name n_name p_partkey p_mfgr s_address s_phone s_comment]
            [:select (= ps_supplycost min_ps_supplycost)
@@ -113,7 +113,7 @@
                     '?size 15})))
 
 (def tpch-q3-shipping-priority
-  (-> '[:slice {:limit 10}
+  (-> '[:top {:limit 10}
         [:order-by [{revenue :desc} {o_orderdate :desc}]
          [:group-by [l_orderkey
                      {revenue (sum disc_price)}
@@ -263,7 +263,7 @@
       (with-params {'?color "green"})))
 
 (def tpch-q10-returned-item-reporting
-  (-> '[:slice {:limit 20}
+  (-> '[:top {:limit 20}
         [:order-by [{revenue :desc}]
          [:group-by [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
                      {revenue (sum disc_price)}]
@@ -415,7 +415,7 @@
                     '?container "MED_BOX"})))
 
 (def tpch-q18-large-volume-customer
-  (-> '[:slice {:limit 100}
+  (-> '[:top {:limit 100}
         [:order-by [{o_totalprice :desc} {o_orderdate :desc}]
          [:group-by [c_name c_custkey o_orderkey o_orderdate o_totalprice {sum_qty (sum l_quantity)}]
           [:join {o_orderkey l_orderkey}
@@ -504,7 +504,7 @@
                         [:scan [n_nationkey {n_name (= n_name ?nation)}]]]]
                       [:rename l2
                        [:scan [l_orderkey l_suppkey]]]]]]
-        [:slice {:limit 100}
+        [:top {:limit 100}
          [:order-by [{numwait :desc} {s_name :asc}]
           [:group-by [s_name {numwait (count l1_l_orderkey)}]
            [:distinct
