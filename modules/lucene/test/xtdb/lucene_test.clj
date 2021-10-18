@@ -472,6 +472,9 @@
     (let [docs (iterator-seq search-results)]
       (t/is (= 0 (count docs))))))
 
+(t/deftest handles-matching-nil-1627
+  (t/is (submit+await-tx [[::xt/match :foo nil]])))
+
 (comment
   (do
     (import '[ch.qos.logback.classic Level Logger]

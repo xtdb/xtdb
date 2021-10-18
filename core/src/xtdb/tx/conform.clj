@@ -70,7 +70,8 @@
      :at-valid-time (some-> at-valid-time (check-valid-time decoders))}))
 
 (defmethod conform-tx-op-type ::xt/match [[_ eid doc at-valid-time :as op] decoders]
-  (let [doc (some-> doc (check-doc decoders))
+  (let [doc (when-not (= doc (c/new-id nil))
+              (some-> doc (check-doc decoders)))
         doc-id (c/hash-doc doc)]
     {:op ::xt/match
      :eid (check-eid eid)
