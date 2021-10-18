@@ -1473,6 +1473,7 @@
   ;; - if nothing has yet computed the hashCode, it serializes `-1`
   ;; - the hashCode computation depends on the resolved IP address of the domain name (non-deterministic)
   ;; we (arguably incorrectly) expect the serialized form to be deterministic
+  ;; we could consider re-implementing c/value->buffer for URL, but this would have backwards compatibility implications
 
   #_ ;
   (let [url (URL. "https://xtdb.com")
