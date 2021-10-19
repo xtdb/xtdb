@@ -4,7 +4,8 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.writer :as vw]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            [core2.edn :as edn])
   (:import core2.ICursor
            java.lang.AutoCloseable
            [java.nio.file Files Path]
@@ -60,8 +61,8 @@
    :varbinary #(.decode b64-decoder ^String %)
    :varchar identity
    :bit #(or (= "1" %) (= "true" %))
-   :timestamp-milli inst/read-instant-date
-   :duration-milli #(Duration/parse %)})
+   :timestamp edn/instant-reader
+   :duration edn/duration-reader})
 
 (def ->arrow-type
   {:bigint (.getType Types$MinorType/BIGINT)
@@ -69,8 +70,8 @@
    :varbinary (.getType Types$MinorType/VARBINARY)
    :varchar (.getType Types$MinorType/VARCHAR)
    :bit (.getType Types$MinorType/BIT)
-   :timestamp-milli (.getType Types$MinorType/TIMESTAMPMILLI)
-   :duration-milli types/duration-milli-type})
+   :timestamp types/timestamp-micro-tz-type
+   :duration types/duration-micro-type})
 
 (defn ^core2.ICursor ->csv-cursor
   ([^BufferAllocator allocator, ^Path path, col-types]

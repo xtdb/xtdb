@@ -47,12 +47,12 @@
             },
             "children" : [ ]
           },{
-            "name" : "timestampmilli",
+            "name" : "timestampmicrotz-utc",
             "nullable" : false,
             "type" : {
               "name" : "timestamp",
-              "unit" : "MILLISECOND",
-              "timezone" : null
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
             },
             "children" : [ ]
           },{
@@ -101,10 +101,10 @@
             "OFFSET" : [0,3],
             "DATA" : ["foo"]
           },{
-            "name" : "timestampmilli",
+            "name" : "timestampmicrotz-utc",
             "count" : 1,
             "VALIDITY" : [1],
-            "DATA" : [1577836800000]
+            "DATA" : [1577836800000000]
           },{
             "name" : "bit",
             "count" : 1,

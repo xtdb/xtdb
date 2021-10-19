@@ -4,7 +4,6 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import [core2.log INotifyingSubscriberHandler Log LogRecord]
            java.time.Clock
-           java.time.temporal.ChronoUnit
            java.util.concurrent.CompletableFuture))
 
 (deftype InMemoryLog [!records, ^INotifyingSubscriberHandler subscriber-handler, ^Clock clock]
@@ -12,8 +11,7 @@
   (appendRecord [_ record]
     (CompletableFuture/completedFuture
      (let [^LogRecord record (-> (swap! !records (fn [records]
-                                                   (conj records (log/->LogRecord (c2/->TransactionInstant (count records)
-                                                                                                           (-> (.instant clock) (.truncatedTo ChronoUnit/MILLIS)))
+                                                   (conj records (log/->LogRecord (c2/->TransactionInstant (count records) (.instant clock))
                                                                                   record))))
                                  peek)]
        (.notifyTx subscriber-handler (.tx record))

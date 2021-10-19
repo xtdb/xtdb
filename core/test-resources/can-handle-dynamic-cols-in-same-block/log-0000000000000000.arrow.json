@@ -14,8 +14,8 @@
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
-        "unit" : "MILLISECOND",
-        "timezone" : null
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
       },
       "children" : [ ]
     },{
@@ -58,8 +58,8 @@
               "nullable" : true,
               "type" : {
                 "name" : "timestamp",
-                "unit" : "MILLISECOND",
-                "timezone" : null
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
               },
               "children" : [ ]
             },{
@@ -67,8 +67,8 @@
               "nullable" : true,
               "type" : {
                 "name" : "timestamp",
-                "unit" : "MILLISECOND",
-                "timezone" : null
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
               },
               "children" : [ ]
             }]
@@ -92,8 +92,8 @@
               "nullable" : true,
               "type" : {
                 "name" : "timestamp",
-                "unit" : "MILLISECOND",
-                "timezone" : null
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
               },
               "children" : [ ]
             },{
@@ -101,8 +101,8 @@
               "nullable" : true,
               "type" : {
                 "name" : "timestamp",
-                "unit" : "MILLISECOND",
-                "timezone" : null
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
               },
               "children" : [ ]
             }]
@@ -129,7 +129,7 @@
       "name" : "_tx-time",
       "count" : 1,
       "VALIDITY" : [1],
-      "DATA" : [1577836800000]
+      "DATA" : [1577836800000000]
     },{
       "name" : "ops",
       "count" : 1,

@@ -18,12 +18,12 @@
         "typeIds" : [0]
       },
       "children" : [{
-        "name" : "timestampmilli",
+        "name" : "timestampmicrotz-utc",
         "nullable" : false,
         "type" : {
           "name" : "timestamp",
-          "unit" : "MILLISECOND",
-          "timezone" : null
+          "unit" : "MICROSECOND",
+          "timezone" : "UTC"
         },
         "children" : [ ]
       }]
@@ -42,10 +42,10 @@
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
       "children" : [{
-        "name" : "timestampmilli",
+        "name" : "timestampmicrotz-utc",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "DATA" : [1479211200000,1479211200000]
+        "DATA" : [1479211200000000,1479211200000000]
       }]
     }]
   }]

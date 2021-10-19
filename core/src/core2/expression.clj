@@ -16,7 +16,7 @@
            [java.time.temporal ChronoField ChronoUnit]
            [java.util Date LinkedHashMap]
            org.apache.arrow.vector.BaseVariableWidthVector
-           [org.apache.arrow.vector.types Types Types$MinorType]
+           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]
            org.roaringbitmap.RoaringBitmap))
 
@@ -145,8 +145,8 @@
    (.getType Types$MinorType/INT) 'int
    types/bigint-type 'long
    types/float8-type 'double
-   types/timestamp-milli-type 'long
-   types/duration-milli-type 'long})
+   types/timestamp-micro-tz-type 'long
+   types/duration-micro-type 'long})
 
 (def idx-sym (gensym "idx"))
 
@@ -215,6 +215,7 @@
   (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
     (case minor-type-name
       "DURATION" (throw (UnsupportedOperationException.))
+      "TIMESTAMPMICROTZ" `(ArrowType$Timestamp. TimeUnit/MICROSECOND ~(.getTimezone ^ArrowType$Timestamp arrow-type))
       ;; TODO there are other minor types that don't have a single corresponding ArrowType
       `(.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name)))))
 
@@ -465,7 +466,7 @@
    :return-type ArrowType$Utf8/INSTANCE})
 
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} {x :code}] :args}]
-  {:code `(.get (.atOffset (Instant/ofEpochMilli ~x) ZoneOffset/UTC)
+  {:code `(.get (.atOffset ^Instant (util/micros->instant ~x) ZoneOffset/UTC)
                 ~(case field
                    "YEAR" `ChronoField/YEAR
                    "MONTH" `ChronoField/MONTH_OF_YEAR
@@ -475,13 +476,15 @@
    :return-type types/bigint-type})
 
 (defmethod codegen-call [:date-trunc ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} {x :code, date-type :return-type}] :args}]
-  {:code `(.toEpochMilli (.truncatedTo (Instant/ofEpochMilli ~x)
-                                       ~(case field
-                                          ;; can't truncate instants to years/months
-                                          "DAY" `ChronoUnit/DAYS
-                                          "HOUR" `ChronoUnit/HOURS
-                                          "MINUTE" `ChronoUnit/MINUTES
-                                          "SECOND" `ChronoUnit/SECONDS)))
+  {:code `(util/instant->micros (.truncatedTo ^Instant (util/micros->instant ~x)
+                                              ~(case field
+                                                 ;; can't truncate instants to years/months
+                                                 "DAY" `ChronoUnit/DAYS
+                                                 "HOUR" `ChronoUnit/HOURS
+                                                 "MINUTE" `ChronoUnit/MINUTES
+                                                 "SECOND" `ChronoUnit/SECONDS
+                                                 "MILLISECOND" `ChronoUnit/MILLIS
+                                                 "MICROSECOND" `ChronoUnit/MICROS)))
    :return-type date-type})
 
 (def ^:private type->arrow-type
@@ -500,18 +503,12 @@
 
 (defn normalize-union-value [v]
   (cond
-    (instance? Date v)
-    (.getTime ^Date v)
-    (instance? Instant v)
-    (.toEpochMilli ^Instant v)
-    (instance? Duration v)
-    (.toMillis ^Duration v)
-    (string? v)
-    (ByteBuffer/wrap (.getBytes ^String v StandardCharsets/UTF_8))
-    (bytes? v)
-    (ByteBuffer/wrap v)
-    :else
-    v))
+    (instance? Date v) (Math/multiplyExact (.getTime ^Date v) 1000)
+    (instance? Instant v) (util/instant->micros v)
+    (instance? Duration v) (.toMillis ^Duration v)
+    (string? v) (ByteBuffer/wrap (.getBytes ^String v StandardCharsets/UTF_8))
+    (bytes? v) (ByteBuffer/wrap v)
+    :else v))
 
 (defn normalise-params [expr params]
   (let [expr (lits->params expr)

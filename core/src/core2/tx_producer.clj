@@ -10,7 +10,7 @@
            core2.vector.IVectorWriter
            java.time.Instant
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector TimeStampMilliVector VectorSchemaRoot]
+           [org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo ArrowType$Union Schema]
            org.apache.arrow.vector.types.UnionMode))
 
@@ -55,10 +55,10 @@
     parsed-tx-ops))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-start-field
-  (t/->field "_valid-time-start" t/timestamp-milli-type true))
+  (t/->field "_valid-time-start" t/timestamp-micro-tz-type true))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-end-field
-  (t/->field "_valid-time-end" t/timestamp-milli-type true))
+  (t/->field "_valid-time-end" t/timestamp-micro-tz-type true))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(t/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
@@ -106,12 +106,12 @@
                            (t/write-value! v writer))))
 
                      (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
-                       (.set ^TimeStampMilliVector (.getVector put-vt-start-writer)
-                             put-idx (.toEpochMilli vt-start)))
+                       (.set ^TimeStampMicroTZVector (.getVector put-vt-start-writer)
+                             put-idx (util/instant->micros vt-start)))
 
                      (when-let [^Instant vt-end (:_valid-time-end vt-opts)]
-                       (.set ^TimeStampMilliVector (.getVector put-vt-end-writer)
-                             put-idx (.toEpochMilli vt-end))))
+                       (.set ^TimeStampMicroTZVector (.getVector put-vt-end-writer)
+                             put-idx (util/instant->micros vt-end))))
 
               :delete (let [delete-idx (.startValue delete-writer)]
                         (let [id (:_id tx-op)
@@ -121,12 +121,12 @@
                           (t/write-value! id writer))
 
                         (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
-                          (.set ^TimeStampMilliVector (.getVector delete-vt-start-writer)
-                                delete-idx (.toEpochMilli vt-start)))
+                          (.set ^TimeStampMicroTZVector (.getVector delete-vt-start-writer)
+                                delete-idx (util/instant->micros vt-start)))
 
                         (when-let [^Instant vt-end (:_valid-time-end vt-opts)]
-                          (.set ^TimeStampMilliVector (.getVector delete-vt-end-writer)
-                                delete-idx (.toEpochMilli vt-end))))
+                          (.set ^TimeStampMicroTZVector (.getVector delete-vt-end-writer)
+                                delete-idx (util/instant->micros vt-end))))
 
               :evict (do
                        (.startValue evict-writer)

@@ -23,7 +23,6 @@
            core2.tx.Watermark
            java.io.Closeable
            java.lang.AutoCloseable
-           java.time.Instant
            [java.util Collections Map Map$Entry Set TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap PriorityBlockingQueue]
            java.util.concurrent.atomic.AtomicInteger
@@ -31,7 +30,7 @@
            [java.util.function Consumer Function]
            java.util.stream.IntStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector TimeStampMilliVector TimeStampVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BigIntVector TimeStampMicroTZVector TimeStampVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema]
@@ -91,18 +90,18 @@
 
 (def ^:private log-schema
   (Schema. [(t/->field "_tx-id" t/bigint-type false)
-            (t/->field "_tx-time" t/timestamp-milli-type false)
+            (t/->field "_tx-time" t/timestamp-micro-tz-type false)
             (t/->field "ops" t/list-type true
                        (t/->field "ops" t/struct-type false
                                   (t/->field "_row-id" t/bigint-type false)
                                   (t/->field "op" (ArrowType$Union. UnionMode/Dense (int-array [0 1 2])) false
                                              (t/->field "put" t/struct-type false
-                                                        (t/->field "_valid-time-start" t/timestamp-milli-type true)
-                                                        (t/->field "_valid-time-end" t/timestamp-milli-type true))
+                                                        (t/->field "_valid-time-start" t/timestamp-micro-tz-type true)
+                                                        (t/->field "_valid-time-end" t/timestamp-micro-tz-type true))
                                              (t/->field "delete" t/struct-type false
                                                         (t/->field "_id" t/dense-union-type false)
-                                                        (t/->field "_valid-time-start" t/timestamp-milli-type true)
-                                                        (t/->field "_valid-time-end" t/timestamp-milli-type true))
+                                                        (t/->field "_valid-time-start" t/timestamp-micro-tz-type true)
+                                                        (t/->field "_valid-time-end" t/timestamp-micro-tz-type true))
                                              (t/->field "evict" t/struct-type false))))]))
 
 (definterface ILogOpIndexer
@@ -121,7 +120,7 @@
 (defn- ->log-indexer [^BufferAllocator allocator, ^long max-rows-per-block]
   (let [log-root (VectorSchemaRoot/create log-schema allocator)
         ^BigIntVector tx-id-vec (.getVector log-root "_tx-id")
-        ^TimeStampMilliVector tx-time-vec (.getVector log-root "_tx-time")
+        ^TimeStampMicroTZVector tx-time-vec (.getVector log-root "_tx-time")
 
         ops-vec (.getVector log-root "ops")
         ops-writer (.asList (vw/vec->writer ops-vec))
@@ -132,16 +131,16 @@
 
         put-writer (.asStruct (.writerForTypeId op-writer 0))
         put-vt-start-writer (.writerForName put-writer "_valid-time-start")
-        ^TimeStampMilliVector put-vt-start-vec (.getVector put-vt-start-writer)
+        ^TimeStampMicroTZVector put-vt-start-vec (.getVector put-vt-start-writer)
         put-vt-end-writer (.writerForName put-writer "_valid-time-end")
-        ^TimeStampMilliVector put-vt-end-vec (.getVector put-vt-end-writer)
+        ^TimeStampMicroTZVector put-vt-end-vec (.getVector put-vt-end-writer)
 
         delete-writer (.asStruct (.writerForTypeId op-writer 1))
         delete-id-writer (.writerForName delete-writer "_id")
         delete-vt-start-writer (.writerForName delete-writer "_valid-time-start")
-        ^TimeStampMilliVector delete-vt-start-vec (.getVector delete-vt-start-writer)
+        ^TimeStampMicroTZVector delete-vt-start-vec (.getVector delete-vt-start-writer)
         delete-vt-end-writer (.writerForName delete-writer "_valid-time-end")
-        ^TimeStampMilliVector delete-vt-end-vec (.getVector delete-vt-end-writer)
+        ^TimeStampMicroTZVector delete-vt-end-vec (.getVector delete-vt-end-writer)
 
         evict-writer (.asStruct (.writerForTypeId op-writer 2))]
 
@@ -150,7 +149,7 @@
         (let [tx-idx (.getRowCount log-root)]
           (.startValue ops-writer)
           (.setSafe tx-id-vec tx-idx (.tx-id tx-key))
-          (.setSafe tx-time-vec tx-idx (.toEpochMilli ^Instant (.tx-time tx-key)))
+          (.setSafe tx-time-vec tx-idx (util/instant->micros (.tx-time tx-key)))
 
           (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
 
@@ -238,12 +237,12 @@
         (fn [^VectorSchemaRoot log-root]
           (let [tx-count (.getRowCount log-root)
                 ^BigIntVector tx-id-vec (.getVector log-root "_tx-id")
-                ^TimeStampMilliVector tx-time-vec (.getVector log-root "_tx-time")
+                ^TimeStampMicroTZVector tx-time-vec (.getVector log-root "_tx-time")
                 ^BigIntVector row-id-vec (-> ^ListVector (.getVector log-root "ops")
                                              ^StructVector (.getDataVector)
                                              (.getChild "_row-id"))]
             {:latest-tx (c2/->TransactionInstant (.get tx-id-vec (dec tx-count))
-                                                 (Instant/ofEpochMilli (.get tx-time-vec (dec tx-count))))
+                                                 (util/micros->instant (.get tx-time-vec (dec tx-count))))
              :latest-row-id (.get row-id-vec (dec (.getValueCount row-id-vec)))}))))))
 
 (defn- copy-docs [^IChunkManager chunk-manager, ^DenseUnionVector tx-ops-vec, ^long base-row-id]

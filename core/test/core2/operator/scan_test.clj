@@ -53,10 +53,10 @@
         (t/is (= #{:_id :_valid-time-start :_valid-time-end :_tx-time-end :_tx-time-start}
                  (-> res keys set)))
 
-        (t/is (= {:_id "doc", :_valid-time-start #inst "2021", :_valid-time-end #inst "2022"}
+        (t/is (= {:_id "doc", :_valid-time-start #c2/instant "2021", :_valid-time-end #c2/instant "2022"}
                  (dissoc res :_tx-time-start :_tx-time-end))))
 
-      (t/is (= {:_id "doc", :vt-start #inst "2021", :vt-end #inst "2022"}
+      (t/is (= {:_id "doc", :vt-start #c2/instant "2021", :vt-end #c2/instant "2022"}
                (-> (first (op/query-ra '[:project [_id
                                                    {vt-start _valid-time-start}
                                                    {vt-end _valid-time-end}]

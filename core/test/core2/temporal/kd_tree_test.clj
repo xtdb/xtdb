@@ -1,7 +1,8 @@
 (ns core2.temporal.kd-tree-test
   (:require [clojure.test :as t]
             [core2.temporal :as temporal]
-            [core2.temporal.kd-tree :as kd])
+            [core2.temporal.kd-tree :as kd]
+            [core2.util :as util])
   (:import [core2.temporal IInternalIdManager TemporalCoordinates]
            java.io.Closeable
            [java.util Date HashMap List]
@@ -17,10 +18,10 @@
   (zipmap [:id :row-id :valid-time-start :valid-time-end :tx-time-start :tx-time-end]
           [(.get point temporal/id-idx)
            (.get point temporal/row-id-idx)
-           (Date. ^long (.get point temporal/valid-time-start-idx))
-           (Date. ^long (.get point temporal/valid-time-end-idx))
-           (Date. ^long (.get point temporal/tx-time-start-idx))
-           (Date. ^long (.get point temporal/tx-time-end-idx))]))
+           (Date/from (util/micros->instant (.get point temporal/valid-time-start-idx)))
+           (Date/from (util/micros->instant (.get point temporal/valid-time-end-idx)))
+           (Date/from (util/micros->instant (.get point temporal/tx-time-start-idx)))
+           (Date/from (util/micros->instant (.get point temporal/tx-time-end-idx)))]))
 
 (defn- temporal-rows [kd-tree row-id->row]
   (vec (for [{:keys [row-id] :as row} (->> (map ->row-map (kd/kd-tree->seq kd-tree))
@@ -35,10 +36,12 @@
                                                                  ^Date valid-time-end
                                                                  tombstone?]}]
   (TemporalCoordinates. row-id id
-                        (.getTime tx-time-start)
-                        (.getTime (or tx-time-end (Date/from temporal/end-of-time)))
-                        (.getTime (or valid-time-start tx-time-start))
-                        (.getTime (or valid-time-end (Date/from temporal/end-of-time)))
+                        (util/instant->micros (.toInstant tx-time-start))
+                        (util/instant->micros (or (some-> tx-time-end .toInstant)
+                                                  temporal/end-of-time))
+                        (util/instant->micros (.toInstant (or valid-time-start tx-time-start)))
+                        (util/instant->micros (or (some-> valid-time-end .toInstant)
+                                                  temporal/end-of-time))
                         (boolean tombstone?)))
 
 (t/deftest bitemporal-tx-time-split-test

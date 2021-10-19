@@ -1,13 +1,15 @@
 (ns core2.types
+  (:require [core2.util :as util]
+            [clojure.string :as str])
   (:import core2.vector.IVectorWriter
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration Instant]
            [java.util Date List Map]
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -16,8 +18,8 @@
 (def float8-type (.getType Types$MinorType/FLOAT8))
 (def varchar-type (.getType Types$MinorType/VARCHAR))
 (def varbinary-type (.getType Types$MinorType/VARBINARY))
-(def timestamp-milli-type (.getType Types$MinorType/TIMESTAMPMILLI))
-(def duration-milli-type (ArrowType$Duration. TimeUnit/MILLISECOND))
+(def timestamp-micro-tz-type (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
+(def duration-micro-type (ArrowType$Duration. TimeUnit/MICROSECOND))
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (.getType Types$MinorType/DENSEUNION))
 (def list-type (.getType Types$MinorType/LIST))
@@ -69,19 +71,22 @@
 
 (extend-protocol ArrowWriteable
   Date
-  (value->arrow-type [_] timestamp-milli-type)
+  (value->arrow-type [_] timestamp-micro-tz-type)
   (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^TimeStampMilliVector (.getVector writer) (.getPosition writer) (.getTime v)))
+    (.setSafe ^TimeStampMicroTZVector (.getVector writer) (.getPosition writer)
+              (Math/multiplyExact (.getTime v) 1000)))
 
   Instant
-  (value->arrow-type [_] timestamp-milli-type)
+  (value->arrow-type [_] timestamp-micro-tz-type)
   (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^TimeStampMilliVector (.getVector writer) (.getPosition writer) (.toEpochMilli v)))
+    (.setSafe ^TimeStampMicroTZVector (.getVector writer) (.getPosition writer)
+              (util/instant->micros v)))
 
-  Duration ; HACK assumes millis for now
-  (value->arrow-type [_] duration-milli-type)
+  Duration ; HACK assumes micros for now
+  (value->arrow-type [_] duration-micro-type)
   (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^DurationVector (.getVector writer) (.getPosition writer) (.toMillis v))))
+    (.setSafe ^DurationVector (.getVector writer) (.getPosition writer)
+              (quot (.toNanos v) 1000))))
 
 (extend-protocol ArrowWriteable
   (Class/forName "[B")
@@ -153,8 +158,8 @@
    ArrowType$Binary/INSTANCE VarBinaryVector
    ArrowType$Utf8/INSTANCE VarCharVector
 
-   timestamp-milli-type TimeStampMilliVector
-   duration-milli-type DurationVector})
+   timestamp-micro-tz-type TimeStampMicroTZVector
+   duration-micro-type DurationVector})
 
 (defprotocol ArrowReadable
   (get-object [value-vector idx]))
@@ -165,12 +170,20 @@
 
   VarBinaryVector (get-object [this idx] (ByteBuffer/wrap (.getObject this ^int idx)))
 
+  VarCharVector
+  (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8)))
+
+(extend-protocol ArrowReadable
   TimeStampMilliVector
   (get-object [this idx] (Date. (.get this ^int idx)))
 
-  VarCharVector
-  (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
+  TimeStampMicroTZVector
+  (get-object [this idx]
+    (if (= "UTC" (.getTimezone ^ArrowType$Timestamp (.getType (.getField this))))
+      (util/micros->instant (.get this ^int idx))
+      (throw (UnsupportedOperationException.)))))
 
+(extend-protocol ArrowReadable
   ListVector
   (get-object [this idx]
     (let [data-vec (.getDataVector this)
@@ -249,10 +262,13 @@
   (->field "_row-id" bigint-type false))
 
 (defn type->field-name [^ArrowType arrow-type]
-  (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
+  (let [minor-type-name (.toLowerCase (.name (Types/getMinorTypeForArrowType arrow-type)))]
     (case minor-type-name
-      "DURATION" (format "%s-%s" (.toLowerCase minor-type-name) (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))
-      (.toLowerCase minor-type-name))))
+      "duration" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))
+      "timestampmicrotz" (format "%s-%s" minor-type-name
+                                 (-> (.toLowerCase (.getTimezone ^ArrowType$Timestamp arrow-type))
+                                     (str/replace #"[/:]" "_")))
+      minor-type-name)))
 
 (defn arrow-type->field [^ArrowType arrow-type]
   (let [field-name (type->field-name arrow-type)

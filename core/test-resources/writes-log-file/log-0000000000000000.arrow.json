@@ -14,8 +14,8 @@
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
-        "unit" : "MILLISECOND",
-        "timezone" : null
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
       },
       "children" : [ ]
     },{
@@ -58,8 +58,8 @@
               "nullable" : true,
               "type" : {
                 "name" : "timestamp",
-                "unit" : "MILLISECOND",
-                "timezone" : null
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
               },
               "children" : [ ]
             },{
@@ -67,8 +67,8 @@
               "nullable" : true,
               "type" : {
                 "name" : "timestamp",
-                "unit" : "MILLISECOND",
-                "timezone" : null
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
               },
               "children" : [ ]
             }]
@@ -99,8 +99,8 @@
               "nullable" : true,
               "type" : {
                 "name" : "timestamp",
-                "unit" : "MILLISECOND",
-                "timezone" : null
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
               },
               "children" : [ ]
             },{
@@ -108,8 +108,8 @@
               "nullable" : true,
               "type" : {
                 "name" : "timestamp",
-                "unit" : "MILLISECOND",
-                "timezone" : null
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
               },
               "children" : [ ]
             }]
@@ -131,12 +131,12 @@
       "name" : "_tx-id",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : ["0","1741"]
+      "DATA" : ["0","1781"]
     },{
       "name" : "_tx-time",
       "count" : 2,
       "VALIDITY" : [1,1],
-      "DATA" : [1577836800000,1577923200000]
+      "DATA" : [1577836800000000,1577923200000000]
     },{
       "name" : "ops",
       "count" : 2,
@@ -164,12 +164,12 @@
               "name" : "_valid-time-start",
               "count" : 3,
               "VALIDITY" : [0,0,1],
-              "DATA" : [0,0,1585699200000]
+              "DATA" : [0,0,1585699200000000]
             },{
               "name" : "_valid-time-end",
               "count" : 3,
               "VALIDITY" : [0,0,1],
-              "DATA" : [0,0,1588291200000]
+              "DATA" : [0,0,1588291200000000]
             }]
           },{
             "name" : "delete",
@@ -191,7 +191,7 @@
               "name" : "_valid-time-start",
               "count" : 1,
               "VALIDITY" : [1],
-              "DATA" : [1585699200000]
+              "DATA" : [1585699200000000]
             },{
               "name" : "_valid-time-end",
               "count" : 1,
