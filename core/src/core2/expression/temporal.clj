@@ -122,7 +122,7 @@
                      (when (and (map? x) (= :metadata-vp-call (:op x)))
                        (let [{:keys [f param]} x]
                          (apply-constraint min-range max-range
-                                           f col-name (get params param))))
+                                           f col-name (util/->instant (get params param)))))
                      x))
                  meta-expr))
     [min-range max-range]))

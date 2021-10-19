@@ -107,11 +107,11 @@
 
                      (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
                        (.set ^TimeStampMicroTZVector (.getVector put-vt-start-writer)
-                             put-idx (util/instant->micros vt-start)))
+                             put-idx (util/instant->micros (util/->instant vt-start))))
 
                      (when-let [^Instant vt-end (:_valid-time-end vt-opts)]
                        (.set ^TimeStampMicroTZVector (.getVector put-vt-end-writer)
-                             put-idx (util/instant->micros vt-end))))
+                             put-idx (util/instant->micros (util/->instant vt-end)))))
 
               :delete (let [delete-idx (.startValue delete-writer)]
                         (let [id (:_id tx-op)
@@ -122,11 +122,11 @@
 
                         (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
                           (.set ^TimeStampMicroTZVector (.getVector delete-vt-start-writer)
-                                delete-idx (util/instant->micros vt-start)))
+                                delete-idx (util/instant->micros (util/->instant vt-start))))
 
                         (when-let [^Instant vt-end (:_valid-time-end vt-opts)]
                           (.set ^TimeStampMicroTZVector (.getVector delete-vt-end-writer)
-                                delete-idx (util/instant->micros vt-end))))
+                                delete-idx (util/instant->micros (util/->instant vt-end)))))
 
               :evict (do
                        (.startValue evict-writer)

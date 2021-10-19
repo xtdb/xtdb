@@ -12,6 +12,7 @@
            [core2.temporal.kd_tree IKdTreePointAccess MergedKdTree]
            java.io.Closeable
            java.nio.ByteBuffer
+           java.time.Instant
            [java.util Arrays Collections Comparator HashMap Map TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap Executors ExecutorService]
            java.util.concurrent.atomic.AtomicLong
@@ -80,7 +81,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^java.time.Instant end-of-time
-  #c2/instant "9999-12-31T23:59:59.999999Z")
+  (Instant/parse "9999-12-31T23:59:59.999999Z"))
 
 (def ^{:tag 'long} end-of-time-μs
   (util/instant->micros end-of-time))

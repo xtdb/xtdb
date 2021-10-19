@@ -54,7 +54,7 @@
 
         {:keys [tx-time] :as tx1} @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 1}]
                                                             [:put {:_id "doc-with-vt"}
-                                                             {:_valid-time-start #c2/instant "2021"}]])
+                                                             {:_valid-time-start #inst "2021"}]])
 
         db (snap/snapshot snapshot-factory tx1)]
 

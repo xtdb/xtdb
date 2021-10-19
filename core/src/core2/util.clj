@@ -13,7 +13,7 @@
            java.nio.charset.StandardCharsets
            [java.nio.file CopyOption Files FileVisitResult LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.time Duration Instant LocalDateTime ZoneId]
+           [java.time Duration Instant LocalDateTime ZoneId ZonedDateTime]
            java.time.temporal.ChronoUnit
            [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList List Map$Entry Queue UUID]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
@@ -65,6 +65,14 @@
 
 (s/def ::duration
   (s/and (s/conformer ->duration) #(instance? Duration %)))
+
+(defprotocol ToInstant
+  (^java.time.Instant ->instant [v]))
+
+(extend-protocol ToInstant
+  Instant (->instant [i] i)
+  Date (->instant [d] (.toInstant d))
+  ZonedDateTime (->instant [zdt] (.toInstant zdt)))
 
 (defn instant->micros ^long [^Instant inst]
   (-> (Math/multiplyExact (.getEpochSecond inst) 1000000)

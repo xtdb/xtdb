@@ -90,21 +90,21 @@
       (t/is (= {:vt-start [Long/MIN_VALUE μs-2019]
                 :vt-end [(inc μs-2019) Long/MAX_VALUE]}
                (transpose (expr.temp/->temporal-min-max-range
-                           {"_valid-time-start" '(<= _vt-time-start #c2/instant "2019")
-                            "_valid-time-end" '(> _vt-time-end #c2/instant "2019")}
+                           {"_valid-time-start" '(<= _vt-time-start #inst "2019")
+                            "_valid-time-end" '(> _vt-time-end #inst "2019")}
                            {}))))
 
       (t/testing "symbol column name"
         (t/is (= {:vt-start [μs-2019 μs-2019]}
                  (transpose (expr.temp/->temporal-min-max-range
-                             {'_valid-time-start '(= _vt-time-start #c2/instant "2019")}
+                             {'_valid-time-start '(= _vt-time-start #inst "2019")}
                              {})))))
 
       (t/testing "conjunction"
         (t/is (= {:vt-start [Long/MIN_VALUE μs-2019]}
                  (transpose (expr.temp/->temporal-min-max-range
-                             {"_valid-time-start" '(and (<= _vt-time-start #c2/instant "2019")
-                                                        (<= _vt-time-start #c2/instant "2020"))}
+                             {"_valid-time-start" '(and (<= _vt-time-start #inst "2019")
+                                                        (<= _vt-time-start #inst "2020"))}
                              {})))))
 
       (t/testing "disjunction not supported"

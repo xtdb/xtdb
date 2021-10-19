@@ -43,8 +43,8 @@
   (with-open [node (node/start-node {})]
     (let [snapshot-factory (tu/component node ::snap/snapshot-factory)
           tx @(c2/submit-tx node [[:put {:_id "doc"}
-                                   {:_valid-time-start #c2/instant "2021"
-                                    :_valid-time-end #c2/instant "2022"}]])]
+                                   {:_valid-time-start #inst "2021"
+                                    :_valid-time-end #inst "2022"}]])]
 
       (let [res (first (op/query-ra '[:scan [_id
                                              _valid-time-start _valid-time-end

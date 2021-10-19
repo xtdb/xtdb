@@ -70,7 +70,7 @@
 (defn ^java.time.Clock ->mock-clock
   ([]
    (->mock-clock (iterate #(.plus ^Instant % (Period/ofDays 1))
-                          #c2/instant "2020-01-01")))
+                          (.toInstant #inst "2020-01-01"))))
 
   ([^Iterable insts]
    (let [times-iterator (.iterator insts)]
