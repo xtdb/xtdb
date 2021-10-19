@@ -6,9 +6,12 @@
             [core2.tx-producer :as txp])
   (:import org.apache.arrow.memory.RootAllocator))
 
+(def ^:private expected-file
+  (io/as-file (io/resource "can-write-tx-to-arrow-ipc-streaming-format/expected.json")))
+
 (t/deftest can-write-tx-to-arrow-ipc-streaming-format
   (with-open [a (RootAllocator.)]
-    (t/is (= (json/parse-string (slurp (io/resource "can-write-tx-to-arrow-ipc-streaming-format/expected.json")))
+    (t/is (= (json/parse-string (slurp expected-file))
              (-> (txp/serialize-tx-ops
                   [[:put {:_id "device-info-demo000000",
                           :api-version "23",
@@ -30,4 +33,5 @@
                           :mem-used 5.89988922E8}]]
                   a)
                  (c2-json/arrow-streaming->json)
+                 #_(doto (->> (spit expected-file)))
                  (json/parse-string))))))
