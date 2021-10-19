@@ -4,11 +4,11 @@
   (:import core2.vector.IVectorWriter
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
-           [java.time Duration Instant ZonedDateTime ZoneId]
+           [java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId]
            [java.util Date List Map]
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
@@ -85,7 +85,12 @@
               (util/instant->micros v)))
 
   ZonedDateTime
-  (value->arrow-type [v] (ArrowType$Timestamp. TimeUnit/MICROSECOND (str (.getZone v))))
+  (value->arrow-type [v] (ArrowType$Timestamp. TimeUnit/MICROSECOND (.getId (.getZone v))))
+  (write-value! [v ^IVectorWriter writer]
+    (write-value! (.toInstant v) writer))
+
+  OffsetDateTime
+  (value->arrow-type [v] (ArrowType$Timestamp. TimeUnit/MICROSECOND (.getId (.getOffset v))))
   (write-value! [v ^IVectorWriter writer]
     (write-value! (.toInstant v) writer))
 
@@ -188,9 +193,24 @@
                           (ZoneId/of zone-str))))))
 
 (extend-protocol ArrowReadable
+  TimeStampSecTZVector
+  (get-object [this idx]
+    (-> (Instant/ofEpochSecond (.get this idx))
+        (.atZone (zone-id this))))
+
+  TimeStampMilliTZVector
+  (get-object [this idx]
+    (-> (Instant/ofEpochMilli (.get this idx))
+        (.atZone (zone-id this))))
+
   TimeStampMicroTZVector
   (get-object [this idx]
     (-> ^Instant (util/micros->instant (.get this ^int idx))
+        (.atZone (zone-id this))))
+
+  TimeStampNanoTZVector
+  (get-object [this idx]
+    (-> (Instant/ofEpochSecond 0 (.get this idx))
         (.atZone (zone-id this)))))
 
 (extend-protocol ArrowReadable

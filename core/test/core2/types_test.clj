@@ -2,9 +2,11 @@
   (:require [clojure.test :as t]
             [core2.test-util :as tu]
             [core2.types :as types]
+            [core2.util :as util]
             [core2.vector.writer :as vw])
   (:import java.nio.ByteBuffer
-           [org.apache.arrow.vector BigIntVector BitVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TinyIntVector VarBinaryVector VarCharVector]
+           [java.time Instant OffsetDateTime ZonedDateTime ZoneId ZoneOffset]
+           [org.apache.arrow.vector BigIntVector BitVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -38,6 +40,19 @@
                                (byte-array [1 2 3])
                                (ByteBuffer/wrap (byte-array [1 2 3]))]))
           "binary types")
+
+    (t/is (= {:vs [(util/->zdt #inst "1999")
+                   (util/->zdt #inst "2021-09-02T13:54:35.809Z")
+                   (ZonedDateTime/ofInstant (util/->instant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "Europe/Stockholm"))
+                   (ZonedDateTime/ofInstant (util/->instant #inst "2021-09-02T13:54:35.809Z") (ZoneOffset/ofHours 2))
+                   (ZonedDateTime/ofInstant (Instant/ofEpochSecond 3600 1000) (ZoneId/of "UTC"))]
+              :vec-types (repeat 5 TimeStampMicroTZVector)}
+             (test-round-trip [#inst "1999"
+                               (util/->instant #inst "2021-09-02T13:54:35.809Z")
+                               (ZonedDateTime/ofInstant (util/->instant #inst "2021-09-02T13:54:35.809Z") (ZoneId/of "Europe/Stockholm"))
+                               (OffsetDateTime/ofInstant (util/->instant #inst "2021-09-02T13:54:35.809Z") (ZoneOffset/ofHours 2))
+                               (Instant/ofEpochSecond 3600 1234)]))
+          "timestamp types")
 
     (let [vs [[]
               [2 3.14 [false nil]]
