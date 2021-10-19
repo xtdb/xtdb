@@ -19,7 +19,7 @@
                        ^IRelationSelector selector]
   ICursor
   (tryAdvance [_ c]
-    (let [!advanced (atom false)]
+    (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
@@ -27,9 +27,9 @@
                                      (when-let [idxs (.select selector in-rel)]
                                        (when-not (.isEmpty idxs)
                                          (.accept c (iv/select in-rel (.toArray idxs)))
-                                         (reset! !advanced true)))))))
-                  (not @!advanced)))
-      @!advanced))
+                                         (aset advanced? 0 true)))))))
+                  (not (aget advanced? 0))))
+      (aget advanced? 0)))
 
   (close [_]
     (util/try-close in-cursor)))

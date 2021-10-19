@@ -103,8 +103,8 @@
 
     (boolean
      (when (or difference? (not (.isEmpty intersection-set)))
-       (let [!advanced? (atom false)]
-         (while (and (not @!advanced?)
+       (let [advanced? (boolean-array 1)]
+         (while (and (not (aget advanced? 0))
                      (.tryAdvance left-cursor
                                   (reify Consumer
                                     (accept [_ in-rel]
@@ -121,9 +121,9 @@
 
                                             (let [idxs (.toArray (.build idxs))]
                                               (when-not (empty? idxs)
-                                                (reset! !advanced? true)
+                                                (aset advanced? 0 true)
                                                 (.accept c (iv/select in-rel idxs))))))))))))
-         @!advanced?))))
+         (aget advanced? 0)))))
 
   (close [_]
     (run! release-set-key intersection-set)
@@ -142,8 +142,8 @@
                          ^Set seen-set]
   ICursor
   (tryAdvance [_ c]
-    (let [!advanced? (atom false)]
-      (while (and (not @!advanced?)
+    (let [advanced? (boolean-array 1)]
+      (while (and (not (aget advanced? 0))
                   (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
@@ -160,9 +160,9 @@
 
                                          (let [idxs (.toArray (.build idxs))]
                                            (when-not (empty? idxs)
-                                             (reset! !advanced? true)
+                                             (aset advanced? 0 true)
                                              (.accept c (iv/select in-rel idxs))))))))))))
-      @!advanced?))
+      (aget advanced? 0)))
 
   (close [_]
     (run! release-set-key seen-set)
@@ -211,7 +211,7 @@
     (if-not (or continue? recursive-cursor)
       false
 
-      (let [!advanced? (atom false)
+      (let [advanced? (boolean-array 1)
             inner-c (reify Consumer
                       (accept [_ in-rel]
                         (let [^IIndirectRelation in-rel in-rel]
@@ -231,13 +231,13 @@
                                     (.add rels out-rel)
                                     (.accept c out-rel)
                                     (set! (.continue? this) true)
-                                    (reset! !advanced? true)))))))))]
+                                    (aset advanced? 0 true)))))))))]
 
         (.tryAdvance base-cursor inner-c)
 
-        (or @!advanced?
+        (or (aget advanced? 0)
             (do
-              (while (and (not @!advanced?) continue?)
+              (while (and (not (aget advanced? 0)) continue?)
                 (when-let [recursive-cursor (or recursive-cursor
                                                 (when continue?
                                                   (set! (.continue? this) false)
@@ -248,13 +248,13 @@
                                                     cursor)))]
 
 
-                  (while (and (not @!advanced?)
+                  (while (and (not (aget advanced? 0))
                               (let [more? (.tryAdvance recursive-cursor inner-c)]
                                 (when-not more?
                                   (util/try-close recursive-cursor)
                                   (set! (.recursive-cursor this) nil))
                                 more?)))))
-              @!advanced?)))))
+              (aget advanced? 0))))))
 
   (close [_]
     (util/try-close recursive-cursor)

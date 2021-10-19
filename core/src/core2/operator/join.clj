@@ -173,11 +173,11 @@
     (boolean
      (when (or (not (.isEmpty join-key->build-pointers))
                anti-join?)
-       (let [!advanced (atom false)]
+       (let [advanced? (boolean-array 1)]
          (binding [scan/*column->pushdown-bloom* (if anti-join?
                                                    scan/*column->pushdown-bloom*
                                                    (assoc scan/*column->pushdown-bloom* probe-column-name pushdown-bloom))]
-           (while (and (not @!advanced)
+           (while (and (not (aget advanced? 0))
                        (.tryAdvance probe-cursor
                                     (reify Consumer
                                       (accept [_ probe-rel]
@@ -186,12 +186,12 @@
                                         (let [out-rel (vw/rel-writer->reader rel-writer)]
                                           (try
                                             (when (pos? (.rowCount out-rel))
-                                              (reset! !advanced true)
+                                              (aset advanced? 0 true)
                                               (.accept c out-rel))
                                             (finally
                                               (vw/clear-rel rel-writer)
                                               (util/try-close out-rel))))))))))
-         @!advanced))))
+         (aget advanced? 0)))))
 
   (close [_]
     (.clear pushdown-bloom)

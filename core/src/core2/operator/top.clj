@@ -22,8 +22,8 @@
                     ^:unsynchronized-mutable ^long idx]
   ICursor
   (tryAdvance [this c]
-    (let [!advanced? (atom false)]
-      (while (and (not @!advanced?)
+    (let [advanced? (boolean-array 1)]
+      (while (and (not (aget advanced? 0))
                   (< (- idx skip) limit)
                   (.tryAdvance in-cursor
                                (reify Consumer
@@ -36,8 +36,8 @@
 
                                      (when-let [[^long rel-offset, ^long rel-length] (offset+length skip limit old-idx row-count)]
                                        (.accept c (iv/select in-rel (.toArray (IntStream/range rel-offset (+ rel-offset rel-length)))))
-                                       (reset! !advanced? true))))))))
-      @!advanced?))
+                                       (aset advanced? 0 true))))))))
+      (aget advanced? 0)))
 
   (close [_]
     (.close in-cursor)))

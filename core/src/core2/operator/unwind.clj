@@ -33,7 +33,7 @@
                        ^String column-name]
   ICursor
   (tryAdvance [this c]
-    (let [!advanced (atom false)]
+    (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor
                                (reify Consumer
                                  (accept [_ in-rel]
@@ -67,9 +67,9 @@
                                                (.add out-cols (.select in-col idxs))))
 
                                            (.accept c (iv/->indirect-rel out-cols))
-                                           (reset! !advanced true))))))))
-                  (not @!advanced)))
-      @!advanced))
+                                           (aset advanced? 0 true))))))))
+                  (not (aget advanced? 0))))
+      (aget advanced? 0)))
 
   (close [_]
     (.close in-cursor)))
