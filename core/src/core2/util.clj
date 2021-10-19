@@ -66,13 +66,24 @@
 (s/def ::duration
   (s/and (s/conformer ->duration) #(instance? Duration %)))
 
-(defprotocol ToInstant
-  (^java.time.Instant ->instant [v]))
+(defprotocol TimeConversions
+  (^java.time.Instant ->instant [v])
+  (^java.time.ZonedDateTime ->zdt [v]))
 
-(extend-protocol ToInstant
-  Instant (->instant [i] i)
-  Date (->instant [d] (.toInstant d))
-  ZonedDateTime (->instant [zdt] (.toInstant zdt)))
+(def utc (ZoneId/of "UTC"))
+
+(extend-protocol TimeConversions
+  Instant
+  (->instant [i] i)
+  (->zdt [i] (-> i (.atZone utc)))
+
+  Date
+  (->instant [d] (.toInstant d))
+  (->zdt [d] (->zdt (->instant d)))
+
+  ZonedDateTime
+  (->instant [zdt] (.toInstant zdt))
+  (->zdt [zdt] zdt))
 
 (defn instant->micros ^long [^Instant inst]
   (-> (Math/multiplyExact (.getEpochSecond inst) 1000000)

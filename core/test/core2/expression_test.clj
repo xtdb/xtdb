@@ -81,8 +81,8 @@
         (t/is (= 500 (select-column '(>= e ?e) "e" {'?e "0500"})))))))
 
 (t/deftest can-extract-min-max-range-from-expression
-  (let [μs-2018 (util/instant->micros #c2/instant "2018")
-        μs-2019 (util/instant->micros #c2/instant "2019")]
+  (let [μs-2018 (util/instant->micros (util/->instant #inst "2018"))
+        μs-2019 (util/instant->micros (util/->instant #inst "2019"))]
     (letfn [(transpose [[mins maxs]]
               (->> (map vector mins maxs)
                    (zipmap [:tt-end :id :tt-start :row-id :vt-start :vt-end])
@@ -124,29 +124,29 @@
                               "_tx-time-end" '(< ?tt _tx-time-end)
                               "_valid-time-start" '(<= ?vt _vt-time-start)
                               "_valid-time-end" '(> ?vt _vt-time-end)}
-                             '{?tt #c2/instant "2019", ?vt #c2/instant "2018"}))))))))
+                             {'?tt (util/->instant #inst "2019",) '?vt (util/->instant #inst "2018")}))))))))
 
 (t/deftest test-date-trunc
   (with-open [node (node/start-node {})]
-    (let [tx (c2/submit-tx node [[:put {:_id "foo", :date #c2/instant "2021-01-21T12:34:56Z"}]])
+    (let [tx (c2/submit-tx node [[:put {:_id "foo", :date (util/->instant #inst "2021-01-21T12:34:56Z")}]])
           db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx)]
-      (t/is (= [{:trunc #c2/instant "2021-01-21"}]
+      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21")}]
                (op/query-ra '[:project [{trunc (date-trunc "DAY" date)}]
                               [:scan [date]]]
                             db)))
 
-      (t/is (= [{:trunc #c2/instant "2021-01-21T12:34"}]
+      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21T12:34")}]
                (op/query-ra '[:project [{trunc (date-trunc "MINUTE" date)}]
                               [:scan [date]]]
                             db)))
 
-      (t/is (= [{:trunc #c2/instant "2021-01-21"}]
+      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21")}]
                (op/query-ra '[:select (> trunc #inst "2021")
                               [:project [{trunc (date-trunc "DAY" date)}]
                                [:scan [date]]]]
                             db)))
 
-      (t/is (= [{:trunc #c2/instant "2021-01-21"}]
+      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21")}]
                (op/query-ra '[:project [{trunc (date-trunc "DAY" trunc)}]
                               [:project [{trunc (date-trunc "MINUTE" date)}]
                                [:scan [date]]]]

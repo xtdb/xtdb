@@ -1,12 +1,14 @@
 (ns core2.types
-  (:require [core2.util :as util]
-            [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [core2.util :as util])
   (:import core2.vector.IVectorWriter
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
-           [java.time Duration Instant]
+           [java.time Duration Instant ZonedDateTime ZoneId]
            [java.util Date List Map]
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
+           java.util.concurrent.ConcurrentHashMap
+           java.util.function.Function
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
@@ -81,6 +83,11 @@
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TimeStampMicroTZVector (.getVector writer) (.getPosition writer)
               (util/instant->micros v)))
+
+  ZonedDateTime
+  (value->arrow-type [v] (ArrowType$Timestamp. TimeUnit/MICROSECOND (str (.getZone v))))
+  (write-value! [v ^IVectorWriter writer]
+    (write-value! (.toInstant v) writer))
 
   Duration ; HACK assumes micros for now
   (value->arrow-type [_] duration-micro-type)
@@ -173,15 +180,18 @@
   VarCharVector
   (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8)))
 
-(extend-protocol ArrowReadable
-  TimeStampMilliVector
-  (get-object [this idx] (Date. (.get this ^int idx)))
+(let [zones (ConcurrentHashMap.)]
+  (defn- zone-id ^java.time.ZoneId [^ValueVector v]
+    (.computeIfAbsent zones (.getTimezone ^ArrowType$Timestamp (.getType (.getField v)))
+                      (reify Function
+                        (apply [_ zone-str]
+                          (ZoneId/of zone-str))))))
 
+(extend-protocol ArrowReadable
   TimeStampMicroTZVector
   (get-object [this idx]
-    (if (= "UTC" (.getTimezone ^ArrowType$Timestamp (.getType (.getField this))))
-      (util/micros->instant (.get this ^int idx))
-      (throw (UnsupportedOperationException.)))))
+    (-> ^Instant (util/micros->instant (.get this ^int idx))
+        (.atZone (zone-id this)))))
 
 (extend-protocol ArrowReadable
   ListVector

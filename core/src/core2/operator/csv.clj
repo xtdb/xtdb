@@ -61,7 +61,7 @@
    :varbinary #(.decode b64-decoder ^String %)
    :varchar identity
    :bit #(or (= "1" %) (= "true" %))
-   :timestamp edn/instant-reader
+   :timestamp inst/read-instant-date
    :duration edn/duration-reader})
 
 (def ->arrow-type

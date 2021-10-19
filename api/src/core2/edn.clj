@@ -1,19 +1,10 @@
 (ns core2.edn
-  (:require [clojure.instant :as inst])
   (:import java.io.Writer
-           [java.time Duration Instant OffsetDateTime ZoneOffset]))
+           [java.time Duration Instant ZonedDateTime]))
 
 (defn duration-reader [s] (Duration/parse s))
-
-(def ^:private ->odt
-  (inst/validated
-   (fn [year month day hour min sec nano offset-sign offset-hrs offset-mins]
-     (OffsetDateTime/of year month day hour min sec nano
-                        (ZoneOffset/ofHoursMinutes (* offset-hrs offset-sign) offset-mins)))))
-
-(defn instant-reader [s]
-  (-> ^OffsetDateTime (inst/parse-timestamp ->odt s)
-      (.toInstant)))
+(defn instant-reader [s] (Instant/parse s))
+(defn zdt-reader [s] (ZonedDateTime/parse s))
 
 (when-not (System/getenv "CORE2_DISABLE_EDN_PRINT_METHODS")
   (defmethod print-dup Duration [^Duration d, ^Writer w]
@@ -26,4 +17,10 @@
     (.write w (format "#c2/instant \"%s\"" i)))
 
   (defmethod print-method Instant [i w]
-    (print-dup i w)))
+    (print-dup i w))
+
+  (defmethod print-dup ZonedDateTime [^ZonedDateTime zdt, ^Writer w]
+    (.write w (format "#c2/zdt \"%s\"" zdt)))
+
+  (defmethod print-method ZonedDateTime [zdt w]
+    (print-dup zdt w)))

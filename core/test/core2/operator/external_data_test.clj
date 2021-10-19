@@ -13,11 +13,11 @@
 (t/use-fixtures :once tu/with-allocator)
 
 (def example-data
-  [[{:id "foo1", :a-long 10, :a-double 54.2, :an-inst #c2/instant "2021"}
-    {:id "foo2", :a-long 82, :a-double 1052.25, :an-inst #c2/instant "2021-01-04"}
-    {:id "foo3", :a-long -15, :a-double -1534.23, :an-inst #c2/instant "2021-01-04T12:13"}]
-   [{:id "foo4", :a-long 0, :a-double 0.0, :an-inst #c2/instant "2021-05-21T17:30"}
-    {:id "foo5", :a-long 53, :a-double 10.0, :an-inst #c2/instant "2022"}]])
+  [[{:id "foo1", :a-long 10, :a-double 54.2, :an-inst (util/->zdt #inst "2021")}
+    {:id "foo2", :a-long 82, :a-double 1052.25, :an-inst (util/->zdt #inst "2021-01-04")}
+    {:id "foo3", :a-long -15, :a-double -1534.23, :an-inst (util/->zdt #inst "2021-01-04T12:13")}]
+   [{:id "foo4", :a-long 0, :a-double 0.0, :an-inst (util/->zdt #inst "2021-05-21T17:30")}
+    {:id "foo5", :a-long 53, :a-double 10.0, :an-inst (util/->zdt #inst "2022")}]])
 
 (t/deftest test-csv-cursor
   (with-open [cursor (csv/->csv-cursor tu/*allocator*
