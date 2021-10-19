@@ -3,8 +3,7 @@
             core2.indexer
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import core2.api.TransactionInstant
-           core2.indexer.TransactionIndexer
+  (:import core2.indexer.TransactionIndexer
            [core2.log Log LogSubscriber]
            java.lang.AutoCloseable))
 
@@ -17,7 +16,7 @@
 (defmethod ig/init-key :core2/ingester [_ {:keys [^Log log ^TransactionIndexer indexer]}]
   (let [!cancel-hook (promise)]
     (.subscribe log
-                (some-> ^TransactionInstant (.latestCompletedTx indexer) (.tx-id))
+                (:tx-id (.latestCompletedTx indexer))
                 (reify LogSubscriber
                   (onSubscribe [_ cancel-hook]
                     (deliver !cancel-hook cancel-hook))

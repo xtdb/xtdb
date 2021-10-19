@@ -88,7 +88,7 @@
                                                                     (< ^long after-tx-id ^long latest-submitted-tx-id)))
                                                          ;; catching up
                                                          (->> (.readRecords log after-tx-id 100)
-                                                              (take-while #(<= (.tx-id ^TransactionInstant (.tx ^LogRecord %))
+                                                              (take-while #(<= ^long (.tx-id ^TransactionInstant (.tx ^LogRecord %))
                                                                                ^long latest-submitted-tx-id)))
 
                                                          ;; running live

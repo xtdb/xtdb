@@ -192,12 +192,12 @@
               "typeIds" : [0]
             },
             "children" : [{
-              "name" : "timestampmilli",
+              "name" : "timestampmicrotz-utc",
               "nullable" : false,
               "type" : {
                 "name" : "timestamp",
-                "unit" : "MILLISECOND",
-                "timezone" : null
+                "unit" : "MICROSECOND",
+                "timezone" : "UTC"
               },
               "children" : [ ]
             }]
@@ -308,8 +308,8 @@
           "nullable" : true,
           "type" : {
             "name" : "timestamp",
-            "unit" : "MILLISECOND",
-            "timezone" : null
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
           },
           "children" : [ ]
         },{
@@ -317,8 +317,8 @@
           "nullable" : true,
           "type" : {
             "name" : "timestamp",
-            "unit" : "MILLISECOND",
-            "timezone" : null
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
           },
           "children" : [ ]
         }]
@@ -342,8 +342,8 @@
           "nullable" : true,
           "type" : {
             "name" : "timestamp",
-            "unit" : "MILLISECOND",
-            "timezone" : null
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
           },
           "children" : [ ]
         },{
@@ -351,8 +351,8 @@
           "nullable" : true,
           "type" : {
             "name" : "timestamp",
-            "unit" : "MILLISECOND",
-            "timezone" : null
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
           },
           "children" : [ ]
         }]
@@ -513,10 +513,10 @@
             "TYPE_ID" : [-1,0],
             "OFFSET" : [0,0],
             "children" : [{
-              "name" : "timestampmilli",
+              "name" : "timestampmicrotz-utc",
               "count" : 1,
               "VALIDITY" : [1],
-              "DATA" : [1479211200000]
+              "DATA" : [1479211200000000]
             }]
           },{
             "name" : "battery-level",

@@ -13,9 +13,8 @@
            core2.tx_producer.ITxProducer
            [java.io Closeable Writer]
            java.lang.AutoCloseable
-           java.time.Duration
+           [java.time Duration Instant]
            [java.util.concurrent CompletableFuture TimeUnit]
-           java.util.Date
            [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -33,7 +32,7 @@
   api/PClient
   (-open-query-async [_ query params]
     (let [{:keys [basis ^Duration basis-timeout]} query
-          {:keys [default-valid-time tx], :or {default-valid-time (Date.)}} basis]
+          {:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
       (-> (snap/snapshot-async snapshot-factory tx)
           (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
           (util/then-apply

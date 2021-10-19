@@ -35,7 +35,7 @@
         objects-dir (.resolve node-dir "objects")]
     (with-tpch-data {:node-dir node-dir
                      :scale-factor scale-factor
-                     :clock (Clock/fixed (.toInstant #inst "2021-04-01") (ZoneId/of "UTC"))}
+                     :clock (Clock/fixed (util/->instant #inst "2021-04-01") (ZoneId/of "UTC"))}
       (fn []
         (t/is (= expected-objects
                  (count (iterator-seq (.iterator (Files/list objects-dir))))))

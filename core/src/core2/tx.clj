@@ -8,7 +8,7 @@
            java.util.concurrent.atomic.AtomicInteger
            java.util.function.IntUnaryOperator))
 
-(defrecord Watermark [^long chunk-idx ^long row-count ^SortedMap column->root ^TransactionInstant tx-instant
+(defrecord Watermark [^long chunk-idx ^long row-count ^SortedMap column->root ^TransactionInstant tx-key
                       ^Object temporal-watermark ^AtomicInteger ref-count ^int max-rows-per-block ^Map thread->count]
   Closeable
   (close [_]

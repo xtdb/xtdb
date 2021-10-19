@@ -7,22 +7,20 @@
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
-           core2.DenseUnionUtil
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.temporal.kd_tree IKdTreePointAccess MergedKdTree]
            java.io.Closeable
            java.nio.ByteBuffer
-           [java.util Arrays Collections Comparator Date HashMap Map TreeMap]
+           java.time.Instant
+           [java.util Arrays Collections Comparator HashMap Map TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap Executors ExecutorService]
            java.util.concurrent.atomic.AtomicLong
            [java.util.function Consumer Function LongConsumer LongFunction LongPredicate Predicate ToLongFunction]
            java.util.stream.LongStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector TimeStampMilliVector TimeStampVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo ArrowType$Union Schema]
-           org.apache.arrow.vector.types.UnionMode
+           [org.apache.arrow.vector BigIntVector TimeStampMicroTZVector TimeStampVector VectorSchemaRoot]
+           org.apache.arrow.vector.types.pojo.Schema
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
 ;; Temporal proof-of-concept plan:
@@ -82,7 +80,11 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^java.util.Date end-of-time #inst "9999-12-31T23:59:59.999Z")
+(def ^java.time.Instant end-of-time
+  (Instant/parse "9999-12-31T23:59:59.999999Z"))
+
+(def ^{:tag 'long} end-of-time-μs
+  (util/instant->micros end-of-time))
 
 (def ^:const ^int k 6)
 
@@ -116,7 +118,7 @@
 (definterface ITemporalManager
   (^Object getTemporalWatermark [])
   (^void registerNewChunk [^long chunk-idx])
-  (^core2.temporal.ITemporalTxIndexer startTx [^core2.api.TransactionInstant tx-instant])
+  (^core2.temporal.ITemporalTxIndexer startTx [^core2.api.TransactionInstant tx-key])
   (^core2.temporal.TemporalRoots createTemporalRoots [^core2.tx.Watermark watermark
                                                       ^java.util.List columns
                                                       ^longs temporal-min-range
@@ -142,7 +144,7 @@
 
 (def ->temporal-field
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
-         [col-name (t/->field col-name t/timestamp-milli-type false)])
+         [col-name (t/->field col-name t/timestamp-micro-tz-type false)])
        (into {})))
 
 (defn temporal-column? [col-name]
@@ -194,22 +196,20 @@
   (let [new-id? (not (.isKnownId id-manager (.id coordinates)))
         row-id (.rowId coordinates)
         id (.getOrCreateInternalId id-manager (.id coordinates) row-id)
-        tx-time-start-ms (.txTimeStart coordinates)
-        tx-time-end-ms (.txTimeEnd coordinates)
-        valid-time-start-ms (.validTimeStart coordinates)
-        valid-time-end-ms (.validTimeEnd coordinates)
-
-        end-of-time-ms (.getTime end-of-time)
+        tx-time-start-μs (.txTimeStart coordinates)
+        tx-time-end-μs (.txTimeEnd coordinates)
+        valid-time-start-μs (.validTimeStart coordinates)
+        valid-time-end-μs (.validTimeEnd coordinates)
 
         min-range (doto (->min-range)
                     (aset id-idx id)
-                    (aset valid-time-end-idx (inc valid-time-start-ms))
-                    (aset tx-time-end-idx tx-time-start-ms))
+                    (aset valid-time-end-idx (inc valid-time-start-μs))
+                    (aset tx-time-end-idx tx-time-start-μs))
 
         max-range (doto (->max-range)
                     (aset id-idx id)
-                    (aset valid-time-start-idx (dec valid-time-end-ms))
-                    (aset tx-time-end-idx tx-time-end-ms))
+                    (aset valid-time-start-idx (dec valid-time-end-μs))
+                    (aset tx-time-end-idx tx-time-end-μs))
 
         ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
 
@@ -233,23 +233,23 @@
                                      (doto (long-array k)
                                        (aset id-idx id)
                                        (aset row-id-idx row-id)
-                                       (aset valid-time-start-idx valid-time-start-ms)
-                                       (aset valid-time-end-idx valid-time-end-ms)
-                                       (aset tx-time-start-idx tx-time-start-ms)
-                                       (aset tx-time-end-idx end-of-time-ms))))]
+                                       (aset valid-time-start-idx valid-time-start-μs)
+                                       (aset valid-time-end-idx valid-time-end-μs)
+                                       (aset tx-time-start-idx tx-time-start-μs)
+                                       (aset tx-time-end-idx end-of-time-μs))))]
     (reduce
      (fn [kd-tree ^longs coord]
        (cond-> (kd/kd-tree-insert kd-tree allocator (doto (->copy-range coord)
-                                                      (aset tx-time-end-idx tx-time-start-ms)))
-         (< (aget coord valid-time-start-idx) valid-time-start-ms)
+                                                      (aset tx-time-end-idx tx-time-start-μs)))
+         (< (aget coord valid-time-start-idx) valid-time-start-μs)
          (kd/kd-tree-insert allocator (doto (->copy-range coord)
-                                        (aset tx-time-start-idx tx-time-start-ms)
-                                        (aset valid-time-end-idx valid-time-start-ms)))
+                                        (aset tx-time-start-idx tx-time-start-μs)
+                                        (aset valid-time-end-idx valid-time-start-μs)))
 
-         (> (aget coord valid-time-end-idx) valid-time-end-ms)
+         (> (aget coord valid-time-end-idx) valid-time-end-μs)
          (kd/kd-tree-insert allocator (doto (->copy-range coord)
-                                        (aset tx-time-start-idx tx-time-start-ms)
-                                        (aset valid-time-start-idx valid-time-end-ms)))))
+                                        (aset tx-time-start-idx tx-time-start-μs)
+                                        (aset valid-time-start-idx valid-time-end-μs)))))
      kd-tree
      overlap)))
 
@@ -279,20 +279,19 @@
       (throw (UnsupportedOperationException.)))
     (kd-tree-range-search [_ min-range max-range]
       (let [min-range (kd/->longs min-range)
-            max-range (kd/->longs max-range)
-            end-of-time-ms (.getTime end-of-time)]
+            max-range (kd/->longs max-range)]
         (if (and (= (aget min-range tx-time-end-idx)
                     (aget max-range tx-time-end-idx)
-                    end-of-time-ms)
+                    end-of-time-μs)
                  (= (aget min-range id-idx)
                     (aget max-range id-idx)))
           (let [id (aget min-range id-idx)
                 new-min-range (doto (->min-range)
                                 (aset id-idx id)
-                                (aset tx-time-end-idx end-of-time-ms))
+                                (aset tx-time-end-idx ^long end-of-time-μs))
                 new-max-range (doto (->max-range)
                                 (aset id-idx id)
-                                (aset tx-time-end-idx end-of-time-ms))
+                                (aset tx-time-end-idx ^long end-of-time-μs))
                 ^IKdTreePointAccess access (kd/kd-tree-point-access kd-tree)
                 axis-mask (-> (kd/range-bitmask min-range max-range)
                               (bit-and-not (bit-or (bit-shift-left 1 id-idx)
@@ -459,7 +458,7 @@
             (util/delete-file path)))))
     (.awaitSnapshotBuild this)
     (when kd-tree
-      (with-open [^Closeable old-kd-tree kd-tree]
+      (with-open [^Closeable _old-kd-tree kd-tree]
         (let [snapshot-idx (.latestTemporalSnapshotIndex this chunk-idx)
               fut (.submit snapshot-pool ^Runnable #(.buildTemporalSnapshot this chunk-idx snapshot-idx))]
           (set! (.snapshot-future this) fut)
@@ -467,9 +466,8 @@
             @fut)
           (.reloadTemporalIndex this chunk-idx snapshot-idx)))))
 
-  (startTx [this tx-instant]
-    (let [tx-time-ms (.getTime ^Date (.tx-time tx-instant))
-          end-of-time-ms (.getTime end-of-time)
+  (startTx [this tx-key]
+    (let [tx-time-μs (util/instant->micros (.tx-time tx-key))
           row-id->operations (TreeMap.)
           evicted-row-ids (Roaring64Bitmap.)]
       (letfn [(->temporal-coordinates [row-id eid
@@ -477,14 +475,14 @@
                                        ^TimeStampVector vt-end-vec
                                        idx tombstone?]
                 (TemporalCoordinates. row-id eid
-                                      tx-time-ms
-                                      end-of-time-ms
+                                      tx-time-μs
+                                      end-of-time-μs
                                       (if-not (.isNull vt-start-vec idx)
                                         (.get vt-start-vec idx)
-                                        tx-time-ms)
+                                        tx-time-μs)
                                       (if-not (.isNull vt-end-vec idx)
                                         (.get vt-end-vec idx)
-                                        end-of-time-ms)
+                                        end-of-time-μs)
                                       tombstone?))]
         (reify ITemporalTxIndexer
           (indexPut [_ eid row-id vt-start-vec vt-end-vec idx]
@@ -546,7 +544,7 @@
             (let [col-idx (->temporal-column-idx col-name)
                   out-root (VectorSchemaRoot/create (->temporal-root-schema col-name) allocator)
                   ^BigIntVector row-id-vec (.getVector out-root 0)
-                  ^TimeStampMilliVector temporal-vec (.getVector out-root 1)]
+                  ^TimeStampMicroTZVector temporal-vec (.getVector out-root 1)]
               (util/set-vector-schema-root-row-count out-root value-count)
               (dotimes [n value-count]
                 (let [^longs coordinate (aget coordinates n)

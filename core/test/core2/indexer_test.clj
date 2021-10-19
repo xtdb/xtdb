@@ -70,14 +70,14 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-instant (c2/->TransactionInstant 6341 #inst "2020-01-02")
+        last-tx-key (c2/map->TransactionInstant {:tx-id 6413, :tx-time (util/->instant #inst "2020-01-02")})
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir
-                                       :clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])})]
+                                       :clock (tu/->mock-clock)})]
       (let [system @(:!system node)
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (::os/file-system-object-store system)
@@ -87,12 +87,12 @@
 
         (t/is (nil? (idx/latest-tx {:object-store os, :buffer-pool bp})))
 
-        (t/is (= last-tx-instant
+        (t/is (= last-tx-key
                  @(last (for [tx-ops txs]
                           (c2/submit-tx node tx-ops)))))
 
-        (t/is (= last-tx-instant
-                 (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 2))))
+        (t/is (= last-tx-key
+                 (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
 
         (t/testing "watermark"
           (with-open [watermark (.getWatermark idx)]
@@ -123,7 +123,7 @@
           (t/is (zero? (.row-count watermark)))
           (t/is (empty? (.column->root watermark))))
 
-        (t/is (= {:latest-tx last-tx-instant
+        (t/is (= {:latest-tx last-tx-key
                   :latest-row-id (dec total-number-of-ops)}
                  (idx/latest-tx {:object-store os, :buffer-pool bp})))
 
@@ -190,7 +190,7 @@
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
-        mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02" #inst "2020-01-03"])
+        mock-clock (tu/->mock-clock)
         tx-ops [[:put {:_id "foo"
                        :list [12.0 "foo"]}]
                 [:put {:_id 24.0}]
@@ -229,7 +229,7 @@
 
 (t/deftest writes-log-file
   (let [node-dir (util/->path "target/writes-log-file")
-        mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02" #inst "2020-01-03"])]
+        mock-clock (tu/->mock-clock)]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
@@ -251,26 +251,26 @@
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (c2/->TransactionInstant 6341 #inst "2020-01-02")]
+        mock-clock (tu/->mock-clock)
+        last-tx-key (c2/map->TransactionInstant {:tx-id 6413, :tx-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
       (let [object-dir (.resolve node-dir "objects")]
 
-        (t/is (= last-tx-instant
+        (t/is (= last-tx-key
                  (last (for [tx-ops txs]
                          @(c2/submit-tx node tx-ops)))))
 
-        (t/is (= last-tx-instant
-                 (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 2))))
-        (t/is (= last-tx-instant (tu/latest-completed-tx node)))
+        (t/is (= last-tx-key
+                 (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
+        (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
         (with-open [node (tu/->local-node {:node-dir node-dir})]
-          (t/is (= last-tx-instant
-                   (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 2))))
+          (t/is (= last-tx-key
+                   (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
 
-          (t/is (= last-tx-instant (tu/latest-completed-tx node))))
+          (t/is (= last-tx-key (tu/latest-completed-tx node))))
 
         (t/is (zero? (.count (Files/list object-dir))))))))
 
@@ -293,17 +293,17 @@
 
         (t/is (nil? (tu/latest-completed-tx node)))
 
-        (let [last-tx-instant @(reduce
-                                (fn [_acc tx-ops]
-                                  (c2/submit-tx node tx-ops))
-                                nil
-                                (partition-all 100 tx-ops))]
+        (let [last-tx-key @(reduce
+                            (fn [_acc tx-ops]
+                              (c2/submit-tx node tx-ops))
+                            nil
+                            (partition-all 100 tx-ops))]
 
-          (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 5))))
-          (t/is (= last-tx-instant (tu/latest-completed-tx node)))
+          (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 5))))
+          (t/is (= last-tx-key (tu/latest-completed-tx node)))
           (tu/finish-chunk node)
 
-          (t/is (= {:latest-tx last-tx-instant
+          (t/is (= {:latest-tx last-tx-key
                     :latest-row-id (dec (count tx-ops))}
                    (idx/latest-tx {:object-store os, :buffer-pool bp})))
 
@@ -372,16 +372,16 @@
 
         (t/is (= 11000 (count tx-ops)))
 
-        (let [last-tx-instant @(reduce
-                                (fn [_ tx-ops]
-                                  (c2/submit-tx submit-node tx-ops))
-                                nil
-                                (partition-all 100 tx-ops))]
+        (let [last-tx-key @(reduce
+                            (fn [_ tx-ops]
+                              (c2/submit-tx submit-node tx-ops))
+                            nil
+                            (partition-all 100 tx-ops))]
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [os ^ObjectStore (::os/file-system-object-store @(:!system node))]]
-            (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 20))))
-            (t/is (= last-tx-instant (tu/latest-completed-tx node)))
+            (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 20))))
+            (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
             (Thread/sleep 1000) ;; TODO for now
             (tu/await-temporal-snapshot-build node)
@@ -412,26 +412,26 @@
         (t/is (= 5500 (count second-half-tx-ops)))
 
         (let [^TransactionInstant
-              first-half-tx-instant @(reduce
-                                      (fn [_ tx-ops]
-                                        (c2/submit-tx submit-node tx-ops))
-                                      nil
-                                      (partition-all 100 first-half-tx-ops))]
+              first-half-tx-key @(reduce
+                                  (fn [_ tx-ops]
+                                    (c2/submit-tx submit-node tx-ops))
+                                  nil
+                                  (partition-all 100 first-half-tx-ops))]
 
           (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [system @(:!system node)
                   ^ObjectStore os (::os/file-system-object-store system)
                   ^BufferPool bp (::bp/buffer-pool system)
                   ^TemporalManager tm (::temporal/temporal-manager system)]
-              (t/is (= first-half-tx-instant
-                       (-> first-half-tx-instant
+              (t/is (= first-half-tx-key
+                       (-> first-half-tx-key
                            (tu/then-await-tx node (Duration/ofSeconds 5)))))
-              (t/is (= first-half-tx-instant (tu/latest-completed-tx node)))
+              (t/is (= first-half-tx-key (tu/latest-completed-tx node)))
 
               (let [{:keys [^TransactionInstant latest-tx, latest-row-id]}
                     (idx/latest-tx {:object-store os, :buffer-pool bp})]
 
-                (t/is (< (.tx-id latest-tx) (.tx-id first-half-tx-instant)))
+                (t/is (< (:tx-id latest-tx) (:tx-id first-half-tx-key)))
                 (t/is (< latest-row-id (count first-half-tx-ops)))
 
                 (let [objs (.listObjects os)]
@@ -442,31 +442,31 @@
                 (t/is (= 2000 (count (.id->internal-id tm)))))
 
               (let [^TransactionInstant
-                    second-half-tx-instant @(reduce
-                                             (fn [_ tx-ops]
-                                               (c2/submit-tx submit-node tx-ops))
-                                             nil
-                                             (partition-all 100 second-half-tx-ops))]
+                    second-half-tx-key @(reduce
+                                         (fn [_ tx-ops]
+                                           (c2/submit-tx submit-node tx-ops))
+                                         nil
+                                         (partition-all 100 second-half-tx-ops))]
 
-                (t/is (<= (.tx-id first-half-tx-instant)
-                          (.tx-id (tu/latest-completed-tx node))
-                          (.tx-id second-half-tx-instant)))
+                (t/is (<= (:tx-id first-half-tx-key)
+                          (:tx-id (tu/latest-completed-tx node))
+                          (:tx-id second-half-tx-key)))
 
                 (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "buffers-2"))]
                   (doseq [^Node node [new-node node]
                           :let [^TemporalManager tm (::temporal/temporal-manager @(:!system node))]]
 
-                    (t/is (<= (.tx-id first-half-tx-instant)
-                              (.tx-id (-> first-half-tx-instant
-                                          (tu/then-await-tx node (Duration/ofSeconds 10))))
-                              (.tx-id second-half-tx-instant)))
+                    (t/is (<= (:tx-id first-half-tx-key)
+                              (:tx-id (-> first-half-tx-key
+                                         (tu/then-await-tx node (Duration/ofSeconds 10))))
+                              (:tx-id second-half-tx-key)))
 
                     (t/is (>= (count (.id->internal-id tm)) 2000)))
 
                   (doseq [^Node node [new-node node]]
-                    (t/is (= second-half-tx-instant (-> second-half-tx-instant
-                                                        (tu/then-await-tx node (Duration/ofSeconds 15)))))
-                    (t/is (= second-half-tx-instant (tu/latest-completed-tx node))))
+                    (t/is (= second-half-tx-key (-> second-half-tx-key
+                                                    (tu/then-await-tx node (Duration/ofSeconds 15)))))
+                    (t/is (= second-half-tx-key (tu/latest-completed-tx node))))
 
                   (Thread/sleep 1000) ;; TODO for now
                   (tu/await-temporal-snapshot-build node)

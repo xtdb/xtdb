@@ -1,10 +1,10 @@
 (ns core2.log.local-directory-log
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [core2.api :as c2]
             [core2.log :as c2.log]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.api :as c2])
   (:import clojure.lang.MapEntry
            [core2.log Log LogRecord]
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
@@ -12,7 +12,7 @@
            [java.nio.channels Channels ClosedByInterruptException FileChannel]
            [java.nio.file Path StandardOpenOption]
            [java.time Clock Duration]
-           [java.util ArrayList Date]
+           java.util.ArrayList
            [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future]))
 
 (def ^:private ^{:tag 'byte} record-separator 0x1E)
@@ -45,13 +45,13 @@
                               (when-not (= record-separator (.read log-in))
                                 (throw (IllegalStateException. "invalid record")))
                               (let [size (.readInt log-in)
-                                    time-ms (.readLong log-in)
+                                    tx-time (util/micros->instant (.readLong log-in))
                                     record (byte-array size)
                                     read-bytes (.read log-in record)
                                     offset-check (.readLong log-in)]
                                 (when (and (= size read-bytes)
                                            (= offset-check offset))
-                                  (c2.log/->LogRecord (c2/->TransactionInstant offset (Date. time-ms)) (ByteBuffer/wrap record))))
+                                  (c2.log/->LogRecord (c2/->TransactionInstant offset tx-time) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
@@ -103,18 +103,18 @@
                        offset previous-offset]
                   (when-not (= n (.size elements))
                     (let [[f ^ByteBuffer record] (.get elements n)
-                          time-ms (.millis clock)
+                          tx-time (.instant clock)
                           size (.remaining record)
                           written-record (.duplicate record)]
                       (.write log-out ^byte record-separator)
                       (.writeInt log-out size)
-                      (.writeLong log-out time-ms)
+                      (.writeLong log-out (util/instant->micros tx-time))
                       (while (>= (.remaining written-record) Long/BYTES)
                         (.writeLong log-out (.getLong written-record)))
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
                       (.writeLong log-out offset)
-                      (.set elements n (MapEntry/create f (c2.log/->LogRecord (c2/->TransactionInstant offset (Date. time-ms)) record)))
+                      (.set elements n (MapEntry/create f (c2.log/->LogRecord (c2/->TransactionInstant offset tx-time) record)))
                       (recur (inc n) (+ offset header-size size footer-size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)

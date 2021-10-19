@@ -58,35 +58,35 @@
 (t/deftest test-q3-shipping-priority
   (t/is (= [{:l_orderkey "orderkey_1637"
              :revenue 164224.9253
-             :o_orderdate #inst "1995-02-08"
+             :o_orderdate (util/->zdt #inst "1995-02-08")
              :o_shippriority 0}
             {:l_orderkey "orderkey_5191"
              :revenue 49378.309400000006
-             :o_orderdate #inst "1994-12-11"
+             :o_orderdate (util/->zdt #inst "1994-12-11")
              :o_shippriority 0}
             {:l_orderkey "orderkey_742"
              :revenue 43728.048
-             :o_orderdate #inst "1994-12-23"
+             :o_orderdate (util/->zdt #inst "1994-12-23")
              :o_shippriority 0}
             {:l_orderkey "orderkey_3492"
              :revenue 43716.072400000005,
-             :o_orderdate #inst "1994-11-24"
+             :o_orderdate (util/->zdt #inst "1994-11-24")
              :o_shippriority 0}
             {:l_orderkey "orderkey_2883"
              :revenue 36666.9612,
-             :o_orderdate #inst "1995-01-23"
+             :o_orderdate (util/->zdt #inst "1995-01-23")
              :o_shippriority 0}
             {:l_orderkey "orderkey_998"
              :revenue 11785.548600000002,
-             :o_orderdate #inst "1994-11-26"
+             :o_orderdate (util/->zdt #inst "1994-11-26")
              :o_shippriority 0}
             {:l_orderkey "orderkey_3430"
              :revenue 4726.6775,
-             :o_orderdate #inst "1994-12-12"
+             :o_orderdate (util/->zdt #inst "1994-12-12")
              :o_shippriority 0}
             {:l_orderkey "orderkey_4423"
              :revenue 3055.9365,
-             :o_orderdate #inst "1995-02-17"
+             :o_orderdate (util/->zdt #inst "1995-02-17")
              :o_shippriority 0}]
            (tpch-test/run-query tpch/tpch-q3-shipping-priority))))
 

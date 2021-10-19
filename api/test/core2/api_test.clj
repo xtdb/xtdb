@@ -4,9 +4,11 @@
             [core2.client :as client]
             [core2.log :as log]
             [core2.test-util :as tu :refer [*node*]]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.util :as util])
   (:import java.time.Duration
-           java.util.concurrent.ExecutionException))
+           java.util.concurrent.ExecutionException
+           core2.api.TransactionInstant))
 
 (defmethod ig/init-key ::clock [_ _]
   (tu/->mock-clock))
@@ -47,13 +49,13 @@
   (t/is (map? (c2/status *node*))))
 
 (t/deftest test-simple-query
-  (let [!tx (c2/submit-tx *node* [[:put {:_id "foo"}]])]
-    (t/is (= #core2/tx-instant {:tx-id 0, :tx-time #inst "2020-01-01"} @!tx))
+  (let [!tx (c2/submit-tx *node* [[:put {:_id "foo", :inst #inst "2021"}]])]
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
 
-    (t/is (= [{:id "foo"}]
+    (t/is (= [{:e "foo", :inst (util/->zdt #inst "2021")}]
              (->> (c2/plan-query *node*
-                                 (-> '{:find [?id]
-                                       :where [[?e :_id ?id]]}
+                                 (-> '{:find [?e ?inst]
+                                       :where [[?e :inst ?inst]]}
                                      (assoc :basis {:tx !tx}
                                             :basis-timeout (Duration/ofSeconds 1))))
                   (into []))))))
@@ -73,7 +75,7 @@
 
 (t/deftest round-trips-lists
   (let [!tx (c2/submit-tx *node* [[:put {:_id "foo", :list [1 2 ["foo" "bar"]]}]])]
-    (t/is (= #core2/tx-instant {:tx-id 0, :tx-time #inst "2020-01-01"} @!tx))
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
 
     (t/is (= [{:id "foo"
                :list [1 2 ["foo" "bar"]]}]
@@ -86,7 +88,7 @@
 (t/deftest round-trips-structs
   (let [!tx (c2/submit-tx *node* [[:put {:_id "foo", :struct {:a 1, :b {:c "bar"}}}]
                                   [:put {:_id "bar", :struct {:a true, :d 42.0}}]])]
-    (t/is (= #core2/tx-instant {:tx-id 0, :tx-time #inst "2020-01-01"} @!tx))
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
 
     (t/is (= #{{:id "foo", :struct {:a 1, :b {:c "bar"}}}
                {:id "bar", :struct {:a true, :d 42.0}}}

@@ -69,18 +69,17 @@
 
 (defn ^java.time.Clock ->mock-clock
   ([]
-   (->mock-clock (->> (iterate #(.plus ^Instant % (Period/ofDays 1))
-                               (.toInstant #inst "2020-01-01"))
-                      (map #(Date/from %)))))
+   (->mock-clock (iterate #(.plus ^Instant % (Period/ofDays 1))
+                          (.toInstant #inst "2020-01-01"))))
 
-  ([^Iterable dates]
-   (let [times-iterator (.iterator dates)]
+  ([^Iterable insts]
+   (let [times-iterator (.iterator insts)]
      (proxy [Clock] []
        (getZone []
          (ZoneId/of "UTC"))
        (instant []
          (if (.hasNext times-iterator)
-           (.toInstant ^Date (.next times-iterator))
+           ^Instant (.next times-iterator)
            (throw (IllegalStateException. "out of time"))))))))
 
 (defn await-temporal-snapshot-build [^Node node]

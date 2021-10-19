@@ -22,14 +22,14 @@
         (binding [*node* node]
           (t/is (nil? (tu/latest-completed-tx node)))
 
-          (let [last-tx-instant (tsd/submit-ts-devices node {:size :small})]
+          (let [last-tx-key (tsd/submit-ts-devices node {:size :small})]
 
-            (log/info "transactions submitted, last tx" (pr-str last-tx-instant))
-            (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofMinutes 15))))
-            (t/is (= last-tx-instant (tu/latest-completed-tx node)))
+            (log/info "transactions submitted, last tx" (pr-str last-tx-key))
+            (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofMinutes 15))))
+            (t/is (= last-tx-key (tu/latest-completed-tx node)))
             (tu/finish-chunk node)
 
-            (t/is (= [last-tx-instant (dec 1001000)]
+            (t/is (= [last-tx-key (dec 1001000)]
                      (idx/latest-tx {:object-store (tu/component ::os/file-system-object-store)
                                      :buffer-pool (tu/component ::bp/buffer-pool)}))))
 

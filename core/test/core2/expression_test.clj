@@ -7,7 +7,8 @@
             [core2.operator :as op]
             [core2.snapshot :as snap]
             [core2.test-util :as tu]
-            [core2.types :as ty])
+            [core2.types :as ty]
+            [core2.util :as util])
   (:import [org.apache.arrow.vector BigIntVector Float4Vector Float8Vector IntVector SmallIntVector]
            org.apache.arrow.vector.types.pojo.Schema))
 
@@ -80,27 +81,27 @@
         (t/is (= 500 (select-column '(>= e ?e) "e" {'?e "0500"})))))))
 
 (t/deftest can-extract-min-max-range-from-expression
-  (let [ms-2018 (.getTime #inst "2018")
-        ms-2019 (.getTime #inst "2019")]
+  (let [μs-2018 (util/instant->micros (util/->instant #inst "2018"))
+        μs-2019 (util/instant->micros (util/->instant #inst "2019"))]
     (letfn [(transpose [[mins maxs]]
               (->> (map vector mins maxs)
                    (zipmap [:tt-end :id :tt-start :row-id :vt-start :vt-end])
                    (into {} (remove (comp #{[Long/MIN_VALUE Long/MAX_VALUE]} val)))))]
-      (t/is (= {:vt-start [Long/MIN_VALUE ms-2019]
-                :vt-end [(inc ms-2019) Long/MAX_VALUE]}
+      (t/is (= {:vt-start [Long/MIN_VALUE μs-2019]
+                :vt-end [(inc μs-2019) Long/MAX_VALUE]}
                (transpose (expr.temp/->temporal-min-max-range
                            {"_valid-time-start" '(<= _vt-time-start #inst "2019")
                             "_valid-time-end" '(> _vt-time-end #inst "2019")}
                            {}))))
 
       (t/testing "symbol column name"
-        (t/is (= {:vt-start [ms-2019 ms-2019]}
+        (t/is (= {:vt-start [μs-2019 μs-2019]}
                  (transpose (expr.temp/->temporal-min-max-range
                              {'_valid-time-start '(= _vt-time-start #inst "2019")}
                              {})))))
 
       (t/testing "conjunction"
-        (t/is (= {:vt-start [Long/MIN_VALUE ms-2019]}
+        (t/is (= {:vt-start [Long/MIN_VALUE μs-2019]}
                  (transpose (expr.temp/->temporal-min-max-range
                              {"_valid-time-start" '(and (<= _vt-time-start #inst "2019")
                                                         (<= _vt-time-start #inst "2020"))}
@@ -114,38 +115,38 @@
                              {})))))
 
       (t/testing "parameters"
-        (t/is (= {:vt-start [ms-2018 Long/MAX_VALUE]
-                  :vt-end [Long/MIN_VALUE (dec ms-2018)]
-                  :tt-start [Long/MIN_VALUE ms-2019]
-                  :tt-end [(inc ms-2019) Long/MAX_VALUE]}
+        (t/is (= {:vt-start [μs-2018 Long/MAX_VALUE]
+                  :vt-end [Long/MIN_VALUE (dec μs-2018)]
+                  :tt-start [Long/MIN_VALUE μs-2019]
+                  :tt-end [(inc μs-2019) Long/MAX_VALUE]}
                  (transpose (expr.temp/->temporal-min-max-range
                              {"_tx-time-start" '(>= ?tt _tx-time-start)
                               "_tx-time-end" '(< ?tt _tx-time-end)
                               "_valid-time-start" '(<= ?vt _vt-time-start)
                               "_valid-time-end" '(> ?vt _vt-time-end)}
-                             '{?tt #inst "2019", ?vt #inst "2018"}))))))))
+                             {'?tt (util/->instant #inst "2019",) '?vt (util/->instant #inst "2018")}))))))))
 
 (t/deftest test-date-trunc
   (with-open [node (node/start-node {})]
-    (let [tx (c2/submit-tx node [[:put {:_id "foo", :date #inst "2021-01-21T12:34:56Z"}]])
+    (let [tx (c2/submit-tx node [[:put {:_id "foo", :date (util/->instant #inst "2021-01-21T12:34:56Z")}]])
           db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx)]
-      (t/is (= [{:trunc #inst "2021-01-21"}]
+      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21")}]
                (op/query-ra '[:project [{trunc (date-trunc "DAY" date)}]
                               [:scan [date]]]
                             db)))
 
-      (t/is (= [{:trunc #inst "2021-01-21T12:34"}]
+      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21T12:34")}]
                (op/query-ra '[:project [{trunc (date-trunc "MINUTE" date)}]
                               [:scan [date]]]
                             db)))
 
-      (t/is (= [{:trunc #inst "2021-01-21"}]
+      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21")}]
                (op/query-ra '[:select (> trunc #inst "2021")
                               [:project [{trunc (date-trunc "DAY" date)}]
                                [:scan [date]]]]
                             db)))
 
-      (t/is (= [{:trunc #inst "2021-01-21"}]
+      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21")}]
                (op/query-ra '[:project [{trunc (date-trunc "DAY" trunc)}]
                               [:project [{trunc (date-trunc "MINUTE" date)}]
                                [:scan [date]]]]
