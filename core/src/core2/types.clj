@@ -157,21 +157,42 @@
         ;; TODO
         :else (throw (UnsupportedOperationException.))))))
 
-(def arrow-type->vector-type
-  {ArrowType$Null/INSTANCE NullVector
-   ArrowType$Bool/INSTANCE BitVector
-   (.getType Types$MinorType/TINYINT) TinyIntVector
-   (.getType Types$MinorType/SMALLINT) SmallIntVector
-   (.getType Types$MinorType/INT) IntVector
-   bigint-type BigIntVector
-   (.getType Types$MinorType/FLOAT4) Float4Vector
-   float8-type Float8Vector
+(defprotocol VectorType
+  (^java.lang.Class arrow-type->vector-type [^ArrowType arrow-type]))
 
-   ArrowType$Binary/INSTANCE VarBinaryVector
-   ArrowType$Utf8/INSTANCE VarCharVector
+(extend-protocol VectorType
+  ArrowType$Null (arrow-type->vector-type [_] NullVector)
+  ArrowType$Bool (arrow-type->vector-type [_] BitVector)
 
-   timestamp-micro-tz-type TimeStampMicroTZVector
-   duration-micro-type DurationVector})
+  ArrowType$Int
+  (arrow-type->vector-type [arrow-type]
+    (let [^ArrowType$Int arrow-type arrow-type]
+      (if (.getIsSigned arrow-type)
+        (case (.getBitWidth arrow-type)
+          8 TinyIntVector
+          16 SmallIntVector
+          32 IntVector
+          64 BigIntVector)
+        (throw (UnsupportedOperationException.)))))
+
+  ArrowType$FloatingPoint
+  (arrow-type->vector-type [arrow-type]
+    (case (.name (.getPrecision ^ArrowType$FloatingPoint arrow-type))
+      "SINGLE" Float4Vector
+      "DOUBLE" Float8Vector))
+
+  ArrowType$Binary (arrow-type->vector-type [_] VarBinaryVector)
+  ArrowType$Utf8 (arrow-type->vector-type [_] VarCharVector)
+
+  ArrowType$Timestamp
+  (arrow-type->vector-type [arrow-type]
+    (let [^ArrowType$Timestamp arrow-type arrow-type]
+      (if (.getTimezone arrow-type)
+        (case (.name (.getUnit arrow-type))
+          "MICROSECOND" TimeStampMicroTZVector)
+        (throw (UnsupportedOperationException.)))))
+
+  ArrowType$Duration (arrow-type->vector-type [_] DurationVector))
 
 (defprotocol ArrowReadable
   (get-object [value-vector idx]))
