@@ -189,7 +189,10 @@
     (let [^ArrowType$Timestamp arrow-type arrow-type]
       (if (.getTimezone arrow-type)
         (case (.name (.getUnit arrow-type))
-          "MICROSECOND" TimeStampMicroTZVector)
+          "SECOND" TimeStampSecTZVector
+          "MILLISECOND" TimeStampMilliTZVector
+          "MICROSECOND" TimeStampMicroTZVector
+          "NANOSECOND" TimeStampNanoTZVector)
         (throw (UnsupportedOperationException.)))))
 
   ArrowType$Duration (arrow-type->vector-type [_] DurationVector))

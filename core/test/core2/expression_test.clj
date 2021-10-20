@@ -8,9 +8,12 @@
             [core2.snapshot :as snap]
             [core2.test-util :as tu]
             [core2.types :as ty]
-            [core2.util :as util])
-  (:import [org.apache.arrow.vector BigIntVector Float4Vector Float8Vector IntVector SmallIntVector]
-           org.apache.arrow.vector.types.pojo.Schema))
+            [core2.util :as util]
+            [core2.vector.indirect :as iv])
+  (:import [java.time Duration ZonedDateTime]
+           [org.apache.arrow.vector BigIntVector DurationVector Float4Vector Float8Vector IntVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TimeStampVector ValueVector]
+           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp Schema]
+           org.apache.arrow.vector.types.TimeUnit))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -152,26 +155,25 @@
                                [:scan [date]]]]
                             db))))))
 
-(defn- run-single-row-projection* [fields row form]
-  (with-open [rel (tu/->relation (Schema. fields) [row])]
-    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {})
-                                   tu/*allocator*
-                                   rel)]
-      (let [out-vec (.getVector out-ivec)]
-        {:res (ty/get-object out-vec 0)
-         :vec-type (class out-vec)}))))
+(defn- run-projection [rel form]
+  (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {})
+                                 tu/*allocator*
+                                 rel)]
+    {:res (tu/<-column out-ivec)
+     :vec-type (class (.getVector out-ivec))}))
 
 (defn- run-single-row-projection
   ([f x]
-   (run-single-row-projection* [(ty/->field "x" (ty/value->arrow-type x) false)]
-                               {:x x}
-                               (list f 'x)))
+   (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (ty/value->arrow-type x) false)]) [{:x x}])]
+     (-> (run-projection rel (list f 'x))
+         (update :res first))))
 
   ([f x y]
-   (run-single-row-projection* [(ty/->field "x" (ty/value->arrow-type x) false)
-                                (ty/->field "y" (ty/value->arrow-type y) false)]
-                               {:x x, :y y}
-                               (list f 'x 'y))))
+   (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (ty/value->arrow-type x) false)
+                                            (ty/->field "y" (ty/value->arrow-type y) false)])
+                                  [{:x x, :y y}])]
+     (-> (run-projection rel (list f 'x 'y))
+         (update :res first)))))
 
 (t/deftest test-mixing-numeric-types
   (t/is (= {:res 6, :vec-type IntVector}
@@ -224,3 +226,104 @@
   ;; the others are thrown by java.lang.Math/*Exact, which throw ArithmeticException
   (t/is (thrown? ArithmeticException
                  (run-single-row-projection '- (Short/MIN_VALUE)))))
+
+(t/deftest test-mixing-timestamp-types
+  (letfn [(->ts-vec [col-name time-unit, ^long value]
+            (doto ^TimeStampVector (.createVector (ty/->field col-name (ArrowType$Timestamp. time-unit "UTC") false) tu/*allocator*)
+              (.setValueCount 1)
+              (.set 0 value)))
+
+          (->dur-vec [col-name ^TimeUnit time-unit, ^long value]
+            (doto (DurationVector. (ty/->field col-name (ArrowType$Duration. time-unit) false) tu/*allocator*)
+              (.setValueCount 1)
+              (.set 0 value)))
+
+          (test-projection [f-sym ->x-vec ->y-vec]
+            (with-open [^ValueVector x-vec (->x-vec)
+                        ^ValueVector y-vec (->y-vec)]
+              (run-projection (iv/->indirect-rel [(iv/->direct-vec x-vec)
+                                                  (iv/->direct-vec y-vec)])
+                              (list f-sym 'x 'y))))]
+
+    (t/testing "ts/dur"
+      (t/is (= {:res [(util/->zdt #inst "2021-01-01T00:02:03Z")]
+                :vec-type TimeStampSecTZVector}
+               (test-projection '+
+                                #(->ts-vec "x" TimeUnit/SECOND (.getEpochSecond (util/->instant #inst "2021")))
+                                #(->dur-vec "y" TimeUnit/SECOND 123))))
+
+      (t/is (= {:res [(util/->zdt #inst "2021-01-01T00:00:00.123Z")]
+                :vec-type TimeStampMilliTZVector}
+               (test-projection '+
+                                #(->ts-vec "x" TimeUnit/SECOND (.getEpochSecond (util/->instant #inst "2021")))
+                                #(->dur-vec "y" TimeUnit/MILLISECOND 123))))
+
+      (t/is (= {:res [(ZonedDateTime/parse "1970-01-01T00:02:34.000001234Z[UTC]")]
+                :vec-type TimeStampNanoTZVector}
+               (test-projection '+
+                                #(->dur-vec "x" TimeUnit/SECOND 154)
+                                #(->ts-vec "y" TimeUnit/NANOSECOND 1234))))
+
+      (t/is (thrown? ArithmeticException
+                     (test-projection '+
+                                      #(->ts-vec "x" TimeUnit/MILLISECOND (- Long/MAX_VALUE 500))
+                                      #(->dur-vec "y" TimeUnit/SECOND 1))))
+
+      (t/is (= {:res [(util/->zdt #inst "2020-12-31T23:59:59.998Z")]
+                :vec-type TimeStampMicroTZVector}
+               (test-projection '-
+                                #(->ts-vec "x" TimeUnit/MICROSECOND (util/instant->micros (util/->instant #inst "2021")))
+                                #(->dur-vec "y" TimeUnit/MILLISECOND 2)))))
+
+    (t/is (t/is (= {:res [(Duration/parse "PT23H59M59.999S")]
+                    :vec-type DurationVector}
+                   (test-projection '-
+                                    #(->ts-vec "x" TimeUnit/MILLISECOND (.toEpochMilli (util/->instant #inst "2021-01-02")))
+                                    #(->ts-vec "y" TimeUnit/MILLISECOND (.toEpochMilli (util/->instant #inst "2021-01-01T00:00:00.001Z")))))))
+
+    (t/testing "durations"
+      (letfn [(->bigint-vec [^String col-name, ^long value]
+                (doto (BigIntVector. col-name tu/*allocator*)
+                  (.setValueCount 1)
+                  (.set 0 value)))
+
+              (->float8-vec [^String col-name, ^double value]
+                (doto (Float8Vector. col-name tu/*allocator*)
+                  (.setValueCount 1)
+                  (.set 0 value)))]
+
+        (t/is (= {:res [(Duration/parse "PT0.002001S")]
+                  :vec-type DurationVector}
+                 (test-projection '+
+                                  #(->dur-vec "x" TimeUnit/MICROSECOND 1)
+                                  #(->dur-vec "y" TimeUnit/MILLISECOND 2))))
+
+        (t/is (= {:res [(Duration/parse "PT-1.999S")]
+                  :vec-type DurationVector}
+                 (test-projection '-
+                                  #(->dur-vec "x" TimeUnit/MILLISECOND 1)
+                                  #(->dur-vec "y" TimeUnit/SECOND 2))))
+
+        (t/is (= {:res [(Duration/parse "PT0.002S")]
+                  :vec-type DurationVector}
+                 (test-projection '*
+                                  #(->dur-vec "x" TimeUnit/MILLISECOND 1)
+                                  #(->bigint-vec "y" 2))))
+
+        (t/is (= {:res [(Duration/parse "PT10S")]
+                  :vec-type DurationVector}
+                 (test-projection '*
+                                  #(->bigint-vec "x" 2)
+                                  #(->dur-vec "y" TimeUnit/SECOND 5))))
+
+        (t/is (= {:res [(Duration/parse "PT0.000012S")]
+                  :vec-type DurationVector}
+                 (test-projection '*
+                                  #(->float8-vec "x" 2.4)
+                                  #(->dur-vec "y" TimeUnit/MICROSECOND 5))))
+
+        (t/is (= {:res [(Duration/parse "PT3S")]
+                  :vec-type DurationVector}
+                 (test-projection '/
+                                  #(->dur-vec "x" TimeUnit/SECOND 10)
+                                  #(->bigint-vec "y" 3))))))))

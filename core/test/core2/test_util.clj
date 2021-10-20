@@ -129,7 +129,7 @@
 
 (defn <-column [^IIndirectVector col]
   (mapv (fn [idx]
-          (.getObject (.getVector col) (.getIndex col idx)))
+          (ty/get-object (.getVector col) (.getIndex col idx)))
         (range (.getValueCount col))))
 
 (defn <-cursor [^ICursor cursor]

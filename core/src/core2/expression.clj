@@ -15,7 +15,7 @@
            [java.time Duration Instant ZoneOffset]
            [java.time.temporal ChronoField ChronoUnit]
            [java.util Date LinkedHashMap]
-           org.apache.arrow.vector.BaseVariableWidthVector
+           [org.apache.arrow.vector BaseVariableWidthVector DurationVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]
            org.roaringbitmap.RoaringBitmap))
@@ -206,18 +206,25 @@
 (defmethod get-value-form ArrowType$FloatingPoint [_ vec-sym idx-sym] `(.get ~vec-sym ~idx-sym))
 (defmethod get-value-form ArrowType$Int [_ vec-sym idx-sym] `(.get ~vec-sym ~idx-sym))
 (defmethod get-value-form ArrowType$Timestamp [_ vec-sym idx-sym] `(.get ~vec-sym ~idx-sym))
-(defmethod get-value-form ArrowType$Duration [_ vec-sym idx-sym] `(.get ~vec-sym ~idx-sym))
+(defmethod get-value-form ArrowType$Duration [_ vec-sym idx-sym] `(DurationVector/get (.getDataBuffer ~vec-sym) ~idx-sym))
 (defmethod get-value-form ArrowType$Utf8 [_ vec-sym idx-sym] `(element->nio-buffer ~vec-sym ~idx-sym))
 (defmethod get-value-form ArrowType$Binary [_ vec-sym idx-sym] `(element->nio-buffer ~vec-sym ~idx-sym))
 (defmethod get-value-form :default [_ vec-sym idx-sym] `(normalize-union-value (.getObject ~vec-sym ~idx-sym)))
 
 (defn- arrow-type-literal-form [^ArrowType arrow-type]
-  (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
-    (case minor-type-name
-      "DURATION" (throw (UnsupportedOperationException.))
-      "TIMESTAMPMICROTZ" `(ArrowType$Timestamp. TimeUnit/MICROSECOND ~(.getTimezone ^ArrowType$Timestamp arrow-type))
-      ;; TODO there are other minor types that don't have a single corresponding ArrowType
-      `(.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name)))))
+  (letfn [(timestamp-type-literal [time-unit-literal]
+            `(ArrowType$Timestamp. ~time-unit-literal ~(.getTimezone ^ArrowType$Timestamp arrow-type)))]
+    (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
+      (case minor-type-name
+        "DURATION" `(ArrowType$Duration. ~(symbol (name `TimeUnit) (.name (.getUnit ^ArrowType$Duration arrow-type))))
+
+        "TIMESTAMPSECTZ" (timestamp-type-literal `TimeUnit/SECOND)
+        "TIMESTAMPMILLITZ" (timestamp-type-literal `TimeUnit/MILLISECOND)
+        "TIMESTAMPMICROTZ" (timestamp-type-literal `TimeUnit/MICROSECOND)
+        "TIMESTAMPNANOTZ" (timestamp-type-literal `TimeUnit/NANOSECOND)
+
+        ;; TODO there are other minor types that don't have a single corresponding ArrowType
+        `(.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name))))))
 
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->type]}]
   (let [arrow-type (or (get var->type variable)
