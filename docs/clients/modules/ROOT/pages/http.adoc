@@ -1,11 +1,9 @@
 = HTTP
 
 This document explains how to query XTDB over HTTP.
-To configure your HTTP module, see the
-xref:extensions::http.adoc[HTTP module documentation].
+To configure your HTTP module, see the xref:extensions::http.adoc[HTTP module documentation].
 
-There is also an link:https://docs.xtdb.com/clients/http/openapi[OpenAPI Reference]
-describing the HTTP endpoint.
+There is also an link:https://docs.xtdb.com/clients/http/openapi/{page-version}[OpenAPI Reference] describing the HTTP endpoint.
 
 [#start-remote-client]
 == Using a Remote API Client
