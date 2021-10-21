@@ -221,7 +221,7 @@ jobs:
           arguments: |
             --acl public-read
           from: xtdb-javadoc
-          to: 's3://xtdb-javadocs-2/clients/java/${DOCS_PREFIX}'
+          to: 's3://xtdb-website-javadocs/clients/java/${DOCS_PREFIX}'
       - node/install
       - run:
           command: |
@@ -235,7 +235,7 @@ jobs:
           arguments: |
             --acl public-read
           from: redoc
-          to: 's3://xtdb-openapi-2/clients/http/openapi/${DOCS_PREFIX}'
+          to: 's3://xtdb-website-openapi/clients/http/openapi/${DOCS_PREFIX}'
 
 
 workflows:
