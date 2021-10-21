@@ -10,7 +10,7 @@ site:
     matomoSiteId: "4"
     typesenseHost: xtagzc25w84ufq37p-1.a1.typesense.net
     typesenseApiKey: 0zVHpGQFDUhgP9hazp1laLklfy00AlGD
-    typesenseCollectionName: xtdb-site-2-s3
+    typesenseCollectionName: xtdb-website-ts-index
     hiddenComponent: main
 
 content:
