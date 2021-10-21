@@ -1,12 +1,4 @@
 = XTDB Docs
-:page-layout: homepage
-:page-nav: black-nav
-////
-TODO: Delete the above two frontmatter attributes when we
-      release v2.xtdb.com because they only apply to the
-      Antora-driven `website-old` to create a hole in the
-      docs for the index template to render with. -sd
-////
 
 == Docs
 
