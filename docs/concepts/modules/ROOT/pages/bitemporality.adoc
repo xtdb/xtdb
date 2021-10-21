@@ -1,7 +1,4 @@
 = Bitemporality
-:toc: macro
-
-toc::[]
 
 [#overview]
 == Overview
@@ -427,6 +424,7 @@ persistent and fully retroactive data structure".
 [#references]
 == References
 
+* xref:resources::bibliography.adoc[XTDB Bibliography]
 * https://juxt.pro/blog/posts/value-of-bitemporality.html[Value of Bitemporality]
 * https://en.wikipedia.org/wiki/Temporal_database[Temporal database]
 * https://martinfowler.com/eaaDev/timeNarrative.html[Temporal Patterns]
