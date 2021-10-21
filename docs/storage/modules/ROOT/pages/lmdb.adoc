@@ -1,5 +1,5 @@
 = LMDB
-:page-aliases: reference::lmdb.adoc
+:page-aliases: 1.20.0@reference::lmdb.adoc
 
 https://symas.com/lmdb/[LMDB] can be used as the data store for XTDB's query indices, but can also be used as a transaction log and/or document store in single node clusters.
 

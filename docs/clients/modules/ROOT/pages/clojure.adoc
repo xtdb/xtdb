@@ -1,5 +1,5 @@
 = Clojure
-:page-aliases: reference::clojure-api.adoc
+:page-aliases: 1.20.0@reference::clojure-api.adoc
 
 The `xtdb.api` namespace exposes a union of methods from `IXtdb` and `IXtdbDatasource`,
 with few lifecycle members added.
