@@ -1,3 +1,3 @@
 = Java
 
-See the https://docs.xtdb.com/clients/java/{xtdb_version}[JavaDoc].
+See the https://docs.xtdb.com/clients/java/javadoc/{xtdb_version}[JavaDoc].
