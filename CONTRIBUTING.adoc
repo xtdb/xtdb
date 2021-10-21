@@ -12,7 +12,10 @@ Our work-in-progress is shown on our https://github.com/xtdb/xtdb/projects/1[Git
 PRs with fixes and improvements to our documentation are also very welcome.
 
 A Contributor License Agreement (CLA) is necessary for us to ensure that we can support a healthy XTDB ecosystem over the indefinite future.
-Please complete the very short https://raw.githubusercontent.com/xtdb/xtdb/main/docs/open-crux-individual-contributor-license-agreement-cla.rtf[.rtf template] and email it to us, hello@xtdb.com, along with a reference to your current PR on GitHub.
+Please complete the very short
+https://raw.githubusercontent.com/xtdb/xtdb/main/docs/xtdb-individual-contributor-license-agreement.pdf[.pdf template]
+(https://raw.githubusercontent.com/xtdb/xtdb/main/docs/xtdb-individual-contributor-license-agreement.rtf[.rtf source])
+and email it to us, hello@xtdb.com, along with a reference to your current PR on GitHub.
 
 Particularly, *please do not open an issue to ask a question* - you'll get quicker support using our support channels below. Thanks!
 
