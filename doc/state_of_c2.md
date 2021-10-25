@@ -145,6 +145,12 @@ SQL's, this implies three-valued logic and a limited set clearly
 defined functions provided by the query engine, and not calling
 arbitrarily Clojure inside the query.
 
+Classic relies heavily on Nippy and the Clojure type-system, so there
+will be some differences here as well. The Arrow type system provides
+extension types so it's possible to add a known set, like the basic
+EDN types, but one cannot cleanly deal with arbitrarily Java objects
+in a useful way except having them flow through as bytes.
+
 ### Cardinality-many
 
 In classic semantics, this requires us to unwind all lists early on,
@@ -171,4 +177,7 @@ SQL uses three-valued logic, unlike Clojure where a nil is false.
 
 Because of the lower-level of the expression engine and it being tied
 to the Arrow type system, providing access to arbitrary Clojure
-functions within the query, while possible, isn't a good fit.
+functions within the query, while possible, isn't a good fit. It's
+possible to open this up with a generic and slower mapping fallback
+function, but for other reasons my preference is to not allow calling
+arbitrary code inside the engine.
