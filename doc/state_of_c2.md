@@ -80,7 +80,7 @@ See also: Core, SQL.
 ## SQL
 
 We aim to provide a SQL:2011 based dialect that works well with schema
-on demand and temporal, while also (for debate) also providing basic
+on demand and temporal, while also (for debate) providing basic
 graph/path queries as per SQL/PGQ.
 
 See also: Testing, Core: Expression compiler.
@@ -122,8 +122,8 @@ parts:
 - There's a lot of work in the other parts which needs to happen
   regardless and will really stretch the team.
 - The query engine won't work like classic in any case, and without a
-  lot of work necessarily perform well, so the it's never going to be
-  an easy win, if not done well, it may hurt us.
+  lot of work necessarily perform well, so it's never going to be an
+  easy win, if not done well, it may hurt us.
 - Will need to maintain and fix bugs. Need to ensure this happens with
   respect to the core and SQL side which requires understanding of the
   full system. The flip-side of this applies to the SQL-side as well,
