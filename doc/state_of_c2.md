@@ -97,6 +97,10 @@ See also: Testing, Core: Expression compiler.
 - Clean semantics to deal with schema on demand.
 - May need to extend temporal side slightly for easy-of-use.
 - Will SQL/PGQ be in scope?
+- Will need qualified columns and select star may need further work
+  due to how we shred documents. Currently there's no way of knowing
+  which columns exist for a specific row id, nor a way to expose the
+  row id out to the query engine as a virtual column.
 
 ## Datalog
 
@@ -181,3 +185,8 @@ functions within the query, while possible, isn't a good fit. It's
 possible to open this up with a generic and slower mapping fallback
 function, but for other reasons my preference is to not allow calling
 arbitrary code inside the engine.
+
+### Pull
+
+Same issue as select star in SQL, needs work or limitations
+imposed. See above.
