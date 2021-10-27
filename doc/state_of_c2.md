@@ -102,6 +102,18 @@ See also: Testing, Core: Expression compiler.
   which columns exist for a specific row id, nor a way to expose the
   row id out to the query engine as a virtual column.
 
+### Interface
+
+- Could use PostgreSQL wire protocol, this opens up for drivers and
+  tooling, but these may also make assumptions about the dialect
+  used. Arrow Flight SQL is another option (based on gRPC) but not
+  finalised or used.
+- Idea is to use SQL:2011 standard dialect, PostgreSQL dialect is
+  another option, but this comes with baggage.
+- Lots of tooling would require gradual schema.
+- Some basic information catalogue queries can be simulated to make
+  some tools, like JDBC drivers, work.
+
 ## Datalog
 
 Datalog support can be seen as a spectrum:
