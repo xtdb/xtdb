@@ -1,4 +1,5 @@
-<img alt="XTDB" role="img" aria-label="XTDB" src="./docs/reference/modules/ROOT/images/xtdb-logo-banner.png">
+<img alt="XTDB" role="img" aria-label="XTDB" src="https://xtdb.com/images/logo.svg" width="282" height="110">
+
 
 [XTDB](https://xtdb.com) is a general purpose database with graph-oriented bitemporal indexes.
 Datalog, SQL & EQL queries are supported, and Java, HTTP & Clojure APIs are
