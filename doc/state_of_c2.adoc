@@ -1,65 +1,65 @@
-# State of C2
+= State of C2
 
 Many of the points here are dealt with in more detail in various ADRs,
 but there's no consolidated place to see the big picture.
 
-## Core
+== Core
 
 This is parts shared between SQL and Datalog. A lot of "hidden" scope
 sits here.
 
-### Query engine
+=== Query engine
 
 The hope is to postpone most planner work until post v1.0, but that's
 highly dependent on how it behaves during testing and if we can get
 away with tuning the raw speed.
 
-#### Expression compiler
+==== Expression compiler
 
-- Full Arrow type system support.
-- Nested operators.
-- Intermediate results.
-- Three-valued logic.
-- Nulls.
+* Full Arrow type system support.
+* Nested operators.
+* Intermediate results.
+* Three-valued logic.
+* Nulls.
 
-#### Operators
+==== Operators
 
-- Align group-by, order-by and set operators with full Arrow.
-- Equi-joins over more than one column.
-- Path-expression operators for SQL/PGQ?
+* Align group-by, order-by and set operators with full Arrow.
+* Equi-joins over more than one column.
+* Path-expression operators for SQL/PGQ?
 
-#### Planner
+==== Planner
 
-- Can we really avoid cost-based planning?
-- Other query rewrite rules?
+* Can we really avoid cost-based planning?
+* Other query rewrite rules?
 
-#### Transaction processing
+==== Transaction processing
 
-- Need conditional transactions (match, constraints).
-- Boils down to some form of deterministic function processing during
+* Need conditional transactions (match, constraints).
+* Boils down to some form of deterministic function processing during
   transactions.
 
-### Storage vs compute
+=== Storage vs compute
 
-#### Temporal indexing
+==== Temporal indexing
 
-- Need to deal with same millisecond transactions.
-- Better snapshots.
-- Ingest efficiency.
-- Testing at scale.
-- Good enough for 1.0?
+* Need to deal with same millisecond transactions.
+* Better snapshots.
+* Ingest efficiency.
+* Testing at scale.
+* Good enough for 1.0?
 
-#### Eviction
+==== Eviction
 
-- Proposal exists, needs implementation and testing.
+* Proposal exists, needs implementation and testing.
 
-#### Efficiency
+==== Efficiency
 
-- Can we get away with no indexing?
-- Cache hierarchy, populating and managing.
-- Local tuning, fighting Clojure.
+* Can we get away with no indexing?
+* Cache hierarchy, populating and managing.
+* Local tuning, fighting Clojure.
 
-## Testing
+== Testing
 
 C2 is a new engine, and will require a lot of testing before we can
 comfortably try to sell it. Some of this can be done under
@@ -68,16 +68,16 @@ before that.
 
 See also: Core, SQL.
 
-### Functional
+=== Functional
 
-- Need more test suites, real deployments, use-cases.
+* Need more test suites, real deployments, use-cases.
 
-### Benchmarks
+=== Benchmarks
 
-- TPC-H, TPC-BiH (subset), WatDiv, Join-order-benchmark? More?
-- Ingest and transaction benchmarks.
+* TPC-H, TPC-BiH (subset), WatDiv, Join-order-benchmark? More?
+* Ingest and transaction benchmarks.
 
-## SQL
+== SQL
 
 We aim to provide a SQL:2011 based dialect that works well with schema
 on demand and temporal, while also (for debate) providing basic
@@ -85,41 +85,41 @@ graph/path queries as per SQL/PGQ.
 
 See also: Testing, Core: Expression compiler.
 
-### Generation of logical plan
+=== Generation of logical plan
 
-- Walk tree, generate working logical plan.
-- Rewrite logical plan to remove dependent joins (sub-query unnesting).
-- Can we get away with no other rewrite rules?
+* Walk tree, generate working logical plan.
+* Rewrite logical plan to remove dependent joins (sub-query unnesting).
+* Can we get away with no other rewrite rules?
 
-### Functions and semantics
+=== Functions and semantics
 
-- Need to implement all the SQL:2011 functions within scope.
-- Clean semantics to deal with schema on demand.
-- May need to extend temporal side slightly for easy-of-use.
-- Will SQL/PGQ be in scope?
-- Will need qualified columns and select star may need further work
+* Need to implement all the SQL:2011 functions within scope.
+* Clean semantics to deal with schema on demand.
+* May need to extend temporal side slightly for easy-of-use.
+* Will SQL/PGQ be in scope?
+* Will need qualified columns and select star may need further work
   due to how we shred documents. Currently there's no way of knowing
   which columns exist for a specific row id, nor a way to expose the
   row id out to the query engine as a virtual column.
 
-### Interface
+=== Interface
 
-- Could use PostgreSQL wire protocol, this opens up for drivers and
+* Could use PostgreSQL wire protocol, this opens up for drivers and
   tooling, but these may also make assumptions about the dialect
   used. Arrow Flight SQL is another option (based on gRPC) but not
   finalised or used.
-- Idea is to use SQL:2011 standard dialect, PostgreSQL dialect is
+* Idea is to use SQL:2011 standard dialect, PostgreSQL dialect is
   another option, but this comes with baggage.
-- Lots of tooling would require gradual schema.
-- Some basic information catalogue queries can be simulated to make
+* Lots of tooling would require gradual schema.
+* Some basic information catalogue queries can be simulated to make
   some tools, like JDBC drivers, work.
 
-## Datalog
+== Datalog
 
 Datalog support can be seen as a spectrum:
 
-- SQL semantics with Datalog syntax.
-- Classic semantics.
+* SQL semantics with Datalog syntax.
+* Classic semantics.
 
 Maybe obviously, the closer we move to classic semantics, the more
 work there will be, and the closer to stay to SQL semantics, the
@@ -129,18 +129,18 @@ The handicap here when it comes to build it, ignoring at the product
 and strategy level in this context, can be broken down into a few
 parts:
 
-- Need to take Datalog into account in the core, deal with trade-offs,
+* Need to take Datalog into account in the core, deal with trade-offs,
   which leads to a lack of focus.
-- Cannot ignore it fully even if the boundary is clear and the module
+* Cannot ignore it fully even if the boundary is clear and the module
   is delegated away, and be prepared to task-switch and analyse it.
-- Always the risk that the boundary will be decided to move suddenly,
+* Always the risk that the boundary will be decided to move suddenly,
   this leads to uncertainty.
-- There's a lot of work in the other parts which needs to happen
+* There's a lot of work in the other parts which needs to happen
   regardless and will really stretch the team.
-- The query engine won't work like classic in any case, and without a
+* The query engine won't work like classic in any case, and without a
   lot of work necessarily perform well, so it's never going to be an
   easy win, if not done well, it may hurt us.
-- Will need to maintain and fix bugs. Need to ensure this happens with
+* Will need to maintain and fix bugs. Need to ensure this happens with
   respect to the core and SQL side which requires understanding of the
   full system. The flip-side of this applies to the SQL-side as well,
   a simple fix may break Datalog, which makes it harder.
@@ -154,7 +154,7 @@ interlocking variables.
 
 See also: SQL, Core: Expression compiler, Core: operators.
 
-### Semantic differences from Classic
+=== Semantic differences from Classic
 
 The core is easiest built with a single semantics. As I propose we use
 SQL's, this implies three-valued logic and a limited set clearly
@@ -167,14 +167,14 @@ extension types so it's possible to add a known set, like the basic
 EDN types, but one cannot cleanly deal with arbitrarily Java objects
 in a useful way except having them flow through as bytes.
 
-### Cardinality-many
+=== Cardinality-many
 
 In classic semantics, this requires us to unwind all lists early on,
 and then the engine will work closer to classic. With SQL semantics,
 lists would have to be unwound manually inside the query using a
 function.
 
-### Sub-queries (or-join/not-join) and rules
+=== Sub-queries (or-join/not-join) and rules
 
 This is non trivial to build in an efficient way using the logical
 plan and operators we have. Simple cases will be simple to map, like
@@ -185,11 +185,11 @@ efficient, likely work inside the core. One can introduce n-plus-one
 operators that execute a sub-query for each set of bound variables to
 potentially make this easier, but that's less efficient.
 
-### Three-valued logic
+=== Three-valued logic
 
 SQL uses three-valued logic, unlike Clojure where a nil is false.
 
-### Clojure functions
+=== Clojure functions
 
 Because of the lower-level of the expression engine and it being tied
 to the Arrow type system, providing access to arbitrary Clojure
@@ -198,7 +198,7 @@ possible to open this up with a generic and slower mapping fallback
 function, but for other reasons my preference is to not allow calling
 arbitrary code inside the engine.
 
-### Pull
+=== Pull
 
 Same issue as select star in SQL, needs work or limitations
 imposed. See above.
