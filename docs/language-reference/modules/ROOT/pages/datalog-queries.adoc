@@ -17,7 +17,7 @@ Graph queries are possible through the XTDB dialect of the Datalog query languag
 Extensible Data Notation (edn) is a simple data format that is used to describe XTDB Datalog queries.
 To understand how edn works, read the brief description at http://edn-format.org/[http://edn-format.org].
 
-To understand how Datalog works, read the _Learn XTDB Datalog Today_ tutorial from the https://www.xtdb.com/tutorials/[Tutorials page].
+To understand how Datalog works, read the _Learn XTDB Datalog Today_ tutorial from the https://docs.xtdb.com/tutorials/[Tutorials page].
 
 ////
 Can we remove these 3 paragraphs? -sd
