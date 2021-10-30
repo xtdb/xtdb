@@ -138,11 +138,13 @@ papers:
 - [[https://www.jsoftware.com/help/learning/contents.htm][Learning J]]
 - [[https://code.kx.com/q4m3/][Q for Mortals - An introduction to q programming]]
 
-** Query planning/SQL
+** Query planning/SQL/Datalog
 - [[http://citeseerx.ist.psu.edu/viewdoc/download;jsessionid=CFD3DCD1A3AECA50776F3A913BF541B4?doi=10.1.1.498.5779&rep=rep1&type=pdf][Execution Strategies for SQL Subqueries]]
 - [[https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf][Translating SQL into the Relational Algebra]]
 - [[https://subs.emis.de/LNI/Proceedings/Proceedings241/383.pdf][Unnesting Arbitrary Queries]]
 - [[http://db.in.tum.de/~freitag/papers/p1891-freitag.pdf][Adopting Worst-Case Optimal Joins in Relational Database Systems]]
+- [[https://core.ac.uk/download/pdf/11454271.pdf][Algebraic optimization of recursive queries]]
+- [[http://citeseerx.ist.psu.edu/viewdoc/download;jsessionid=8D381A994DFCB6C32C1F771BCA27C802?doi=10.1.1.210.1118&rep=rep1&type=pdf][What you always wanted to know about Datalog (and never dared to ask)]]
 
 ** Type systems
 
