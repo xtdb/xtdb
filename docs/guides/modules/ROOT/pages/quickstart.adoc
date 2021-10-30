@@ -326,7 +326,7 @@ xref:language-reference::sql-queries.adoc[Reference Docs: SQL].
 XTDB requires very little effort to set up and start using immediately. Now that you are comfortable with the basics,
 you can read through the
 https://xtdb.com/docs[Reference Docs] or try
-the https://www.xtdb.com/tutorials[Tutorial]. We also have https://www.xtdb.com/articles[Articles] and
+the https://docs.xtdb.com/tutorials[Tutorial]. We also have https://www.xtdb.com/articles[Articles] and
 https://www.xtdb.com/blog/index.html[blog posts] talking about the philosophy and history of XTDB. If you are feeling
 particularly excited, you can browse our https://www.xtdb.com/articles/references.html[Bibliography].
 
