@@ -219,6 +219,13 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     offsetBuffer.writerIndex((long) valueCount * OFFSET_WIDTH);
   }
 
+  /**
+   * Get the inner vectors.
+   *
+   * @deprecated This API will be removed as the current implementations no longer support inner vectors.
+   *
+   * @return the inner vectors for this field as defined by the TypeLayout
+   */
   @Override
   @Deprecated
   public List<BufferBacked> getFieldInnerVectors() {
@@ -658,6 +665,22 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
       }
     }
     return (IntervalDayVector) vector;
+  }
+
+  public IntervalMonthDayNanoVector getIntervalMonthDayNanoVector(byte typeId) {
+    ValueVector vector = typeId < 0 ? null : childVectors[typeId];
+    if (vector == null) {
+      int vectorCount = internalStruct.size();
+      vector = addOrGet(typeId, MinorType.INTERVALMONTHDAYNANO, IntervalMonthDayNanoVector.class);
+      childVectors[typeId] = vector;
+      if (internalStruct.size() > vectorCount) {
+        vector.allocateNew();
+        if (callBack != null) {
+          callBack.doWork();
+        }
+      }
+    }
+    return (IntervalMonthDayNanoVector) vector;
   }
 
   public Decimal256Vector getDecimal256Vector(byte typeId, ArrowType arrowType) {
@@ -1194,8 +1217,7 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
 
   @Override
   public Iterator<ValueVector> iterator() {
-    List<ValueVector> vectors = org.apache.arrow.util.Collections2.toList(internalStruct.iterator());
-    return vectors.iterator();
+    return internalStruct.iterator();
   }
 
   private ValueVector getVector(int index) {
@@ -1385,6 +1407,11 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
       NullableIntervalDayHolder intervalDayHolder = new NullableIntervalDayHolder();
       reader.read(intervalDayHolder);
       setSafe(index, intervalDayHolder);
+      break;
+      case INTERVALMONTHDAYNANO:
+      NullableIntervalMonthDayNanoHolder intervalMonthDayNanoHolder = new NullableIntervalMonthDayNanoHolder();
+      reader.read(intervalMonthDayNanoHolder);
+      setSafe(index, intervalMonthDayNanoHolder);
       break;
       case DECIMAL256:
       NullableDecimal256Holder decimal256Holder = new NullableDecimal256Holder();
@@ -1668,6 +1695,17 @@ public class DenseUnionVector extends AbstractContainerVector implements FieldVe
     }
     byte typeId = getTypeId(index);
     IntervalDayVector vector = getIntervalDayVector(typeId);
+    int offset = vector.getValueCount();
+    vector.setValueCount(offset + 1);
+    vector.setSafe(offset, holder);
+    offsetBuffer.setInt((long) index * OFFSET_WIDTH, offset);
+  }
+  public void setSafe(int index, NullableIntervalMonthDayNanoHolder holder) {
+    while (index >= getOffsetBufferValueCapacity()) {
+      reallocOffsetBuffer();
+    }
+    byte typeId = getTypeId(index);
+    IntervalMonthDayNanoVector vector = getIntervalMonthDayNanoVector(typeId);
     int offset = vector.getValueCount();
     vector.setValueCount(offset + 1);
     vector.setSafe(offset, holder);

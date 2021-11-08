@@ -470,7 +470,7 @@
                                   (+ (.getOffset block)
                                      (.getMetadataLength block))
                                   (.getBodyLength block))
-                      (.retain))]
+                      (-> (.getReferenceManager) (.retain)))]
     (MessageSerializer/deserializeRecordBatch batch body-buffer)))
 
 (deftype ChunkCursor [^ArrowBuf buf,
@@ -586,7 +586,7 @@
            (doseq [^ArrowBuf buf buffers
                    :let [ref-count (.refCnt buf)]
                    :when (pos? ref-count)]
-             (.release buf ref-count))
+             (.release (.getReferenceManager buf) ref-count))
            (.clear buffers)
            (proxy-super close)))))))
 

@@ -32,7 +32,7 @@
                     (.unlock buffers-lock stamp))))]
         (if-not (= ::not-found v)
           (CompletableFuture/completedFuture (doto ^ArrowBuf v
-                                               (.retain)))
+                                               (-> (.getReferenceManager) (.retain))))
           (-> (if cache-path
                 (-> (.getObject object-store k (.resolve cache-path (str (UUID/randomUUID))))
                     (util/then-apply (fn [buffer-path]
@@ -52,7 +52,7 @@
                                                                                                        nio-buffer
                                                                                                        (when path
                                                                                                          #(util/delete-file path))))))
-                        (.retain))
+                        (-> (.getReferenceManager) (.retain)))
                       (finally
                         (.unlock buffers-lock stamp)
                         (when (and key-exists? path)
