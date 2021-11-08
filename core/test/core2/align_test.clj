@@ -1,19 +1,23 @@
 (ns core2.align-test
   (:require [clojure.test :as t]
             [core2.align :as align]
-            [core2.test-util :as tu]
-            [core2.types :as ty]
             [core2.expression :as expr]
-            [core2.vector.writer :as vw]
+            [core2.test-util :as tu]
             [core2.vector.indirect :as iv])
   (:import java.util.List
-           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector))
+           [org.apache.arrow.vector BigIntVector VarCharVector VectorSchemaRoot]
+           org.apache.arrow.vector.util.Text))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-align
-  (with-open [age-vec (DenseUnionVector/empty "age" tu/*allocator*)
+  (with-open [age-vec (doto (BigIntVector. "age" tu/*allocator*)
+                        (.setValueCount 5)
+                        (.setSafe 0 12)
+                        (.setSafe 1 42)
+                        (.setSafe 2 15)
+                        (.setSafe 3 83)
+                        (.setSafe 4 25))
 
               age-row-id-vec (doto (BigIntVector. "_row-id" tu/*allocator*)
                                (.setValueCount 5)
@@ -26,7 +30,12 @@
               age-root (let [^List vecs [age-row-id-vec age-vec]]
                          (VectorSchemaRoot. vecs))
 
-              name-vec (DenseUnionVector/empty "name" tu/*allocator*)
+              name-vec (doto (VarCharVector. "name" tu/*allocator*)
+                         (.setValueCount 4)
+                         (.setSafe 0 (Text. "Al"))
+                         (.setSafe 1 (Text. "Dave"))
+                         (.setSafe 2 (Text. "Bob"))
+                         (.setSafe 3 (Text. "Steve")))
 
               name-row-id-vec (doto (BigIntVector. "_row-id" tu/*allocator*)
                                 (.setValueCount 4)
@@ -37,26 +46,6 @@
 
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
-
-    (let [age-writer (-> (vw/vec->writer age-vec)
-                         (.asDenseUnion))
-          age-bigint-writer (-> age-writer
-                                (.writerForType ty/bigint-type))]
-      (doseq [age [12 42 15 83 25]]
-        (.startValue age-writer)
-        (.startValue age-bigint-writer)
-        (ty/write-value! age age-bigint-writer)
-        (.endValue age-writer)))
-
-    (let [name-writer (-> (vw/vec->writer name-vec)
-                          (.asDenseUnion))
-          name-varchar-writer (-> name-writer
-                                  (.writerForType ty/varchar-type))]
-      (doseq [name ["Al" "Dave" "Bob" "Steve"]]
-        (.startValue name-writer)
-        (.startValue name-varchar-writer)
-        (ty/write-value! name name-varchar-writer)
-        (.endValue name-writer)))
 
     (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-column-selector '(<= age 30) {})
                                                         (iv/->direct-vec age-vec))
