@@ -4,14 +4,14 @@ Date: 2021-10-06
 
 == Status
 
-Proposed
+Accepted
 
 == Context
 
 XTDB has no tables to refer to in the FROM clause, but we want to use as standard SQL as possible.
 We also don’t want users to have to define any schema to use XTDB.
 
-=== Option: table names are just variables
+=== Option A: table names are just variables
 
 My initial idea for this is to simply treat the table names in the FROM clause as variables (making renaming them via AS redundant but possible).
 These kind of variables are called correlation names in SQL (and entity variables in Datalog).
@@ -31,14 +31,14 @@ Example:
 If (when) we later decide to add views on top of this for tooling that requires predictable schema, these views could be created under a different schema.
 These named schemas could work like normal SQL and could also maybe later support real, typed tables.
 
-=== Option: `XTDB_TABLE`
+=== Option B: `XTDB_TABLE`
 
 An alternative to the above is to use a construct similar to `XMLTABLE`, `JSON_TABLE` or `GRAPH_TABLE` to refer to the documents inside XTDB from SQL.
 This would be clear and map straight to our scan operator, but more verbose:
 
 `SELECT bar.foo, bar.baz FROM XTDB_TABLE(COLUMNS(foo, baz)) AS bar WHERE bar.foo = 1`
 
-=== Option: _table metadata field
+=== Option C: `_table` metadata field
 
 We could decide to support a _table as a transaction operation-level metadata field (like _valid_from/to).
 This would then be used to derive the table name.
@@ -47,18 +47,18 @@ The latter would be more intrusive though.
 
 Like in the first option, columns would still need to be qualified, and the example would look the same, with the internal difference that the table name itself would be used to filter the data against the metadata field.
 Some of the ideas around a default XTDB schema, views etc. in the first option could be applied here as well.
+We might decide that documents without this field wouldn't be visible via SQL in the default schema, for example.
+We could consider having several SQL schemas, one where table names are just variables and the _table field isn't used, see option A.
+
+=== Option D: indexing tables separately
+
+Once we have the user specify `_table`, we will be able to partition the indices by table.
+This will mean that the query engine will have less data to sift through for certain queries.
 
 == Decision
 
-We will initially simply use an optional _table metadata field and
-qualified column names.
+Initially we will start with option A, as the smallest increment on what we have currently, and defer the wider data-model decision for later.
 
 == Consequences
 
-This field won't yet be mandatory. We will likely close this down
-later, but defer this decision. Documents without this field won't be
-visible via SQL in the default schema. We could consider having
-several SQL schemas, one where table names are just variables and the
-_table field isn't used, see option one.
-
-SQL DML will later set and refer to this field.
+Once we move towards SQL DML (`INSERT INTO foo`, for example), we will need to revisit this decision.
