@@ -351,6 +351,7 @@
   [{:keys [^Path db-dir analyzer indexer query-engine secondary-indices checkpointer
            fsync-frequency ^Duration refresh-frequency]
     :as opts}]
+  (some-> checkpointer (cp/try-restore (.toFile db-dir) "lucene-8"))
   (let [directory (if db-dir
                     (FSDirectory/open db-dir)
                     (ByteBuffersDirectory.))
