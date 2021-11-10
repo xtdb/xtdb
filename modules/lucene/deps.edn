@@ -1,8 +1,0 @@
-{:paths ["src"]
- :deps {org.apache.lucene/lucene-core {:mvn/version "8.9.0"}
-        org.apache.lucene/lucene-queryparser {:mvn/version "8.9.0"}}
- :aliases {:dev {:extra-deps
-                 {org.apache.lucene/lucene-analyzers-common
-                  {:mvn/version  "8.9.0"}}}}
- :jvm-opts ["-Dclojure.spec.compile-asserts=true"
-            "-Dclojure.spec.check-asserts=true"]}
