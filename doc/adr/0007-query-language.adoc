@@ -1,0 +1,27 @@
+= 7. Query Language
+
+Date: 2021-11-10
+
+== Status
+
+Accepted
+
+== Context
+
+Core1 supports https://docs.datomic.com/on-prem/query/query.html#query[EDN Datalog] as the primary query language.
+
+Core2 currently has a very primitive EDN Datalog query language, compiling down to the internal logical-plan language.
+The SQL support will also compile down to the logical-plan, which means that the logical-plan needs to be sufficiently powerful to handle both.
+If the two languages differ in semantics, the logical plan will either need to handle both, or make a decision about which to prefer.
+
+'SQL support' itself is a rather large solution space - see link:./adr-0008-sql-support.adoc[ADR-0008] for more details.
+
+== Decision
+
+* We will initially concentrate on supporting SQL.
+* If the languages differ, the logical plan will prefer SQL semantics.
+
+== Consequences
+
+* This will help us focus on getting a Core2 MVP delivered.
+* If we choose to release Core2 without Datalog support, it will likely make migrations from Core1 significantly more time-consuming.
