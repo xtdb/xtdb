@@ -8,147 +8,113 @@ Proposed
 
 == Context
 
-XTDB needs easy ways of working with dynamic, nested data. SQL:1999
-provides most (or all) of the primitives to do this in a standards
-compliant way. In some places we will want to mildly extend or abuse
-existing syntax to make it less verbose.
+XTDB needs easy ways of working with dynamic, nested data.
+SQL:1999 provides most (or all) of the primitives to do this in a standards compliant way.
+In some places we will want to mildly extend or abuse existing syntax to make it less verbose.
 
 === Option: Build on SQL:1999 user defined types and collections
 
-This is my preferred option. SQL actually provides the syntax for almost
-everything we want to do, if not always in the most succinct way. SQL
-has arrays (NOTE: they use one-based indexing), and row-types, which are
-tuples / structs.
+This is my preferred option.
+SQL actually provides the syntax for almost everything we want to do, if not always in the most succinct way.
+SQL has arrays (NOTE: they use one-based indexing), and row-types, which are tuples / structs.
 
-This paper
-http://cidrdb.org/cidr2015/Papers/CIDR15_Paper5.pdf[Management of
-Flexible Schema Data in RDBMSs] argues for this approach. In XTDB we
-also only have a single backing Arrow data model, and there’s no need to
-pretend that some of it is JSON or XML etc.
+This paper http://cidrdb.org/cidr2015/Papers/CIDR15_Paper5.pdf[Management of Flexible Schema Data in RDBMSs] argues for this approach.
+In XTDB we also only have a single backing Arrow data model, and there’s no need to pretend that some of it is JSON or XML etc.
 
-One can refer to nested elements inside structs, using the expected
-syntax:
+One can refer to nested elements inside structs, using the expected syntax:
 
-SELECT foo.bar FROM foo WHERE foo.bar.baz = 1
+`SELECT foo.bar FROM foo WHERE foo.bar.baz = 1`
 
-Here foo is a correlation name (variable), bar is a column containing a
-row with (at least) a field baz. The entire row (struct) foo.bar is
-returned.
+Here `foo` is a correlation name (variable), `bar` is a column containing a row with (at least) a field `baz`.
+The entire row (struct) `foo.bar` is returned.
 
 ==== Arrays
 
-Arrays are accessed as such in the standard, note the cross join and
-implicit LATERAL:
+Arrays are accessed as such in the standard, note the cross join and implicit `LATERAL`:
 
-SELECT baz.* FROM foo, UNNEST(foo.bar) AS baz
+`SELECT baz.* FROM foo, UNNEST(foo.bar) AS baz`
 
-Here foo is a correlation name (variable), bar is a column containing an
-array. The LATERAL UNNEST is executed once per row in foo, and
-duplicates the row for each value in the array foo.bar.
+Here `foo` is a correlation name (variable), `bar` is a column containing an array.
+The `LATERAL UNNEST` is executed once per row in `foo`, and duplicates the row for each value in the array `foo.bar`.
 
-Note that SQL arrays work differently from cardinality many in Datalog
-or SPARQL, one has to explicitly deal with them.
+Note that SQL arrays work differently from cardinality many in Datalog or SPARQL, one has to explicitly deal with them.
 
 ==== Structs
 
-One issue in standard SQL is that the way to instantiate a row type is
-this:
+One issue in standard SQL is that the way to instantiate a row type is this:
 
-ROW (`foo', 1)
+`ROW ('foo', 1)`
 
-Using the standard, to add field names, one can explicitly cast it, but
-this forces one to also add types:
+* Using the standard, to add field names, one can explicitly cast it, but this forces one to also add types:
++
+`CAST (ROW ('foo', 1) AS ROW (name VARCHAR, id BIGINT) )`
++
+* Another standard compliant approach is to use either a user defined routine invocation or to instantiate a user defined type:
++
+`STRUCT (name => 'foo', id => 1)`
++
+`NEW STRUCT (name => 'foo', id => 1)`
++
+As can be seen, SQL provides a syntax for named arguments.
+`STRUCT` here could be seen as a user defined routine or struct we provide.
++
+* Another way to create rows is to introduce a syntax similar to the SQL:2016 `JSON_OBJECT` function:
++
+`STRUCT ('name': 'foo', 'id': 1)`
++
+Note that the keys are expressions here, and can actually be calculated during the query in this approach.
 
-CAST (ROW (`foo', 1) AS ROW (name VARCHAR, id BIGINT) )
+* A third alternative is to tweak the `ROW` syntax, so it optionally supports either of the above constructs:
++
+`ROW (name => 'foo', id => 1)`
++
+* A fourth alternative is using the syntax of https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types[BigQuery]:
++
+`STRUCT ('foo' AS name, 1 AS id)`
++
+* A fifth alternative is to leverage SQL/PGQ which has syntactic support for embedded maps, though this is really only allowed within their sub-language:
++
+`{name: 'foo', id: 1}`
++
+This approach is also not consistent with SQL arrays, which cannot be constructed without the ARRAY keyword.
+So going down this path one should consider making that optional as well.
+This literal approach is a bit closer to PartiQL (see below).
 
-Another standard compliant approach is to use either a user defined
-routine invocation or to instantiate a user defined type:
+What to consistently call these row types is another question.
+They are all technically ROW types in SQL, but could be considered either STRUCT, OBJECT or MAP etc. optionally with an XTDB prefix.
+JDBC and Arrow calls these 'structs'.
 
-STRUCT (name => `foo', id => 1)
+Note that because XTDB supports the full Arrow data model, we cannot just overload `JSON_OBJECT` for this purpose, as that implies the JSON data model.
+Also, `JSON_OBJECT` is only a small part of the massive SQL/JSON extension, which we don't want to support right now, as the entire idea of XTDB is that you store documents.
 
-NEW STRUCT (name => `foo', id => 1)
-
-As can be seen, SQL provides a syntax for named arguments. STRUCT here
-could be seen as a user defined routine or struct we provide.
-
-Another way to create rows is to introduce a syntax similar to the
-SQL:2016 JSON_OBJECT function:
-
-STRUCT (`name': `foo, ’id': 1)
-
-Note that the keys are expressions here, and can actually be calculated
-during the query in this approach.
-
-A third alternative is to tweak the ROW syntax, so it optionally
-supports either of the above constructs:
-
-ROW (name => `foo', id => 1)
-
-A fourth alternative is using the syntax of
-https://cloud.google.com/bigquery/docs/reference/standard-sql/data-types[BigQuery]:
-
-STRUCT (`foo' AS name, 1 AS id)
-
-A fifth alternative is to leverage SQL/PGQ which has syntactic support
-for embedded maps, though this is really only allowed within their
-sub-language:
-
-\{name: `foo', id: 1}
-
-This approach is also not consistent with SQL arrays, which cannot be
-constructed without the ARRAY keyword. So going down this path one
-should consider making that optional as well. This literal approach is a
-bit closer to PartiQL (see below).
-
-What to consistently call these row types is another question. They are
-all technically ROW types in SQL, but could be considered either STRUCT,
-OBJECT or MAP etc. optionally with an XTDB prefix. JDBC and Arrow calls
-these structs.
-
-Note that because XTDB supports the full Arrow data model, we cannot
-just overload JSON_OBJECT for this purpose, as that implies the JSON
-data model. Also, JSON_OBJECT is only a small part of the massive
-SQL/JSON extension, which we don’t want to support right now, as the
-entire idea of XTDB is that you store documents.
-
-See also https://rockset.com/docs/data-types/ which similar to PartiQL
-has its own JSON-like literals and also their own functions to deal with
-these. Like JSON, it calls rows objects. Like standard SQL they use
-one-based indexing for arrays.
+See also https://rockset.com/docs/data-types/ which similar to PartiQL has its own JSON-like literals and also their own functions to deal with these.
+Like JSON, it calls rows objects.
+Like standard SQL they use one-based indexing for arrays.
 
 === Option: PartiQL / SQL++
 
-https://partiql.org/assets/PartiQL-Specification.pdf[PartiQL] is based
-on https://arxiv.org/pdf/1405.3631.pdf[SQL++] and is an extension of
-SQL-92 to support nested, dynamic data. It has some interesting ideas
-and will at least be used as a reference and prior-art.
+https://partiql.org/assets/PartiQL-Specification.pdf[PartiQL] is based on https://arxiv.org/pdf/1405.3631.pdf[SQL++] and is an extension of SQL-92 to support nested, dynamic data.
+It has some interesting ideas and will at least be used as a reference and prior-art.
 
-That said, the fact that it’s based on SQL-92 is pragmatic - this is the
-version of SQL most people are familiar with - but also problematic, as
-this is a 30-year old specification, and modern SQL has evolved a lot
-since. As mentioned in the first option, SQL:1999 contains most of the
-building blocks we need. This would been less of a problem if we
-actually targeted SQL-92, but we target SQL:2011 (at least).
+That said, the fact that it’s based on SQL-92 is pragmatic - this is the version of SQL most people are familiar with - but also problematic, as this is a 30-year old specification, and modern SQL has evolved a lot since.
+As mentioned in the first option, SQL:1999 contains most of the building blocks we need.
+This would been less of a problem if we actually targeted SQL-92, but we target SQL:2011 (at least).
 
 That said, there are a few superficially nice things about PartiQL:
 
-[arabic]
 . JSON-like literal syntax.
 . Arrays use zero-based indexing.
 . Support for MISSING vs NULL.
 . No need for UNNEST, ARRAY or ROW constructs.
 
-Example without UNNEST, s.readings is an array:
+Example without `UNNEST`, `s.readings` is an array:
 
-FROM sensors AS s, s.readings AS r
+`FROM sensors AS s, s.readings AS r`
 
-PartiQL also adds several small extensions to SQL, like PIVOT, UNPIVOT
-and SELECT VALUE, and requires the user to grok the semantics of these
-to fully leverage it.
+PartiQL also adds several small extensions to SQL, like `PIVOT`, `UNPIVOT` and `SELECT VALUE`, and requires the user to grok the semantics of these to fully leverage it.
 
 == Decision
 
-We will build on standard SQL and extend it just a tiny bit to simplify
-instantiate row types.
+We will build on standard SQL and extend it just a tiny bit to simplify instantiate row types.
 
 == Consequences

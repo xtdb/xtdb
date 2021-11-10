@@ -8,59 +8,45 @@ Proposed
 
 == Context
 
-XTDB has no tables to refer to in the FROM clause, but we want to use as
-standard SQL as possible. We also don’t want users to have to define any
-schema to use XTDB.
+XTDB has no tables to refer to in the FROM clause, but we want to use as standard SQL as possible.
+We also don’t want users to have to define any schema to use XTDB.
 
 === Option: table names are just variables
 
-My initial idea for this is to simply treat the table names in the FROM
-clause as variables (making renaming them via AS redundant but
-possible). These kind of variables are called correlation names in SQL
-(and entity variables in Datalog).
+My initial idea for this is to simply treat the table names in the FROM clause as variables (making renaming them via AS redundant but possible).
+These kind of variables are called correlation names in SQL (and entity variables in Datalog).
 
-Which columns they refer to will be inferred from looking at the query
-as a whole. These columns would be bundled together into a scan operator
-in the logical plan.
+Which columns they refer to will be inferred from looking at the query as a whole.
+These columns would be bundled together into a scan operator in the logical plan.
 
-A plausible interpretation of this against the standard is that there’s
-a default schema called say XTDB which contains all documents. The
-interpretation of a table name in this schema is as per above. That is,
-there are no fixed tables.
+A plausible interpretation of this against the standard is that there’s a default schema called say XTDB which contains all documents.
+The interpretation of a table name in this schema is as per above.
+That is, there are no fixed tables.
 
-In this XTDB schema, column references must be qualified in queries, as
-there’s no way for us to tie back the column name to which correlation
-name it belongs to. Example:
+In this XTDB schema, column references must be qualified in queries, as there’s no way for us to tie back the column name to which correlation name it belongs to.
+Example:
 
-SELECT bar.foo, bar.baz FROM bar WHERE bar.foo = 1
+`SELECT bar.foo, bar.baz FROM bar WHERE bar.foo = 1`
 
-If (when) we later decide to add views on top of this for tooling that
-requires predictable schema, these views could be created under a
-different schema. These named schemas could work like normal SQL and
-could also maybe later support real, typed tables.
+If (when) we later decide to add views on top of this for tooling that requires predictable schema, these views could be created under a different schema.
+These named schemas could work like normal SQL and could also maybe later support real, typed tables.
 
-=== Option: XTDB_TABLE
+=== Option: `XTDB_TABLE`
 
-An alternative to the above is to use a construct similar to XMLTABLE,
-JSON_TABLE or GRAPH_TABLE to refer to the documents inside XTDB from
-SQL. This would be clear and map straight to our scan operator, but more
-verbose:
+An alternative to the above is to use a construct similar to `XMLTABLE`, `JSON_TABLE` or `GRAPH_TABLE` to refer to the documents inside XTDB from SQL.
+This would be clear and map straight to our scan operator, but more verbose:
 
-SELECT bar.foo, bar.baz FROM XTDB_TABLE(COLUMNS(foo, baz)) AS bar WHERE
-bar.foo = 1
+`SELECT bar.foo, bar.baz FROM XTDB_TABLE(COLUMNS(foo, baz)) AS bar WHERE bar.foo = 1`
 
 === Option: _table metadata field
 
-We could decide to support a _table as a transaction operation-level
-metadata field (like _valid_from/to). This would then be used to derive
-the table name. It could be stored as a normal column, or even split the
-chunk files per table. The latter would be more intrusive though.
+We could decide to support a _table as a transaction operation-level metadata field (like _valid_from/to).
+This would then be used to derive the table name.
+It could be stored as a normal column, or even split the chunk files per table.
+The latter would be more intrusive though.
 
-Like in the first option, columns would still need to be qualified, and
-the example would look the same, with the internal difference that the
-table name itself would be used to filter the data against the metadata
-field. Some of the ideas around a default XTDB schema, views etc. in the
-first option could be applied here as well.
+Like in the first option, columns would still need to be qualified, and the example would look the same, with the internal difference that the table name itself would be used to filter the data against the metadata field.
+Some of the ideas around a default XTDB schema, views etc. in the first option could be applied here as well.
 
 == Decision
 

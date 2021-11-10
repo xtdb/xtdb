@@ -8,11 +8,11 @@ Proposed
 
 == Context
 
-XTDB is a deterministic, dynamic document database. It doesn’t (for the
-foreseeable future) support interactive transactions. A transaction is
-instead proposed asynchronously onto a central, totally ordered log. The
-transaction might get rejected during processing. All nodes process all
-transactions in parallel and must reach the same result.
+XTDB is a deterministic, dynamic document database.
+It doesn’t (for the foreseeable future) support interactive transactions.
+A transaction is instead proposed asynchronously onto a central, totally ordered log.
+The transaction might get rejected during processing.
+All nodes process all transactions in parallel and must reach the same result.
 
 === Format
 
@@ -20,7 +20,6 @@ A transaction is composed of a series of operations executed in order.
 
 Options:
 
-[arabic]
 . EDN (classic): put/delete/evict and integrity checks via match + find.
 . SQL DML: insert/update/delete/evict and integrity checks via select.
 
@@ -28,28 +27,21 @@ Operations also need to be able to do bitemporal corrections.
 
 == Decision
 
-We will support EDN-style transactions to start, either in EDN, JSON or
-raw Arrow.
+We will support EDN-style transactions to start, either in EDN, JSON or raw Arrow.
 
-As per the link:0002-data-model.adoc[data model], the transactions are
-converted to Arrow client side before submitted.
+As per the link:0002-data-model.adoc[data model], the transactions are converted to Arrow client side before submitted.
 
-Integrity checks are done via queries and transaction functions should
-not be supported by default. Transactions are proposed and can be
-rejected.
+Integrity checks are done via queries and transaction functions should not be supported by default.
+Transactions are proposed and can be rejected.
 
-We need a way to override the system (transaction) time, mainly to be
-used for initial import or migration. The system time still needs to be
-monotonically increasing.
+We need a way to override the system (transaction) time, mainly to be used for initial import or migration.
+The system time still needs to be monotonically increasing.
 
 == Consequences
 
-Transactions must be fully deterministic as all nodes needs to reach the
-same conclusion and also share the same object store.
+Transactions must be fully deterministic as all nodes needs to reach the same conclusion and also share the same object store.
 
-If a transaction has committed could potentially be figured out via
-querying the transaction id column.
+If a transaction has committed could potentially be figured out via querying the transaction id column.
 
-SQL:2011 always assumes start/end time for corrections, while classic
-supports calculating the end time if not given. The core needs to
-support both.
+SQL:2011 always assumes start/end time for corrections, while classic supports calculating the end time if not given.
+The core needs to support both.

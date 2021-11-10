@@ -10,5 +10,4 @@ Proposed
 
 == Consequences
 
-Existing users will be able to migrate their data but not be able to use
-all features, as we are not aiming for 100% API compatibility.
+Existing users will be able to migrate their data but not be able to use all features, as we are not aiming for 100% API compatibility.

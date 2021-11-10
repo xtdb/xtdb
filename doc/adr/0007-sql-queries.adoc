@@ -8,74 +8,55 @@ Proposed
 
 == Context
 
-XTDB should be possible to query via SQL. We need support for temporal
-queries and a natural way to access nested data in documents.
+XTDB should be possible to query via SQL.
+We need support for temporal queries and a natural way to access nested data in documents.
 
 === Implementation
 
-The SQL implementation is responsible for parsing SQL queries and to
-generate a logical plan. It’s not responsible for optimising the plan or
-the translation of it into a physical plan.
+The SQL implementation is responsible for parsing SQL queries and to generate a logical plan.
+It’s not responsible for optimising the plan or the translation of it into a physical plan.
 
 === Parser
 
 Options:
 
-[arabic]
-. Use existing framework or library, like
-https://calcite.apache.org/[Calcite], https://prestodb.io/[Presto] or
-https://www.h2database.com/html/main.html[H2].
-. Leverage existing parser, like https://partiql.org/[PartiQL] or
-https://github.com/JSQLParser/JSqlParser[JSQLParser].
-. Write our own parser for the parts we need using
-https://github.com/Engelberg/instaparse[Instaparse],
-https://www.antlr.org/[Antlr] or handwritten recursive descent.
+. Use existing framework or library, like https://calcite.apache.org/[Calcite], https://prestodb.io/[Presto] or https://www.h2database.com/html/main.html[H2].
+. Leverage existing parser, like https://partiql.org/[PartiQL] or https://github.com/JSQLParser/JSqlParser[JSQLParser].
+. Write our own parser for the parts we need using https://github.com/Engelberg/instaparse[Instaparse], https://www.antlr.org/[Antlr] or handwritten recursive descent.
 
 === API
 
 Options:
 
-[arabic]
 . Our own JDBC driver.
 . https://arrow.apache.org/docs/format/Flight.html[Arrow Flight] (gRPC).
-SQL extension in progress.
-. https://www.postgresql.org/docs/current/protocol.html[PostgreSQL wire
-protocol].
+  SQL extension in progress.
+. https://www.postgresql.org/docs/current/protocol.html[PostgreSQL wire protocol].
 . HTTP (using Arrow IPC streaming mime-type).
 
 === Nested data
 
 Options:
 
-[arabic]
-. https://crate.io/docs/sql-99/en/latest/[SQL:1999] structured
-user-defined types.
-. https://standards.iso.org/ittf/PubliclyAvailableStandards/c067367_ISO_IEC_TR_19075-6_2017.zip[SQL:2016
-JSON].
-. PartiQL ``SQL-compatible access to relational, semi-structured, and
-nested data.''
+. https://crate.io/docs/sql-99/en/latest/[SQL:1999] structured user-defined types.
+. https://standards.iso.org/ittf/PubliclyAvailableStandards/c067367_ISO_IEC_TR_19075-6_2017.zip[SQL:2016 JSON].
+. PartiQL ''SQL-compatible access to relational, semi-structured, and nested data.'
 
 === Graph
 
 Options:
 
-[arabic]
 . SQL:1999 common table expressions and recursive queries.
-. https://s3.amazonaws.com/artifacts.opencypher.org/website/ocim5/slides/ocim5+-+SQL+and+GQL+Status+2019-03-06.pdf[SQL:202x/PGQ]
-``SQL Property Graph Query'', https://opencypher.org/[openCypher]-like
-queries embedded in SQL. Related to https://www.gqlstandards.org/[GQL]
-which is a new language (and not to be confused with GraphQL).
+. https://s3.amazonaws.com/artifacts.opencypher.org/website/ocim5/slides/ocim5+-+SQL+and+GQL+Status+2019-03-06.pdf[SQL:202x/PGQ] 'SQL Property Graph Query', https://opencypher.org/[openCypher]-like queries embedded in SQL.
+  Related to https://www.gqlstandards.org/[GQL] which is a new language (and not to be confused with GraphQL).
 
 === Temporal
 
 Options:
 
-[arabic]
-. https://standards.iso.org/ittf/PubliclyAvailableStandards/c060394_ISO_IEC_TR_19075-2_2015.zip[SQL:2011
-temporal].
-. https://www2.cs.arizona.edu/~rts/tsql2.html[TSQL-2] ``TSQL2 is a
-temporal extension to the SQL-92 language standard.'' More advanced, but
-never made it into SQL, superseded by the above.
+. https://standards.iso.org/ittf/PubliclyAvailableStandards/c060394_ISO_IEC_TR_19075-2_2015.zip[SQL:2011 temporal].
+. https://www2.cs.arizona.edu/~rts/tsql2.html[TSQL-2] 'TSQL2 is a temporal extension to the SQL-92 language standard.'
+  More advanced, but never made it into SQL, superseded by the above.
 . Design our own extensions.
 
 == Decision
@@ -83,40 +64,29 @@ never made it into SQL, superseded by the above.
 We will support:
 
 [arabic]
-. A large part of
-https://www.contrib.andrew.cmu.edu/~shadow/sql/sql1992.txt[SQL-92].
+. A large part of https://www.contrib.andrew.cmu.edu/~shadow/sql/sql1992.txt[SQL-92].
 . The temporal part of SQL-2011, potentially with our own extensions.
-. Structured user-defined types (nested access) and booleans as of
-SQL-1999.
+. Structured user-defined types (nested access) and booleans as of SQL-1999.
 . Take inspiration from PartiQL.
 
-XTDB should not require a schema to work, so columns in SQL will need to
-qualified.
+XTDB should not require a schema to work, so columns in SQL will need to qualified.
 
-Queries should be possible to execute via HTTP or the PostgreSQL wire
-protocol. JDBC is supported via existing PostgreSQL drives. The Arrow
-IPC streaming format has its own mime-type we will support, but should
-also support different representations like JSON, EDN, CSV.
+Queries should be possible to execute via HTTP or the PostgreSQL wire protocol.
+JDBC is supported via existing PostgreSQL drives.
+The Arrow IPC streaming format has its own mime-type we will support, but should also support different representations like JSON, EDN, CSV.
 
-We will write our own parser, closely following the
-https://jakewheat.github.io/sql-overview/sql-2011-foundation-grammar.html[official
-SQL:2011 grammar], but avoiding parts we don’t support.
+We will write our own parser, closely following the https://jakewheat.github.io/sql-overview/sql-2011-foundation-grammar.html[official SQL:2011 grammar], but avoiding parts we don’t support.
 
-We’re currently postponing any decisions around dealing with graph
-queries to a later date.
+We’re currently postponing any decisions around dealing with graph queries to a later date.
 
 == Consequences
 
-All processing needs to map down to the internal
-link:0002-data-model.adoc[data model] and
-link:0006-temporal-data.adoc[temporal data] support.
+All processing needs to map down to the internal link:0002-data-model.adoc[data model] and link:0006-temporal-data.adoc[temporal data] support.
 
-In the core, the logical plan will need to expand to support the parts
-of SQL we need. The expression evaluator needs to support three-valued
-logic like SQL. We also need to add a reasonable set of SQL predicates
-and functions to the expression evaluator.
+In the core, the logical plan will need to expand to support the parts of SQL we need.
+The expression evaluator needs to support three-valued logic like SQL.
+We also need to add a reasonable set of SQL predicates and functions to the expression evaluator.
 
-The PostgreSQL wire protocol doesn’t support representing the full Arrow
-type system. A column in the result set has a single type and there’s no
-concept of unions. The type system can be extended, but the question is
-what happens when using existing drivers.
+The PostgreSQL wire protocol doesn’t support representing the full Arrow type system.
+A column in the result set has a single type and there’s no concept of unions.
+The type system can be extended, but the question is what happens when using existing drivers.
