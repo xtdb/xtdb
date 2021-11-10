@@ -15,7 +15,7 @@ Superseded by:
 * Datalog Rules link:0018-classic-datalog-rules.adoc[ADR-0018]
 * Advanced Datalog link:0019-classic-advanced-datalog.adoc[ADR-0019]
 * Migration Tool link:0020-classic-migration-tool.adoc[ADR-0020]
-* Tx-ops link:0021-classic-tx-fns.adoc[ADR-0021]
+* Tx-ops link:0021-classic-tx-ops.adoc[ADR-0021]
 * History API link:0022-classic-history-api.adoc[ADR-0022]
 
 == Context
