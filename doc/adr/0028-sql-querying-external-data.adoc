@@ -28,7 +28,7 @@ https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-file.html[SparkSQ
 
 https://drill.apache.org/docs/querying-a-file-system-introduction/[Drill] works similarly, and also has wildcard and directory support so a file can be backed by several tables:
 
-`SELECT foo.bar FROM dfs.`/tmp/parquet/199?/*` AS foo`
+`SELECT foo.bar FROM dfs.'/tmp/parquet/199?/*' AS foo`
 
 Another alternative is to introduce some syntax for this (like `JSON_TABLE` etc.):
 
