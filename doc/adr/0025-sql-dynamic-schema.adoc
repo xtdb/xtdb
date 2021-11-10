@@ -50,4 +50,15 @@ Some of the ideas around a default XTDB schema, views etc. in the first option c
 
 == Decision
 
+We will initially simply use an optional _table metadata field and
+qualified column names.
+
 == Consequences
+
+This field won't yet be mandatory. We will likely close this down
+later, but defer this decision. Documents without this field won't be
+visible via SQL in the default schema. We could consider having
+several SQL schemas, one where table names are just variables and the
+_table field isn't used, see option one.
+
+SQL DML will later set and refer to this field.
