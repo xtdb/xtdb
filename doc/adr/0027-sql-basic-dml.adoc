@@ -15,7 +15,7 @@ We want to support the basic `INSERT`, `UPDATE` and `DELETE` statements.
 `MERGE` can provide some level of conditional processing.
 We probably want to introduce an `EVICT` statement as well.
 
-What constitutes a table will be defined in link:0025-sql-dynamic-schema.adoc[SQL dynamic schema].
+What constitutes a table will be defined in link:0025-sql-tables.adoc[SQL Tables].
 
 == Decision
 

@@ -1,4 +1,4 @@
-= 25. SQL dynamic schema
+= 25. SQL tables
 
 Date: 2021-10-06
 
