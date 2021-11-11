@@ -300,9 +300,8 @@
   (->> tx-ops
        (mapv
         (fn [tx-op]
-          (map #(if (instance? Map %) (into {} %) %)
-               tx-op)))
-       (mapv vec)))
+          (mapv #(if (instance? Map %) (into {} %) %)
+                tx-op)))))
 
 (defprotocol DBProvider
   (db

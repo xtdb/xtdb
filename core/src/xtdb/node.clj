@@ -216,7 +216,7 @@
       (xio/with-read-lock lock
         (ensure-node-open this)
         (db/submit-docs document-store (->> conformed-tx-ops
-                                            (into {} (comp (mapcat :docs)))
+                                            (into {} (mapcat :docs))
                                             (xio/map-vals c/xt->crux)))
         (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops) opts))))
 

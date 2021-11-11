@@ -46,7 +46,7 @@
         (keys doc)))
 
 (defn- without-tx-fn-docs [docs]
-  (into {} (remove (comp tx-fn-doc? val) docs)))
+  (into {} (remove (comp tx-fn-doc? val)) docs))
 
 (defn- strict-fetch-docs [{:keys [document-store-tx]} doc-hashes]
   (let [doc-hashes (set doc-hashes)
