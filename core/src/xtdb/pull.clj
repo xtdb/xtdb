@@ -60,7 +60,7 @@
                      (raise-doc-lookup-out-of-coll)
                      (after-doc-lookup (fn [res]
                                          (when-let [res (seq (remove nil? res))]
-                                           (into {} (mapcat identity) res))))))))]
+                                           (into {} cat res))))))))]
     (cond
       (= '... query) pull-child
       (int? query) (fn [v db ^RecurseState recurse-state]
