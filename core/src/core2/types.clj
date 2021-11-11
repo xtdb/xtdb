@@ -329,8 +329,7 @@
                                 x-precision
                                 y-precision))))
 
-(defmethod least-upper-bound2 :default [x-type y-type]
-  (throw (UnsupportedOperationException. (format "Can't LUB: %s ⊔ %s" x-type y-type))))
+(defmethod least-upper-bound2 :default [_ _] ::Object)
 
 (alter-meta! #'least-upper-bound2 assoc :private true)
 
