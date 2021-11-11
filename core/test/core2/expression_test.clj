@@ -162,70 +162,76 @@
     {:res (tu/<-column out-ivec)
      :vec-type (class (.getVector out-ivec))}))
 
-(defn- run-single-row-projection
-  ([f x]
-   (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (.arrowType (ty/value->leg-type x)) false)]) [{:x x}])]
-     (-> (run-projection rel (list f 'x))
-         (update :res first))))
-
-  ([f x y]
-   (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (.arrowType (ty/value->leg-type x)) false)
-                                            (ty/->field "y" (.arrowType (ty/value->leg-type y)) false)])
-                                  [{:x x, :y y}])]
-     (-> (run-projection rel (list f 'x 'y))
-         (update :res first)))))
-
 (t/deftest test-mixing-numeric-types
-  (t/is (= {:res 6, :vec-type IntVector}
-           (run-single-row-projection '+ (int 4) (int 2))))
+  (letfn [(run-test [f x y]
+            (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (.arrowType (ty/value->leg-type x)) false)
+                                                     (ty/->field "y" (.arrowType (ty/value->leg-type y)) false)])
+                                           [{:x x, :y y}])]
+              (-> (run-projection rel (list f 'x 'y))
+                  (update :res first))))]
 
-  (t/is (= {:res 6, :vec-type BigIntVector}
-           (run-single-row-projection '+ (int 2) (long 4))))
+    (t/is (= {:res 6, :vec-type IntVector}
+             (run-test '+ (int 4) (int 2))))
 
-  (t/is (= {:res 6, :vec-type SmallIntVector}
-           (run-single-row-projection '+ (short 2) (short 4))))
+    (t/is (= {:res 6, :vec-type BigIntVector}
+             (run-test '+ (int 2) (long 4))))
 
-  (t/is (= {:res 6.5, :vec-type Float4Vector}
-           (run-single-row-projection '+ (byte 2) (float 4.5))))
+    (t/is (= {:res 6, :vec-type SmallIntVector}
+             (run-test '+ (short 2) (short 4))))
 
-  (t/is (= {:res 6.5, :vec-type Float4Vector}
-           (run-single-row-projection '+ (float 2) (float 4.5))))
+    (t/is (= {:res 6.5, :vec-type Float4Vector}
+             (run-test '+ (byte 2) (float 4.5))))
 
-  (t/is (= {:res 6.5, :vec-type Float8Vector}
-           (run-single-row-projection '+ (float 2) (double 4.5))))
+    (t/is (= {:res 6.5, :vec-type Float4Vector}
+             (run-test '+ (float 2) (float 4.5))))
 
-  (t/is (= {:res 6.5, :vec-type Float8Vector}
-           (run-single-row-projection '+ (int 2) (double 4.5))))
+    (t/is (= {:res 6.5, :vec-type Float8Vector}
+             (run-test '+ (float 2) (double 4.5))))
 
-  (t/is (= {:res -2, :vec-type IntVector}
-           (run-single-row-projection '- (short 2) (int 4))))
+    (t/is (= {:res 6.5, :vec-type Float8Vector}
+             (run-test '+ (int 2) (double 4.5))))
 
-  (t/is (= {:res 8, :vec-type SmallIntVector}
-           (run-single-row-projection '* (byte 2) (short 4))))
+    (t/is (= {:res -2, :vec-type IntVector}
+             (run-test '- (short 2) (int 4))))
 
-  (t/is (= {:res 2, :vec-type SmallIntVector}
-           (run-single-row-projection '/ (short 4) (byte 2))))
+    (t/is (= {:res 8, :vec-type SmallIntVector}
+             (run-test '* (byte 2) (short 4))))
 
-  (t/is (= {:res 2.0, :vec-type Float4Vector}
-           (run-single-row-projection '/ (float 4) (int 2)))))
+    (t/is (= {:res 2, :vec-type SmallIntVector}
+             (run-test '/ (short 4) (byte 2))))
+
+    (t/is (= {:res 2.0, :vec-type Float4Vector}
+             (run-test '/ (float 4) (int 2))))))
 
 (t/deftest test-throws-on-overflow
-  (t/is (thrown? ArithmeticException
-                 (run-single-row-projection '+ (Integer/MAX_VALUE) (int 4))))
+  (letfn [(run-unary-test [f x]
+            (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (.arrowType (ty/value->leg-type x)) false)]) [{:x x}])]
+              (-> (run-projection rel (list f 'x))
+                  (update :res first))))
 
-  (t/is (thrown? ArithmeticException
-                 (run-single-row-projection '- (Integer/MIN_VALUE) (int 4))))
+          (run-binary-test [f x y]
+            (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (.arrowType (ty/value->leg-type x)) false)
+                                                     (ty/->field "y" (.arrowType (ty/value->leg-type y)) false)])
+                                           [{:x x, :y y}])]
+              (-> (run-projection rel (list f 'x 'y))
+                  (update :res first))))]
 
-  (t/is (thrown? ArithmeticException
-                 (run-single-row-projection '- (Integer/MIN_VALUE))))
+    (t/is (thrown? ArithmeticException
+                   (run-binary-test '+ (Integer/MAX_VALUE) (int 4))))
 
-  (t/is (thrown? ArithmeticException
-                 (run-single-row-projection '* (Integer/MIN_VALUE) (int 2))))
+    (t/is (thrown? ArithmeticException
+                   (run-binary-test '- (Integer/MIN_VALUE) (int 4))))
 
-  #_ ; TODO this one throws IAE because that's what clojure.lang.Numbers/shortCast throws
-  ;; the others are thrown by java.lang.Math/*Exact, which throw ArithmeticException
-  (t/is (thrown? ArithmeticException
-                 (run-single-row-projection '- (Short/MIN_VALUE)))))
+    (t/is (thrown? ArithmeticException
+                   (run-unary-test '- (Integer/MIN_VALUE))))
+
+    (t/is (thrown? ArithmeticException
+                   (run-binary-test '* (Integer/MIN_VALUE) (int 2))))
+
+    #_ ; TODO this one throws IAE because that's what clojure.lang.Numbers/shortCast throws
+    ;; the others are thrown by java.lang.Math/*Exact, which throw ArithmeticException
+    (t/is (thrown? ArithmeticException
+                   (run-unary-test '- (Short/MIN_VALUE))))))
 
 (t/deftest test-mixing-timestamp-types
   (letfn [(->ts-vec [col-name time-unit, ^long value]
