@@ -15,46 +15,49 @@ site:
 
 content:
   sources:
-    - url: https://github.com/xtdb/xtdb
+    - url: ../
       start_path: docs/main # index - Only necessary to read self-hosted docs.
       branches: master
-    - url: https://github.com/xtdb/xtdb
+    - url: ../
       start_path: docs/language-reference
       branches:
         - master
         - docs-v1.19.0
-    - url: https://github.com/xtdb/xtdb
+    - url: ../
       start_path: docs/clients
       branches:
         - master
         - docs-v1.19.0
-    - url: https://github.com/xtdb/xtdb
+    - url: ../
       start_path: docs/administration
       branches:
         - master
         - docs-v1.19.0
-    - url: https://github.com/xtdb/xtdb
+    - url: ../
       start_path: docs/extensions
       branches:
         - master
         - docs-v1.19.0
-    - url: https://github.com/xtdb/xtdb
+    - url: ../
       start_path: docs/storage
       branches:
         - master
         - docs-v1.19.0
 
-    - url: https://github.com/xtdb/xtdb
+    - url: ../
       start_path: docs/tutorials
       branches: master
-    - url: https://github.com/xtdb/xtdb
+    - url: ../
       start_path: docs/guides
       branches: master
-    - url: https://github.com/xtdb/xtdb
+    - url: ../
       start_path: docs/concepts
       branches: master
-    - url: https://github.com/xtdb/xtdb
+    - url: ../
       start_path: docs/resources
+      branches: master
+    - url: ../
+      start_path: docs/ecosystem
       branches: master
 
 urls:

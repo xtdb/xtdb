@@ -1,0 +1,3 @@
+* https://biff.findka.com/[Biff] - Batteries-Included (Web) Framework
+* https://github.com/juxt/site[Site] - OpenAPI and GraphQL Resource Server
+* https://github.com/tatut/xtdb-inspector[XTDB Inspector] - Browse XTDB databases visually

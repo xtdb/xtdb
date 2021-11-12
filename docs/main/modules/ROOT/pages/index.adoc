@@ -13,4 +13,5 @@
 * xref:tutorials::index.adoc[Tutorials]
 * xref:guides::index.adoc[Guides]
 * xref:concepts::index.adoc[Concepts]
+* xref:ecosystem::index.adoc[Ecosystem]
 * xref:resources::index.adoc[Resources]

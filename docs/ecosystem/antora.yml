@@ -1,0 +1,7 @@
+name: ecosystem
+title: Ecosystem
+version: master
+display_version: main
+start_page: ROOT:index.adoc
+nav:
+  - modules/ROOT/nav.adoc
