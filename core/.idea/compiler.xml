@@ -15,5 +15,16 @@
       <entry name="!?*.clj" />
       <entry name="!?*.aj" />
     </wildcardResourcePatterns>
+    <annotationProcessing>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="core2-core" />
+      </profile>
+    </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="core2-core" target="1.5" />
+    </bytecodeTargetLevel>
   </component>
 </project>

@@ -7,5 +7,12 @@
       </list>
     </option>
   </component>
+  <component name="MavenProjectsManager">
+    <option name="originalFiles">
+      <list>
+        <option value="$PROJECT_DIR$/pom.xml" />
+      </list>
+    </option>
+  </component>
   <component name="ProjectRootManager" version="2" languageLevel="JDK_11" project-jdk-name="java-11-openjdk" project-jdk-type="JavaSDK" />
 </project>
