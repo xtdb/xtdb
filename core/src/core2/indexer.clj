@@ -6,7 +6,6 @@
             [core2.bloom :as bloom]
             [core2.buffer-pool :as bp]
             [core2.metadata :as meta]
-            core2.object-store
             [core2.temporal :as temporal]
             [core2.tx :as tx]
             [core2.types :as t]
@@ -21,16 +20,16 @@
            core2.object_store.ObjectStore
            core2.temporal.ITemporalManager
            core2.tx.Watermark
+           core2.vector.IVectorWriter
            java.io.Closeable
            java.lang.AutoCloseable
-           [java.util Collections Map Map$Entry Set TreeMap]
+           [java.util Collections HashMap Map Map$Entry Set TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap PriorityBlockingQueue]
            java.util.concurrent.atomic.AtomicInteger
            java.util.concurrent.locks.StampedLock
            [java.util.function Consumer Function]
-           java.util.stream.IntStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector TimeStampMicroTZVector TimeStampVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BigIntVector TimeStampMicroTZVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema]
@@ -245,30 +244,55 @@
                                                  (util/micros->instant (.get tx-time-vec (dec tx-count))))
              :latest-row-id (.get row-id-vec (dec (.getValueCount row-id-vec)))}))))))
 
+(definterface DocRowCopier
+  (^void copyDocRow [^long rowId, ^int srcIdx]))
+
 (defn- copy-docs [^IChunkManager chunk-manager, ^DenseUnionVector tx-ops-vec, ^long base-row-id]
-  (let [row-ids (let [row-ids (IntStream/builder)]
-                  (dotimes [op-idx (.getValueCount tx-ops-vec)]
-                    (when (zero? (.getTypeId tx-ops-vec op-idx))
-                      (.add row-ids (+ base-row-id op-idx))))
-                  (.toArray (.build row-ids)))
-        doc-vec (-> (.getStruct tx-ops-vec 0)
-                    (.getChild "document" StructVector))]
-    (doseq [^DenseUnionVector child-vec doc-vec]
-      (let [col-name (.getName child-vec)
-            live-root (.getLiveRoot chunk-manager col-name)
-            ^BigIntVector row-id-vec (.getVector live-root "_row-id")
-            vec-writer (vw/vec->writer (.getVector live-root col-name))
-            row-copier (.rowCopier vec-writer child-vec)]
-        (dotimes [src-idx (.getValueCount doc-vec)]
-          (when-not (neg? (.getTypeId child-vec src-idx))
-            (let [dest-idx (.getValueCount row-id-vec)]
-              (.setValueCount row-id-vec (inc dest-idx))
-              (.set row-id-vec dest-idx (aget row-ids src-idx)))
-            (.startValue vec-writer)
-            (.copyRow row-copier src-idx)
-            (.endValue vec-writer)
-            (util/set-vector-schema-root-row-count live-root (inc (.getRowCount live-root)))))
-        (.syncSchema live-root)))))
+  (let [^DenseUnionVector doc-vec (-> (.getStruct tx-ops-vec 0)
+                                      (.getChild "document" DenseUnionVector))
+
+        col-names (set (for [^StructVector leg-vec (.getChildrenFromFields doc-vec)
+                             ^ValueVector child-vec (.getChildrenFromFields leg-vec)]
+                         (.getName child-vec)))
+
+        live-roots (->> (for [col-name col-names]
+                          (MapEntry/create col-name (.getLiveRoot chunk-manager col-name)))
+                        (into {}))
+
+        vec-writers (->> (for [^String col-name col-names]
+                           (MapEntry/create col-name
+                                            (-> ^VectorSchemaRoot (get live-roots col-name)
+                                                (.getVector col-name)
+                                                (vw/vec->writer))))
+                         (into {}))
+
+        doc-copiers (vec
+                     (for [^StructVector leg-vec (.getChildrenFromFields doc-vec)]
+                       (vec
+                        (for [^ValueVector src-vec (.getChildrenFromFields leg-vec)]
+                          (let [col-name (.getName src-vec)
+                                ^VectorSchemaRoot live-root (get live-roots col-name)
+                                ^BigIntVector row-id-vec (.getVector live-root "_row-id")
+                                ^IVectorWriter vec-writer (get vec-writers col-name)
+                                row-copier (.rowCopier vec-writer src-vec)]
+                            (reify DocRowCopier
+                              (copyDocRow [_ row-id src-idx]
+                                (let [dest-idx (.getValueCount row-id-vec)]
+                                  (.setValueCount row-id-vec (inc dest-idx))
+                                  (.set row-id-vec dest-idx row-id))
+                                (.startValue vec-writer)
+                                (.copyRow row-copier src-idx)
+                                (.endValue vec-writer)
+
+                                (util/set-vector-schema-root-row-count live-root (inc (.getRowCount live-root)))
+                                (.syncSchema live-root))))))))]
+
+    (dotimes [op-idx (.getValueCount tx-ops-vec)]
+      (when (zero? (.getTypeId tx-ops-vec op-idx))
+        (let [row-id (+ base-row-id op-idx)
+              doc-idx (.getOffset tx-ops-vec op-idx)]
+          (doseq [^DocRowCopier doc-row-copier (nth doc-copiers (.getTypeId doc-vec doc-idx))]
+            (.copyDocRow doc-row-copier row-id (.getOffset doc-vec doc-idx))))))))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
@@ -379,10 +403,13 @@
                 row-id (+ next-row-id tx-op-idx)
                 op (aget op-type-ids op-type-id)]
             (case op
-              :put (let [id-vec (-> ^StructVector (.getChild op-vec "document" StructVector)
+              :put (let [^DenseUnionVector doc-duv (.getChild op-vec "document" DenseUnionVector)
+                         leg-type-id (.getTypeId doc-duv per-op-offset)
+                         leg-offset (.getOffset doc-duv per-op-offset)
+                         id-vec (-> ^StructVector (.getVectorByType doc-duv leg-type-id)
                                     (.getChild "_id"))]
                      (.logPut log-op-idxer row-id tx-op-idx)
-                     (.indexPut temporal-idxer (t/get-object id-vec per-op-offset) row-id
+                     (.indexPut temporal-idxer (t/get-object id-vec leg-offset) row-id
                                 valid-time-start-vec valid-time-end-vec per-op-offset))
 
               :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]

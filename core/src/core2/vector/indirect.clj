@@ -2,7 +2,8 @@
   (:require [core2.types :as ty]
             [core2.util :as util])
   (:import core2.DenseUnionUtil
-           [core2.vector IIndirectVector IIndirectRelation]
+           core2.types.LegType
+           [core2.vector IIndirectRelation IIndirectVector]
            [java.util LinkedHashMap Map]
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
@@ -127,33 +128,33 @@
   (getName [_] (.getName parent-col))
   (withName [_ name] (DuvChildReader. (.withName parent-col name) parent-duv type-id type-vec)))
 
-(defn duv-type-id ^java.lang.Byte [^DenseUnionVector duv, ^ArrowType arrow-type]
+(defn duv-type-id ^java.lang.Byte [^DenseUnionVector duv, ^LegType leg-type]
   (let [field (.getField duv)
         type-ids (.getTypeIds ^ArrowType$Union (.getType field))]
     (-> (keep-indexed (fn [idx ^Field sub-field]
-                        (when (= arrow-type (.getType sub-field))
+                        (when (= leg-type (ty/field->leg-type sub-field))
                           (aget type-ids idx)))
                       (.getChildren field))
         (first))))
 
-(defn reader-for-type ^core2.vector.IIndirectVector [^IIndirectVector col, ^ArrowType arrow-type]
+(defn reader-for-type ^core2.vector.IIndirectVector [^IIndirectVector col, ^LegType leg-type]
   (let [v (.getVector col)
         field (.getField v)
-        v-type (.getType field)]
+        v-type (ty/field->leg-type field)]
     (cond
-      (= arrow-type v-type) col
+      (= leg-type v-type) col
 
       (instance? DenseUnionVector v)
-      (let [type-id (or (duv-type-id v arrow-type)
+      (let [type-id (or (duv-type-id v leg-type)
                         (throw (IllegalArgumentException.)))
             type-vec (.getVectorByType ^DenseUnionVector v type-id)]
         (DuvChildReader. col v type-id type-vec)))))
 
-(defn col->arrow-types [^IIndirectVector col]
+(defn col->leg-types [^IIndirectVector col]
   (let [col-vec (.getVector col)
         field (.getField col-vec)]
     (if (instance? DenseUnionVector col-vec)
       (into #{} (for [^ValueVector vv (.getChildrenFromFields ^DenseUnionVector col-vec)
                       :when (pos? (.getValueCount vv))]
-                  (.getType (.getField vv))))
-      #{(.getType field)})))
+                  (ty/field->leg-type (.getField vv))))
+      #{(ty/field->leg-type field)})))

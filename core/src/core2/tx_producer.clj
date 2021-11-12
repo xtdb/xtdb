@@ -7,6 +7,7 @@
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import [core2.log Log LogRecord]
+           [core2.types LegType$StructLegType]
            core2.vector.IVectorWriter
            java.time.Instant
            org.apache.arrow.memory.BufferAllocator
@@ -63,7 +64,7 @@
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(t/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                        (t/->field "put" t/struct-type false
-                                  (t/->field "document" t/struct-type false)
+                                  (t/->field "document" t/dense-union-type false)
                                   valid-time-start-field
                                   valid-time-end-field)
                        (t/->field "delete" t/struct-type false
@@ -79,7 +80,7 @@
       (let [tx-ops-writer (.asDenseUnion (vw/vec->writer (.getVector root "tx-ops")))
 
             put-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
-            put-doc-writer (.asStruct (.writerForName put-writer "document"))
+            put-doc-writer (.asDenseUnion (.writerForName put-writer "document"))
             put-vt-start-writer (.writerForName put-writer "_valid-time-start")
             put-vt-end-writer (.writerForName put-writer "_valid-time-end")
 
@@ -97,12 +98,15 @@
           (let [{:keys [op vt-opts] :as tx-op} (nth tx-ops tx-op-n)]
             (case op
               :put (let [put-idx (.startValue put-writer)]
-                     (let [{:keys [doc]} tx-op]
+                     (let [{:keys [doc]} tx-op
+                           put-doc-leg-writer (-> (.writerForType put-doc-writer (LegType$StructLegType. (into #{} (map name) (keys doc))))
+                                                  (doto (.startValue))
+                                                  (.asStruct))]
                        (doseq [[k v] doc]
-                         (let [^IVectorWriter writer (doto (-> (.writerForName put-doc-writer (name k))
-                                                               (.asDenseUnion)
-                                                               (.writerForType (t/value->arrow-type v)))
-                                                       (.startValue))]
+                         (let [writer (doto (-> (.writerForName put-doc-leg-writer (name k))
+                                                (.asDenseUnion)
+                                                (.writerForType (t/value->leg-type v)))
+                                        (.startValue))]
                            (t/write-value! v writer))))
 
                      (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
@@ -116,7 +120,7 @@
               :delete (let [delete-idx (.startValue delete-writer)]
                         (let [id (:_id tx-op)
                               ^IVectorWriter writer (doto (-> delete-id-writer
-                                                              (.writerForType (t/value->arrow-type id)))
+                                                              (.writerForType (t/value->leg-type id)))
                                                       (.startValue))]
                           (t/write-value! id writer))
 
@@ -132,7 +136,7 @@
                        (.startValue evict-writer)
                        (let [id (:_id tx-op)
                              ^IVectorWriter writer (doto (-> evict-id-writer
-                                                             (.writerForType (t/value->arrow-type id)))
+                                                             (.writerForType (t/value->leg-type id)))
                                                      (.startValue))]
                          (t/write-value! id writer)))))
 

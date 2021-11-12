@@ -1,8 +1,10 @@
 (ns core2.vector.writer
   (:require [core2.types :as ty]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
-  (:import [core2.vector IIndirectVector IIndirectRelation IDenseUnionWriter IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter]
+            [core2.vector.indirect :as iv]
+            [core2.types :as types])
+  (:import [core2.types LegType LegType$StructLegType]
+           [core2.vector IDenseUnionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter]
            java.lang.AutoCloseable
            [java.util HashMap LinkedHashMap Map]
            java.util.function.Function
@@ -10,7 +12,8 @@
            org.apache.arrow.util.AutoCloseables
            [org.apache.arrow.vector NullVector ValueVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType]))
+           [org.apache.arrow.vector.types.pojo ArrowType$Struct ArrowType$Union Field FieldType]
+           org.apache.arrow.vector.types.Types))
 
 (deftype DuvChildWriter [^IDenseUnionWriter parent-writer,
                          ^byte type-id
@@ -72,9 +75,8 @@
 
     (dotimes [n (alength type-ids)]
       (let [src-type-id (aget type-ids n)
-            arrow-type (-> ^Field (.get (.getChildren src-field) n)
-                           (.getType))]
-        (aset copier-mapping src-type-id (.rowCopier (.writerForType dest-col arrow-type)
+            leg-type (types/field->leg-type (.get (.getChildren src-field) n))]
+        (aset copier-mapping src-type-id (.rowCopier (.writerForType dest-col leg-type)
                                                      (.getVectorByType src-vec src-type-id)))))
 
     (reify IRowCopier
@@ -85,7 +87,7 @@
                 (.copyRow (.getOffset src-vec src-idx)))))))))
 
 (defn- vec->duv-copier ^core2.vector.IRowCopier [^ValueVector src-vec, ^IDenseUnionWriter dest-col]
-  (-> (.writerForType dest-col (-> src-vec (.getField) (.getType)))
+  (-> (.writerForType dest-col (types/field->leg-type (.getField src-vec)))
       (.rowCopier src-vec)))
 
 (declare ^core2.vector.IVectorWriter vec->writer)
@@ -135,13 +137,21 @@
           (aset writers-by-type-id type-id writer)
           writer)))
 
-  (writerForType [this arrow-type]
-    (.computeIfAbsent writers-by-type arrow-type
+  (writerForType [this leg-type]
+    (.computeIfAbsent writers-by-type leg-type
                       (reify Function
-                        (apply [_ arrow-type]
-                          (let [^Field field (ty/arrow-type->field arrow-type)
-                                type-id (or (iv/duv-type-id dest-duv arrow-type)
+                        (apply [_ _]
+                          (let [arrow-type (.arrowType leg-type)
+                                field-name (types/type->field-name arrow-type)
+
+                                ^Field field (case (.name (Types/getMinorTypeForArrowType arrow-type))
+                                               "LIST" (types/->field field-name arrow-type false (types/->field "$data$" types/dense-union-type false))
+                                               "STRUCT" (types/->field (str field-name (count writers-by-type)) arrow-type false)
+                                               (types/->field field-name arrow-type false))
+
+                                type-id (or (iv/duv-type-id dest-duv leg-type)
                                             (.registerNewTypeId dest-duv field))]
+
                             (when-not (.getVectorByType dest-duv type-id)
                               (.addVector dest-duv type-id
                                           (.createVector field (.getAllocator dest-duv))))

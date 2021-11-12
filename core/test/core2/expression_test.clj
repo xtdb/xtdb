@@ -164,13 +164,13 @@
 
 (defn- run-single-row-projection
   ([f x]
-   (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (ty/value->arrow-type x) false)]) [{:x x}])]
+   (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (.arrowType (ty/value->leg-type x)) false)]) [{:x x}])]
      (-> (run-projection rel (list f 'x))
          (update :res first))))
 
   ([f x y]
-   (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (ty/value->arrow-type x) false)
-                                            (ty/->field "y" (ty/value->arrow-type y) false)])
+   (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (.arrowType (ty/value->leg-type x)) false)
+                                            (ty/->field "y" (.arrowType (ty/value->leg-type y)) false)])
                                   [{:x x, :y y}])]
      (-> (run-projection rel (list f 'x 'y))
          (update :res first)))))
