@@ -17,6 +17,10 @@ int4.sql
 int8.sql
 interval.sql
 join.sql
+jsonb_jsonpath.sql
+jsonb.sql
+json_encoding.sql
+json.sql
 limit.sql
 numeric_big.sql
 numeric.sql
