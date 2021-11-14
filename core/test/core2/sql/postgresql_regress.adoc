@@ -1,0 +1,71 @@
+= PostgreSQL regression suite
+
+https://github.com/postgres/postgres/tree/master/src/test/regress
+
+== Basics
+
+== Test data
+
+create_table.sql
+
+=== Data types
+
+bit.sql
+boolean.sql
+char.sql
+date.sql
+float4.sql
+float8.sql
+int2.sql
+int4.sql
+int8.sql
+interval.sql
+numeric_big.sql
+numeric.sql
+time.sql
+timestamp.sql
+timestamptz.sql
+timetz.sql
+varchar.sql
+
+=== Functions
+
+case.sql
+comments.sql
+expressions.sql
+horology.sql
+numerology.sql
+random.sql
+regex.linux.utf8.sql
+regex.sql
+strings.sql
+text.sql
+
+== Queries
+
+aggregates.sql
+join.sql
+limit.sql
+select_distinct.sql
+select_having.sql
+select_implicit.sql
+select.sql
+subselect.sql
+union.sql
+with.sql
+
+== Composites
+
+arrays.sql
+jsonb.sql
+json_encoding.sql
+json.sql
+
+== DML
+
+delete.sql
+insert.sql
+select_into.sql
+transactions.sql
+truncate.sql
+update.sql
