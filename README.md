@@ -1,4 +1,4 @@
-<img alt="XTDB" role="img" aria-label="XTDB" src="https://xtdb.com/images/logo.svg" width="282" height="110">
+<img alt="XTDB" role="img" aria-label="XTDB" src="./docs/xtdb-logo-banner.svg">
 
 
 [XTDB](https://xtdb.com) is a general purpose database with graph-oriented bitemporal indexes.
@@ -52,7 +52,7 @@ information privacy regulations.
 >
 > — Martin Kleppmann
 
-<img alt="Unbundled Architecture Diagram" role="img" aria-label="XTDB Venn" src="./docs/articles/modules/ROOT/images/xtdb-node-1.svg" width="1000px">
+<img alt="Unbundled Architecture Diagram" role="img" aria-label="XTDB Venn" src="./docs/concepts/modules/ROOT/images/xtdb-node-1.svg" width="1000px">
 
 This design makes it feasible and desirable to embed XTDB nodes directly within
 your application processes, which reduces deployment complexity and eliminates
