@@ -60,6 +60,7 @@ arrays.sql
 jsonb.sql
 json_encoding.sql
 json.sql
+rowtypes.sql
 
 == DML
 
@@ -69,3 +70,13 @@ select_into.sql
 transactions.sql
 truncate.sql
 update.sql
+
+== Extensions
+
+create_function_3.sql
+create_procedure.sql
+create_view.sql
+select_views.sql
+tablesample.sql
+temp.sql
+window.sql
