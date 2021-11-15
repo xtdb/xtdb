@@ -79,4 +79,5 @@ create_view.sql
 select_views.sql
 tablesample.sql
 temp.sql
+triggers.sql
 window.sql
