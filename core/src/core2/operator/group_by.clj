@@ -4,6 +4,7 @@
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
   (:import core2.ICursor
+           core2.types.LegType
            core2.vector.IIndirectRelation
            [java.util ArrayList Comparator DoubleSummaryStatistics HashMap LinkedList List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer ObjDoubleConsumer ObjIntConsumer ObjLongConsumer Supplier]
@@ -80,20 +81,20 @@
           acc (if (some? container)
                 container
                 (.get supplier))
-          arrow-types (iv/col->arrow-types from-col)
+          leg-types (iv/col->leg-types from-col)
           consumer (cond
-                     (= #{types/bigint-type} arrow-types)
+                     (= #{LegType/BIGINT} leg-types)
                      (let [from-col (-> from-col
-                                        (iv/reader-for-type types/bigint-type))
+                                        (iv/reader-for-type LegType/BIGINT))
                            ^BigIntVector from-vec (.getVector from-col)]
                        (reify IntConsumer
                          (accept [_ idx]
                            (.accept ^ObjLongConsumer accumulator acc
                                     (.get from-vec (.getIndex from-col idx))))))
 
-                     (= #{types/float8-type} arrow-types)
+                     (= #{LegType/FLOAT8} leg-types)
                      (let [from-col (-> from-col
-                                        (iv/reader-for-type types/float8-type))
+                                        (iv/reader-for-type LegType/FLOAT8))
                            ^Float8Vector from-vec (.getVector from-col)]
                        (reify IntConsumer
                          (accept [_ idx]
@@ -295,7 +296,7 @@
           (.startValue duv-writer)
           (let [^objects accs (.get all-accs idx)
                 v (.finish aggregate-spec (aget accs n))]
-            (types/write-value! v (doto (.writerForType duv-writer (types/value->arrow-type v))
+            (types/write-value! v (doto (.writerForType duv-writer (types/value->leg-type v))
                                     (.startValue))))
           (.endValue duv-writer))
 

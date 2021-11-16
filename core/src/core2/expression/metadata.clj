@@ -6,11 +6,12 @@
             [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
            core2.metadata.IMetadataIndices
+           core2.types.LegType
            core2.vector.IIndirectVector
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType$Bool]
+           org.apache.arrow.vector.types.pojo.ArrowType$Bool
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -44,14 +45,15 @@
             (simplify-and-or-expr
              {:op :call
               :f 'or
-              :args (vec (let [arrow-type (get param-types param)]
-                           (for [arrow-type (if (isa? types/arrow-type-hierarchy arrow-type ::types/Number)
-                                              [types/bigint-type types/float8-type]
-                                              [arrow-type])]
+              :args (vec (let [^LegType leg-type (get param-types param)
+                               arrow-type (.arrowType leg-type)]
+                           (for [leg-type (if (isa? types/arrow-type-hierarchy arrow-type ::types/Number)
+                                            [LegType/BIGINT LegType/FLOAT8]
+                                            [leg-type])]
                              {:op :metadata-vp-call,
                               :f f
                               :meta-value meta-value
-                              :arrow-type arrow-type
+                              :leg-type leg-type
                               :field field,
                               :param param
                               :bloom-hash-sym (when (= meta-value :bloom-filter)
@@ -132,8 +134,9 @@
                (.columnIndex ~metadata-idxs-sym ~field-name)))
      :return-type ArrowType$Bool/INSTANCE}))
 
-(defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param arrow-type bloom-hash-sym]} opts]
-  (let [field-name (str field)]
+(defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param ^LegType leg-type bloom-hash-sym]} opts]
+  (let [field-name (str field)
+        arrow-type (.arrowType leg-type)]
     {:code `(boolean
              (when-let [~expr/idx-sym (if ~block-idx-sym
                                         (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
@@ -145,7 +148,7 @@
                         col-sym (gensym 'meta-col)
                         variable-code (expr/codegen-expr
                                        {:op :variable, :variable col-sym}
-                                       {:var->type {col-sym arrow-type}})]
+                                       {:var->type {col-sym leg-type}})]
                     `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
                                 (.getChild ~vec-sym ~(types/type->field-name arrow-type))]
                        (when-not (.isNull ~vec-sym ~expr/idx-sym)

@@ -8,6 +8,7 @@
   (:import clojure.lang.MapEntry
            core2.operator.project.ProjectionSpec
            [core2.operator.select IColumnSelector IRelationSelector]
+           [core2.types LegType LegType$StructLegType]
            [core2.vector IIndirectRelation IIndirectVector]
            java.lang.reflect.Method
            java.nio.ByteBuffer
@@ -17,7 +18,7 @@
            [java.util Date LinkedHashMap]
            [org.apache.arrow.vector BaseVariableWidthVector DurationVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]
+           [org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -166,7 +167,7 @@
     x))
 
 (defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param->type]}]
-  (let [return-type (or (get param->type param)
+  (let [return-type (or (some-> ^LegType (get param->type param) (.arrowType))
                         (throw (IllegalArgumentException. (str "parameter not provided: " param))))]
     (into {:code param
            :return-type return-type}
@@ -211,31 +212,34 @@
 (defmethod get-value-form ArrowType$Binary [_ vec-sym idx-sym] `(element->nio-buffer ~vec-sym ~idx-sym))
 (defmethod get-value-form :default [_ vec-sym idx-sym] `(normalize-union-value (.getObject ~vec-sym ~idx-sym)))
 
-(defn- arrow-type-literal-form [^ArrowType arrow-type]
-  (letfn [(timestamp-type-literal [time-unit-literal]
-            `(ArrowType$Timestamp. ~time-unit-literal ~(.getTimezone ^ArrowType$Timestamp arrow-type)))]
-    (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
-      (case minor-type-name
-        "DURATION" `(ArrowType$Duration. ~(symbol (name `TimeUnit) (.name (.getUnit ^ArrowType$Duration arrow-type))))
+(defn- leg-type-literal-form [^LegType leg-type]
+  (let [arrow-type (.arrowType leg-type)]
+    (letfn [(timestamp-type-literal [time-unit-literal]
+              `(LegType. (ArrowType$Timestamp. ~time-unit-literal ~(.getTimezone ^ArrowType$Timestamp arrow-type))))]
+      (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
+        (case minor-type-name
+          "STRUCT" `(LegType$StructLegType. ~(.keys ^LegType$StructLegType leg-type))
+          "DURATION" `(LegType. (ArrowType$Duration. ~(symbol (name `TimeUnit) (.name (.getUnit ^ArrowType$Duration arrow-type)))))
 
-        "TIMESTAMPSECTZ" (timestamp-type-literal `TimeUnit/SECOND)
-        "TIMESTAMPMILLITZ" (timestamp-type-literal `TimeUnit/MILLISECOND)
-        "TIMESTAMPMICROTZ" (timestamp-type-literal `TimeUnit/MICROSECOND)
-        "TIMESTAMPNANOTZ" (timestamp-type-literal `TimeUnit/NANOSECOND)
+          "TIMESTAMPSECTZ" (timestamp-type-literal `TimeUnit/SECOND)
+          "TIMESTAMPMILLITZ" (timestamp-type-literal `TimeUnit/MILLISECOND)
+          "TIMESTAMPMICROTZ" (timestamp-type-literal `TimeUnit/MICROSECOND)
+          "TIMESTAMPNANOTZ" (timestamp-type-literal `TimeUnit/NANOSECOND)
 
-        ;; TODO there are other minor types that don't have a single corresponding ArrowType
-        `(.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name))))))
+          ;; TODO there are other minor types that don't have a single corresponding ArrowType
+          `(LegType. (.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name))))))))
 
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->type]}]
-  (let [arrow-type (or (get var->type variable)
-                       (throw (IllegalArgumentException. (str "unknown variable: " variable))))
+  (let [^LegType leg-type (or (get var->type variable)
+                              (throw (IllegalArgumentException. (str "unknown variable: " variable))))
+        arrow-type (.arrowType leg-type)
         vec-sym (gensym 'vec)]
     ;; TODO the `reader-for-type` call doesn't need to be per-elem
     {:code `(let [~(-> vec-sym
                        (with-tag (or (-> arrow-type types/arrow-type->vector-type)
                                      (throw (UnsupportedOperationException.)))))
                   (-> ~variable
-                      (iv/reader-for-type ~(arrow-type-literal-form arrow-type))
+                      (iv/reader-for-type ~(leg-type-literal-form leg-type))
                       (.getVector))
                   ~idx-sym (.getIndex ~variable ~idx-sym)]
               ~(get-value-form arrow-type vec-sym idx-sym))
@@ -531,12 +535,12 @@
      :param-types (->> params
                        (util/into-linked-map
                         (util/map-entries (fn [param-k param-v]
-                                            (let [arrow-type (types/value->arrow-type param-v)
+                                            (let [leg-type (types/value->leg-type param-v)
                                                   normalized-expr-type (normalize-union-value param-v)
-                                                  primitive-tag (get type->cast (types/value->arrow-type normalized-expr-type))]
+                                                  primitive-tag (get type->cast (.arrowType (types/value->leg-type normalized-expr-type)))]
                                               (MapEntry/create (cond-> param-k
                                                                  primitive-tag (with-tag primitive-tag))
-                                                               arrow-type))))))
+                                                               leg-type))))))
 
      :emitted-params (->> params
                           (util/into-linked-map
@@ -607,7 +611,7 @@
                              (util/into-linked-map
                               (util/map-values (fn [_variable ^IIndirectVector read-col]
                                                  (assert read-col)
-                                                 (->> (iv/col->arrow-types read-col)
+                                                 (->> (iv/col->leg-types read-col)
                                                       (types/least-upper-bound))))))
               {:keys [code return-type]} (memo-generate-projection expr var-types param-types)
               expr-fn (memo-eval code)
@@ -649,7 +653,7 @@
                 var-types (->> in-cols
                                (util/into-linked-map
                                 (util/map-values (fn [_variable ^IIndirectVector read-col]
-                                                   (->> (iv/col->arrow-types read-col)
+                                                   (->> (iv/col->leg-types read-col)
                                                         (types/least-upper-bound))))))
                 expr-code (memo-generate-selection expr var-types param-types)
                 expr-fn (memo-eval expr-code)]
@@ -668,7 +672,7 @@
           (let [in-cols (doto (LinkedHashMap.)
                           (.put variable in-col))
                 var-types (doto (LinkedHashMap.)
-                            (.put variable (->> (iv/col->arrow-types in-col)
+                            (.put variable (->> (iv/col->leg-types in-col)
                                                 (types/least-upper-bound))))
                 expr-code (memo-generate-selection expr var-types param-types)
                 expr-fn (memo-eval expr-code)]

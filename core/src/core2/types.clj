@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [core2.util :as util])
   (:import core2.vector.IVectorWriter
+           [core2.types LegType LegType$StructLegType]
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId]
@@ -11,7 +12,7 @@
            [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -28,120 +29,121 @@
 (def map-type (ArrowType$Map. false))
 
 (defprotocol ArrowWriteable
-  (value->arrow-type [v])
+  (^core2.types.LegType value->leg-type [v])
   (write-value! [v ^core2.vector.IVectorWriter writer]))
 
 (extend-protocol ArrowWriteable
   nil
-  (value->arrow-type [_] ArrowType$Null/INSTANCE)
+  (value->leg-type [_] LegType/NULL)
   (write-value! [v ^IVectorWriter writer])
 
   Boolean
-  (value->arrow-type [_] ArrowType$Bool/INSTANCE)
+  (value->leg-type [_] LegType/BOOL)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^BitVector (.getVector writer) (.getPosition writer) (if v 1 0)))
 
   Byte
-  (value->arrow-type [_] (.getType Types$MinorType/TINYINT))
+  (value->leg-type [_] LegType/TINYINT)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TinyIntVector (.getVector writer) (.getPosition writer) v))
 
   Short
-  (value->arrow-type [_] (.getType Types$MinorType/SMALLINT))
+  (value->leg-type [_] LegType/SMALLINT)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^SmallIntVector (.getVector writer) (.getPosition writer) v))
 
   Integer
-  (value->arrow-type [_] (.getType Types$MinorType/INT))
+  (value->leg-type [_] LegType/INT)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^IntVector (.getVector writer) (.getPosition writer) v))
 
   Long
-  (value->arrow-type [_] bigint-type)
+  (value->leg-type [_] LegType/BIGINT)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^BigIntVector (.getVector writer) (.getPosition writer) v))
 
   Float
-  (value->arrow-type [_] (.getType Types$MinorType/FLOAT4))
+  (value->leg-type [_] LegType/FLOAT4)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^Float4Vector (.getVector writer) (.getPosition writer) v))
 
   Double
-  (value->arrow-type [_] float8-type)
+  (value->leg-type [_] LegType/FLOAT8)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^Float8Vector (.getVector writer) (.getPosition writer) v)))
 
 (extend-protocol ArrowWriteable
   Date
-  (value->arrow-type [_] timestamp-micro-tz-type)
+  (value->leg-type [_] LegType/TIMESTAMPMICROTZ)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TimeStampMicroTZVector (.getVector writer) (.getPosition writer)
               (Math/multiplyExact (.getTime v) 1000)))
 
   Instant
-  (value->arrow-type [_] timestamp-micro-tz-type)
+  (value->leg-type [_] LegType/TIMESTAMPMICROTZ)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TimeStampMicroTZVector (.getVector writer) (.getPosition writer)
               (util/instant->micros v)))
 
   ZonedDateTime
-  (value->arrow-type [v] (ArrowType$Timestamp. TimeUnit/MICROSECOND (.getId (.getZone v))))
+  (value->leg-type [v] (LegType. (ArrowType$Timestamp. TimeUnit/MICROSECOND (.getId (.getZone v)))))
   (write-value! [v ^IVectorWriter writer]
     (write-value! (.toInstant v) writer))
 
   OffsetDateTime
-  (value->arrow-type [v] (ArrowType$Timestamp. TimeUnit/MICROSECOND (.getId (.getOffset v))))
+  (value->leg-type [v] (LegType. (ArrowType$Timestamp. TimeUnit/MICROSECOND (.getId (.getOffset v)))))
   (write-value! [v ^IVectorWriter writer]
     (write-value! (.toInstant v) writer))
 
   Duration ; HACK assumes micros for now
-  (value->arrow-type [_] duration-micro-type)
+  (value->leg-type [_] LegType/DURATIONMICRO)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^DurationVector (.getVector writer) (.getPosition writer)
               (quot (.toNanos v) 1000))))
 
 (extend-protocol ArrowWriteable
   (Class/forName "[B")
-  (value->arrow-type [_] ArrowType$Binary/INSTANCE)
+  (value->leg-type [_] LegType/BINARY)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^VarBinaryVector (.getVector writer) (.getPosition writer) ^bytes v))
 
   ByteBuffer
-  (value->arrow-type [_] ArrowType$Binary/INSTANCE)
+  (value->leg-type [_] LegType/BINARY)
   (write-value! [buf ^IVectorWriter writer]
     (.setSafe ^VarBinaryVector (.getVector writer) (.getPosition writer)
               buf (.position buf) (.remaining buf)))
 
   CharSequence
-  (value->arrow-type [_] ArrowType$Utf8/INSTANCE)
+  (value->leg-type [_] LegType/UTF8)
   (write-value! [v ^IVectorWriter writer]
     (let [buf (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap v))]
       (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer)
                 buf (.position buf) (.remaining buf))))
 
   Text
-  (value->arrow-type [_] ArrowType$Utf8/INSTANCE)
+  (value->leg-type [_] LegType/UTF8)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer) v)))
 
 (extend-protocol ArrowWriteable
   List
-  (value->arrow-type [_] list-type)
+  (value->leg-type [_] LegType/LIST)
   (write-value! [v ^IVectorWriter writer]
     (let [writer (.asList writer)
           data-writer (.getDataWriter writer)
           data-duv-writer (.asDenseUnion data-writer)]
       (doseq [el v]
         (.startValue data-writer)
-        (write-value! el (doto (.writerForType data-duv-writer (value->arrow-type el))
+        (write-value! el (doto (.writerForType data-duv-writer (value->leg-type el))
                            (.startValue)))
         (.endValue data-writer))))
 
   Map
-  (value->arrow-type [v]
-    (if (every? keyword? (keys v))
-      struct-type
-      map-type))
+  (value->leg-type [v]
+    (let [ks (keys v)]
+      (if (every? keyword? ks)
+        (LegType$StructLegType. (into #{} (map name) (keys v)))
+        LegType/MAP)))
 
   (write-value! [m ^IVectorWriter writer]
     (let [dest-vec (.getVector writer)]
@@ -151,7 +153,7 @@
           (doseq [[k v] m]
             (write-value! v (doto (-> (.writerForName writer (name k))
                                       (.asDenseUnion)
-                                      (.writerForType (value->arrow-type v)))
+                                      (.writerForType (value->leg-type v)))
                               (.startValue)))))
 
         ;; TODO
@@ -324,9 +326,8 @@
                                      (str/replace #"[/:]" "_")))
       minor-type-name)))
 
-(defn arrow-type->field [^ArrowType arrow-type]
-  (let [field-name (type->field-name arrow-type)
-        minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
-    (case minor-type-name
-      "LIST" (->field field-name arrow-type false (->field "$data$" dense-union-type false))
-      (->field field-name arrow-type false))))
+(defn field->leg-type [^Field field]
+  (let [arrow-type (.getType field)]
+    (if (instance? ArrowType$Struct arrow-type)
+      (LegType$StructLegType. (->> (.getChildren field) (into #{} (map #(.getName ^Field %)))))
+      (LegType. arrow-type))))

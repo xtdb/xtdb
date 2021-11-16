@@ -18,7 +18,7 @@
                 (doseq [v vs]
                   (.startValue duv-writer)
                   (types/write-value! v
-                                      (doto (.writerForType duv-writer (types/value->arrow-type v))
+                                      (doto (.writerForType duv-writer (types/value->leg-type v))
                                         (.startValue)))
                   (.endValue duv-writer)))
 

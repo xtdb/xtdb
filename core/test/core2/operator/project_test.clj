@@ -5,6 +5,7 @@
             [core2.types :as ty]
             [core2.vector.indirect :as iv])
   (:import core2.operator.project.ProjectionSpec
+           core2.types.LegType
            org.apache.arrow.vector.BigIntVector
            org.apache.arrow.vector.types.pojo.Schema))
 
@@ -24,11 +25,11 @@
                                                             (let [row-count (.rowCount in-rel)
 
                                                                   a-col (-> (.vectorForName in-rel "a")
-                                                                            (iv/reader-for-type ty/bigint-type))
+                                                                            (iv/reader-for-type LegType/BIGINT))
                                                                   ^BigIntVector a-vec (.getVector a-col)
 
                                                                   b-col (-> (.vectorForName in-rel "b")
-                                                                            (iv/reader-for-type ty/bigint-type))
+                                                                            (iv/reader-for-type LegType/BIGINT))
                                                                   ^BigIntVector b-vec (.getVector b-col)
 
                                                                   out (BigIntVector. "c" allocator)]
