@@ -49,7 +49,11 @@
     :numeric_type
     :boolean_type
     :datetime_type
-    :interval_type})
+    :interval_type
+    :insert_statement
+    :case_specification
+    :query_specification
+    :table_value_constructor})
 
 (defn cst->ast [x]
   (w/postwalk
@@ -73,7 +77,7 @@
   (memoize
    (fn self
      ([s]
-      (self s :query_expression))
+      (self s :direct_sql_data_statement))
      ([s start-rule]
       (cst->ast
        (parse-sql2011 s :start start-rule))))))
@@ -83,7 +87,7 @@
    (cst->ast
     (parse-sql2011
      "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
-     :start :query_expression)))
+     :start :direct_sql_data_statement)))
 
   (time
    (parse
@@ -112,7 +116,21 @@
       (Commenter IS Person WHERE Commenter.email = :email2)
     COLUMNS ( M.creationDate, M.content )
     )"
-    :start :graph_table)))
+    :start :graph_table))
+
+  (time
+   (cst->ast
+    (parse-sql2011
+     "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)"
+     :start :direct_sql_data_statement)))
+
+  (time
+   (cst->ast
+    (parse-sql2011
+     "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END
+  FROM t1
+ ORDER BY 1"
+     :start :direct_sql_data_statement))))
 
 ;; SQL:2011 official grammar:
 
