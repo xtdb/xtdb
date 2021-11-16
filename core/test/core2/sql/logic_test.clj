@@ -14,9 +14,11 @@
 
 (defmethod parse-record :statement [[x & xs]]
   (let [[_ mode] (str/split x #"\s+")
-        statement (str/join xs)]
+        statement (str/join xs)
+        mode (keyword mode)]
+    (assert (contains? #{:ok :error} mode))
     {:type :statement
-     :mode (keyword mode)
+     :mode mode
      :statement statement}))
 
 (defmethod parse-record :query [[x & xs]]
@@ -24,11 +26,14 @@
         _ (prn xs)
         [query _ result] (partition-by #{"----"} xs)
         query (str/join query)
+        sort-mode (keyword (or sort-mode :nosort))
         record {:type :query
                 :query query
-                :type-string (mapv str type-string)
-                :sort-mode (keyword sort-mode)
+                :type-string type-string
+                :sort-mode sort-mode
                 :label label}]
+    (assert (contains? #{:nosort :rowsort :valuesort} sort-mode))
+    (assert (re-find #"^[TIR]+$" type-string))
     (if-let [[_ values hash] (and (= 1 (count result))
                                   (re-find #"^(\d+) values hashing to (\p{XDigit}{32})$" (first result)))]
       (assoc record :result-set-size (Long/parseLong values) :result-set-md5sum hash)
