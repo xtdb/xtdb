@@ -58,7 +58,9 @@
                              (f v db recurse-state))
                            (.child-fns recurse-state))
                      (raise-doc-lookup-out-of-coll)
-                     (after-doc-lookup (fn [res] (not-empty (into {} (mapcat identity) res))))))))]
+                     (after-doc-lookup (fn [res]
+                                         (when-let [res (seq (remove nil? res))]
+                                           (into {} (mapcat identity) res))))))))]
     (cond
       (= '... query) pull-child
       (int? query) (fn [v db ^RecurseState recurse-state]
@@ -120,7 +122,7 @@
         (when-let [content-hash (some-> (entity-resolver-fn (c/->id-buffer value))
                                         c/new-id)]
           (let-docs [docs #{content-hash}]
-            (let [doc (get docs content-hash)]
+            (when-let [doc (get docs content-hash)]
               (->> (concat (->> forward-join-child-fns (map (fn [f] (f doc db recurse-state))))
                            (->> union-child-fns (mapcat (fn [f] (f value doc db recurse-state)))))
                    (raise-doc-lookup-out-of-coll)

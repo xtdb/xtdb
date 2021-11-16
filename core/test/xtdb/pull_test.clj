@@ -21,13 +21,18 @@
 
 (t/deftest test-pull
   (let [db (submit-bond)]
-    (t/is (= #{}
-             (xt/q db '{:find [(pull ?v [])]
-                        :where [[?v :not/here "N/A"]]})))
+    (t/testing "empty cases"
+      (t/is (= #{}
+               (xt/q db '{:find [(pull ?v [])]
+                          :where [[?v :not/here "N/A"]]})))
 
-    (t/is (= #{[nil]}
-             (xt/q db '{:find [(pull ?v [])]
-                        :where [[?v :vehicle/brand "Aston Martin"]]})))
+      (t/is (= #{[nil]}
+               (xt/q db '{:find [(pull ?v [])]
+                          :where [[?v :vehicle/brand "Aston Martin"]]})))
+
+      (t/is (= #{[{}]}
+               (xt/q db '{:find [(pull ?v [:doesntexist])]
+                          :where [[?v :vehicle/brand "Aston Martin"]]}))))
 
     (t/testing "simple props"
       (let [expected #{[{:vehicle/brand "Aston Martin", :vehicle/model "DB5"}]
@@ -248,7 +253,9 @@
                  '{:find [(pull ?e [*])]
                    :in [?e]
                    :timeout 500}
-                 "doesntexist"))))
+                 "doesntexist")))
+
+  (t/is (nil? (xt/pull (xt/db *api*) '[*] "doesntexist"))))
 
 (t/deftest test-with-speculative-doc-store
   (let [db (xt/with-tx (xt/db *api*) [[::xt/put {:xt/id :foo}]])]
