@@ -32,10 +32,11 @@
                                 (util/set-value-count out-vec idx)
 
                                 (.startValue out-writer)
-                                (let [v (get row k)
-                                      writer (.writerForType out-writer (ty/value->leg-type v))]
-                                  (.startValue writer)
-                                  (ty/write-value! v writer))
+                                (let [v (get row k)]
+                                  (doto (.writerForType out-writer (ty/value->leg-type v))
+                                    (.startValue)
+                                    (->> (ty/write-value! v))
+                                    (.endValue)))
                                 (.endValue out-writer))
 
                               rows))))

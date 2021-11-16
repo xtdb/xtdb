@@ -204,14 +204,18 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
-      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
+      (try
+        (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
 
-        (-> (c2/submit-tx node tx-ops)
-            (tu/then-await-tx node (Duration/ofMillis 2000)))
+          (-> (c2/submit-tx node tx-ops)
+              (tu/then-await-tx node (Duration/ofMillis 2000)))
 
-        (tu/finish-chunk node)
+          (tu/finish-chunk node)
 
-        (tu/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
+          (tu/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os))
+        (catch Exception e
+          (.printStackTrace e)
+          (throw e))))))
 
 (t/deftest round-trips-nils
   (with-open [node (node/start-node {})]

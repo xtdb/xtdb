@@ -17,9 +17,10 @@
               (let [duv-writer (.asDenseUnion (vw/vec->writer duv))]
                 (doseq [v vs]
                   (.startValue duv-writer)
-                  (types/write-value! v
-                                      (doto (.writerForType duv-writer (types/value->leg-type v))
-                                        (.startValue)))
+                  (doto (.writerForType duv-writer (types/value->leg-type v))
+                    (.startValue)
+                    (->> (types/write-value! v))
+                    (.endValue))
                   (.endValue duv-writer)))
 
               {:vs (vec (for [idx (range (count vs))]

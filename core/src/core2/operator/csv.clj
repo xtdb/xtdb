@@ -33,12 +33,12 @@
                         (let [parse-value (nth col-parsers col-idx)
                               writer (vw/vec->writer fv)]
                           (dotimes [row-idx row-count]
-                            (.startValue writer)
-                            (types/write-value! (-> (nth row-batch row-idx)
-                                                    (nth col-idx)
-                                                    parse-value)
-                                                writer)
-                            (.endValue writer))))
+                            (doto writer
+                              (.startValue)
+                              (->> (types/write-value! (-> (nth row-batch row-idx)
+                                                           (nth col-idx)
+                                                           parse-value)))
+                              (.endValue)))))
                       (.getFieldVectors root)))
 
         (util/set-vector-schema-root-row-count root row-count)

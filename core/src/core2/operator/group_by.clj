@@ -296,8 +296,10 @@
           (.startValue duv-writer)
           (let [^objects accs (.get all-accs idx)
                 v (.finish aggregate-spec (aget accs n))]
-            (types/write-value! v (doto (.writerForType duv-writer (types/value->leg-type v))
-                                    (.startValue))))
+            (doto (.writerForType duv-writer (types/value->leg-type v))
+              (.startValue)
+              (->> (types/write-value! v))
+              (.endValue)))
           (.endValue duv-writer))
 
         (.add out-cols (iv/->direct-vec append-vec))))

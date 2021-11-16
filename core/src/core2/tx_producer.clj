@@ -103,11 +103,14 @@
                                                   (doto (.startValue))
                                                   (.asStruct))]
                        (doseq [[k v] doc]
-                         (let [writer (doto (-> (.writerForName put-doc-leg-writer (name k))
-                                                (.asDenseUnion)
-                                                (.writerForType (t/value->leg-type v)))
-                                        (.startValue))]
-                           (t/write-value! v writer))))
+                         (doto (-> (.writerForName put-doc-leg-writer (name k))
+                                   (.asDenseUnion)
+                                   (.writerForType (t/value->leg-type v)))
+                           (.startValue)
+                           (->> (t/write-value! v))
+                           (.endValue)))
+
+                       (.endValue put-doc-leg-writer))
 
                      (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
                        (.set ^TimeStampMicroTZVector (.getVector put-vt-start-writer)
@@ -115,14 +118,17 @@
 
                      (when-let [^Instant vt-end (:_valid-time-end vt-opts)]
                        (.set ^TimeStampMicroTZVector (.getVector put-vt-end-writer)
-                             put-idx (util/instant->micros (util/->instant vt-end)))))
+                             put-idx (util/instant->micros (util/->instant vt-end))))
+
+                     (.endValue put-writer))
 
               :delete (let [delete-idx (.startValue delete-writer)]
-                        (let [id (:_id tx-op)
-                              ^IVectorWriter writer (doto (-> delete-id-writer
-                                                              (.writerForType (t/value->leg-type id)))
-                                                      (.startValue))]
-                          (t/write-value! id writer))
+                        (let [id (:_id tx-op)]
+                          (doto (-> delete-id-writer
+                                    (.writerForType (t/value->leg-type id)))
+                            (.startValue)
+                            (->> (t/write-value! id))
+                            (.endValue)))
 
                         (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
                           (.set ^TimeStampMicroTZVector (.getVector delete-vt-start-writer)
@@ -134,11 +140,13 @@
 
               :evict (do
                        (.startValue evict-writer)
-                       (let [id (:_id tx-op)
-                             ^IVectorWriter writer (doto (-> evict-id-writer
-                                                             (.writerForType (t/value->leg-type id)))
-                                                     (.startValue))]
-                         (t/write-value! id writer)))))
+                       (let [id (:_id tx-op)]
+                         (doto (-> evict-id-writer
+                                   (.writerForType (t/value->leg-type id)))
+                           (.startValue)
+                           (->> (t/write-value! id))
+                           (.endValue)))
+                       (.endValue evict-writer))))
 
           (.endValue tx-ops-writer))
 

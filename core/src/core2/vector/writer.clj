@@ -64,7 +64,8 @@
       (reify IRowCopier
         (copyRow [this src-idx]
           (.startValue this-writer)
-          (.copyRow inner-copier src-idx))))))
+          (.copyRow inner-copier src-idx)
+          (.endValue this-writer))))))
 
 (defn- duv->duv-copier ^core2.vector.IRowCopier [^DenseUnionVector src-vec, ^IDenseUnionWriter dest-col]
   (let [src-field (.getField src-vec)
@@ -107,9 +108,6 @@
     pos)
 
   (endValue [this]
-    (let [type-id (.getTypeId dest-duv pos)]
-      (when-not (neg? type-id)
-        (.endValue ^IVectorWriter (aget writers-by-type-id type-id))))
     (set! (.pos this) (inc pos)))
 
   (clear [this]

@@ -170,7 +170,8 @@
                 (let [src-offset (.getOffset tx-ops-vec tx-op-idx)
                       dest-offset (.startValue put-writer)]
                   (.copyFromSafe put-vt-start-vec src-offset dest-offset tx-put-vt-start-vec)
-                  (.copyFromSafe put-vt-end-vec src-offset dest-offset tx-put-vt-end-vec))
+                  (.copyFromSafe put-vt-end-vec src-offset dest-offset tx-put-vt-end-vec)
+                  (.endValue put-writer))
 
                 (.endValue ops-data-writer))
 
@@ -182,7 +183,8 @@
                       dest-offset (.startValue delete-writer)]
                   (.copyFromSafe delete-vt-start-vec src-offset dest-offset tx-delete-vt-start-vec)
                   (.copyFromSafe delete-vt-end-vec src-offset dest-offset tx-delete-vt-end-vec)
-                  (.copyRow delete-id-row-copier src-offset))
+                  (.copyRow delete-id-row-copier src-offset)
+                  (.endValue delete-writer))
 
                 (.endValue ops-data-writer))
 
@@ -190,7 +192,7 @@
                 (let [op-idx (.startValue ops-data-writer)]
                   (.setSafe row-id-vec op-idx row-id))
 
-                (.startValue evict-writer))
+                (doto evict-writer (.startValue) (.endValue)))
 
               (endTx [_]
                 (.endValue ops-writer)

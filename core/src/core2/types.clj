@@ -134,8 +134,10 @@
           data-duv-writer (.asDenseUnion data-writer)]
       (doseq [el v]
         (.startValue data-writer)
-        (write-value! el (doto (.writerForType data-duv-writer (value->leg-type el))
-                           (.startValue)))
+        (doto (.writerForType data-duv-writer (value->leg-type el))
+          (.startValue)
+          (->> (write-value! el))
+          (.endValue))
         (.endValue data-writer))))
 
   Map
@@ -151,10 +153,12 @@
         (instance? StructVector dest-vec)
         (let [writer (.asStruct writer)]
           (doseq [[k v] m]
-            (write-value! v (doto (-> (.writerForName writer (name k))
-                                      (.asDenseUnion)
-                                      (.writerForType (value->leg-type v)))
-                              (.startValue)))))
+            (doto (-> (.writerForName writer (name k))
+                      (.asDenseUnion)
+                      (.writerForType (value->leg-type v)))
+              (.startValue)
+              (->> (write-value! v))
+              (.endValue))))
 
         ;; TODO
         :else (throw (UnsupportedOperationException.))))))
