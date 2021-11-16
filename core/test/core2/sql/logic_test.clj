@@ -1,5 +1,8 @@
 (ns core2.sql.logic-test
-  (:require [clojure.string :as str])
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [core2.sql :as sql]
+            [instaparse.core :as insta])
   (:import java.security.MessageDigest
            java.nio.charset.StandardCharsets))
 
@@ -14,7 +17,7 @@
 
 (defmethod parse-record :statement [[x & xs]]
   (let [[_ mode] (str/split x #"\s+")
-        statement (str/join xs)
+        statement (str/join "\n" xs)
         mode (keyword mode)]
     (assert (contains? #{:ok :error} mode))
     {:type :statement
@@ -23,9 +26,8 @@
 
 (defmethod parse-record :query [[x & xs]]
   (let [[_ type-string sort-mode label] (str/split x #"\s+")
-        _ (prn xs)
         [query _ result] (partition-by #{"----"} xs)
-        query (str/join query)
+        query (str/join "\n" query)
         sort-mode (keyword (or sort-mode :nosort))
         record {:type :query
                 :query query
@@ -88,4 +90,21 @@ SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END
 skipif postgresql
 query III rowsort label-xyzzy
 SELECT a x, b y, c z FROM t1
-"))
+")
+
+  (dotimes [n 5]
+    (time
+     (let [f (format "core2/sql/logic_test/select%d.test" (inc n))
+           records (parse-script (slurp (io/resource f)))]
+       (println f (count records))
+       (doseq [{:keys [type statement query] :as record} records
+               :let [input (case type
+                             :statement statement
+                             :query query
+                             nil)]
+               :when input
+               :let [tree (sql/parse-sql2011 input :start :direct_sql_data_statement)]]
+         (if-let [failure (insta/get-failure tree)]
+           (println failure)
+           (print ".")))
+       (println)))))
