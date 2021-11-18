@@ -12,6 +12,15 @@
        (BigInteger. 1)
        (format "%032x")))
 
+(defn- parse-create-table [^String x]
+  (when-let [[_ table-name columns] (re-find #"(?s)^\s*CREATE\s+TABLE\s+(\w+)\((.+)\)\s*$" x)]
+    {:type :create-table
+     :table-name table-name
+     :columns (vec (for [column (str/split columns #",")]
+                     (->> (str/split column #"\s+")
+                          (remove str/blank?)
+                          (first))))}))
+
 (defmulti parse-record (fn [[x & xs]]
                          (keyword (first (str/split x #"\s+")))))
 
@@ -64,7 +73,7 @@
        (map #(str/replace % #"\s*#.+$" ""))
        (partition-by str/blank?)
        (remove #(every? str/blank? %))
-       (map parse-record)))
+       (mapv parse-record)))
 
 (comment
   (parse-script
@@ -92,6 +101,15 @@ query III rowsort label-xyzzy
 SELECT a x, b y, c z FROM t1
 ")
 
+  (parse-create-table "CREATE TABLE t1(a INTEGER, b INTEGER)")
+
+  (parse-create-table "
+CREATE TABLE t1(
+  a INTEGER,
+  b VARCHAR(30),
+  c INTEGER
+)")
+
   (dotimes [n 5]
     (time
      (let [f (format "core2/sql/logic_test/select%d.test" (inc n))
@@ -105,6 +123,6 @@ SELECT a x, b y, c z FROM t1
                :when input
                :let [tree (sql/parse-sql2011 input :start :direct_sql_data_statement)]]
          (if-let [failure (insta/get-failure tree)]
-           (println failure)
+           (println (or (parse-create-table input) failure))
            (print ".")))
        (println)))))
