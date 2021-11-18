@@ -10,7 +10,7 @@
          (comp #(str/starts-with? % "?") name)))
 
 ;; TODO flesh out
-(def ^:private eid? (some-fn string? number? inst?))
+(def ^:private eid? (some-fn string? number? inst? keyword?))
 
 (s/def ::eid eid?)
 (s/def ::value (some-fn eid?))

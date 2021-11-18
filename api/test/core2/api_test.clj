@@ -49,10 +49,10 @@
   (t/is (map? (c2/status *node*))))
 
 (t/deftest test-simple-query
-  (let [!tx (c2/submit-tx *node* [[:put {:_id "foo", :inst #inst "2021"}]])]
+  (let [!tx (c2/submit-tx *node* [[:put {:_id :foo, :inst #inst "2021"}]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
 
-    (t/is (= [{:e "foo", :inst (util/->zdt #inst "2021")}]
+    (t/is (= [{:e :foo, :inst (util/->zdt #inst "2021")}]
              (->> (c2/plan-query *node*
                                  (-> '{:find [?e ?inst]
                                        :where [[?e :inst ?inst]]}
@@ -63,7 +63,7 @@
 (t/deftest test-validation-errors
   (t/is (thrown? IllegalArgumentException
                  (try
-                   @(c2/submit-tx *node* [[:pot {:_id "foo"}]])
+                   @(c2/submit-tx *node* [[:pot {:_id :foo}]])
                    (catch ExecutionException e
                      (throw (.getCause e))))))
 
@@ -74,10 +74,10 @@
                      (throw (.getCause e)))))))
 
 (t/deftest round-trips-lists
-  (let [!tx (c2/submit-tx *node* [[:put {:_id "foo", :list [1 2 ["foo" "bar"]]}]])]
+  (let [!tx (c2/submit-tx *node* [[:put {:_id :foo, :list [1 2 ["foo" "bar"]]}]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
 
-    (t/is (= [{:id "foo"
+    (t/is (= [{:id :foo
                :list [1 2 ["foo" "bar"]]}]
              (c2/query *node*
                        (-> '{:find [?id ?list]
@@ -86,12 +86,12 @@
                                   :basis-timeout (Duration/ofSeconds 1))))))))
 
 (t/deftest round-trips-structs
-  (let [!tx (c2/submit-tx *node* [[:put {:_id "foo", :struct {:a 1, :b {:c "bar"}}}]
-                                  [:put {:_id "bar", :struct {:a true, :d 42.0}}]])]
+  (let [!tx (c2/submit-tx *node* [[:put {:_id :foo, :struct {:a 1, :b {:c "bar"}}}]
+                                  [:put {:_id :bar, :struct {:a true, :d 42.0}}]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
 
-    (t/is (= #{{:id "foo", :struct {:a 1, :b {:c "bar"}}}
-               {:id "bar", :struct {:a true, :d 42.0}}}
+    (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
+               {:id :bar, :struct {:a true, :d 42.0}}}
              (set (c2/query *node*
                             (-> '{:find [?id ?struct]
                                   :where [[?id :struct ?struct]]}

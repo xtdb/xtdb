@@ -17,9 +17,9 @@
 (t/deftest test-as-of-tx
   (let [snapshot-factory (tu/component ::snap/snapshot-factory)
 
-        !tx1 (c2/submit-tx tu/*node* [[:put {:_id "my-doc", :last-updated "tx1"}]])
+        !tx1 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last-updated "tx1"}]])
         _ (Thread/sleep 10) ; prevent same-ms transactions
-        !tx2 (c2/submit-tx tu/*node* [[:put {:_id "my-doc", :last-updated "tx2"}]])]
+        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last-updated "tx2"}]])]
 
     (t/is (= #{{:last-updated "tx2"}}
              (set (op/query-ra '[:scan [last-updated]]
@@ -55,23 +55,23 @@
 (t/deftest test-valid-time
   (let [snapshot-factory (tu/component ::snap/snapshot-factory)
 
-        {:keys [tx-time] :as tx1} @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 1}]
-                                                            [:put {:_id "doc-with-vt"}
+        {:keys [tx-time] :as tx1} @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]
+                                                            [:put {:_id :doc-with-vt}
                                                              {:_valid-time-start #inst "2021"}]])
         tx-time (util/->zdt tx-time)
 
         db (snap/snapshot snapshot-factory tx1)]
 
-    (t/is (= {"doc" {:_id "doc",
-                     :_valid-time-start tx-time
-                     :_valid-time-end end-of-time-zdt
-                     :_tx-time-start tx-time
-                     :_tx-time-end end-of-time-zdt}
-              "doc-with-vt" {:_id "doc-with-vt",
-                             :_valid-time-start (util/->zdt #inst "2021")
-                             :_valid-time-end end-of-time-zdt
-                             :_tx-time-start tx-time
-                             :_tx-time-end end-of-time-zdt}}
+    (t/is (= {:doc {:_id :doc,
+                    :_valid-time-start tx-time
+                    :_valid-time-end end-of-time-zdt
+                    :_tx-time-start tx-time
+                    :_tx-time-end end-of-time-zdt}
+              :doc-with-vt {:_id :doc-with-vt,
+                            :_valid-time-start (util/->zdt #inst "2021")
+                            :_valid-time-end end-of-time-zdt
+                            :_tx-time-start tx-time
+                            :_tx-time-end end-of-time-zdt}}
              (->> (op/query-ra '[:scan [_id
                                         _valid-time-start _valid-time-end
                                         _tx-time-start _tx-time-end]]
@@ -81,21 +81,21 @@
 (t/deftest test-tx-time
   (let [snapshot-factory (tu/component ::snap/snapshot-factory)
 
-        {tt1 :tx-time} @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 0}]])
+        {tt1 :tx-time} @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 0}]])
         _ (Thread/sleep 10) ; prevent same-ms transactions
-        {tt2 :tx-time, :as tx2} @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 1}]])
+        {tt2 :tx-time, :as tx2} @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]])
         tt1 (util/->zdt tt1)
         tt2 (util/->zdt tt2)
 
         db (snap/snapshot snapshot-factory tx2)
 
-        replaced-v0-doc {:_id "doc", :version 0
+        replaced-v0-doc {:_id :doc, :version 0
                          :_valid-time-start tt1
                          :_valid-time-end tt2
                          :_tx-time-start tt2
                          :_tx-time-end end-of-time-zdt}
 
-        v1-doc {:_id "doc", :version 1
+        v1-doc {:_id :doc, :version 1
                 :_valid-time-start tt2
                 :_valid-time-end end-of-time-zdt
                 :_tx-time-start tt2
@@ -133,14 +133,14 @@
                    (map :_id)
                    frequencies))]
 
-      (let [_ @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 0}]
-                                        [:put {:_id "other-doc", :version 0}]])
+      (let [_ @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 0}]
+                                        [:put {:_id :other-doc, :version 0}]])
             _ (Thread/sleep 10)         ; prevent same-ms transactions
-            tx2 @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 1}]])]
+            tx2 @(c2/submit-tx tu/*node* [[:put {:_id :doc, "version" 1}]])]
 
-        (t/is (= {"doc" 3, "other-doc" 1} (all-time-docs (snap/snapshot snapshot-factory tx2)))
+        (t/is (= {:doc 3, :other-doc 1} (all-time-docs (snap/snapshot snapshot-factory tx2)))
               "documents present before evict"))
 
-      (let [tx3 @(c2/submit-tx tu/*node* [[:evict "doc"]])]
-        (t/is (= {"other-doc" 1} (all-time-docs (snap/snapshot snapshot-factory tx3)))
+      (let [tx3 @(c2/submit-tx tu/*node* [[:evict :doc]])]
+        (t/is (= {:other-doc 1} (all-time-docs (snap/snapshot snapshot-factory tx3)))
               "documents removed after evict")))))

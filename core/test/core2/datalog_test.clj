@@ -7,8 +7,8 @@
 (t/use-fixtures :each tu/with-node)
 
 (def ivan+petr
-  [[:put {:_id "ivan", :first-name "Ivan", :last-name "Ivanov"}]
-   [:put {:_id "petr", :first-name "Petr", :last-name "Petrov"}]])
+  [[:put {:_id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
+   [:put {:_id :petr, :first-name "Petr", :last-name "Petrov"}]])
 
 (t/deftest test-scan
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
@@ -20,8 +20,8 @@
                                      (assoc :basis {:tx tx})))
                   (into []))))
 
-    (t/is (= [{:e "ivan", :name "Ivan"}
-              {:e "petr", :name "Petr"}]
+    (t/is (= [{:e :ivan, :name "Ivan"}
+              {:e :petr, :name "Petr"}]
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?e ?name]
                                        :where [[?e :first-name ?name]]}
@@ -31,7 +31,7 @@
 
 (t/deftest test-basic-query
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
-    (t/is (= [{:e "ivan"}]
+    (t/is (= [{:e :ivan}]
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?e]
                                        :where [[?e :first-name "Ivan"]]}
@@ -52,8 +52,8 @@
     (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?first-name ?last-name]
-                                       :where [["petr" :first-name ?first-name]
-                                               ["petr" :last-name ?last-name]]}
+                                       :where [[:petr :first-name ?first-name]
+                                               [:petr :last-name ?last-name]]}
                                      (assoc :basis {:tx tx})))
                   (into [])))
           "literal eid")))
@@ -211,10 +211,10 @@
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
 (t/deftest datascript-test-aggregates
   (let [tx (c2/submit-tx tu/*node*
-                         [[:put {:_id "Cerberus", :heads 3}]
-                          [:put {:_id "Medusa", :heads 1}]
-                          [:put {:_id "Cyclops", :heads 1}]
-                          [:put {:_id "Chimera", :heads 1}]])]
+                         [[:put {:_id :cerberus, :heads 3}]
+                          [:put {:_id :medusa, :heads 1}]
+                          [:put {:_id :cyclops, :heads 1}]
+                          [:put {:_id :chimera, :heads 1}]])]
     (t/is (= #{{:heads 1, :count-?heads 3} {:heads 3, :count-?heads 1}}
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?heads (count ?heads)]
@@ -236,7 +236,7 @@
 
 (t/deftest test-query-with-in-bindings
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
-    (t/is (= #{{:e "ivan"}}
+    (t/is (= #{{:e :ivan}}
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?e]
                                        :in [?name]
@@ -246,7 +246,7 @@
                   (into #{})))
           "single arg")
 
-    (t/is (= #{{:e "ivan"}}
+    (t/is (= #{{:e :ivan}}
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?e]
                                        :in [?first-name ?last-name]
@@ -257,7 +257,7 @@
                   (into #{})))
           "multiple args")
 
-    (t/is (= #{{:e "ivan"}}
+    (t/is (= #{{:e :ivan}}
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?e]
                                        :in [[?first-name]]
@@ -267,7 +267,7 @@
                   (into #{})))
           "tuple with 1 var")
 
-    (t/is (= #{{:e "ivan"}}
+    (t/is (= #{{:e :ivan}}
              (->> (c2/plan-query tu/*node*
                                  (-> '{:find [?e]
                                        :in [[?first-name ?last-name]]
@@ -283,11 +283,11 @@
                         :in [[?first-name ...]]
                         :where [[?e :first-name ?first-name]]}
                       (assoc :basis {:tx tx}))]
-        (t/is (= #{{:e "petr"}}
+        (t/is (= #{{:e :petr}}
                  (->> (c2/plan-query tu/*node* query ["Petr"])
                       (into #{}))))
 
-        (t/is (= #{{:e "ivan"} {:e "petr"}}
+        (t/is (= #{{:e :ivan} {:e :petr}}
                  (->> (c2/plan-query tu/*node* query ["Ivan" "Petr"])
                       (into #{}))))))
 
@@ -298,22 +298,22 @@
                                 [?e :last-name ?last-name]]}
                       (assoc :basis {:tx tx}))]
 
-        (t/is (= #{{:e "ivan"}}
+        (t/is (= #{{:e :ivan}}
                  (->> (c2/plan-query tu/*node* query
                                      [{:first-name "Ivan", :last-name "Ivanov"}])
                       (into #{}))))
 
-        (t/is (= #{{:e "ivan"}}
+        (t/is (= #{{:e :ivan}}
                  (->> (c2/plan-query tu/*node* query
                                      [["Ivan" "Ivanov"]])
                       (into #{}))))
 
-        (t/is (= #{{:e "ivan"} {:e "petr"}}
+        (t/is (= #{{:e :ivan} {:e :petr}}
                  (->> (c2/plan-query tu/*node* query
                                      [{:first-name "Ivan", :last-name "Ivanov"}
                                       {:first-name "Petr", :last-name "Petrov"}])
                       (into #{}))))
-        (t/is (= #{{:e "ivan"} {:e "petr"}}
+        (t/is (= #{{:e :ivan} {:e :petr}}
                  (->> (c2/plan-query tu/*node* query
                                      [["Ivan" "Ivanov"]
                                       ["Petr" "Petrov"]])

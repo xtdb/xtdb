@@ -4,7 +4,8 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.writer :as vw])
-  (:import java.nio.ByteBuffer
+  (:import [core2.vector.extensions KeywordVector UuidVector]
+           java.nio.ByteBuffer
            [java.time Instant OffsetDateTime ZonedDateTime ZoneId ZoneOffset]
            [org.apache.arrow.vector BigIntVector BitVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]))
@@ -66,4 +67,10 @@
       (t/is (= {:vs vs
                 :vec-types [ListVector ListVector StructVector StructVector StructVector ListVector ListVector StructVector]}
                (test-round-trip vs))
-            "nested types"))))
+            "nested types"))
+
+    (let [vs [:foo :foo/bar #uuid "97a392d5-5e3f-406f-9651-a828ee79b156"]]
+      (t/is (= {:vs vs
+                :vec-types [KeywordVector KeywordVector UuidVector]}
+               (test-round-trip vs))
+            "extension types"))))

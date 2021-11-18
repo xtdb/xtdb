@@ -108,7 +108,7 @@
   (get-value [v idx]
     (let [x (ByteBuffer/wrap (.getObject v ^long idx))]
       (case (extension-type v)
-        "uuid"
+        "java.util.UUID"
         (UUID. (.getLong x) (.getLong x))
 
         x)))
@@ -531,7 +531,7 @@
   UUID
   (append-value [x ^DenseUnionVector v]
     (let [arrow-type (ArrowType$FixedSizeBinary. 16)
-          extension-type "uuid"
+          extension-type "java.util.UUID"
           type-id (get-or-create-type-id v arrow-type (->extension-type-pred extension-type))
           ^FixedSizeBinaryVector inner-vec (get-or-add-vector v arrow-type "extensiontype" type-id extension-type)
           offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)]

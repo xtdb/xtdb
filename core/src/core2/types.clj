@@ -1,18 +1,20 @@
 (ns core2.types
   (:require [clojure.string :as str]
             [core2.util :as util])
-  (:import core2.vector.IVectorWriter
+  (:import clojure.lang.Keyword
            [core2.types LegType LegType$StructLegType]
+           [core2.vector.extensions KeywordType KeywordVector UuidType UuidVector]
+           core2.vector.IVectorWriter
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId]
-           [java.util Date List Map]
+           [java.util Date List Map UUID]
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -163,6 +165,26 @@
         ;; TODO
         :else (throw (UnsupportedOperationException.))))))
 
+(def ^:private ^core2.types.LegType keyword-leg-type (LegType. KeywordType/INSTANCE))
+(def ^:private ^core2.types.LegType uuid-leg-type (LegType. UuidType/INSTANCE))
+
+(extend-protocol ArrowWriteable
+  Keyword
+  (value->leg-type [_] keyword-leg-type)
+  (write-value! [kw ^IVectorWriter writer]
+    (write-value! (str (symbol kw)) (.getUnderlyingWriter (.asExtension writer))))
+
+  UUID
+  (value->leg-type [_] uuid-leg-type)
+  (write-value! [^UUID uuid ^IVectorWriter writer]
+    (let [underlying-writer (.getUnderlyingWriter (.asExtension writer))
+          bb (doto (ByteBuffer/allocate 16)
+               (.putLong (.getMostSignificantBits uuid))
+               (.putLong (.getLeastSignificantBits uuid)))]
+      (.setSafe ^FixedSizeBinaryVector (.getVector underlying-writer)
+                (.getPosition underlying-writer)
+                (.array bb)))))
+
 (defprotocol VectorType
   (^java.lang.Class arrow-type->vector-type [^ArrowType arrow-type]))
 
@@ -202,6 +224,10 @@
         (throw (UnsupportedOperationException.)))))
 
   ArrowType$Duration (arrow-type->vector-type [_] DurationVector))
+
+(extend-protocol VectorType
+  KeywordType (arrow-type->vector-type [_] KeywordVector)
+  UuidType (arrow-type->vector-type [_] UuidVector))
 
 (defprotocol ArrowReadable
   (get-object [value-vector idx]))
@@ -328,6 +354,7 @@
       "timestampmicrotz" (format "%s-%s" minor-type-name
                                  (-> (.toLowerCase (.getTimezone ^ArrowType$Timestamp arrow-type))
                                      (str/replace #"[/:]" "_")))
+      "extensiontype" (.extensionName ^ArrowType$ExtensionType arrow-type)
       minor-type-name)))
 
 (defn field->leg-type [^Field field]

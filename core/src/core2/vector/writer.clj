@@ -1,18 +1,16 @@
 (ns core2.vector.writer
-  (:require [core2.types :as ty]
+  (:require [core2.types :as types]
             [core2.util :as util]
-            [core2.vector.indirect :as iv]
-            [core2.types :as types])
-  (:import [core2.types LegType LegType$StructLegType]
-           [core2.vector IDenseUnionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter]
+            [core2.vector.indirect :as iv])
+  (:import [core2.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter]
            java.lang.AutoCloseable
            [java.util HashMap LinkedHashMap Map]
            java.util.function.Function
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.util.AutoCloseables
-           [org.apache.arrow.vector NullVector ValueVector]
+           [org.apache.arrow.vector ExtensionTypeVector NullVector ValueVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType$Struct ArrowType$Union Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType]
            org.apache.arrow.vector.types.Types))
 
 (deftype DuvChildWriter [^IDenseUnionWriter parent-writer,
@@ -41,6 +39,16 @@
         (startValue [_] (.startValue duv-child-writer))
         (endValue [_] (.endValue duv-child-writer))
         (getDataWriter [_] (.getDataWriter inner-writer)))))
+
+  (asExtension [duv-child-writer]
+    (let [^IExtensionWriter inner-writer (cast IExtensionWriter inner-writer)] ; cast to throw CCE early
+      (reify
+        IExtensionWriter
+        (getVector [_] (.getVector inner-writer))
+        (getPosition [_] (.getPosition inner-writer))
+        (startValue [_] (.startValue duv-child-writer))
+        (endValue [_] (.endValue duv-child-writer))
+        (getUnderlyingWriter [_] (.getUnderlyingWriter inner-writer)))))
 
   (startValue [this]
     (let [parent-duv (.getVector parent-writer)
@@ -123,8 +131,6 @@
       (reify IRowCopier
         (copyRow [_ src-idx] (.copyRow inner-copier src-idx)))))
 
-  (asDenseUnion [this] this)
-
   IDenseUnionWriter
   (writerForTypeId [this type-id]
     (or (aget writers-by-type-id type-id)
@@ -178,8 +184,6 @@
       (.clear writer))
     (set! (.pos this) 0))
 
-  (asStruct [this] this)
-
   (rowCopier [struct-writer src-vec]
     (let [^StructVector src-vec (cast StructVector src-vec)
           copiers (vec (for [^ValueVector child-vec (.getChildrenFromFields src-vec)]
@@ -197,7 +201,7 @@
                         (apply [_ col-name]
                           (-> (or (.getChild dest-vec col-name)
                                   (.addOrGet dest-vec col-name
-                                             (FieldType/nullable ty/dense-union-type)
+                                             (FieldType/nullable types/dense-union-type)
                                              DenseUnionVector))
                               (vec->writer pos)))))))
 
@@ -208,7 +212,6 @@
   IVectorWriter
   (getVector [_] dest-vec)
   (getPosition [_] pos)
-  (asList [this] this)
 
   (startValue [this]
     (set! (.data-start-pos this) (.startNewValue dest-vec pos))
@@ -236,6 +239,21 @@
 
   IListWriter
   (getDataWriter [_] data-writer))
+
+(deftype ExtensionWriter [^ExtensionTypeVector dest-vec, ^IVectorWriter underlying-writer]
+  IVectorWriter
+  (getVector [_] dest-vec)
+  (getPosition [_] (.getPosition underlying-writer))
+  (startValue [_] (.startValue underlying-writer))
+  (endValue [_] (.endValue underlying-writer))
+
+  (clear [_] (.clear underlying-writer))
+
+  (rowCopier [_ src-vec]
+    (.rowCopier underlying-writer (.getUnderlyingVector ^ExtensionTypeVector src-vec)))
+
+  IExtensionWriter
+  (getUnderlyingWriter [_] underlying-writer))
 
 (deftype ScalarWriter [^ValueVector dest-vec,
                        ^:unsynchronized-mutable ^int pos]
@@ -272,6 +290,9 @@
 
      (instance? ListVector dest-vec)
      (ListWriter. dest-vec (vec->writer (.getDataVector ^ListVector dest-vec)) pos 0)
+
+     (instance? ExtensionTypeVector dest-vec)
+     (ExtensionWriter. dest-vec (vec->writer (.getUnderlyingVector ^ExtensionTypeVector dest-vec)))
 
      :else
      (ScalarWriter. dest-vec pos))))

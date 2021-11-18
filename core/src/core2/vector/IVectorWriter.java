@@ -1,28 +1,36 @@
 package core2.vector;
 
+import org.apache.arrow.vector.ExtensionTypeVector;
+import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.ValueVector;
 
 @SuppressWarnings("try")
 public interface IVectorWriter<V extends ValueVector> extends AutoCloseable {
     V getVector();
 
-    <R extends ValueVector> IRowCopier rowCopier(ValueVector srcVector);
+    IRowCopier rowCopier(ValueVector srcVector);
 
     int getPosition();
 
     int startValue();
+
     void endValue();
 
     default IStructWriter asStruct() {
-        throw new ClassCastException("not a struct");
+        return (IStructWriter) this;
     }
 
     default IListWriter asList() {
-        throw new ClassCastException("not a list");
+        return (IListWriter) this;
     }
 
     default IDenseUnionWriter asDenseUnion() {
-        throw new ClassCastException("not a dense union");
+        return (IDenseUnionWriter) this;
+    }
+
+    @SuppressWarnings("unchecked")
+    default <I extends FieldVector, V extends ExtensionTypeVector<I>> IExtensionWriter<I, V> asExtension() {
+        return (IExtensionWriter<I, V>) this;
     }
 
     void clear();

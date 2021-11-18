@@ -33,7 +33,7 @@
    :return-type compare-return-type})
 
 (defmethod expr/codegen-call [:compare ::types/Object ::types/Object] [{:keys [emitted-args]}]
-  {:code `(.compareTo ~@emitted-args)
+  {:code `(.compareTo ~@(map #(expr/with-tag % Comparable) emitted-args))
    :return-type compare-return-type})
 
 (defmethod expr/codegen-call [:compare ArrowType$Utf8 ArrowType$Utf8] [{:keys [emitted-args]}]

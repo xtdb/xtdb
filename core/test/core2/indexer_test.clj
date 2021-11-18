@@ -204,18 +204,14 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
-      (try
-        (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
+      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
 
-          (-> (c2/submit-tx node tx-ops)
-              (tu/then-await-tx node (Duration/ofMillis 2000)))
+        (-> (c2/submit-tx node tx-ops)
+            (tu/then-await-tx node (Duration/ofMillis 2000)))
 
-          (tu/finish-chunk node)
+        (tu/finish-chunk node)
 
-          (tu/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os))
-        (catch Exception e
-          (.printStackTrace e)
-          (throw e))))))
+        (tu/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
 
 (t/deftest round-trips-nils
   (with-open [node (node/start-node {})]
@@ -230,6 +226,25 @@
                               :where [[?e :_id ?id]
                                       [?e :foo ?foo]
                                       [?e :bar ?bar]]})))))
+
+(t/deftest round-trips-extensions-via-ipc
+  (let [node-dir (util/->path "target/round-trips-extensions-via-ipc")
+        uuid #uuid "eb965985-de20-4b45-9721-b6a4bbd694bf"]
+    (util/delete-dir node-dir)
+
+    (with-open [node (tu/->local-node {:node-dir node-dir})]
+      (-> (c2/submit-tx node [[:put {:_id :foo, :uuid uuid}]])
+          (tu/then-await-tx node (Duration/ofMillis 2000)))
+
+      (tu/finish-chunk node)
+      (t/is (= #{{:id :foo, :uuid uuid}}
+               (set (c2/query node '{:find [?id ?uuid]
+                                     :where [[?id :uuid ?uuid]]})))))
+
+    (with-open [node (tu/->local-node {:node-dir node-dir})]
+      (t/is (= #{{:id :foo, :uuid uuid}}
+               (set (c2/query node '{:find [?id ?uuid]
+                                     :where [[?id :uuid ?uuid]]})))))))
 
 (t/deftest writes-log-file
   (let [node-dir (util/->path "target/writes-log-file")

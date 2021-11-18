@@ -131,7 +131,7 @@
 
 (t/deftest test-date-trunc
   (with-open [node (node/start-node {})]
-    (let [tx (c2/submit-tx node [[:put {:_id "foo", :date (util/->instant #inst "2021-01-21T12:34:56Z")}]])
+    (let [tx (c2/submit-tx node [[:put {:_id :foo, :date (util/->instant #inst "2021-01-21T12:34:56Z")}]])
           db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx)]
       (t/is (= [{:trunc (util/->zdt #inst "2021-01-21")}]
                (op/query-ra '[:project [{trunc (date-trunc "DAY" date)}]

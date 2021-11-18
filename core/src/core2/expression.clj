@@ -10,6 +10,7 @@
            [core2.operator.select IColumnSelector IRelationSelector]
            [core2.types LegType LegType$StructLegType]
            [core2.vector IIndirectRelation IIndirectVector]
+           [core2.vector.extensions KeywordType UuidType]
            java.lang.reflect.Method
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
@@ -18,7 +19,7 @@
            [java.util Date LinkedHashMap]
            [org.apache.arrow.vector BaseVariableWidthVector DurationVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -212,6 +213,11 @@
 (defmethod get-value-form ArrowType$Binary [_ vec-sym idx-sym] `(element->nio-buffer ~vec-sym ~idx-sym))
 (defmethod get-value-form :default [_ vec-sym idx-sym] `(normalize-union-value (.getObject ~vec-sym ~idx-sym)))
 
+(defmulti extension-type-literal-form class)
+
+(defmethod extension-type-literal-form KeywordType [_] `KeywordType/INSTANCE)
+(defmethod extension-type-literal-form UuidType [_] `UuidType/INSTANCE)
+
 (defn- leg-type-literal-form [^LegType leg-type]
   (let [arrow-type (.arrowType leg-type)]
     (letfn [(timestamp-type-literal [time-unit-literal]
@@ -225,6 +231,8 @@
           "TIMESTAMPMILLITZ" (timestamp-type-literal `TimeUnit/MILLISECOND)
           "TIMESTAMPMICROTZ" (timestamp-type-literal `TimeUnit/MICROSECOND)
           "TIMESTAMPNANOTZ" (timestamp-type-literal `TimeUnit/NANOSECOND)
+
+          "EXTENSIONTYPE" `(LegType. ~(extension-type-literal-form arrow-type))
 
           ;; TODO there are other minor types that don't have a single corresponding ArrowType
           `(LegType. (.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name))))))))
