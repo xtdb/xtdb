@@ -6,56 +6,56 @@
             [core2.types :as types]
             [core2.util :as util])
   (:import java.time.Instant
-           java.util.Date
-           [org.apache.arrow.vector.types.pojo ArrowType$Bool ArrowType$Duration ArrowType$Int ArrowType$Timestamp]
+           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Int ArrowType$Timestamp]
            org.apache.arrow.vector.types.TimeUnit))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 ;; SQL:2011 Time-related-predicates
+;; FIXME: these don't take different granularities of timestamp into account
 
-(defmethod expr/codegen-call [:overlaps ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
-  [{[{x-start :code} {x-end :code} {y-start :code} {y-end :code}] :args}]
+(defmethod expr/codegen-call [:overlaps ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp] [_]
+  {:continue-call (fn [f [x-start x-end y-start y-end]]
+                    (f types/bool-type
+                       `(and (< ~x-start ~y-end) (> ~x-end ~y-start))))
+   :return-type types/bool-type})
 
-  {:code `(and (< ~x-start ~y-end) (> ~x-end ~y-start))
-   :return-type ArrowType$Bool/INSTANCE})
+(defmethod expr/codegen-call [:contains ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp] [_]
+  {:continue-call (fn [f [x-start x-end y]]
+                    (f types/bool-type
+                       `(let [y# ~y]
+                          (and (<= ~x-start y#) (> ~x-end y#)))))
+   :return-type types/bool-type})
 
-(defmethod expr/codegen-call [:contains ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
-  [{[{x-start :code} {x-end :code} {y :code}] :args}]
+(defmethod expr/codegen-call [:contains ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp] [_]
+  {:continue-call (fn [f [x-start x-end y-start y-end]]
+                    (f types/bool-type
+                       `(and (<= ~x-start ~y-start) (>= ~x-end ~y-end))))
+   :return-type types/bool-type})
 
-  {:code `(let [y# ~y]
-            (and (<= ~x-start y#) (> ~x-end y#)))
-   :return-type ArrowType$Bool/INSTANCE})
+(defmethod expr/codegen-call [:precedes ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp] [_]
+  {:continue-call (fn [f [_x-start x-end y-start _y-end]]
+                    (f types/bool-type
+                       `(<= ~x-end ~y-start)))
+   :return-type types/bool-type})
 
-(defmethod expr/codegen-call [:contains ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
-  [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
+(defmethod expr/codegen-call [:succeeds ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp] [_]
+  {:continue-call (fn [f [x-start _x-end _y-start y-end]]
+                    (f types/bool-type
+                       `(>= ~x-start ~y-end)))
+   :return-type types/bool-type})
 
-  {:code `(and (<= ~x-start ~y-start) (>= ~x-end ~y-end))
-   :return-type ArrowType$Bool/INSTANCE})
+(defmethod expr/codegen-call [:immediately-precedes ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp] [_]
+  {:continue-call (fn [f [_x-start x-end y-start _y-end]]
+                    (f types/bool-type
+                       `(= ~x-end ~y-start)))
+   :return-type types/bool-type})
 
-(defmethod expr/codegen-call [:precedes ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
-  [{[_x-start {x-end :code} {y-start :code} _y-end] :args}]
-
-  {:code `(<= ~x-end ~y-start)
-   :return-type ArrowType$Bool/INSTANCE})
-
-(defmethod expr/codegen-call [:succeeds ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
-  [{[{x-start :code} _x-end _y-start {y-end :code}] :args}]
-
-  {:code `(>= ~x-start ~y-end)
-   :return-type ArrowType$Bool/INSTANCE})
-
-(defmethod expr/codegen-call [:immediately-precedes ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
-  [{[_x-start {x-end :code} {y-start :code} _y-end] :args}]
-
-  {:code `(= ~x-end ~y-start)
-   :return-type ArrowType$Bool/INSTANCE})
-
-(defmethod expr/codegen-call [:immediately-succeeds ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp]
-  [{[{x-start :code} _x-end _y-start {y-end :code}] :args}]
-
-  {:code `(= ~x-start ~y-end)
-   :return-type ArrowType$Bool/INSTANCE})
+(defmethod expr/codegen-call [:immediately-succeeds ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp ArrowType$Timestamp] [_]
+  {:continue-call (fn [f [x-start _x-end _y-start y-end]]
+                    (f types/bool-type
+                       `(= ~x-start ~y-end)))
+   :return-type types/bool-type})
 
 ;; SQL:2011 Operations involving datetimes and intervals
 
@@ -76,79 +76,101 @@
     form
     `(Math/multiplyExact ~form ~(quot (units-per-second to-unit) (units-per-second from-unit)))))
 
-(defmethod expr/codegen-call [:+ ArrowType$Timestamp ArrowType$Duration] [{[^ArrowType$Timestamp x-type, ^ArrowType$Duration y-type] :arg-types,
-                                                                           [x-arg y-arg] :emitted-args}]
+(defmethod expr/codegen-call [:+ ArrowType$Timestamp ArrowType$Duration] [{[^ArrowType$Timestamp x-type, ^ArrowType$Duration y-type] :arg-types}]
   (let [x-unit (.getUnit x-type)
         y-unit (.getUnit y-type)
-        res-unit (smallest-unit x-unit y-unit)]
-    {:code `(Math/addExact ~(-> x-arg (with-conversion x-unit res-unit))
-                           ~(-> y-arg (with-conversion y-unit res-unit)))
-     :return-type (ArrowType$Timestamp. res-unit (.getTimezone x-type))}))
+        res-unit (smallest-unit x-unit y-unit)
+        return-type (ArrowType$Timestamp. res-unit (.getTimezone x-type))]
+    {:return-types #{return-type}
+     :continue-call (fn [f [x-arg y-arg]]
+                      (f return-type
+                         `(Math/addExact ~(-> x-arg (with-conversion x-unit res-unit))
+                                         ~(-> y-arg (with-conversion y-unit res-unit)))))}))
 
-(defmethod expr/codegen-call [:+ ArrowType$Duration ArrowType$Timestamp] [{[^ArrowType$Duration x-type, ^ArrowType$Timestamp y-type] :arg-types,
-                                                                           [x-arg y-arg] :emitted-args}]
+(defmethod expr/codegen-call [:+ ArrowType$Duration ArrowType$Timestamp] [{[^ArrowType$Duration x-type, ^ArrowType$Timestamp y-type] :arg-types}]
   (let [x-unit (.getUnit x-type)
         y-unit (.getUnit y-type)
-        res-unit (smallest-unit x-unit y-unit)]
-    {:code `(Math/addExact ~(-> x-arg (with-conversion x-unit res-unit))
-                           ~(-> y-arg (with-conversion y-unit res-unit)))
-     :return-type (ArrowType$Timestamp. res-unit (.getTimezone y-type))}))
+        res-unit (smallest-unit x-unit y-unit)
+        return-type (ArrowType$Timestamp. res-unit (.getTimezone y-type))]
+    {:return-types #{return-type}
+     :continue-call (fn [f [x-arg y-arg]]
+                      (f return-type
+                         `(Math/addExact ~(-> x-arg (with-conversion x-unit res-unit))
+                                         ~(-> y-arg (with-conversion y-unit res-unit)))))}))
 
-(defmethod expr/codegen-call [:+ ArrowType$Duration ArrowType$Duration] [{[^ArrowType$Duration x-type, ^ArrowType$Duration y-type] :arg-types,
-                                                                          [x-arg y-arg] :emitted-args}]
+(defmethod expr/codegen-call [:+ ArrowType$Duration ArrowType$Duration] [{[^ArrowType$Duration x-type, ^ArrowType$Duration y-type] :arg-types}]
   (let [x-unit (.getUnit x-type)
         y-unit (.getUnit y-type)
-        res-unit (smallest-unit x-unit y-unit)]
-    {:code `(Math/addExact ~(-> x-arg (with-conversion x-unit res-unit))
-                           ~(-> y-arg (with-conversion y-unit res-unit)))
-     :return-type (ArrowType$Duration. res-unit)}))
+        res-unit (smallest-unit x-unit y-unit)
+        return-type (ArrowType$Duration. res-unit)]
+    {:return-types #{return-type}
+     :continue-call (fn [f [x-arg y-arg]]
+                      (f return-type
+                         `(Math/addExact ~(-> x-arg (with-conversion x-unit res-unit))
+                                         ~(-> y-arg (with-conversion y-unit res-unit)))))}))
 
-(defmethod expr/codegen-call [:- ArrowType$Timestamp ArrowType$Timestamp] [{[^ArrowType$Timestamp x-type, ^ArrowType$Timestamp y-type] :arg-types,
-                                                                            [x-arg y-arg] :emitted-args}]
+(defmethod expr/codegen-call [:- ArrowType$Timestamp ArrowType$Timestamp] [{[^ArrowType$Timestamp x-type, ^ArrowType$Timestamp y-type] :arg-types}]
   (let [x-unit (.getUnit x-type)
         y-unit (.getUnit y-type)
-        res-unit (smallest-unit x-unit y-unit)]
-    {:code `(Math/subtractExact ~(-> x-arg (with-conversion x-unit res-unit))
-                                ~(-> y-arg (with-conversion y-unit res-unit)))
-     :return-type (ArrowType$Duration. res-unit)}))
+        res-unit (smallest-unit x-unit y-unit)
+        return-type (ArrowType$Duration. res-unit)]
+    {:return-types #{return-type}
+     :continue-call (fn [f [x-arg y-arg]]
+                      (f return-type
+                         `(Math/subtractExact ~(-> x-arg (with-conversion x-unit res-unit))
+                                              ~(-> y-arg (with-conversion y-unit res-unit)))))}))
 
-(defmethod expr/codegen-call [:- ArrowType$Timestamp ArrowType$Duration] [{[^ArrowType$Timestamp x-type, ^ArrowType$Duration y-type] :arg-types,
-                                                                           [x-arg y-arg] :emitted-args}]
+(defmethod expr/codegen-call [:- ArrowType$Timestamp ArrowType$Duration] [{[^ArrowType$Timestamp x-type, ^ArrowType$Duration y-type] :arg-types}]
   (let [x-unit (.getUnit x-type)
         y-unit (.getUnit y-type)
-        res-unit (smallest-unit x-unit y-unit)]
-    {:code `(Math/subtractExact ~(-> x-arg (with-conversion x-unit res-unit))
-                                ~(-> y-arg (with-conversion y-unit res-unit)))
-     :return-type (ArrowType$Timestamp. res-unit (.getTimezone x-type))}))
+        res-unit (smallest-unit x-unit y-unit)
+        return-type (ArrowType$Timestamp. res-unit (.getTimezone x-type))]
+    {:return-types #{return-type}
+     :continue-call (fn [f [x-arg y-arg]]
+                      (f return-type
+                         `(Math/subtractExact ~(-> x-arg (with-conversion x-unit res-unit))
+                                              ~(-> y-arg (with-conversion y-unit res-unit)))))}))
 
-(defmethod expr/codegen-call [:- ArrowType$Duration ArrowType$Duration] [{[^ArrowType$Duration x-type, ^ArrowType$Duration y-type] :arg-types,
-                                                                          [x-arg y-arg] :emitted-args}]
+(defmethod expr/codegen-call [:- ArrowType$Duration ArrowType$Duration] [{[^ArrowType$Duration x-type, ^ArrowType$Duration y-type] :arg-types}]
   (let [x-unit (.getUnit x-type)
         y-unit (.getUnit y-type)
-        res-unit (smallest-unit x-unit y-unit)]
-    {:code `(Math/subtractExact ~(-> x-arg (with-conversion x-unit res-unit))
-                                ~(-> y-arg (with-conversion y-unit res-unit)))
-     :return-type (ArrowType$Duration. res-unit)}))
+        res-unit (smallest-unit x-unit y-unit)
+        return-type (ArrowType$Duration. res-unit)]
+    {:return-types #{return-type}
+     :continue-call (fn [f [x-arg y-arg]]
+                      (f return-type
+                         `(Math/subtractExact ~(-> x-arg (with-conversion x-unit res-unit))
+                                              ~(-> y-arg (with-conversion y-unit res-unit)))))}))
 
-(defmethod expr/codegen-call [:* ArrowType$Duration ArrowType$Int] [{[x-type _y-type] :arg-types, :keys [emitted-args]}]
-  {:code `(Math/multiplyExact ~@emitted-args)
-   :return-type x-type})
+(defmethod expr/codegen-call [:* ArrowType$Duration ArrowType$Int] [{[x-type _y-type] :arg-types, :keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f x-type
+                       `(Math/multiplyExact ~@emitted-args)))
+   :return-types #{x-type}})
 
-(defmethod expr/codegen-call [:* ArrowType$Duration ::types/Number] [{[x-type _y-type] :arg-types, :keys [emitted-args]}]
-  {:code `(* ~@emitted-args)
-   :return-type x-type})
+(defmethod expr/codegen-call [:* ArrowType$Duration ::types/Number] [{[x-type _y-type] :arg-types, :keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f x-type
+                       `(* ~@emitted-args)))
+   :return-types #{x-type}})
 
-(defmethod expr/codegen-call [:* ArrowType$Int ArrowType$Duration] [{[_x-type y-type] :arg-types, :keys [emitted-args]}]
-  {:code `(Math/multiplyExact ~@emitted-args)
-   :return-type y-type})
+(defmethod expr/codegen-call [:* ArrowType$Int ArrowType$Duration] [{[_x-type y-type] :arg-types, :keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f y-type
+                       `(Math/multiplyExact ~@emitted-args)))
+   :return-types #{y-type}})
 
-(defmethod expr/codegen-call [:* ::types/Number ArrowType$Duration] [{[_x-type y-type] :arg-types, :keys [emitted-args]}]
-  {:code `(long (* ~@emitted-args))
-   :return-type y-type})
+(defmethod expr/codegen-call [:* ::types/Number ArrowType$Duration] [{[_x-type y-type] :arg-types, :keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f y-type
+                       `(long (* ~@emitted-args))))
+   :return-types #{y-type}})
 
-(defmethod expr/codegen-call [:/ ArrowType$Duration ::types/Number] [{[x-type] :arg-types, :keys [emitted-args]}]
-  {:code `(quot ~@emitted-args)
-   :return-type x-type})
+(defmethod expr/codegen-call [:/ ArrowType$Duration ::types/Number] [{[x-type] :arg-types, :keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f x-type
+                       `(quot ~@emitted-args)))
+   :return-types #{x-type}})
 
 (defn apply-constraint [^longs min-range ^longs max-range
                         f col-name ^Instant time]

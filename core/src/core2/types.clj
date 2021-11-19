@@ -19,6 +19,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(def bool-type (.getType Types$MinorType/BIT))
 (def bigint-type (.getType Types$MinorType/BIGINT))
 (def float8-type (.getType Types$MinorType/FLOAT8))
 (def varchar-type (.getType Types$MinorType/VARCHAR))

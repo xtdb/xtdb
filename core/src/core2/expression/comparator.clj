@@ -12,54 +12,67 @@
 
 (def ^:private compare-return-type (.getType Types$MinorType/INT))
 
-(defmethod expr/codegen-call [:compare ArrowType$Int ArrowType$Int] [{:keys [emitted-args]}]
-  {:code `(Long/compare ~@emitted-args)
-   :return-type compare-return-type})
+(defmethod expr/codegen-call [:compare ArrowType$Int ArrowType$Int] [{:keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f compare-return-type
+                       `(Long/compare ~@emitted-args)))
+   :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ::types/Number ::types/Number] [{:keys [emitted-args]}]
-  {:code `(Double/compare ~@emitted-args)
-   :return-type compare-return-type})
+(defmethod expr/codegen-call [:compare ::types/Number ::types/Number] [{:keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f compare-return-type
+                       `(Double/compare ~@emitted-args)))
+   :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ArrowType$Timestamp ArrowType$Timestamp] [{:keys [emitted-args]}]
-  {:code `(Long/compare ~@emitted-args)
-   :return-type compare-return-type})
+(defmethod expr/codegen-call [:compare ArrowType$Timestamp ArrowType$Timestamp] [{:keys []}]
+  ;; TODO different scales
+  {:continue-call (fn [f emitted-args]
+                    (f compare-return-type
+                       `(Long/compare ~@emitted-args)))
+   :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ArrowType$Binary ArrowType$Binary] [{:keys [emitted-args]}]
-  {:code `(expr/compare-nio-buffers-unsigned ~@emitted-args)
-   :return-type compare-return-type})
+(defmethod expr/codegen-call [:compare ArrowType$Binary ArrowType$Binary] [{:keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f compare-return-type
+                       `(expr/compare-nio-buffers-unsigned ~@emitted-args)))
+   :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ArrowType$Bool ArrowType$Bool] [{:keys [emitted-args]}]
-  {:code `(Boolean/compare ~@emitted-args)
-   :return-type compare-return-type})
+(defmethod expr/codegen-call [:compare ArrowType$Bool ArrowType$Bool] [{:keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f compare-return-type
+                       `(Boolean/compare ~@emitted-args)))
+   :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ::types/Object ::types/Object] [{:keys [emitted-args]}]
-  {:code `(.compareTo ~@(map #(expr/with-tag % Comparable) emitted-args))
-   :return-type compare-return-type})
+(defmethod expr/codegen-call [:compare ::types/Object ::types/Object] [{:keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f compare-return-type
+                       `(.compareTo ~@(map #(expr/with-tag % Comparable) emitted-args))))
+   :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ArrowType$Utf8 ArrowType$Utf8] [{:keys [emitted-args]}]
-  {:code `(expr/compare-nio-buffers-unsigned ~@emitted-args)
-   :return-type compare-return-type})
+(defmethod expr/codegen-call [:compare ArrowType$Utf8 ArrowType$Utf8] [{:keys []}]
+  {:continue-call (fn [f emitted-args]
+                    (f compare-return-type
+                       `(expr/compare-nio-buffers-unsigned ~@emitted-args)))
+   :return-types #{compare-return-type}})
 
 (prefer-method expr/codegen-call [:compare ArrowType$Timestamp ArrowType$Timestamp] [:compare ::types/Object ::types/Object])
 (prefer-method expr/codegen-call [:compare ::types/Number ::types/Number] [:compare ::types/Object ::types/Object])
 (prefer-method expr/codegen-call [:compare ArrowType$Utf8 ArrowType$Utf8] [:compare ::types/Object ::types/Object])
 
-(defn- comparator-code [^ArrowType arrow-type]
-  (let [left-vec-sym (gensym 'left-vec)
-        left-idx-sym (gensym 'left-idx)
-        right-vec-sym (gensym 'right-vec)
-        right-idx-sym (gensym 'right-idx)
-        vec-type (types/arrow-type->vector-type arrow-type)]
-    `(reify ColumnComparator
-       (compareIdx [_# ~left-vec-sym ~left-idx-sym ~right-vec-sym ~right-idx-sym]
-         ~(:code (expr/codegen-call {:f :compare
-                                     :arg-types [arrow-type arrow-type]
-                                     :emitted-args [(expr/get-value-form arrow-type (-> left-vec-sym (expr/with-tag vec-type)) left-idx-sym)
-                                                    (expr/get-value-form arrow-type (-> right-vec-sym (expr/with-tag vec-type)) right-idx-sym)]}))))))
+(def ^core2.expression.comparator.ColumnComparator ->comparator
+  (-> (fn [^ArrowType arrow-type]
+        (let [left-vec-sym (gensym 'left-vec)
+              left-idx-sym (gensym 'left-idx)
+              right-vec-sym (gensym 'right-vec)
+              right-idx-sym (gensym 'right-idx)
+              vec-type (types/arrow-type->vector-type arrow-type)]
+          (eval
+           `(reify ColumnComparator
+              (compareIdx [_# ~left-vec-sym ~left-idx-sym ~right-vec-sym ~right-idx-sym]
+                ~(let [{:keys [continue-call]} (expr/codegen-call {:f :compare
+                                                                   :arg-types [arrow-type arrow-type]})]
+                   (continue-call (fn [_ code] code)
+                                  [(expr/get-value-form arrow-type (-> left-vec-sym (expr/with-tag vec-type)) left-idx-sym)
+                                   (expr/get-value-form arrow-type (-> right-vec-sym (expr/with-tag vec-type)) right-idx-sym)])))))))
 
-(def ^:private memo-comparator-code (memoize comparator-code))
-(def ^:private memo-eval (memoize eval))
-
-(defn ->comparator ^core2.expression.comparator.ColumnComparator [^ArrowType arrow-type]
-  (-> (memo-comparator-code arrow-type)
-      (memo-eval)))
+      (memoize)))

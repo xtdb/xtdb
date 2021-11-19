@@ -9,9 +9,12 @@
             [core2.test-util :as tu]
             [core2.types :as ty]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
-  (:import [java.time Duration ZonedDateTime]
+            [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw])
+  (:import [core2.vector IDenseUnionWriter IRelationWriter]
+           [java.time Duration ZonedDateTime]
            [org.apache.arrow.vector BigIntVector DurationVector Float4Vector Float8Vector IntVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TimeStampVector ValueVector]
+           org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp Schema]
            org.apache.arrow.vector.types.TimeUnit))
 
@@ -55,8 +58,8 @@
                (project '(sin a)))
             "math")
 
-      (t/is (= (repeat 1000 0.0)
-               (project '(if false a 0)))
+      (t/is (= (interleave (map float (range)) (repeat 500 0))
+               (project '(if (= 0 (% a 2)) (/ a 2) 0)))
             "if")
 
       (t/is (thrown? IllegalArgumentException (project '(vec a)))
@@ -160,7 +163,10 @@
                                  tu/*allocator*
                                  rel)]
     {:res (tu/<-column out-ivec)
-     :vec-type (class (.getVector out-ivec))}))
+     :vec-type (let [out-vec (.getVector out-ivec)]
+                 (if (instance? DenseUnionVector out-vec)
+                   (->> (seq out-vec) (into #{} (map class)))
+                   (class out-vec)))}))
 
 (t/deftest test-mixing-numeric-types
   (letfn [(run-test [f x y]
@@ -232,6 +238,44 @@
     ;; the others are thrown by java.lang.Math/*Exact, which throw ArithmeticException
     (t/is (thrown? ArithmeticException
                    (run-unary-test '- (Short/MIN_VALUE))))))
+
+(t/deftest test-polymorphic-columns
+  (letfn [(write-value! [^IDenseUnionWriter w, v]
+            (let [leg-type (ty/value->leg-type v)]
+              (doto w
+                (.startValue)
+                (-> (.writerForType leg-type)
+                    (doto (.startValue))
+                    (doto (as-> w (ty/write-value! v w)))
+                    (doto (.endValue)))
+                (.endValue))))
+
+          (write-col! [^IRelationWriter rel-writer, ^String col-name, vs]
+            (let [w (-> (.writerForName rel-writer col-name)
+                        (.asDenseUnion))]
+              (doseq [v vs]
+                (write-value! w v))))
+
+          (run-test [f xs ys]
+            (with-open [rel-writer (vw/->rel-writer tu/*allocator*)]
+              (doto rel-writer
+                (write-col! "x" xs)
+                (write-col! "y" ys))
+
+              (run-projection (vw/rel-writer->reader rel-writer)
+                              (list f 'x 'y))))]
+
+    (with-open [rel-writer (vw/->rel-writer tu/*allocator*)]
+      (doto rel-writer
+        (write-col! "x" [1.2 1 3.4]))
+
+      (t/is (= {:res [1.2 1 3.4]
+                :vec-type #{Float8Vector BigIntVector}}
+               (run-projection (vw/rel-writer->reader rel-writer) 'x))))
+
+    (t/is (= {:res [4.4 9.75]
+              :vec-type #{Float4Vector Float8Vector}}
+             (run-test '+ [1 1.5] [3.4 (float 8.25)])))))
 
 (t/deftest test-mixing-timestamp-types
   (letfn [(->ts-vec [col-name time-unit, ^long value]

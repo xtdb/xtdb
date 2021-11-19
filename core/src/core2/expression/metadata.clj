@@ -6,12 +6,11 @@
             [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
            core2.metadata.IMetadataIndices
-           core2.types.LegType
            core2.vector.IIndirectVector
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex ListVector StructVector]
-           org.apache.arrow.vector.types.pojo.ArrowType$Bool
+           org.apache.arrow.vector.types.pojo.FieldType
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -41,19 +40,20 @@
 (declare meta-expr)
 
 (defn call-meta-expr [{:keys [f args] :as expr} param-types]
-  (letfn [(var-param-expr [f meta-value field {:keys [param]}]
+  (letfn [(var-param-expr [f meta-value field param]
             (simplify-and-or-expr
              {:op :call
               :f 'or
-              :args (vec (let [^LegType leg-type (get param-types param)
-                               arrow-type (.arrowType leg-type)]
-                           (for [leg-type (if (isa? types/arrow-type-hierarchy arrow-type ::types/Number)
-                                            [LegType/BIGINT LegType/FLOAT8]
-                                            [leg-type])]
+              :args (vec (let [arrow-type (get param-types param)]
+                           ;; TODO this seems like it could make better use
+                           ;; of the polymorphic expr patterns?
+                           (for [arrow-type (if (isa? types/arrow-type-hierarchy arrow-type ::types/Number)
+                                              [types/bigint-type types/float8-type]
+                                              [arrow-type])]
                              {:op :metadata-vp-call,
                               :f f
                               :meta-value meta-value
-                              :leg-type leg-type
+                              :arrow-type arrow-type
                               :field field,
                               :param param
                               :bloom-hash-sym (when (= meta-value :bloom-filter)
@@ -65,9 +65,9 @@
               (case [x-op y-op]
                 [:param :param] expr
                 [:variable :param] (var-param-expr var-param-f var-param-meta-fn
-                                                   (:variable x-arg) y-arg)
+                                                   (:variable x-arg) (:param y-arg))
                 [:param :variable] (var-param-expr param-var-f param-var-meta-fn
-                                                   (:variable y-arg) x-arg)
+                                                   (:variable y-arg) (:param x-arg))
                 nil)))]
 
     (or (case f
@@ -128,42 +128,41 @@
 
 (defmethod expr/codegen-expr :metadata-field-present [{:keys [field]} _]
   (let [field-name (str field)]
-    {:code `(boolean
-             (if ~block-idx-sym
-               (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
-               (.columnIndex ~metadata-idxs-sym ~field-name)))
-     :return-type ArrowType$Bool/INSTANCE}))
+    {:continue (fn [f]
+                 (f types/bool-type
+                    `(boolean
+                      (if ~block-idx-sym
+                        (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
+                        (.columnIndex ~metadata-idxs-sym ~field-name)))))
+     :return-types #{types/bool-type}}))
 
-(defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param ^LegType leg-type bloom-hash-sym]} opts]
-  (let [field-name (str field)
-        arrow-type (.arrowType leg-type)]
-    {:code `(boolean
-             (when-let [~expr/idx-sym (if ~block-idx-sym
-                                        (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
-                                        (.columnIndex ~metadata-idxs-sym ~field-name))]
-               ~(if (= meta-value :bloom-filter)
-                  `(bloom/bloom-contains? ~(:bloom metadata-vec-syms) ~expr/idx-sym ~bloom-hash-sym)
+(defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param arrow-type bloom-hash-sym]} opts]
+  (let [field-name (str field)]
+    {:return-types #{types/bool-type}
+     :continue
+     (fn [cont]
+       (cont types/bool-type
+             `(boolean
+               (when-let [~expr/idx-sym (if ~block-idx-sym
+                                          (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
+                                          (.columnIndex ~metadata-idxs-sym ~field-name))]
+                 ~(if (= meta-value :bloom-filter)
+                    `(bloom/bloom-contains? ~(:bloom metadata-vec-syms) ~expr/idx-sym ~bloom-hash-sym)
 
-                  (let [vec-sym (get metadata-vec-syms meta-value)
-                        col-sym (gensym 'meta-col)
-                        variable-code (expr/codegen-expr
-                                       {:op :variable, :variable col-sym}
-                                       {:var->type {col-sym leg-type}})]
-                    `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
-                                (.getChild ~vec-sym ~(types/type->field-name arrow-type))]
-                       (when-not (.isNull ~vec-sym ~expr/idx-sym)
-                         (let [~(-> col-sym (expr/with-tag IIndirectVector)) (iv/->direct-vec ~vec-sym)]
-                           ~(:code (expr/codegen-expr
-                                    {:op :call
-                                     :f f
-                                     :args [(if-let [cast (expr/type->cast arrow-type)]
-                                              {:code (list cast (:code variable-code)),
-                                               :return-type arrow-type}
-                                              variable-code)
-                                            (expr/codegen-expr {:op :param, :param param}
-                                                               opts)]}
-                                    opts)))))))))
-     :return-type ArrowType$Bool/INSTANCE}))
+                    (let [vec-sym (get metadata-vec-syms meta-value)
+                          col-sym (gensym 'meta-col)]
+                      `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
+                                  (.getChild ~vec-sym ~(types/type->field-name arrow-type))]
+                         (when-not (.isNull ~vec-sym ~expr/idx-sym)
+                           (let [~(-> col-sym (expr/with-tag IIndirectVector)) (iv/->direct-vec ~vec-sym)]
+                             ~((:continue (expr/codegen-expr
+                                           {:op :call
+                                            :f f
+                                            :args [{:op :variable, :variable col-sym}
+                                                   {:op :param, :param param}]}
+                                           (-> opts
+                                               (assoc-in [:var->types col-sym] (FieldType. false arrow-type nil)))))
+                               (fn [_ code] code)))))))))))}))
 
 (defn check-meta [chunk-idx ^VectorSchemaRoot metadata-root ^IMetadataIndices metadata-idxs check-meta-f]
   (when (check-meta-f (.getVector metadata-root "min")
@@ -185,29 +184,31 @@
       (when-not (.isEmpty block-idxs)
         (meta/->ChunkMatch chunk-idx block-idxs)))))
 
-(defn meta-expr->code [expr param-types bloom-hash-syms]
-  `(fn [chunk-idx#
-        ~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))
-        [~@(map key param-types)]
-        [~@bloom-hash-syms]]
-     (let [~(-> metadata-idxs-sym (expr/with-tag IMetadataIndices)) (meta/->metadata-idxs ~metadata-root-sym)]
-       (check-meta chunk-idx# ~metadata-root-sym ~metadata-idxs-sym
-                   (fn check-meta# [~(-> (:min metadata-vec-syms) (expr/with-tag StructVector))
-                                    ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
-                                    ~(-> (:bloom metadata-vec-syms) (expr/with-tag VarBinaryVector))
-                                    ~block-idx-sym]
-                     ~(:code (expr/postwalk-expr #(expr/codegen-expr % {:param->type param-types}) expr)))))))
+(def ^:private compile-meta-expr
+  (-> (fn [expr param-types bloom-hash-syms]
+        (eval
+         `(fn [chunk-idx#
+               ~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))
+               [~@(map key param-types)]
+               [~@bloom-hash-syms]]
+            (let [~(-> metadata-idxs-sym (expr/with-tag IMetadataIndices)) (meta/->metadata-idxs ~metadata-root-sym)]
+              (check-meta chunk-idx# ~metadata-root-sym ~metadata-idxs-sym
+                          (fn check-meta# [~(-> (:min metadata-vec-syms) (expr/with-tag StructVector))
+                                           ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
+                                           ~(-> (:bloom metadata-vec-syms) (expr/with-tag VarBinaryVector))
+                                           ~block-idx-sym]
+                            ~(let [{:keys [continue]} (expr/codegen-expr expr {:param->type param-types})]
+                               (continue (fn [_ code] code)))))))))
 
-(def ^:private memo-meta-expr->code (memoize meta-expr->code))
-(def ^:private memo-eval (memoize eval))
+      ;; TODO passing gensym'd bloom-hash-syms into the memoized fn means we're unlikely to get cache hits
+      ;; pass values instead?
+      memoize))
 
 (defn ->metadata-selector [form params]
   (let [{:keys [expr param-types params emitted-params]} (-> (expr/form->expr form params)
                                                              (expr/normalise-params params))
         meta-expr (meta-expr expr (into {} param-types))
         {:keys [bloom-hash-syms bloom-hashes]} (->bloom-hashes meta-expr params)
-        f (-> meta-expr
-              (memo-meta-expr->code (into {} param-types) bloom-hash-syms)
-              (memo-eval))]
+        f (compile-meta-expr meta-expr (into {} param-types) bloom-hash-syms)]
     (fn [chunk-idx metadata-root]
       (f chunk-idx metadata-root (vals emitted-params) bloom-hashes))))
