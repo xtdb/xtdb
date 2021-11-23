@@ -162,6 +162,8 @@ Record typing
 
 The 'original' record typing papers (as far as I'm aware) are by Mitchell Wand, Luca Cardelli and Didier Rémy in the late 80s/early 90s but I don't find them as approachable or complete.
 
+- Bezanson, 'Abstraction in Technical Computing' (Julia PhD thesis, 2015): https://github.com/JeffBezanson/phdthesis/blob/master/main.pdf
+
 ** Misc
 - [[http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf][The End of an Architectural Era (It’s Time for a Complete Rewrite)]]
   - [[https://hstore.cs.brown.edu/papers/hstore-demo.pdf][H-Store: A High-Performance, Distributed Main Memory Transaction Processing System]]
