@@ -120,17 +120,26 @@
 
 (defn- format-result-str [sort-mode projection result]
   (let [result-rows (for [vs (map #(map % projection) result)]
-                      (vec (for [v vs]
-                             (cond
-                               (nil? v) "NULL"
-                               (= "" v) "(empty)"
-                               (float? v) (format "%.3f" v)
-                               :else (str v)))))]
+                      (for [v vs]
+                        (cond
+                          (nil? v) "NULL"
+                          (= "" v) "(empty)"
+                          (float? v) (format "%.3f" v)
+                          :else (str v))))]
     (->> (case sort-mode
            :rowsort (flatten (sort-by (partial str/join " ") result-rows))
            :valuesort (sort (flatten result-rows))
            :nosort (flatten result-rows))
          (str/join "\n"))))
+
+(defn- validate-type-string [type-string projection result]
+  (doseq [row result
+          [value type] (map vector (map row projection) type-string)
+          :let [java-class (case (str type)
+                             "I" Long
+                             "R" Double
+                             "T" String)]]
+    (t/is (or (nil? value) (cast java-class value)))))
 
 ;; TODO: parse query and qualify known table columns if
 ;; needed. Generate logical plan and format and hash result according
@@ -144,8 +153,11 @@
     (when (insta/failure? tree)
       (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
     (let [result (op/query-ra '[:scan [_id]] db)
-          projection '[_id]
+          projection [:_id]
           result-str (format-result-str sort-mode projection result)]
+      #_(validate-type-string type-string projection result)
+      (when-let [row (first result)]
+        (t/is (count type-string) (count row)))
       (t/is (= result-set-size (count result)))
       #_(when result-set
           (t/is (= (str/join "\n" result-set) result-str)))
