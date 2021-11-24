@@ -103,6 +103,12 @@
   (t/is (nil? (get-in ctx [:tables table-name])))
   (assoc-in ctx [:tables table-name] columns))
 
+(defmethod execute-record :halt [ctx _]
+  (reduced ctx))
+
+(defmethod execute-record :hash-threshold [ctx {:keys [max-result-set-size]}]
+  (assoc ctx :max-result-set-size max-result-set-size))
+
 (defmethod execute-record :statement [ctx {:keys [mode statement]}]
   (if (skip-statement? statement)
     ctx
@@ -165,11 +171,14 @@
         (t/is (= result-set-md5sum (md5 result-str)))))
     ctx))
 
+(defn- skip-record? [{:keys [skipif onlyif]
+                      :or {onlyif "xtdb"}}]
+ (or (= "xtdb" skipif)
+     (not= "xtdb" onlyif)) )
+
 (defn- execute-records [node records]
-  (reduce execute-record
-          {:node node
-           :tables {}}
-          records))
+  (->> (remove skip-record? records)
+       (reduce execute-record {:node node :tables {}})))
 
 (t/deftest test-sql-logic-test-parser
   (t/is (= 6 (count (parse-script
@@ -199,13 +208,12 @@ SELECT a x, b y, c z FROM t1
 
 (t/deftest test-sql-logic-test-execution
   (let [records (parse-script
-                 "# full line comment
-
+                 "
 statement ok
 CREATE TABLE t1(a INTEGER, b INTEGER, c INTEGER, d INTEGER, e INTEGER)
 
 statement ok
-INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104) # end of line comment
+INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)
 
 query I nosort
 SELECT t1.a FROM t1
