@@ -1,10 +1,18 @@
 (ns core2.sql.logic-test
-  (:require [clojure.java.io :as io]
+  (:require [clojure.test :as t]
+            [clojure.java.io :as io]
             [clojure.string :as str]
+            [core2.api :as c2]
+            [core2.snapshot :as snap]
             [core2.sql :as sql]
+            [core2.operator :as op]
+            [core2.test-util :as tu]
             [instaparse.core :as insta])
-  (:import java.security.MessageDigest
-           java.nio.charset.StandardCharsets))
+  (:import java.nio.charset.StandardCharsets
+           java.security.MessageDigest
+           java.util.UUID))
+
+(t/use-fixtures :each tu/with-node)
 
 (defn- md5 ^String [^String s]
   (->> (.getBytes s StandardCharsets/UTF_8)
@@ -20,6 +28,9 @@
                      (->> (str/split column #"\s+")
                           (remove str/blank?)
                           (first))))}))
+
+(defn- skip-statement? [^String x]
+  (boolean (re-find #"(?s)^\s*CREATE\s+INDEX" x)))
 
 (defmulti parse-record (fn [[x & xs]]
                          (keyword (first (str/split x #"\s+")))))
@@ -48,7 +59,7 @@
     (if-let [[_ values hash] (and (= 1 (count result))
                                   (re-find #"^(\d+) values hashing to (\p{XDigit}{32})$" (first result)))]
       (assoc record :result-set-size (Long/parseLong values) :result-set-md5sum hash)
-      (assoc record :result-set (vec result)))))
+      (assoc record :result-set-size (count result) :result-set (vec result)))))
 
 (defmethod parse-record :skipif [[x & xs]]
   (let [[_ database-name] (str/split x #"\s+")]
@@ -75,9 +86,82 @@
        (remove #(every? str/blank? %))
        (mapv parse-record)))
 
-(comment
-  (parse-script
-   "# full line comment
+(defmulti execute-statement (fn [ctx [type]]
+                              type))
+
+;; TODO: parse insert and create proper document, potentially with
+;; help of the known table columns.
+(defmethod execute-statement :insert_statement [{:keys [node tables] :as ctx} insert-statement]
+  (-> (c2/submit-tx node [[:put {:_id (UUID/randomUUID)}]])
+      (tu/then-await-tx node))
+  ctx)
+
+(defmulti execute-record (fn [ctx {:keys [type] :as record}]
+                           type))
+
+(defmethod execute-record :create-table [ctx {:keys [table-name columns]}]
+  (t/is (nil? (get-in ctx [:tables table-name])))
+  (assoc-in ctx [:tables table-name] columns))
+
+(defmethod execute-record :statement [ctx {:keys [mode statement]}]
+  (if (skip-statement? statement)
+    ctx
+    (let [tree (sql/parse-sql2011 statement :start :direct_sql_data_statement)]
+      (if (insta/failure? tree)
+        (if-let [create-table-record (parse-create-table statement)]
+          (case mode
+            :ok (execute-record ctx create-table-record)
+            :error (t/is (thrown? Exception (execute-record ctx create-table-record))))
+          (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
+        (let [direct-sql-data-statement-tree (second tree)]
+          (case mode
+            :ok (execute-statement ctx direct-sql-data-statement-tree)
+            :error (t/is (thrown? Exception (execute-statement ctx direct-sql-data-statement-tree)))))))))
+
+(defn- format-result-str [sort-mode projection result]
+  (let [result-rows (for [vs (map #(map % projection) result)]
+                      (vec (for [v vs]
+                             (cond
+                               (nil? v) "NULL"
+                               (= "" v) "(empty)"
+                               (float? v) (format "%.3f" v)
+                               :else (str v)))))]
+    (->> (case sort-mode
+           :rowsort (flatten (sort-by (partial str/join " ") result-rows))
+           :valuesort (sort (flatten result-rows))
+           :nosort (flatten result-rows))
+         (str/join "\n"))))
+
+;; TODO: parse query and qualify known table columns if
+;; needed. Generate logical plan and format and hash result according
+;; to sort mode. Projection will usually be positional.
+(defmethod execute-record :query [{:keys [node tables] :as ctx}
+                                  {:keys [query type-string sort-mode label
+                                          result-set-size result-set result-set-md5sum]}]
+  (let [tree (sql/parse-sql2011 query :start :query_expression)
+        snapshot-factory (tu/component node ::snap/snapshot-factory)
+        db (snap/snapshot snapshot-factory)]
+    (when (insta/failure? tree)
+      (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
+    (let [result (op/query-ra '[:scan [_id]] db)
+          projection '[_id]
+          result-str (format-result-str sort-mode projection result)]
+      (t/is (= result-set-size (count result)))
+      #_(when result-set
+          (t/is (= (str/join "\n" result-set) result-str)))
+      (when result-set-md5sum
+        (t/is (= result-set-md5sum (md5 result-str)))))
+    ctx))
+
+(defn- execute-records [node records]
+  (reduce execute-record
+          {:node node
+           :tables {}}
+          records))
+
+(t/deftest test-sql-logic-test-parser
+  (t/is (= 6 (count (parse-script
+                     "# full line comment
 
 statement ok
 CREATE TABLE t1(a INTEGER, b INTEGER, c INTEGER, d INTEGER, e INTEGER)
@@ -99,17 +183,45 @@ SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END
 skipif postgresql
 query III rowsort label-xyzzy
 SELECT a x, b y, c z FROM t1
-")
+")))))
 
-  (parse-create-table "CREATE TABLE t1(a INTEGER, b INTEGER)")
+(t/deftest test-sql-logic-test-execution
+  (let [records (parse-script
+                 "# full line comment
 
-  (parse-create-table "
-CREATE TABLE t1(
+statement ok
+CREATE TABLE t1(a INTEGER, b INTEGER, c INTEGER, d INTEGER, e INTEGER)
+
+statement ok
+INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104) # end of line comment
+
+query I nosort
+SELECT t1.a FROM t1
+----
+104
+")]
+
+    (t/is (= 3 (count records)))
+    (t/is (= {"t1" ["a" "b" "c" "d" "e"]} (:tables (execute-records tu/*node* records))))))
+
+(t/deftest test-parse-create-table
+  (t/is (= {:type :create-table
+            :table-name "t1"
+            :columns ["a" "b"]}
+           (parse-create-table "CREATE TABLE t1(a INTEGER, b INTEGER)")))
+
+  (t/is (= {:type :create-table
+            :table-name "t2"
+            :columns ["a" "b" "c"]}
+
+           (parse-create-table "
+CREATE TABLE t2(
   a INTEGER,
   b VARCHAR(30),
   c INTEGER
-)")
+)"))))
 
+(comment
   (dotimes [n 5]
     (time
      (let [f (format "core2/sql/logic_test/select%d.test" (inc n))
