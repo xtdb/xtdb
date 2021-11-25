@@ -21,7 +21,7 @@
        (format "%032x")))
 
 (defn- parse-create-table [^String x]
-  (when-let [[_ table-name columns] (re-find #"(?s)^\s*CREATE\s+TABLE\s+(\w+)\((.+)\)\s*$" x)]
+  (when-let [[_ table-name columns] (re-find #"(?is)^\s*CREATE\s+TABLE\s+(\w+)\s*\((.+)\)\s*$" x)]
     {:type :create-table
      :table-name table-name
      :columns (vec (for [column (str/split columns #",")]
@@ -29,8 +29,14 @@
                           (remove str/blank?)
                           (first))))}))
 
+(defn- parse-create-view [^String x]
+  (when-let [[_ view-name query] (re-find #"(?is)^\s*CREATE\s+VIEW\s+(\w+)\s+AS\s+(.+)\s*$" x)]
+    {:type :create-view
+     :view-name view-name
+     :as query}))
+
 (defn- skip-statement? [^String x]
-  (boolean (re-find #"(?s)^\s*CREATE\s+INDEX" x)))
+  (boolean (re-find #"(?is)^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(\w+)\s+ON\s+(\w+)\s*\((.+)\)\s*$" x)))
 
 (defmulti parse-record (fn [[x & xs]]
                          (keyword (first (str/split x #"\s+")))))
@@ -100,8 +106,12 @@
                            type))
 
 (defmethod execute-record :create-table [ctx {:keys [table-name columns]}]
-  (t/is (nil? (get-in ctx [:tables table-name])))
+  (assert (nil? (get-in ctx [:tables table-name])))
   (assoc-in ctx [:tables table-name] columns))
+
+(defmethod execute-record :create-view [ctx {:keys [view-name as]}]
+  (assert (nil? (get-in ctx [:views view-name])))
+  (assoc-in ctx [:views view-name] as))
 
 (defmethod execute-record :halt [ctx _]
   (reduced ctx))
@@ -114,10 +124,11 @@
     ctx
     (let [tree (sql/parse-sql2011 statement :start :direct_sql_data_statement)]
       (if (insta/failure? tree)
-        (if-let [create-table-record (parse-create-table statement)]
+        (if-let [record (or (parse-create-table statement)
+                            (parse-create-view statement))]
           (case mode
-            :ok (execute-record ctx create-table-record)
-            :error (t/is (thrown? Exception (execute-record ctx create-table-record))))
+            :ok (execute-record ctx record)
+            :error (t/is (thrown? Exception (execute-record ctx record))))
           (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
         (let [direct-sql-data-statement-tree (second tree)]
           (case mode
@@ -239,6 +250,21 @@ CREATE TABLE t2(
   a INTEGER,
   b VARCHAR(30),
   c INTEGER
+)"))))
+
+(t/deftest test-parse-create-view
+  (t/is (= {:type :create-view
+            :view-name "view_1"
+            :as "SELECT pk, col0 FROM tab0 WHERE col0 = 49"}
+           (parse-create-view "CREATE VIEW view_1 AS SELECT pk, col0 FROM tab0 WHERE col0 = 49"))))
+
+(t/deftest test-skip-statement?
+  (t/is (false? (skip-statement? "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)")))
+  (t/is (true? (skip-statement? "CREATE INDEX t1i0 ON t1(a1,b1,c1,d1,e1,x1)")))
+  (t/is (true? (skip-statement? "
+CREATE UNIQUE INDEX t1i0 ON t1(
+  a1,
+  b1
 )"))))
 
 (comment
