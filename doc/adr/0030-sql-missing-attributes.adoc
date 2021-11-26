@@ -126,6 +126,16 @@ practice, one may do `NOT COLUMN_EXISTS` and manually add some form of
 projection for the default column in combination of `UNION` with the
 base case where it does exist.
 
+=== Option G: Use `MISSING` or `NULL` for projected columns
+
+The idea here is that we treat fields which are not part of the
+`WHERE` clause more leniently, and pad them with either `MISSING` or
+`NULL` if they are only projected in the `SELECT` clause or used in
+`GROUP BY`. That is, every column referred to in the `WHERE` clause
+has to actually exist. One could also further use flags like in other
+options to control this a bit better and what the padded value should
+be.
+
 == Decision
 
 Leaning towards Option D with explicit `DOCUMENT_TABLE` function based
