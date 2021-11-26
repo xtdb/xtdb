@@ -20,6 +20,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (def bool-type (.getType Types$MinorType/BIT))
+(def int-type (.getType Types$MinorType/INT))
 (def bigint-type (.getType Types$MinorType/BIGINT))
 (def float8-type (.getType Types$MinorType/FLOAT8))
 (def varchar-type (.getType Types$MinorType/VARCHAR))
@@ -302,7 +303,8 @@
   (-> (make-hierarchy)
       (derive ArrowType$FloatingPoint ::Number)
       (derive ArrowType$Int ::Number)
-      (derive ArrowType ::Object)))
+      (derive ArrowType ::Object)
+      (derive ::Number ::Object)))
 
 (defmulti least-upper-bound2
   (fn [x-type y-type] [(class x-type) (class y-type)])

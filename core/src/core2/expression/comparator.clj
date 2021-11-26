@@ -1,8 +1,7 @@
 (ns core2.expression.comparator
   (:require [core2.expression :as expr]
             [core2.types :as types])
-  (:import [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]
-           org.apache.arrow.vector.types.Types$MinorType))
+  (:import [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -10,54 +9,48 @@
   (^int compareIdx [^org.apache.arrow.vector.ValueVector left-vec, ^int left-idx,
                     ^org.apache.arrow.vector.ValueVector right-vec, ^int right-idx]))
 
-(def ^:private compare-return-type (.getType Types$MinorType/INT))
-
 (defmethod expr/codegen-call [:compare ArrowType$Int ArrowType$Int] [_]
   {:continue-call (fn [f emitted-args]
-                    (f compare-return-type
+                    (f types/int-type
                        `(Long/compare ~@emitted-args)))
-   :return-types #{compare-return-type}})
+   :return-types #{types/int-type}})
 
 (defmethod expr/codegen-call [:compare ::types/Number ::types/Number] [_]
   {:continue-call (fn [f emitted-args]
-                    (f compare-return-type
+                    (f types/int-type
                        `(Double/compare ~@emitted-args)))
-   :return-types #{compare-return-type}})
+   :return-types #{types/int-type}})
 
 (defmethod expr/codegen-call [:compare ArrowType$Timestamp ArrowType$Timestamp] [_]
   ;; TODO different scales
   {:continue-call (fn [f emitted-args]
-                    (f compare-return-type
+                    (f types/int-type
                        `(Long/compare ~@emitted-args)))
-   :return-types #{compare-return-type}})
+   :return-types #{types/int-type}})
 
 (defmethod expr/codegen-call [:compare ArrowType$Binary ArrowType$Binary] [_]
   {:continue-call (fn [f emitted-args]
-                    (f compare-return-type
+                    (f types/int-type
                        `(expr/compare-nio-buffers-unsigned ~@emitted-args)))
-   :return-types #{compare-return-type}})
+   :return-types #{types/int-type}})
 
 (defmethod expr/codegen-call [:compare ArrowType$Bool ArrowType$Bool] [_]
   {:continue-call (fn [f emitted-args]
-                    (f compare-return-type
+                    (f types/int-type
                        `(Boolean/compare ~@emitted-args)))
-   :return-types #{compare-return-type}})
+   :return-types #{types/int-type}})
 
 (defmethod expr/codegen-call [:compare ::types/Object ::types/Object] [_]
   {:continue-call (fn [f emitted-args]
-                    (f compare-return-type
+                    (f types/int-type
                        `(.compareTo ~@(map #(expr/with-tag % Comparable) emitted-args))))
-   :return-types #{compare-return-type}})
+   :return-types #{types/int-type}})
 
 (defmethod expr/codegen-call [:compare ArrowType$Utf8 ArrowType$Utf8] [_]
   {:continue-call (fn [f emitted-args]
-                    (f compare-return-type
+                    (f types/int-type
                        `(expr/compare-nio-buffers-unsigned ~@emitted-args)))
-   :return-types #{compare-return-type}})
-
-(prefer-method expr/codegen-call [:compare ArrowType$Timestamp ArrowType$Timestamp] [:compare ::types/Object ::types/Object])
-(prefer-method expr/codegen-call [:compare ::types/Number ::types/Number] [:compare ::types/Object ::types/Object])
-(prefer-method expr/codegen-call [:compare ArrowType$Utf8 ArrowType$Utf8] [:compare ::types/Object ::types/Object])
+   :return-types #{types/int-type}})
 
 (def ^core2.expression.comparator.ColumnComparator ->comparator
   (-> (fn [^ArrowType arrow-type]

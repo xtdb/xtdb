@@ -346,211 +346,49 @@
 
                    (build-args-then-call [] [])))}))
 
-(defmethod codegen-call [:= ::types/Number ::types/Number] [_]
+(defn mono-fn-call [return-type wrap-args-f]
   {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(== ~@emitted-args)))
-   :return-types #{types/bool-type}})
+                    (f return-type (-> emitted-args wrap-args-f)))
+   :return-types #{return-type}})
+
+(doseq [[f-kw cmp] [[:< #(do `(neg? ~%))]
+                    [:<= #(do `(not (pos? ~%)))]
+                    [:> #(do `(pos? ~%))]
+                    [:>= #(do `(not (neg? ~%)))]]
+        :let [f-sym (symbol (name f-kw))]]
+
+  (doseq [arrow-type #{::types/Number ArrowType$Timestamp ArrowType$Duration}]
+    (defmethod codegen-call [f-kw arrow-type arrow-type] [_]
+      (mono-fn-call types/bool-type #(do `(~f-sym ~@%)))))
+
+  (doseq [arrow-type #{ArrowType$Binary ArrowType$Utf8}]
+    (defmethod codegen-call [f-kw arrow-type arrow-type] [_]
+      (mono-fn-call types/bool-type #(cmp `(compare-nio-buffers-unsigned ~@%)))))
+
+  (defmethod codegen-call [f-kw ::types/Object ::types/Object] [_]
+    (mono-fn-call types/bool-type #(cmp `(compare ~@%)))))
+
+(defmethod codegen-call [:= ::types/Number ::types/Number] [_]
+  (mono-fn-call types/bool-type #(do `(== ~@%))))
 
 (defmethod codegen-call [:= ::types/Object ::types/Object] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(= ~@emitted-args)))
-   :return-types #{types/bool-type}})
+  (mono-fn-call types/bool-type #(do `(= ~@%))))
 
-(prefer-method codegen-call [:= ::types/Number ::types/Number] [:= ::types/Object ::types/Object])
+(defmethod codegen-call [:!= ::types/Number ::types/Number] [_]
+  (mono-fn-call types/bool-type #(do `(not (== ~@%)))))
 
 (defmethod codegen-call [:!= ::types/Object ::types/Object] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(not= ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(prefer-method codegen-call [:!= ::types/Number ::types/Number] [:!= ::types/Object ::types/Object])
-
-(defmethod codegen-call [:< ::types/Number ::types/Number] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(< ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:< ArrowType$Timestamp ArrowType$Timestamp] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(< ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:< ArrowType$Duration ArrowType$Duration] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(< ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:< ::types/Object ::types/Object] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(neg? (compare ~@emitted-args))))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:< ArrowType$Binary ArrowType$Binary] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(neg? (compare-nio-buffers-unsigned ~@emitted-args))))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:< ArrowType$Utf8 ArrowType$Utf8] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(neg? (compare-nio-buffers-unsigned ~@emitted-args))))
-   :return-types #{types/bool-type}})
-
-(prefer-method codegen-call [:< ::types/Number ::types/Number] [:< ::types/Object ::types/Object])
-(prefer-method codegen-call [:< ArrowType$Timestamp ArrowType$Timestamp] [:< ::types/Object ::types/Object])
-(prefer-method codegen-call [:< ArrowType$Duration ArrowType$Duration] [:< ::types/Object ::types/Object])
-(prefer-method codegen-call [:< ArrowType$Utf8 ArrowType$Utf8] [:< ::types/Object ::types/Object])
-
-(defmethod codegen-call [:<= ::types/Number ::types/Number] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(<= ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:<= ArrowType$Timestamp ArrowType$Timestamp] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(<= ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:<= ArrowType$Duration ArrowType$Duration] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(<= ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:<= ::types/Object ::types/Object] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(not (pos? (compare ~@emitted-args)))))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:<= ArrowType$Binary ArrowType$Binary] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(not (pos? (compare-nio-buffers-unsigned ~@emitted-args)))))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:<= ArrowType$Utf8 ArrowType$Utf8] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(not (pos? (compare-nio-buffers-unsigned ~@emitted-args)))))
-   :return-types #{types/bool-type}})
-
-(prefer-method codegen-call [:<= ::types/Number ::types/Number] [:<= ::types/Object ::types/Object])
-(prefer-method codegen-call [:<= ArrowType$Timestamp ArrowType$Timestamp] [:<= ::types/Object ::types/Object])
-(prefer-method codegen-call [:<= ArrowType$Duration ArrowType$Duration] [:<= ::types/Object ::types/Object])
-(prefer-method codegen-call [:<= ArrowType$Utf8 ArrowType$Utf8] [:<= ::types/Object ::types/Object])
-
-(defmethod codegen-call [:> ::types/Number ::types/Number] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(> ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:> ArrowType$Timestamp ArrowType$Timestamp] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(> ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:> ArrowType$Duration ArrowType$Duration] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(> ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:> ArrowType$Binary ArrowType$Binary] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(pos? (compare-nio-buffers-unsigned ~@emitted-args))))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:> ArrowType$Utf8 ArrowType$Utf8] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(pos? (compare-nio-buffers-unsigned ~@emitted-args))))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:> ::types/Object ::types/Object] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(pos? (compare ~@emitted-args))))
-   :return-types #{types/bool-type}})
-
-(prefer-method codegen-call [:> ::types/Number ::types/Number] [:> ::types/Object ::types/Object])
-(prefer-method codegen-call [:> ArrowType$Timestamp ArrowType$Timestamp] [:> ::types/Object ::types/Object])
-(prefer-method codegen-call [:> ArrowType$Duration ArrowType$Duration] [:> ::types/Object ::types/Object])
-(prefer-method codegen-call [:> ArrowType$Utf8 ArrowType$Utf8] [:> ::types/Object ::types/Object])
-
-
-(defmethod codegen-call [:>= ::types/Number ::types/Number] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(>= ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:>= ArrowType$Timestamp ArrowType$Timestamp] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(>= ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:>= ArrowType$Duration ArrowType$Duration] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(>= ~@emitted-args)))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:>= ArrowType$Binary ArrowType$Binary] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(not (neg? (compare-nio-buffers-unsigned ~@emitted-args)))))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:>= ArrowType$Utf8 ArrowType$Utf8] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(not (neg? (compare-nio-buffers-unsigned ~@emitted-args)))))
-   :return-types #{types/bool-type}})
-
-(defmethod codegen-call [:>= ::types/Object ::types/Object] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(not (neg? (compare ~@emitted-args)))))
-   :return-types #{types/bool-type}})
-
-(prefer-method codegen-call [:>= ::types/Number ::types/Number] [:>= ::types/Object ::types/Object])
-(prefer-method codegen-call [:>= ArrowType$Timestamp ArrowType$Timestamp] [:>= ::types/Object ::types/Object])
-(prefer-method codegen-call [:>= ArrowType$Duration ArrowType$Duration] [:>= ::types/Object ::types/Object])
-(prefer-method codegen-call [:>= ArrowType$Utf8 ArrowType$Utf8] [:>= ::types/Object ::types/Object])
+  (mono-fn-call types/bool-type #(do `(not= ~@%))))
 
 
 (defmethod codegen-call [:and ArrowType$Bool ArrowType$Bool] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(and ~@emitted-args)))
-   :return-types #{types/bool-type}})
+  (mono-fn-call types/bool-type #(do `(and ~@%))))
 
 (defmethod codegen-call [:or ArrowType$Bool ArrowType$Bool] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(or ~@emitted-args)))
-   :return-types #{types/bool-type}})
+  (mono-fn-call types/bool-type #(do `(or ~@%))))
 
 (defmethod codegen-call [:not ArrowType$Bool] [_]
-  {:continue-call (fn [f emitted-args]
-                    (f types/bool-type
-                       `(not ~@emitted-args)))
-   :return-types #{types/bool-type}})
+  (mono-fn-call types/bool-type #(do `(not ~@%))))
 
 (defn- with-math-integer-cast
   "java.lang.Math's functions only take int or long, so we introduce an up-cast if need be"
@@ -567,10 +405,8 @@
                                `(Math/addExact ~@(with-math-integer-cast return-type emitted-args)))))}))
 
 (defmethod codegen-call [:+ ::types/Number ::types/Number] [{:keys [arg-types]}]
-  (let [return-type (types/least-upper-bound arg-types)]
-    {:return-types #{return-type}
-     :continue-call (fn [f emitted-args]
-                      (f return-type `(+ ~@emitted-args)))}))
+  (mono-fn-call (types/least-upper-bound arg-types)
+                #(do `(+ ~@%))))
 
 (defmethod codegen-call [:- ArrowType$Int ArrowType$Int] [{:keys [arg-types]}]
   (let [^ArrowType$Int return-type (types/least-upper-bound arg-types)]
@@ -581,10 +417,8 @@
                                `(Math/subtractExact ~@(with-math-integer-cast return-type emitted-args)))))}))
 
 (defmethod codegen-call [:- ::types/Number ::types/Number] [{:keys [arg-types]}]
-  (let [return-type (types/least-upper-bound arg-types)]
-    {:return-types #{return-type}
-     :continue-call (fn [f emitted-args]
-                      (f return-type `(- ~@emitted-args)))}))
+  (mono-fn-call (types/least-upper-bound arg-types)
+                #(do `(- ~@%))))
 
 (defmethod codegen-call [:- ArrowType$Int] [{[^ArrowType$Int x-type] :arg-types}]
   {:continue-call (fn [f emitted-args]
@@ -593,10 +427,7 @@
                              `(Math/negateExact ~@(with-math-integer-cast x-type emitted-args)))))
    :return-types #{x-type}})
 
-(defmethod codegen-call [:- ::types/Number] [{[x-type] :arg-types}]
-  {:return-types #{x-type}
-   :continue-call (fn [f emitted-args]
-                    (f x-type `(- ~@emitted-args)))})
+(defmethod codegen-call [:- ::types/Number] [{[x-type] :arg-types}] (mono-fn-call x-type #(do `(- ~@%))))
 
 (defmethod codegen-call [:* ArrowType$Int ArrowType$Int] [{:keys [arg-types]}]
   (let [^ArrowType$Int return-type (types/least-upper-bound arg-types)
@@ -614,25 +445,17 @@
                       (f return-type `(* ~@emitted-args)))}))
 
 (defmethod codegen-call [:% ::types/Number ::types/Number] [{:keys [ arg-types]}]
-  (let [return-type (types/least-upper-bound arg-types)]
-    {:continue-call (fn [f emitted-args]
-                      (f return-type
-                         `(mod ~@emitted-args)))
-     :return-types #{return-type}}))
-
-(defmethod codegen-call [:/ ::types/Number ::types/Number] [{:keys [ arg-types]}]
-  (let [return-type (types/least-upper-bound arg-types)]
-    {:continue-call (fn [f emitted-args]
-                      (f return-type
-                         `(/ ~@emitted-args)))
-     :return-types #{return-type}}))
+  (mono-fn-call (types/least-upper-bound arg-types)
+                #(do `(mod ~@%))))
 
 (defmethod codegen-call [:/ ArrowType$Int ArrowType$Int] [{:keys [ arg-types]}]
-  (let [return-type (types/least-upper-bound arg-types)]
-    {:continue-call (fn [f emitted-args]
-                      (f return-type
-                         `(quot ~@emitted-args)))
-     :return-types #{return-type}}))
+  (mono-fn-call (types/least-upper-bound arg-types)
+                #(do `(quot ~@%))))
+
+(defmethod codegen-call [:/ ::types/Number ::types/Number] [{:keys [ arg-types]}]
+  (mono-fn-call (types/least-upper-bound arg-types)
+                #(do `(/ ~@%))))
+
 
 (defmethod codegen-call [:like ::types/Object ArrowType$Utf8] [{[_ {:keys [literal]}] :args}]
   {:return-types #{types/bool-type}
