@@ -255,23 +255,29 @@
              (run-projection rel '(+ x y))))))
 
 (t/deftest test-ternary-booleans
-  (t/is (= {:res [true false nil false false false nil false nil]
-            :vec-type BitVector}
+  (t/is (= [{:res [true false nil false false false nil false nil]
+             :vec-type BitVector}
+            {:res [true true true true false nil true nil nil]
+             :vec-type BitVector}]
            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true ty/bool-type nil)
                                                      [true true true false false false nil nil nil])
                                       (tu/->duv "y" [true false nil true false nil true false nil])])]
-             (run-projection rel '(and x y)))))
+             [(run-projection rel '(and x y))
+              (run-projection rel '(or x y))])))
 
-  (t/is (= {:res [true true true true false nil true nil nil]
-            :vec-type BitVector}
-           (with-open [rel (open-rel [(tu/->duv "x" [true true true false false false nil nil nil])
-                                      (tu/->duv "y" [true false nil true false nil true false nil])])]
-             (run-projection rel '(or x y)))))
-
-  (t/is (= {:res [false true nil]
-            :vec-type BitVector}
+  (t/is (= [{:res [false true nil]
+             :vec-type BitVector}
+            {:res [true false false]
+             :vec-type BitVector}
+            {:res [false true false]
+             :vec-type BitVector}
+            {:res [false false true]
+             :vec-type BitVector}]
            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true ty/bool-type nil) [true false nil])])]
-             (run-projection rel '(not x))))))
+             [(run-projection rel '(not x))
+              (run-projection rel '(true? x))
+              (run-projection rel '(false? x))
+              (run-projection rel '(nil? x))]))))
 
 (t/deftest test-mixing-timestamp-types
   (letfn [(->ts-vec [col-name time-unit, ^long value]

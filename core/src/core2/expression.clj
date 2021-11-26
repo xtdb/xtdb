@@ -436,6 +436,19 @@
 
 (defmethod codegen-call [:not ArrowType$Null] [_] call-returns-null)
 
+(defmethod codegen-call [:true? ArrowType$Bool] [_]
+  (mono-fn-call types/bool-type #(do `(true? ~@%))))
+
+(defmethod codegen-call [:false? ArrowType$Bool] [_]
+  (mono-fn-call types/bool-type #(do `(false? ~@%))))
+
+(defmethod codegen-call [:nil? ArrowType$Null] [_]
+  (mono-fn-call types/bool-type (constantly true)))
+
+(doseq [f #{:true? :false? :nil?}]
+  (defmethod codegen-call [f ::types/Object] [_]
+    (mono-fn-call types/bool-type (constantly false))))
+
 (defn- with-math-integer-cast
   "java.lang.Math's functions only take int or long, so we introduce an up-cast if need be"
   [^ArrowType$Int arrow-type emitted-args]
