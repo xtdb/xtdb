@@ -21,7 +21,7 @@ attribute in question to project into a column. The latter means that
 the column (and hence attribute) contains a literal `NULL` value.
 
 Supporting semi-structured data, querying documents with slightly
-different shape out of XTDB can easily lead to not knowing what the
+different shapes out of XTDB can easily lead to not knowing what the
 database really contains without issuing several probing queries, as
 anything that deviates from the requested projection will silently be
 filtered out.
@@ -74,8 +74,8 @@ We could have `FROM foo NULL ON EMPTY, bar DEFAULT 'N/A' ON EMPTY` or
 similar, though this would work on a relation level and not individual
 columns like `JSON_VALUE`. One could instead imagine a table function
 similar to `JSON_TABLE` to make it more explict, `FROM
-DOCUMENT_TABLE(COLUMNS(foo NULL ON EMPTY, bar))`, this could also be a
-place to add explicit types, which is how `JSON_TABLE` works, but
+DOCUMENT_TABLE(baz, COLUMNS(foo NULL ON EMPTY, bar))`, this could also
+be a place to add explicit types, which is how `JSON_TABLE` works, but
 that's a different discussion. The default could be to operate as
 Option A, filtering out rows like now, or add `NULL` as in Option C,
 like `JSON_VALUE` itself.
