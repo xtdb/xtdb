@@ -142,31 +142,31 @@
                          `(Math/subtractExact ~(-> x-arg (with-conversion x-unit res-unit))
                                               ~(-> y-arg (with-conversion y-unit res-unit)))))}))
 
-(defmethod expr/codegen-call [:* ArrowType$Duration ArrowType$Int] [{[x-type _y-type] :arg-types, :keys []}]
+(defmethod expr/codegen-call [:* ArrowType$Duration ArrowType$Int] [{[x-type _y-type] :arg-types}]
   {:continue-call (fn [f emitted-args]
                     (f x-type
                        `(Math/multiplyExact ~@emitted-args)))
    :return-types #{x-type}})
 
-(defmethod expr/codegen-call [:* ArrowType$Duration ::types/Number] [{[x-type _y-type] :arg-types, :keys []}]
+(defmethod expr/codegen-call [:* ArrowType$Duration ::types/Number] [{[x-type _y-type] :arg-types}]
   {:continue-call (fn [f emitted-args]
                     (f x-type
                        `(* ~@emitted-args)))
    :return-types #{x-type}})
 
-(defmethod expr/codegen-call [:* ArrowType$Int ArrowType$Duration] [{[_x-type y-type] :arg-types, :keys []}]
+(defmethod expr/codegen-call [:* ArrowType$Int ArrowType$Duration] [{[_x-type y-type] :arg-types}]
   {:continue-call (fn [f emitted-args]
                     (f y-type
                        `(Math/multiplyExact ~@emitted-args)))
    :return-types #{y-type}})
 
-(defmethod expr/codegen-call [:* ::types/Number ArrowType$Duration] [{[_x-type y-type] :arg-types, :keys []}]
+(defmethod expr/codegen-call [:* ::types/Number ArrowType$Duration] [{[_x-type y-type] :arg-types}]
   {:continue-call (fn [f emitted-args]
                     (f y-type
                        `(long (* ~@emitted-args))))
    :return-types #{y-type}})
 
-(defmethod expr/codegen-call [:/ ArrowType$Duration ::types/Number] [{[x-type] :arg-types, :keys []}]
+(defmethod expr/codegen-call [:/ ArrowType$Duration ::types/Number] [{[x-type] :arg-types}]
   {:continue-call (fn [f emitted-args]
                     (f x-type
                        `(quot ~@emitted-args)))

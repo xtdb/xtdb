@@ -12,44 +12,44 @@
 
 (def ^:private compare-return-type (.getType Types$MinorType/INT))
 
-(defmethod expr/codegen-call [:compare ArrowType$Int ArrowType$Int] [{:keys []}]
+(defmethod expr/codegen-call [:compare ArrowType$Int ArrowType$Int] [_]
   {:continue-call (fn [f emitted-args]
                     (f compare-return-type
                        `(Long/compare ~@emitted-args)))
    :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ::types/Number ::types/Number] [{:keys []}]
+(defmethod expr/codegen-call [:compare ::types/Number ::types/Number] [_]
   {:continue-call (fn [f emitted-args]
                     (f compare-return-type
                        `(Double/compare ~@emitted-args)))
    :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ArrowType$Timestamp ArrowType$Timestamp] [{:keys []}]
+(defmethod expr/codegen-call [:compare ArrowType$Timestamp ArrowType$Timestamp] [_]
   ;; TODO different scales
   {:continue-call (fn [f emitted-args]
                     (f compare-return-type
                        `(Long/compare ~@emitted-args)))
    :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ArrowType$Binary ArrowType$Binary] [{:keys []}]
+(defmethod expr/codegen-call [:compare ArrowType$Binary ArrowType$Binary] [_]
   {:continue-call (fn [f emitted-args]
                     (f compare-return-type
                        `(expr/compare-nio-buffers-unsigned ~@emitted-args)))
    :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ArrowType$Bool ArrowType$Bool] [{:keys []}]
+(defmethod expr/codegen-call [:compare ArrowType$Bool ArrowType$Bool] [_]
   {:continue-call (fn [f emitted-args]
                     (f compare-return-type
                        `(Boolean/compare ~@emitted-args)))
    :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ::types/Object ::types/Object] [{:keys []}]
+(defmethod expr/codegen-call [:compare ::types/Object ::types/Object] [_]
   {:continue-call (fn [f emitted-args]
                     (f compare-return-type
                        `(.compareTo ~@(map #(expr/with-tag % Comparable) emitted-args))))
    :return-types #{compare-return-type}})
 
-(defmethod expr/codegen-call [:compare ArrowType$Utf8 ArrowType$Utf8] [{:keys []}]
+(defmethod expr/codegen-call [:compare ArrowType$Utf8 ArrowType$Utf8] [_]
   {:continue-call (fn [f emitted-args]
                     (f compare-return-type
                        `(expr/compare-nio-buffers-unsigned ~@emitted-args)))
