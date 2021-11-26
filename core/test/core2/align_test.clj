@@ -3,46 +3,22 @@
             [core2.align :as align]
             [core2.expression :as expr]
             [core2.test-util :as tu]
+            [core2.types :as ty]
             [core2.vector.indirect :as iv])
   (:import java.util.List
-           [org.apache.arrow.vector BigIntVector VarCharVector VectorSchemaRoot]
-           org.apache.arrow.vector.util.Text))
+           org.apache.arrow.vector.VectorSchemaRoot))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-align
-  (with-open [age-vec (doto (BigIntVector. "age" tu/*allocator*)
-                        (.setValueCount 5)
-                        (.setSafe 0 12)
-                        (.setSafe 1 42)
-                        (.setSafe 2 15)
-                        (.setSafe 3 83)
-                        (.setSafe 4 25))
-
-              age-row-id-vec (doto (BigIntVector. "_row-id" tu/*allocator*)
-                               (.setValueCount 5)
-                               (.setSafe 0 2)
-                               (.setSafe 1 5)
-                               (.setSafe 2 9)
-                               (.setSafe 3 12)
-                               (.setSafe 4 13))
+  (with-open [age-vec (tu/->mono-vec "age" ty/bigint-type [12 42 15 83 25])
+              age-row-id-vec (tu/->mono-vec "_row-id" ty/bigint-type [2 5 9 12 13])
 
               age-root (let [^List vecs [age-row-id-vec age-vec]]
                          (VectorSchemaRoot. vecs))
 
-              name-vec (doto (VarCharVector. "name" tu/*allocator*)
-                         (.setValueCount 4)
-                         (.setSafe 0 (Text. "Al"))
-                         (.setSafe 1 (Text. "Dave"))
-                         (.setSafe 2 (Text. "Bob"))
-                         (.setSafe 3 (Text. "Steve")))
-
-              name-row-id-vec (doto (BigIntVector. "_row-id" tu/*allocator*)
-                                (.setValueCount 4)
-                                (.setSafe 0 1)
-                                (.setSafe 1 2)
-                                (.setSafe 2 9)
-                                (.setSafe 3 13))
+              name-vec (tu/->mono-vec "name" ty/varchar-type ["Al" "Dave" "Bob" "Steve"])
+              name-row-id-vec (tu/->mono-vec "_row-id" ty/bigint-type [1 2 9 13])
 
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]

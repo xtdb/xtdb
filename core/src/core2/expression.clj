@@ -230,19 +230,26 @@
 
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->types]}]
   (let [field-types (or (get var->types variable)
-                        (throw (AssertionError. (str "unknown variable: " variable))))]
+                        (throw (AssertionError. (str "unknown variable: " variable))))
+        var-idx-sym (gensym 'var-idx)
+        var-vec-sym (gensym 'var-vec)]
     (if-not (vector? field-types)
       (let [^FieldType field-type field-types
             arrow-type (.getType field-type)
             vec-type (types/arrow-type->vector-type arrow-type)
+            nullable? (.isNullable field-type)]
 
-            code `(let [~idx-sym (.getIndex ~variable ~idx-sym)
-                        ~(-> variable (with-tag vec-type)) (.getVector ~variable)]
-                    ~(get-value-form arrow-type variable idx-sym))]
-
-        {:return-types #{arrow-type}
+        {:return-types (cond-> #{arrow-type}
+                         nullable? (conj types/null-type))
          :continue (fn [f]
-                     (f arrow-type code))})
+                     `(let [~var-idx-sym (.getIndex ~variable ~idx-sym)
+                            ~(-> var-vec-sym (with-tag vec-type)) (.getVector ~variable)]
+                        ~(let [get-value (f arrow-type (get-value-form arrow-type var-vec-sym var-idx-sym))]
+                           (if nullable?
+                             `(if (.isNull ~var-vec-sym ~var-idx-sym)
+                                ~(f types/null-type nil)
+                                ~get-value)
+                             get-value))))})
 
       {:return-types
        (->> field-types
@@ -252,21 +259,19 @@
 
        :continue
        (fn [f]
-         (let [var-idx-sym (gensym 'var-idx)
-               var-vec-sym (gensym 'var-vec)]
-           `(let [~var-idx-sym (.getIndex ~variable ~idx-sym)
-                  ~(-> var-vec-sym (with-tag DenseUnionVector)) (.getVector ~variable)]
-              (case (.getTypeId ~var-vec-sym ~var-idx-sym)
-                ~@(->> field-types
-                       (map-indexed
-                        (fn [type-id ^FieldType field-type]
-                          (let [arrow-type (.getType field-type)]
-                            [type-id
-                             (f arrow-type (get-value-form arrow-type
-                                                           (-> `(.getVectorByType ~var-vec-sym ~type-id)
-                                                               (with-tag (types/arrow-type->vector-type arrow-type)))
-                                                           `(.getOffset ~var-vec-sym ~var-idx-sym)))])))
-                       (apply concat))))))})))
+         `(let [~var-idx-sym (.getIndex ~variable ~idx-sym)
+                ~(-> var-vec-sym (with-tag DenseUnionVector)) (.getVector ~variable)]
+            (case (.getTypeId ~var-vec-sym ~var-idx-sym)
+              ~@(->> field-types
+                     (map-indexed
+                      (fn [type-id ^FieldType field-type]
+                        (let [arrow-type (.getType field-type)]
+                          [type-id
+                           (f arrow-type (get-value-form arrow-type
+                                                         (-> `(.getVectorByType ~var-vec-sym ~type-id)
+                                                             (with-tag (types/arrow-type->vector-type arrow-type)))
+                                                         `(.getOffset ~var-vec-sym ~var-idx-sym)))])))
+                     (apply concat)))))})))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} opts]
   (let [{p-rets :return-types, p-cont :continue} (codegen-expr pred opts)

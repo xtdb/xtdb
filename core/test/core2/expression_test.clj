@@ -13,7 +13,7 @@
   (:import [java.time Duration ZonedDateTime]
            [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TimeStampVector ValueVector]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp]
+           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp FieldType]
            org.apache.arrow.vector.types.TimeUnit))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -248,28 +248,29 @@
                                       (tu/->duv "y" [3.4 (float 8.25)])])]
              (run-projection rel '(+ x y)))))
 
-  (t/is (= {:res [4.4 nil nil nil]
-            :vec-type #{NullVector Float8Vector}}
+  (t/is (= {:res [(float 4.4) nil nil nil]
+            :vec-type #{NullVector Float4Vector Float8Vector}}
            (with-open [rel (open-rel [(tu/->duv "x" [1 12 nil nil])
-                                      (tu/->duv "y" [3.4 nil 4.8 nil])])]
+                                      (tu/->duv "y" [(float 3.4) nil 4.8 nil])])]
              (run-projection rel '(+ x y))))))
 
 (t/deftest test-ternary-booleans
   (t/is (= {:res [true false nil false false false nil false nil]
-            :vec-type #{BitVector NullVector}}
-           (with-open [rel (open-rel [(tu/->duv "x" [true true true false false false nil nil nil])
+            :vec-type #{NullVector BitVector}}
+           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true ty/bool-type nil)
+                                                     [true true true false false false nil nil nil])
                                       (tu/->duv "y" [true false nil true false nil true false nil])])]
              (run-projection rel '(and x y)))))
 
   (t/is (= {:res [true true true true false nil true nil nil]
-            :vec-type #{BitVector NullVector}}
+            :vec-type #{NullVector BitVector}}
            (with-open [rel (open-rel [(tu/->duv "x" [true true true false false false nil nil nil])
                                       (tu/->duv "y" [true false nil true false nil true false nil])])]
              (run-projection rel '(or x y)))))
 
   (t/is (= {:res [false true nil]
-            :vec-type #{BitVector NullVector}}
-           (with-open [rel (open-rel [(tu/->duv "x" [true false nil])])]
+            :vec-type #{NullVector BitVector}}
+           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true ty/bool-type nil) [true false nil])])]
              (run-projection rel '(not x))))))
 
 (t/deftest test-mixing-timestamp-types
@@ -328,14 +329,10 @@
 
     (t/testing "durations"
       (letfn [(->bigint-vec [^String col-name, ^long value]
-                (doto (BigIntVector. col-name tu/*allocator*)
-                  (.setValueCount 1)
-                  (.set 0 value)))
+                (tu/->mono-vec col-name ty/bigint-type [value]))
 
               (->float8-vec [^String col-name, ^double value]
-                (doto (Float8Vector. col-name tu/*allocator*)
-                  (.setValueCount 1)
-                  (.set 0 value)))]
+                (tu/->mono-vec col-name ty/float8-type [value]))]
 
         (t/is (= {:res [(Duration/parse "PT0.002001S")]
                   :vec-type DurationVector}
