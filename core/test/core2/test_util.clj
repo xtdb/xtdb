@@ -8,8 +8,8 @@
             [core2.temporal :as temporal]
             [core2.types :as ty]
             [core2.util :as util]
-            [core2.vector.writer :as vw]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw])
   (:import core2.ICursor
            core2.local_node.Node
            core2.object_store.FileSystemObjectStore
@@ -18,12 +18,13 @@
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            [java.time Clock Duration Instant Period ZoneId]
-           [java.util ArrayList Date LinkedList]
+           [java.util ArrayList LinkedList]
            java.util.concurrent.TimeUnit
            java.util.function.Consumer
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
-           org.apache.arrow.vector.types.pojo.Schema))
+           org.apache.arrow.vector.complex.DenseUnionVector
+           [org.apache.arrow.vector.types.pojo ArrowType FieldType Schema]))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 
@@ -89,28 +90,71 @@
   (.finishChunk ^core2.indexer.Indexer (.indexer node))
   (await-temporal-snapshot-build node))
 
+(defn write-duv! [^DenseUnionVector duv, vs]
+  (.clear duv)
+
+  (let [writer (-> (vw/vec->writer duv) .asDenseUnion)]
+    (doseq [v vs]
+      (.startValue writer)
+      (doto (.writerForType writer (ty/value->leg-type v))
+        (.startValue)
+        (->> (ty/write-value! v))
+        (.endValue))
+      (.endValue writer))
+
+    (util/set-value-count duv (count vs))
+
+    duv))
+
+(defn ->duv [col-name vs]
+  (let [res (DenseUnionVector/empty col-name *allocator*)]
+    (try
+      (doto res (write-duv! vs))
+      (catch Exception e
+        (.close res)
+        (throw e)))))
+
+(defn write-vec! [^ValueVector v, vs]
+  (.clear v)
+
+  (let [writer (vw/vec->writer v)]
+    (doseq [v vs]
+      (doto writer
+        (.startValue)
+        (->> (ty/write-value! v))
+        (.endValue)))
+
+    (util/set-value-count v (count vs))
+
+    v))
+
+(defn ->mono-vec
+  (^org.apache.arrow.vector.ValueVector [^String col-name col-type]
+   (let [^FieldType field-type (cond
+                                 (instance? FieldType col-type) col-type
+                                 (instance? ArrowType col-type) (FieldType. false col-type nil)
+                                 :else (throw (UnsupportedOperationException.)))]
+     (.createNewSingleVector field-type col-name *allocator* nil)))
+
+  (^org.apache.arrow.vector.ValueVector [^String col-name col-type vs]
+   (let [res (->mono-vec col-name col-type)]
+     (try
+       (doto res (write-vec! vs))
+       (catch Exception e
+         (.close res)
+         (throw e))))))
+
 (defn populate-root ^core2.vector.IIndirectRelation [^VectorSchemaRoot root rows]
   (.clear root)
 
   (let [field-vecs (.getFieldVectors root)
         row-count (count rows)]
-    (doseq [^FieldVector field-vec field-vecs
-            :let [writer (vw/vec->writer field-vec)]]
-      (dotimes [idx row-count]
-        (.startValue writer)
-        (ty/write-value! (-> (nth rows idx)
-                             (get (keyword (.getName (.getField field-vec)))))
-                         writer)
-        (.endValue writer)))
+    (doseq [^FieldVector field-vec field-vecs]
+      (write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
 
     (util/set-vector-schema-root-row-count root row-count)
 
     root))
-
-(defn ->relation ^core2.vector.IIndirectRelation [schema rows]
-  (let [root (VectorSchemaRoot/create schema *allocator*)]
-    (populate-root root rows)
-    (iv/<-root root)))
 
 (defn ->cursor ^core2.ICursor [schema blocks]
   (let [blocks (LinkedList. blocks)

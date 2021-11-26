@@ -20,17 +20,17 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
-(def a-field (ty/->field "a" ty/float8-type false))
-(def b-field (ty/->field "b" ty/float8-type false))
-(def d-field (ty/->field "d" ty/bigint-type false))
-(def e-field (ty/->field "e" ty/varchar-type false))
+(defn ->data-vecs []
+  [(tu/->mono-vec "a" ty/float8-type (map double (range 1000)))
+   (tu/->mono-vec "b" ty/float8-type (map double (range 1000)))
+   (tu/->mono-vec "d" ty/bigint-type (range 1000))
+   (tu/->mono-vec "e" ty/varchar-type (map #(format "%04d" %) (range 1000)))])
 
-(def data
-  (for [n (range 1000)]
-    {:a (double n), :b (double n), :d n, :e (format "%04d" n)}))
+(defn- open-rel ^core2.vector.IIndirectRelation [vecs]
+  (iv/->indirect-rel (map iv/->direct-vec vecs)))
 
 (t/deftest test-simple-projection
-  (with-open [in-rel (tu/->relation (Schema. [a-field b-field d-field e-field]) data)]
+  (with-open [in-rel (open-rel (->data-vecs))]
     (letfn [(project [form]
               (with-open [project-col (.project (expr/->expression-projection-spec "c" form {})
                                                 tu/*allocator* in-rel)]
@@ -66,7 +66,7 @@
             "cannot call arbitrary functions"))))
 
 (t/deftest can-compile-simple-expression
-  (with-open [in-rel (tu/->relation (Schema. [a-field b-field d-field e-field]) data)]
+  (with-open [in-rel (open-rel (->data-vecs))]
     (letfn [(select-relation [form params]
               (-> (.select (expr/->expression-relation-selector form params)
                            in-rel)
@@ -170,9 +170,8 @@
 
 (t/deftest test-mixing-numeric-types
   (letfn [(run-test [f x y]
-            (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (.arrowType (ty/value->leg-type x)) false)
-                                                     (ty/->field "y" (.arrowType (ty/value->leg-type y)) false)])
-                                           [{:x x, :y y}])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (ty/value->leg-type x)) [x])
+                                       (tu/->mono-vec "y" (.arrowType (ty/value->leg-type y)) [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 
@@ -211,14 +210,13 @@
 
 (t/deftest test-throws-on-overflow
   (letfn [(run-unary-test [f x]
-            (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (.arrowType (ty/value->leg-type x)) false)]) [{:x x}])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (ty/value->leg-type x)) [x])])]
               (-> (run-projection rel (list f 'x))
                   (update :res first))))
 
           (run-binary-test [f x y]
-            (with-open [rel (tu/->relation (Schema. [(ty/->field "x" (.arrowType (ty/value->leg-type x)) false)
-                                                     (ty/->field "y" (.arrowType (ty/value->leg-type y)) false)])
-                                           [{:x x, :y y}])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (ty/value->leg-type x)) [x])
+                                       (tu/->mono-vec "y" (.arrowType (ty/value->leg-type y)) [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 
@@ -240,42 +238,17 @@
                    (run-unary-test '- (Short/MIN_VALUE))))))
 
 (t/deftest test-polymorphic-columns
-  (letfn [(write-value! [^IDenseUnionWriter w, v]
-            (let [leg-type (ty/value->leg-type v)]
-              (doto w
-                (.startValue)
-                (-> (.writerForType leg-type)
-                    (doto (.startValue))
-                    (doto (as-> w (ty/write-value! v w)))
-                    (doto (.endValue)))
-                (.endValue))))
+  (t/is (= {:res [1.2 1 3.4]
+            :vec-type #{Float8Vector BigIntVector}}
+           (with-open [rel (open-rel [(tu/->duv "x" [1.2 1 3.4])
+                                      (tu/->duv "y" [3.4 (float 8.25)])])]
+             (run-projection rel 'x))))
 
-          (write-col! [^IRelationWriter rel-writer, ^String col-name, vs]
-            (let [w (-> (.writerForName rel-writer col-name)
-                        (.asDenseUnion))]
-              (doseq [v vs]
-                (write-value! w v))))
-
-          (run-test [f xs ys]
-            (with-open [rel-writer (vw/->rel-writer tu/*allocator*)]
-              (doto rel-writer
-                (write-col! "x" xs)
-                (write-col! "y" ys))
-
-              (run-projection (vw/rel-writer->reader rel-writer)
-                              (list f 'x 'y))))]
-
-    (with-open [rel-writer (vw/->rel-writer tu/*allocator*)]
-      (doto rel-writer
-        (write-col! "x" [1.2 1 3.4]))
-
-      (t/is (= {:res [1.2 1 3.4]
-                :vec-type #{Float8Vector BigIntVector}}
-               (run-projection (vw/rel-writer->reader rel-writer) 'x))))
-
-    (t/is (= {:res [4.4 9.75]
-              :vec-type #{Float4Vector Float8Vector}}
-             (run-test '+ [1 1.5] [3.4 (float 8.25)])))))
+  (t/is (= {:res [4.4 9.75]
+            :vec-type #{Float4Vector Float8Vector}}
+           (with-open [rel (open-rel [(tu/->duv "x" [1 1.5])
+                                      (tu/->duv "y" [3.4 (float 8.25)])])]
+             (run-projection rel '(+ x y))))))
 
 (t/deftest test-mixing-timestamp-types
   (letfn [(->ts-vec [col-name time-unit, ^long value]
