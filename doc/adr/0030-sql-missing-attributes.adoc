@@ -32,6 +32,15 @@ rows must contain at least some specified column to be considered in
 the first place, all columns cannot be `MISSING` as that would match
 every document in the database.
 
+It's also worth noting that the way XTDB works, a top-level, column
+stored in its own file, and a column itself containing a struct with a
+nested `MISSING` attribute works quite differently. In this latter
+case, the struct value itself is already at hand when the query engine
+needs to deal with `MISSING`. Most of this ADR worry about the former
+base case and how to make the scan operator behave well. That said, at
+the SQL level, there may not be much, if any, difference on how they
+behave.
+
 === Option A: Filter out missing attributes (current behaviour)
 
 We accept this as a known issue, document patterns on how to detect
