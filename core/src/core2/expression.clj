@@ -657,16 +657,25 @@
         ;; TODO there are other minor types that don't have a single corresponding ArrowType
         `(.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name))))))
 
-(defn- write-value-out-code [return-types]
-  (if (= 1 (count return-types))
+(defn- return-types->field-type ^org.apache.arrow.vector.types.pojo.FieldType [return-types]
+  (let [without-null (disj return-types types/null-type)]
+    (if (>= (count without-null) 2)
+      (FieldType. false types/dense-union-type nil)
+      (FieldType. (contains? return-types types/null-type)
+                  (first without-null)
+                  nil))))
+
+(defn- write-value-out-code [^FieldType field-type return-types]
+  (if-not (= types/dense-union-type (.getType field-type))
     {:write-value-out!
      (fn [^ArrowType arrow-type code]
-       (let [vec-type (types/arrow-type->vector-type arrow-type)]
-         (set-value-form arrow-type
-                         (-> `(.getVector ~out-writer-sym)
-                             (with-tag vec-type))
-                         `(.getPosition ~out-writer-sym)
-                         code)))}
+       (when-not (= arrow-type types/null-type)
+         (let [vec-type (types/arrow-type->vector-type arrow-type)]
+           (set-value-form arrow-type
+                           (-> `(.getVector ~out-writer-sym)
+                               (with-tag vec-type))
+                           `(.getPosition ~out-writer-sym)
+                           code))))}
 
     (let [->writer-sym (->> return-types
                             (into {} (map (juxt identity (fn [_] (gensym 'writer))))))]
@@ -698,8 +707,9 @@
 
               codegen-opts {:var->types var->types, :param->type param-types}
               {:keys [return-types continue]} (codegen-expr expr codegen-opts)
+              ret-field-type (return-types->field-type return-types)
 
-              {:keys [writer-bindings write-value-out!]} (write-value-out-code return-types)]
+              {:keys [writer-bindings write-value-out!]} (write-value-out-code ret-field-type return-types)]
 
           {:expr-fn (eval
                      `(fn [~(-> out-vec-sym (with-tag ValueVector))
@@ -713,7 +723,7 @@
                             ~(continue write-value-out!)
                             (.endValue ~out-writer-sym)))))
 
-           :return-types return-types}))
+           :field-type ret-field-type}))
       (memoize)))
 
 (defn field->value-types [^Field field]
@@ -736,11 +746,8 @@
                               (util/map-values (fn [_variable ^IIndirectVector read-col]
                                                  (assert read-col)
                                                  (field->value-types (.getField (.getVector read-col)))))))
-              {:keys [expr-fn return-types]} (memo-generate-projection expr var-types param-types)
-              ^ValueVector out-vec (if (= 1 (count return-types))
-                                     (-> (FieldType. false (first return-types) nil)
-                                         (.createNewSingleVector col-name allocator nil))
-                                     (DenseUnionVector/empty col-name allocator))]
+              {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection expr var-types param-types)
+              ^ValueVector out-vec (.createNewSingleVector field-type col-name allocator nil)]
           (try
             (expr-fn out-vec (vals in-cols) (vals emitted-params) (.rowCount in-rel))
             (iv/->direct-vec out-vec)
