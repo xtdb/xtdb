@@ -73,12 +73,12 @@ options.
 We could have `FROM foo NULL ON EMPTY, bar DEFAULT 'N/A' ON EMPTY` or
 similar, though this would work on a relation level and not individual
 columns like `JSON_VALUE`. One could instead imagine a table function
-similar to `JSON_TABLE` to make it more explict, `FROM
+similar to `JSON_TABLE` to make it more explicit, `FROM
 DOCUMENT_TABLE(baz, COLUMNS(foo NULL ON EMPTY, bar))`, this could also
 be a place to add explicit types, which is how `JSON_TABLE` works, but
 that's a different discussion. The default could be to operate as
 Option A, filtering out rows like now, or add `NULL` as in Option C,
-like `JSON_VALUE` itself.
+like `JSON_TABLE` itself.
 
 A potential benefit of this approach is that you can directly see in
 the `FROM` clause where the engine needs to deal with this. Another is
@@ -94,11 +94,11 @@ SQL, as it already contains `IS UNKONWN` and similar predicates.
 A massive drawback of this approach is that we're overloading and
 misusing an existing concept in SQL in an attempt to not extend it.
 
-=== Option F: Use a specifal predicate
+=== Option F: Use a special predicate
 
-This is similar to how `JSON_EXISTS` and other semi-structed
+This is similar to how `JSON_EXISTS` and other semi-structured
 extensions to SQL works, we simply add a special predicate that can
-tell if a column is missing or not, and the existance of this
+tell if a column is missing or not, and the existence of this
 predicate would lift up some sentinel value out of the scan operator
 or tweak its behaviour in other ways. We could maybe call it
 `COLUMN_EXIST`.
