@@ -1,0 +1,128 @@
+= 30. SQL missing attributes
+
+Date: 2021-11-26
+
+== Status
+
+Proposed
+
+== Context
+
+XTDB needs a way to identify and query for missing attributes in the
+semi-structured documents it stores. Once projected into a relation
+via the scan operator, the schema supports dynamic types, but has a
+fixed set of columns. Currently, XTDB defaults to filter out rows
+early in the scan operator when a row doesn't contain all requested
+columns.
+
+The concept of `MISSING` or `undefined` is slightly different from
+`NULL`. The former means that the document doesn't contain the
+attribute in question to project into a column. The latter means that
+the column (and hence attribute) contains a literal `NULL` value.
+
+Supporting semi-structured data, querying documents with slightly
+different shape out of XTDB can easily lead to not knowing what the
+database really contains without issuing several probing queries, as
+anything that deviates from the requested projection will silently be
+filtered out.
+
+The below options aren't all mutually exclusive.
+
+=== Option A: Filter out missing attributes (current behaviour)
+
+We accept this as a known issue, document patterns on how to detect
+different shapes, and focus elsewhere.
+
+=== Option B: Add `Missing` to the Arrow type system
+
+Arrow has extension types, and we can extend the `Null` type with our
+own `Missing` type. This would mean that for all intents and purposes,
+it will behave like `Null`, but can detected via either type
+predicates or `IS MISSING`.
+
+This approach, while clean, has a few drawbacks:
+
+* It's costly during scan to detect missing columns if there's no
+  other, existing, limiting column, for example querying for a single
+  column that's not stored in the database would do a full table scan,
+  returning `MISSING` for every row in the database.
+* The current default behaviour is intuitive and often likely what one
+  wants. This means that there likely needs to be some form of flag or
+  option on the query or in `FROM bar MISSING ON EMPTY` or similar.
+
+This approach is inspired by SQL++ and PartiQL.
+
+=== Option C: Always project out `NULL` for missing columns
+
+This is how Rockset seems to work. They like JavaScript has
+`undefined` which is similar to `MISSING`.
+
+The main benefit of this is that it is predictable, and one can reuse
+`null` if one wants. It has many drawbacks though:
+
+* Always risk of table scan.
+* If one doesn't add a new type, it's impossible to tell a `NULL` from
+  a `MISSING` column.
+
+=== Option D: Use a user defined value for `MISSING`
+
+This is similar to how some SQL/JSON functions work, like `JSON_VALUE`
+which has `NULL ON EMPTY` (the default) and `DEFAULT <value> ON EMPTY`
+options.
+
+We could have `FROM foo NULL ON EMPTY, bar DEFAULT 'N/A' ON EMPTY` or
+similar, though this would work on a relation level and not individual
+columns like `JSON_VALUE`. One could instead imagine a table function
+similar to `JSON_TABLE` to make it more explict, `FROM
+DOCUMENT_TABLE(COLUMNS(foo NULL ON EMPTY, bar))`, this could also be a
+place to add explicit types, which is how `JSON_TABLE` works, but
+that's a different discussion. The default could be to operate as
+Option A, filtering out rows like now, or add `NULL` as in Option C,
+like `JSON_VALUE` itself.
+
+A potential benefit of this approach is that you can directly see in
+the `FROM` clause where the engine needs to deal with this. Another is
+that there's no need to add a new `MISSING` type to the type system
+with associated predicates.
+
+=== Option E: Use SQL's `UNKNOWN` as a placeholder for `MISSING`
+
+Essentially like Option B, but instead of introducing a new type, we
+overload `UNKNOWN`, which is a boolean `NULL`. Requires no tweaks to
+SQL, as it already contains `IS UNKONWN` and similar predicates.
+
+A massive drawback of this approach is that we're overloading and
+misusing an existing concept in SQL in an attempt to not extend it.
+
+=== Option F: Use a specifal predicate
+
+This is similar to how `JSON_EXISTS` and other semi-structed
+extensions to SQL works, we simply add a special predicate that can
+tell if a column is missing or not, and the existance of this
+predicate would lift up some sentinel value out of the scan operator
+or tweak its behaviour in other ways. We could maybe call it
+`COLUMN_EXIST`.
+
+In most ways, this is actually just a different way of expressing
+Option B, but tries to avoid introducing a user-visible concept of
+`MISSING`. It could act as a hint to project out `NULL` if needed for
+the column in question.
+
+The semantics of how this would work cleanly is a bit vague. In
+practice, one may do `NOT COLUMN_EXISTS` and manually add some form of
+projection for the default column in combination of `UNION` with the
+base case where it does exist.
+
+== Decision
+
+Leaning towards Option D with explicit `DOCUMENT_TABLE` function based
+on `JSON_TABLE` for the cases one need better control, including
+types, over what's read out of scan. The default could then be seen as
+an implicit `DOCUMENT_TABLE` based on qualified columns referenced in
+the query. This would be more inline with modern SQL and doesn't
+require tweaks to the type system.
+
+Option B is the other main alternative, which is inspired by SQL++
+which is more based on SQL-92.
+
+== Consequences
