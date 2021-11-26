@@ -26,7 +26,11 @@ database really contains without issuing several probing queries, as
 anything that deviates from the requested projection will silently be
 filtered out.
 
-The below options aren't all mutually exclusive.
+The below options aren't all mutually exclusive. All options except A
+risk table scans. There's an underlying assumption throughout that the
+rows must contain at least some specified column to be considered in
+the first place, all columns cannot be `MISSING` as that would match
+every document in the database.
 
 === Option A: Filter out missing attributes (current behaviour)
 
