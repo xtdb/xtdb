@@ -351,6 +351,9 @@
                     (f return-type (-> emitted-args wrap-args-f)))
    :return-types #{return-type}})
 
+(def call-returns-null
+  (mono-fn-call ArrowType$Null/INSTANCE (constantly nil)))
+
 (doseq [[f-kw cmp] [[:< #(do `(neg? ~%))]
                     [:<= #(do `(not (pos? ~%)))]
                     [:> #(do `(pos? ~%))]
@@ -380,15 +383,53 @@
 (defmethod codegen-call [:!= ::types/Object ::types/Object] [_]
   (mono-fn-call types/bool-type #(do `(not= ~@%))))
 
+(doseq [f-kw #{:= :!= :< :<= :> :>=}]
+  (defmethod codegen-call [f-kw ::types/Object ArrowType$Null] [_] call-returns-null)
+  (defmethod codegen-call [f-kw ArrowType$Null ::types/Object] [_] call-returns-null)
+  (defmethod codegen-call [f-kw ArrowType$Null ArrowType$Null] [_] call-returns-null))
 
 (defmethod codegen-call [:and ArrowType$Bool ArrowType$Bool] [_]
   (mono-fn-call types/bool-type #(do `(and ~@%))))
 
+(defmethod codegen-call [:and ArrowType$Bool ArrowType$Null] [_]
+  {:return-types #{types/null-type types/bool-type}
+   :continue-call (fn [f [x-code _]]
+                    `(if-not ~x-code
+                       ~(f types/bool-type false)
+                       ~(f types/null-type nil)))})
+
+(defmethod codegen-call [:and ArrowType$Null ArrowType$Bool] [_]
+  {:return-types #{types/null-type types/bool-type}
+   :continue-call (fn [f [_ y-code]]
+                    `(if-not ~y-code
+                       ~(f types/bool-type false)
+                       ~(f types/null-type nil)))})
+
+(defmethod codegen-call [:and ArrowType$Null ArrowType$Null] [_] call-returns-null)
+
 (defmethod codegen-call [:or ArrowType$Bool ArrowType$Bool] [_]
   (mono-fn-call types/bool-type #(do `(or ~@%))))
 
+(defmethod codegen-call [:or ArrowType$Bool ArrowType$Null] [_]
+  {:return-types #{types/null-type types/bool-type}
+   :continue-call (fn [f [x-code _]]
+                    `(if ~x-code
+                       ~(f types/bool-type true)
+                       ~(f types/null-type nil)))})
+
+(defmethod codegen-call [:or ArrowType$Null ArrowType$Bool] [_]
+  {:return-types #{types/null-type types/bool-type}
+   :continue-call (fn [f [_ y-code]]
+                    `(if ~y-code
+                       ~(f types/bool-type true)
+                       ~(f types/null-type nil)))})
+
+(defmethod codegen-call [:or ArrowType$Null ArrowType$Null] [_] call-returns-null)
+
 (defmethod codegen-call [:not ArrowType$Bool] [_]
   (mono-fn-call types/bool-type #(do `(not ~@%))))
+
+(defmethod codegen-call [:not ArrowType$Null] [_] call-returns-null)
 
 (defn- with-math-integer-cast
   "java.lang.Math's functions only take int or long, so we introduce an up-cast if need be"
@@ -428,6 +469,7 @@
    :return-types #{x-type}})
 
 (defmethod codegen-call [:- ::types/Number] [{[x-type] :arg-types}] (mono-fn-call x-type #(do `(- ~@%))))
+(defmethod codegen-call [:- ArrowType$Null] [_] call-returns-null)
 
 (defmethod codegen-call [:* ArrowType$Int ArrowType$Int] [{:keys [arg-types]}]
   (let [^ArrowType$Int return-type (types/least-upper-bound arg-types)
@@ -456,6 +498,10 @@
   (mono-fn-call (types/least-upper-bound arg-types)
                 #(do `(/ ~@%))))
 
+(doseq [f #{:+ :- :* :/ :%}]
+  (defmethod codegen-call [f ::types/Number ArrowType$Null] [_] call-returns-null)
+  (defmethod codegen-call [f ArrowType$Null ::types/Number] [_] call-returns-null)
+  (defmethod codegen-call [f ArrowType$Null ArrowType$Null] [_] call-returns-null))
 
 (defmethod codegen-call [:like ::types/Object ArrowType$Utf8] [{[_ {:keys [literal]}] :args}]
   {:return-types #{types/bool-type}
@@ -558,6 +604,8 @@
 (defmulti set-value-form
   (fn [arrow-type out-vec-sym idx-sym code]
     (class arrow-type)))
+
+(defmethod set-value-form ArrowType$Null [_ _out-vec-sym _idx-sym _code])
 
 (defmethod set-value-form ArrowType$Bool [_ out-vec-sym idx-sym code]
   `(.set ~out-vec-sym ~idx-sym (if ~code 1 0)))

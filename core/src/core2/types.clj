@@ -19,6 +19,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(def null-type (.getType Types$MinorType/NULL))
 (def bool-type (.getType Types$MinorType/BIT))
 (def int-type (.getType Types$MinorType/INT))
 (def bigint-type (.getType Types$MinorType/BIGINT))
