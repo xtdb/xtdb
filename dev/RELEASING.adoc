@@ -18,6 +18,7 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 2. Manually approve hold - this kicks off the Maven deploy, building the API docs, deploying Docker images etc.
 
 If you're building XTDB locally, run:
+
 1. `git clean -dXf`
 2. `XTDB_VERSION=1.20.0 ./lein-sub install && ./lein-sub do check, test`
 3. `XTDB_VERSION=1.20.0 ./lein-sub deploy`
