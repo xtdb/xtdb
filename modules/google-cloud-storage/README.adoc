@@ -5,7 +5,7 @@ This XTDB module allows you to use Google's Cloud Storage as XTDB's 'document st
 .deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-google-cloud-storage {:mvn/version "1.19.0"}
+com.xtdb/xtdb-google-cloud-storage {:mvn/version "1.20.0"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ com.xtdb/xtdb-google-cloud-storage {:mvn/version "1.19.0"}
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-google-cloud-storage</artifactId>
-    <version>1.19.0</version>
+    <version>1.20.0</version>
 </dependency>
 ----
 

@@ -22,26 +22,31 @@ content:
       start_path: docs/language-reference
       branches:
         - master
+        - docs-v1.20.0
         - docs-v1.19.0
     - url: ../
       start_path: docs/clients
       branches:
         - master
+        - docs-v1.20.0
         - docs-v1.19.0
     - url: ../
       start_path: docs/administration
       branches:
         - master
+        - docs-v1.20.0
         - docs-v1.19.0
     - url: ../
       start_path: docs/extensions
       branches:
         - master
+        - docs-v1.20.0
         - docs-v1.19.0
     - url: ../
       start_path: docs/storage
       branches:
         - master
+        - docs-v1.20.0
         - docs-v1.19.0
 
     - url: ../

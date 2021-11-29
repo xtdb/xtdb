@@ -7,4 +7,4 @@ nav:
   - modules/ROOT/nav.adoc
 asciidoc:
   attributes:
-    xtdb_version: 1.19.0
+    xtdb_version: 1.20.0

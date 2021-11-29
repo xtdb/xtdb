@@ -16,10 +16,10 @@ build.gradle.kts::
 [source,kotlin,subs=attributes+]
 ----
 // Main library
-implementation("com.xtdb.labs", "xtdb-corda", "1.19.0")
+implementation("com.xtdb.labs", "xtdb-corda", "1.20.0")
 
 // Library for inclusion in contract JARs
-implementation("com.xtdb.labs", "xtdb-corda-state", "1.19.0")
+implementation("com.xtdb.labs", "xtdb-corda-state", "1.20.0")
 ----
 
 pom.xml::
@@ -29,14 +29,14 @@ pom.xml::
 <dependency>
     <groupId>com.xtdb.labs</groupId>
     <artifactId>xtdb-corda</artifactId>
-    <version>1.19.0</version>
+    <version>1.20.0</version>
 </dependency>
 
 <!-- Library for inclusion in contract JARs -->
 <dependency>
     <groupId>com.xtdb.labs</groupId>
     <artifactId>xtdb-corda-state</artifactId>
-    <version>1.19.0</version>
+    <version>1.20.0</version>
 </dependency>
 ----
 ====
