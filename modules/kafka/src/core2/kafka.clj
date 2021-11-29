@@ -10,13 +10,14 @@
            java.lang.AutoCloseable
            java.nio.file.Path
            [java.time Duration Instant]
-           [java.util Date Map Properties]
+           [java.util Map Properties]
            [java.util.concurrent CompletableFuture ExecutionException]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer Callback KafkaProducer ProducerRecord]
            [org.apache.kafka.common.errors InterruptException TopicExistsException UnknownTopicOrPartitionException]
-           org.apache.kafka.common.TopicPartition))
+           org.apache.kafka.common.TopicPartition
+           java.time.Instant))
 
 (defn ->kafka-config [{:keys [bootstrap-servers ^Path properties-file properties-map]}]
   (merge {"bootstrap.servers" bootstrap-servers}
@@ -62,7 +63,7 @@
       (throw (.getCause e)))))
 
 (defn- ->log-record [^ConsumerRecord record]
-  (log/->LogRecord (c2/->TransactionInstant (.offset record) (Date. (.timestamp record)))
+  (log/->LogRecord (c2/->TransactionInstant (.offset record) (Instant/ofEpochMilli (.timestamp record)))
                    (.value record)))
 
 (defn- handle-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^LogSubscriber subscriber]
