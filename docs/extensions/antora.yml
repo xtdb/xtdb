@@ -1,8 +1,6 @@
 name: extensions
 title: Extensions
-version: master
-prerelease: indeed
-display_version: main
+version: 1.20.0
 start_page: ROOT:index.adoc
 nav:
   - modules/ROOT/nav.adoc
