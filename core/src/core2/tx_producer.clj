@@ -8,7 +8,6 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import [core2.log Log LogRecord]
            [core2.types LegType$StructLegType]
-           core2.vector.IVectorWriter
            java.time.Instant
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot]
@@ -17,7 +16,9 @@
 
 (definterface ITxProducer
   (submitTx
-    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps]))
+    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps])
+  (submitTx
+    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps, ^java.util.Map opts]))
 
 (s/def ::id any?)
 (s/def ::doc (s/keys :req-un [::_id]))
@@ -62,22 +63,27 @@
   (t/->field "_valid-time-end" t/timestamp-micro-tz-type true))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
-  (Schema. [(t/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
-                       (t/->field "put" t/struct-type false
-                                  (t/->field "document" t/dense-union-type false)
-                                  valid-time-start-field
-                                  valid-time-end-field)
-                       (t/->field "delete" t/struct-type false
-                                  (t/->field "_id" t/dense-union-type false)
-                                  valid-time-start-field
-                                  valid-time-end-field)
-                       (t/->field "evict" t/struct-type false
-                                  (t/->field "_id" t/dense-union-type false)))]))
+  (Schema. [(t/->field "tx-ops" t/list-type false
+                       (t/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
+                                  (t/->field "put" t/struct-type false
+                                             (t/->field "document" t/dense-union-type false)
+                                             valid-time-start-field
+                                             valid-time-end-field)
+                                  (t/->field "delete" t/struct-type false
+                                             (t/->field "_id" t/dense-union-type false)
+                                             valid-time-start-field
+                                             valid-time-end-field)
+                                  (t/->field "evict" t/struct-type false
+                                             (t/->field "_id" t/dense-union-type false))))
+            (t/->field "tx-time" t/timestamp-micro-tz-type true)]))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
-  (let [tx-ops (conform-tx-ops tx-ops)]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops {:keys [^Instant tx-time]} ^BufferAllocator allocator]
+  (let [tx-ops (conform-tx-ops tx-ops)
+        op-count (count tx-ops)]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
-      (let [tx-ops-writer (.asDenseUnion (vw/vec->writer (.getVector root "tx-ops")))
+      (let [ops-list-writer (.asList (vw/vec->writer (.getVector root "tx-ops")))
+            tx-ops-writer (.asDenseUnion (.getDataWriter ops-list-writer))
+            ^TimeStampMicroTZVector tx-time-vec (.getVector root "tx-time")
 
             put-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
             put-doc-writer (.asDenseUnion (.writerForName put-writer "document"))
@@ -92,7 +98,12 @@
             evict-writer (.asStruct (.writerForTypeId tx-ops-writer 2))
             evict-id-writer (.asDenseUnion (.writerForName evict-writer "_id"))]
 
-        (dotimes [tx-op-n (count tx-ops)]
+        (when tx-time
+          (.setSafe tx-time-vec 0 (util/instant->micros tx-time)))
+
+        (.startValue ops-list-writer)
+
+        (dotimes [tx-op-n op-count]
           (.startValue tx-ops-writer)
 
           (let [{:keys [op vt-opts] :as tx-op} (nth tx-ops tx-op-n)]
@@ -150,18 +161,25 @@
 
           (.endValue tx-ops-writer))
 
-        (util/set-vector-schema-root-row-count root (count tx-ops))
+        (.endValue ops-list-writer)
+
+        (util/set-vector-schema-root-row-count root 1)
         (.syncSchema root)
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))
 
 (deftype TxProducer [^Log log, ^BufferAllocator allocator]
   ITxProducer
-  (submitTx [_ tx-ops]
-    (-> (.appendRecord log (serialize-tx-ops tx-ops allocator))
-        (util/then-apply
-          (fn [^LogRecord result]
-            (.tx result))))))
+  (submitTx [this tx-ops]
+    (.submitTx this tx-ops {}))
+
+  (submitTx [_ tx-ops opts]
+    (let [{:keys [tx-time] :as opts} (some-> opts (update :tx-time util/->instant))]
+      (-> (.appendRecord log (serialize-tx-ops tx-ops opts allocator))
+          (util/then-apply
+            (fn [^LogRecord result]
+              (cond-> (.tx result)
+                tx-time (assoc :tx-time tx-time))))))))
 
 (defmethod ig/prep-key ::tx-producer [_ opts]
   (merge {:log (ig/ref :core2/log)

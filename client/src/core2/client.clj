@@ -96,10 +96,14 @@
 
   c2/PSubmitNode
   (submit-tx [client tx-ops]
+    (c2/submit-tx client tx-ops {}))
+
+  (submit-tx [client tx-ops opts]
     (-> ^CompletableFuture
         (request client :post :tx
                  {:content-type :transit+json
-                  :form-params {:tx-ops tx-ops}})
+                  :form-params {:tx-ops tx-ops
+                                :opts opts}})
 
         (.thenApply (reify Function
                       (apply [_ resp]

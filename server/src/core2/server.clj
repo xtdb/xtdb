@@ -45,19 +45,32 @@
 
 (s/def ::tx-ops vector?)
 
+(s/def ::tx-id int?)
+
+(s/def ::tx-time
+  (st/spec inst?
+           {:decode/string (fn [_ s]
+                             (cond
+                               (inst? s) s
+                               (string? s) (inst/read-instant-date s)))}))
+
+(s/def ::opts (s/keys :opt-un [::tx-time]))
+
 (defmethod route-handler :status [_]
   {:get (fn [{:keys [node] :as _req}]
           {:status 200, :body (c2/status node)})})
 
 (defmethod route-handler :tx [_]
   {:post {:handler (fn [{:keys [node] :as req}]
-                     (-> (c2/submit-tx node (get-in req [:parameters :body :tx-ops]))
-                         (util/then-apply (fn [tx]
-                                            {:status 200, :body tx}))))
+                     (let [{:keys [tx-ops opts]} (get-in req [:parameters :body])]
+                       (-> (c2/submit-tx node tx-ops opts)
+                           (util/then-apply (fn [tx]
+                                              {:status 200, :body tx})))))
 
           ;; TODO spec-tools doesn't handle multi-spec with a vector,
           ;; so we just check for vector and then conform later.
-          :parameters {:body (s/keys :req-un [::tx-ops])}}})
+          :parameters {:body (s/keys :req-un [::tx-ops]
+                                     :opt-un [::opts])}}})
 
 (defn- ->edn-resultset-encoder [_]
   (reify
@@ -85,15 +98,6 @@
           (let [writer (transit/writer out :json opts)]
             (doseq [el (iterator-seq res)]
               (transit/write writer el))))))))
-
-(s/def ::tx-id int?)
-
-(s/def ::tx-time
-  (st/spec inst?
-           {:decode/string (fn [_ s]
-                             (cond
-                               (inst? s) s
-                               (string? s) (inst/read-instant-date s)))}))
 
 (s/def ::default-valid-time inst?)
 (s/def ::tx #(instance? TransactionInstant %))

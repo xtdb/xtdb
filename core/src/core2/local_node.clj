@@ -56,6 +56,9 @@
   (submit-tx [_ tx-ops]
     (.submitTx tx-producer tx-ops))
 
+  (submit-tx [_ tx-ops opts]
+    (.submitTx tx-producer tx-ops opts))
+
   Closeable
   (close [_]
     (when close-fn
@@ -110,6 +113,9 @@
   api/PSubmitNode
   (submit-tx [_ tx-ops]
     (.submitTx tx-producer tx-ops))
+
+  (submit-tx [_ tx-ops opts]
+    (.submitTx tx-producer tx-ops opts))
 
   AutoCloseable
   (close [_]

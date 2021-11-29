@@ -3,7 +3,8 @@
             [clojure.java.io :as io]
             [clojure.test :as t]
             [core2.json :as c2-json]
-            [core2.tx-producer :as txp])
+            [core2.tx-producer :as txp]
+            [core2.util :as util])
   (:import org.apache.arrow.memory.RootAllocator))
 
 (def ^:private expected-file
@@ -31,6 +32,7 @@
                           :cpu-avg-1min 24.81,
                           :mem-free 4.10011078E8,
                           :mem-used 5.89988922E8}]]
+                  {:tx-time (util/->instant #inst "2021")}
                   a)
                  (c2-json/arrow-streaming->json)
                  #_(doto (->> (spit expected-file)))

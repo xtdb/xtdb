@@ -24,8 +24,10 @@
   (-open-query-async ^java.util.concurrent.CompletableFuture [node query params]))
 
 (defprotocol PSubmitNode
-  (submit-tx
-    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [node tx-ops]))
+  (^java.util.concurrent.CompletableFuture #_<TransactionInstant>
+   submit-tx
+   [node tx-ops]
+   [node tx-ops opts]))
 
 (defprotocol PStatus
   (status [node]))

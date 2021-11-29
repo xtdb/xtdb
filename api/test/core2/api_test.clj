@@ -97,3 +97,26 @@
                                   :where [[?id :struct ?struct]]}
                                 (assoc :basis {:tx !tx}
                                        :basis-timeout (Duration/ofSeconds 1)))))))))
+
+(t/deftest can-manually-specify-tx-time-47
+  (let [tx1 @(c2/submit-tx *node* [[:put {:_id :foo}]]
+                           {:tx-time #inst "2012"})
+
+        _invalid-tx @(c2/submit-tx *node* [[:put {:_id :bar}]]
+                                   {:tx-time #inst "2011"})
+
+        tx3 @(c2/submit-tx *node* [[:put {:_id :baz}]])]
+
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2012")})
+             tx1))
+
+    (letfn [(q-at [tx]
+              (->> (c2/query *node*
+                             (-> '{:find [?id]
+                                   :where [[?e :_id ?id]]}
+                                 (assoc :basis {:tx tx}
+                                        :basis-timeout (Duration/ofSeconds 1))))
+                   (into #{} (map :id))))]
+
+      (t/is (= #{:foo} (q-at tx1)))
+      (t/is (= #{:foo :baz} (q-at tx3))))))

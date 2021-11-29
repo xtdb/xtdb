@@ -73,6 +73,10 @@
 (def utc (ZoneId/of "UTC"))
 
 (extend-protocol TimeConversions
+  nil
+  (->instant [i] nil)
+  (->zdt [i] nil)
+
   Instant
   (->instant [i] i)
   (->zdt [i] (-> i (.atZone utc)))
