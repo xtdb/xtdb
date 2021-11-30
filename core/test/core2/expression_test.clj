@@ -207,6 +207,24 @@
                 :nullable? true}
                (run-test cond-without-default 5))))))
 
+(t/deftest test-let
+  (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/bigint-type) [1 2 3 nil])])]
+    (t/is (= {:res [6 9 12 nil]
+              :vec-type BigIntVector
+              :nullable? true}
+             (run-projection rel '(let [y (* x 2)
+                                        y (+ y 3)]
+                                    (+ x y)))))))
+
+(t/deftest test-coalesce
+  (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/varchar-type) ["x" nil nil])
+                             (tu/->mono-vec "y" (FieldType/nullable ty/varchar-type) ["y" "y" nil])])]
+    (t/is (= {:res ["x" "y" "default"]
+              :vec-type VarCharVector
+              ;; TODO shouldn't be nullable
+              :nullable? true}
+             (run-projection rel '(coalesce x y "default"))))))
+
 (t/deftest test-mixing-numeric-types
   (letfn [(run-test [f x y]
             (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (ty/value->leg-type x)) [x])

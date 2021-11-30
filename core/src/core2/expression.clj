@@ -27,28 +27,48 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn form->expr [form params]
+(defn form->expr [form {:keys [params locals] :as env}]
   (cond
     (or (true? form) (false? form) (nil? form))
     {:op :literal, :literal form}
 
-    (symbol? form) (if (contains? params form)
-                     {:op :param, :param form}
-                     {:op :variable, :variable form})
+    (symbol? form) (cond
+                     (contains? locals form) {:op :local, :local form}
+                     (contains? params form) {:op :param, :param form}
+                     :else {:op :variable, :variable form})
 
     (sequential? form) (let [[f & args] form]
                          (case f
-                           'if (do
-                                 (when-not (= 3 (count args))
-                                   (throw (IllegalArgumentException. (str "'if' expects 3 args: " (pr-str form)))))
+                           if (do
+                                (when-not (= 3 (count args))
+                                  (throw (IllegalArgumentException. (str "'if' expects 3 args: " (pr-str form)))))
 
-                                 (let [[pred then else] args]
-                                   {:op :if,
-                                    :pred (form->expr pred params),
-                                    :then (form->expr then params),
-                                    :else (form->expr else params)}))
+                                (let [[pred then else] args]
+                                  {:op :if,
+                                   :pred (form->expr pred env),
+                                   :then (form->expr then env),
+                                   :else (form->expr else env)}))
 
-                           {:op :call, :f f, :args (mapv #(form->expr % params) args)}))
+                           let (do
+                                 (when-not (= 2 (count args))
+                                   (throw (IllegalArgumentException. (str "'let' expects 2 args - bindings + body" (pr-str form)))))
+
+                                 (let [[bindings body] args]
+                                   (when-not (or (nil? bindings) (sequential? bindings))
+                                     (throw (IllegalArgumentException. (str "'let' expects a sequence of bindings: " (pr-str form)))))
+
+                                   (if-let [[local expr-form & more-bindings] (seq bindings)]
+                                     (do
+                                       (when-not (symbol? local)
+                                         (throw (IllegalArgumentException. (str "bindings in `let` should be symbols: " (pr-str local)))))
+                                       {:op :let
+                                        :local local
+                                        :expr (form->expr expr-form env)
+                                        :body (form->expr (list 'let more-bindings body) (update env :locals (fnil conj #{}) local))})
+
+                                     (form->expr body env))))
+
+                           {:op :call, :f f, :args (mapv #(form->expr % env) args)}))
 
     :else {:op :literal, :literal form}))
 
@@ -59,6 +79,7 @@
 
 (defmethod direct-child-exprs ::default [_] #{})
 (defmethod direct-child-exprs :if [{:keys [pred then else]}] [pred then else])
+(defmethod direct-child-exprs :let [{:keys [expr body]}] [expr body])
 (defmethod direct-child-exprs :call [{:keys [args]}] args)
 
 (defmulti postwalk-expr
@@ -74,6 +95,12 @@
       :pred (postwalk-expr f pred)
       :then (postwalk-expr f then)
       :else (postwalk-expr f else)}))
+
+(defmethod postwalk-expr :let [f {:keys [local expr body]}]
+  (f {:op :let
+      :local local
+      :expr (postwalk-expr f expr)
+      :body (postwalk-expr f body)}))
 
 (defmethod postwalk-expr :call [f {expr-f :f, :keys [args]}]
   (f {:op :call
@@ -276,6 +303,24 @@
                         ~(t-cont f)
                         ~(e-cont f)))))}))
 
+(defmethod codegen-expr :local [{:keys [local]} {:keys [local-types]}]
+  (let [return-type (get local-types local)]
+    {:return-types #{return-type}
+     :continue (fn [f] (f return-type local))}))
+
+(defmethod codegen-expr :let [{:keys [local expr body]} opts]
+  (let [{continue-expr :continue, :as emitted-expr} (codegen-expr expr opts)
+        emitted-bodies (->> (for [local-type (:return-types emitted-expr)]
+                              (MapEntry/create local-type
+                                               (codegen-expr body (assoc-in opts [:local-types local] local-type))))
+                            (into {}))
+        return-types (into #{} (mapcat :return-types) (vals emitted-bodies))]
+    {:return-types return-types
+     :continue (fn [f]
+                 (continue-expr (fn [local-type code]
+                                  `(let [~local ~code]
+                                     ~((:continue (get emitted-bodies local-type)) f)))))}))
+
 (defmulti codegen-call
   "Expects a map containing both the expression and an `:arg-types` key - a vector of ArrowTypes.
    This `:arg-types` vector should be monomorphic - if the args are polymorphic, call this multimethod multiple times.
@@ -338,6 +383,19 @@
          :pred test
          :then expr
          :else {:op :call, :f :cond, :args more-args}}))))
+
+(defmethod macroexpand1-call :coalesce [{:keys [args]}]
+  (case (count args)
+    0 {:op :nil}
+    1 (first args)
+    (let [local (gensym 'coalesce)]
+      {:op :let
+       :local local
+       :expr (first args)
+       :body {:op :if
+              :pred {:op :call, :f :nil?, :args [{:op :local, :local local}]}
+              :then {:op :call, :f :coalesce, :args (rest args)}
+              :else {:op :local, :local local}}})))
 
 (defn- macroexpand-call [expr]
   (loop [expr expr]
@@ -789,15 +847,15 @@
     (.getFieldType field)))
 
 (defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [^String col-name form params]
-  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form params)
+  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form {:params params})
                                                       (normalise-params params))]
     (reify ProjectionSpec
       (project [_ allocator in-rel]
         (let [in-cols (expression-in-cols in-rel expr)
               var-types (->> in-cols
                              (util/into-linked-map
-                              (util/map-values (fn [_variable ^IIndirectVector read-col]
-                                                 (assert read-col)
+                              (util/map-values (fn [variable ^IIndirectVector read-col]
+                                                 (assert read-col (str "missing read-col: " variable))
                                                  (field->value-types (.getField (.getVector read-col)))))))
               {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection expr var-types param-types)
               ^ValueVector out-vec (.createNewSingleVector field-type col-name allocator nil)]
@@ -830,7 +888,7 @@
       (memoize)))
 
 (defn ->expression-relation-selector ^core2.operator.select.IRelationSelector [form params]
-  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form params)
+  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form {:params params})
                                                       (normalise-params params))]
     (reify IRelationSelector
       (select [_ in-rel]
@@ -846,10 +904,10 @@
           (RoaringBitmap.))))))
 
 (defn ->expression-column-selector ^core2.operator.select.IColumnSelector [form params]
-  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form params)
+  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form {:params params})
                                                       (normalise-params params))
         vars (variables expr)
-        _ (assert (= 1 (count vars)))
+        _ (assert (= 1 (count vars)) (str "multiple vars in column selector: " (pr-str vars)))
         variable (first vars)]
     (reify IColumnSelector
       (select [_ in-col]

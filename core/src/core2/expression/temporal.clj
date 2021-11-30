@@ -192,7 +192,7 @@
         max-range (temporal/->max-range)]
     (doseq [[col-name select-form] selects
             :when (temporal/temporal-column? col-name)
-            :let [select-expr (expr/form->expr select-form srcs)
+            :let [select-expr (expr/form->expr select-form {:params srcs})
                   {:keys [expr param-types params]} (expr/normalise-params select-expr srcs)
                   meta-expr (@#'expr.meta/meta-expr expr param-types)]]
       (w/prewalk (fn [x]

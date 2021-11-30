@@ -204,7 +204,7 @@
       memoize))
 
 (defn ->metadata-selector [form params]
-  (let [{:keys [expr param-types params emitted-params]} (-> (expr/form->expr form params)
+  (let [{:keys [expr param-types params emitted-params]} (-> (expr/form->expr form {:params params})
                                                              (expr/normalise-params params))
         meta-expr (meta-expr expr (into {} param-types))
         {:keys [bloom-hash-syms bloom-hashes]} (->bloom-hashes meta-expr params)
