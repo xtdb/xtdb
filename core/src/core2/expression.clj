@@ -280,6 +280,16 @@
                                                          `(.getOffset ~var-vec-sym ~var-idx-sym)))])))
                      (apply concat)))))})))
 
+(defn- wrap-mono-return [{:keys [return-types continue]}]
+  {:return-types return-types
+   :continue (if (= 1 (count return-types))
+               ;; only generate the surrounding code once if we're monomorphic
+               (fn [f]
+                 (f (first return-types)
+                    (continue (fn [_ code] code))))
+
+               continue)})
+
 (defmethod codegen-expr :if [{:keys [pred then else]} opts]
   (let [{p-rets :return-types, p-cont :continue} (codegen-expr pred opts)
         {t-rets :return-types, t-cont :continue} (codegen-expr then opts)
@@ -289,19 +299,12 @@
       (throw (IllegalArgumentException. (str "pred expression doesn't return boolean "
                                              (pr-str p-rets)))))
 
-    {:return-types return-types
-     :continue (let [p-code (p-cont (fn [_ code] code))]
-                 (if (= 1 (count return-types))
-                   ;; only generate the surrounding code once if we're monomorphic
-                   (fn [f]
-                     (f (first return-types)
-                        `(if ~p-code
-                           ~(t-cont (fn [_ code] code))
-                           ~(e-cont (fn [_ code] code)))))
-                   (fn [f]
-                     `(if ~p-code
+    (-> {:return-types return-types
+         :continue (fn [f]
+                     `(if ~(p-cont (fn [_ code] code))
                         ~(t-cont f)
-                        ~(e-cont f)))))}))
+                        ~(e-cont f)))}
+        (wrap-mono-return))))
 
 (defmethod codegen-expr :local [{:keys [local]} {:keys [local-types]}]
   (let [return-type (get local-types local)]
@@ -315,11 +318,12 @@
                                                (codegen-expr body (assoc-in opts [:local-types local] local-type))))
                             (into {}))
         return-types (into #{} (mapcat :return-types) (vals emitted-bodies))]
-    {:return-types return-types
-     :continue (fn [f]
-                 (continue-expr (fn [local-type code]
-                                  `(let [~local ~code]
-                                     ~((:continue (get emitted-bodies local-type)) f)))))}))
+    (-> {:return-types return-types
+         :continue (fn [f]
+                     (continue-expr (fn [local-type code]
+                                      `(let [~local ~code]
+                                         ~((:continue (get emitted-bodies local-type)) f)))))}
+        (wrap-mono-return))))
 
 (defmethod codegen-expr :if-some [{:keys [local expr then else]} opts]
   (let [{continue-expr :continue, expr-rets :return-types} (codegen-expr expr opts)
@@ -330,31 +334,23 @@
                            (into {}))
         then-rets (into #{} (mapcat :return-types) (vals emitted-thens))]
 
-    (if-not (contains? expr-rets types/null-type)
-      {:return-types then-rets
-       :continue (fn [f]
-                   (continue-expr (fn [local-type code]
-                                    `(let [~local ~code]
-                                       ~((:continue (get emitted-thens local-type)) f)))))}
-
-      (let [{e-rets :return-types, e-cont :continue} (codegen-expr else opts)
-            return-types (into then-rets e-rets)]
-        {:return-types return-types
-         :continue (if (= 1 (count return-types))
-                     (fn [f]
-                       (f (first return-types)
-                          (continue-expr (fn [local-type code]
-                                           (if (= local-type types/null-type)
-                                             (e-cont (fn [_ code] code))
-                                             `(let [~local ~code]
-                                                ~((:continue (get emitted-thens local-type)) (fn [_ code] code))))))))
-
-                     (fn [f]
+    (-> (if-not (contains? expr-rets types/null-type)
+          {:return-types then-rets
+           :continue (fn [f]
                        (continue-expr (fn [local-type code]
-                                        (if (= local-type types/null-type)
-                                          (e-cont f)
-                                          `(let [~local ~code]
-                                             ~((:continue (get emitted-thens local-type)) f)))))))}))))
+                                        `(let [~local ~code]
+                                           ~((:continue (get emitted-thens local-type)) f)))))}
+
+          (let [{e-rets :return-types, e-cont :continue} (codegen-expr else opts)
+                return-types (into then-rets e-rets)]
+            {:return-types return-types
+             :continue (fn [f]
+                         (continue-expr (fn [local-type code]
+                                          (if (= local-type types/null-type)
+                                            (e-cont f)
+                                            `(let [~local ~code]
+                                               ~((:continue (get emitted-thens local-type)) f))))))}))
+        (wrap-mono-return))))
 
 (defmulti codegen-call
   "Expects a map containing both the expression and an `:arg-types` key - a vector of ArrowTypes.
@@ -476,25 +472,26 @@
             return-types (->> emitted-calls
                               (into #{} (mapcat (comp :return-types val))))]
 
-        {:return-types return-types
-         :continue (fn continue-call-expr [handle-emitted-expr]
-                     (let [build-args-then-call
-                           (reduce (fn step [build-next-arg {continue-this-arg :continue}]
-                                     ;; step: emit this arg, and pass it through to the inner build-fn
-                                     (fn continue-building-args [arg-types emitted-args]
-                                       (continue-this-arg (fn [arg-type emitted-arg]
-                                                            (build-next-arg (conj arg-types arg-type)
-                                                                            (conj emitted-args emitted-arg))))))
+        (-> {:return-types return-types
+             :continue (fn continue-call-expr [handle-emitted-expr]
+                         (let [build-args-then-call
+                               (reduce (fn step [build-next-arg {continue-this-arg :continue}]
+                                         ;; step: emit this arg, and pass it through to the inner build-fn
+                                         (fn continue-building-args [arg-types emitted-args]
+                                           (continue-this-arg (fn [arg-type emitted-arg]
+                                                                (build-next-arg (conj arg-types arg-type)
+                                                                                (conj emitted-args emitted-arg))))))
 
-                                   ;; innermost fn - we're done, call continue-call for these types
-                                   (fn call-with-built-args [arg-types emitted-args]
-                                     (let [{:keys [continue-call]} (get emitted-calls arg-types)]
-                                       (continue-call handle-emitted-expr emitted-args)))
+                                       ;; innermost fn - we're done, call continue-call for these types
+                                       (fn call-with-built-args [arg-types emitted-args]
+                                         (let [{:keys [continue-call]} (get emitted-calls arg-types)]
+                                           (continue-call handle-emitted-expr emitted-args)))
 
-                                   ;; reverse because we're working inside-out
-                                   (reverse emitted-args))]
+                                       ;; reverse because we're working inside-out
+                                       (reverse emitted-args))]
 
-                       (build-args-then-call [] [])))}))))
+                           (build-args-then-call [] [])))}
+            (wrap-mono-return))))))
 
 (defn mono-fn-call [return-type wrap-args-f]
   {:continue-call (fn [f emitted-args]
