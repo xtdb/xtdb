@@ -383,6 +383,21 @@
        :then expr
        :else {:op :call, :f :cond, :args more-args}})))
 
+(defmethod macroexpand1-call :case [{:keys [args]}]
+  (let [[expr & clauses] args
+        local (gensym 'case)]
+    {:op :let
+     :local local
+     :expr expr
+     :body {:op :call, :f :cond
+            :args (->> (for [[test expr] (partition-all 2 clauses)]
+                         (if-not expr
+                           [test] ; default case
+                           [{:op :call, :f :=,
+                             :args [{:op :local, :local local} test]}
+                            expr]))
+                       (mapcat identity))}}))
+
 (defmethod macroexpand1-call :coalesce [{:keys [args]}]
   (case (count args)
     0 {:op :nil}

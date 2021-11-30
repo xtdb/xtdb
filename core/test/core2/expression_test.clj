@@ -213,6 +213,16 @@
                                         y (+ y 3)]
                                     (+ x y)))))))
 
+(t/deftest test-case
+  (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/bigint-type) [1 2 3 nil])])]
+    (t/is (= {:res ["x=1" "x=2" "none of the above" "none of the above"]
+              :vec-type VarCharVector
+              :nullable? false}
+             (run-projection rel '(case (* x 2)
+                                    2 "x=1"
+                                    (+ x 2) "x=2"
+                                    "none of the above"))))))
+
 (t/deftest test-coalesce
   (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/varchar-type) ["x" nil nil])
                              (tu/->mono-vec "y" (FieldType/nullable ty/varchar-type) ["y" "y" nil])])]
