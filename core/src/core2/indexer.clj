@@ -297,270 +297,269 @@
           (doseq [^DocRowCopier doc-row-copier (nth doc-copiers (.getTypeId doc-vec doc-idx))]
             (.copyDocRow doc-row-copier row-id (.getOffset doc-vec doc-idx))))))))
 
-(do
-  (deftype Indexer [^BufferAllocator allocator
-                    ^ObjectStore object-store
-                    ^IMetadataManager metadata-mgr
-                    ^ITemporalManager temporal-mgr
-                    ^long max-rows-per-chunk
-                    ^long max-rows-per-block
-                    ^Map live-roots
-                    ^ILogIndexer log-indexer
-                    ^Set open-watermarks
-                    ^StampedLock open-watermarks-lock
-                    ^:volatile-mutable ^Watermark watermark
-                    ^PriorityBlockingQueue awaiters
-                    ^:volatile-mutable ^Throwable ingester-error]
+(deftype Indexer [^BufferAllocator allocator
+                  ^ObjectStore object-store
+                  ^IMetadataManager metadata-mgr
+                  ^ITemporalManager temporal-mgr
+                  ^long max-rows-per-chunk
+                  ^long max-rows-per-block
+                  ^Map live-roots
+                  ^ILogIndexer log-indexer
+                  ^Set open-watermarks
+                  ^StampedLock open-watermarks-lock
+                  ^:volatile-mutable ^Watermark watermark
+                  ^PriorityBlockingQueue awaiters
+                  ^:volatile-mutable ^Throwable ingester-error]
 
-    IChunkManager
-    (getLiveRoot [_ field-name]
-      (.computeIfAbsent live-roots field-name
-                        (util/->jfn
-                          (fn [field-name]
-                            (->live-root field-name allocator)))))
+  IChunkManager
+  (getLiveRoot [_ field-name]
+    (.computeIfAbsent live-roots field-name
+                      (util/->jfn
+                       (fn [field-name]
+                         (->live-root field-name allocator)))))
 
-    (getWatermark [_]
-      (let [stamp (.writeLock open-watermarks-lock)]
-        (try
-          (remove-closed-watermarks open-watermarks)
-          (finally
-            (.unlock open-watermarks-lock stamp)))
-        (loop []
-          (when-let [current-watermark watermark]
-            (if (pos? (util/inc-ref-count (.ref-count current-watermark)))
-              (let [stamp (.writeLock open-watermarks-lock)]
-                (try
-                  (let [^Map thread->count (.thread->count current-watermark)
-                        ^AtomicInteger thread-ref-count (.computeIfAbsent thread->count
-                                                                          (Thread/currentThread)
-                                                                          (reify Function
-                                                                            (apply [_ k]
-                                                                              (AtomicInteger. 0))))]
-                    (.incrementAndGet thread-ref-count)
-                    (.add open-watermarks current-watermark)
-                    current-watermark)
-                  (finally
-                    (.unlock open-watermarks-lock stamp))))
-              (recur))))))
-
-    TransactionIndexer
-    (indexTx [this tx-key tx-bytes]
+  (getWatermark [_]
+    (let [stamp (.writeLock open-watermarks-lock)]
       (try
-        (with-open [tx-ops-ch (util/->seekable-byte-channel tx-bytes)
-                    sr (ArrowStreamReader. tx-ops-ch allocator)
-                    tx-root (.getVectorSchemaRoot sr)]
-          (.loadNextBatch sr)
-
-          (let [^TimeStampMicroTZVector tx-time-vec (.getVector tx-root "tx-time")
-                ^TransactionInstant tx-key (cond-> tx-key
-                                             (not (.isNull tx-time-vec 0))
-                                             (assoc :tx-time (-> (.get tx-time-vec 0) (util/micros->instant))))
-                latest-completed-tx (.latestCompletedTx this)]
-
-            (if (and (not (nil? latest-completed-tx))
-                     (neg? (compare (.tx-time tx-key)
-                                    (.tx-time latest-completed-tx))))
-              ;; TODO: we don't yet have the concept of an aborted tx
-              ;; so anyone awaiting this tx will have a bad time.
-              (log/warnf "specified tx-time '%s' older than current tx '%s'"
-                         (pr-str tx-key)
-                         (pr-str latest-completed-tx))
-
-              (let [tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
-                                   (.getDataVector))
-                    chunk-idx (.chunk-idx watermark)
-                    row-count (.row-count watermark)
-                    next-row-id (+ chunk-idx row-count)]
-                (.indexTx this tx-key tx-root next-row-id)
-
-                (let [number-of-new-rows (.getValueCount tx-ops-vec)
-                      new-chunk-row-count (+ row-count number-of-new-rows)]
-                  (with-open [_old-watermark watermark]
-                    (set! (.watermark this)
-                          (tx/->Watermark chunk-idx
-                                          new-chunk-row-count
-                                          (snapshot-roots live-roots)
-                                          tx-key
-                                          (.getTemporalWatermark temporal-mgr)
-                                          (AtomicInteger. 1)
-                                          max-rows-per-block
-                                          (ConcurrentHashMap.))))
-                  (when (>= new-chunk-row-count max-rows-per-chunk)
-                    (.finishChunk this))
-
-                  (await/notify-tx tx-key awaiters)
-
-                  tx-key)))))
-        (catch Throwable e
-          (set! (.ingester-error this) e)
-          (await/notify-ex e awaiters)
-          (throw e))))
-
-    (latestCompletedTx [_]
-      (some-> watermark .tx-key))
-
-    (awaitTxAsync [this tx]
-      (await/await-tx-async tx
-                            #(or (some-> ingester-error throw)
-                                 (.latestCompletedTx this))
-                            awaiters))
-
-    IndexerPrivate
-    (indexTx [this tx-key tx-root next-row-id]
-      (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
-                                             (.getDataVector))
-            op-type-ids (object-array (mapv (fn [^Field field]
-                                              (keyword (.getName field)))
-                                            (.getChildren (.getField tx-ops-vec))))
-            log-op-idxer (.startTx log-indexer tx-key tx-root)
-            temporal-idxer (.startTx temporal-mgr tx-key)]
-
-        (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
-          (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
-                per-op-offset (.getOffset tx-ops-vec tx-op-idx)
-                op-vec (.getStruct tx-ops-vec op-type-id)
-
-                ^TimeStampVector valid-time-start-vec (.getChild op-vec "_valid-time-start")
-                ^TimeStampVector valid-time-end-vec (.getChild op-vec "_valid-time-end")
-                row-id (+ next-row-id tx-op-idx)
-                op (aget op-type-ids op-type-id)]
-            (case op
-              :put (let [^DenseUnionVector doc-duv (.getChild op-vec "document" DenseUnionVector)
-                         leg-type-id (.getTypeId doc-duv per-op-offset)
-                         leg-offset (.getOffset doc-duv per-op-offset)
-                         id-vec (-> ^StructVector (.getVectorByType doc-duv leg-type-id)
-                                    (.getChild "_id"))]
-                     (.logPut log-op-idxer row-id tx-op-idx)
-                     (.indexPut temporal-idxer (t/get-object id-vec leg-offset) row-id
-                                valid-time-start-vec valid-time-end-vec per-op-offset))
-
-              :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
-                        (.logDelete log-op-idxer row-id tx-op-idx)
-                        (.indexDelete temporal-idxer (t/get-object id-vec per-op-offset) row-id
-                                      valid-time-start-vec valid-time-end-vec per-op-offset))
-
-              :evict (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
-                       (.logEvict log-op-idxer row-id tx-op-idx)
-                       (.indexEvict temporal-idxer (t/get-object id-vec per-op-offset) row-id)))))
-
-        (copy-docs this tx-ops-vec next-row-id)
-
-        (.endTx log-op-idxer)
-        (let [evicted-row-ids (.endTx temporal-idxer)]
-          (when-not (.isEmpty evicted-row-ids)
-            ;; TODO create work item
-            ))))
-
-    (writeColumn [_this live-root]
-      (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
-        (let [loader (VectorLoader. write-root)
-              row-counts (blocks/row-id-aligned-blocks live-root (.chunk-idx watermark) max-rows-per-block)]
-          (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
-            (util/build-arrow-ipc-byte-buffer write-root :file
-              (fn [write-batch!]
-                (.forEachRemaining slices
-                                   (reify Consumer
-                                     (accept [_ sliced-root]
-                                       (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                                         (.load loader arb)
-                                         (write-batch!)))))))))))
-
-    (closeCols [_this]
-      (doseq [^VectorSchemaRoot live-root (vals live-roots)]
-        (util/try-close live-root))
-
-      (.clear live-roots)
-      (.clear log-indexer))
-
-    (finishChunk [this]
-      (when-not (.isEmpty live-roots)
-        (log/debugf "finishing chunk '%x', tx '%s'" (.chunk-idx watermark) (pr-str (.latestCompletedTx this)))
-
-        (try
-          (let [chunk-idx (.chunk-idx watermark)]
-            @(CompletableFuture/allOf (->> (cons
-                                            (.putObject object-store (format "log-%016x.arrow" chunk-idx) (.writeLog log-indexer))
-                                            (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-                                              (.putObject object-store (meta/->chunk-obj-key chunk-idx col-name) (.writeColumn this live-root))))
-                                           (into-array CompletableFuture)))
-            (.registerNewChunk temporal-mgr chunk-idx)
-            (.registerNewChunk metadata-mgr live-roots chunk-idx max-rows-per-block)
-
-            (with-open [old-watermark watermark]
-              (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-key old-watermark)
-                                                         (.getTemporalWatermark temporal-mgr) max-rows-per-block)))
+        (remove-closed-watermarks open-watermarks)
+        (finally
+          (.unlock open-watermarks-lock stamp)))
+      (loop []
+        (when-let [current-watermark watermark]
+          (if (pos? (util/inc-ref-count (.ref-count current-watermark)))
             (let [stamp (.writeLock open-watermarks-lock)]
               (try
-                (remove-closed-watermarks open-watermarks)
+                (let [^Map thread->count (.thread->count current-watermark)
+                      ^AtomicInteger thread-ref-count (.computeIfAbsent thread->count
+                                                                        (Thread/currentThread)
+                                                                        (reify Function
+                                                                          (apply [_ k]
+                                                                            (AtomicInteger. 0))))]
+                  (.incrementAndGet thread-ref-count)
+                  (.add open-watermarks current-watermark)
+                  current-watermark)
                 (finally
-                  (.unlock open-watermarks-lock stamp)))))
-          (log/debug "finished chunk.")
-          (finally
-            (.closeCols this)))))
+                  (.unlock open-watermarks-lock stamp))))
+            (recur))))))
 
-    Closeable
-    (close [this]
-      (.closeCols this)
-      (.close watermark)
-      (.close log-indexer)
-      (let [stamp (.writeLock open-watermarks-lock)]
-        (try
-          (let [i (.iterator open-watermarks)]
-            (while (.hasNext i)
-              (let [^Watermark open-watermark (.next i)
-                    ^AtomicInteger watermark-ref-cnt (.ref-count open-watermark)]
-                (doseq [[^Thread thread ^AtomicInteger thread-ref-count] (.thread->count open-watermark)
-                        :let [rc (.get thread-ref-count)]
-                        :when (pos? rc)]
-                  (log/warn "interrupting:" thread "on close, has outstanding watermarks:" rc)
-                  (.interrupt thread))
-                (loop [rc (.get watermark-ref-cnt)]
-                  (when (pos? rc)
-                    (util/try-close open-watermark)
-                    (recur (.get watermark-ref-cnt)))))))
-          (finally
-            (.unlock open-watermarks-lock stamp))))
-      (.clear open-watermarks)
-      (set! (.watermark this) nil)))
+  TransactionIndexer
+  (indexTx [this tx-key tx-bytes]
+    (try
+      (with-open [tx-ops-ch (util/->seekable-byte-channel tx-bytes)
+                  sr (ArrowStreamReader. tx-ops-ch allocator)
+                  tx-root (.getVectorSchemaRoot sr)]
+        (.loadNextBatch sr)
 
-  (defmethod ig/prep-key ::indexer [_ opts]
-    (merge {:max-rows-per-block 1000
-            :max-rows-per-chunk 100000
-            :allocator (ig/ref :core2/allocator)
-            :object-store (ig/ref :core2/object-store)
-            :metadata-mgr (ig/ref ::meta/metadata-manager)
-            :temporal-mgr (ig/ref ::temporal/temporal-manager)
-            :buffer-pool (ig/ref ::bp/buffer-pool)}
-           opts))
+        (let [^TimeStampMicroTZVector tx-time-vec (.getVector tx-root "tx-time")
+              ^TransactionInstant tx-key (cond-> tx-key
+                                           (not (.isNull tx-time-vec 0))
+                                           (assoc :tx-time (-> (.get tx-time-vec 0) (util/micros->instant))))
+              latest-completed-tx (.latestCompletedTx this)]
 
-  (defmethod ig/init-key ::indexer
-    [_ {:keys [allocator object-store metadata-mgr ^ITemporalManager temporal-mgr
-               max-rows-per-chunk max-rows-per-block]
-        :as deps}]
+          (if (and (not (nil? latest-completed-tx))
+                   (neg? (compare (.tx-time tx-key)
+                                  (.tx-time latest-completed-tx))))
+            ;; TODO: we don't yet have the concept of an aborted tx
+            ;; so anyone awaiting this tx will have a bad time.
+            (log/warnf "specified tx-time '%s' older than current tx '%s'"
+                       (pr-str tx-key)
+                       (pr-str latest-completed-tx))
 
-    (let [{:keys [latest-row-id latest-tx]} (latest-tx deps)
-          chunk-idx (if latest-row-id
-                      (inc (long latest-row-id))
-                      0)
-          bloom-false-positive-probability (bloom/bloom-false-positive-probability? max-rows-per-chunk)]
-      (when (> bloom-false-positive-probability 0.05)
-        (log/warn "Bloom should be sized for large chunks:" max-rows-per-chunk
-                  "false positive probability:" bloom-false-positive-probability
-                  "bits:" bloom/bloom-bits
-                  "can be set via system property core2.bloom.bits"))
-      (Indexer. allocator
-                object-store
-                metadata-mgr
-                temporal-mgr
-                max-rows-per-chunk
-                max-rows-per-block
-                (ConcurrentSkipListMap.)
-                (->log-indexer allocator max-rows-per-block)
-                (util/->identity-set)
-                (StampedLock.)
-                (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block)
-                (PriorityBlockingQueue.)
-                nil))))
+            (let [tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
+                                 (.getDataVector))
+                  chunk-idx (.chunk-idx watermark)
+                  row-count (.row-count watermark)
+                  next-row-id (+ chunk-idx row-count)]
+              (.indexTx this tx-key tx-root next-row-id)
+
+              (let [number-of-new-rows (.getValueCount tx-ops-vec)
+                    new-chunk-row-count (+ row-count number-of-new-rows)]
+                (with-open [_old-watermark watermark]
+                  (set! (.watermark this)
+                        (tx/->Watermark chunk-idx
+                                        new-chunk-row-count
+                                        (snapshot-roots live-roots)
+                                        tx-key
+                                        (.getTemporalWatermark temporal-mgr)
+                                        (AtomicInteger. 1)
+                                        max-rows-per-block
+                                        (ConcurrentHashMap.))))
+                (when (>= new-chunk-row-count max-rows-per-chunk)
+                  (.finishChunk this))
+
+                (await/notify-tx tx-key awaiters)
+
+                tx-key)))))
+      (catch Throwable e
+        (set! (.ingester-error this) e)
+        (await/notify-ex e awaiters)
+        (throw e))))
+
+  (latestCompletedTx [_]
+    (some-> watermark .tx-key))
+
+  (awaitTxAsync [this tx]
+    (await/await-tx-async tx
+                          #(or (some-> ingester-error throw)
+                               (.latestCompletedTx this))
+                          awaiters))
+
+  IndexerPrivate
+  (indexTx [this tx-key tx-root next-row-id]
+    (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
+                                           (.getDataVector))
+          op-type-ids (object-array (mapv (fn [^Field field]
+                                            (keyword (.getName field)))
+                                          (.getChildren (.getField tx-ops-vec))))
+          log-op-idxer (.startTx log-indexer tx-key tx-root)
+          temporal-idxer (.startTx temporal-mgr tx-key)]
+
+      (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
+        (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
+              per-op-offset (.getOffset tx-ops-vec tx-op-idx)
+              op-vec (.getStruct tx-ops-vec op-type-id)
+
+              ^TimeStampVector valid-time-start-vec (.getChild op-vec "_valid-time-start")
+              ^TimeStampVector valid-time-end-vec (.getChild op-vec "_valid-time-end")
+              row-id (+ next-row-id tx-op-idx)
+              op (aget op-type-ids op-type-id)]
+          (case op
+            :put (let [^DenseUnionVector doc-duv (.getChild op-vec "document" DenseUnionVector)
+                       leg-type-id (.getTypeId doc-duv per-op-offset)
+                       leg-offset (.getOffset doc-duv per-op-offset)
+                       id-vec (-> ^StructVector (.getVectorByType doc-duv leg-type-id)
+                                  (.getChild "_id"))]
+                   (.logPut log-op-idxer row-id tx-op-idx)
+                   (.indexPut temporal-idxer (t/get-object id-vec leg-offset) row-id
+                              valid-time-start-vec valid-time-end-vec per-op-offset))
+
+            :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
+                      (.logDelete log-op-idxer row-id tx-op-idx)
+                      (.indexDelete temporal-idxer (t/get-object id-vec per-op-offset) row-id
+                                    valid-time-start-vec valid-time-end-vec per-op-offset))
+
+            :evict (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
+                     (.logEvict log-op-idxer row-id tx-op-idx)
+                     (.indexEvict temporal-idxer (t/get-object id-vec per-op-offset) row-id)))))
+
+      (copy-docs this tx-ops-vec next-row-id)
+
+      (.endTx log-op-idxer)
+      (let [evicted-row-ids (.endTx temporal-idxer)]
+        (when-not (.isEmpty evicted-row-ids)
+          ;; TODO create work item
+          ))))
+
+  (writeColumn [_this live-root]
+    (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
+      (let [loader (VectorLoader. write-root)
+            row-counts (blocks/row-id-aligned-blocks live-root (.chunk-idx watermark) max-rows-per-block)]
+        (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
+          (util/build-arrow-ipc-byte-buffer write-root :file
+                                            (fn [write-batch!]
+                                              (.forEachRemaining slices
+                                                                 (reify Consumer
+                                                                   (accept [_ sliced-root]
+                                                                     (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                                                                       (.load loader arb)
+                                                                       (write-batch!)))))))))))
+
+  (closeCols [_this]
+    (doseq [^VectorSchemaRoot live-root (vals live-roots)]
+      (util/try-close live-root))
+
+    (.clear live-roots)
+    (.clear log-indexer))
+
+  (finishChunk [this]
+    (when-not (.isEmpty live-roots)
+      (log/debugf "finishing chunk '%x', tx '%s'" (.chunk-idx watermark) (pr-str (.latestCompletedTx this)))
+
+      (try
+        (let [chunk-idx (.chunk-idx watermark)]
+          @(CompletableFuture/allOf (->> (cons
+                                          (.putObject object-store (format "log-%016x.arrow" chunk-idx) (.writeLog log-indexer))
+                                          (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
+                                            (.putObject object-store (meta/->chunk-obj-key chunk-idx col-name) (.writeColumn this live-root))))
+                                         (into-array CompletableFuture)))
+          (.registerNewChunk temporal-mgr chunk-idx)
+          (.registerNewChunk metadata-mgr live-roots chunk-idx max-rows-per-block)
+
+          (with-open [old-watermark watermark]
+            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-key old-watermark)
+                                                       (.getTemporalWatermark temporal-mgr) max-rows-per-block)))
+          (let [stamp (.writeLock open-watermarks-lock)]
+            (try
+              (remove-closed-watermarks open-watermarks)
+              (finally
+                (.unlock open-watermarks-lock stamp)))))
+        (log/debug "finished chunk.")
+        (finally
+          (.closeCols this)))))
+
+  Closeable
+  (close [this]
+    (.closeCols this)
+    (.close watermark)
+    (.close log-indexer)
+    (let [stamp (.writeLock open-watermarks-lock)]
+      (try
+        (let [i (.iterator open-watermarks)]
+          (while (.hasNext i)
+            (let [^Watermark open-watermark (.next i)
+                  ^AtomicInteger watermark-ref-cnt (.ref-count open-watermark)]
+              (doseq [[^Thread thread ^AtomicInteger thread-ref-count] (.thread->count open-watermark)
+                      :let [rc (.get thread-ref-count)]
+                      :when (pos? rc)]
+                (log/warn "interrupting:" thread "on close, has outstanding watermarks:" rc)
+                (.interrupt thread))
+              (loop [rc (.get watermark-ref-cnt)]
+                (when (pos? rc)
+                  (util/try-close open-watermark)
+                  (recur (.get watermark-ref-cnt)))))))
+        (finally
+          (.unlock open-watermarks-lock stamp))))
+    (.clear open-watermarks)
+    (set! (.watermark this) nil)))
+
+(defmethod ig/prep-key ::indexer [_ opts]
+  (merge {:max-rows-per-block 1000
+          :max-rows-per-chunk 100000
+          :allocator (ig/ref :core2/allocator)
+          :object-store (ig/ref :core2/object-store)
+          :metadata-mgr (ig/ref ::meta/metadata-manager)
+          :temporal-mgr (ig/ref ::temporal/temporal-manager)
+          :buffer-pool (ig/ref ::bp/buffer-pool)}
+         opts))
+
+(defmethod ig/init-key ::indexer
+  [_ {:keys [allocator object-store metadata-mgr ^ITemporalManager temporal-mgr
+             max-rows-per-chunk max-rows-per-block]
+      :as deps}]
+
+  (let [{:keys [latest-row-id latest-tx]} (latest-tx deps)
+        chunk-idx (if latest-row-id
+                    (inc (long latest-row-id))
+                    0)
+        bloom-false-positive-probability (bloom/bloom-false-positive-probability? max-rows-per-chunk)]
+    (when (> bloom-false-positive-probability 0.05)
+      (log/warn "Bloom should be sized for large chunks:" max-rows-per-chunk
+                "false positive probability:" bloom-false-positive-probability
+                "bits:" bloom/bloom-bits
+                "can be set via system property core2.bloom.bits"))
+    (Indexer. allocator
+              object-store
+              metadata-mgr
+              temporal-mgr
+              max-rows-per-chunk
+              max-rows-per-block
+              (ConcurrentSkipListMap.)
+              (->log-indexer allocator max-rows-per-block)
+              (util/->identity-set)
+              (StampedLock.)
+              (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block)
+              (PriorityBlockingQueue.)
+              nil)))
 
 (defmethod ig/halt-key! ::indexer [_ ^AutoCloseable indexer]
   (.close indexer))
