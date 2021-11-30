@@ -188,31 +188,21 @@
              (run-projection rel "foo")))))
 
 (t/deftest test-cond
-  (letfn [(run-test [expr x]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" ty/bigint-type [x])])]
-              (-> (run-projection rel expr)
-                  (update :res first))))]
+  (letfn [(run-test [expr xs]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/bigint-type) xs)])]
+              (run-projection rel expr)))]
 
-    (let [cond-with-default '(cond (> x 100) "big", (> x 10) "small", true "tiny")]
-      (t/is (= {:res "small"
-                :vec-type VarCharVector
-                :nullable? false}
-               (run-test cond-with-default 50)))
+    (t/is (= {:res ["big" "small" "tiny" "tiny"]
+              :vec-type VarCharVector
+              :nullable? false}
+             (run-test '(cond (> x 100) "big", (> x 10) "small", "tiny")
+                       [500 50 5 nil])))
 
-      (t/is (= {:res "tiny"
-                :vec-type VarCharVector
-                :nullable? false}
-               (run-test cond-with-default 5))))
-
-    (let [cond-without-default '(cond (> x 100) "big", (> x 10) "small")]
-      (t/is (= {:res "small"
-                :vec-type VarCharVector
-                :nullable? true}
-               (run-test cond-without-default 50)))
-      (t/is (= {:res nil
-                :vec-type VarCharVector
-                :nullable? true}
-               (run-test cond-without-default 5))))))
+    (t/is (= {:res ["big" "small" nil nil]
+              :vec-type VarCharVector
+              :nullable? true}
+             (run-test '(cond (> x 100) "big", (> x 10) "small")
+                       [500 50 5 nil])))))
 
 (t/deftest test-let
   (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/bigint-type) [1 2 3 nil])])]

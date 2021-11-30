@@ -375,14 +375,13 @@
 (defmethod macroexpand1-call :cond [{:keys [args]}]
   (case (count args)
     0 {:op :nil} ; can't use literal, those are swapped out before we macroexpand
-    1 (throw (IllegalArgumentException. "odd number of args passed to `cond`"))
-    (let [[{test-literal :literal, :as test} expr & more-args] args]
-      (if (true? test-literal)
-        expr
-        {:op :if
-         :pred test
-         :then expr
-         :else {:op :call, :f :cond, :args more-args}}))))
+    1 (first args) ; unlike Clojure, we allow a default expr at the end
+    (let [[test expr & more-args] args]
+      {:op :if
+       :pred {:op :call, :f :true?
+              :args [test]}
+       :then expr
+       :else {:op :call, :f :cond, :args more-args}})))
 
 (defmethod macroexpand1-call :coalesce [{:keys [args]}]
   (case (count args)
