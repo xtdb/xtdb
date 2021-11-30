@@ -651,7 +651,7 @@
   `(.set ~out-vec-sym ~idx-sym (double ~code)))
 
 (defmethod set-value-form ArrowType$Utf8 [_ out-vec-sym idx-sym code]
-  `(let [buf# ~code]
+  `(let [^ByteBuffer buf# ~code]
      (.setSafe ~out-vec-sym ~idx-sym buf#
                (.position buf#) (.remaining buf#))))
 

@@ -245,10 +245,15 @@
     (when-not (.isNull this idx)
       (= (.get this ^int idx) 1)))
 
-  VarBinaryVector (get-object [this idx] (ByteBuffer/wrap (.getObject this ^int idx)))
+  VarBinaryVector
+  (get-object [this idx]
+    (when-not (.isNull this idx)
+      (ByteBuffer/wrap (.getObject this ^int idx))))
 
   VarCharVector
-  (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8)))
+  (get-object [this idx]
+    (when-not (.isNull this idx)
+      (String. (.get this ^int idx) StandardCharsets/UTF_8))))
 
 (let [zones (ConcurrentHashMap.)]
   (defn- zone-id ^java.time.ZoneId [^ValueVector v]
