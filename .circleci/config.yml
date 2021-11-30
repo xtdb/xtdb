@@ -200,7 +200,7 @@ jobs:
 
   deploy-api-docs:
     docker:
-      - image: circleci/clojure:openjdk-11-lein-2.9.3
+      - image: clojure:openjdk-17-lein-2.9.8
     working_directory: ~/xtdb
     steps:
       - checkout
