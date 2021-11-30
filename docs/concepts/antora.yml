@@ -1,7 +1,7 @@
 name: concepts
 title: Concepts
 version: master
-display_version: main
+display_version: master
 start_page: ROOT:index.adoc
 nav:
   - modules/ROOT/nav.adoc

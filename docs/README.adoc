@@ -26,7 +26,7 @@ These are located by branch name convention - branches prefixed with `docs-v*` w
 
 1. Create a `docs-v<new-version>` branch
 2. Update docs/reference/antora.yml:
-  a. Delete `prerelease: indeed` and `display-version: main` lines
+  a. Delete `prerelease: indeed` and `display-version: master` lines
   b. Update `version: master` to `version: <new-version>`
 3. Commit, push branch to the main JUXT XTDB repo
 4. Head over to `website-old` to deploy the docs.

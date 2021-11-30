@@ -2,7 +2,7 @@ name: extensions
 title: Extensions
 version: master
 prerelease: indeed
-display_version: main
+display_version: master
 start_page: ROOT:index.adoc
 nav:
   - modules/ROOT/nav.adoc
