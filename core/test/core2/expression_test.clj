@@ -166,6 +166,19 @@
                    (->> (seq out-vec) (into #{} (map class)))
                    (class out-vec)))}))
 
+(t/deftest test-variadics
+  (letfn [(run-test [f x y z]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" ty/bigint-type [x])
+                                       (tu/->mono-vec "y" ty/bigint-type [y])
+                                       (tu/->mono-vec "z" ty/bigint-type [z])])]
+              (-> (run-projection rel (list f 'x 'y 'z))
+                  :res first)))]
+
+    (t/is (= 6 (run-test '+ 1 2 3)))
+    (t/is (= 1 (run-test '- 4 2 1)))
+    (t/is (true? (run-test '< 1 2 4)))
+    (t/is (false? (run-test '> 4 1 2)))))
+
 (t/deftest test-mixing-numeric-types
   (letfn [(run-test [f x y]
             (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (ty/value->leg-type x)) [x])

@@ -93,19 +93,18 @@
         (meta-fallback-expr expr))))
 
 (defn- meta-expr [{:keys [op] :as expr} param-types]
-  (expr/expand-variadics
-   (case op
-     (:literal :param) nil
-     :variable (meta-fallback-expr expr)
-     :if {:op :call
-          :f 'and
-          :args [(meta-fallback-expr (:pred expr))
-                 (-> {:op :call
-                      :f 'or
-                      :args [(meta-expr (:then expr) param-types)
-                             (meta-expr (:else expr) param-types)]}
-                     simplify-and-or-expr)]}
-     :call (call-meta-expr expr param-types))))
+  (case op
+    (:literal :param) nil
+    :variable (meta-fallback-expr expr)
+    :if {:op :call
+         :f 'and
+         :args [(meta-fallback-expr (:pred expr))
+                (-> {:op :call
+                     :f 'or
+                     :args [(meta-expr (:then expr) param-types)
+                            (meta-expr (:else expr) param-types)]}
+                    simplify-and-or-expr)]}
+    :call (call-meta-expr expr param-types)))
 
 (defn- ->bloom-hashes [expr params]
   (with-open [allocator (RootAllocator.)]

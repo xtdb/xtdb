@@ -27,32 +27,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn expand-variadics [{:keys [op] :as expr}]
-  (letfn [(expand-l [{:keys [f args]}]
-            (reduce (fn [acc arg]
-                      {:op :call, :f f, :args [acc arg]})
-                    args))
-
-          (expand-r [{:keys [f args]}]
-            (reduce (fn [acc arg]
-                      {:op :call, :f f, :args [arg acc]})
-                    (reverse args)))]
-
-    (or (when (= :call op)
-          (let [{:keys [f args]} expr]
-            (when (> (count args) 2)
-              (cond
-                (contains? '#{+ - * /} f) (expand-l expr)
-                (contains? '#{and or} f) (expand-r expr)
-                (contains? '#{<= < = != > >=} f) (expand-r {:op :call
-                                                            :f 'and
-                                                            :args (for [[x y] (partition 2 1 args)]
-                                                                    {:op :call
-                                                                     :f f
-                                                                     :args [x y]})})))))
-
-        expr)))
-
 (defn form->expr [form params]
   (cond
     (symbol? form) (if (contains? params form)
@@ -71,8 +45,7 @@
                                     :then (form->expr then params),
                                     :else (form->expr else params)}))
 
-                           (-> {:op :call, :f f, :args (mapv #(form->expr % params) args)}
-                               expand-variadics)))
+                           {:op :call, :f f, :args (mapv #(form->expr % params) args)}))
 
     :else {:op :literal, :literal form}))
 
@@ -312,8 +285,51 @@
     (vec (cons (keyword (name f)) (map class arg-types))))
   :hierarchy #'types/arrow-type-hierarchy)
 
-(defmethod codegen-expr :call [{:keys [args] :as expr} opts]
-  (let [emitted-args (mapv #(codegen-expr % opts) args)
+(defmulti macroexpand1-call
+  (fn [{:keys [f] :as call-expr}]
+    (keyword (name f)))
+  :default ::default)
+
+(defmethod macroexpand1-call ::default [expr] expr)
+
+(defn macroexpand1l-call [{:keys [f args] :as expr}]
+  (if (> (count args) 2)
+    {:op :call, :f f
+     :args [(update expr :args butlast)
+            (last args)]}
+    expr))
+
+(defn macroexpand1r-call [{:keys [f args] :as expr}]
+  (if (> (count args) 2)
+    {:op :call, :f f
+     :args [(first args)
+            (update expr :args rest)]}
+    expr))
+
+(doseq [f #{:+ :- :* :/}]
+  (defmethod macroexpand1-call f [expr] (macroexpand1l-call expr)))
+
+(doseq [f #{:and :or}]
+  (defmethod macroexpand1-call f [expr] (macroexpand1r-call expr)))
+
+(doseq [f #{:< :<= := :!= :>= :>}]
+  (defmethod macroexpand1-call f [{:keys [args] :as expr}]
+    (if (> (count args) 2)
+      {:op :call, :f :and
+       :args (for [args (partition 2 1 args)]
+               {:op :call, :f f, :args args})}
+      expr)))
+
+(defn- macroexpand-call [expr]
+  (loop [expr expr]
+    (let [new-expr (macroexpand1-call expr)]
+      (if (identical? expr new-expr)
+        expr
+        (recur new-expr)))))
+
+(defmethod codegen-expr :call [expr opts]
+  (let [{:keys [args] :as expr} (macroexpand-call expr)
+        emitted-args (mapv #(codegen-expr % opts) args)
         all-arg-types (reduce (fn [acc {:keys [return-types]}]
                                 (for [el acc
                                       return-type return-types]
@@ -737,7 +753,7 @@
                             (.endValue ~out-writer-sym)))))
 
            :field-type ret-field-type}))
-      (memoize)))
+      #_(memoize)))
 
 (defn field->value-types [^Field field]
   ;; potential duplication with LegType

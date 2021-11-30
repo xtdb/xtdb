@@ -239,6 +239,11 @@
   ;; NOTE: Vectors not explicitly listed here have useful getObject methods and are handled by `ValueVector`.
   ValueVector (get-object [this idx] (.getObject this ^int idx))
 
+  BitVector
+  (get-object [this idx]
+    (when-not (.isNull this idx)
+      (= (.get this ^int idx) 1)))
+
   VarBinaryVector (get-object [this idx] (ByteBuffer/wrap (.getObject this ^int idx)))
 
   VarCharVector
