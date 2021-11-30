@@ -29,6 +29,9 @@
 
 (defn form->expr [form params]
   (cond
+    (or (true? form) (false? form) (nil? form))
+    {:op :literal, :literal form}
+
     (symbol? form) (if (contains? params form)
                      {:op :param, :param form}
                      {:op :variable, :variable form})
@@ -137,6 +140,10 @@
       Returned fn returns the emitted code for the expression (including the code supplied by the callback)."
   (fn [{:keys [op]} {:keys [var->types]}]
     op))
+
+(defmethod codegen-expr :nil [_ _]
+  {:return-types #{types/null-type}
+   :continue (fn [f] (f types/null-type nil))})
 
 (defn resolve-string ^String [x]
   (cond
@@ -320,52 +327,69 @@
                {:op :call, :f f, :args args})}
       expr)))
 
+(defmethod macroexpand1-call :cond [{:keys [args]}]
+  (case (count args)
+    0 {:op :nil} ; can't use literal, those are swapped out before we macroexpand
+    1 (throw (IllegalArgumentException. "odd number of args passed to `cond`"))
+    (let [[{test-literal :literal, :as test} expr & more-args] args]
+      (if (true? test-literal)
+        expr
+        {:op :if
+         :pred test
+         :then expr
+         :else {:op :call, :f :cond, :args more-args}}))))
+
 (defn- macroexpand-call [expr]
   (loop [expr expr]
-    (let [new-expr (macroexpand1-call expr)]
-      (if (identical? expr new-expr)
-        expr
+    (let [{:keys [op] :as new-expr} (macroexpand1-call expr)]
+      (if (or (identical? expr new-expr)
+              (not= :call op))
+        new-expr
         (recur new-expr)))))
 
 (defmethod codegen-expr :call [expr opts]
-  (let [{:keys [args] :as expr} (macroexpand-call expr)
-        emitted-args (mapv #(codegen-expr % opts) args)
-        all-arg-types (reduce (fn [acc {:keys [return-types]}]
-                                (for [el acc
-                                      return-type return-types]
-                                  (conj el return-type)))
-                              [[]]
-                              emitted-args)
+  (let [expr (macroexpand-call expr)]
+    (if (not= (:op expr) :call)
+      (codegen-expr expr opts)
 
-        emitted-calls (->> (for [arg-types all-arg-types]
-                             (MapEntry/create arg-types
-                                              (codegen-call (assoc expr
-                                                                   :args emitted-args
-                                                                   :arg-types arg-types))))
-                           (into {}))
+      (let [{:keys [args]} expr
+            emitted-args (mapv #(codegen-expr % opts) args)
+            all-arg-types (reduce (fn [acc {:keys [return-types]}]
+                                    (for [el acc
+                                          return-type return-types]
+                                      (conj el return-type)))
+                                  [[]]
+                                  emitted-args)
 
-        return-types (->> emitted-calls
-                          (into #{} (mapcat (comp :return-types val))))]
+            emitted-calls (->> (for [arg-types all-arg-types]
+                                 (MapEntry/create arg-types
+                                                  (codegen-call (assoc expr
+                                                                       :args emitted-args
+                                                                       :arg-types arg-types))))
+                               (into {}))
 
-    {:return-types return-types
-     :continue (fn continue-call-expr [handle-emitted-expr]
-                 (let [build-args-then-call
-                       (reduce (fn step [build-next-arg {continue-this-arg :continue}]
-                                 ;; step: emit this arg, and pass it through to the inner build-fn
-                                 (fn continue-building-args [arg-types emitted-args]
-                                   (continue-this-arg (fn [arg-type emitted-arg]
-                                                        (build-next-arg (conj arg-types arg-type)
-                                                                        (conj emitted-args emitted-arg))))))
+            return-types (->> emitted-calls
+                              (into #{} (mapcat (comp :return-types val))))]
 
-                               ;; innermost fn - we're done, call continue-call for these types
-                               (fn call-with-built-args [arg-types emitted-args]
-                                 (let [{:keys [continue-call]} (get emitted-calls arg-types)]
-                                   (continue-call handle-emitted-expr emitted-args)))
+        {:return-types return-types
+         :continue (fn continue-call-expr [handle-emitted-expr]
+                     (let [build-args-then-call
+                           (reduce (fn step [build-next-arg {continue-this-arg :continue}]
+                                     ;; step: emit this arg, and pass it through to the inner build-fn
+                                     (fn continue-building-args [arg-types emitted-args]
+                                       (continue-this-arg (fn [arg-type emitted-arg]
+                                                            (build-next-arg (conj arg-types arg-type)
+                                                                            (conj emitted-args emitted-arg))))))
 
-                               ;; reverse because we're working inside-out
-                               (reverse emitted-args))]
+                                   ;; innermost fn - we're done, call continue-call for these types
+                                   (fn call-with-built-args [arg-types emitted-args]
+                                     (let [{:keys [continue-call]} (get emitted-calls arg-types)]
+                                       (continue-call handle-emitted-expr emitted-args)))
 
-                   (build-args-then-call [] [])))}))
+                                   ;; reverse because we're working inside-out
+                                   (reverse emitted-args))]
+
+                       (build-args-then-call [] [])))}))))
 
 (defn mono-fn-call [return-type wrap-args-f]
   {:continue-call (fn [f emitted-args]

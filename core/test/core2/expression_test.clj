@@ -11,7 +11,7 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import [java.time Duration ZonedDateTime]
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TimeStampVector ValueVector]
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TimeStampVector ValueVector VarCharVector]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp FieldType]
            org.apache.arrow.vector.types.TimeUnit))
@@ -164,7 +164,8 @@
      :vec-type (let [out-vec (.getVector out-ivec)]
                  (if (instance? DenseUnionVector out-vec)
                    (->> (seq out-vec) (into #{} (map class)))
-                   (class out-vec)))}))
+                   (class out-vec)))
+     :nullable? (.isNullable (.getField (.getVector out-ivec)))}))
 
 (t/deftest test-variadics
   (letfn [(run-test [f x y z]
@@ -179,12 +180,40 @@
     (t/is (true? (run-test '< 1 2 4)))
     (t/is (false? (run-test '> 4 1 2)))))
 
+(t/deftest test-cond
+  (letfn [(run-test [expr x]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" ty/bigint-type [x])])]
+              (-> (run-projection rel expr)
+                  (update :res first))))]
+
+    (let [cond-with-default '(cond (> x 100) "big", (> x 10) "small", true "tiny")]
+      (t/is (= {:res "small"
+                :vec-type VarCharVector
+                :nullable? false}
+               (run-test cond-with-default 50)))
+
+      (t/is (= {:res "tiny"
+                :vec-type VarCharVector
+                :nullable? false}
+               (run-test cond-with-default 5))))
+
+    (let [cond-without-default '(cond (> x 100) "big", (> x 10) "small")]
+      (t/is (= {:res "small"
+                :vec-type VarCharVector
+                :nullable? true}
+               (run-test cond-without-default 50)))
+      (t/is (= {:res nil
+                :vec-type VarCharVector
+                :nullable? true}
+               (run-test cond-without-default 5))))))
+
 (t/deftest test-mixing-numeric-types
   (letfn [(run-test [f x y]
             (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (ty/value->leg-type x)) [x])
                                        (tu/->mono-vec "y" (.arrowType (ty/value->leg-type y)) [y])])]
               (-> (run-projection rel (list f 'x 'y))
-                  (update :res first))))]
+                  (update :res first)
+                  (dissoc :nullable?))))]
 
     (t/is (= {:res 6, :vec-type IntVector}
              (run-test '+ (int 4) (int 2))))
@@ -250,28 +279,31 @@
 
 (t/deftest test-polymorphic-columns
   (t/is (= {:res [1.2 1 3.4]
-            :vec-type #{Float8Vector BigIntVector}}
+            :vec-type #{Float8Vector BigIntVector}
+            :nullable? false}
            (with-open [rel (open-rel [(tu/->duv "x" [1.2 1 3.4])
                                       (tu/->duv "y" [3.4 (float 8.25)])])]
              (run-projection rel 'x))))
 
   (t/is (= {:res [4.4 9.75]
-            :vec-type #{Float4Vector Float8Vector}}
+            :vec-type #{Float4Vector Float8Vector}
+            :nullable? false}
            (with-open [rel (open-rel [(tu/->duv "x" [1 1.5])
                                       (tu/->duv "y" [3.4 (float 8.25)])])]
              (run-projection rel '(+ x y)))))
 
   (t/is (= {:res [(float 4.4) nil nil nil]
-            :vec-type #{NullVector Float4Vector Float8Vector}}
+            :vec-type #{NullVector Float4Vector Float8Vector}
+            :nullable? false}
            (with-open [rel (open-rel [(tu/->duv "x" [1 12 nil nil])
                                       (tu/->duv "y" [(float 3.4) nil 4.8 nil])])]
              (run-projection rel '(+ x y))))))
 
 (t/deftest test-ternary-booleans
   (t/is (= [{:res [true false nil false false false nil false nil]
-             :vec-type BitVector}
+             :vec-type BitVector, :nullable? true}
             {:res [true true true true false nil true nil nil]
-             :vec-type BitVector}]
+             :vec-type BitVector, :nullable? true}]
            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true ty/bool-type nil)
                                                      [true true true false false false nil nil nil])
                                       (tu/->duv "y" [true false nil true false nil true false nil])])]
@@ -279,13 +311,13 @@
               (run-projection rel '(or x y))])))
 
   (t/is (= [{:res [false true nil]
-             :vec-type BitVector}
+             :vec-type BitVector, :nullable? true}
             {:res [true false false]
-             :vec-type BitVector}
+             :vec-type BitVector, :nullable? false}
             {:res [false true false]
-             :vec-type BitVector}
+             :vec-type BitVector, :nullable? false}
             {:res [false false true]
-             :vec-type BitVector}]
+             :vec-type BitVector, :nullable? false}]
            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true ty/bool-type nil) [true false nil])])]
              [(run-projection rel '(not x))
               (run-projection rel '(true? x))
@@ -306,9 +338,10 @@
           (test-projection [f-sym ->x-vec ->y-vec]
             (with-open [^ValueVector x-vec (->x-vec)
                         ^ValueVector y-vec (->y-vec)]
-              (run-projection (iv/->indirect-rel [(iv/->direct-vec x-vec)
-                                                  (iv/->direct-vec y-vec)])
-                              (list f-sym 'x 'y))))]
+              (-> (run-projection (iv/->indirect-rel [(iv/->direct-vec x-vec)
+                                                      (iv/->direct-vec y-vec)])
+                                  (list f-sym 'x 'y))
+                  (dissoc :nullable?))))]
 
     (t/testing "ts/dur"
       (t/is (= {:res [(util/->zdt #inst "2021-01-01T00:02:03Z")]
