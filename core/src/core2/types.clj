@@ -241,6 +241,7 @@
 
   BitVector
   (get-object [this idx]
+    ;; `BitVector/getObject` returns `new Boolean(...)` rather than `Boolean/valueOf`
     (when-not (.isNull this idx)
       (= (.get this ^int idx) 1)))
 
