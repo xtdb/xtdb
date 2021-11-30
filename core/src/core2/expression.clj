@@ -230,11 +230,6 @@
 (defmethod get-value-form ArrowType$Binary [_ vec-sym idx-sym] `(element->nio-buffer ~vec-sym ~idx-sym))
 (defmethod get-value-form :default [_ vec-sym idx-sym] `(normalize-union-value (.getObject ~vec-sym ~idx-sym)))
 
-(defmulti extension-type-literal-form class)
-
-(defmethod extension-type-literal-form KeywordType [_] `KeywordType/INSTANCE)
-(defmethod extension-type-literal-form UuidType [_] `UuidType/INSTANCE)
-
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->types]}]
   (let [field-types (or (get var->types variable)
                         (throw (AssertionError. (str "unknown variable: " variable))))
@@ -776,7 +771,7 @@
 (defmethod set-value-form ArrowType$FloatingPoint [_ out-vec-sym idx-sym code]
   `(.set ~out-vec-sym ~idx-sym (double ~code)))
 
-(defmethod set-value-form ArrowType$Utf8 [_ out-vec-sym idx-sym code]
+(defn- set-bytebuf-form [out-vec-sym idx-sym code]
   `(let [^ByteBuffer buf# ~code
          pos# (.position buf#)]
      (.setSafe ~out-vec-sym ~idx-sym buf#
@@ -784,13 +779,11 @@
      ;; setSafe mutates the buffer's position, so we reset it
      (.position buf# pos#)))
 
+(defmethod set-value-form ArrowType$Utf8 [_ out-vec-sym idx-sym code]
+  (set-bytebuf-form out-vec-sym idx-sym code))
+
 (defmethod set-value-form ArrowType$Binary [_ out-vec-sym idx-sym code]
-  `(let [^ByteBuffer buf# ~code
-         pos# (.position buf#)]
-     (.setSafe ~out-vec-sym ~idx-sym buf#
-               pos# (.remaining buf#))
-     ;; setSafe mutates the buffer's position, so we reset it
-     (.position buf# pos#)))
+  (set-bytebuf-form out-vec-sym idx-sym code))
 
 (defmethod set-value-form ArrowType$Timestamp [_ out-vec-sym idx-sym code]
   `(.set ~out-vec-sym ~idx-sym ~code))
@@ -800,6 +793,11 @@
 
 (def ^:private out-vec-sym (gensym 'out-vec))
 (def ^:private out-writer-sym (gensym 'out-writer-sym))
+
+(defmulti extension-type-literal-form class)
+
+(defmethod extension-type-literal-form KeywordType [_] `KeywordType/INSTANCE)
+(defmethod extension-type-literal-form UuidType [_] `UuidType/INSTANCE)
 
 (defn- arrow-type-literal-form [^ArrowType arrow-type]
   (letfn [(timestamp-type-literal [time-unit-literal]
