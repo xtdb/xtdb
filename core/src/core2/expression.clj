@@ -321,6 +321,41 @@
                                   `(let [~local ~code]
                                      ~((:continue (get emitted-bodies local-type)) f)))))}))
 
+(defmethod codegen-expr :if-some [{:keys [local expr then else]} opts]
+  (let [{continue-expr :continue, expr-rets :return-types} (codegen-expr expr opts)
+        emitted-thens (->> (for [local-type (-> expr-rets
+                                                (disj types/null-type))]
+                             (MapEntry/create local-type
+                                              (codegen-expr then (assoc-in opts [:local-types local] local-type))))
+                           (into {}))
+        then-rets (into #{} (mapcat :return-types) (vals emitted-thens))]
+
+    (if-not (contains? expr-rets types/null-type)
+      {:return-types then-rets
+       :continue (fn [f]
+                   (continue-expr (fn [local-type code]
+                                    `(let [~local ~code]
+                                       ~((:continue (get emitted-thens local-type)) f)))))}
+
+      (let [{e-rets :return-types, e-cont :continue} (codegen-expr else opts)
+            return-types (into then-rets e-rets)]
+        {:return-types return-types
+         :continue (if (= 1 (count return-types))
+                     (fn [f]
+                       (f (first return-types)
+                          (continue-expr (fn [local-type code]
+                                           (if (= local-type types/null-type)
+                                             (e-cont (fn [_ code] code))
+                                             `(let [~local ~code]
+                                                ~((:continue (get emitted-thens local-type)) (fn [_ code] code))))))))
+
+                     (fn [f]
+                       (continue-expr (fn [local-type code]
+                                        (if (= local-type types/null-type)
+                                          (e-cont f)
+                                          `(let [~local ~code]
+                                             ~((:continue (get emitted-thens local-type)) f)))))))}))))
+
 (defmulti codegen-call
   "Expects a map containing both the expression and an `:arg-types` key - a vector of ArrowTypes.
    This `:arg-types` vector should be monomorphic - if the args are polymorphic, call this multimethod multiple times.
@@ -403,13 +438,11 @@
     0 {:op :nil}
     1 (first args)
     (let [local (gensym 'coalesce)]
-      {:op :let
+      {:op :if-some
        :local local
        :expr (first args)
-       :body {:op :if
-              :pred {:op :call, :f :nil?, :args [{:op :local, :local local}]}
-              :then {:op :call, :f :coalesce, :args (rest args)}
-              :else {:op :local, :local local}}})))
+       :then {:op :local, :local local}
+       :else {:op :call, :f :coalesce, :args (rest args)}})))
 
 (defn- macroexpand-call [expr]
   (loop [expr expr]
