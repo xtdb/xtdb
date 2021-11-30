@@ -128,13 +128,21 @@ base case where it does exist.
 
 === Option G: Use `MISSING` or `NULL` for projected columns
 
+This option is a variant of B.
+
 The idea here is that we treat fields which are not part of the
 `WHERE` clause more leniently, and pad them with either `MISSING` or
 `NULL` if they are only projected in the `SELECT` clause or used in
 `GROUP BY`. That is, every column referred to in the `WHERE` clause
-has to actually exist. One could also further use flags like in other
-options to control this a bit better and what the padded value should
-be.
+has to actually exist.
+
+A possible further relaxation is that columns in the `WHERE` clause
+referred into an `OR` clause (and also by an `IS MISSING`) expression
+are projected out as `MISSING` as well by the scan operator, as only
+one sub-expression of the `OR` clause actually needs to match.
+
+One could also further use flags like in other options to control this
+a bit better and what the padded value should be.
 
 == Decision
 
@@ -145,7 +153,7 @@ an implicit `DOCUMENT_TABLE` based on qualified columns referenced in
 the query. This would be more inline with modern SQL and doesn't
 require tweaks to the type system.
 
-Option B is the other main alternative, which is inspired by SQL++
+Option B/G is the other main alternative, which is inspired by SQL++
 which is more based on SQL-92.
 
 == Consequences
