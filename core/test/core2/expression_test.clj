@@ -180,6 +180,13 @@
     (t/is (true? (run-test '< 1 2 4)))
     (t/is (false? (run-test '> 4 1 2)))))
 
+(t/deftest can-return-string-multiple-times
+  (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/bigint-type) [1 2 3])])]
+    (t/is (= {:res ["foo" "foo" "foo"]
+              :vec-type VarCharVector
+              :nullable? false}
+             (run-projection rel "foo")))))
+
 (t/deftest test-cond
   (letfn [(run-test [expr x]
             (with-open [rel (open-rel [(tu/->mono-vec "x" ty/bigint-type [x])])]

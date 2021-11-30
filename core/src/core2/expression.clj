@@ -733,14 +733,20 @@
   `(.set ~out-vec-sym ~idx-sym (double ~code)))
 
 (defmethod set-value-form ArrowType$Utf8 [_ out-vec-sym idx-sym code]
-  `(let [^ByteBuffer buf# ~code]
+  `(let [^ByteBuffer buf# ~code
+         pos# (.position buf#)]
      (.setSafe ~out-vec-sym ~idx-sym buf#
-               (.position buf#) (.remaining buf#))))
+               pos# (.remaining buf#))
+     ;; setSafe mutates the buffer's position, so we reset it
+     (.position buf# pos#)))
 
 (defmethod set-value-form ArrowType$Binary [_ out-vec-sym idx-sym code]
-  `(let [buf# ~code]
+  `(let [^ByteBuffer buf# ~code
+         pos# (.position buf#)]
      (.setSafe ~out-vec-sym ~idx-sym buf#
-               (.position buf#) (.remaining buf#))))
+               pos# (.remaining buf#))
+     ;; setSafe mutates the buffer's position, so we reset it
+     (.position buf# pos#)))
 
 (defmethod set-value-form ArrowType$Timestamp [_ out-vec-sym idx-sym code]
   `(.set ~out-vec-sym ~idx-sym ~code))
