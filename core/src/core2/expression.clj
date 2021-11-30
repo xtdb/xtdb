@@ -753,7 +753,7 @@
                             (.endValue ~out-writer-sym)))))
 
            :field-type ret-field-type}))
-      #_(memoize)))
+      (memoize)))
 
 (defn field->value-types [^Field field]
   ;; potential duplication with LegType
