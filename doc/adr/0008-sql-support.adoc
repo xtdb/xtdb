@@ -8,7 +8,7 @@ Proposed
 
 == Context
 
-Per link:adr-0007-query-language.adoc[ADR-0007], XTDB should be possible to query via SQL.
+Per link:0007-query-language.adoc[ADR-0007], XTDB should be possible to query via SQL.
 
 === Protocols
 
