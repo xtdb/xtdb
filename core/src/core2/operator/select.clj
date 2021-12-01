@@ -12,11 +12,7 @@
 (definterface IRelationSelector
   (^org.roaringbitmap.RoaringBitmap select [^core2.vector.IIndirectRelation in-rel]))
 
-(definterface IColumnSelector
-  (^org.roaringbitmap.RoaringBitmap select [^core2.vector.IIndirectVector in-col]))
-
-(deftype SelectCursor [^ICursor in-cursor
-                       ^IRelationSelector selector]
+(deftype SelectCursor [^ICursor in-cursor, ^IRelationSelector selector]
   ICursor
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]

@@ -11,7 +11,7 @@
             [core2.vector.writer :as vw])
   (:import clojure.lang.MapEntry
            core2.operator.project.ProjectionSpec
-           [core2.operator.select IColumnSelector IRelationSelector]
+           [core2.operator.select IRelationSelector]
            core2.types.LegType
            [core2.vector IIndirectRelation IIndirectVector]
            [core2.vector.extensions KeywordType UuidType]
@@ -20,7 +20,7 @@
            java.nio.charset.StandardCharsets
            [java.time Duration Instant ZoneOffset]
            [java.time.temporal ChronoField ChronoUnit]
-           [java.util Date LinkedHashMap]
+           java.util.Date
            [org.apache.arrow.vector BaseVariableWidthVector DurationVector ValueVector]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
@@ -746,24 +746,32 @@
 ;; assumption wouldn't hold if macroexpansion created new variable exprs, for example.
 ;; macroexpansion is non-deterministic (gensym), so busts the memo cache.
 
+(defn- variable-bindings [vars rel-sym]
+  (->> (for [var-sym (set vars)]
+         [(-> var-sym (with-tag IIndirectVector))
+          `(.vectorForName ~rel-sym ~(name var-sym))])
+       (apply concat)))
+
 (def ^:private memo-generate-projection
   (-> (fn [expr var->types param-types]
         (let [expr (macro/macroexpand-all expr)
-              variable-syms (->> (keys var->types)
-                                 (mapv #(with-tag % IIndirectVector)))
 
               codegen-opts {:var->types var->types, :param->type param-types}
               {:keys [return-types continue]} (codegen-expr expr codegen-opts)
               ret-field-type (return-types->field-type return-types)
 
-              {:keys [writer-bindings write-value-out!]} (write-value-out-code ret-field-type return-types)]
+              {:keys [writer-bindings write-value-out!]} (write-value-out-code ret-field-type return-types)
+              rel-sym (gensym 'rel)]
 
           {:expr-fn (eval
                      `(fn [~(-> out-vec-sym (with-tag ValueVector))
-                           [~@variable-syms] [~@(keys param-types)] ^long row-count#]
+                           ~(-> rel-sym (with-tag IIndirectRelation))
+                           [~@(keys param-types)]]
+                        (let [~@(variable-bindings (keys var->types) rel-sym)
 
-                        (let [~out-writer-sym (vw/vec->writer ~out-vec-sym)
-                              ~@writer-bindings]
+                              ~out-writer-sym (vw/vec->writer ~out-vec-sym)
+                              ~@writer-bindings
+                              row-count# (.rowCount ~rel-sym)]
                           (.setValueCount ~out-vec-sym row-count#)
                           (dotimes [~idx-sym row-count#]
                             (.startValue ~out-writer-sym)
@@ -782,21 +790,23 @@
 
     (.getFieldType field)))
 
+(defn ->var-types [^IIndirectRelation in-rel, expr]
+  (->> (for [var-sym (variables expr)]
+         (let [^IIndirectVector ivec (or (.vectorForName in-rel (name var-sym))
+                                         (throw (IllegalArgumentException. (str "missing read-col: " var-sym))))]
+           (MapEntry/create var-sym (field->value-types (-> ivec (.getVector) (.getField))))))
+       (into {})))
+
 (defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [^String col-name form params]
   (let [{:keys [expr param-types emitted-params]} (-> (form->expr form {:params params})
                                                       (normalise-params params))]
     (reify ProjectionSpec
       (project [_ allocator in-rel]
-        (let [in-cols (expression-in-cols in-rel expr)
-              var-types (->> in-cols
-                             (util/into-linked-map
-                              (util/map-values (fn [variable ^IIndirectVector read-col]
-                                                 (assert read-col (str "missing read-col: " variable))
-                                                 (field->value-types (.getField (.getVector read-col)))))))
+        (let [var-types (->var-types in-rel expr)
               {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection expr var-types param-types)
               ^ValueVector out-vec (.createNewSingleVector field-type col-name allocator nil)]
           (try
-            (expr-fn out-vec (vals in-cols) (vals emitted-params) (.rowCount in-rel))
+            (expr-fn out-vec in-rel (vals emitted-params))
             (iv/->direct-vec out-vec)
             (catch Exception e
               (.close out-vec)
@@ -805,19 +815,20 @@
 (def ^:private memo-generate-selection
   (-> (fn [expr var->types param-types]
         (let [expr (macro/macroexpand-all expr)
-              variable-syms (->> (keys var->types)
-                                 (mapv #(with-tag % IIndirectVector)))
 
               codegen-opts {:var->types var->types, :param->type param-types}
               {:keys [return-types continue]} (codegen-expr expr codegen-opts)
+              rel-sym (gensym 'rel)
               acc-sym (gensym 'acc)]
 
           (assert (= #{ArrowType$Bool/INSTANCE} return-types))
 
           (eval
-           `(fn [[~@variable-syms] [~@(keys param-types)] ^long row-count#]
-              (let [~acc-sym (RoaringBitmap.)]
-                (dotimes [~idx-sym row-count#]
+           `(fn [~(-> rel-sym (with-tag IIndirectRelation))
+                 [~@(keys param-types)]]
+              (let [~@(variable-bindings (keys var->types) rel-sym)
+                    ~acc-sym (RoaringBitmap.)]
+                (dotimes [~idx-sym (.rowCount ~rel-sym)]
                   ~(continue (fn [_ code]
                                `(when ~code
                                   (.add ~acc-sym ~idx-sym)))))
@@ -830,29 +841,8 @@
     (reify IRelationSelector
       (select [_ in-rel]
         (if (pos? (.rowCount in-rel))
-          (let [in-cols (expression-in-cols in-rel expr)
-                var-types (->> in-cols
-                               (util/into-linked-map
-                                (util/map-values (fn [_variable ^IIndirectVector read-col]
-                                                   (field->value-types (.getField (.getVector read-col)))))))
+          (let [var-types (->var-types in-rel expr)
                 expr-fn (memo-generate-selection expr var-types param-types)]
+            (expr-fn in-rel (vals emitted-params)))
 
-            (expr-fn (vals in-cols) (vals emitted-params) (.rowCount in-rel)))
-          (RoaringBitmap.))))))
-
-(defn ->expression-column-selector ^core2.operator.select.IColumnSelector [form params]
-  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form {:params params})
-                                                      (normalise-params params))
-        vars (variables expr)
-        _ (assert (= 1 (count vars)) (str "multiple vars in column selector: " (pr-str vars)))
-        variable (first vars)]
-    (reify IColumnSelector
-      (select [_ in-col]
-        (if (pos? (.getValueCount in-col))
-          (let [in-cols (doto (LinkedHashMap.)
-                          (.put variable in-col))
-                var-types (doto (LinkedHashMap.)
-                            (.put variable (field->value-types (.getField (.getVector in-col)))))
-                expr-fn (memo-generate-selection expr var-types param-types)]
-            (expr-fn (vals in-cols) (vals emitted-params) (.getValueCount in-col)))
           (RoaringBitmap.))))))

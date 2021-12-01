@@ -68,21 +68,15 @@
     (letfn [(select-relation [form params]
               (-> (.select (expr/->expression-relation-selector form params)
                            in-rel)
-                  (.getCardinality)))
-
-            (select-column [form ^String col-name params]
-              (-> (.select (expr/->expression-column-selector form params)
-                           (.vectorForName in-rel col-name))
                   (.getCardinality)))]
 
       (t/testing "selector"
         (t/is (= 500 (select-relation '(>= a 500) {})))
-        (t/is (= 500 (select-column '(>= a 500) "a" {})))
-        (t/is (= 500 (select-column '(>= e "0500") "e" {}))))
+        (t/is (= 500 (select-relation '(>= e "0500") {}))))
 
       (t/testing "parameter"
-        (t/is (= 500 (select-column '(>= a ?a) "a" {'?a 500})))
-        (t/is (= 500 (select-column '(>= e ?e) "e" {'?e "0500"})))))))
+        (t/is (= 500 (select-relation '(>= a ?a) {'?a 500})))
+        (t/is (= 500 (select-relation '(>= e ?e) {'?e "0500"})))))))
 
 (t/deftest can-extract-min-max-range-from-expression
   (let [μs-2018 (util/instant->micros (util/->instant #inst "2018"))

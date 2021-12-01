@@ -70,7 +70,7 @@
                      (into {}))
         col-preds (->> (for [[col-name select-form] selects]
                          (MapEntry/create (name col-name)
-                                          (expr/->expression-column-selector select-form srcs)))
+                                          (expr/->expression-relation-selector select-form srcs)))
                        (into {}))
         metadata-args (vec (concat (for [col-name col-names
                                          :when (not (contains? col-preds col-name))]

@@ -12,7 +12,7 @@
            core2.buffer_pool.IBufferPool
            core2.ICursor
            core2.metadata.IMetadataManager
-           core2.operator.select.IColumnSelector
+           [core2.operator.select IRelationSelector]
            [core2.temporal ITemporalManager TemporalRoots]
            core2.tx.Watermark
            [java.util HashMap LinkedList List Map Queue]
@@ -49,12 +49,12 @@
 
 (defn- ->atemporal-row-id-bitmap [^List col-names ^Map col-preds ^Map in-roots]
   (->> (for [^String col-name col-names
-                     :when (not (temporal/temporal-column? col-name))
-                     :let [^IColumnSelector col-pred (.get col-preds col-name)
-                           ^VectorSchemaRoot in-root (.get in-roots col-name)]]
-                 (align/->row-id-bitmap (when col-pred
-                                          (.select col-pred (iv/->direct-vec (.getVector in-root col-name))))
-                                        (.getVector in-root t/row-id-field)))
+             :when (not (temporal/temporal-column? col-name))
+             :let [^IRelationSelector col-pred (.get col-preds col-name)
+                   ^VectorSchemaRoot in-root (.get in-roots col-name)]]
+         (align/->row-id-bitmap (when col-pred
+                                  (.select col-pred (iv/<-root in-root)))
+                                (.getVector in-root t/row-id-field)))
        (reduce roaring64-and)))
 
 (defn- adjust-temporal-min-range-to-row-id-range ^longs [^longs temporal-min-range ^Roaring64Bitmap row-id-bitmap]
@@ -105,10 +105,10 @@
             atemporal-row-id-bitmap)
           (for [^String col-name col-names
                 :when (temporal/temporal-column? col-name)
-                :let [^IColumnSelector col-pred (.get col-preds col-name)
+                :let [^IRelationSelector col-pred (.get col-preds col-name)
                       ^VectorSchemaRoot in-root (.get ^Map (.roots temporal-roots) col-name)]]
             (align/->row-id-bitmap (when col-pred
-                                     (.select col-pred (iv/->direct-vec (.getVector in-root col-name))))
+                                     (.select col-pred (iv/<-root in-root)))
                                    (.getVector in-root t/row-id-field)))))
 
 (defn- align-roots ^core2.vector.IIndirectRelation [^List col-names ^Map in-roots ^TemporalRoots temporal-roots row-id-bitmap]
@@ -199,9 +199,9 @@
                           (let [chunks (->> (for [col-name real-col-names]
                                               (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
                                                   (util/then-apply
-                                                    (fn [buf]
-                                                      (MapEntry/create col-name (util/->chunks buf {:block-idxs block-idxs
-                                                                                                    :close-buffer? true}))))))
+                                                   (fn [buf]
+                                                     (MapEntry/create col-name (util/->chunks buf {:block-idxs block-idxs
+                                                                                                   :close-buffer? true}))))))
                                             (remove nil?)
                                             vec
                                             (into {} (map deref)))]

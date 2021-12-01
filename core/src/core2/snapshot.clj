@@ -14,7 +14,7 @@
   (^core2.ICursor scan [^org.apache.arrow.memory.BufferAllocator allocator
                         ^java.util.List #_<String> colNames,
                         metadataPred
-                        ^java.util.Map #_#_<String, IColumnSelector> colPreds
+                        ^java.util.Map #_#_<String, IRelationSelector> colPreds
                         ^longs temporalMinRange
                         ^longs temporalMaxRange]))
 
