@@ -1,6 +1,7 @@
 (ns core2.expression.temporal
   (:require [clojure.walk :as w]
             [core2.expression :as expr]
+            [core2.expression.macro :as emacro]
             [core2.expression.metadata :as expr.meta]
             [core2.temporal :as temporal]
             [core2.types :as types]
@@ -192,7 +193,8 @@
         max-range (temporal/->max-range)]
     (doseq [[col-name select-form] selects
             :when (temporal/temporal-column? col-name)
-            :let [select-expr (expr/form->expr select-form {:params srcs})
+            :let [select-expr (-> (expr/form->expr select-form {:params srcs})
+                                  (emacro/macroexpand-all))
                   {:keys [expr param-types params]} (expr/normalise-params select-expr srcs)
                   meta-expr (@#'expr.meta/meta-expr expr param-types)]]
       (w/prewalk (fn [x]

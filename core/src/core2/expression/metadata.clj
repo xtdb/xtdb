@@ -1,6 +1,7 @@
 (ns core2.expression.metadata
   (:require [core2.bloom :as bloom]
             [core2.expression :as expr]
+            [core2.expression.macro :as emacro]
             [core2.expression.walk :as ewalk]
             [core2.metadata :as meta]
             [core2.types :as types]
@@ -206,6 +207,7 @@
 
 (defn ->metadata-selector [form params]
   (let [{:keys [expr param-types params emitted-params]} (-> (expr/form->expr form {:params params})
+                                                             (emacro/macroexpand-all)
                                                              (expr/normalise-params params))
         meta-expr (meta-expr expr (into {} param-types))
         {:keys [bloom-hash-syms bloom-hashes]} (->bloom-hashes meta-expr params)
