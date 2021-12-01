@@ -1,6 +1,7 @@
 (ns core2.expression
   (:require [clojure.set :as set]
             [clojure.string :as str]
+            [core2.expression.walk :as walk]
             core2.operator.project
             core2.operator.select
             [core2.types :as types]
@@ -72,67 +73,28 @@
 
     :else {:op :literal, :literal form}))
 
-(defmulti direct-child-exprs
-  (fn [{:keys [op] :as expr}]
-    op)
-  :default ::default)
-
-(defmethod direct-child-exprs ::default [_] #{})
-(defmethod direct-child-exprs :if [{:keys [pred then else]}] [pred then else])
-(defmethod direct-child-exprs :let [{:keys [expr body]}] [expr body])
-(defmethod direct-child-exprs :call [{:keys [args]}] args)
-
-(defmulti postwalk-expr
-  (fn [f {:keys [op] :as expr}]
-    op)
-  :default ::default)
-
-(defmethod postwalk-expr ::default [f expr]
-  (f expr))
-
-(defmethod postwalk-expr :if [f {:keys [pred then else]}]
-  (f {:op :if
-      :pred (postwalk-expr f pred)
-      :then (postwalk-expr f then)
-      :else (postwalk-expr f else)}))
-
-(defmethod postwalk-expr :let [f {:keys [local expr body]}]
-  (f {:op :let
-      :local local
-      :expr (postwalk-expr f expr)
-      :body (postwalk-expr f body)}))
-
-(defmethod postwalk-expr :call [f {expr-f :f, :keys [args]}]
-  (f {:op :call
-      :f expr-f
-      :args (mapv #(postwalk-expr f %) args)}))
-
 (defn lits->params [expr]
   (->> expr
-       (postwalk-expr (fn [{:keys [op] :as expr}]
-                        (case op
-                          :literal (let [{:keys [literal]} expr
-                                         sym (gensym 'literal)]
-                                     (-> {:op :param, :param sym, :literal literal}
-                                         (vary-meta (fnil into {})
-                                                    {:literals {sym literal}
-                                                     :params #{sym}})))
+       (walk/postwalk-expr (fn [{:keys [op] :as expr}]
+                             (case op
+                               :literal (let [{:keys [literal]} expr
+                                              sym (gensym 'literal)]
+                                          (-> {:op :param, :param sym, :literal literal}
+                                              (vary-meta (fnil into {})
+                                                         {:literals {sym literal}
+                                                          :params #{sym}})))
 
-                          :param (-> expr
+                               :param (-> expr
+                                          (vary-meta (fnil into {})
+                                                     {:params #{(:param expr)}}))
+
+                               (let [child-exprs (walk/direct-child-exprs expr)]
+                                 (-> expr
                                      (vary-meta (fnil into {})
-                                                {:params #{(:param expr)}}))
-
-                          (let [child-exprs (direct-child-exprs expr)]
-                            (-> expr
-                                (vary-meta (fnil into {})
-                                           {:literals (->> child-exprs
-                                                           (into {} (mapcat (comp :literals meta))))
-                                            :params (->> child-exprs
-                                                         (into #{} (mapcat (comp :params meta))))}))))))))
-
-(defn expr-seq [expr]
-  (lazy-seq
-   (cons expr (mapcat expr-seq (direct-child-exprs expr)))))
+                                                {:literals (->> child-exprs
+                                                                (into {} (mapcat (comp :literals meta))))
+                                                 :params (->> child-exprs
+                                                              (into #{} (mapcat (comp :params meta))))}))))))))
 
 (defn with-tag [sym tag]
   (-> sym
@@ -141,7 +103,7 @@
                               (symbol (.getName ^Class tag))))))
 
 (defn variables [expr]
-  (->> (expr-seq expr)
+  (->> (walk/expr-seq expr)
        (into [] (comp (filter (comp #(= :variable %) :op))
                       (map :variable)
                       (distinct)))))

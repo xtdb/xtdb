@@ -1,6 +1,7 @@
 (ns core2.expression.metadata
   (:require [core2.bloom :as bloom]
             [core2.expression :as expr]
+            [core2.expression.walk :as ewalk]
             [core2.metadata :as meta]
             [core2.types :as types]
             [core2.vector.indirect :as iv])
@@ -108,7 +109,7 @@
 
 (defn- ->bloom-hashes [expr params]
   (with-open [allocator (RootAllocator.)]
-    (let [bloom-hashes (for [{:keys [bloom-hash-sym param]} (expr/expr-seq expr)
+    (let [bloom-hashes (for [{:keys [bloom-hash-sym param]} (ewalk/expr-seq expr)
                              :when bloom-hash-sym]
                          (MapEntry/create bloom-hash-sym
                                           (bloom/literal-hashes allocator
