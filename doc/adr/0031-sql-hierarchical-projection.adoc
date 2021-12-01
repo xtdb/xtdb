@@ -1,0 +1,27 @@
+= 31. SQL hierarchical projection
+
+Date: 2021-12-01
+
+== Status
+
+Proposed
+
+== Context
+
+XTDB is a dynamic document database and needs to be able to construct
+and project out hierarchical composite values in the `SELECT`
+clause. In SQL, this usually means a mix of `ARRAY_AGG`, constructs
+like `JSON_OBJECT` and nested sub-queries in the `SELECT` to build up
+the tree structure one wants to project.
+
+We want at minimum make this possible via existing SQL constructs, see
+also link:0023-sql-nested-data.adoc[ADR-0023]. On top of this we
+may also want syntactic sugar which is translated to the former that
+makes it more natural to use, similar to how PartiQL allows JSON-like
+syntax embedded in SQL.
+
+This feature is in the same space as EQL pull and GraphQL.
+
+== Decision
+
+== Consequences
