@@ -187,19 +187,20 @@
 
 (def ^:private compile-meta-expr
   (-> (fn [expr param-types bloom-hash-syms]
-        (eval
-         `(fn [chunk-idx#
-               ~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))
-               [~@(map key param-types)]
-               [~@bloom-hash-syms]]
-            (let [~(-> metadata-idxs-sym (expr/with-tag IMetadataIndices)) (meta/->metadata-idxs ~metadata-root-sym)]
-              (check-meta chunk-idx# ~metadata-root-sym ~metadata-idxs-sym
-                          (fn check-meta# [~(-> (:min metadata-vec-syms) (expr/with-tag StructVector))
-                                           ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
-                                           ~(-> (:bloom metadata-vec-syms) (expr/with-tag VarBinaryVector))
-                                           ~block-idx-sym]
-                            ~(let [{:keys [continue]} (expr/codegen-expr expr {:param->type param-types})]
-                               (continue (fn [_ code] code)))))))))
+        (let [expr (emacro/macroexpand-all expr)]
+          (eval
+           `(fn [chunk-idx#
+                 ~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))
+                 [~@(map key param-types)]
+                 [~@bloom-hash-syms]]
+              (let [~(-> metadata-idxs-sym (expr/with-tag IMetadataIndices)) (meta/->metadata-idxs ~metadata-root-sym)]
+                (check-meta chunk-idx# ~metadata-root-sym ~metadata-idxs-sym
+                            (fn check-meta# [~(-> (:min metadata-vec-syms) (expr/with-tag StructVector))
+                                             ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
+                                             ~(-> (:bloom metadata-vec-syms) (expr/with-tag VarBinaryVector))
+                                             ~block-idx-sym]
+                              ~(let [{:keys [continue]} (expr/codegen-expr expr {:param->type param-types})]
+                                 (continue (fn [_ code] code))))))))))
 
       ;; TODO passing gensym'd bloom-hash-syms into the memoized fn means we're unlikely to get cache hits
       ;; pass values instead?
@@ -207,7 +208,6 @@
 
 (defn ->metadata-selector [form params]
   (let [{:keys [expr param-types params emitted-params]} (-> (expr/form->expr form {:params params})
-                                                             (emacro/macroexpand-all)
                                                              (expr/normalise-params params))
         meta-expr (meta-expr expr (into {} param-types))
         {:keys [bloom-hash-syms bloom-hashes]} (->bloom-hashes meta-expr params)

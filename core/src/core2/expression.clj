@@ -741,9 +741,15 @@
                                code)
               (.endValue ~writer-sym))))})))
 
+;; NOTE: we macroexpand inside the memoize on the assumption that
+;; everything outside yields the same result on the pre-expanded expr - this
+;; assumption wouldn't hold if macroexpansion created new variable exprs, for example.
+;; macroexpansion is non-deterministic (gensym), so busts the memo cache.
+
 (def ^:private memo-generate-projection
   (-> (fn [expr var->types param-types]
-        (let [variable-syms (->> (keys var->types)
+        (let [expr (macro/macroexpand-all expr)
+              variable-syms (->> (keys var->types)
                                  (mapv #(with-tag % IIndirectVector)))
 
               codegen-opts {:var->types var->types, :param->type param-types}
@@ -778,7 +784,6 @@
 
 (defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [^String col-name form params]
   (let [{:keys [expr param-types emitted-params]} (-> (form->expr form {:params params})
-                                                      (macro/macroexpand-all)
                                                       (normalise-params params))]
     (reify ProjectionSpec
       (project [_ allocator in-rel]
@@ -799,7 +804,8 @@
 
 (def ^:private memo-generate-selection
   (-> (fn [expr var->types param-types]
-        (let [variable-syms (->> (keys var->types)
+        (let [expr (macro/macroexpand-all expr)
+              variable-syms (->> (keys var->types)
                                  (mapv #(with-tag % IIndirectVector)))
 
               codegen-opts {:var->types var->types, :param->type param-types}
@@ -820,7 +826,6 @@
 
 (defn ->expression-relation-selector ^core2.operator.select.IRelationSelector [form params]
   (let [{:keys [expr param-types emitted-params]} (-> (form->expr form {:params params})
-                                                      (macro/macroexpand-all)
                                                       (normalise-params params))]
     (reify IRelationSelector
       (select [_ in-rel]
@@ -837,7 +842,6 @@
 
 (defn ->expression-column-selector ^core2.operator.select.IColumnSelector [form params]
   (let [{:keys [expr param-types emitted-params]} (-> (form->expr form {:params params})
-                                                      (macro/macroexpand-all)
                                                       (normalise-params params))
         vars (variables expr)
         _ (assert (= 1 (count vars)) (str "multiple vars in column selector: " (pr-str vars)))
