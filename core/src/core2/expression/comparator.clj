@@ -1,6 +1,7 @@
 (ns core2.expression.comparator
   (:require [core2.expression :as expr]
-            [core2.types :as types])
+            [core2.types :as types]
+            [core2.util :as util])
   (:import [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -31,7 +32,7 @@
 (defmethod expr/codegen-call [:compare ArrowType$Binary ArrowType$Binary] [_]
   {:continue-call (fn [f emitted-args]
                     (f types/int-type
-                       `(expr/compare-nio-buffers-unsigned ~@emitted-args)))
+                       `(util/compare-nio-buffers-unsigned ~@emitted-args)))
    :return-types #{types/int-type}})
 
 (defmethod expr/codegen-call [:compare ArrowType$Bool ArrowType$Bool] [_]
@@ -49,7 +50,7 @@
 (defmethod expr/codegen-call [:compare ArrowType$Utf8 ArrowType$Utf8] [_]
   {:continue-call (fn [f emitted-args]
                     (f types/int-type
-                       `(expr/compare-nio-buffers-unsigned ~@emitted-args)))
+                       `(util/compare-nio-buffers-unsigned ~@emitted-args)))
    :return-types #{types/int-type}})
 
 (def ^core2.expression.comparator.ColumnComparator ->comparator

@@ -154,32 +154,6 @@
                        (f return-type param))}
           (select-keys expr #{:literal}))))
 
-(defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
-  (let [rem-x (.remaining x)
-        rem-y (.remaining y)
-        limit (min rem-x rem-y)
-        char-limit (bit-shift-right limit 1)
-        diff (.compareTo (.limit (.asCharBuffer x) char-limit)
-                         (.limit (.asCharBuffer y) char-limit))]
-    (if (zero? diff)
-      (loop [n (bit-and-not limit 1)]
-        (if (= n limit)
-          (- rem-x rem-y)
-          (let [x-byte (.get x n)
-                y-byte (.get y n)]
-            (if (= x-byte y-byte)
-              (recur (inc n))
-              (Byte/compareUnsigned x-byte y-byte)))))
-      diff)))
-
-(defn element->nio-buffer ^java.nio.ByteBuffer [^BaseVariableWidthVector vec ^long idx]
-  (let [value-buffer (.getDataBuffer vec)
-        offset-buffer (.getOffsetBuffer vec)
-        offset-idx (* idx BaseVariableWidthVector/OFFSET_WIDTH)
-        offset (.getInt offset-buffer offset-idx)
-        end-offset (.getInt offset-buffer (+ offset-idx BaseVariableWidthVector/OFFSET_WIDTH))]
-    (.nioBuffer value-buffer offset (- end-offset offset))))
-
 (defmulti get-value-form
   (fn [arrow-type vec-sym idx-sym]
     (class arrow-type)))
@@ -189,8 +163,8 @@
 (defmethod get-value-form ArrowType$Int [_ vec-sym idx-sym] `(.get ~vec-sym ~idx-sym))
 (defmethod get-value-form ArrowType$Timestamp [_ vec-sym idx-sym] `(.get ~vec-sym ~idx-sym))
 (defmethod get-value-form ArrowType$Duration [_ vec-sym idx-sym] `(DurationVector/get (.getDataBuffer ~vec-sym) ~idx-sym))
-(defmethod get-value-form ArrowType$Utf8 [_ vec-sym idx-sym] `(element->nio-buffer ~vec-sym ~idx-sym))
-(defmethod get-value-form ArrowType$Binary [_ vec-sym idx-sym] `(element->nio-buffer ~vec-sym ~idx-sym))
+(defmethod get-value-form ArrowType$Utf8 [_ vec-sym idx-sym] `(util/element->nio-buffer ~vec-sym ~idx-sym))
+(defmethod get-value-form ArrowType$Binary [_ vec-sym idx-sym] `(util/element->nio-buffer ~vec-sym ~idx-sym))
 (defmethod get-value-form :default [_ vec-sym idx-sym] `(normalize-union-value (.getObject ~vec-sym ~idx-sym)))
 
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->types]}]
@@ -390,7 +364,7 @@
 
   (doseq [arrow-type #{ArrowType$Binary ArrowType$Utf8}]
     (defmethod codegen-call [f-kw arrow-type arrow-type] [_]
-      (mono-fn-call types/bool-type #(cmp `(compare-nio-buffers-unsigned ~@%)))))
+      (mono-fn-call types/bool-type #(cmp `(util/compare-nio-buffers-unsigned ~@%)))))
 
   (defmethod codegen-call [f-kw ::types/Object ::types/Object] [_]
     (mono-fn-call types/bool-type #(cmp `(compare ~@%)))))

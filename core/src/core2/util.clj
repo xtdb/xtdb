@@ -13,7 +13,7 @@
            java.nio.charset.StandardCharsets
            [java.nio.file CopyOption Files FileVisitResult LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.time Duration Instant LocalDateTime ZoneId ZonedDateTime]
+           [java.time Duration Instant LocalDateTime ZonedDateTime ZoneId]
            java.time.temporal.ChronoUnit
            [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList List Map$Entry Queue UUID]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
@@ -23,7 +23,7 @@
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator RootAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers MemoryUtil]
-           [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BaseVariableWidthVector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
@@ -574,6 +574,32 @@
       (.setBytes buffer-copy 0 (.getBuf x) (.getOffset x) length)
       (ArrowBufPointer. buffer-copy 0 length))
     x))
+
+(defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
+  (let [rem-x (.remaining x)
+        rem-y (.remaining y)
+        limit (min rem-x rem-y)
+        char-limit (bit-shift-right limit 1)
+        diff (.compareTo (.limit (.asCharBuffer x) char-limit)
+                         (.limit (.asCharBuffer y) char-limit))]
+    (if (zero? diff)
+      (loop [n (bit-and-not limit 1)]
+        (if (= n limit)
+          (- rem-x rem-y)
+          (let [x-byte (.get x n)
+                y-byte (.get y n)]
+            (if (= x-byte y-byte)
+              (recur (inc n))
+              (Byte/compareUnsigned x-byte y-byte)))))
+      diff)))
+
+(defn element->nio-buffer ^java.nio.ByteBuffer [^BaseVariableWidthVector vec ^long idx]
+  (let [value-buffer (.getDataBuffer vec)
+        offset-buffer (.getOffsetBuffer vec)
+        offset-idx (* idx BaseVariableWidthVector/OFFSET_WIDTH)
+        offset (.getInt offset-buffer offset-idx)
+        end-offset (.getInt offset-buffer (+ offset-idx BaseVariableWidthVector/OFFSET_WIDTH))]
+    (.nioBuffer value-buffer offset (- end-offset offset))))
 
 (defn ->region-allocator
   (^org.apache.arrow.memory.BufferAllocator []
