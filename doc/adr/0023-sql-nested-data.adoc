@@ -28,6 +28,12 @@ One can refer to nested elements inside structs, using the expected syntax:
 Here `foo` is a correlation name (variable), `bar` is a column containing a row with (at least) a field `baz`.
 The entire row (struct) `foo.bar` is returned.
 
+As XTDB is dynamically typed, there will be a need for reflection and the ability to switch based on the type of value.
+In SQL:1999 there are a few constructs for this:
+
+* `SPECIFICTYPE` returns a string with the fully-qualified name of the argument.
+* `IS [NOT] OF (...)` is a predicate that takes a list of type identifiers.
+
 ==== Arrays
 
 Arrays are accessed as such in the standard, note the cross join and implicit `LATERAL`:
