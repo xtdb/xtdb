@@ -186,6 +186,12 @@
   ;; a reasonable default, but implement it for more specific types if this doesn't work
   (get-value-form (.storageType arrow-type) `(.getUnderlyingVector ~vec-sym) idx-sym))
 
+(defmethod with-batch-bindings :variable [{:keys [variable] :as expr}]
+  (-> expr
+      (assoc :batch-bindings
+             [[(-> variable (with-tag IIndirectVector))
+               `(.vectorForName ~rel-sym ~(name variable))]])))
+
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->types]}]
   (let [field-types (or (get var->types variable)
                         (throw (AssertionError. (str "unknown variable: " variable))))
@@ -689,15 +695,10 @@
                                code)
               (.endValue ~writer-sym))))})))
 
-(defn- variable-bindings [vars]
-  (->> (for [var-sym (set vars)]
-         [(-> var-sym (with-tag IIndirectVector))
-          `(.vectorForName ~rel-sym ~(name var-sym))])
-       (apply concat)))
-
 (defn batch-bindings [expr]
   (->> (walk/expr-seq expr)
        (mapcat :batch-bindings)
+       (distinct)
        (apply concat)))
 
 ;; NOTE: we macroexpand inside the memoize on the assumption that
@@ -720,8 +721,7 @@
                      `(fn [~(-> out-vec-sym (with-tag ValueVector))
                            ~(-> rel-sym (with-tag IIndirectRelation))
                            ~params-sym]
-                        (let [~@(variable-bindings (keys var->types))
-                              ~@(batch-bindings expr)
+                        (let [~@(batch-bindings expr)
 
                               ~out-writer-sym (vw/vec->writer ~out-vec-sym)
                               ~@writer-bindings
@@ -780,8 +780,7 @@
 
           (eval
            `(fn [~(-> rel-sym (with-tag IIndirectRelation)) ~params-sym]
-              (let [~@(variable-bindings (keys var->types))
-                    ~@(batch-bindings expr)
+              (let [~@(batch-bindings expr)
                     ~acc-sym (RoaringBitmap.)]
                 (dotimes [~idx-sym (.rowCount ~rel-sym)]
                   ~(continue (fn [_ code]
