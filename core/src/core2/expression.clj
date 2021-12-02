@@ -9,9 +9,9 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import clojure.lang.MapEntry
+  (:import [clojure.lang Keyword MapEntry]
            core2.operator.project.ProjectionSpec
-           [core2.operator.select IRelationSelector]
+           core2.operator.select.IRelationSelector
            core2.types.LegType
            [core2.vector IIndirectRelation IIndirectVector]
            [core2.vector.extensions KeywordType UuidType]
@@ -21,22 +21,22 @@
            [java.time Duration Instant ZoneOffset]
            [java.time.temporal ChronoField ChronoUnit]
            java.util.Date
-           [org.apache.arrow.vector BaseVariableWidthVector DurationVector ValueVector]
+           [org.apache.arrow.vector DurationVector ValueVector]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn form->expr [form {:keys [params locals] :as env}]
   (cond
-    (or (true? form) (false? form) (nil? form))
-    {:op :literal, :literal form}
-
     (symbol? form) (cond
                      (contains? locals form) {:op :local, :local form}
-                     (contains? params form) {:op :param, :param form}
+                     (contains? params form) (let [param-v (get params form)]
+                                               {:op :param, :param form,
+                                                :param-type (.arrowType (types/value->leg-type param-v))
+                                                :param-class (class param-v)})
                      :else {:op :variable, :variable form})
 
     (sequential? form) (let [[f & args] form]
@@ -72,42 +72,15 @@
 
                            {:op :call, :f f, :args (mapv #(form->expr % env) args)}))
 
-    :else {:op :literal, :literal form}))
-
-(defn lits->params [expr]
-  (->> expr
-       (walk/postwalk-expr (fn [{:keys [op] :as expr}]
-                             (case op
-                               :literal (let [{:keys [literal]} expr
-                                              sym (gensym 'literal)]
-                                          (-> {:op :param, :param sym, :literal literal}
-                                              (vary-meta (fnil into {})
-                                                         {:literals {sym literal}
-                                                          :params #{sym}})))
-
-                               :param (-> expr
-                                          (vary-meta (fnil into {})
-                                                     {:params #{(:param expr)}}))
-
-                               (let [child-exprs (walk/direct-child-exprs expr)]
-                                 (-> expr
-                                     (vary-meta (fnil into {})
-                                                {:literals (->> child-exprs
-                                                                (into {} (mapcat (comp :literals meta))))
-                                                 :params (->> child-exprs
-                                                              (into #{} (mapcat (comp :params meta))))}))))))))
+    :else {:op :literal, :literal form
+           :literal-type (.arrowType (types/value->leg-type form))
+           :literal-class (class form)}))
 
 (defn with-tag [sym tag]
   (-> sym
       (vary-meta assoc :tag (if (symbol? tag)
                               tag
                               (symbol (.getName ^Class tag))))))
-
-(defn variables [expr]
-  (->> (walk/expr-seq expr)
-       (into [] (comp (filter (comp #(= :variable %) :op))
-                      (map :variable)
-                      (distinct)))))
 
 (def type->cast
   {ArrowType$Bool/INSTANCE 'boolean
@@ -119,7 +92,12 @@
    types/timestamp-micro-tz-type 'long
    types/duration-micro-type 'long})
 
-(def idx-sym (gensym "idx"))
+(def idx-sym (gensym 'idx))
+(def rel-sym (gensym 'rel))
+(def params-sym (gensym 'params))
+
+(defmulti with-batch-bindings :op, :default ::default)
+(defmethod with-batch-bindings ::default [expr] expr)
 
 (defmulti codegen-expr
   "Returns a map containing
@@ -130,10 +108,6 @@
       Returned fn returns the emitted code for the expression (including the code supplied by the callback)."
   (fn [{:keys [op]} {:keys [var->types]}]
     op))
-
-(defmethod codegen-expr :nil [_ _]
-  {:return-types #{types/null-type}
-   :continue (fn [f] (f types/null-type nil))})
 
 (defn resolve-string ^String [x]
   (cond
@@ -146,18 +120,58 @@
     (string? x)
     x))
 
-(defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param->type]}]
-  (let [return-type (or (get param->type param)
-                        (throw (IllegalArgumentException. (str "parameter not provided: " param))))]
-    (into {:return-types #{return-type}
-           :continue (fn [f]
-                       (f return-type param))}
-          (select-keys expr #{:literal}))))
+(defmulti emit-value
+  (fn [val-class code] val-class)
+  :default ::default)
+
+(defmethod emit-value ::default [_ code] code)
+(defmethod emit-value Date [_ code] `(Math/multiplyExact (.getTime ~code) 1000))
+(defmethod emit-value Instant [_ code] `(util/instant->micros ~code))
+(defmethod emit-value Duration [_ code] `(quot (.toNanos ~code) 1000))
+(defmethod emit-value (Class/forName "[B") [_ code] `(ByteBuffer/wrap ~code))
+
+(defmethod emit-value String [_ code]
+  `(-> (.getBytes ~code StandardCharsets/UTF_8) (ByteBuffer/wrap)))
+
+(defmethod emit-value Keyword [_ code]
+  `(-> (.getBytes ~(str (symbol code)) StandardCharsets/UTF_8) (ByteBuffer/wrap)))
+
+(defmethod codegen-expr :literal [{:keys [literal]} _]
+  (let [return-type (.arrowType (types/value->leg-type literal))]
+    {:return-types #{return-type}
+     :continue (fn [f]
+                 (f return-type (emit-value literal)))
+     :literal literal}))
+
+(defn lit->param [{:keys [op] :as expr}]
+  (if (= op :literal)
+    {:op :param, :param (gensym 'lit),
+     :literal (:literal expr)
+     :param-class (:literal-class expr)
+     :param-type (:literal-type expr)}
+    expr))
+
+(defmethod with-batch-bindings :param [{:keys [param param-class] :as expr}]
+  (-> expr
+      (assoc :batch-bindings
+             [[param
+               (emit-value param-class
+                           (:literal expr
+                                     (cond-> `(get ~params-sym '~param)
+                                       param-class (with-tag param-class))))]])))
+
+(defmethod codegen-expr :param [{:keys [param param-type] :as expr} _]
+  (into {:return-types #{param-type}
+         :continue (fn [f]
+                     (f param-type param))}
+        (select-keys expr #{:literal})))
 
 (defmulti get-value-form
   (fn [arrow-type vec-sym idx-sym]
-    (class arrow-type)))
+    (class arrow-type))
+  :default ::default)
 
+(defmethod get-value-form ArrowType$Null [_ _ _] nil)
 (defmethod get-value-form ArrowType$Bool [_ vec-sym idx-sym] `(= 1 (.get ~vec-sym ~idx-sym)))
 (defmethod get-value-form ArrowType$FloatingPoint [_ vec-sym idx-sym] `(.get ~vec-sym ~idx-sym))
 (defmethod get-value-form ArrowType$Int [_ vec-sym idx-sym] `(.get ~vec-sym ~idx-sym))
@@ -165,7 +179,12 @@
 (defmethod get-value-form ArrowType$Duration [_ vec-sym idx-sym] `(DurationVector/get (.getDataBuffer ~vec-sym) ~idx-sym))
 (defmethod get-value-form ArrowType$Utf8 [_ vec-sym idx-sym] `(util/element->nio-buffer ~vec-sym ~idx-sym))
 (defmethod get-value-form ArrowType$Binary [_ vec-sym idx-sym] `(util/element->nio-buffer ~vec-sym ~idx-sym))
-(defmethod get-value-form :default [_ vec-sym idx-sym] `(normalize-union-value (.getObject ~vec-sym ~idx-sym)))
+(defmethod get-value-form ArrowType$FixedSizeBinary [_ vec-sym idx-sym] `(util/element->nio-buffer ~vec-sym ~idx-sym))
+
+(defmethod get-value-form ArrowType$ExtensionType
+  [^ArrowType$ExtensionType arrow-type vec-sym idx-sym]
+  ;; a reasonable default, but implement it for more specific types if this doesn't work
+  (get-value-form (.storageType arrow-type) `(.getUnderlyingVector ~vec-sym) idx-sym))
 
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->types]}]
   (let [field-types (or (get var->types variable)
@@ -300,49 +319,45 @@
     (vec (cons (keyword (name f)) (map class arg-types))))
   :hierarchy #'types/arrow-type-hierarchy)
 
-(defmethod codegen-expr :call [expr opts]
-  (if (not= (:op expr) :call)
-    (codegen-expr expr opts)
+(defmethod codegen-expr :call [{:keys [args] :as expr} opts]
+  (let [emitted-args (mapv #(codegen-expr % opts) args)
+        all-arg-types (reduce (fn [acc {:keys [return-types]}]
+                                (for [el acc
+                                      return-type return-types]
+                                  (conj el return-type)))
+                              [[]]
+                              emitted-args)
 
-    (let [{:keys [args]} expr
-          emitted-args (mapv #(codegen-expr % opts) args)
-          all-arg-types (reduce (fn [acc {:keys [return-types]}]
-                                  (for [el acc
-                                        return-type return-types]
-                                    (conj el return-type)))
-                                [[]]
-                                emitted-args)
+        emitted-calls (->> (for [arg-types all-arg-types]
+                             (MapEntry/create arg-types
+                                              (codegen-call (assoc expr
+                                                                   :args emitted-args
+                                                                   :arg-types arg-types))))
+                           (into {}))
 
-          emitted-calls (->> (for [arg-types all-arg-types]
-                               (MapEntry/create arg-types
-                                                (codegen-call (assoc expr
-                                                                     :args emitted-args
-                                                                     :arg-types arg-types))))
-                             (into {}))
+        return-types (->> emitted-calls
+                          (into #{} (mapcat (comp :return-types val))))]
 
-          return-types (->> emitted-calls
-                            (into #{} (mapcat (comp :return-types val))))]
+    (-> {:return-types return-types
+         :continue (fn continue-call-expr [handle-emitted-expr]
+                     (let [build-args-then-call
+                           (reduce (fn step [build-next-arg {continue-this-arg :continue}]
+                                     ;; step: emit this arg, and pass it through to the inner build-fn
+                                     (fn continue-building-args [arg-types emitted-args]
+                                       (continue-this-arg (fn [arg-type emitted-arg]
+                                                            (build-next-arg (conj arg-types arg-type)
+                                                                            (conj emitted-args emitted-arg))))))
 
-      (-> {:return-types return-types
-           :continue (fn continue-call-expr [handle-emitted-expr]
-                       (let [build-args-then-call
-                             (reduce (fn step [build-next-arg {continue-this-arg :continue}]
-                                       ;; step: emit this arg, and pass it through to the inner build-fn
-                                       (fn continue-building-args [arg-types emitted-args]
-                                         (continue-this-arg (fn [arg-type emitted-arg]
-                                                              (build-next-arg (conj arg-types arg-type)
-                                                                              (conj emitted-args emitted-arg))))))
+                                   ;; innermost fn - we're done, call continue-call for these types
+                                   (fn call-with-built-args [arg-types emitted-args]
+                                     (let [{:keys [continue-call]} (get emitted-calls arg-types)]
+                                       (continue-call handle-emitted-expr emitted-args)))
 
-                                     ;; innermost fn - we're done, call continue-call for these types
-                                     (fn call-with-built-args [arg-types emitted-args]
-                                       (let [{:keys [continue-call]} (get emitted-calls arg-types)]
-                                         (continue-call handle-emitted-expr emitted-args)))
+                                   ;; reverse because we're working inside-out
+                                   (reverse emitted-args))]
 
-                                     ;; reverse because we're working inside-out
-                                     (reverse emitted-args))]
-
-                         (build-args-then-call [] [])))}
-          (wrap-mono-return)))))
+                       (build-args-then-call [] [])))}
+        (wrap-mono-return))))
 
 (defn mono-fn-call [return-type wrap-args-f]
   {:continue-call (fn [f emitted-args]
@@ -571,47 +586,6 @@
                       (f return-type
                          `(~(symbol "Math" math-op) ~@emitted-args)))}))
 
-(defn normalize-union-value [v]
-  (cond
-    (instance? Date v) (Math/multiplyExact (.getTime ^Date v) 1000)
-    (instance? Instant v) (util/instant->micros v)
-    (instance? Duration v) (.toMillis ^Duration v)
-    (string? v) (ByteBuffer/wrap (.getBytes ^String v StandardCharsets/UTF_8))
-    (bytes? v) (ByteBuffer/wrap v)
-    :else v))
-
-(defn normalise-params [expr params]
-  (let [expr (lits->params expr)
-        {expr-params :params, lits :literals} (meta expr)
-        params (->> expr-params
-                    (util/into-linked-map
-                     (map (fn [param-k]
-                            (MapEntry/create param-k
-                                             (val (or (find params param-k)
-                                                      (find lits param-k))))))))]
-    {:expr expr
-     :params params
-     :param-types (->> params
-                       (util/into-linked-map
-                        (util/map-entries (fn [param-k param-v]
-                                            (let [leg-type (types/value->leg-type param-v)
-                                                  normalized-expr-type (normalize-union-value param-v)
-                                                  primitive-tag (get type->cast (.arrowType (types/value->leg-type normalized-expr-type)))]
-                                              (MapEntry/create (cond-> param-k
-                                                                 primitive-tag (with-tag primitive-tag))
-                                                               (.arrowType leg-type)))))))
-
-     :emitted-params (->> params
-                          (util/into-linked-map
-                           (util/map-values (fn [_param-k param-v]
-                                              (normalize-union-value param-v)))))}))
-
-(defn- expression-in-cols [^IIndirectRelation in-rel expr]
-  (->> (variables expr)
-       (util/into-linked-map
-        (map (fn [variable]
-               (MapEntry/create variable (.vectorForName in-rel (name variable))))))))
-
 (defmulti set-value-form
   (fn [arrow-type out-vec-sym idx-sym code]
     (class arrow-type)))
@@ -715,33 +689,39 @@
                                code)
               (.endValue ~writer-sym))))})))
 
-;; NOTE: we macroexpand inside the memoize on the assumption that
-;; everything outside yields the same result on the pre-expanded expr - this
-;; assumption wouldn't hold if macroexpansion created new variable exprs, for example.
-;; macroexpansion is non-deterministic (gensym), so busts the memo cache.
-
-(defn- variable-bindings [vars rel-sym]
+(defn- variable-bindings [vars]
   (->> (for [var-sym (set vars)]
          [(-> var-sym (with-tag IIndirectVector))
           `(.vectorForName ~rel-sym ~(name var-sym))])
        (apply concat)))
 
-(def ^:private memo-generate-projection
-  (-> (fn [expr var->types param-types]
-        (let [expr (macro/macroexpand-all expr)
+(defn batch-bindings [expr]
+  (->> (walk/expr-seq expr)
+       (mapcat :batch-bindings)
+       (apply concat)))
 
-              codegen-opts {:var->types var->types, :param->type param-types}
-              {:keys [return-types continue]} (codegen-expr expr codegen-opts)
+;; NOTE: we macroexpand inside the memoize on the assumption that
+;; everything outside yields the same result on the pre-expanded expr - this
+;; assumption wouldn't hold if macroexpansion created new variable exprs, for example.
+;; macroexpansion is non-deterministic (gensym), so busts the memo cache.
+
+(def ^:private memo-generate-projection
+  (-> (fn [expr var->types]
+        (let [expr (->> expr
+                        (macro/macroexpand-all)
+                        (walk/postwalk-expr (comp with-batch-bindings lit->param)))
+
+              {:keys [return-types continue]} (codegen-expr expr {:var->types var->types})
               ret-field-type (return-types->field-type return-types)
 
-              {:keys [writer-bindings write-value-out!]} (write-value-out-code ret-field-type return-types)
-              rel-sym (gensym 'rel)]
+              {:keys [writer-bindings write-value-out!]} (write-value-out-code ret-field-type return-types)]
 
           {:expr-fn (eval
                      `(fn [~(-> out-vec-sym (with-tag ValueVector))
                            ~(-> rel-sym (with-tag IIndirectRelation))
-                           [~@(keys param-types)]]
-                        (let [~@(variable-bindings (keys var->types) rel-sym)
+                           ~params-sym]
+                        (let [~@(variable-bindings (keys var->types))
+                              ~@(batch-bindings expr)
 
                               ~out-writer-sym (vw/vec->writer ~out-vec-sym)
                               ~@writer-bindings
@@ -765,42 +745,43 @@
     (.getFieldType field)))
 
 (defn ->var-types [^IIndirectRelation in-rel, expr]
-  (->> (for [var-sym (variables expr)]
+  (->> (for [var-sym (->> (walk/expr-seq expr)
+                          (into #{} (comp (filter #(= :variable (:op %)))
+                                          (map :variable))))]
          (let [^IIndirectVector ivec (or (.vectorForName in-rel (name var-sym))
                                          (throw (IllegalArgumentException. (str "missing read-col: " var-sym))))]
            (MapEntry/create var-sym (field->value-types (-> ivec (.getVector) (.getField))))))
        (into {})))
 
 (defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [^String col-name form params]
-  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form {:params params})
-                                                      (normalise-params params))]
+  (let [expr (form->expr form {:params params})]
     (reify ProjectionSpec
       (project [_ allocator in-rel]
         (let [var-types (->var-types in-rel expr)
-              {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection expr var-types param-types)
+              {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection expr var-types)
               ^ValueVector out-vec (.createNewSingleVector field-type col-name allocator nil)]
           (try
-            (expr-fn out-vec in-rel (vals emitted-params))
+            (expr-fn out-vec in-rel params)
             (iv/->direct-vec out-vec)
             (catch Exception e
               (.close out-vec)
               (throw e))))))))
 
 (def ^:private memo-generate-selection
-  (-> (fn [expr var->types param-types]
-        (let [expr (macro/macroexpand-all expr)
+  (-> (fn [expr var->types]
+        (let [expr (->> expr
+                        (macro/macroexpand-all)
+                        (walk/postwalk-expr (comp with-batch-bindings lit->param)))
 
-              codegen-opts {:var->types var->types, :param->type param-types}
-              {:keys [return-types continue]} (codegen-expr expr codegen-opts)
-              rel-sym (gensym 'rel)
+              {:keys [return-types continue]} (codegen-expr expr {:var->types var->types})
               acc-sym (gensym 'acc)]
 
           (assert (= #{ArrowType$Bool/INSTANCE} return-types))
 
           (eval
-           `(fn [~(-> rel-sym (with-tag IIndirectRelation))
-                 [~@(keys param-types)]]
-              (let [~@(variable-bindings (keys var->types) rel-sym)
+           `(fn [~(-> rel-sym (with-tag IIndirectRelation)) ~params-sym]
+              (let [~@(variable-bindings (keys var->types))
+                    ~@(batch-bindings expr)
                     ~acc-sym (RoaringBitmap.)]
                 (dotimes [~idx-sym (.rowCount ~rel-sym)]
                   ~(continue (fn [_ code]
@@ -810,13 +791,12 @@
       (memoize)))
 
 (defn ->expression-relation-selector ^core2.operator.select.IRelationSelector [form params]
-  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form {:params params})
-                                                      (normalise-params params))]
+  (let [expr (form->expr form {:params params})]
     (reify IRelationSelector
       (select [_ in-rel]
         (if (pos? (.rowCount in-rel))
           (let [var-types (->var-types in-rel expr)
-                expr-fn (memo-generate-selection expr var-types param-types)]
-            (expr-fn in-rel (vals emitted-params)))
+                expr-fn (memo-generate-selection expr var-types)]
+            (expr-fn in-rel params))
 
           (RoaringBitmap.))))))

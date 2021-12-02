@@ -92,6 +92,11 @@
                             "_valid-time-end" '(> _vt-time-end #inst "2019")}
                            {}))))
 
+      (t/is (= {:vt-start [μs-2019 μs-2019]}
+               (transpose (expr.temp/->temporal-min-max-range
+                           {"_valid-time-start" '(= _vt-time-start #inst "2019")}
+                           {}))))
+
       (t/testing "symbol column name"
         (t/is (= {:vt-start [μs-2019 μs-2019]}
                  (transpose (expr.temp/->temporal-min-max-range

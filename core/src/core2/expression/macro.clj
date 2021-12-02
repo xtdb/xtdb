@@ -1,5 +1,6 @@
 (ns core2.expression.macro
-  (:require [core2.expression.walk :as walk]))
+  (:require [core2.expression.walk :as walk]
+            [core2.types :as types]))
 
 (defmulti macroexpand1-call
   (fn [{:keys [f] :as call-expr}]
@@ -36,9 +37,12 @@
                {:op :call, :f f, :args args})}
       expr)))
 
+(def ^:private nil-literal
+  {:op :literal, :literal nil, :literal-type types/null-type})
+
 (defmethod macroexpand1-call :cond [{:keys [args]}]
   (case (count args)
-    0 {:op :nil} ; can't use literal, those are swapped out before we macroexpand
+    0 nil-literal
     1 (first args) ; unlike Clojure, we allow a default expr at the end
     (let [[test expr & more-args] args]
       {:op :if
@@ -64,7 +68,7 @@
 
 (defmethod macroexpand1-call :coalesce [{:keys [args]}]
   (case (count args)
-    0 {:op :nil}
+    0 nil-literal
     1 (first args)
     (let [local (gensym 'coalesce)]
       {:op :if-some

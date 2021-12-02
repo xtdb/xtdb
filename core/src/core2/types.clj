@@ -100,7 +100,7 @@
   (write-value! [v ^IVectorWriter writer]
     (write-value! (.toInstant v) writer))
 
-  Duration ; HACK assumes micros for now
+  Duration
   (value->leg-type [_] LegType/DURATIONMICRO)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^DurationVector (.getVector writer) (.getPosition writer)

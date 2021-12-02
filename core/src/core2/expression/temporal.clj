@@ -3,6 +3,7 @@
             [core2.expression :as expr]
             [core2.expression.macro :as emacro]
             [core2.expression.metadata :as expr.meta]
+            [core2.expression.walk :as ewalk]
             [core2.temporal :as temporal]
             [core2.types :as types]
             [core2.util :as util])
@@ -192,17 +193,24 @@
   (let [min-range (temporal/->min-range)
         max-range (temporal/->max-range)]
     (doseq [[col-name select-form] selects
-            :when (temporal/temporal-column? col-name)
-            :let [select-expr (-> (expr/form->expr select-form {:params srcs})
-                                  (emacro/macroexpand-all))
-                  {:keys [expr param-types params]} (expr/normalise-params select-expr srcs)
-                  meta-expr (@#'expr.meta/meta-expr expr param-types)]]
-      (w/prewalk (fn [x]
-                   (when-not (and (map? x) (= 'or (:f x)))
-                     (when (and (map? x) (= :metadata-vp-call (:op x)))
-                       (let [{:keys [f param]} x]
-                         (apply-constraint min-range max-range
-                                           f col-name (util/->instant (get params param)))))
-                     x))
-                 meta-expr))
+            :when (temporal/temporal-column? col-name)]
+      (->> (expr/form->expr select-form {:params srcs})
+           (emacro/macroexpand-all)
+           (ewalk/postwalk-expr expr/lit->param)
+           (expr.meta/meta-expr)
+           (ewalk/prewalk-expr
+            (fn [{:keys [op] :as expr}]
+              (case op
+                :call (when (not= 'or (:f expr))
+                        expr)
+
+                :metadata-vp-call
+                (let [{:keys [f param-expr]} expr]
+                  (apply-constraint min-range max-range
+                                    f col-name
+                                    (util/->instant (some-> (or (find param-expr :literal)
+                                                                (find srcs (get param-expr :param)))
+                                                            val))))
+
+                expr)))))
     [min-range max-range]))
