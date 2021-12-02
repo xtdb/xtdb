@@ -2,7 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [core2.error :as err]
             core2.log
-            [core2.types :as t]
+            [core2.types :as types]
             [core2.util :as util]
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
@@ -57,25 +57,25 @@
     parsed-tx-ops))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-start-field
-  (t/->field "_valid-time-start" t/timestamp-micro-tz-type true))
+  (types/->field "_valid-time-start" types/timestamp-micro-tz-type true))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-end-field
-  (t/->field "_valid-time-end" t/timestamp-micro-tz-type true))
+  (types/->field "_valid-time-end" types/timestamp-micro-tz-type true))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
-  (Schema. [(t/->field "tx-ops" t/list-type false
-                       (t/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
-                                  (t/->field "put" t/struct-type false
-                                             (t/->field "document" t/dense-union-type false)
-                                             valid-time-start-field
-                                             valid-time-end-field)
-                                  (t/->field "delete" t/struct-type false
-                                             (t/->field "_id" t/dense-union-type false)
-                                             valid-time-start-field
-                                             valid-time-end-field)
-                                  (t/->field "evict" t/struct-type false
-                                             (t/->field "_id" t/dense-union-type false))))
-            (t/->field "tx-time" t/timestamp-micro-tz-type true)]))
+  (Schema. [(types/->field "tx-ops" types/list-type false
+                           (types/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
+                                          (types/->field "put" types/struct-type false
+                                                         (types/->field "document" types/dense-union-type false)
+                                                         valid-time-start-field
+                                                         valid-time-end-field)
+                                          (types/->field "delete" types/struct-type false
+                                                         (types/->field "_id" types/dense-union-type false)
+                                                         valid-time-start-field
+                                                         valid-time-end-field)
+                                          (types/->field "evict" types/struct-type false
+                                                         (types/->field "_id" types/dense-union-type false))))
+            (types/->field "tx-time" types/timestamp-micro-tz-type true)]))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops {:keys [^Instant tx-time]} ^BufferAllocator allocator]
   (let [tx-ops (conform-tx-ops tx-ops)
@@ -116,9 +116,9 @@
                        (doseq [[k v] doc]
                          (doto (-> (.writerForName put-doc-leg-writer (name k))
                                    (.asDenseUnion)
-                                   (.writerForType (t/value->leg-type v)))
+                                   (.writerForType (types/value->leg-type v)))
                            (.startValue)
-                           (->> (t/write-value! v))
+                           (->> (types/write-value! v))
                            (.endValue)))
 
                        (.endValue put-doc-leg-writer))
@@ -136,9 +136,9 @@
               :delete (let [delete-idx (.startValue delete-writer)]
                         (let [id (:_id tx-op)]
                           (doto (-> delete-id-writer
-                                    (.writerForType (t/value->leg-type id)))
+                                    (.writerForType (types/value->leg-type id)))
                             (.startValue)
-                            (->> (t/write-value! id))
+                            (->> (types/write-value! id))
                             (.endValue)))
 
                         (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
@@ -153,9 +153,9 @@
                        (.startValue evict-writer)
                        (let [id (:_id tx-op)]
                          (doto (-> evict-id-writer
-                                   (.writerForType (t/value->leg-type id)))
+                                   (.writerForType (types/value->leg-type id)))
                            (.startValue)
-                           (->> (t/write-value! id))
+                           (->> (types/write-value! id))
                            (.endValue)))
                        (.endValue evict-writer))))
 
