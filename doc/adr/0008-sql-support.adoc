@@ -55,13 +55,13 @@ The type system can be extended, but the question is what happens when using exi
 
 === Modeling nested data
 
-See link:0023-sql-nested-data.adoc[ADR-0023].
-
 Options:
 
 . https://crate.io/docs/sql-99/en/latest/[SQL:1999] structured user-defined types.
 . https://standards.iso.org/ittf/PubliclyAvailableStandards/c067367_ISO_IEC_TR_19075-6_2017.zip[SQL:2016 JSON].
 . https://partiql.org[PartiQL] ''SQL-compatible access to relational, semi-structured, and nested data.'
+
+See also link:0023-sql-nested-data.adoc[ADR-0023].
 
 ==== Decision
 
