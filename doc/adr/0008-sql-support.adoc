@@ -55,6 +55,8 @@ The type system can be extended, but the question is what happens when using exi
 
 === Modeling nested data
 
+See link:0023-sql-nested-data.adoc[ADR-0023].
+
 Options:
 
 . https://crate.io/docs/sql-99/en/latest/[SQL:1999] structured user-defined types.
@@ -77,6 +79,8 @@ Options:
 . https://s3.amazonaws.com/artifacts.opencypher.org/website/ocim5/slides/ocim5+-+SQL+and+GQL+Status+2019-03-06.pdf[SQL:202x/PGQ] 'SQL Property Graph Query', https://opencypher.org/[openCypher]-like queries embedded in SQL.
   Related to https://www.gqlstandards.org/[GQL] which is a new language (and not to be confused with GraphQL).
 
+See also link:0026-sql-property-graph-queries.adoc[ADR-0026].
+
 ==== Decision
 
 We’re currently postponing any decisions around dealing with graph queries to a later date.
@@ -91,6 +95,8 @@ Options:
 . Use existing framework or library, like https://calcite.apache.org/[Calcite], https://prestodb.io/[Presto] or https://www.h2database.com/html/main.html[H2].
 . Leverage existing parser, like PartiQL or https://github.com/JSQLParser/JSqlParser[JSQLParser].
 . Write our own parser for the parts we need using https://github.com/Engelberg/instaparse[Instaparse], https://www.antlr.org/[Antlr] or handwritten recursive descent.
+
+=== Parser
 
 ==== Decision
 

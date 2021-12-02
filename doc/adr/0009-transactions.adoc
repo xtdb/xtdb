@@ -23,6 +23,8 @@ Options:
 Operations also need to be able to do bitemporal corrections.
 SQL:2011 always assumes start/end time for corrections, while classic supports calculating the end time if not given.
 
+See also link:0027-sql-basic-dml.adoc[ADR-0027].
+
 == Decision
 
 We will continue to use the existing single-writer log based model.
