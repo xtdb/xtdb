@@ -136,7 +136,7 @@
       (let [_ @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 0}]
                                         [:put {:_id :other-doc, :version 0}]])
             _ (Thread/sleep 10)         ; prevent same-ms transactions
-            tx2 @(c2/submit-tx tu/*node* [[:put {:_id :doc, "version" 1}]])]
+            tx2 @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]])]
 
         (t/is (= {:doc 3, :other-doc 1} (all-time-docs (snap/snapshot snapshot-factory tx2)))
               "documents present before evict"))

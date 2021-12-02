@@ -109,19 +109,11 @@
           (let [{:keys [op vt-opts] :as tx-op} (nth tx-ops tx-op-n)]
             (case op
               :put (let [put-idx (.startValue put-writer)]
-                     (let [{:keys [doc]} tx-op
-                           put-doc-leg-writer (-> (.writerForType put-doc-writer (LegType$StructLegType. (into #{} (map name) (keys doc))))
-                                                  (doto (.startValue))
-                                                  (.asStruct))]
-                       (doseq [[k v] doc]
-                         (doto (-> (.writerForName put-doc-leg-writer (name k))
-                                   (.asDenseUnion)
-                                   (.writerForType (types/value->leg-type v)))
-                           (.startValue)
-                           (->> (types/write-value! v))
-                           (.endValue)))
-
-                       (.endValue put-doc-leg-writer))
+                     (let [{:keys [doc]} tx-op]
+                       (doto (.writerForType put-doc-writer (types/value->leg-type doc))
+                         (.startValue)
+                         (->> (types/write-value! doc))
+                         (.endValue)))
 
                      (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
                        (.set ^TimeStampMicroTZVector (.getVector put-vt-start-writer)
