@@ -1,4 +1,8 @@
 * Bibliography
+** CMU Courses
+- [[https://15445.courses.cs.cmu.edu/fall2021/schedule.html][Intro to Database Systems (Fall 2021)]]
+- [[https://15721.courses.cs.cmu.edu/spring2020/schedule.html][Advanced Database Systems (Spring 2020)]]
+
 ** Columnar:
 - [[https://www.cs.umd.edu/class/spring2015/cmsc724/abadi-column-stores.pdf][(Abadi) The Design and Implementation of Modern Columnar Store Systems]]
 - [[https://arxiv.org/pdf/2004.14471.pdf][Mainlining Databases: Supporting Fast Transactional Workloads on Universal Columnar Data File Formats]]
@@ -21,6 +25,15 @@ SingleStore (formerly MemSQL):
 - https://www.singlestore.com/blog/linux-off-cpu-investigation/ - issues with =mmap=
 - [[https://www.singlestore.com/blog/memsql-singlestore-then-there-was-one/][Erasing any apparent difference between today's rowstore and columnstore tables]]
 
+*** Compute engines - vectorization/compilation:
+- [[https://strum355.netsoc.co/books/PDF/MonetDB-X100%20-%20Hyper-Pipelining%20Query%20Execution%20(CIDR%202005%20P19).pdf][MonetDB/X100: Hyper-Pipelining Query Execution]]
+- [[https://15721.courses.cs.cmu.edu/spring2020/schedule.html#mar-04-2020][CMU 'Vectorized Execution' lecture]]
+- [[https://15721.courses.cs.cmu.edu/spring2020/schedule.html#mar-23-2020][CMU 'Vectorization vs Compilation' lecture]]
+  - [[https://15721.courses.cs.cmu.edu/spring2020/papers/16-vectorization2/p2209-kersten.pdf][Everything You Always Wanted to Know About Compiled and Vectorized Queries But Were Afraid to Ask]]
+  - [[https://15721.courses.cs.cmu.edu/spring2020/papers/16-vectorization2/menon-vldb2017.pdf][Relaxed Operator Fusion for In-Memory Databases: Making Compilation, Vectorization, and Prefetching Work Together At Last]]
+  - [[https://15721.courses.cs.cmu.edu/spring2020/papers/16-vectorization2/p5-sompolski.pdf][Vectorization vs. Compilation in Query Execution]]
+  - [[https://15721.courses.cs.cmu.edu/spring2020/papers/16-vectorization2/p311-lang.pdf][Data Blocks: Hybrid OLTP and OLAP on Compressed Storage using both Vectorization and Compilation]]
+
 ** Separating Storage from Compute
 blog posts:
 - https://ajstorm.medium.com/separating-compute-and-storage-59def4f27d64
@@ -35,10 +48,6 @@ papers:
 - [[https://www.vertica.com/wp-content/uploads/2018/05/Vertica_EON_SIGMOD_Paper.pdf][Eon Mode: Bringing the Vertica Columnar Database to the Cloud]] - explains their journey from the old enterprise model to the cloud EON-mode.
 - [[https://media.amazonwebservices.com/blog/2017/aurora-design-considerations-paper.pdf][Amazon Aurora: Design Considerations for High Throughput Cloud-Native Relational Databases]] - stores the logs in S3, and all other data is derived from it.
 - [[https://www.eecg.utoronto.ca/~ashvin/publications/hailstorm.pdf][Hailstorm: Disaggregated Compute and Storage for Distributed LSM-based Databases]] - more of a cloud LSM implementation paper.
-
-** CMU Courses
-- [[https://15445.courses.cs.cmu.edu/fall2020/schedule.html][Intro to Database Systems (Fall 2020)]]
-- [[https://15721.courses.cs.cmu.edu/spring2020/schedule.html][Advanced Database Systems (Spring 2020)]]
 
 ** Deterministic Databases:
 - [[http://www.cs.umd.edu/~abadi/papers/abadi-cacm2018.pdf][An Overview of Deterministic Database Systems]] (Abadi, 2018)
