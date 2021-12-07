@@ -55,7 +55,7 @@
     (vector? form) {:op :list
                     :elements (mapv #(form->expr % env) form)}
 
-    (sequential? form) (parse-list-form form env)
+    (seq? form) (parse-list-form form env)
 
     :else {:op :literal, :literal form
            :literal-type (.arrowType (types/value->leg-type form))
