@@ -41,8 +41,8 @@
                (project '(- a (* 2.0 b)))))
 
       (t/is (= (mapv (comp double +) (range 1000) (range 1000) (repeat 2))
-               (project '[:+ a [:+ b 2]]))
-            "support keyword and vectors")
+               (project '(:+ a (:+ b 2))))
+            "support keywords")
 
       (t/is (= (mapv + (repeat 2) (range 1000))
                (project '(+ 2 d)))

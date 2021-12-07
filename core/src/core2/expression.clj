@@ -29,6 +29,11 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defmulti parse-list-form
+  (fn [[f & args] env]
+    f)
+  :default ::default)
+
 (defn form->expr [form {:keys [params locals] :as env}]
   (cond
     (symbol? form) (cond
@@ -39,42 +44,80 @@
                                                 :param-class (class param-v)})
                      :else {:op :variable, :variable form})
 
-    (sequential? form) (let [[f & args] form]
-                         (case f
-                           if (do
-                                (when-not (= 3 (count args))
-                                  (throw (IllegalArgumentException. (str "'if' expects 3 args: " (pr-str form)))))
+    (map? form) (do
+                  (when-not (every? keyword? (keys form))
+                    (throw (IllegalArgumentException. (str "keys to struct must be keywords: " (pr-str form)))))
+                  {:op :struct,
+                   :entries (->> (for [[k v-form] form]
+                                   (MapEntry/create k (form->expr v-form env)))
+                                 (into {}))})
 
-                                (let [[pred then else] args]
-                                  {:op :if,
-                                   :pred (form->expr pred env),
-                                   :then (form->expr then env),
-                                   :else (form->expr else env)}))
+    (vector? form) {:op :list
+                    :elements (mapv #(form->expr % env) form)}
 
-                           let (do
-                                 (when-not (= 2 (count args))
-                                   (throw (IllegalArgumentException. (str "'let' expects 2 args - bindings + body" (pr-str form)))))
-
-                                 (let [[bindings body] args]
-                                   (when-not (or (nil? bindings) (sequential? bindings))
-                                     (throw (IllegalArgumentException. (str "'let' expects a sequence of bindings: " (pr-str form)))))
-
-                                   (if-let [[local expr-form & more-bindings] (seq bindings)]
-                                     (do
-                                       (when-not (symbol? local)
-                                         (throw (IllegalArgumentException. (str "bindings in `let` should be symbols: " (pr-str local)))))
-                                       {:op :let
-                                        :local local
-                                        :expr (form->expr expr-form env)
-                                        :body (form->expr (list 'let more-bindings body) (update env :locals (fnil conj #{}) local))})
-
-                                     (form->expr body env))))
-
-                           {:op :call, :f f, :args (mapv #(form->expr % env) args)}))
+    (sequential? form) (parse-list-form form env)
 
     :else {:op :literal, :literal form
            :literal-type (.arrowType (types/value->leg-type form))
            :literal-class (class form)}))
+
+(defmethod parse-list-form 'if [[_ & args :as form] env]
+  (when-not (= 3 (count args))
+    (throw (IllegalArgumentException. (str "'if' expects 3 args: " (pr-str form)))))
+
+  (let [[pred then else] args]
+    {:op :if,
+     :pred (form->expr pred env),
+     :then (form->expr then env),
+     :else (form->expr else env)}))
+
+(defmethod parse-list-form 'let [[_ & args :as form] env]
+  (when-not (= 2 (count args))
+    (throw (IllegalArgumentException. (str "'let' expects 2 args - bindings + body"
+                                           (pr-str form)))))
+
+  (let [[bindings body] args]
+    (when-not (or (nil? bindings) (sequential? bindings))
+      (throw (IllegalArgumentException. (str "'let' expects a sequence of bindings: "
+                                             (pr-str form)))))
+
+    (if-let [[local expr-form & more-bindings] (seq bindings)]
+      (do
+        (when-not (symbol? local)
+          (throw (IllegalArgumentException. (str "bindings in `let` should be symbols: "
+                                                 (pr-str local)))))
+        {:op :let
+         :local local
+         :expr (form->expr expr-form env)
+         :body (form->expr (list 'let more-bindings body)
+                           (update env :locals (fnil conj #{}) local))})
+
+      (form->expr body env))))
+
+(defmethod parse-list-form '. [[_ & args :as form] env]
+  (when-not (= 2 (count args))
+    (throw (IllegalArgumentException. (str "'.' expects 2 args: " (pr-str form)))))
+
+  (let [[struct field] args]
+    (when-not (symbol? field)
+      (throw (IllegalArgumentException. (str "'.' expects symbol field: " (pr-str form)))))
+    {:op :dot,
+     :expr (form->expr struct env)
+     :field field}))
+
+(defmethod parse-list-form '.. [[_ & args :as form] env]
+  (let [[struct & fields] args]
+    (when-not (seq fields)
+      (throw (IllegalArgumentException. (str "'..' expects at least 2 args: " (pr-str form)))))
+    (when-not (every? symbol? fields)
+      (throw (IllegalArgumentException. (str "'..' expects symbol fields: " (pr-str form)))))
+    (reduce (fn [expr field]
+              {:op :dot, :expr expr, :field field})
+            (form->expr struct env)
+            (rest args))))
+
+(defmethod parse-list-form ::default [[f & args] env]
+  {:op :call, :f f, :args (mapv #(form->expr % env) args)})
 
 (defn with-tag [sym tag]
   (-> sym
