@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [clojure.walk :as w]
             [core2.api :as c2]
             [core2.snapshot :as snap]
             [core2.sql :as sql]
@@ -95,12 +96,52 @@
 (defmulti execute-statement (fn [ctx [type]]
                               type))
 
-;; TODO: parse insert and create proper document, potentially with
-;; help of the known table columns.
+;; TODO: this is a temporary hack.
+(defn- normalize-literal [x]
+  (if (vector? x)
+    (case (first x)
+      :boolean_literal (= "TRUE" (second x))
+      ;; TODO: is parsing NULL as an identifier correct?
+      :regular_identifier (if (= "NULL" (second x))
+                            nil
+                            x)
+      :character_string_literal (let [s (second x)]
+                                  (subs s 1 (dec (count s))))
+      :exact_numeric_literal (let [s (str/join "" (remove keyword? (flatten x)))]
+                               (if (= 1 (count (rest x)))
+                                 (Long/parseLong s)
+                                 (Double/parseDouble s)))
+      ;; TODO: should this parse as signed_numeric_literal?
+      :factor (if (and (= 2 (count (rest x)))
+                       (= [:sign [:minus_sign "-"]] (second x)))
+                (- (first (filter number? (flatten x))))
+                x)
+      x)
+    x))
+
+(defn- insert->doc [{:keys [tables] :as ctx} insert-statement]
+  (let [[_ _ _ insertion-target insert-columns-and-source] insert-statement
+        table (first (filter string? (flatten insertion-target)))
+        from-subquery (second insert-columns-and-source)
+        columns (if (= 1 (count (rest from-subquery)))
+                  (get tables table)
+                  (let [insert-column-list (nth from-subquery 2)]
+                    (->> (flatten insert-column-list)
+                         (filter string? )
+                         (remove #{","}))))
+        query-expression (last from-subquery)
+        values (->> query-expression
+                    (w/postwalk-replace (zipmap #{"," "(" ")" "VALUES"} (repeat [])))
+                    (w/postwalk normalize-literal)
+                    (flatten)
+                    (filter (some-fn number? string? boolean? nil?)))]
+    (merge {:_table table} (zipmap (map keyword columns) values))))
+
 (defmethod execute-statement :insert_statement [{:keys [node tables] :as ctx} insert-statement]
-  (-> (c2/submit-tx node [[:put {:_id (UUID/randomUUID)}]])
-      (tu/then-await-tx node))
-  ctx)
+  (let [doc (insert->doc ctx insert-statement)]
+    (-> (c2/submit-tx node [[:put (merge {:_id (UUID/randomUUID)} doc)]])
+        (tu/then-await-tx node))
+    ctx))
 
 (defmulti execute-record (fn [ctx {:keys [type] :as record}]
                            type))
@@ -344,6 +385,13 @@ CREATE UNIQUE INDEX t1i0 ON t1(
         expected "SELECT t1.a+t1.b*2+t1.c*3+t1.d*4+t1.e*5 AS col1, (t1.a+t1.b+t1.c+t1.d+t1.e)/5 AS col2 FROM t1 ORDER BY col1,col2"]
     (t/is (= (sql/parse-sql2011 expected :start :query_expression)
              (normalize-query ctx (sql/parse-sql2011 query :start :query_expression))))))
+
+(t/deftest test-insert->doc
+  (let [ctx {:tables {"t1" ["a" "b" "c" "d" "e"]}}]
+    (t/is (= {:e 103 :c 102 :b 100 :d 101 :a 104 :_table "t1"}
+             (insert->doc ctx (sql/parse-sql2011 "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :start :insert_statement))))
+    (t/is (= {:a nil :b -102 :c true :d "101" :e 104.5 :_table "t1"}
+             (insert->doc ctx (sql/parse-sql2011 "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :start :insert_statement))))))
 
 (comment
   (dotimes [n 5]
