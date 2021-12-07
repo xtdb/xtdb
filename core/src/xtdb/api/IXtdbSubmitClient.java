@@ -26,8 +26,7 @@ public interface IXtdbSubmitClient extends Closeable {
      *
      * @param options node configuration options.
      * @return        the started submit client node.
-     * @see <a href="https://xtdb.com/reference/installation.html">Installation</a>
-     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://docs.xtdb.com/administration/configuring/">Configuring</a>
      */
     static IXtdbSubmitClient newSubmitClient(Map<?, ?> options) {
         Object submitClient = resolve("xtdb.submit-client/open-submit-client").invoke(options);
@@ -48,8 +47,7 @@ public interface IXtdbSubmitClient extends Closeable {
      *
      * @param f a callback, provided with an object to configure the node before it starts.
      * @return the started submit client node.
-     * @see <a href="https://xtdb.com/reference/installation.html">Installation</a>
-     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://docs.xtdb.com/administration/configuring/">Configuring</a>
      */
     static IXtdbSubmitClient newSubmitClient(Consumer<NodeConfiguration.Builder> f) {
         return newSubmitClient(NodeConfiguration.buildNode(f));

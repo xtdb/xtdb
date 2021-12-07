@@ -15,7 +15,7 @@ Throughout this tutorial, you will see links to targeted extra reading and infor
 
 == Part 1: Getting an XTDB node running on your local machine
 
-This tutorial will install XTDB using the Clojure CLI tools. You can find in the other methods of installing XTDB in the https://xtdb.com/reference/installation.html[XTDB installation docs].
+This tutorial will install XTDB using the Clojure CLI tools. You can find in the other methods of installing XTDB in the xref:administration::installing.adoc[XTDB installation docs].
 
 If you do not have the Clojure CLI tools installed, installers are available from the https://clojure.org/guides/getting_started#_clojure_installer_and_cli_tools[Clojure Getting Started Guide]. Don't worry, you don't need to know Clojure or the Clojure toolchain to run XTDB. Just copy the commands below.
 
@@ -179,9 +179,9 @@ In this tutorial, we used 3 operations: storing documents with `submit-tx`, retr
 
 XTDB also supports a number of other protocols and features:
 
-* https://xtdb.com/reference/queries.html[Native Datalog queries]
-* https://xtdb.com/reference/sql.html[SQL queries]
-* https://xtdb.com/reference/lucene.html[Full-text search with Apache Lucene]
-* https://xtdb.com/reference/transactions.html#speculative-transactions[Speculative transactions]
+* xref:language-reference::datalog-queries.adoc[Native Datalog queries]
+* xref:language-reference::sql-queries.adoc[SQL queries]
+* xref:extensions::full-text-search.adoc[Full-text search with Apache Lucene]
+* xref:language-reference::datalog-transactions.adoc#speculative-transactions[Speculative transactions]
 
 Now that you've dipped your toes in the temporal data waters, we encourage you to experiment with the more advanced features of XTDB!

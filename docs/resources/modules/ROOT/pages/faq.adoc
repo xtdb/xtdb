@@ -5,11 +5,11 @@
 [#quickstart]
 == What is the smallest XTDB configuration so I can start quickly?
 
-If you want the smallest on-disk configuration, you can use the https://xtdb.com/howto/quickstart.html[Quickstart Guide] (5 minutes).
+If you want the smallest on-disk configuration, you can use the xref:guides::quickstart.adoc[Quickstart Guide] (5 minutes).
 
-If you just want to see XTDB running in-memory without writing any code, try the https://xtdb.com/blog/crux-command-line.html[Command Line XTDB Guide] (10 minutes).
+If you just want to see XTDB running in-memory without writing any code, try the https://xtdb.com/blog/xtdb-command-line/[Command Line XTDB Guide] (10 minutes).
 
-If you want a battle-ready on-disk setup with Kafka, try the https://xtdb.com/blog/crux-confluent-cloud.html[XTDB on Confluent Cloud Guide] (5 minutes).
+If you want a battle-ready on-disk setup with Kafka, try the xref:guides::confluent-cloud[XTDB on Confluent Cloud Guide] (5 minutes).
 
 
 [#bitemporality]
@@ -31,9 +31,9 @@ transactions.
 
 You need to add a `logback-classic` dependency to your `project.clj` / `deps.edn` and then create a `logback.xml` file. Set your log level to "INFO".
 
-Look for https://github.com/xtdb/xtdb/search?p=2&q=logback&unscoped_q=logback[code examples] and https://github.com/xtdb/xtdb/blob/0ac595a6df9efcde57e85356e0edfccf00e85248/crux-bench/logback.xml[config examples] in the XTDB repo.
+Look for https://github.com/xtdb/xtdb/search?p=2&q=logback&unscoped_q=logback[code examples] and https://github.com/xtdb/xtdb/blob/master/bench/resources/logback.xml[config examples] in the XTDB repo.
 
-If you want to see the gritty details, turn your log level up to "DEBUG" for the `xtdb.query` namespace in a similar way. Try using the following snippet at the REPL:
+If you want to see the gritty details, turn your log level up to "DEBUG" for the `xtdb.query` namespace in a similar way. You can also use the following snippet at the REPL:
 
 [source,clojure]
 ----

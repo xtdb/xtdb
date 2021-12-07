@@ -326,9 +326,9 @@ xref:language-reference::sql-queries.adoc[Reference Docs: SQL].
 XTDB requires very little effort to set up and start using immediately. Now that you are comfortable with the basics,
 you can read through the
 https://xtdb.com/docs[Reference Docs] or try
-the https://docs.xtdb.com/tutorials[Tutorial]. We also have https://www.xtdb.com/articles[Articles] and
+the xref:tutorials::index.adoc[Tutorials]. We also have xref:concepts::index.adoc[concept articles] and
 https://www.xtdb.com/blog/index.html[blog posts] talking about the philosophy and history of XTDB. If you are feeling
-particularly excited, you can browse our https://www.xtdb.com/articles/references.html[Bibliography].
+particularly excited, you can browse our xref:resources::bibliography.adoc[Bibliography].
 
 As always, we encourage you to chat with us on https://juxt-oss.zulipchat.com/#narrow/stream/194466-xtdb[Zulip] or `#xtdb` on
 Clojurians if you have questions or ideas. Enjoy XTDB!

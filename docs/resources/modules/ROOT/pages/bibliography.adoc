@@ -218,8 +218,8 @@ of implementation details.
 
 === Talks and Articles
 
-* https://xtdb.com/articles/strength-of-the-record.html[The Strength of the Record], Deobald. xtdb.com. 2021.
-* https://xtdb.com/blog/crux-sql.html[XTDB SQL: Query your Datalog database with SQL], Pither. XTDB Weblog. 2020.
+* xref:concepts::strength-of-the-record.adoc[The Strength of the Record], Deobald. xtdb.com. 2021.
+* https://xtdb.com/blog/xtdb-sql/[XTDB SQL: Query your Datalog database with SQL], Pither. XTDB Weblog. 2020.
 * https://juxt.pro/blog/value-of-bitemporality[The Value of Bitemporality], Pither. JUXT Weblog. 2019.
 * https://www.youtube.com/watch?v=YjAVsvYGbuU[The Design and Implementation of a Bitemporal DBMS], Råberg. ClojuTRE (YouTube). September 2019.
 * https://www.youtube.com/watch?v=ykbYNBE-V3k[Temporal Databases for Stream Architectures], Taylor, Pither. StrangeLoop (YouTube). September 2019.

@@ -25,7 +25,7 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
      * @return the started node
-     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://docs.xtdb.com/administration/configuring/">Configuring</a>
      */
     static IXtdb startNode() {
         return startNode(NodeConfiguration.EMPTY);
@@ -39,7 +39,7 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
      * @param options a Map of XTDB configuration
      * @return the started node.
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
-     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://docs.xtdb.com/administration/configuring/">Configuring</a>
      */
     static IXtdb startNode(Map<?, ?> options) throws IndexVersionOutOfSyncException {
         return XtdbFactory.startNode(options);
@@ -53,7 +53,7 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
      * @param file a JSON or EDN file containing XTDB configuration
      * @return the started node.
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
-     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://docs.xtdb.com/administration/configuring/">Configuring</a>
      */
     static IXtdb startNode(File file) throws IndexVersionOutOfSyncException {
         return XtdbFactory.startNode(file);
@@ -67,7 +67,7 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
      * @param url a URL of a JSON or EDN file containing XTDB configuration
      * @return the started node.
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
-     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://docs.xtdb.com/administration/configuring/">Configuring</a>
      */
     static IXtdb startNode(URL url) throws IndexVersionOutOfSyncException {
         return XtdbFactory.startNode(url);
@@ -87,8 +87,7 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
      * @param f a callback, provided with an object to configure the node before it starts.
      * @return the started node.
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
-     * @see <a href="https://xtdb.com/reference/installation.html">Installation</a>
-     * @see <a href="https://xtdb.com/reference/configuration.html">Configuration</a>
+     * @see <a href="https://docs.xtdb.com/administration/configuring/">Configuring</a>
      */
     static IXtdb startNode(Consumer<NodeConfiguration.Builder> f) throws IndexVersionOutOfSyncException {
         return startNode(NodeConfiguration.buildNode(f));
