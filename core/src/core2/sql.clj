@@ -16,7 +16,6 @@
 (def ^:private delimiter-set
   #{[:colon ":"]
     [:quote "'"]
-    [:double_quote "'"]
     [:period "."]
     [:comma ","]
     [:left_paren "("]
