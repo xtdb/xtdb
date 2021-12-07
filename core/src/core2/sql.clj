@@ -27,48 +27,11 @@
     [:left_brace "{"]
     [:right_brace "}"]})
 
-(def ^:private keep-tag-set
-  #{:character_string_literal
-    :binary_string_literal
-    :signed_numeric_literal
-    :exact_numeric_literal
-    :approximate_numeric_literal
-    :boolean_literal
-    :date_literal
-    :time_literal
-    :timestamp_literal
-    :interval_literal
-    :year_month_literal
-    :day_time_literal
-    :host_parameter_name
-    :identifier
-    :identifier_chain
-    :character_string_type
-    :binary_string_type
-    :numeric_type
-    :boolean_type
-    :datetime_type
-    :interval_type
-    :insert_statement
-    :case_specification
-    :query_specification
-    :table_value_constructor})
-
-(defn cst->ast [x]
+(defn- remove-delimiters [x]
   (w/postwalk
    (fn [x]
      (if (vector? x)
-       (let [;; remove delimiters
-             x (filterv (complement delimiter-set) x)]
-         ;; single child
-         (if (and (= (count x) 2)
-                  (vector? (second x)))
-           (if (contains? keep-tag-set (first (second x)))
-             ;; replace this with child
-             (second x)
-             ;; replace this with child with this name
-             (into [(first x)] (rest (second x))))
-           x))
+       (filterv (complement delimiter-set) x)
        x))
    x))
 
@@ -78,35 +41,31 @@
      ([s]
       (self s :direct_sql_data_statement))
      ([s start-rule]
-      (cst->ast
+      (remove-delimiters
        (parse-sql2011 s :start start-rule))))))
 
 (comment
   (time
-   (cst->ast
-    (parse-sql2011
-     "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
-     :start :direct_sql_data_statement)))
+   (parse-sql2011
+    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
+    :start :direct_sql_data_statement))
 
   (time
    (parse
     "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"))
 
   (time
-   (cst->ast
-    (parse-sql2011
-     "TIME '20:00:00.000'"
-     :start :literal)))
+   (parse-sql2011
+    "TIME '20:00:00.000'"
+    :start :literal))
 
   (time
-   (cst->ast
-    (parse-sql2011
-     "TIME (3) WITH TIME ZONE"
-     :start :data_type)))
-
-  (cst->ast
    (parse-sql2011
-    "GRAPH_TABLE ( myGraph,
+    "TIME (3) WITH TIME ZONE"
+    :start :data_type))
+
+  (parse-sql2011
+   "GRAPH_TABLE ( myGraph,
     MATCH
       (Creator IS Person WHERE Creator.email = :email1)
       -[ IS Created ]->
@@ -115,21 +74,19 @@
       (Commenter IS Person WHERE Commenter.email = :email2)
     COLUMNS ( M.creationDate, M.content )
     )"
-    :start :graph_table))
+   :start :graph_table)
 
   (time
-   (cst->ast
-    (parse-sql2011
-     "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)"
-     :start :direct_sql_data_statement)))
+   (parse-sql2011
+    "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)"
+    :start :direct_sql_data_statement))
 
   (time
-   (cst->ast
-    (parse-sql2011
-     "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END
+   (parse-sql2011
+    "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END
   FROM t1
  ORDER BY 1"
-     :start :direct_sql_data_statement))))
+    :start :direct_sql_data_statement)))
 
 ;; SQL:2011 official grammar:
 

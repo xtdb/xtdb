@@ -107,7 +107,7 @@
                             x)
       :character_string_literal (let [s (second x)]
                                   (subs s 1 (dec (count s))))
-      :exact_numeric_literal (let [s (str/join "" (remove keyword? (flatten x)))]
+      :exact_numeric_literal (let [s (str/join "." (remove keyword? (flatten x)))]
                                (if (= 1 (count (rest x)))
                                  (Long/parseLong s)
                                  (Double/parseDouble s)))
@@ -119,30 +119,21 @@
       x)
     x))
 
-(defn- remove-delimiters [x]
-  (if (vector? x)
-    (case (first x)
-      (:comma :left_paren :right_paren) [(first x)]
-      :table_value_constructor (vec (replace {"VALUES" []} x))
-      x)
-    x))
-
 (defn- insert->doc [{:keys [tables] :as ctx} insert-statement]
   (let [[_ _ _ insertion-target insert-columns-and-source] insert-statement
         table (first (filter string? (flatten insertion-target)))
         from-subquery (second insert-columns-and-source)
         columns (if (= 1 (count (rest from-subquery)))
                   (get tables table)
-                  (let [insert-column-list (nth from-subquery 2)]
-                    (->> insert-column-list
-                         (w/postwalk remove-delimiters)
-                         (flatten)
+                  (let [insert-column-list (second from-subquery)]
+                    (->> (flatten insert-column-list)
                          (filter string?))))
         query-expression (last from-subquery)
-        values (->> query-expression
-                    (w/postwalk (comp normalize-literal remove-delimiters))
-                    (flatten)
-                    (filter (some-fn number? string? boolean? nil?)))]
+        [_ values] (->> query-expression
+                        (w/postwalk normalize-literal)
+                        (flatten)
+                        (filter (some-fn number? string? boolean? nil?))
+                        (split-with #{"VALUES"}))]
     (merge {:_table table} (zipmap (map keyword columns) values))))
 
 (defmethod execute-statement :insert_statement [{:keys [node tables] :as ctx} insert-statement]
@@ -171,7 +162,7 @@
 (defmethod execute-record :statement [ctx {:keys [mode statement]}]
   (if (skip-statement? statement)
     ctx
-    (let [tree (sql/parse-sql2011 statement :start :direct_sql_data_statement)]
+    (let [tree (sql/parse statement :direct_sql_data_statement)]
       (if (insta/failure? tree)
         (if-let [record (or (parse-create-table statement)
                             (parse-create-view statement))]
@@ -222,16 +213,11 @@
   tree)
 
 (defmethod normalize-query :select_list [ctx tree]
-  (loop [[x & xs] tree
-         acc []
-         select-idx 0]
-    (if x
-      (recur xs
-             (conj acc (normalize-query (assoc ctx :select-idx select-idx) x))
-             (if (= [:comma ","] x)
-               select-idx
-               (inc select-idx)))
-      acc)))
+  (vec
+   (map-indexed
+    (fn [idx x]
+      (normalize-query (assoc ctx :select-idx idx) x))
+    tree)))
 
 (defmethod normalize-query :derived_column [{:keys [select-idx] :as ctx} tree]
   (let [tree (normalize-query-vec ctx tree)]
@@ -255,7 +241,6 @@
        [:identifier
         [:actual_identifier
          [:regular_identifier table]]]
-       [:period "."]
        [:identifier
         [:actual_identifier
          [:regular_identifier column]]]])
@@ -283,7 +268,7 @@
 (defmethod execute-record :query [{:keys [node tables] :as ctx}
                                   {:keys [query type-string sort-mode label
                                           result-set-size result-set result-set-md5sum]}]
-  (let [tree (sql/parse-sql2011 query :start :query_expression)
+  (let [tree (sql/parse query :query_expression)
         snapshot-factory (tu/component node ::snap/snapshot-factory)
         db (snap/snapshot snapshot-factory)]
     (when (insta/failure? tree)
@@ -391,15 +376,15 @@ CREATE UNIQUE INDEX t1i0 ON t1(
   (let [ctx {:tables {"t1" ["a" "b" "c" "d" "e"]}}
         query "SELECT a+b*2+c*3+d*4+e*5, (a+b+c+d+e)/5 FROM t1 ORDER BY 1,2"
         expected "SELECT t1.a+t1.b*2+t1.c*3+t1.d*4+t1.e*5 AS col1, (t1.a+t1.b+t1.c+t1.d+t1.e)/5 AS col2 FROM t1 ORDER BY col1,col2"]
-    (t/is (= (sql/parse-sql2011 expected :start :query_expression)
-             (normalize-query ctx (sql/parse-sql2011 query :start :query_expression))))))
+    (t/is (= (sql/parse expected :query_expression)
+             (normalize-query ctx (sql/parse query :query_expression))))))
 
 (t/deftest test-insert->doc
   (let [ctx {:tables {"t1" ["a" "b" "c" "d" "e"]}}]
     (t/is (= {:e 103 :c 102 :b 100 :d 101 :a 104 :_table "t1"}
-             (insert->doc ctx (sql/parse-sql2011 "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :start :insert_statement))))
+             (insert->doc ctx (sql/parse "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :insert_statement))))
     (t/is (= {:a nil :b -102 :c true :d "101" :e 104.5 :_table "t1"}
-             (insert->doc ctx (sql/parse-sql2011 "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :start :insert_statement))))))
+             (insert->doc ctx (sql/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement))))))
 
 (comment
   (dotimes [n 5]
