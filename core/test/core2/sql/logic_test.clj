@@ -102,7 +102,7 @@
     (case (first x)
       :boolean_literal (= "TRUE" (second x))
       ;; TODO: is parsing NULL as an identifier correct?
-      :regular_identifier (if (= "NULL" (second x))
+      :regular_identifier (if (= "NULL" (str/upper-case (second x)))
                             nil
                             x)
       :character_string_literal (let [s (second x)]
