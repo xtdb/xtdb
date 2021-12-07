@@ -119,6 +119,14 @@
       x)
     x))
 
+(defn- remove-delimiters [x]
+  (if (vector? x)
+    (case (first x)
+      (:comma :left_paren :right_paren) [(first x)]
+      :table_value_constructor (vec (replace {"VALUES" []} x))
+      x)
+    x))
+
 (defn- insert->doc [{:keys [tables] :as ctx} insert-statement]
   (let [[_ _ _ insertion-target insert-columns-and-source] insert-statement
         table (first (filter string? (flatten insertion-target)))
@@ -126,13 +134,13 @@
         columns (if (= 1 (count (rest from-subquery)))
                   (get tables table)
                   (let [insert-column-list (nth from-subquery 2)]
-                    (->> (flatten insert-column-list)
-                         (filter string? )
-                         (remove #{","}))))
+                    (->> insert-column-list
+                         (w/postwalk remove-delimiters)
+                         (flatten)
+                         (filter string?))))
         query-expression (last from-subquery)
         values (->> query-expression
-                    (w/postwalk-replace (zipmap #{"," "(" ")" "VALUES"} (repeat [])))
-                    (w/postwalk normalize-literal)
+                    (w/postwalk (comp normalize-literal remove-delimiters))
                     (flatten)
                     (filter (some-fn number? string? boolean? nil?)))]
     (merge {:_table table} (zipmap (map keyword columns) values))))
