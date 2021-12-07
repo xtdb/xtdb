@@ -158,6 +158,76 @@
                              "T" String)]]
     (t/is (or (nil? value) (cast java-class value)))))
 
+(defmulti normalize-query (fn [ctx tree]
+                            (if (vector? tree)
+                              (first tree)
+                              ::normalize-query-single-value)))
+
+(defn- normalize-query-vec [ctx tree]
+  (mapv #(normalize-query ctx %) tree))
+
+(defmethod normalize-query :default [ctx tree]
+  (normalize-query-vec ctx tree))
+
+(defmethod normalize-query ::normalize-query-single-value [ctx tree]
+  tree)
+
+(defmethod normalize-query :select_list [ctx tree]
+  (loop [[x & xs] tree
+         acc []
+         select-idx 0]
+    (if x
+      (recur xs
+             (conj acc (normalize-query (assoc ctx :select-idx select-idx) x))
+             (if (= [:comma ","] x)
+               select-idx
+               (inc select-idx)))
+      acc)))
+
+(defmethod normalize-query :derived_column [{:keys [select-idx] :as ctx} tree]
+  (let [tree (normalize-query-vec ctx tree)]
+    (if (and (= 1 (count (rest tree))) select-idx)
+      (conj tree
+            [:as_clause
+             "AS"
+             [:column_name
+              [:identifier
+               [:actual_identifier [:regular_identifier (str "col" select-idx)]]]]])
+      tree)))
+
+(defmethod normalize-query :identifier_chain [{:keys [tables] :as ctx} tree]
+  (if (= 1 (count (rest tree)))
+    ;; TODO: does not take renamed tables into account.
+    (let [column (first (filter string? (flatten tree)))
+          table (first (for [[table columns] tables
+                             :when (contains? (set columns) column)]
+                         table))]
+      [:identifier_chain
+       [:identifier
+        [:actual_identifier
+         [:regular_identifier table]]]
+       [:period "."]
+       [:identifier
+        [:actual_identifier
+         [:regular_identifier column]]]])
+    tree))
+
+(defmethod normalize-query :sort_specification [ctx tree]
+  (normalize-query-vec (assoc ctx :sort-specification? true) tree))
+
+(defmethod normalize-query :unsigned_value_specification [{:keys [sort-specification?] :as ctx} tree]
+  (if sort-specification?
+    ;; TODO: does not take renamed columns into account.
+    (let [ordinal (first (filter string? (flatten tree)))
+          column (str "col" ordinal)]
+      [:column_reference
+       [:basic_identifier_chain
+        [:identifier_chain
+         [:identifier
+          [:actual_identifier
+           [:regular_identifier column]]]]]])
+    tree))
+
 ;; TODO: parse query and qualify known table columns if
 ;; needed. Generate logical plan and format and hash result according
 ;; to sort mode. Projection will usually be positional.
@@ -169,7 +239,8 @@
         db (snap/snapshot snapshot-factory)]
     (when (insta/failure? tree)
       (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
-    (let [result (op/query-ra '[:scan [_id]] db)
+    (let [tree (normalize-query ctx tree)
+          result (op/query-ra '[:scan [_id]] db)
           projection [:_id]
           result-str (format-result-str sort-mode projection result)]
       #_(validate-type-string type-string projection result)
@@ -266,6 +337,13 @@ CREATE UNIQUE INDEX t1i0 ON t1(
   a1,
   b1
 )"))))
+
+(t/deftest test-normalize-query
+  (let [ctx {:tables {"t1" ["a" "b" "c" "d" "e"]}}
+        query "SELECT a+b*2+c*3+d*4+e*5, (a+b+c+d+e)/5 FROM t1 ORDER BY 1,2"
+        expected "SELECT t1.a+t1.b*2+t1.c*3+t1.d*4+t1.e*5 AS col1, (t1.a+t1.b+t1.c+t1.d+t1.e)/5 AS col2 FROM t1 ORDER BY col1,col2"]
+    (t/is (= (sql/parse-sql2011 expected :start :query_expression)
+             (normalize-query ctx (sql/parse-sql2011 query :start :query_expression))))))
 
 (comment
   (dotimes [n 5]
