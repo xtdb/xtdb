@@ -13,36 +13,13 @@
    :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*?([*]/\\s*|$)'")
    :string-ci true))
 
-(def ^:private delimiter-set
-  #{[:colon ":"]
-    [:quote "'"]
-    [:period "."]
-    [:comma ","]
-    [:left_paren "("]
-    [:right_paren ")"]
-    [:left_bracket "["]
-    [:right_bracket "]"]
-    [:left_bracket_trigraph "??("]
-    [:right_bracket_trigraph "??)"]
-    [:left_brace "{"]
-    [:right_brace "}"]})
-
-(defn- remove-delimiters [x]
-  (w/postwalk
-   (fn [x]
-     (if (vector? x)
-       (filterv (complement delimiter-set) x)
-       x))
-   x))
-
 (def parse
   (memoize
    (fn self
      ([s]
       (self s :direct_sql_data_statement))
      ([s start-rule]
-      (remove-delimiters
-       (parse-sql2011 s :start start-rule))))))
+      (parse-sql2011 s :start start-rule)))))
 
 (comment
   (time
