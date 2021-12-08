@@ -78,10 +78,13 @@
 (defn ->indirect-vec ^core2.vector.IIndirectVector [^ValueVector in-vec, ^ints idxs]
   (IndirectVector. in-vec (.getName in-vec) idxs))
 
-(deftype IndirectRelation [^Map cols, ^int row-count]
+(deftype IndirectRelation [^Map cols]
   IIndirectRelation
   (vectorForName [_ col-name] (.get cols col-name))
-  (rowCount [_] row-count)
+  (rowCount [_]
+    (if-let [^IIndirectVector col (some-> (first cols) val)]
+      (.getValueCount col)
+      0))
 
   (iterator [_] (.iterator (.values cols)))
 
@@ -91,16 +94,13 @@
   (IndirectRelation. (let [col-map (LinkedHashMap.)]
                        (doseq [^IIndirectVector col cols]
                          (.put col-map (.getName col) col))
-                       col-map)
-                     (if (seq cols)
-                       (.getValueCount ^IIndirectVector (first cols))
-                       0)))
+                       col-map)))
 
 (defn <-root [^VectorSchemaRoot root]
   (let [cols (LinkedHashMap.)]
     (doseq [^ValueVector in-vec (.getFieldVectors root)]
       (.put cols (.getName in-vec) (->direct-vec in-vec)))
-    (IndirectRelation. cols (.getRowCount root))))
+    (IndirectRelation. cols)))
 
 (defn select ^core2.vector.IIndirectRelation [^IIndirectRelation in-rel, ^ints idxs]
   (->indirect-rel (for [^IIndirectVector in-col in-rel]
