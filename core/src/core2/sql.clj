@@ -1,5 +1,6 @@
 (ns core2.sql
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.walk :as w]
             [instaparse.core :as insta]))
 
@@ -20,6 +21,38 @@
       (self s :direct_sql_data_statement))
      ([s start-rule]
       (parse-sql2011 s :start start-rule)))))
+
+(def ^:private ^:dynamic *annotations*)
+
+(defn annotate-tree [tree]
+  (if (vector? tree)
+    (case (first tree)
+      (:table_or_query_name :correlation_name)
+      (do (vswap! *annotations* assoc :current-table (first (filterv string? (flatten tree))))
+          tree)
+      :table_reference_list
+      (mapv (fn [x]
+              (let [x (annotate-tree x)]
+                (some->> (:current-table @*annotations*)
+                         (vswap! *annotations* update :tables conj))
+                x))
+            tree)
+      :basic_identifier_chain
+      (do (vswap! *annotations* update :columns conj (filterv string? (flatten tree)))
+          tree)
+      :query_expression
+      (binding [*annotations* (volatile! {:tables #{} :columns #{}})]
+        (let [tree (mapv annotate-tree tree)
+              {:keys [tables columns] :as annotations} @*annotations*
+              correlated-columns (set (for [c columns
+                                            :when (and (next c) (not (contains? tables (first c))))]
+                                        c))]
+          (with-meta tree (merge (meta tree)
+                                 (when (:current-table annotations)
+                                   {::scope (-> (dissoc annotations :current-table)
+                                                (assoc :correlated-columns correlated-columns))})))))
+      (mapv annotate-tree tree))
+    tree))
 
 (comment
   (time
