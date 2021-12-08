@@ -387,7 +387,8 @@ CREATE UNIQUE INDEX t1i0 ON t1(
              (insert->doc ctx (sql/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement))))))
 
 (t/deftest test-annotate-query-scopes
-  (let [tree (sql/parse "SELECT t1.d-t1.e
+  (let [tree (sql/parse "WITH foo AS (SELECT 1 FROM bar)
+SELECT t1.d-t1.e
   FROM t1
  WHERE EXISTS(SELECT 1 FROM t1 AS x WHERE x.b<t1.b)
    AND t1.a>t1.b
@@ -396,11 +397,17 @@ CREATE UNIQUE INDEX t1i0 ON t1(
                     (second)
                     (tree-seq vector? seq)
                     (keep (comp :core2.sql/scope meta)))]
-    (t/is (= [{:tables #{"t1"},
-               :columns #{["t1" "e"] ["t1" "a"] ["t1" "b"] ["t1" "d"]},
+    (t/is (= [{:tables #{"t1"}
+               :columns #{["t1" "e"] ["t1" "a"] ["t1" "b"] ["t1" "d"]}
+               :with #{"foo"}
                :correlated-columns #{}}
-              {:tables #{"x"},
-               :columns #{["x" "b"] ["t1" "b"]},
+              {:tables #{"bar"},
+               :columns #{},
+               :with #{},
+               :correlated-columns #{}}
+              {:tables #{"x"}
+               :columns #{["x" "b"] ["t1" "b"]}
+               :with #{}
                :correlated-columns #{["t1" "b"]}}]
              scopes))))
 

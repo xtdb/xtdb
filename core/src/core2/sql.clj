@@ -56,6 +56,10 @@
   [(update ctx :columns conj (filterv string? (flatten tree)))
    tree])
 
+(defmethod annotate-tree :with_list_element [ctx [_ query-name :as tree]]
+  [(update ctx :with conj (first (filterv string? (flatten query-name))))
+   (annotate-vec ctx tree)])
+
 (defmethod annotate-tree :table_reference_list [ctx tree]
   (annotate-vec
    (fn [[ctx tree]]
@@ -67,14 +71,15 @@
    tree))
 
 (defmethod annotate-tree :query_expression [ctx tree]
-  (let [new-ctx {:tables #{} :columns #{}}
-        [{:keys [current-table tables columns]} tree] (annotate-vec new-ctx tree)
+  (let [new-ctx {:tables #{} :columns #{} :with #{}}
+        [{:keys [current-table tables with columns]} tree] (annotate-vec new-ctx tree)
         correlated-columns (set (for [c columns
                                       :when (and (next c) (not (contains? tables (first c))))]
                                   c))
         scope (when current-table
                 {::scope {:tables tables
                           :columns columns
+                          :with with
                           :correlated-columns correlated-columns}})]
     [ctx (with-meta tree (merge (meta tree) scope))]))
 
