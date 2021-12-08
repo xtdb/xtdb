@@ -1,7 +1,5 @@
 (ns core2.sql
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [clojure.walk :as w]
             [instaparse.core :as insta]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -22,37 +20,63 @@
      ([s start-rule]
       (parse-sql2011 s :start start-rule)))))
 
-(def ^:private ^:dynamic *annotations*)
+(declare annotate-tree)
 
-(defn annotate-tree [tree]
-  (if (vector? tree)
-    (case (first tree)
-      (:table_or_query_name :correlation_name)
-      (do (vswap! *annotations* assoc :current-table (first (filterv string? (flatten tree))))
-          tree)
-      :table_reference_list
-      (mapv (fn [x]
-              (let [x (annotate-tree x)]
-                (some->> (:current-table @*annotations*)
-                         (vswap! *annotations* update :tables conj))
-                x))
-            tree)
-      :column_reference
-      (do (vswap! *annotations* update :columns conj (filterv string? (flatten tree)))
-          tree)
-      :query_expression
-      (binding [*annotations* (volatile! {:tables #{} :columns #{}})]
-        (let [tree (mapv annotate-tree tree)
-              {:keys [tables columns] :as annotations} @*annotations*
-              correlated-columns (set (for [c columns
-                                            :when (and (next c) (not (contains? tables (first c))))]
-                                        c))]
-          (with-meta tree (merge (meta tree)
-                                 (when (:current-table annotations)
-                                   {::scope (-> (dissoc annotations :current-table)
-                                                (assoc :correlated-columns correlated-columns))})))))
-      (mapv annotate-tree tree))
-    tree))
+(defn- annotate-vec
+  ([ctx tree]
+   (annotate-vec identity ctx tree))
+  ([f ctx tree]
+   (reduce
+    (fn [[ctx acc] x]
+      (let [[ctx x] (f (annotate-tree ctx x))]
+        [ctx (conj acc x)]))
+    [ctx (empty tree)]
+    tree)))
+
+(defmulti annotate-tree (fn [ctx tree]
+                          (if (vector? tree)
+                            (first tree)
+                            ::annotate-tree-single-value)))
+
+(defmethod annotate-tree :default [ctx tree]
+  (annotate-vec ctx tree))
+
+(defmethod annotate-tree ::annotate-tree-single-value [ctx tree]
+  [ctx tree])
+
+(defmethod annotate-tree :table_or_query_name [ctx tree]
+  [(assoc ctx :current-table (first (filterv string? (flatten tree))))
+   tree])
+
+(defmethod annotate-tree :correlation_name [ctx tree]
+  [(assoc ctx :current-table (first (filterv string? (flatten tree))))
+   tree])
+
+(defmethod annotate-tree :column_reference [ctx tree]
+  [(update ctx :columns conj (filterv string? (flatten tree)))
+   tree])
+
+(defmethod annotate-tree :table_reference_list [ctx tree]
+  (annotate-vec
+   (fn [[ctx tree]]
+     [(if-let [current-table (:current-table ctx)]
+        (update ctx :tables conj current-table)
+        ctx)
+      tree])
+   ctx
+   tree))
+
+(defmethod annotate-tree :query_expression [ctx tree]
+  (let [new-ctx {:tables #{} :columns #{}}
+        [{:keys [current-table tables columns]} tree] (annotate-vec new-ctx tree)
+        correlated-columns (set (for [c columns
+                                      :when (and (next c) (not (contains? tables (first c))))]
+                                  c))
+        scope (when current-table
+                {::scope {:tables tables
+                          :columns columns
+                          :correlated-columns correlated-columns}})]
+    [ctx (with-meta tree (merge (meta tree) scope))]))
 
 (comment
   (time
