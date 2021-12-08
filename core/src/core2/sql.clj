@@ -37,7 +37,7 @@
                          (vswap! *annotations* update :tables conj))
                 x))
             tree)
-      :basic_identifier_chain
+      :column_reference
       (do (vswap! *annotations* update :columns conj (filterv string? (flatten tree)))
           tree)
       :query_expression
