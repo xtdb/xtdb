@@ -9,7 +9,7 @@
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field]))
+           [org.apache.arrow.vector.types.pojo ArrowType$Union Field]))
 
 (declare ->IndirectVector)
 
@@ -23,13 +23,13 @@
   (withName [_ name] (->DirectVector v name))
   (select [_ idxs] (->IndirectVector v name idxs))
 
-  (copy [_ allocator]
+  (copyTo [_ out-vec]
     ;; we'd like to use .getTransferPair here but DUV is broken again
     ;; - it doesn't pass the fieldType through so you get a DUV with empty typeIds
-    (let [to (-> (doto (.makeTransferPair v (.createVector (.getField v) allocator))
-                   (.splitAndTransfer 0 (.getValueCount v)))
-                 (.getTo))]
-      (DirectVector. to name))))
+    (doto (.makeTransferPair v out-vec)
+      (.splitAndTransfer 0 (.getValueCount v)))
+
+    (DirectVector. out-vec name)))
 
 (defrecord IndirectVector [^ValueVector v, ^String col-name, ^ints idxs]
   IIndirectVector
@@ -48,28 +48,29 @@
 
       (IndirectVector. v col-name (.toArray (.build new-idxs)))))
 
-  (copy [_ allocator]
-    (let [tp (.makeTransferPair v (.createVector (.getField v) allocator))]
+  (copyTo [_ out-vec]
+    (.clear out-vec)
 
-      (if (instance? DenseUnionVector v)
-        ;; DUV.copyValueSafe is broken - it's not safe, and it calls DenseUnionWriter.setPosition which NPEs
-        (let [^DenseUnionVector from-duv v
-              ^DenseUnionVector to-duv (.getTo tp)]
-          (dotimes [idx (alength idxs)]
-            (let [src-idx (aget idxs idx)
-                  type-id (.getTypeId from-duv src-idx)
-                  dest-offset (DenseUnionUtil/writeTypeId to-duv idx type-id)]
-              (.copyFromSafe (.getVectorByType to-duv type-id)
-                             (.getOffset from-duv src-idx)
-                             dest-offset
-                             (.getVectorByType from-duv type-id)))))
-
+    (if (instance? DenseUnionVector v)
+      ;; DUV.copyValueSafe is broken - it's not safe, and it calls DenseUnionWriter.setPosition which NPEs
+      (let [^DenseUnionVector from-duv v
+            ^DenseUnionVector to-duv out-vec]
         (dotimes [idx (alength idxs)]
-          (.copyValueSafe tp (aget idxs idx) idx)))
+          (let [src-idx (aget idxs idx)
+                type-id (.getTypeId from-duv src-idx)
+                dest-offset (DenseUnionUtil/writeTypeId to-duv idx type-id)]
+            (.copyFromSafe (.getVectorByType to-duv type-id)
+                           (.getOffset from-duv src-idx)
+                           dest-offset
+                           (.getVectorByType from-duv type-id)))))
 
-      (DirectVector. (doto (.getTo tp)
-                       (.setValueCount (alength idxs)))
-                     col-name))))
+      (let [tp (.makeTransferPair v out-vec)]
+        (dotimes [idx (alength idxs)]
+          (.copyValueSafe tp (aget idxs idx) idx))))
+
+    (DirectVector. (doto out-vec
+                     (.setValueCount (alength idxs)))
+                   col-name)))
 
 (defn ->direct-vec ^core2.vector.IIndirectVector [^ValueVector in-vec]
   (DirectVector. in-vec (.getName in-vec)))
