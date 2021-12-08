@@ -3,8 +3,8 @@
             [core2.util :as util])
   (:import clojure.lang.Keyword
            [core2.types LegType LegType$StructLegType]
+           [core2.vector IDenseUnionWriter IVectorWriter]
            [core2.vector.extensions KeywordType KeywordVector UuidType UuidVector]
-           core2.vector.IVectorWriter
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId]
@@ -157,13 +157,17 @@
       (cond
         (instance? StructVector dest-vec)
         (let [writer (.asStruct writer)]
-          (doseq [[k v] m]
-            (doto (-> (.writerForName writer (name k))
-                      (.asDenseUnion)
-                      (.writerForType (value->leg-type v)))
-              (.startValue)
-              (->> (write-value! v))
-              (.endValue))))
+          (doseq [[k v] m
+                  :let [v-writer (.writerForName writer (name k))]]
+            (if (instance? IDenseUnionWriter v-writer)
+              (doto (-> v-writer
+                        (.asDenseUnion)
+                        (.writerForType (value->leg-type v)))
+                (.startValue)
+                (->> (write-value! v))
+                (.endValue))
+
+              (write-value! v v-writer))))
 
         ;; TODO
         :else (throw (UnsupportedOperationException.))))))
