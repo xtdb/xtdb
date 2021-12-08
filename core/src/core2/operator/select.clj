@@ -10,9 +10,10 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IRelationSelector
-  (^org.roaringbitmap.RoaringBitmap select [^core2.vector.IIndirectRelation in-rel]))
+  (^org.roaringbitmap.RoaringBitmap select [^org.apache.arrow.memory.BufferAllocator allocator
+                                            ^core2.vector.IIndirectRelation in-rel]))
 
-(deftype SelectCursor [^ICursor in-cursor, ^IRelationSelector selector]
+(deftype SelectCursor [^BufferAllocator allocator, ^ICursor in-cursor, ^IRelationSelector selector]
   ICursor
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
@@ -20,7 +21,7 @@
                                (reify Consumer
                                  (accept [_ in-rel]
                                    (let [^IIndirectRelation in-rel in-rel]
-                                     (when-let [idxs (.select selector in-rel)]
+                                     (when-let [idxs (.select selector allocator in-rel)]
                                        (when-not (.isEmpty idxs)
                                          (.accept c (iv/select in-rel (.toArray idxs)))
                                          (aset advanced? 0 true)))))))
@@ -31,5 +32,5 @@
     (util/try-close in-cursor)))
 
 (defn ->select-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^IRelationSelector selector]
-  (-> (SelectCursor. in-cursor selector)
+  (-> (SelectCursor. allocator in-cursor selector)
       (coalesce/->coalescing-cursor allocator)))

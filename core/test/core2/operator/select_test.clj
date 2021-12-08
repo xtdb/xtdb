@@ -20,7 +20,7 @@
                                      [{:a 83, :b 100}]])
                 select-cursor (select/->select-cursor tu/*allocator* cursor
                                                       (reify IRelationSelector
-                                                        (select [_ in-rel]
+                                                        (select [_ _al in-rel]
                                                           (let [idxs (RoaringBitmap.)
                                                                 ^BigIntVector a-vec (.getVector (.vectorForName in-rel "a"))
                                                                 ^BigIntVector b-vec (.getVector (.vectorForName in-rel "b"))]

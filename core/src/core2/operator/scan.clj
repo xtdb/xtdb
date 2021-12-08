@@ -47,13 +47,13 @@
    (doto x
      (.and y))))
 
-(defn- ->atemporal-row-id-bitmap [^List col-names ^Map col-preds ^Map in-roots]
+(defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^List col-names, ^Map col-preds, ^Map in-roots]
   (->> (for [^String col-name col-names
              :when (not (temporal/temporal-column? col-name))
              :let [^IRelationSelector col-pred (.get col-preds col-name)
                    ^VectorSchemaRoot in-root (.get in-roots col-name)]]
          (align/->row-id-bitmap (when col-pred
-                                  (.select col-pred (iv/<-root in-root)))
+                                  (.select col-pred allocator (iv/<-root in-root)))
                                 (.getVector in-root t/row-id-field)))
        (reduce roaring64-and)))
 
@@ -98,7 +98,7 @@
                           temporal-max-range
                           atemporal-row-id-bitmap)))
 
-(defn- ->temporal-row-id-bitmap [col-names ^Map col-preds ^TemporalRoots temporal-roots atemporal-row-id-bitmap]
+(defn- ->temporal-row-id-bitmap [^BufferAllocator allocator, col-names, ^Map col-preds, ^TemporalRoots temporal-roots, atemporal-row-id-bitmap]
   (reduce roaring64-and
           (if temporal-roots
             (.row-id-bitmap temporal-roots)
@@ -108,7 +108,7 @@
                 :let [^IRelationSelector col-pred (.get col-preds col-name)
                       ^VectorSchemaRoot in-root (.get ^Map (.roots temporal-roots) col-name)]]
             (align/->row-id-bitmap (when col-pred
-                                     (.select col-pred (iv/<-root in-root)))
+                                     (.select col-pred allocator (iv/<-root in-root)))
                                    (.getVector in-root t/row-id-field)))))
 
 (defn- align-roots ^core2.vector.IIndirectRelation [^List col-names ^Map in-roots ^TemporalRoots temporal-roots row-id-bitmap]
@@ -144,7 +144,8 @@
                  filtered-block-idxs))))))
     block-idxs))
 
-(deftype ScanCursor [^IBufferPool buffer-pool
+(deftype ScanCursor [^BufferAllocator allocator
+                     ^IBufferPool buffer-pool
                      ^ITemporalManager temporal-manager
                      ^IMetadataManager metadata-manager
                      ^Watermark watermark
@@ -161,10 +162,10 @@
       (letfn [(next-block [chunks]
                 (loop []
                   (if-let [in-roots (next-roots real-col-names chunks)]
-                    (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap col-names col-preds in-roots)
+                    (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-names col-preds in-roots)
                           temporal-roots (->temporal-roots temporal-manager watermark col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
                       (or (try
-                            (let [row-id-bitmap (->temporal-row-id-bitmap col-names col-preds temporal-roots atemporal-row-id-bitmap)
+                            (let [row-id-bitmap (->temporal-row-id-bitmap allocator col-names col-preds temporal-roots atemporal-row-id-bitmap)
                                   read-rel (align-roots col-names in-roots temporal-roots row-id-bitmap)]
                               (if (and read-rel (pos? (.rowCount read-rel)))
                                 (do
@@ -235,7 +236,7 @@
                                                      ^Map col-preds
                                                      ^longs temporal-min-range, ^longs temporal-max-range]
   (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))]
-    (-> (ScanCursor. buffer-pool temporal-manager metadata-manager watermark
+    (-> (ScanCursor. allocator buffer-pool temporal-manager metadata-manager watermark
                      matching-chunks col-names col-preds
                      temporal-min-range temporal-max-range
                      #_chunks nil #_live-chunk-done? false)

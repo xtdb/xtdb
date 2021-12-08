@@ -7,22 +7,22 @@
             [core2.operator :as op]
             [core2.snapshot :as snap]
             [core2.test-util :as tu]
-            [core2.types :as ty]
+            [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import [java.time Duration ZonedDateTime]
            [org.apache.arrow.vector BigIntVector BitVector DurationVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TimeStampVector ValueVector VarCharVector]
-           org.apache.arrow.vector.complex.DenseUnionVector
+           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp FieldType]
            org.apache.arrow.vector.types.TimeUnit))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (defn ->data-vecs []
-  [(tu/->mono-vec "a" ty/float8-type (map double (range 1000)))
-   (tu/->mono-vec "b" ty/float8-type (map double (range 1000)))
-   (tu/->mono-vec "d" ty/bigint-type (range 1000))
-   (tu/->mono-vec "e" ty/varchar-type (map #(format "%04d" %) (range 1000)))])
+  [(tu/->mono-vec "a" types/float8-type (map double (range 1000)))
+   (tu/->mono-vec "b" types/float8-type (map double (range 1000)))
+   (tu/->mono-vec "d" types/bigint-type (range 1000))
+   (tu/->mono-vec "e" types/varchar-type (map #(format "%04d" %) (range 1000)))])
 
 (defn- open-rel ^core2.vector.IIndirectRelation [vecs]
   (iv/->indirect-rel (map iv/->direct-vec vecs)))
@@ -67,6 +67,7 @@
   (with-open [in-rel (open-rel (->data-vecs))]
     (letfn [(select-relation [form params]
               (-> (.select (expr/->expression-relation-selector form params)
+                           tu/*allocator*
                            in-rel)
                   (.getCardinality)))]
 
@@ -168,9 +169,9 @@
 
 (t/deftest test-variadics
   (letfn [(run-test [f x y z]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" ty/bigint-type [x])
-                                       (tu/->mono-vec "y" ty/bigint-type [y])
-                                       (tu/->mono-vec "z" ty/bigint-type [z])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" types/bigint-type [x])
+                                       (tu/->mono-vec "y" types/bigint-type [y])
+                                       (tu/->mono-vec "z" types/bigint-type [z])])]
               (-> (run-projection rel (list f 'x 'y 'z))
                   :res first)))]
 
@@ -180,7 +181,7 @@
     (t/is (false? (run-test '> 4 1 2)))))
 
 (t/deftest can-return-string-multiple-times
-  (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/bigint-type) [1 2 3])])]
+  (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bigint-type) [1 2 3])])]
     (t/is (= {:res ["foo" "foo" "foo"]
               :vec-type VarCharVector
               :nullable? false}
@@ -188,7 +189,7 @@
 
 (t/deftest test-cond
   (letfn [(run-test [expr xs]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/bigint-type) xs)])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bigint-type) xs)])]
               (run-projection rel expr)))]
 
     (t/is (= {:res ["big" "small" "tiny" "tiny"]
@@ -204,7 +205,7 @@
                        [500 50 5 nil])))))
 
 (t/deftest test-let
-  (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/bigint-type) [1 2 3 nil])])]
+  (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bigint-type) [1 2 3 nil])])]
     (t/is (= {:res [6 9 12 nil]
               :vec-type BigIntVector
               :nullable? true}
@@ -213,7 +214,7 @@
                                     (+ x y)))))))
 
 (t/deftest test-case
-  (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/bigint-type) [1 2 3 nil])])]
+  (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bigint-type) [1 2 3 nil])])]
     (t/is (= {:res ["x=1" "x=2" "none of the above" "none of the above"]
               :vec-type VarCharVector
               :nullable? false}
@@ -224,8 +225,8 @@
 
 (t/deftest test-coalesce
   (letfn [(run-test [expr]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable ty/varchar-type) ["x" nil nil])
-                                       (tu/->mono-vec "y" (FieldType/nullable ty/varchar-type) ["y" "y" nil])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/varchar-type) ["x" nil nil])
+                                       (tu/->mono-vec "y" (FieldType/nullable types/varchar-type) ["y" "y" nil])])]
               (run-projection rel expr)))]
 
     (t/is (= {:res ["x" "y" nil]
@@ -245,8 +246,8 @@
 
 (t/deftest test-mixing-numeric-types
   (letfn [(run-test [f x y]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (ty/value->leg-type x)) [x])
-                                       (tu/->mono-vec "y" (.arrowType (ty/value->leg-type y)) [y])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (types/value->leg-type x)) [x])
+                                       (tu/->mono-vec "y" (.arrowType (types/value->leg-type y)) [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first)
                   (dissoc :nullable?))))]
@@ -286,13 +287,13 @@
 
 (t/deftest test-throws-on-overflow
   (letfn [(run-unary-test [f x]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (ty/value->leg-type x)) [x])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (types/value->leg-type x)) [x])])]
               (-> (run-projection rel (list f 'x))
                   (update :res first))))
 
           (run-binary-test [f x y]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (ty/value->leg-type x)) [x])
-                                       (tu/->mono-vec "y" (.arrowType (ty/value->leg-type y)) [y])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (types/value->leg-type x)) [x])
+                                       (tu/->mono-vec "y" (.arrowType (types/value->leg-type y)) [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 
@@ -339,7 +340,7 @@
              :vec-type BitVector, :nullable? true}
             {:res [true true true true false nil true nil nil]
              :vec-type BitVector, :nullable? true}]
-           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true ty/bool-type nil)
+           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true types/bool-type nil)
                                                      [true true true false false false nil nil nil])
                                       (tu/->duv "y" [true false nil true false nil true false nil])])]
              [(run-projection rel '(and x y))
@@ -353,7 +354,7 @@
              :vec-type BitVector, :nullable? false}
             {:res [false false true]
              :vec-type BitVector, :nullable? false}]
-           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true ty/bool-type nil) [true false nil])])]
+           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true types/bool-type nil) [true false nil])])]
              [(run-projection rel '(not x))
               (run-projection rel '(true? x))
               (run-projection rel '(false? x))
@@ -361,12 +362,12 @@
 
 (t/deftest test-mixing-timestamp-types
   (letfn [(->ts-vec [col-name time-unit, ^long value]
-            (doto ^TimeStampVector (.createVector (ty/->field col-name (ArrowType$Timestamp. time-unit "UTC") false) tu/*allocator*)
+            (doto ^TimeStampVector (.createVector (types/->field col-name (ArrowType$Timestamp. time-unit "UTC") false) tu/*allocator*)
               (.setValueCount 1)
               (.set 0 value)))
 
           (->dur-vec [col-name ^TimeUnit time-unit, ^long value]
-            (doto (DurationVector. (ty/->field col-name (ArrowType$Duration. time-unit) false) tu/*allocator*)
+            (doto (DurationVector. (types/->field col-name (ArrowType$Duration. time-unit) false) tu/*allocator*)
               (.setValueCount 1)
               (.set 0 value)))
 
@@ -416,10 +417,10 @@
 
     (t/testing "durations"
       (letfn [(->bigint-vec [^String col-name, ^long value]
-                (tu/->mono-vec col-name ty/bigint-type [value]))
+                (tu/->mono-vec col-name types/bigint-type [value]))
 
               (->float8-vec [^String col-name, ^double value]
-                (tu/->mono-vec col-name ty/float8-type [value]))]
+                (tu/->mono-vec col-name types/float8-type [value]))]
 
         (t/is (= {:res [(Duration/parse "PT0.002001S")]
                   :vec-type DurationVector}
@@ -456,3 +457,44 @@
                  (test-projection '/
                                   #(->dur-vec "x" TimeUnit/SECOND 10)
                                   #(->bigint-vec "y" 3))))))))
+
+(t/deftest test-struct-literals
+  (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])
+                             (tu/->mono-vec "y" types/float8-type [3.4 8.25])])]
+    (t/is (= {:res [{:x 1.2, :y 3.4}
+                    {:x 3.4, :y 8.25}]
+              :vec-type StructVector
+              :nullable? false}
+             (run-projection rel '{:x x, :y y})))
+
+    (t/is (= {:res [3.4 8.25]
+              :vec-type Float8Vector
+              :nullable? false}
+             (run-projection rel '(. {:x x, :y y} y))))))
+
+(t/deftest test-list-literals
+  (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])
+                             (tu/->mono-vec "y" types/float8-type [3.4 8.25])])]
+    (t/is (= {:res [[1.2 3.4 10.0]
+                    [3.4 8.25 10.0]]
+              :vec-type FixedSizeListVector
+              :nullable? false}
+             (run-projection rel '[x y 10.0])))
+
+    (t/is (= {:res [[1.2 3.4] [3.4 8.25]]
+              :vec-type FixedSizeListVector
+              :nullable? false}
+             (run-projection rel '[(nth [x y] 0)
+                                   (nth [x y] 1)])))))
+
+(t/deftest text-mixing-prims-with-non-prims
+  (with-open [rel (open-rel [(tu/->mono-vec "x" types/struct-type
+                                            [{:a 42, :b 8}
+                                             {:a 12, :b 5}])])]
+    (t/is (= {:res [{:a 42, :b 8, :sum 50}
+                    {:a 12, :b 5, :sum 17}]
+              :vec-type StructVector
+              :nullable? false}
+             (run-projection rel '{:a (. x a)
+                                   :b (. x b)
+                                   :sum (+ (. x a) (. x b))})))))

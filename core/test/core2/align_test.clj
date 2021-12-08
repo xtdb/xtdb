@@ -24,9 +24,11 @@
                           (VectorSchemaRoot. vecs))]
 
     (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-relation-selector '(<= age 30) {})
+                                                        tu/*allocator*
                                                         (iv/->indirect-rel [(iv/->direct-vec age-vec)]))
                                                age-row-id-vec)
                     (.and (align/->row-id-bitmap (.select (expr/->expression-relation-selector '(<= name "Frank") {})
+                                                          tu/*allocator*
                                                           (iv/->indirect-rel [(iv/->direct-vec name-vec)]))
                                                  name-row-id-vec)))
           roots [name-root age-root]]

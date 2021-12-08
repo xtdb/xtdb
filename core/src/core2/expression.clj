@@ -13,18 +13,18 @@
            core2.operator.project.ProjectionSpec
            core2.operator.select.IRelationSelector
            core2.types.LegType
-           [core2.vector IIndirectRelation IIndirectVector]
+           [core2.vector IIndirectRelation IIndirectVector IRowCopier]
            [core2.vector.extensions KeywordType UuidType]
            java.lang.reflect.Method
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
            [java.time Duration Instant ZoneOffset]
            [java.time.temporal ChronoField ChronoUnit]
-           java.util.Date
-           [org.apache.arrow.vector DurationVector ValueVector]
-           org.apache.arrow.vector.complex.DenseUnionVector
+           [java.util Date HashMap LinkedList]
+           [org.apache.arrow.vector BitVector DurationVector ValueVector]
+           [org.apache.arrow.vector.complex BaseListVector BaseRepeatedValueVector DenseUnionVector FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -94,16 +94,21 @@
 
       (form->expr body env))))
 
+(defn- ->dot-expr [struct-expr field-form env]
+  (if (symbol? field-form)
+    {:op :dot-const-field
+     :struct-expr struct-expr
+     :field field-form}
+    {:op :dot
+     :struct-expr struct-expr
+     :field-expr (form->expr field-form env)}))
+
 (defmethod parse-list-form '. [[_ & args :as form] env]
   (when-not (= 2 (count args))
     (throw (IllegalArgumentException. (str "'.' expects 2 args: " (pr-str form)))))
 
   (let [[struct field] args]
-    (when-not (symbol? field)
-      (throw (IllegalArgumentException. (str "'.' expects symbol field: " (pr-str form)))))
-    {:op :dot,
-     :expr (form->expr struct env)
-     :field field}))
+    (->dot-expr (form->expr struct env) field env)))
 
 (defmethod parse-list-form '.. [[_ & args :as form] env]
   (let [[struct & fields] args]
@@ -111,10 +116,23 @@
       (throw (IllegalArgumentException. (str "'..' expects at least 2 args: " (pr-str form)))))
     (when-not (every? symbol? fields)
       (throw (IllegalArgumentException. (str "'..' expects symbol fields: " (pr-str form)))))
-    (reduce (fn [expr field]
-              {:op :dot, :expr expr, :field field})
+    (reduce (fn [struct-expr field-form]
+              (->dot-expr struct-expr field-form env))
             (form->expr struct env)
             (rest args))))
+
+(defmethod parse-list-form 'nth [[_ & args :as form] env]
+  (when-not (= 2 (count args))
+    (throw (IllegalArgumentException. (str "'nth' expects 2 args: " (pr-str form)))))
+
+  (let [[coll-form idx-form] args]
+    (if (integer? idx-form)
+      {:op :nth-const-idx
+       :coll-expr (form->expr coll-form env)
+       :idx idx-form}
+      {:op :nth
+       :coll-expr (form->expr coll-form env)
+       :idx-expr (form->expr idx-form env)})))
 
 (defmethod parse-list-form ::default [[f & args] env]
   {:op :call, :f f, :args (mapv #(form->expr % env) args)})
@@ -787,58 +805,229 @@
 
     (.getFieldType field)))
 
-(defn ->var-types [^IIndirectRelation in-rel, expr]
+(defmulti emit-expr
+  (fn [{:keys [op]} col-name {:keys [var-fields] :as opts}]
+    op)
+  :default ::default)
+
+(defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, ^String col-name]
+  (apply types/->field col-name (.getType field) (.isNullable field)
+         (.getChildren field)))
+
+(defmethod emit-expr :struct [{:keys [entries]} col-name opts]
+  (let [entries (vec (for [[k v] entries]
+                       (emit-expr v (name k) opts)))
+        ^Field out-field (apply types/->field col-name types/struct-type false
+                                (map :out-field entries))]
+
+    {:out-field out-field
+
+     :eval-expr (fn [^IIndirectRelation in-rel, al params]
+                  (let [^StructVector out-vec (.createVector out-field al)
+                        row-count (.rowCount in-rel)]
+                    (.setValueCount out-vec row-count)
+
+                    (dotimes [idx row-count]
+                      (.setIndexDefined out-vec idx))
+
+                    (try
+                      (let [child-vecs (seq out-vec)]
+                        (dotimes [col-idx (count entries)]
+                          (let [child-vec (nth child-vecs col-idx)
+                                {:keys [eval-expr]} (nth entries col-idx)]
+                            (with-open [^ValueVector evald-child (eval-expr in-rel al params)]
+                              (doto (.makeTransferPair evald-child child-vec)
+                                (.splitAndTransfer 0 (.getValueCount evald-child)))))))
+
+                      out-vec
+                      (catch Throwable e
+                        (util/try-close out-vec)
+                        (throw e)))))}))
+
+(defmethod emit-expr :dot-const-field [{:keys [struct-expr field]} ^String col-name opts]
+  (let [{:keys [^Field out-field eval-expr]} (emit-expr struct-expr "dot" opts)
+
+        ;; HACK assuming monomorphic for now
+        out-field (-> (->> (.getChildren out-field)
+                           (filter #(= (name field) (.getName ^Field %)))
+                           first)
+                      (field-with-name col-name))]
+
+    {:out-field out-field
+     :eval-expr (fn [in-rel al params]
+                  (with-open [^StructVector res (eval-expr in-rel al params)]
+                    (-> (.getTransferPair (.getChild res (name field)) col-name al)
+                        (doto (.transfer))
+                        (.getTo))))}))
+
+(defmethod emit-expr :variable [{:keys [variable]} col-name {:keys [var-fields]}]
+  (let [^Field out-field (-> (or (get var-fields variable)
+                                 (throw (IllegalArgumentException. (str "missing variable: " variable ", available " (pr-str (set (keys var-fields)))))))
+                             (field-with-name col-name))]
+    {:out-field out-field
+     :eval-expr (fn [^IIndirectRelation in-rel al _params]
+                  (let [in-vec (.vectorForName in-rel (name variable))
+                        out-vec (.createVector out-field al)]
+                    (.copyTo in-vec out-vec)
+                    (try
+                      out-vec
+                      (catch Throwable e
+                        (.close out-vec)
+                        (throw e)))))}))
+
+(defmethod emit-expr :list [{:keys [elements]} ^String col-name opts]
+  (let [el-count (count elements)
+        emitted-els (mapv #(emit-expr % "list-el" opts) elements)
+        out-field (types/->field col-name (ArrowType$FixedSizeList. (count elements)) false
+                                 ;; HACK - needs to take all the el's types into account
+                                 (or (:out-field (first emitted-els))
+                                     (types/->field "list-el" types/null-type true)))]
+    {:out-field out-field
+     :eval-expr (fn [in-rel al params]
+                  (let [^FixedSizeListVector out-vec (.createVector out-field al)
+                        out-writer (.asList (vw/vec->writer out-vec))
+                        out-data-writer (.getDataWriter out-writer)
+                        els (LinkedList.)]
+                    (try
+                      (when (seq elements)
+                        (doseq [{:keys [eval-expr]} emitted-els]
+                          (.add els (eval-expr in-rel al params)))
+
+                        (let [child-row-count (.getValueCount ^ValueVector (first els))
+                              copiers (mapv (fn [res]
+                                              (.rowCopier out-data-writer res))
+                                            els)]
+                          (.setValueCount out-vec child-row-count)
+
+                          (dotimes [idx child-row-count]
+                            (.setNotNull out-vec idx)
+                            (.startValue out-writer)
+
+                            (dotimes [el-idx el-count]
+                              (.startValue out-data-writer)
+                              (doto ^IRowCopier (nth copiers el-idx)
+                                (.copyRow idx))
+                              (.endValue out-data-writer))
+
+                            (.endValue out-writer))))
+
+                      out-vec
+                      (catch Throwable e
+                        (.close out-vec)
+                        (throw e))
+
+                      (finally
+                        (run! util/try-close els)))))}))
+
+(defn- ->data-vec [^BaseListVector list-vec]
+  (cond
+    (instance? BaseRepeatedValueVector list-vec)
+    (.getDataVector ^BaseRepeatedValueVector list-vec)
+
+    (instance? FixedSizeListVector list-vec)
+    (.getDataVector ^FixedSizeListVector list-vec)))
+
+(defmethod emit-expr :nth-const-idx [{:keys [coll-expr ^long idx]} col-name opts]
+  (let [{^Field coll-field :out-field, eval-coll :eval-expr} (emit-expr coll-expr "nth-coll" opts)
+
+        out-field (-> (first (.getChildren coll-field))
+                      (field-with-name col-name))]
+
+    {:out-field out-field
+     :eval-expr (fn [in-rel al params]
+                  (let [out-vec (.createVector out-field al)
+                        out-writer (vw/vec->writer out-vec)]
+                    (try
+                      (with-open [^BaseListVector coll-res (eval-coll in-rel al params)]
+                        (let [coll-count (.getValueCount coll-res)
+                              copier (.rowCopier out-writer (->data-vec coll-res))]
+                          (.setValueCount out-vec coll-count)
+                          (dotimes [out-idx coll-count]
+                            (.startValue out-writer)
+                            (.copyRow copier (+ (.getElementStartIndex coll-res out-idx) idx))
+                            (.endValue out-writer))
+                          out-vec))
+                      (catch Throwable e
+                        (.close out-vec)
+                        (throw e)))))}))
+
+(defn- emit-prim-expr [prim-expr ^String col-name {:keys [var-fields] :as opts}]
+  (let [primitive-ops (methods codegen-expr)
+        prim-expr (->> prim-expr
+                       (macro/macroexpand-all)
+                       (walk/prewalk-expr (fn [{:keys [op] :as expr}]
+                                            (if (contains? primitive-ops op)
+                                              expr
+                                              {:op :variable
+                                               :variable (gensym 'var)
+                                               :expr expr}))))
+        var-sub-exprs (->> (walk/expr-seq prim-expr)
+                           (filter #(= :variable (:op %))))
+        emitted-sub-exprs (->> (for [{:keys [variable expr]} var-sub-exprs
+                                     :when expr]
+                                 (MapEntry/create variable
+                                                  (emit-expr expr (name variable) opts)))
+                               (into {}))
+        var->types (->> (concat (for [[variable field] var-fields]
+                                  (MapEntry/create variable (field->value-types field)))
+                                (for [[variable {:keys [out-field]}] emitted-sub-exprs]
+                                  (MapEntry/create variable (field->value-types out-field))))
+                        (into {}))
+        {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection prim-expr var->types)
+        out-field (Field. col-name field-type [])]
+
+    ;; TODO what are we going to do about needing to close over locals?
+    {:out-field out-field
+     :eval-expr (fn [in-rel al params]
+                  (let [out-vec (.createVector out-field al)
+                        evald-sub-exprs (HashMap.)]
+                    (try
+                      (doseq [[variable {:keys [eval-expr]}] emitted-sub-exprs]
+                        (.put evald-sub-exprs variable (eval-expr in-rel al params)))
+
+                      (let [in-rel (-> (concat in-rel (for [[variable sub-expr-vec] evald-sub-exprs]
+                                                        (-> (iv/->direct-vec sub-expr-vec)
+                                                            (.withName (name variable)))))
+                                       iv/->indirect-rel)]
+
+                        (expr-fn out-vec in-rel params))
+
+                      out-vec
+                      (catch Throwable e
+                        (.close out-vec)
+                        (throw e))
+                      (finally
+                        (run! util/try-close (vals evald-sub-exprs))))))}))
+
+(doseq [op (-> (set (keys (methods codegen-expr)))
+               (disj :variable))]
+  (defmethod emit-expr op [prim-expr col-name opts]
+    (emit-prim-expr prim-expr col-name opts)))
+
+(defn ->var-fields [^IIndirectRelation in-rel, expr]
   (->> (for [var-sym (->> (walk/expr-seq expr)
                           (into #{} (comp (filter #(= :variable (:op %)))
                                           (map :variable))))]
          (let [^IIndirectVector ivec (or (.vectorForName in-rel (name var-sym))
                                          (throw (IllegalArgumentException. (str "missing read-col: " var-sym))))]
-           (MapEntry/create var-sym (field->value-types (-> ivec (.getVector) (.getField))))))
+           (MapEntry/create var-sym (-> ivec (.getVector) (.getField)))))
        (into {})))
 
 (defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [^String col-name form params]
   (let [expr (form->expr form {:params params})]
     (reify ProjectionSpec
       (project [_ allocator in-rel]
-        (let [var-types (->var-types in-rel expr)
-              {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection expr var-types)
-              ^ValueVector out-vec (.createNewSingleVector field-type col-name allocator nil)]
-          (try
-            (expr-fn out-vec in-rel params)
-            (iv/->direct-vec out-vec)
-            (catch Exception e
-              (.close out-vec)
-              (throw e))))))))
-
-(def ^:private memo-generate-selection
-  (-> (fn [expr var->types]
-        (let [expr (->> expr
-                        (macro/macroexpand-all)
-                        (walk/postwalk-expr (comp with-batch-bindings lit->param)))
-
-              {:keys [return-types continue]} (codegen-expr expr {:var->types var->types})
-              acc-sym (gensym 'acc)]
-
-          (assert (= #{ArrowType$Bool/INSTANCE} return-types))
-
-          (eval
-           `(fn [~(-> rel-sym (with-tag IIndirectRelation)) ~params-sym]
-              (let [~@(batch-bindings expr)
-                    ~acc-sym (RoaringBitmap.)]
-                (dotimes [~idx-sym (.rowCount ~rel-sym)]
-                  ~(continue (fn [_ code]
-                               `(when ~code
-                                  (.add ~acc-sym ~idx-sym)))))
-                ~acc-sym)))))
-      (memoize)))
+        (let [{:keys [eval-expr]} (emit-expr expr col-name {:var-fields (->var-fields in-rel expr)})]
+          (iv/->direct-vec (eval-expr in-rel allocator params)))))))
 
 (defn ->expression-relation-selector ^core2.operator.select.IRelationSelector [form params]
-  (let [expr (form->expr form {:params params})]
+  (let [projector (->expression-projection-spec "select" form params)]
     (reify IRelationSelector
-      (select [_ in-rel]
-        (if (pos? (.rowCount in-rel))
-          (let [var-types (->var-types in-rel expr)
-                expr-fn (memo-generate-selection expr var-types)]
-            (expr-fn in-rel params))
-
-          (RoaringBitmap.))))))
+      (select [_ al in-rel]
+        (with-open [selection (.project projector al in-rel)]
+          (let [^BitVector sel-vec (.getVector selection)
+                res (RoaringBitmap.)]
+            (dotimes [idx (.getValueCount selection)]
+              (when (= 1 (.get sel-vec (.getIndex selection idx)))
+                (.add res idx)))
+            res))))))
