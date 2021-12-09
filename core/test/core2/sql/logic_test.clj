@@ -276,8 +276,8 @@
 
 (defn- skip-record? [{:keys [skipif onlyif]
                       :or {onlyif "xtdb"}}]
- (or (= "xtdb" skipif)
-     (not= "xtdb" onlyif)) )
+  (or (= "xtdb" skipif)
+      (not= "xtdb" onlyif)) )
 
 (defn- execute-records [node records]
   (->> (remove skip-record? records)

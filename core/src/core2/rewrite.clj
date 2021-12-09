@@ -64,7 +64,7 @@
 (defn ->scoped
   ([rule-overrides]
    (->scoped rule-overrides nil (fn [loc _]
-                                       loc)))
+                                  loc)))
   ([rule-overrides after-fn]
    (->scoped rule-overrides nil after-fn))
   ([rule-overrides ->ctx-fn after-fn]
