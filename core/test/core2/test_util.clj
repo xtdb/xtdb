@@ -107,7 +107,7 @@
     duv))
 
 (defn ->duv [col-name vs]
-  (let [res (DenseUnionVector/empty col-name *allocator*)]
+  (let [res (.createVector (ty/->field col-name ty/dense-union-type false) *allocator*)]
     (try
       (doto res (write-duv! vs))
       (catch Exception e

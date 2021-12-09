@@ -317,8 +317,7 @@
   (t/is (= {:res [1.2 1 3.4]
             :vec-type #{Float8Vector BigIntVector}
             :nullable? false}
-           (with-open [rel (open-rel [(tu/->duv "x" [1.2 1 3.4])
-                                      (tu/->duv "y" [3.4 (float 8.25)])])]
+           (with-open [rel (open-rel [(tu/->duv "x" [1.2 1 3.4])])]
              (run-projection rel 'x))))
 
   (t/is (= {:res [4.4 9.75]
