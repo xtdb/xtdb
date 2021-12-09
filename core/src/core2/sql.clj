@@ -105,6 +105,17 @@
 
 (declare ->root-annotation-ctx)
 
+(defn- ->scope-annotation [{:keys [tables with columns] :as ctx}]
+  (let [known-tables (set (for [{:keys [table-or-query-name correlation-name]} tables]
+                            (or correlation-name table-or-query-name)))
+        correlated-columns (set (for [c columns
+                                      :when (and (next c) (not (contains? known-tables (first c))))]
+                                  c))]
+    {:tables tables
+     :columns columns
+     :with with
+     :correlated-columns correlated-columns}))
+
 (def ^:private root-annotation-rules
   {:table_primary
    (->scoped-rule {:table_or_query_name (->text-rule :table-or-query-name)
@@ -125,17 +136,8 @@
    (->scoped-rule {}
                   (fn [_]
                     (->root-annotation-ctx))
-                  (fn [loc {:keys [tables with columns] :as old-ctx}]
-                    (let [known-tables (set (for [{:keys [table-or-query-name correlation-name]} tables]
-                                              (or correlation-name table-or-query-name)))
-                          correlated-columns (set (for [c columns
-                                                        :when (and (next c) (not (contains? known-tables (first c))))]
-                                                    c))
-                          scope {:tables tables
-                                 :columns columns
-                                 :with with
-                                 :correlated-columns correlated-columns}]
-                      (zip/edit loc vary-meta assoc ::scope scope))))})
+                  (fn [loc old-ctx]
+                    (zip/edit loc vary-meta assoc ::scope (->scope-annotation old-ctx))))})
 
 (defn- ->root-annotation-ctx []
   {:tables #{} :columns #{} :with #{} :rules root-annotation-rules})
