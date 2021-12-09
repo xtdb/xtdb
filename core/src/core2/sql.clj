@@ -1,5 +1,7 @@
 (ns core2.sql
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.zip :as zip]
             [instaparse.core :as insta]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -20,68 +22,96 @@
      ([s start-rule]
       (parse-sql2011 s :start start-rule)))))
 
-(declare annotate-tree)
+(defn- current-ctx [loc]
+  (first (:ctx (meta loc))))
 
-(defn- annotate-vec
-  ([ctx tree]
-   (annotate-vec identity ctx tree))
-  ([f ctx tree]
-   (reduce
-    (fn [[ctx acc] x]
-      (let [[ctx x] (f (annotate-tree ctx x))]
-        [ctx (conj acc x)]))
-    [ctx (empty tree)]
-    tree)))
+(defn- zip-dispatch [loc mode]
+  (let [tree (zip/node loc)
+        dispatch-kw (when (vector? tree)
+                      (first tree))]
+    (if-let [dispatch-fn (get-in (meta loc) [:ctx 0 :dispatch-map dispatch-kw mode])]
+      (dispatch-fn loc (current-ctx loc))
+      loc)))
 
-(defmulti annotate-tree (fn [ctx tree]
-                          (if (vector? tree)
-                            (first tree)
-                            ::annotate-tree-single-value)))
+(defn- strs-vec [loc]
+  (filterv string? (flatten (zip/node loc))))
 
-(defmethod annotate-tree :default [ctx tree]
-  (annotate-vec ctx tree))
+(defn- strs [loc]
+  (str/join (strs-vec loc)))
 
-(defmethod annotate-tree ::annotate-tree-single-value [ctx tree]
-  [ctx tree])
+(defn- vary-ctx [loc f & args]
+  (vary-meta loc update-in [:ctx 0] (fn [ctx]
+                                      (apply f ctx args))))
 
-(defmethod annotate-tree :table_or_query_name [ctx tree]
-  [(assoc ctx :current-table (first (filterv string? (flatten tree))))
-   tree])
+(defn- pop-ctx [loc]
+  (vary-meta loc update :ctx (comp vec rest)))
 
-(defmethod annotate-tree :correlation_name [ctx tree]
-  [(assoc ctx :current-table (first (filterv string? (flatten tree))))
-   tree])
+(defn- push-ctx
+  ([loc dispatch-map-overrides]
+   (push-ctx loc dispatch-map-overrides (current-ctx loc)))
+  ([loc dispatch-map-overrides ctx]
+   (vary-meta loc update :ctx (partial into [(update ctx :dispatch-map merge dispatch-map-overrides)]))))
 
-(defmethod annotate-tree :column_reference [ctx tree]
-  [(update ctx :columns conj (filterv string? (flatten tree)))
-   tree])
+(defn- ->strs [kw]
+  (fn [loc _]
+    (vary-ctx loc assoc kw (strs loc))))
 
-(defmethod annotate-tree :with_list_element [ctx [_ query-name :as tree]]
-  [(update ctx :with conj (first (filterv string? (flatten query-name))))
-   (annotate-vec ctx tree)])
+(declare root-ctx root-dispatch-map)
 
-(defmethod annotate-tree :table_reference_list [ctx tree]
-  (annotate-vec
-   (fn [[ctx tree]]
-     [(if-let [current-table (:current-table ctx)]
-        (update ctx :tables conj current-table)
-        ctx)
-      tree])
-   ctx
-   tree))
+(def ^:private root-dispatch-map
+  {:table_primary {:> (fn [loc ctx]
+                        (push-ctx loc {:table_or_query_name {:> (->strs :table-or-query-name)}
+                                       :correlation_name {:> (->strs :correlation-name)}}))
+                   :< (fn [loc ctx]
+                        (-> (pop-ctx loc)
+                            (vary-ctx update :tables conj (select-keys ctx [:table-or-query-name :correlation-name]))))}
+   :column_reference {:> (fn [loc _]
+                           (vary-ctx loc update :columns conj (strs-vec loc)))}
+   :with_list_element {:> (fn [loc ctx]
+                            (push-ctx loc {:query_name {:> (->strs :query-name)}}))
+                       :< (fn [loc {:keys [query-name]}]
+                            (-> (pop-ctx loc)
+                                (vary-ctx update :with conj query-name)))}
+   :query_expression {:> (fn [loc _]
+                           (push-ctx loc {} root-ctx))
+                      :< (fn [loc {:keys [tables with columns]}]
+                           (let [known-tables (set (for [{:keys [table-or-query-name correlation-name]} tables]
+                                                     (or correlation-name table-or-query-name)))
+                                 correlated-columns (set (for [c columns
+                                                               :when (and (next c) (not (contains? known-tables (first c))))]
+                                                           c))
+                                 scope {:tables tables
+                                        :columns columns
+                                        :with with
+                                        :correlated-columns correlated-columns}]
+                             (-> (pop-ctx loc)
+                                 (zip/edit vary-meta assoc ::scope scope))))}})
 
-(defmethod annotate-tree :query_expression [ctx tree]
-  (let [new-ctx {:tables #{} :columns #{} :with #{}}
-        [{:keys [current-table tables with columns]} tree] (annotate-vec new-ctx tree)
-        correlated-columns (set (for [c columns
-                                      :when (and (next c) (not (contains? tables (first c))))]
-                                  c))
-        scope (when current-table
-                {::scope {:tables tables
-                          :columns columns
-                          :with with
-                          :correlated-columns correlated-columns}})]
-    [ctx (with-meta tree (merge (meta tree) scope))]))
+(def ^:private root-ctx {:tables #{} :columns #{} :with #{} :dispatch-map root-dispatch-map})
+
+(defn zip-annotate
+  ([tree]
+   (zip-annotate tree root-ctx))
+  ([tree ctx]
+   (loop [loc (vary-meta (zip/vector-zip tree) assoc :ctx [ctx])]
+     (if (zip/end? loc)
+       (zip/root loc)
+       (let [loc (zip-dispatch loc :>)]
+         (recur (cond
+                  (zip/branch? loc)
+                  (zip/down loc)
+
+                  (seq (zip/rights loc))
+                  (zip/right (zip-dispatch loc :<))
+
+                  :else
+                  (loop [p loc]
+                    (let [p (zip-dispatch p :<)]
+                      (if-let [parent (zip/up p)]
+                        (if (seq (zip/rights parent))
+                          (zip/right (zip-dispatch parent :<))
+                          (recur parent))
+                        [(zip/node p) :end]))))))))))
 
 (comment
   (time

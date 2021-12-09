@@ -393,19 +393,18 @@ SELECT t1.d-t1.e
  WHERE EXISTS(SELECT 1 FROM t1 AS x WHERE x.b<t1.b)
    AND t1.a>t1.b
  ORDER BY 1" :query_expression)
-        scopes (->> (sql/annotate-tree {} tree)
-                    (second)
+        scopes (->> (sql/zip-annotate tree)
                     (tree-seq vector? seq)
                     (keep (comp :core2.sql/scope meta)))]
-    (t/is (= [{:tables #{"t1"}
+    (t/is (= [{:tables #{{:table-or-query-name "t1"}}
                :columns #{["t1" "e"] ["t1" "a"] ["t1" "b"] ["t1" "d"]}
                :with #{"foo"}
                :correlated-columns #{}}
-              {:tables #{"bar"},
+              {:tables #{{:table-or-query-name "bar"}},
                :columns #{},
                :with #{},
                :correlated-columns #{}}
-              {:tables #{"x"}
+              {:tables #{{:table-or-query-name "t1" :correlation-name "x"}}
                :columns #{["x" "b"] ["t1" "b"]}
                :with #{}
                :correlated-columns #{["t1" "b"]}}]
