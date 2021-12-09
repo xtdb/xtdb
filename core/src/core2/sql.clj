@@ -23,10 +23,10 @@
       (parse-sql2011 s :start start-rule)))))
 
 (defprotocol Rule
-  (--> [_ loc ctx])
-  (<-- [_ loc ctx]))
+  (--> [_ loc])
+  (<-- [_ loc]))
 
-(defn- current-ctx [loc]
+(defn- ->ctx [loc]
   (first (::ctx (meta loc))))
 
 (defn- zip-dispatch [loc direction-fn]
@@ -34,7 +34,7 @@
         rule-kw (when (vector? tree)
                   (first tree))]
     (if-let [rule (get-in (meta loc) [::ctx 0 :rules rule-kw])]
-      (direction-fn rule loc (current-ctx loc))
+      (direction-fn rule loc)
       loc)))
 
 (defn- vary-ctx [loc f & args]
@@ -49,7 +49,7 @@
 
 (defn- push-ctx
   ([loc rule-overrides]
-   (push-ctx loc rule-overrides (current-ctx loc)))
+   (push-ctx loc rule-overrides (->ctx loc)))
   ([loc rule-overrides ctx]
    (vary-meta loc update ::ctx (partial into [(update ctx :rules merge rule-overrides)]))))
 
@@ -58,10 +58,10 @@
 
 (defn- ->text-rule [kw]
   (reify Rule
-    (--> [_ loc _]
+    (--> [_ loc]
       (vary-ctx loc assoc kw (str/join (text-nodes loc))))
 
-    (<-- [_ loc _] loc)))
+    (<-- [_ loc] loc)))
 
 (defn rewrite-tree [tree ctx]
   (loop [loc (vary-meta (zip/vector-zip tree) assoc ::ctx [ctx])]
@@ -84,42 +84,46 @@
                          (recur parent))
                        [(zip/node p) :end])))))))))
 
-(declare root-annotation-ctx root-annotation-rules)
+(defn- ->root-annotation-ctx [root-annotation-rules]
+  {:tables #{} :columns #{} :with #{} :rules root-annotation-rules})
+
+(declare root-annotation-rules)
 
 (def ^:private root-annotation-rules
   {:table_primary
    (reify Rule
-     (--> [_ loc _]
+     (--> [_ loc]
        (push-ctx loc {:table_or_query_name (->text-rule :table-or-query-name)
                       :correlation_name (->text-rule :correlation-name)}))
 
-     (<-- [_ loc ctx]
+     (<-- [_ loc]
        (-> (pop-ctx loc)
-           (conj-ctx :tables (select-keys ctx [:table-or-query-name :correlation-name])))))
+           (conj-ctx :tables (select-keys (->ctx loc) [:table-or-query-name :correlation-name])))))
 
    :column_reference
    (reify Rule
-     (--> [_ loc _]
+     (--> [_ loc]
        (conj-ctx loc :columns (text-nodes loc)))
 
-     (<-- [_ loc _] loc))
+     (<-- [_ loc] loc))
 
    :with_list_element
    (reify Rule
-     (--> [_ loc _]
+     (--> [_ loc]
        (push-ctx loc {:query_name (->text-rule :query-name)}))
 
-     (<-- [_ loc {:keys [query-name]}]
+     (<-- [_ loc]
        (-> (pop-ctx loc)
-           (conj-ctx :with query-name))))
+           (conj-ctx :with (:query-name (->ctx loc))))))
 
    :query_expression
    (reify Rule
-     (--> [_ loc _]
-       (push-ctx loc {} root-annotation-ctx))
+     (--> [_ loc]
+       (push-ctx loc {} (->root-annotation-ctx root-annotation-rules)))
 
-     (<-- [_ loc {:keys [tables with columns]}]
-       (let [known-tables (set (for [{:keys [table-or-query-name correlation-name]} tables]
+     (<-- [_ loc]
+       (let [{:keys [tables with columns]} (->ctx loc)
+             known-tables (set (for [{:keys [table-or-query-name correlation-name]} tables]
                                  (or correlation-name table-or-query-name)))
              correlated-columns (set (for [c columns
                                            :when (and (next c) (not (contains? known-tables (first c))))]
@@ -131,10 +135,8 @@
          (-> (pop-ctx loc)
              (zip/edit vary-meta assoc ::scope scope)))))})
 
-(def ^:private root-annotation-ctx {:tables #{} :columns #{} :with #{} :rules root-annotation-rules})
-
 (defn annotate-tree [tree]
-  (rewrite-tree tree root-annotation-ctx))
+  (rewrite-tree tree (->root-annotation-ctx root-annotation-rules)))
 
 (comment
   (time
