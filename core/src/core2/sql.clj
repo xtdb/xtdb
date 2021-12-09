@@ -47,21 +47,36 @@
 (defn- pop-ctx [loc]
   (vary-meta loc update ::ctx (comp vec rest)))
 
-(defn- push-ctx
-  ([loc rule-overrides]
-   (push-ctx loc rule-overrides (->ctx loc)))
-  ([loc rule-overrides ctx]
-   (vary-meta loc update ::ctx (partial into [(update ctx :rules merge rule-overrides)]))))
+(defn- push-ctx [loc ctx]
+  (vary-meta loc update ::ctx (partial into [ctx])))
 
 (defn- text-nodes [loc]
   (filterv string? (flatten (zip/node loc))))
 
-(defn- ->text-rule [kw]
+(defn- ->before-rule [before-fn]
   (reify Rule
     (--> [_ loc]
-      (vary-ctx loc assoc kw (str/join (text-nodes loc))))
+      (before-fn loc))
 
     (<-- [_ loc] loc)))
+
+(defn- ->text-rule [kw]
+  (->before-rule
+   (fn [loc]
+     (vary-ctx loc assoc kw (str/join (text-nodes loc))))))
+
+(defn- ->scoped-rule
+  ([rule-overrides after-fn]
+   (->scoped-rule rule-overrides nil after-fn))
+  ([rule-overrides ->ctx-fn after-fn]
+   (let [->ctx-fn (or ->ctx-fn ->ctx)]
+     (reify Rule
+       (--> [_ loc]
+         (push-ctx loc (update (->ctx-fn loc) :rules merge rule-overrides)))
+
+       (<-- [_ loc]
+         (-> (pop-ctx loc)
+             (after-fn (->ctx loc))))))))
 
 (defn rewrite-tree [tree ctx]
   (loop [loc (vary-meta (zip/vector-zip tree) assoc ::ctx [ctx])]
@@ -84,59 +99,45 @@
                          (recur parent))
                        [(zip/node p) :end])))))))))
 
-(defn- ->root-annotation-ctx [root-annotation-rules]
-  {:tables #{} :columns #{} :with #{} :rules root-annotation-rules})
-
-(declare root-annotation-rules)
+(declare ->root-annotation-ctx)
 
 (def ^:private root-annotation-rules
   {:table_primary
-   (reify Rule
-     (--> [_ loc]
-       (push-ctx loc {:table_or_query_name (->text-rule :table-or-query-name)
-                      :correlation_name (->text-rule :correlation-name)}))
-
-     (<-- [_ loc]
-       (-> (pop-ctx loc)
-           (conj-ctx :tables (select-keys (->ctx loc) [:table-or-query-name :correlation-name])))))
+   (->scoped-rule {:table_or_query_name (->text-rule :table-or-query-name)
+                   :correlation_name (->text-rule :correlation-name)}
+                  (fn [loc old-ctx]
+                    (conj-ctx loc :tables (select-keys old-ctx [:table-or-query-name :correlation-name]))))
 
    :column_reference
-   (reify Rule
-     (--> [_ loc]
-       (conj-ctx loc :columns (text-nodes loc)))
-
-     (<-- [_ loc] loc))
+   (->before-rule (fn [loc]
+                    (conj-ctx loc :columns (text-nodes loc))))
 
    :with_list_element
-   (reify Rule
-     (--> [_ loc]
-       (push-ctx loc {:query_name (->text-rule :query-name)}))
-
-     (<-- [_ loc]
-       (-> (pop-ctx loc)
-           (conj-ctx :with (:query-name (->ctx loc))))))
+   (->scoped-rule {:query_name (->text-rule :query-name)}
+                  (fn [loc {:keys [query-name] :as old-ctx}]
+                    (conj-ctx loc :with query-name)))
 
    :query_expression
-   (reify Rule
-     (--> [_ loc]
-       (push-ctx loc {} (->root-annotation-ctx root-annotation-rules)))
+   (->scoped-rule {}
+                  (fn [_]
+                    (->root-annotation-ctx))
+                  (fn [loc {:keys [tables with columns] :as old-ctx}]
+                    (let [known-tables (set (for [{:keys [table-or-query-name correlation-name]} tables]
+                                              (or correlation-name table-or-query-name)))
+                          correlated-columns (set (for [c columns
+                                                        :when (and (next c) (not (contains? known-tables (first c))))]
+                                                    c))
+                          scope {:tables tables
+                                 :columns columns
+                                 :with with
+                                 :correlated-columns correlated-columns}]
+                      (zip/edit loc vary-meta assoc ::scope scope))))})
 
-     (<-- [_ loc]
-       (let [{:keys [tables with columns]} (->ctx loc)
-             known-tables (set (for [{:keys [table-or-query-name correlation-name]} tables]
-                                 (or correlation-name table-or-query-name)))
-             correlated-columns (set (for [c columns
-                                           :when (and (next c) (not (contains? known-tables (first c))))]
-                                       c))
-             scope {:tables tables
-                    :columns columns
-                    :with with
-                    :correlated-columns correlated-columns}]
-         (-> (pop-ctx loc)
-             (zip/edit vary-meta assoc ::scope scope)))))})
+(defn- ->root-annotation-ctx []
+  {:tables #{} :columns #{} :with #{} :rules root-annotation-rules})
 
 (defn annotate-tree [tree]
-  (rewrite-tree tree (->root-annotation-ctx root-annotation-rules)))
+  (rewrite-tree tree (->root-annotation-ctx)))
 
 (comment
   (time
