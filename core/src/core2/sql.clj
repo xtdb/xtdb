@@ -22,6 +22,8 @@
      ([s start-rule]
       (parse-sql2011 s :start start-rule)))))
 
+;; Rewrite engine.
+
 (defprotocol Rule
   (--> [_ loc])
   (<-- [_ loc]))
@@ -98,6 +100,8 @@
                          (zip/right (zip-dispatch parent <--))
                          (recur parent))
                        [(zip/node p) :end])))))))))
+
+;; Rewrite to annotate variable scopes.
 
 (declare ->root-annotation-ctx)
 
