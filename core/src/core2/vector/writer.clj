@@ -9,7 +9,7 @@
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.util.AutoCloseables
            [org.apache.arrow.vector ExtensionTypeVector NullVector ValueVector]
-           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
+           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector]
            [org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType]
            org.apache.arrow.vector.types.Types))
 
@@ -240,6 +240,35 @@
   IListWriter
   (getDataWriter [_] data-writer))
 
+(deftype FixedSizeListWriter [^FixedSizeListVector dest-vec
+                              ^IVectorWriter data-writer
+                              ^:unsynchronized-mutable ^int pos]
+  IVectorWriter
+  (getVector [_] dest-vec)
+  (getPosition [_] pos)
+
+  (startValue [_] pos)
+  (endValue [this] (set! (.pos this) (inc pos)))
+
+  (clear [this]
+    (.clear data-writer)
+    (set! (.pos this) 0))
+
+  (rowCopier [_ src-vec]
+    (let [^FixedSizeListVector src-vec (cast FixedSizeListVector src-vec)
+          src-data-vec (.getDataVector src-vec)
+          inner-copier (.rowCopier data-writer src-data-vec)]
+      (reify IRowCopier
+        (copyRow [_ src-idx]
+          (let [start-idx (.getElementStartIndex src-vec src-idx)]
+            (dotimes [el-idx (- (.getElementEndIndex src-vec src-idx) start-idx)]
+              (.startValue data-writer)
+              (.copyRow inner-copier (+ start-idx el-idx))
+              (.endValue data-writer)))))))
+
+  IListWriter
+  (getDataWriter [_] data-writer))
+
 (deftype ExtensionWriter [^ExtensionTypeVector dest-vec, ^IVectorWriter underlying-writer]
   IVectorWriter
   (getVector [_] dest-vec)
@@ -290,6 +319,9 @@
 
      (instance? ListVector dest-vec)
      (ListWriter. dest-vec (vec->writer (.getDataVector ^ListVector dest-vec)) pos 0)
+
+     (instance? FixedSizeListVector dest-vec)
+     (FixedSizeListWriter. dest-vec (vec->writer (.getDataVector ^FixedSizeListVector dest-vec)) pos)
 
      (instance? ExtensionTypeVector dest-vec)
      (ExtensionWriter. dest-vec (vec->writer (.getUnderlyingVector ^ExtensionTypeVector dest-vec)))
