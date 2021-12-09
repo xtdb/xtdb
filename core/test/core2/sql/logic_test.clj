@@ -201,9 +201,9 @@
 
 (def ^:private normalize-query-rules
   {:select_sublist
-   (sql/->scoped-rule {:derived_column (sql/->before-rule
-                                        (fn [loc]
-                                          (if (= 1 (count (rest (zip/children loc))))
+   (sql/->scoped-rule {:derived_column (sql/->after-rule
+                                        (fn [loc _]
+                                          (if (sql/single-child? loc)
                                             (let [select-sublist-loc (zip/up loc)
                                                   column (str "col" (count (zip/lefts select-sublist-loc)))]
                                               (zip/append-child
@@ -215,10 +215,9 @@
                                                   [:actual_identifier [:regular_identifier column]]]]]))
                                             loc)))})
 
-
    :identifier_chain
    (sql/->after-rule (fn [loc {:keys [tables] :as old-ctx}]
-                       (if (= 1 (count (rest (zip/children loc))))
+                       (if (sql/single-child? loc)
                          ;; TODO: does not take renamed tables into account.
                          (let [column (first (sql/text-nodes loc))
                                table (first (for [[table columns] tables

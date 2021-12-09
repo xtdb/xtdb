@@ -32,10 +32,9 @@
   (first (::ctx (meta loc))))
 
 (defn- zip-dispatch [loc direction-fn]
-  (let [tree (zip/node loc)
-        rule-kw (when (vector? tree)
-                  (first tree))]
-    (if-let [rule (get-in (meta loc) [::ctx 0 :rules rule-kw])]
+  (let [tree (zip/node loc)]
+    (if-let [rule (and (vector? tree)
+                       (get-in (meta loc) [::ctx 0 :rules (first tree)]))]
       (direction-fn rule loc)
       loc)))
 
@@ -55,10 +54,13 @@
 (defn text-nodes [loc]
   (filterv string? (flatten (zip/node loc))))
 
+(defn single-child? [loc]
+  (= 1 (count (rest (zip/children loc)))))
+
 (defn ->before-rule [before-fn]
   (reify Rule
     (--> [_ loc]
-      (before-fn loc))
+      (before-fn loc (->ctx loc)))
 
     (<-- [_ loc] loc)))
 
@@ -71,7 +73,7 @@
 
 (defn ->text-rule [kw]
   (->before-rule
-   (fn [loc]
+   (fn [loc _]
      (vary-ctx loc assoc kw (str/join (text-nodes loc))))))
 
 (defn ->scoped-rule
@@ -134,7 +136,7 @@
                     (conj-ctx loc :tables (select-keys old-ctx [:table-or-query-name :correlation-name]))))
 
    :column_reference
-   (->before-rule (fn [loc]
+   (->before-rule (fn [loc _]
                     (conj-ctx loc :columns (text-nodes loc))))
 
    :with_list_element
