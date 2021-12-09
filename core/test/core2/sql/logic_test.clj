@@ -393,7 +393,7 @@ SELECT t1.d-t1.e
  WHERE EXISTS(SELECT 1 FROM t1 AS x WHERE x.b<t1.b)
    AND t1.a>t1.b
  ORDER BY 1" :query_expression)
-        scopes (->> (sql/zip-annotate tree)
+        scopes (->> (sql/annotate-tree tree)
                     (tree-seq vector? seq)
                     (keep (comp :core2.sql/scope meta)))]
     (t/is (= [{:tables #{{:table-or-query-name "t1"}}
