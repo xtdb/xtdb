@@ -17,8 +17,11 @@
       (direction-fn rule loc)
       loc)))
 
-(defn ->ctx [loc]
+(defn- ->ctx [loc]
   (first (::ctx (meta loc))))
+
+(defn- init-ctx [loc ctx]
+  (vary-meta loc assoc ::ctx [ctx]))
 
 (defn vary-ctx [loc f & args]
   (vary-meta loc update-in [::ctx 0] (fn [ctx]
@@ -75,7 +78,7 @@
              (after-fn (->ctx loc))))))))
 
 (defn rewrite-tree [tree ctx]
-  (loop [loc (vary-meta (zip/vector-zip tree) assoc ::ctx [ctx])]
+  (loop [loc (init-ctx (zip/vector-zip tree) ctx)]
     (if (zip/end? loc)
       (zip/root loc)
       (let [loc (zip-dispatch loc -->)]
