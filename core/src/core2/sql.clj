@@ -41,6 +41,9 @@
   (vary-meta loc update-in [::ctx 0] (fn [ctx]
                                        (apply f ctx args))))
 
+(defn- conj-ctx [loc k v]
+  (vary-ctx loc update k conj v))
+
 (defn- pop-ctx [loc]
   (vary-meta loc update ::ctx (comp vec rest)))
 
@@ -92,12 +95,12 @@
 
      (<-- [_ loc ctx]
        (-> (pop-ctx loc)
-           (vary-ctx update :tables conj (select-keys ctx [:table-or-query-name :correlation-name])))))
+           (conj-ctx :tables (select-keys ctx [:table-or-query-name :correlation-name])))))
 
    :column_reference
    (reify Rule
      (--> [_ loc _]
-       (vary-ctx loc update :columns conj (text-nodes loc)))
+       (conj-ctx loc :columns (text-nodes loc)))
 
      (<-- [_ loc _] loc))
 
@@ -108,7 +111,7 @@
 
      (<-- [_ loc {:keys [query-name]}]
        (-> (pop-ctx loc)
-           (vary-ctx update :with conj query-name))))
+           (conj-ctx :with query-name))))
 
    :query_expression
    (reify Rule
