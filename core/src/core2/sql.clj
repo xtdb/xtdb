@@ -1,7 +1,7 @@
 (ns core2.sql
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]
             [clojure.zip :as zip]
+            [core2.rewrite :as rew]
             [instaparse.core :as insta]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -22,97 +22,6 @@
      ([s start-rule]
       (parse-sql2011 s :start start-rule)))))
 
-;; Rewrite engine.
-
-(defprotocol Rule
-  (--> [_ loc])
-  (<-- [_ loc]))
-
-(defn ->ctx [loc]
-  (first (::ctx (meta loc))))
-
-(defn- zip-dispatch [loc direction-fn]
-  (let [tree (zip/node loc)]
-    (if-let [rule (and (vector? tree)
-                       (get-in (meta loc) [::ctx 0 :rules (first tree)]))]
-      (direction-fn rule loc)
-      loc)))
-
-(defn vary-ctx [loc f & args]
-  (vary-meta loc update-in [::ctx 0] (fn [ctx]
-                                       (apply f ctx args))))
-
-(defn conj-ctx [loc k v]
-  (vary-ctx loc update k conj v))
-
-(defn- pop-ctx [loc]
-  (vary-meta loc update ::ctx (comp vec rest)))
-
-(defn- push-ctx [loc ctx]
-  (vary-meta loc update ::ctx (partial into [ctx])))
-
-(defn text-nodes [loc]
-  (filterv string? (flatten (zip/node loc))))
-
-(defn single-child? [loc]
-  (= 1 (count (rest (zip/children loc)))))
-
-(defn ->before-rule [before-fn]
-  (reify Rule
-    (--> [_ loc]
-      (before-fn loc (->ctx loc)))
-
-    (<-- [_ loc] loc)))
-
-(defn ->after-rule [after-fn]
-  (reify Rule
-    (--> [_ loc] loc)
-
-    (<-- [_ loc]
-      (after-fn loc (->ctx loc)))))
-
-(defn ->text-rule [kw]
-  (->before-rule
-   (fn [loc _]
-     (vary-ctx loc assoc kw (str/join (text-nodes loc))))))
-
-(defn ->scoped-rule
-  ([rule-overrides]
-   (->scoped-rule rule-overrides nil (fn [loc _]
-                                       loc)))
-  ([rule-overrides after-fn]
-   (->scoped-rule rule-overrides nil after-fn))
-  ([rule-overrides ->ctx-fn after-fn]
-   (let [->ctx-fn (or ->ctx-fn ->ctx)]
-     (reify Rule
-       (--> [_ loc]
-         (push-ctx loc (update (->ctx-fn loc) :rules merge rule-overrides)))
-
-       (<-- [_ loc]
-         (-> (pop-ctx loc)
-             (after-fn (->ctx loc))))))))
-
-(defn rewrite-tree [tree ctx]
-  (loop [loc (vary-meta (zip/vector-zip tree) assoc ::ctx [ctx])]
-    (if (zip/end? loc)
-      (zip/root loc)
-      (let [loc (zip-dispatch loc -->)]
-        (recur (cond
-                 (zip/branch? loc)
-                 (zip/down loc)
-
-                 (seq (zip/rights loc))
-                 (zip/right (zip-dispatch loc <--))
-
-                 :else
-                 (loop [p loc]
-                   (let [p (zip-dispatch p <--)]
-                     (if-let [parent (zip/up p)]
-                       (if (seq (zip/rights parent))
-                         (zip/right (zip-dispatch parent <--))
-                         (recur parent))
-                       [(zip/node p) :end])))))))))
-
 ;; Rewrite to annotate variable scopes.
 
 (declare ->root-annotation-ctx)
@@ -130,32 +39,32 @@
 
 (def ^:private root-annotation-rules
   {:table_primary
-   (->scoped-rule {:table_or_query_name (->text-rule :table-or-query-name)
-                   :correlation_name (->text-rule :correlation-name)}
-                  (fn [loc old-ctx]
-                    (conj-ctx loc :tables (select-keys old-ctx [:table-or-query-name :correlation-name]))))
+   (rew/->scoped {:table_or_query_name (rew/->text :table-or-query-name)
+                  :correlation_name (rew/->text :correlation-name)}
+                 (fn [loc old-ctx]
+                   (rew/conj-ctx loc :tables (select-keys old-ctx [:table-or-query-name :correlation-name]))))
 
    :column_reference
-   (->before-rule (fn [loc _]
-                    (conj-ctx loc :columns (text-nodes loc))))
+   (rew/->before (fn [loc _]
+                   (rew/conj-ctx loc :columns (rew/text-nodes loc))))
 
    :with_list_element
-   (->scoped-rule {:query_name (->text-rule :query-name)}
-                  (fn [loc {:keys [query-name] :as old-ctx}]
-                    (conj-ctx loc :with query-name)))
+   (rew/->scoped {:query_name (rew/->text :query-name)}
+                 (fn [loc {:keys [query-name] :as old-ctx}]
+                   (rew/conj-ctx loc :with query-name)))
 
    :query_expression
-   (->scoped-rule {}
-                  (fn [_]
-                    (->root-annotation-ctx))
-                  (fn [loc old-ctx]
-                    (zip/edit loc vary-meta assoc ::scope (->scope-annotation old-ctx))))})
+   (rew/->scoped {}
+                 (fn [_]
+                   (->root-annotation-ctx))
+                 (fn [loc old-ctx]
+                   (zip/edit loc vary-meta assoc ::scope (->scope-annotation old-ctx))))})
 
 (defn- ->root-annotation-ctx []
   {:tables #{} :columns #{} :with #{} :rules root-annotation-rules})
 
 (defn annotate-tree [tree]
-  (rewrite-tree tree (->root-annotation-ctx)))
+  (rew/rewrite-tree tree (->root-annotation-ctx)))
 
 (comment
   (time

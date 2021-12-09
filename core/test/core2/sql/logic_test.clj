@@ -5,6 +5,7 @@
             [clojure.walk :as w]
             [clojure.zip :as zip]
             [core2.api :as c2]
+            [core2.rewrite :as rew]
             [core2.snapshot :as snap]
             [core2.sql :as sql]
             [core2.operator :as op]
@@ -201,52 +202,52 @@
 
 (def ^:private normalize-query-rules
   {:select_sublist
-   (sql/->scoped-rule {:derived_column (sql/->after-rule
-                                        (fn [loc _]
-                                          (if (sql/single-child? loc)
-                                            (let [select-sublist-loc (zip/up loc)
-                                                  column (str "col" (count (zip/lefts select-sublist-loc)))]
-                                              (zip/append-child
-                                               loc
-                                               [:as_clause
-                                                "AS"
-                                                [:column_name
-                                                 [:identifier
-                                                  [:actual_identifier [:regular_identifier column]]]]]))
-                                            loc)))})
+   (rew/->scoped {:derived_column (rew/->after
+                                   (fn [loc _]
+                                     (if (rew/single-child? loc)
+                                       (let [select-sublist-loc (zip/up loc)
+                                             column (str "col" (count (zip/lefts select-sublist-loc)))]
+                                         (zip/append-child
+                                          loc
+                                          [:as_clause
+                                           "AS"
+                                           [:column_name
+                                            [:identifier
+                                             [:actual_identifier [:regular_identifier column]]]]]))
+                                       loc)))})
 
    :identifier_chain
-   (sql/->after-rule (fn [loc {:keys [tables] :as old-ctx}]
-                       (if (sql/single-child? loc)
-                         ;; TODO: does not take renamed tables into account.
-                         (let [column (first (sql/text-nodes loc))
-                               table (first (for [[table columns] tables
-                                                  :when (contains? (set columns) column)]
-                                              table))]
-                           (zip/replace loc [:identifier_chain
-                                             [:identifier
-                                              [:actual_identifier
-                                               [:regular_identifier table]]]
-                                             [:identifier
-                                              [:actual_identifier
-                                               [:regular_identifier column]]]]))
-                         loc)))
+   (rew/->after (fn [loc {:keys [tables] :as old-ctx}]
+                  (if (rew/single-child? loc)
+                    ;; TODO: does not take renamed tables into account.
+                    (let [column (first (rew/text-nodes loc))
+                          table (first (for [[table columns] tables
+                                             :when (contains? (set columns) column)]
+                                         table))]
+                      (zip/replace loc [:identifier_chain
+                                        [:identifier
+                                         [:actual_identifier
+                                          [:regular_identifier table]]]
+                                        [:identifier
+                                         [:actual_identifier
+                                          [:regular_identifier column]]]]))
+                    loc)))
 
    :sort_specification
-   (sql/->scoped-rule {:unsigned_value_specification
-                       (sql/->after-rule
-                        (fn [loc _]
-                          (let [ordinal (first (sql/text-nodes loc))
-                                column (str "col" ordinal)]
-                            (zip/replace loc [:column_reference
-                                              [:basic_identifier_chain
-                                               [:identifier_chain
-                                                [:identifier
-                                                 [:actual_identifier
-                                                  [:regular_identifier column]]]]]]))))})})
+   (rew/->scoped {:unsigned_value_specification
+                  (rew/->after
+                   (fn [loc _]
+                     (let [ordinal (first (rew/text-nodes loc))
+                           column (str "col" ordinal)]
+                       (zip/replace loc [:column_reference
+                                         [:basic_identifier_chain
+                                          [:identifier_chain
+                                           [:identifier
+                                            [:actual_identifier
+                                             [:regular_identifier column]]]]]]))))})})
 
 (defn normalize-query-tree [tables tree]
-  (sql/rewrite-tree tree {:tables tables :rules normalize-query-rules}))
+  (rew/rewrite-tree tree {:tables tables :rules normalize-query-rules}))
 
 ;; TODO: parse query and qualify known table columns if
 ;; needed. Generate logical plan and format and hash result according
