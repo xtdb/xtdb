@@ -28,7 +28,7 @@
   (--> [_ loc])
   (<-- [_ loc]))
 
-(defn- ->ctx [loc]
+(defn ->ctx [loc]
   (first (::ctx (meta loc))))
 
 (defn- zip-dispatch [loc direction-fn]
@@ -39,11 +39,11 @@
       (direction-fn rule loc)
       loc)))
 
-(defn- vary-ctx [loc f & args]
+(defn vary-ctx [loc f & args]
   (vary-meta loc update-in [::ctx 0] (fn [ctx]
                                        (apply f ctx args))))
 
-(defn- conj-ctx [loc k v]
+(defn conj-ctx [loc k v]
   (vary-ctx loc update k conj v))
 
 (defn- pop-ctx [loc]
@@ -52,22 +52,32 @@
 (defn- push-ctx [loc ctx]
   (vary-meta loc update ::ctx (partial into [ctx])))
 
-(defn- text-nodes [loc]
+(defn text-nodes [loc]
   (filterv string? (flatten (zip/node loc))))
 
-(defn- ->before-rule [before-fn]
+(defn ->before-rule [before-fn]
   (reify Rule
     (--> [_ loc]
       (before-fn loc))
 
     (<-- [_ loc] loc)))
 
-(defn- ->text-rule [kw]
+(defn ->after-rule [after-fn]
+  (reify Rule
+    (--> [_ loc] loc)
+
+    (<-- [_ loc]
+      (after-fn loc (->ctx loc)))))
+
+(defn ->text-rule [kw]
   (->before-rule
    (fn [loc]
      (vary-ctx loc assoc kw (str/join (text-nodes loc))))))
 
-(defn- ->scoped-rule
+(defn ->scoped-rule
+  ([rule-overrides]
+   (->scoped-rule rule-overrides nil (fn [loc _]
+                                       loc)))
   ([rule-overrides after-fn]
    (->scoped-rule rule-overrides nil after-fn))
   ([rule-overrides ->ctx-fn after-fn]
