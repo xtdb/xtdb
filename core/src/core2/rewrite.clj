@@ -106,40 +106,45 @@
 ;; https://haslab.uminho.pt/prmartins/files/phd.pdf
 
 (comment
-  (letfn [(repmin [loc]
-            (let [n (zip/node loc)]
-              (or (:repmin (meta n))
-                  (case (first n)
-                    :leaf [:leaf (globmin loc)]
-                    :fork (let [child (zip/down loc)
-                                l (zip/right child)
-                                r (zip/right l)]
-                            [:fork (repmin l) (repmin r)])))))
-          (locmin [loc]
-            (let [n (zip/node loc)]
-              (or (:locmin (meta n))
-                  (case (first n)
-                    :leaf (zip/node (zip/right (zip/down loc)))
-                    :fork (let [child (zip/down loc)
-                                l (zip/right child)
-                                r (zip/right l)]
-                            (min (locmin l) (locmin r)))))))
-          (globmin [loc]
-            (let [n (zip/node loc)]
-              (or (:globmin (meta n))
-                  (if-let [p (zip/up loc)]
-                    (globmin p)
-                    (locmin loc)))))
+  (do
+    (defmacro defattr [name [loc :as attrs] & body]
+      `(defn ~name ~attrs
+         (when (zip/branch? ~loc)
+           (let [n# (zip/node ~loc)]
+             (or (~(keyword (str name)) (meta n#))
+                 (case (first n#)
+                   ~@body))))))
 
-          (annotate-tree [tree attrs]
-            (loop [loc (zip/vector-zip tree)]
-              (if (zip/end? loc)
-                (zip/node loc)
-                (recur (zip/next (if (zip/branch? loc)
-                                   (zip/edit loc vary-meta merge (->> (for [[k attr-fn] attrs]
-                                                                        [k (attr-fn loc)])
-                                                                      (into {})))
-                                   loc))))))]
+    (declare repmin globmin locmin)
+
+    (defattr repmin [loc]
+      :fork (let [child (zip/down loc)
+                  l (zip/right child)
+                  r (zip/right l)]
+              [:fork (repmin l) (repmin r)])
+      :leaf [:leaf (globmin loc)])
+
+    (defattr locmin [loc]
+      :fork (let [child (zip/down loc)
+                  l (zip/right child)
+                  r (zip/right l)]
+              (min (locmin l) (locmin r)))
+      :leaf (-> loc (zip/down) (zip/right) (zip/node)))
+
+    (defattr globmin [loc]
+      (if-let [p (zip/up loc)]
+        (globmin p)
+        (locmin loc)))
+
+    (defn annotate-tree [tree attrs]
+      (loop [loc (zip/vector-zip tree)]
+        (if (zip/end? loc)
+          (zip/node loc)
+          (recur (zip/next (if (zip/branch? loc)
+                             (zip/edit loc vary-meta merge (->> (for [[k attr-fn] attrs]
+                                                                  [k (attr-fn loc)])
+                                                                (into {})))
+                             loc))))))
 
     (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
           tree (annotate-tree tree {:repmin repmin
