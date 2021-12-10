@@ -102,7 +102,7 @@ CREATE UNIQUE INDEX t1i0 ON t1(
   (dotimes [n 5]
     (time
      (let [f (format "core2/sql/logic_test/select%d.test" (inc n))
-           records (parse-script (slurp (io/resource f)))]
+           records (slt/parse-script (slurp (io/resource f)))]
        (println f (count records))
        (doseq [{:keys [type statement query] :as record} records
                :let [input (case type
@@ -111,7 +111,7 @@ CREATE UNIQUE INDEX t1i0 ON t1(
                              nil)]
                :when input
                :let [tree (sql/parse-sql2011 input :start :direct_sql_data_statement)]]
-         (if-let [failure (insta/get-failure tree)]
-           (println (or (parse-create-table input) failure))
+         (if-let [failure (instaparse.core/get-failure tree)]
+           (println (or (xtdb-engine/parse-create-table input) failure))
            (print ".")))
        (println)))))
