@@ -2,12 +2,37 @@
   (:require [clojure.test :as t]
             [clojure.string :as str])
   (:import java.nio.charset.StandardCharsets
-           java.security.MessageDigest))
+           java.security.MessageDigest
+           java.sql.Connection))
 
 (defprotocol DbEngine
   (get-engine-name [_])
   (execute-statement [_ statement])
   (execute-query [_ query]))
+
+(extend-protocol DbEngine
+  Connection
+  (get-engine-name [this]
+    (str/lower-case (.getDatabaseProductName (.getMetaData this))))
+
+  (execute-statement [this statement]
+    (with-open [stmt (.createStatement this)]
+      (.execute stmt statement))
+    this)
+
+  (execute-query [this query]
+    (with-open [stmt (.createStatement this)
+                rs (.executeQuery stmt query)]
+      (let [column-count (.getColumnCount (.getMetaData rs))]
+        (loop [acc []]
+          (if (.next rs)
+            (recur (loop [n 0
+                          row []]
+                     (if (= n column-count)
+                       (conj acc row)
+                       (recur (inc n)
+                              (conj row (.getObject rs (inc n)))))))
+            acc))))))
 
 ;; Parser
 
