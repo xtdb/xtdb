@@ -95,17 +95,17 @@
 (defmulti execute-record (fn [_ {:keys [type] :as record}]
                            type))
 
-(defmethod execute-record :halt [db-engine _]
-  (reduced db-engine))
+(defmethod execute-record :halt [ctx _]
+  (reduced ctx))
 
-(defmethod execute-record :hash-threshold [db-engine {:keys [max-result-set-size]}]
-  (assoc db-engine :max-result-set-size max-result-set-size))
+(defmethod execute-record :hash-threshold [ctx {:keys [max-result-set-size]}]
+  (assoc ctx :max-result-set-size max-result-set-size))
 
-(defmethod execute-record :statement [db-engine {:keys [mode statement]}]
+(defmethod execute-record :statement [{:keys [db-engine] :as ctx} {:keys [mode statement]}]
   (case mode
-    :ok (execute-statement db-engine statement)
+    :ok (update ctx :db-engine execute-statement statement)
     :error (do (t/is (thrown? Exception (execute-statement db-engine statement)))
-               db-engine)))
+               ctx)))
 
 (defn- format-result-str [sort-mode result]
   (let [result-rows (for [vs result]
@@ -139,20 +139,23 @@
 ;; TODO: parse query and qualify known table columns if
 ;; needed. Generate logical plan and format and hash result according
 ;; to sort mode. Projection will usually be positional.
-(defmethod execute-record :query [db-engine {:keys [query type-string sort-mode label
-                                                    result-set-size result-set result-set-md5sum]}]
+(defmethod execute-record :query [{:keys [db-engine max-result-set-size] :as ctx}
+                                  {:keys [query type-string sort-mode label
+                                          result-set-size result-set result-set-md5sum]}]
 
-  (let [result (execute-query db-engine query)
-        result-str (format-result-str sort-mode result)]
+  (let [result (execute-query db-engine query)]
     #_(validate-type-string type-string result)
     (when-let [row (first result)]
       (t/is (count type-string) (count row)))
     (t/is (= result-set-size (count result)))
-    #_(when result-set
-        (t/is (= (str/join "\n" result-set) result-str)))
-    (when result-set-md5sum
-      (t/is (= result-set-md5sum (md5 result-str)))))
-  db-engine)
+    (let [result-str (cond->> result
+                       (and result-set-md5sum max-result-set-size) (take max-result-set-size)
+                       true (format-result-str sort-mode))]
+      #_(when result-set
+          (t/is (= (str/join "\n" result-set) result-str)))
+      (when result-set-md5sum
+        (t/is (= result-set-md5sum (md5 result-str))))))
+  ctx)
 
 (defn- skip-record? [db-engine-name {:keys [skipif onlyif]
                                      :or {onlyif db-engine-name}}]
@@ -161,4 +164,5 @@
 
 (defn execute-records [db-engine records]
   (->> (remove (partial skip-record? (get-engine-name db-engine)) records)
-       (reduce execute-record db-engine)))
+       (reduce execute-record {:db-engine db-engine})
+       :db-engine))
