@@ -12,8 +12,10 @@
             [core2.test-util :as tu]
             [instaparse.core :as insta])
   (:import java.nio.charset.StandardCharsets
+           java.io.Closeable
            java.security.MessageDigest
-           java.util.UUID))
+           java.util.UUID
+           core2.local_node.Node))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -95,8 +97,10 @@
        (remove #(every? str/blank? %))
        (mapv parse-record)))
 
-(defmulti execute-statement (fn [ctx [type]]
-                              type))
+(defprotocol DbEngine
+  (get-engine-name [_])
+  (execute-statement [_ statement])
+  (execute-query [_ query]))
 
 ;; TODO: this is a temporary hack.
 (defn- normalize-literal [x]
@@ -121,7 +125,7 @@
       x)
     x))
 
-(defn- insert->doc [{:keys [tables] :as ctx} insert-statement]
+(defn- xtdb-insert->doc [tables insert-statement]
   (let [[_ _ _ insertion-target insert-columns-and-source] insert-statement
         table (first (filter string? (flatten insertion-target)))
         from-subquery (second insert-columns-and-source)
@@ -138,69 +142,30 @@
                         (split-with #{"VALUES"}))]
     (merge {:_table table} (zipmap (map keyword columns) values))))
 
-(defmethod execute-statement :insert_statement [{:keys [node tables] :as ctx} insert-statement]
-  (let [doc (insert->doc ctx insert-statement)]
+(defn- xtdb-insert-statement [{:keys [tables] :as node} insert-statement]
+  (let [doc (xtdb-insert->doc tables insert-statement)]
     (-> (c2/submit-tx node [[:put (merge {:_id (UUID/randomUUID)} doc)]])
         (tu/then-await-tx node))
-    ctx))
+    node))
 
-(defmulti execute-record (fn [ctx {:keys [type] :as record}]
-                           type))
+(defn- xtdb-create-table [node {:keys [table-name columns]}]
+  (assert (nil? (get-in node [:tables table-name])))
+  (assoc-in node [:tables table-name] columns))
 
-(defmethod execute-record :create-table [ctx {:keys [table-name columns]}]
-  (assert (nil? (get-in ctx [:tables table-name])))
-  (assoc-in ctx [:tables table-name] columns))
+(defn- xtdb-create-view [node {:keys [view-name as]}]
+  (assert (nil? (get-in node [:views view-name])))
+  (assoc-in node [:views view-name] as))
 
-(defmethod execute-record :create-view [ctx {:keys [view-name as]}]
-  (assert (nil? (get-in ctx [:views view-name])))
-  (assoc-in ctx [:views view-name] as))
+(defn- xtdb-execute-record [node record]
+  (case (:type record)
+    :create-table (xtdb-create-table node record)
+    :create-view (xtdb-create-view node record)))
 
-(defmethod execute-record :halt [ctx _]
-  (reduced ctx))
+(defn- xtdb-execute-statement [node direct-sql-data-statement-tree]
+  (case (first direct-sql-data-statement-tree)
+    :insert_statement (xtdb-insert-statement node direct-sql-data-statement-tree)))
 
-(defmethod execute-record :hash-threshold [ctx {:keys [max-result-set-size]}]
-  (assoc ctx :max-result-set-size max-result-set-size))
-
-(defmethod execute-record :statement [ctx {:keys [mode statement]}]
-  (if (skip-statement? statement)
-    ctx
-    (let [tree (sql/parse statement :direct_sql_data_statement)]
-      (if (insta/failure? tree)
-        (if-let [record (or (parse-create-table statement)
-                            (parse-create-view statement))]
-          (case mode
-            :ok (execute-record ctx record)
-            :error (t/is (thrown? Exception (execute-record ctx record))))
-          (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
-        (let [direct-sql-data-statement-tree (second tree)]
-          (case mode
-            :ok (execute-statement ctx direct-sql-data-statement-tree)
-            :error (t/is (thrown? Exception (execute-statement ctx direct-sql-data-statement-tree)))))))))
-
-(defn- format-result-str [sort-mode projection result]
-  (let [result-rows (for [vs (map #(map % projection) result)]
-                      (for [v vs]
-                        (cond
-                          (nil? v) "NULL"
-                          (= "" v) "(empty)"
-                          (float? v) (format "%.3f" v)
-                          :else (str v))))]
-    (->> (case sort-mode
-           :rowsort (flatten (sort-by (partial str/join " ") result-rows))
-           :valuesort (sort (flatten result-rows))
-           :nosort (flatten result-rows))
-         (str/join "\n"))))
-
-(defn- validate-type-string [type-string projection result]
-  (doseq [row result
-          [value type] (map vector (map row projection) type-string)
-          :let [java-class (case (str type)
-                             "I" Long
-                             "R" Double
-                             "T" String)]]
-    (t/is (or (nil? value) (cast java-class value)))))
-
-(def ^:private normalize-query-rules
+(def ^:private xtdb-normalize-query-rules
   {:select_sublist
    (rew/->scoped {:derived_column (rew/->after
                                    (fn [loc _]
@@ -246,42 +211,96 @@
                                             [:actual_identifier
                                              [:regular_identifier column]]]]]]))))})})
 
-(defn normalize-query-tree [tables tree]
-  (rew/rewrite-tree tree {:tables tables :rules normalize-query-rules}))
+(defn- xtdb-normalize-query-tree [tables tree]
+  (rew/rewrite-tree tree {:tables tables :rules xtdb-normalize-query-rules}))
+
+(extend-protocol DbEngine
+  Node
+  (get-engine-name [_] "xtdb")
+
+  (execute-statement [this statement]
+    (let [tree (sql/parse statement :direct_sql_data_statement)]
+      (if (insta/failure? tree)
+        (if-let [record (or (parse-create-table statement)
+                            (parse-create-view statement))]
+          (xtdb-execute-record this record))
+        (let [direct-sql-data-statement-tree (second tree)]
+          (xtdb-execute-statement this direct-sql-data-statement-tree)))))
+
+  (execute-query [this query]
+    (let [tree (sql/parse query :query_expression)
+          snapshot-factory (tu/component this ::snap/snapshot-factory)
+          db (snap/snapshot snapshot-factory)]
+      (when (insta/failure? tree)
+        (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
+      (let [tree (xtdb-normalize-query-tree (:tables this) tree)]
+        (->> (op/query-ra '[:scan [_id]] db)
+             (mapv (comp vec keys)))))))
+
+(defmulti execute-record (fn [_ {:keys [type] :as record}]
+                           type))
+
+(defmethod execute-record :halt [db-engine _]
+  (reduced db-engine))
+
+(defmethod execute-record :hash-threshold [db-engine {:keys [max-result-set-size]}]
+  (assoc db-engine :max-result-set-size max-result-set-size))
+
+(defmethod execute-record :statement [db-engine {:keys [mode statement]}]
+  (case mode
+    :ok (execute-statement db-engine statement)
+    :error (do (t/is (thrown? Exception (execute-statement db-engine statement)))
+               db-engine)))
+
+(defn- format-result-str [sort-mode result]
+  (let [result-rows (for [vs result]
+                      (for [v vs]
+                        (cond
+                          (nil? v) "NULL"
+                          (= "" v) "(empty)"
+                          (float? v) (format "%.3f" v)
+                          :else (str v))))]
+    (->> (case sort-mode
+           :rowsort (flatten (sort-by (partial str/join " ") result-rows))
+           :valuesort (sort (flatten result-rows))
+           :nosort (flatten result-rows))
+         (str/join "\n"))))
+
+(defn- validate-type-string [type-string result]
+  (doseq [row result
+          [value type] (map vector row type-string)
+          :let [java-class (case (str type)
+                             "I" Long
+                             "R" Double
+                             "T" String)]]
+    (t/is (or (nil? value) (cast java-class value)))))
 
 ;; TODO: parse query and qualify known table columns if
 ;; needed. Generate logical plan and format and hash result according
 ;; to sort mode. Projection will usually be positional.
-(defmethod execute-record :query [{:keys [node tables] :as ctx}
-                                  {:keys [query type-string sort-mode label
-                                          result-set-size result-set result-set-md5sum]}]
-  (let [tree (sql/parse query :query_expression)
-        snapshot-factory (tu/component node ::snap/snapshot-factory)
-        db (snap/snapshot snapshot-factory)]
-    (when (insta/failure? tree)
-      (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
-    (let [tree (normalize-query-tree tables tree)
-          result (op/query-ra '[:scan [_id]] db)
-          projection [:_id]
-          result-str (format-result-str sort-mode projection result)]
-      #_(validate-type-string type-string projection result)
-      (when-let [row (first result)]
-        (t/is (count type-string) (count row)))
-      (t/is (= result-set-size (count result)))
-      #_(when result-set
-          (t/is (= (str/join "\n" result-set) result-str)))
-      (when result-set-md5sum
-        (t/is (= result-set-md5sum (md5 result-str)))))
-    ctx))
+(defmethod execute-record :query [db-engine {:keys [query type-string sort-mode label
+                                                    result-set-size result-set result-set-md5sum]}]
 
-(defn- skip-record? [{:keys [skipif onlyif]
-                      :or {onlyif "xtdb"}}]
-  (or (= "xtdb" skipif)
-      (not= "xtdb" onlyif)) )
+  (let [result (execute-query db-engine query)
+        result-str (format-result-str sort-mode result)]
+    #_(validate-type-string type-string result)
+    (when-let [row (first result)]
+      (t/is (count type-string) (count row)))
+    (t/is (= result-set-size (count result)))
+    #_(when result-set
+        (t/is (= (str/join "\n" result-set) result-str)))
+    (when result-set-md5sum
+      (t/is (= result-set-md5sum (md5 result-str)))))
+  db-engine)
 
-(defn- execute-records [node records]
-  (->> (remove skip-record? records)
-       (reduce execute-record {:node node :tables {}})))
+(defn- skip-record? [db-engine-name {:keys [skipif onlyif]
+                                     :or {onlyif db-engine-name}}]
+  (or (= db-engine-name skipif)
+      (not= db-engine-name onlyif)) )
+
+(defn- execute-records [db-engine records]
+  (->> (remove (partial skip-record? (get-engine-name db-engine)) records)
+       (reduce execute-record db-engine)))
 
 (t/deftest test-sql-logic-test-parser
   (t/is (= 6 (count (parse-script
@@ -361,18 +380,17 @@ CREATE UNIQUE INDEX t1i0 ON t1(
 
 (t/deftest test-normalize-query
   (let [tables {"t1" ["a" "b" "c" "d" "e"]}
-        ctx {:tables tables}
         query "SELECT a+b*2+c*3+d*4+e*5, (a+b+c+d+e)/5 FROM t1 ORDER BY 1,2"
         expected "SELECT t1.a+t1.b*2+t1.c*3+t1.d*4+t1.e*5 AS col1, (t1.a+t1.b+t1.c+t1.d+t1.e)/5 AS col2 FROM t1 ORDER BY col1,col2"]
     (t/is (= (sql/parse expected :query_expression)
-             (normalize-query-tree tables (sql/parse query :query_expression))))))
+             (xtdb-normalize-query-tree tables (sql/parse query :query_expression))))))
 
 (t/deftest test-insert->doc
-  (let [ctx {:tables {"t1" ["a" "b" "c" "d" "e"]}}]
+  (let [tables {"t1" ["a" "b" "c" "d" "e"]}]
     (t/is (= {:e 103 :c 102 :b 100 :d 101 :a 104 :_table "t1"}
-             (insert->doc ctx (sql/parse "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :insert_statement))))
+             (xtdb-insert->doc tables (sql/parse "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :insert_statement))))
     (t/is (= {:a nil :b -102 :c true :d "101" :e 104.5 :_table "t1"}
-             (insert->doc ctx (sql/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement))))))
+             (xtdb-insert->doc tables (sql/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement))))))
 
 (t/deftest test-annotate-query-scopes
   (let [tree (sql/parse "WITH foo AS (SELECT 1 FROM bar)
