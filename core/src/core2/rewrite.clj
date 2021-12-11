@@ -104,6 +104,24 @@
 ;; https://inkytonik.github.io/kiama/Attribution
 ;; https://arxiv.org/pdf/2110.07902.pdf
 ;; https://haslab.uminho.pt/prmartins/files/phd.pdf
+;; https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.650.3848&rep=rep1&type=pdf <-- check this, analyses SQL.
+;; https://github.com/christoff-buerger/racr
+
+;; Note:
+
+;; Currently a bit mixed, tries to maintain zipper and memoize on the
+;; nodes, but won't do this properly as the active zipper may
+;; change. Needs to stay same for this to work properly.
+
+;; Ideas:
+
+;; Collection attributes - trivial?
+;; Avoid explicit zippers, grab all parent/child attributes?
+;; Strategies?
+;; Replace rest of this rewrite ns entirely?
+;; Proper unification match on node instead of keyword - optionally bind zippers with ^:z?
+;; Try to maintain zipper instance in-out and annotate directly in generated code? Return zipper instead of value? Access attribute values via helper?
+;; Alternatively, dynamic mutable memo map during annotate-tree on [loc attr] keys.
 
 (comment
   (do
@@ -111,9 +129,10 @@
       `(defn ~name ~attrs
          (when (zip/branch? ~loc)
            (let [n# (zip/node ~loc)]
-             (or (~(keyword (str name)) (meta n#))
-                 (case (first n#)
-                   ~@body))))))
+             (get (meta n#)
+                  ~(keyword (str name))
+                  (case (first n#)
+                    ~@body))))))
 
     (declare repmin globmin locmin)
 
@@ -141,9 +160,12 @@
         (if (zip/end? loc)
           (zip/node loc)
           (recur (zip/next (if (zip/branch? loc)
-                             (zip/edit loc vary-meta merge (->> (for [[k attr-fn] attrs]
-                                                                  [k (attr-fn loc)])
-                                                                (into {})))
+                             (->> (for [[k attr-fn] attrs
+                                        :let [v (attr-fn loc)]
+                                        :when (some? v)]
+                                    [k v])
+                                  (into {})
+                                  (zip/edit loc vary-meta merge))
                              loc))))))
 
     (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
