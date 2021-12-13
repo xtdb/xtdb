@@ -5,6 +5,7 @@
            [core2.types LegType LegType$StructLegType]
            [core2.vector IDenseUnionWriter IVectorWriter]
            [core2.vector.extensions KeywordType KeywordVector UuidType UuidVector]
+           java.io.Writer
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
            [java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId]
@@ -380,3 +381,9 @@
     (if (instance? ArrowType$Struct arrow-type)
       (LegType$StructLegType. (->> (.getChildren field) (into #{} (map #(.getName ^Field %)))))
       (LegType. arrow-type))))
+
+(defmethod print-method LegType [^LegType leg-type, ^Writer w]
+  (.write w (format "(LegType %s)" (.arrowType leg-type))))
+
+(defmethod print-method LegType$StructLegType [^LegType$StructLegType leg-type, ^Writer w]
+  (.write w (format "(StructLegType %s)" (pr-str (.keys leg-type)))))

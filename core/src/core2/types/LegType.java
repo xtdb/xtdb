@@ -22,6 +22,10 @@ public class LegType {
     public static final LegType LIST = new LegType(ArrowType.List.INSTANCE);
     public static final LegType MAP = new LegType(new ArrowType.Map(false));
 
+    public static LegType structOfKeys(Set<String> keys) {
+        return new StructLegType(keys);
+    }
+
     public final ArrowType arrowType;
 
     public LegType(ArrowType arrowType) {

@@ -24,12 +24,10 @@
                                                           (project [_ allocator in-rel]
                                                             (let [row-count (.rowCount in-rel)
 
-                                                                  a-col (-> (.vectorForName in-rel "a")
-                                                                            (iv/reader-for-type LegType/BIGINT))
+                                                                  a-col (.vectorForName in-rel "a")
                                                                   ^BigIntVector a-vec (.getVector a-col)
 
-                                                                  b-col (-> (.vectorForName in-rel "b")
-                                                                            (iv/reader-for-type LegType/BIGINT))
+                                                                  b-col (.vectorForName in-rel "b")
                                                                   ^BigIntVector b-vec (.getVector b-col)
 
                                                                   out (BigIntVector. "c" allocator)]
