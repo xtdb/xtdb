@@ -201,7 +201,7 @@
                         (apply [_ col-name]
                           (-> (or (.getChild dest-vec col-name)
                                   (.addOrGet dest-vec col-name
-                                             (FieldType/nullable types/dense-union-type)
+                                             (FieldType. false types/dense-union-type nil)
                                              DenseUnionVector))
                               (vec->writer pos)))))))
 
@@ -336,7 +336,8 @@
         (.computeIfAbsent writers col-name
                           (reify Function
                             (apply [_ col-name]
-                              (vec->writer (DenseUnionVector/empty col-name allocator))))))
+                              (vec->writer (-> (types/->field col-name types/dense-union-type false)
+                                               (.createVector allocator)))))))
 
       (iterator [_]
         (.iterator (.values writers)))

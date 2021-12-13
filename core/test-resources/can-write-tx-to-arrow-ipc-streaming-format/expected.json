@@ -36,7 +36,7 @@
               },
               "children" : [{
                 "name" : "_id",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -52,7 +52,7 @@
                 }]
               },{
                 "name" : "api-version",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -68,7 +68,7 @@
                 }]
               },{
                 "name" : "manufacturer",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -84,7 +84,7 @@
                 }]
               },{
                 "name" : "model",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -100,7 +100,7 @@
                 }]
               },{
                 "name" : "os-name",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -123,7 +123,7 @@
               },
               "children" : [{
                 "name" : "_id",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -139,7 +139,7 @@
                 }]
               },{
                 "name" : "cpu-avg-15min",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -156,7 +156,7 @@
                 }]
               },{
                 "name" : "rssi",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -173,7 +173,7 @@
                 }]
               },{
                 "name" : "cpu-avg-5min",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -190,7 +190,7 @@
                 }]
               },{
                 "name" : "battery-status",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -206,7 +206,7 @@
                 }]
               },{
                 "name" : "ssid",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -222,7 +222,7 @@
                 }]
               },{
                 "name" : "time",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -240,7 +240,7 @@
                 }]
               },{
                 "name" : "battery-level",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -257,7 +257,7 @@
                 }]
               },{
                 "name" : "bssid",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -273,7 +273,7 @@
                 }]
               },{
                 "name" : "battery-temperature",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -290,7 +290,7 @@
                 }]
               },{
                 "name" : "cpu-avg-1min",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -307,7 +307,7 @@
                 }]
               },{
                 "name" : "mem-free",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",
@@ -324,7 +324,7 @@
                 }]
               },{
                 "name" : "mem-used",
-                "nullable" : true,
+                "nullable" : false,
                 "type" : {
                   "name" : "union",
                   "mode" : "Dense",

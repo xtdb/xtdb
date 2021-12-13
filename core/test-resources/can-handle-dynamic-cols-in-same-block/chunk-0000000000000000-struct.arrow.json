@@ -25,7 +25,7 @@
         },
         "children" : [{
           "name" : "a",
-          "nullable" : true,
+          "nullable" : false,
           "type" : {
             "name" : "union",
             "mode" : "Dense",
@@ -43,7 +43,7 @@
           }]
         },{
           "name" : "b",
-          "nullable" : true,
+          "nullable" : false,
           "type" : {
             "name" : "union",
             "mode" : "Dense",
@@ -66,7 +66,7 @@
         },
         "children" : [{
           "name" : "a",
-          "nullable" : true,
+          "nullable" : false,
           "type" : {
             "name" : "union",
             "mode" : "Dense",
@@ -82,7 +82,7 @@
           }]
         },{
           "name" : "c",
-          "nullable" : true,
+          "nullable" : false,
           "type" : {
             "name" : "union",
             "mode" : "Dense",
