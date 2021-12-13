@@ -849,10 +849,10 @@
         arrow-type (.getType out-field)]
     (or (cond
           (instance? ArrowType$Struct arrow-type)
-          (let [out-field (-> (->> (.getChildren out-field)
-                                   (filter #(= (name field) (.getName ^Field %)))
-                                   first)
-                              (field-with-name col-name))]
+          (when-let [out-field (some-> (->> (.getChildren out-field)
+                                            (filter #(= (name field) (.getName ^Field %)))
+                                            first)
+                                       (field-with-name col-name))]
 
             {:out-field out-field
              :eval-expr (fn [in-rel al params]

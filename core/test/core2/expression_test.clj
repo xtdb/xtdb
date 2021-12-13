@@ -470,7 +470,12 @@
     (t/is (= {:res [3.4 8.25]
               :vec-type Float8Vector
               :nullable? false}
-             (run-projection rel '(. {:x x, :y y} y))))))
+             (run-projection rel '(. {:x x, :y y} y))))
+
+    (t/is (= {:res [nil nil]
+              :vec-type NullVector
+              :nullable? true}
+             (run-projection rel '(. {:x x, :y y} z))))))
 
 (t/deftest test-list-literals
   (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])
