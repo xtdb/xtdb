@@ -498,3 +498,23 @@
              (run-projection rel '{:a (. x a)
                                    :b (. x b)
                                    :sum (+ (. x a) (. x b))})))))
+
+(t/deftest text-multiple-struct-legs
+  (with-open [rel (open-rel [(tu/->duv "x"
+                                       [{:a 42}
+                                        {:a 12, :b 5}
+                                        {:b 10}
+                                        {:a 15, :b 25}])])]
+    (t/is (= {:res [{:a 42}
+                    {:a 12, :b 5}
+                    {:b 10}
+                    {:a 15, :b 25}]
+              :vec-type #{StructVector}
+              :nullable? false}
+             (run-projection rel 'x)))
+
+    (t/is (= {:res [42 12 nil 15]
+              ;; TODO: this could be a nullable BigIntVector, rather than a DUV
+              :vec-type #{BigIntVector NullVector}
+              :nullable? false}
+             (run-projection rel '(. x a))))))

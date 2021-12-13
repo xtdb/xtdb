@@ -24,7 +24,7 @@
            [org.apache.arrow.vector BitVector DurationVector ValueVector]
            [org.apache.arrow.vector.complex BaseListVector BaseRepeatedValueVector DenseUnionVector FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -846,19 +846,72 @@
 
 (defmethod emit-expr :dot-const-field [{:keys [struct-expr field]} ^String col-name opts]
   (let [{:keys [^Field out-field eval-expr]} (emit-expr struct-expr "dot" opts)
+        arrow-type (.getType out-field)]
+    (cond
+      (instance? ArrowType$Struct arrow-type)
+      (let [out-field (-> (->> (.getChildren out-field)
+                               (filter #(= (name field) (.getName ^Field %)))
+                               first)
+                          (field-with-name col-name))]
 
-        ;; HACK assuming monomorphic for now
-        out-field (-> (->> (.getChildren out-field)
-                           (filter #(= (name field) (.getName ^Field %)))
-                           first)
-                      (field-with-name col-name))]
+        {:out-field out-field
+         :eval-expr (fn [in-rel al params]
+                      (with-open [^StructVector res (eval-expr in-rel al params)]
+                        (-> (.getTransferPair (.getChild res (name field)) col-name al)
+                            (doto (.transfer))
+                            (.getTo))))})
 
-    {:out-field out-field
-     :eval-expr (fn [in-rel al params]
-                  (with-open [^StructVector res (eval-expr in-rel al params)]
-                    (-> (.getTransferPair (.getChild res (name field)) col-name al)
-                        (doto (.transfer))
-                        (.getTo))))}))
+      (instance? ArrowType$Union arrow-type)
+      (let [type-ids (.getTypeIds ^ArrowType$Union arrow-type)
+            max-type-id (when (seq type-ids) (apply max type-ids))
+
+            ^ArrowType$Union
+            child-fields (for [^Field child-field (.getChildren out-field)
+                               :when (instance? ArrowType$Struct (.getType child-field))]
+                           (->> (.getChildren child-field)
+                                (filter #(= (name field) (.getName ^Field %)))
+                                first))]
+
+        ;; HACK: we need to combine the child field types
+        (if-let [first-child-field (->> child-fields (filter some?) first)]
+          (let [out-field (-> first-child-field (field-with-name col-name))]
+            {:out-field out-field
+             :eval-expr (fn [in-rel al params]
+                          (let [out-vec (.createVector out-field al)
+                                out-writer (.asDenseUnion (vw/vec->writer out-vec))
+                                null-writer (.writerForType out-writer LegType/NULL)]
+                            (try
+                              (with-open [^DenseUnionVector in-vec (eval-expr in-rel al params)]
+                                (let [^"[Lcore2.vector.IRowCopier;"
+                                      copiers (->> (for [type-id (range (inc ^long max-type-id))]
+                                                     (when-let [child-vec (.getVectorByType in-vec type-id)]
+                                                       (when (instance? StructVector child-vec)
+                                                         (when-let [field-vec (.getChild ^StructVector child-vec (name field))]
+                                                           (.rowCopier out-writer field-vec)))))
+                                                   (into-array IRowCopier))]
+
+                                  (dotimes [idx (.getValueCount in-vec)]
+                                    (.startValue out-writer)
+                                    (if-let [^IRowCopier copier (aget copiers (.getTypeId in-vec idx))]
+                                      (.copyRow copier (.getOffset in-vec idx))
+                                      (doto null-writer (.startValue) (.endValue)))
+                                    (.endValue out-writer))))
+
+                              out-vec
+
+                              (catch Throwable e
+                                (.close out-vec)
+                                (throw e)))))})
+
+          (let [out-field (types/->field col-name types/null-type true)]
+            {:out-field out-field
+             :eval-expr (fn [in-rel al params]
+                          (with-open [^ValueVector in-vec (eval-expr in-rel al params)]
+                            (doto (.createVector out-field al)
+                              (.setValueCount (.getValueCount in-vec)))))})))
+
+      :else
+      (throw (UnsupportedOperationException.)))))
 
 (defmethod emit-expr :variable [{:keys [variable]} col-name {:keys [var-fields]}]
   (let [^Field out-field (-> (or (get var-fields variable)
