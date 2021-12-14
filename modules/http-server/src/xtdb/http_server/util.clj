@@ -148,12 +148,11 @@
             [:nav.header
              [:div.xtdb-logo
               [:a {:href "/_xtdb/query"}
-               [:img.xtdb-logo__img {:src "/crux-horizontal-bw.svg.png" }]]]
+               [:img.xtdb-logo__img {:src "/xtdb.svg" }]]]
              [:span.mobile-hidden
               [:b (:server-label http-options)]]
              [:div.header__links
-              [:a.header__link {:href "https://xtdb.com/reference/get-started.html" :target "_blank"} "Documentation"]
-              [:a.header__link {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-xtdb-users" :target "_blank"} "Zulip Chat"]
+              [:a.header__link {:href "https://xtdb.com/docs/" :target "_blank"} "Documentation"]
               [:a.header__link {:href "mailto:hello@xtdb.com" :target "_blank"} "Email Support"]]]
             [:div.console
              [:div#app
