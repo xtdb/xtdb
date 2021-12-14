@@ -970,6 +970,26 @@
                       (finally
                         (run! util/try-close els)))))}))
 
+(defn- ->nullable-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
+  (let [arrow-type (.getType field)]
+    (cond
+      (.isNullable field) field
+
+      (not (instance? ArrowType$Union arrow-type))
+      (recur (types/->field (.getName field) types/dense-union-type false field))
+
+      (some #{LegType/NULL} (map types/field->leg-type (.getChildren field)))
+      field
+
+      :else
+      (let [field-type (.getFieldType field)
+            ^ArrowType$Union arrow-type (.getType field-type)
+            ;; have to pass [] type-ids here, otherwise it breaks creating a FixedSizeList :/
+            arrow-type (ArrowType$Union. (.getMode arrow-type) (int-array 0))]
+        (Field. (.getName field)
+                (FieldType. false arrow-type (.getDictionary field-type) (.getMetadata field-type))
+                (conj (vec (.getChildren field)) (types/->field "null" types/null-type true)))))))
+
 (defn- ->data-vec [^BaseListVector list-vec]
   (cond
     (instance? BaseRepeatedValueVector list-vec)
@@ -981,14 +1001,21 @@
 (defmethod emit-expr :nth-const-idx [{:keys [coll-expr ^long idx]} col-name opts]
   (let [{^Field coll-field :out-field, eval-coll :eval-expr} (emit-expr coll-expr "nth-coll" opts)
 
+        nullable? (let [arrow-type (.getType coll-field)]
+                    (or (not (instance? ArrowType$FixedSizeList arrow-type))
+                        (<= (.getListSize ^ArrowType$FixedSizeList arrow-type) idx)))
+
         out-field (-> (first (.getChildren coll-field))
-                      (field-with-name col-name))]
+                      (field-with-name col-name)
+                      (->nullable-field))]
 
     ;; TODO handle non-list and add test
     {:out-field out-field
      :eval-expr (fn [in-rel al params]
                   (let [out-vec (.createVector out-field al)
-                        out-writer (vw/vec->writer out-vec)]
+                        out-writer (vw/vec->writer out-vec)
+                        null-writer (when nullable?
+                                      (.writerForType (.asDenseUnion out-writer) LegType/NULL))]
                     (try
                       (with-open [^BaseListVector coll-res (eval-coll in-rel al params)]
                         (let [coll-count (.getValueCount coll-res)
@@ -996,8 +1023,10 @@
                           (.setValueCount out-vec coll-count)
                           (dotimes [out-idx coll-count]
                             (.startValue out-writer)
-                            ;; TODO AIOOB - put null?
-                            (.copyRow copier (+ (.getElementStartIndex coll-res out-idx) idx))
+                            (let [copy-idx (+ (.getElementStartIndex coll-res out-idx) idx)]
+                              (if (< copy-idx (.getElementEndIndex coll-res out-idx))
+                                (.copyRow copier copy-idx)
+                                (doto null-writer (.startValue) (.endValue))))
                             (.endValue out-writer))
                           out-vec))
                       (catch Throwable e

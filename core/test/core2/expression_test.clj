@@ -487,11 +487,12 @@
               :nullable? false}
              (run-projection rel '[x y 10.0])))
 
-    (t/is (= {:res [[1.2 3.4] [3.4 8.25]]
-              :leg-type (LegType. (ArrowType$FixedSizeList. 2))
+    (t/is (= {:res [[1.2 3.4 nil] [3.4 8.25 nil]]
+              :leg-type (LegType. (ArrowType$FixedSizeList. 3))
               :nullable? false}
              (run-projection rel '[(nth [x y] 0)
-                                   (nth [x y] 1)])))))
+                                   (nth [x y] 1)
+                                   (nth [x y] 2)])))))
 
 (t/deftest test-mixing-prims-with-non-prims
   (with-open [rel (open-rel [(tu/->mono-vec "x" types/struct-type
