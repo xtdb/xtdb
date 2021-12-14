@@ -8,6 +8,7 @@
             [xtdb.api :as xt]
             [xtdb.calcite.types]
             [xtdb.error :as err]
+            [xtdb.query :as query]
             [xtdb.system :as sys]
             [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core :as json])
   (:import clojure.lang.Symbol
@@ -459,7 +460,8 @@
 
 (s/def :xtdb.sql/table-name string?)
 (s/def :xtdb.sql/table-columns (s/map-of symbol? java-sql-types->calcite-sql-type))
-(s/def ::table (s/keys :req [:xt/id :xtdb.sql/table-name :xtdb.sql/table-columns]))
+(s/def :xtdb.sql/table-query ::query/query)
+(s/def ::table (s/keys :req [:xt/id :xtdb.sql/table-name :xtdb.sql/table-columns :xtdb.sql/table-query]))
 
 (defn- lookup-schema [node]
   (let [db (xt/db node)]
