@@ -106,12 +106,6 @@
 ;; https://haslab.uminho.pt/prmartins/files/phd.pdf
 ;; https://github.com/christoff-buerger/racr
 
-;; Note:
-
-;; Currently a bit mixed, tries to maintain zipper and memoize on the
-;; nodes, but won't do this properly as the active zipper may
-;; change. Needs to stay same for this to work properly.
-
 ;; Ideas:
 
 ;; Strategies?
