@@ -116,8 +116,7 @@
 
 ;; Strategies?
 ;; Replace rest of this rewrite ns entirely?
-;; Proper unification match on node instead of keyword - optionally bind zippers with ^:z?
-
+;
 (comment
   (do
     (defn- attr-children [attr-fn loc]
@@ -125,32 +124,85 @@
              acc []]
         (if loc
           (recur (zip/right loc)
-                 (if-some [v (and (zip/branch? loc)
-                                  (attr-fn loc))]
-                   (conj acc v)
+                 (if (zip/branch? loc)
+                   (if-some [v (attr-fn loc)]
+                     (conj acc v)
+                     acc)
                    acc))
           acc)))
 
-    (defmacro defattr [name [loc :as attrs] & body]
-      `(defn ~name ~attrs
-         (when (zip/branch? ~loc)
-           (let [node# (zip/node ~loc)]
-             (case (first node#)
-               ~@body)))))
+    (defn- zip-next-skip-subtree [loc]
+      (or (zip/right loc)
+          (loop [p loc]
+            (when-let [p (zip/up p)]
+              (or (zip/right p)
+                  (recur p))))))
+
+    (defn- zip-match [pattern-loc loc]
+      (loop [pattern-loc pattern-loc
+             loc loc
+             acc {}]
+        (cond
+          (or (nil? pattern-loc)
+              (zip/end? pattern-loc))
+          acc
+
+          (or (nil? loc)
+              (zip/end? loc))
+          nil
+
+          (and (zip/branch? pattern-loc)
+               (zip/branch? loc))
+          (when (= (count (zip/children pattern-loc))
+                   (count (zip/children loc)))
+            (recur (zip/down pattern-loc) (zip/down loc) acc))
+
+          :else
+          (let [pattern-node (zip/node pattern-loc)
+                node (zip/node loc)]
+            (cond
+              (= pattern-node node)
+              (recur (zip-next-skip-subtree pattern-loc) (zip-next-skip-subtree loc) acc)
+
+              (and (symbol? pattern-node)
+                   (= node (get acc pattern-node node)))
+              (recur (zip/next pattern-loc)
+                     (zip-next-skip-subtree loc)
+                     (cond-> acc
+                       (not= '_ pattern-node) (assoc pattern-node
+                                                     (if (:z (meta pattern-node))
+                                                       loc
+                                                       node))))
+
+              :else
+              nil)))))
+
+    (defmacro zmatch {:style/indent 1} [loc & [pattern expr & clauses]]
+      (when pattern
+        (if expr
+          (let [vars (->> (flatten pattern)
+                          (filter symbol?)
+                          (remove '#{_}))]
+            `(if-let [{:syms [~@vars] :as acc#} (zip-match (zip/vector-zip '~pattern) ~loc)]
+               ~expr
+               (zmatch ~loc ~@clauses)))
+          pattern)))
 
     (declare repmin globmin locmin)
 
-    (defattr repmin [loc]
-      :fork (->> (attr-children repmin loc)
-                 (into [:fork]))
-      :leaf [:leaf (globmin loc)])
+    (defn repmin [loc]
+      (zmatch loc
+        [:fork _ _] (->> (attr-children repmin loc)
+                         (into [:fork]))
+        [:leaf _] [:leaf (globmin loc)]))
 
-    (defattr locmin [loc]
-      :fork (->> (attr-children locmin loc)
-                 (reduce min))
-      :leaf (second (zip/node loc)))
+    (defn locmin [loc]
+      (zmatch loc
+        [:fork _ _] (->> (attr-children locmin loc)
+                         (reduce min))
+        [:leaf n] n))
 
-    (defattr globmin [loc]
+    (defn globmin [loc]
       (if-let [p (zip/up loc)]
         (globmin p)
         (locmin loc)))
@@ -162,14 +214,19 @@
              (if (zip/end? loc)
                (zip/node loc)
                (recur (zip/next (if (zip/branch? loc)
-                                  (->> (for [[k attr-fn] attrs
-                                             :let [v (attr-fn loc)]
-                                             :when (some? v)]
-                                         [(:name (meta k)) v])
-                                       (into {})
-                                       (zip/edit loc vary-meta merge))
+                                  (if-let [acc (some->> (for [[k attr-fn] attrs
+                                                              :let [v (attr-fn loc)]
+                                                              :when (some? v)]
+                                                          [(:name (meta k)) v])
+                                                        (not-empty)
+                                                        (into {}))]
+                                    (zip/edit loc vary-meta merge acc)
+                                    loc)
                                   loc))))))))
 
     (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
           tree (annotate-tree tree [#'repmin #'locmin #'globmin])]
-      (keep meta (tree-seq vector? seq tree)))))
+      (keep meta (tree-seq vector? seq tree)))
+
+    (zip-match (zip/vector-zip '[:leaf n])
+               (zip/vector-zip [:leaf 2]))))
