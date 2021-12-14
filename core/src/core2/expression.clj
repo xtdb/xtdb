@@ -1007,7 +1007,6 @@
 (defn- emit-prim-expr [prim-expr ^String col-name {:keys [var-fields] :as opts}]
   (let [primitive-ops (methods codegen-expr)
         prim-expr (->> prim-expr
-                       (macro/macroexpand-all)
                        (walk/prewalk-expr (fn [{:keys [op] :as expr}]
                                             (if (contains? primitive-ops op)
                                               expr
