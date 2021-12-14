@@ -104,7 +104,6 @@
 ;; https://inkytonik.github.io/kiama/Attribution
 ;; https://arxiv.org/pdf/2110.07902.pdf
 ;; https://haslab.uminho.pt/prmartins/files/phd.pdf
-;; https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.650.3848&rep=rep1&type=pdf <-- check this, analyses SQL.
 ;; https://github.com/christoff-buerger/racr
 
 ;; Note:
@@ -115,61 +114,62 @@
 
 ;; Ideas:
 
-;; Collection attributes - trivial?
-;; Avoid explicit zippers, grab all parent/child attributes?
 ;; Strategies?
 ;; Replace rest of this rewrite ns entirely?
 ;; Proper unification match on node instead of keyword - optionally bind zippers with ^:z?
-;; Try to maintain zipper instance in-out and annotate directly in generated code? Return zipper instead of value? Access attribute values via helper?
-;; Alternatively, dynamic mutable memo map during annotate-tree on [loc attr] keys.
 
 (comment
   (do
+    (defn- attr-children [attr-fn loc]
+      (loop [loc (zip/right (zip/down loc))
+             acc []]
+        (if loc
+          (recur (zip/right loc)
+                 (if-some [v (and (zip/branch? loc)
+                                  (attr-fn loc))]
+                   (conj acc v)
+                   acc))
+          acc)))
+
     (defmacro defattr [name [loc :as attrs] & body]
       `(defn ~name ~attrs
          (when (zip/branch? ~loc)
-           (let [n# (zip/node ~loc)]
-             (get (meta n#)
-                  ~(keyword (str name))
-                  (case (first n#)
-                    ~@body))))))
+           (let [node# (zip/node ~loc)]
+             (case (first node#)
+               ~@body)))))
 
     (declare repmin globmin locmin)
 
     (defattr repmin [loc]
-      :fork (let [child (zip/down loc)
-                  l (zip/right child)
-                  r (zip/right l)]
-              [:fork (repmin l) (repmin r)])
+      :fork (->> (attr-children repmin loc)
+                 (into [:fork]))
       :leaf [:leaf (globmin loc)])
 
     (defattr locmin [loc]
-      :fork (let [child (zip/down loc)
-                  l (zip/right child)
-                  r (zip/right l)]
-              (min (locmin l) (locmin r)))
-      :leaf (-> loc (zip/down) (zip/right) (zip/node)))
+      :fork (->> (attr-children locmin loc)
+                 (reduce min))
+      :leaf (second (zip/node loc)))
 
     (defattr globmin [loc]
       (if-let [p (zip/up loc)]
         (globmin p)
         (locmin loc)))
 
-    (defn annotate-tree [tree attrs]
-      (loop [loc (zip/vector-zip tree)]
-        (if (zip/end? loc)
-          (zip/node loc)
-          (recur (zip/next (if (zip/branch? loc)
-                             (->> (for [[k attr-fn] attrs
-                                        :let [v (attr-fn loc)]
-                                        :when (some? v)]
-                                    [k v])
-                                  (into {})
-                                  (zip/edit loc vary-meta merge))
-                             loc))))))
+    (defn annotate-tree [tree attr-vars]
+      (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
+        (with-redefs-fn attrs
+          #(loop [loc (zip/vector-zip tree)]
+             (if (zip/end? loc)
+               (zip/node loc)
+               (recur (zip/next (if (zip/branch? loc)
+                                  (->> (for [[k attr-fn] attrs
+                                             :let [v (attr-fn loc)]
+                                             :when (some? v)]
+                                         [(:name (meta k)) v])
+                                       (into {})
+                                       (zip/edit loc vary-meta merge))
+                                  loc))))))))
 
     (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
-          tree (annotate-tree tree {:repmin repmin
-                                    :locmin locmin
-                                    :globmin globmin})]
+          tree (annotate-tree tree [#'repmin #'locmin #'globmin])]
       (keep meta (tree-seq vector? seq tree)))))
