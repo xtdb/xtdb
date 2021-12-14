@@ -5,6 +5,7 @@
             [xtdb.fixtures.calcite :as cf :refer [explain prepared-query query]]
             [clojure.string :as str])
   (:import [java.time ZonedDateTime ZoneId]
+           java.util.ArrayList
            java.time.format.DateTimeFormatter))
 
 (defn- with-each-connection-type [f]
@@ -672,6 +673,18 @@ XtdbToEnumerableConverter
   (t/is (:current_time (first (query "SELECT current_time FROM PERSON"))))
   (t/is (:current_timestamp (first (query "SELECT current_timestamp FROM PERSON"))))
   (t/is (first (query "SELECT last_day(current_timestamp) FROM PERSON"))))
+
+(t/deftest test-table-query-validation
+  (fix/transact! *api* [{:xt/id :person-schema
+                         :xtdb.sql/table-name "person"
+                         :xtdb.sql/table-query {:find '[?id ?name]
+                                                ;; table-query must be a valid edn query
+                                                ;; ArrayList doesn't implement IPersistentCollection
+                                                :where (ArrayList. [['?id :name '?name]])}
+                         :xtdb.sql/table-columns '{?id :keyword, ?name :varchar}}])
+  (fix/transact! *api* [{:xt/id :human/ivan :name "Ivan"}])
+  (t/is (thrown-with-msg? java.sql.SQLException #"Invalid table schema:"
+                          (query "SELECT * FROM PERSON WHERE NAME = 'Ivan'"))))
 
 (comment
   (import '[ch.qos.logback.classic Level Logger]
