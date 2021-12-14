@@ -110,6 +110,7 @@
   (let [[struct field] args]
     (->dot-expr (form->expr struct env) field env)))
 
+;; TODO macro?
 (defmethod parse-list-form '.. [[_ & args :as form] env]
   (let [[struct & fields] args]
     (when-not (seq fields)
@@ -903,6 +904,7 @@
                                     (throw e)))))}))))
 
         (let [out-field (types/->field col-name types/null-type true)]
+          ;; TODO add test
           {:out-field out-field
            :eval-expr (fn [in-rel al params]
                         (with-open [^ValueVector in-vec (eval-expr in-rel al params)]
@@ -982,6 +984,7 @@
         out-field (-> (first (.getChildren coll-field))
                       (field-with-name col-name))]
 
+    ;; TODO handle non-list and add test
     {:out-field out-field
      :eval-expr (fn [in-rel al params]
                   (let [out-vec (.createVector out-field al)
@@ -993,6 +996,7 @@
                           (.setValueCount out-vec coll-count)
                           (dotimes [out-idx coll-count]
                             (.startValue out-writer)
+                            ;; TODO AIOOB - put null?
                             (.copyRow copier (+ (.getElementStartIndex coll-res out-idx) idx))
                             (.endValue out-writer))
                           out-vec))
@@ -1074,6 +1078,7 @@
     (reify IRelationSelector
       (select [_ al in-rel]
         (with-open [selection (.project projector al in-rel)]
+          ;; TODO return an int-array here
           (let [^BitVector sel-vec (.getVector selection)
                 res (RoaringBitmap.)]
             (dotimes [idx (.getValueCount selection)]
