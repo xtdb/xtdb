@@ -260,6 +260,16 @@
        (choice-tp (one-tp-right (once-bu-tp f)))
        (choice-tp f)))
 
+(defn stop-td-tp [f]
+  (->> (one-tp-right (stop-td-tp f))
+       (seq-tp f)
+       (choice-tp (one-tp-down (stop-td-tp f)))))
+
+(defn stop-bu-tp [f]
+  (->> (one-tp-down (stop-bu-tp f))
+       (choice-tp f)
+       (seq-tp (one-tp-right (stop-bu-tp f)))))
+
 (declare z-try-apply-m z-try-apply-mz)
 
 (defn adhoc-tp [f g]
@@ -369,6 +379,14 @@
   (->> f
        (choice-tu (all-tu-down (once-bu-tu f)))
        (choice-tu (all-tu-right (once-bu-tu f)))))
+
+(defn stop-td-tu [f]
+  (->> (all-tu-right (stop-td-tu f))
+       (seq-tu (choice-tu f (all-tu-down (stop-td-tu f))))))
+
+(defn stop-bu-tu [f]
+  (->> (choice-tu (all-tu-down (stop-bu-tu f)) f)
+       (seq-tu (all-tu-right (stop-bu-tu f)))))
 
 (defn all-tu-down
   ([f] (partial all-tu-down f))
