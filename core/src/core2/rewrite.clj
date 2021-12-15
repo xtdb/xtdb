@@ -335,7 +335,7 @@
    `(let [xs# (~x ~z)
           ys# (~y ~z)]
       (into (or (empty ys#) (empty xs#))
-            (concat ys# xs#)))))
+            (concat xs# ys#)))))
 
 (defmacro choice-tu
   ([x y] `(fn [z#]
@@ -368,13 +368,13 @@
 (defn once-bu-tu [f]
   (->> f
        (choice-tu (all-tu-down (once-bu-tu f)))
-       (choice-tu (all-tu-right (once-bu-tu f))))
+       (choice-tu (all-tu-right (once-bu-tu f)))))
 
-  (defn all-tu-down
-    ([f] (partial all-tu-down f))
-    ([f z]
-     (when-some [d (zip/down z)]
-       (f d)))))
+(defn all-tu-down
+  ([f] (partial all-tu-down f))
+  ([f z]
+   (when-some [d (zip/down z)]
+     (f d))))
 
 (defn all-tu-right
   ([f] (partial all-tu-right f))
