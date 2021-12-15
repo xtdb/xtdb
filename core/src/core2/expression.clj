@@ -126,14 +126,14 @@
   (when-not (= 2 (count args))
     (throw (IllegalArgumentException. (str "'nth' expects 2 args: " (pr-str form)))))
 
-  (let [[coll-form idx-form] args]
-    (if (integer? idx-form)
-      {:op :nth-const-idx
+  (let [[coll-form n-form] args]
+    (if (integer? n-form)
+      {:op :nth-const-n
        :coll-expr (form->expr coll-form env)
-       :idx idx-form}
+       :n n-form}
       {:op :nth
        :coll-expr (form->expr coll-form env)
-       :idx-expr (form->expr idx-form env)})))
+       :n-expr (form->expr n-form env)})))
 
 (defmethod parse-list-form ::default [[f & args] env]
   {:op :call, :f f, :args (mapv #(form->expr % env) args)})
@@ -933,7 +933,7 @@
           (finally
             (run! util/try-close els)))))))
 
-(defmethod emit-expr :nth-const-idx [{:keys [coll-expr ^long idx]} col-name opts]
+(defmethod emit-expr :nth-const-n [{:keys [coll-expr ^long n]} col-name opts]
   (let [eval-coll (emit-expr coll-expr "nth-coll" opts)]
     (fn [in-rel al params]
       (with-open [^FieldVector coll-res (eval-coll in-rel al params)]
@@ -947,9 +947,9 @@
 
               (.setValueCount out-vec coll-count)
 
-              (dotimes [out-idx coll-count]
+              (dotimes [idx coll-count]
                 (.startValue out-writer)
-                (.copyElement copier out-idx idx)
+                (.copyElement copier idx n)
                 (.endValue out-writer))
               out-vec)
             (catch Throwable e
