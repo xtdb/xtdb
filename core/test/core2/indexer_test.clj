@@ -18,8 +18,8 @@
             [core2.util :as util])
   (:import core2.api.TransactionInstant
            [core2.buffer_pool BufferPool IBufferPool]
-           core2.local_node.Node
            core2.indexer.IChunkManager
+           core2.local_node.Node
            core2.object_store.ObjectStore
            core2.temporal.TemporalManager
            java.nio.file.Files

@@ -12,7 +12,8 @@
             [core2.types :as t]
             [core2.util :as util]
             [core2.vector.writer :as vw]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
            core2.api.TransactionInstant
            core2.buffer_pool.BufferPool
@@ -251,12 +252,11 @@
   (^void copyDocRow [^long rowId, ^int srcIdx]))
 
 (defn- copy-docs [^IChunkManager chunk-manager, ^DenseUnionVector tx-ops-vec, ^long base-row-id]
-  (let [^DenseUnionVector doc-vec (-> (.getStruct tx-ops-vec 0)
-                                      (.getChild "document" DenseUnionVector))
+  (let [doc-rdr (-> (.getStruct tx-ops-vec 0)
+                    (.getChild "document")
+                    (iv/->direct-vec))
 
-        col-names (set (for [^StructVector leg-vec (.getChildrenFromFields doc-vec)
-                             ^ValueVector child-vec (.getChildrenFromFields leg-vec)]
-                         (.getName child-vec)))
+        col-names (.structKeys doc-rdr)
 
         live-roots (->> (for [col-name col-names]
                           (MapEntry/create col-name (.getLiveRoot chunk-manager col-name)))
@@ -270,32 +270,31 @@
                          (into {}))
 
         doc-copiers (vec
-                     (for [^StructVector leg-vec (.getChildrenFromFields doc-vec)]
-                       (vec
-                        (for [^ValueVector src-vec (.getChildrenFromFields leg-vec)]
-                          (let [col-name (.getName src-vec)
-                                ^VectorSchemaRoot live-root (get live-roots col-name)
-                                ^BigIntVector row-id-vec (.getVector live-root "_row-id")
-                                ^IVectorWriter vec-writer (get vec-writers col-name)
-                                row-copier (.rowCopier vec-writer src-vec)]
-                            (reify DocRowCopier
-                              (copyDocRow [_ row-id src-idx]
-                                (let [dest-idx (.getValueCount row-id-vec)]
-                                  (.setValueCount row-id-vec (inc dest-idx))
-                                  (.set row-id-vec dest-idx row-id))
-                                (.startValue vec-writer)
-                                (.copyRow row-copier src-idx)
-                                (.endValue vec-writer)
+                     (for [col-name col-names
+                           :let [col-rdr (.readerForKey doc-rdr col-name)
+                                 ^VectorSchemaRoot live-root (get live-roots col-name)
+                                 ^BigIntVector row-id-vec (.getVector live-root "_row-id")
+                                 ^IVectorWriter vec-writer (get vec-writers col-name)
+                                 row-copier (.rowCopier col-rdr vec-writer)]]
+                       (reify DocRowCopier
+                         (copyDocRow [_ row-id src-idx]
+                           (when (.isPresent col-rdr src-idx)
+                             (let [dest-idx (.getValueCount row-id-vec)]
+                               (.setValueCount row-id-vec (inc dest-idx))
+                               (.set row-id-vec dest-idx row-id))
+                             (.startValue vec-writer)
+                             (.copyRow row-copier src-idx)
+                             (.endValue vec-writer)
 
-                                (util/set-vector-schema-root-row-count live-root (inc (.getRowCount live-root)))
-                                (.syncSchema live-root))))))))]
+                             (util/set-vector-schema-root-row-count live-root (inc (.getRowCount live-root)))
+                             (.syncSchema live-root))))))]
 
     (dotimes [op-idx (.getValueCount tx-ops-vec)]
       (when (zero? (.getTypeId tx-ops-vec op-idx))
         (let [row-id (+ base-row-id op-idx)
               doc-idx (.getOffset tx-ops-vec op-idx)]
-          (doseq [^DocRowCopier doc-row-copier (nth doc-copiers (.getTypeId doc-vec doc-idx))]
-            (.copyDocRow doc-row-copier row-id (.getOffset doc-vec doc-idx))))))))
+          (doseq [^DocRowCopier doc-row-copier doc-copiers]
+            (.copyDocRow doc-row-copier row-id doc-idx)))))))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
