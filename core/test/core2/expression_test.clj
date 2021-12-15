@@ -478,21 +478,33 @@
               :nullable? false}
              (run-projection rel '(. {:x x, :y y} z))))))
 
-(t/deftest test-list-literals
-  (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])
-                             (tu/->mono-vec "y" types/float8-type [3.4 8.25])])]
-    (t/is (= {:res [[1.2 3.4 10.0]
-                    [3.4 8.25 10.0]]
-              :leg-type (LegType. (ArrowType$FixedSizeList. 3))
-              :nullable? false}
-             (run-projection rel '[x y 10.0])))
+(t/deftest test-lists
+  (t/testing "simple lists"
+    (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])
+                               (tu/->mono-vec "y" types/float8-type [3.4 8.25])])]
+      (t/is (= {:res [[1.2 3.4 10.0]
+                      [3.4 8.25 10.0]]
+                :leg-type (LegType. (ArrowType$FixedSizeList. 3))
+                :nullable? false}
+               (run-projection rel '[x y 10.0])))
 
-    (t/is (= {:res [[1.2 3.4 nil] [3.4 8.25 nil]]
-              :leg-type (LegType. (ArrowType$FixedSizeList. 3))
-              :nullable? false}
-             (run-projection rel '[(nth [x y] 0)
-                                   (nth [x y] 1)
-                                   (nth [x y] 2)])))))
+      (t/is (= {:res [[1.2 3.4 nil] [3.4 8.25 nil]]
+                :leg-type (LegType. (ArrowType$FixedSizeList. 3))
+                :nullable? false}
+               (run-projection rel '[(nth [x y] 0)
+                                     (nth [x y] 1)
+                                     (nth [x y] 2)])))))
+
+  (t/testing "might not be lists"
+    (with-open [rel (open-rel [(tu/->duv "x"
+                                         [12.0
+                                          [1 2 3]
+                                          [4 5]
+                                          "foo"])])]
+      (t/is (= {:res [nil 3 nil nil]
+                :leg-type #{LegType/BIGINT LegType/NULL}
+                :nullable? false}
+               (run-projection rel '(nth x 2)))))))
 
 (t/deftest test-mixing-prims-with-non-prims
   (with-open [rel (open-rel [(tu/->mono-vec "x" types/struct-type

@@ -933,39 +933,23 @@
           (finally
             (run! util/try-close els)))))))
 
-(defn- ->data-vec [^BaseListVector list-vec]
-  (cond
-    (instance? BaseRepeatedValueVector list-vec)
-    (.getDataVector ^BaseRepeatedValueVector list-vec)
-
-    (instance? FixedSizeListVector list-vec)
-    (.getDataVector ^FixedSizeListVector list-vec)))
-
 (defmethod emit-expr :nth-const-idx [{:keys [coll-expr ^long idx]} col-name opts]
   (let [eval-coll (emit-expr coll-expr "nth-coll" opts)]
-    ;; TODO handle non-list and add test
     (fn [in-rel al params]
-      (with-open [^BaseListVector coll-res (eval-coll in-rel al params)]
-        (let [coll-field (.getField coll-res)
-              nullable? (let [arrow-type (.getType coll-field)]
-                          (or (not (instance? ArrowType$FixedSizeList arrow-type))
-                              (<= (.getListSize ^ArrowType$FixedSizeList arrow-type) idx)))
-
+      (with-open [^FieldVector coll-res (eval-coll in-rel al params)]
+        (let [list-rdr (.listReader (iv/->direct-vec coll-res))
+              coll-count (.getValueCount coll-res)
               out-vec (-> (types/->field col-name types/dense-union-type false)
                           (.createVector al))]
           (try
             (let [out-writer (vw/vec->writer out-vec)
-                  null-writer (when nullable?
-                                (.writerForType (.asDenseUnion out-writer) LegType/NULL))
-                  coll-count (.getValueCount coll-res)
-                  copier (.rowCopier out-writer (->data-vec coll-res))]
+                  copier (.elementCopier list-rdr out-writer)]
+
               (.setValueCount out-vec coll-count)
+
               (dotimes [out-idx coll-count]
                 (.startValue out-writer)
-                (let [copy-idx (+ (.getElementStartIndex coll-res out-idx) idx)]
-                  (if (< copy-idx (.getElementEndIndex coll-res out-idx))
-                    (.copyRow copier copy-idx)
-                    (doto null-writer (.startValue) (.endValue))))
+                (.copyElement copier out-idx idx)
                 (.endValue out-writer))
               out-vec)
             (catch Throwable e
