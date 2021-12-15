@@ -31,9 +31,7 @@ public interface IIndirectVector<V extends ValueVector> extends AutoCloseable {
 
     IRowCopier rowCopier(IVectorWriter<? super V> writer);
 
-    Set<String> structKeys();
-
-    IIndirectVector<?> readerForKey(String colName);
+    IStructReader structReader();
 
     @Override
     default void close() {

@@ -254,7 +254,8 @@
 (defn- copy-docs [^IChunkManager chunk-manager, ^DenseUnionVector tx-ops-vec, ^long base-row-id]
   (let [doc-rdr (-> (.getStruct tx-ops-vec 0)
                     (.getChild "document")
-                    (iv/->direct-vec))
+                    (iv/->direct-vec)
+                    (.structReader))
 
         col-names (.structKeys doc-rdr)
 

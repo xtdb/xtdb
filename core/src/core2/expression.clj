@@ -861,7 +861,8 @@
           (try
             (.setValueCount out-vec (.getValueCount in-vec))
 
-            (let [col-rdr (.readerForKey (iv/->direct-vec in-vec) (name field))
+            (let [col-rdr (-> (.structReader (iv/->direct-vec in-vec))
+                              (.readerForKey (name field)))
                   copier (.rowCopier col-rdr out-writer)]
 
               (dotimes [idx (.getValueCount in-vec)]
