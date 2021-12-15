@@ -175,9 +175,13 @@
       (let [vars (->> (flatten pattern)
                       (filter symbol?)
                       (remove '#{_}))]
-        `(if-let [{:syms [~@vars] :as acc#} (zip-match (zip/vector-zip '~pattern) ~loc)]
-           ~expr
-           (zmatch ~loc ~@clauses)))
+        `(let [loc# ~loc
+               loc# (if (:zip/make-node (meta loc#))
+                      loc#
+                      (zip/vector-zip loc#))]
+           (if-let [{:syms [~@vars] :as acc#} (zip-match (zip/vector-zip '~pattern) loc#)]
+             ~expr
+             (zmatch loc# ~@clauses))))
       pattern)))
 
 (declare repmin globmin locmin)
@@ -459,4 +463,20 @@
    (zip/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]))
 
   ((full-bu-tu (mono-tu (fn [x] (prn x) (when (number? x) [x]))))
-   (zip/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]])))
+   (zip/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]))
+
+  (= ["a" "c" "b" "c"]
+     ((full-td-tu (mono-tu
+                   #(zmatch %
+                      [:assign s _ _] [s]
+                      [:nested-let s _ _] [s]
+                      _ [])))
+      (zip/vector-zip
+       [:let
+        [:assign "a"
+         [:add [:var "b"] [:const 0]]
+         [:assign "c" [:const 2]
+          [:nested-let "b" [:let [:assign "c" [:const 3] [:empty-list]]
+                            [:add [:var "c"] [:var "c"]]]
+           [:empty-list]]]]
+        [:sub [:add [:var "a"] [:const 7]] [:var "c"]]]))))
