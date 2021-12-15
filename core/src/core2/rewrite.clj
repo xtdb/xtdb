@@ -219,8 +219,7 @@
 ;; Strategic Zippers based on Ztrategic
 ;; https://arxiv.org/pdf/2110.07902.pdf
 
-(defn apply-tp [f z]
-  (f z))
+;; Type Preserving
 
 (declare all-tp-down all-tp-right maybe-keep)
 
@@ -241,8 +240,8 @@
 
 (defn full-td-tp [f]
   (->> f
-       (seq-tp (all-tp-down (full-td-tp f)))
-       (seq-tp (all-tp-right (full-td-tp f)))))
+       (seq-tp (all-tp-right (full-td-tp f)))
+       (seq-tp (all-tp-down (full-td-tp f)))))
 
 (defn full-bu-tp [f]
   (->> (all-tp-down (full-bu-tp f))
@@ -253,8 +252,8 @@
 
 (defn once-td-tp [f]
   (->> f
-       (choice-tp (one-tp-down (once-td-tp f)))
-       (choice-tp (one-tp-right (once-td-tp f)))))
+       (choice-tp (one-tp-right (once-td-tp f)))
+       (choice-tp (one-tp-down (once-td-tp f)))))
 
 (defn once-bu-tp [f]
   (->> (one-tp-down (once-bu-tp f))
@@ -327,15 +326,108 @@
 (defn outermost [s]
   (repeat-tp (once-td-tp s)))
 
-(defn z-try-apply-mz [f]
-  (fn [z]
-    (some->> (f (zip/node z) z)
-             (zip/replace z))))
+;; Type Unifying
 
-(defn z-try-apply-m [f]
-  (fn [z]
-    (some->> (f (zip/node z))
-             (zip/replace z))))
+(defmacro seq-tu
+  ([x y] `(fn [z#]
+            (seq-tu ~x ~y z#)))
+  ([x y z]
+   `(let [xs# (~x ~z)
+          ys# (~y ~z)]
+      (into (or (empty ys#) (empty xs#))
+            (concat ys# xs#)))))
+
+(defmacro choice-tu
+  ([x y] `(fn [z#]
+            (choice-tu ~x ~y z#)))
+  ([x y z]
+   `(let [z# ~z]
+      (if-some [z# (~y z#)]
+        z#
+        (~x z#)))))
+
+(declare all-tu-down all-tu-right)
+
+(defn full-td-tu [f]
+  (->> (all-tu-right (full-td-tu f))
+       (seq-tu (all-tu-down (full-td-tu f)))
+       (seq-tu f)))
+
+(defn full-bu-tu [f]
+  (->> f
+       (seq-tu (all-tu-down (full-bu-tu f)))
+       (seq-tu (all-tu-right (full-bu-tu f)))))
+
+(declare one-tu-down one-tu-right)
+
+(defn once-td-tu [f]
+  (->> (all-tu-right (once-td-tu f))
+       (choice-tu (all-tu-down (once-td-tu f)))
+       (choice-tu f)))
+
+(defn once-bu-tu [f]
+  (->> f
+       (choice-tu (all-tu-down (once-bu-tu f)))
+       (choice-tu (all-tu-right (once-bu-tu f))))
+
+  (defn all-tu-down
+    ([f] (partial all-tu-down f))
+    ([f z]
+     (when-some [d (zip/down z)]
+       (f d)))))
+
+(defn all-tu-right
+  ([f] (partial all-tu-right f))
+  ([f z]
+   (when-some [r (zip/right z)]
+     (f r))))
+
+(declare z-try-reduce-m z-try-reduce-mz)
+
+(defn adhoc-tu
+  ([f g] (partial adhoc-tu f g))
+  ([f g z]
+   (if-some [id (z-try-reduce-m g z)]
+     id
+     (f z))))
+
+(defn adhoc-tuz
+  ([f g] (partial adhoc-tuz f g))
+  ([f g z]
+   (if-some [id (z-try-reduce-mz g z)]
+     id
+     (f z))))
+
+(defn fail-tu [_])
+
+(defn const-tu [x]
+  (constantly x))
+
+(def mono-tu (partial adhoc-tu fail-tu))
+
+(def mono-tuz (partial adhoc-tuz fail-tu))
+
+(defn z-try-reduce-mz
+  ([f] (partial z-try-reduce-mz f))
+  ([f z]
+   (some-> (zip/node z) (f z))))
+
+(defn z-try-reduce-m
+  ([f] (partial z-try-reduce-m f))
+  ([f z]
+   (some-> (zip/node z) (f))))
+
+(defn z-try-apply-mz
+  ([f] (partial z-try-apply-mz f))
+  ([f z]
+   (some->> (f (zip/node z) z)
+            (zip/replace z))))
+
+(defn z-try-apply-m
+  ([f] (partial z-try-apply-m f))
+  ([f z]
+   (some->> (f (zip/node z))
+            (zip/replace z))))
 
 (comment
   (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
@@ -345,5 +437,8 @@
   (zip-match (zip/vector-zip '[:leaf n])
              (zip/vector-zip [:leaf 2]))
 
-  ((innermost (mono-tp (fn [x] (prn x) (when (number? x) (str x)))))
+  ((full-td-tp (mono-tp (fn [x] (prn x) (when (number? x) (str x)))))
+   (zip/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]))
+
+  ((full-bu-tu (mono-tu (fn [x] (prn x) (when (number? x) [x]))))
    (zip/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]])))
