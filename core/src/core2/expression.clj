@@ -13,7 +13,7 @@
            core2.operator.project.ProjectionSpec
            core2.operator.select.IRelationSelector
            core2.types.LegType
-           [core2.vector IIndirectRelation IIndirectVector IRowCopier]
+           [core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter]
            [core2.vector.extensions KeywordType UuidType]
            java.lang.reflect.Method
            java.nio.ByteBuffer
@@ -23,8 +23,8 @@
            [java.util Date HashMap LinkedList]
            [org.apache.arrow.vector BitVector DurationVector FieldVector ValueVector]
            [org.apache.arrow.vector.complex BaseListVector BaseRepeatedValueVector DenseUnionVector FixedSizeListVector StructVector]
-           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType UnionMode]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -126,14 +126,14 @@
   (when-not (= 2 (count args))
     (throw (IllegalArgumentException. (str "'nth' expects 2 args: " (pr-str form)))))
 
-  (let [[coll-form idx-form] args]
-    (if (integer? idx-form)
-      {:op :nth-const-idx
+  (let [[coll-form n-form] args]
+    (if (integer? n-form)
+      {:op :nth-const-n
        :coll-expr (form->expr coll-form env)
-       :idx idx-form}
+       :n n-form}
       {:op :nth
        :coll-expr (form->expr coll-form env)
-       :idx-expr (form->expr idx-form env)})))
+       :n-expr (form->expr n-form env)})))
 
 (defmethod parse-list-form ::default [[f & args] env]
   {:op :call, :f f, :args (mapv #(form->expr % env) args)})
@@ -855,45 +855,26 @@
   (let [eval-expr (emit-expr struct-expr "dot" opts)]
     (fn [in-rel al params]
       (with-open [^FieldVector in-vec (eval-expr in-rel al params)]
-        (let [value-count (.getValueCount in-vec)]
-          (or (cond
-                (instance? StructVector in-vec)
-                (when-let [child-vec (.getChild ^StructVector in-vec (name field) ValueVector)]
-                  (-> child-vec
-                      (.getTransferPair col-name al)
-                      (doto (.splitAndTransfer 0 value-count))
-                      (.getTo)))
+        (let [out-field (types/->field col-name types/dense-union-type false)
+              out-vec (.createVector out-field al)
+              out-writer (vw/vec->writer out-vec)]
+          (try
+            (.setValueCount out-vec (.getValueCount in-vec))
 
-                (instance? DenseUnionVector in-vec)
-                (let [^DenseUnionVector in-vec in-vec
-                      out-field (types/->field col-name types/dense-union-type false)
-                      out-vec (.createVector out-field al)]
-                  (try
-                    (let [out-writer (.asDenseUnion (vw/vec->writer out-vec))
-                          null-writer (.writerForType out-writer LegType/NULL)
-                          ^"[Lcore2.vector.IRowCopier;"
-                          copiers (->> (for [child-vec (.getChildrenFromFields in-vec)]
-                                         (when (instance? StructVector child-vec)
-                                           (when-let [field-vec (.getChild ^StructVector child-vec (name field))]
-                                             (.rowCopier out-writer field-vec))))
-                                       (into-array IRowCopier))]
+            (let [col-rdr (-> (.structReader (iv/->direct-vec in-vec))
+                              (.readerForKey (name field)))
+                  copier (.rowCopier col-rdr out-writer)]
 
-                      (dotimes [idx (.getValueCount in-vec)]
-                        (.startValue out-writer)
-                        (if-let [^IRowCopier copier (aget copiers (.getTypeId in-vec idx))]
-                          (.copyRow copier (.getOffset in-vec idx))
-                          (doto null-writer (.startValue) (.endValue)))
-                        (.endValue out-writer))
+              (dotimes [idx (.getValueCount in-vec)]
+                (.startValue out-writer)
+                (.copyRow copier idx)
+                (.endValue out-writer)))
 
-                      out-vec)
+            out-vec
 
-                    (catch Throwable e
-                      (.close out-vec)
-                      (throw e)))))
-
-              ;; TODO add test
-              (doto (.createVector (types/->field col-name types/null-type true) al)
-                (.setValueCount (.getValueCount in-vec)))))))))
+            (catch Throwable e
+              (.close out-vec)
+              (throw e))))))))
 
 (defmethod emit-expr :variable [{:keys [variable]} col-name {:keys [var-fields]}]
   (let [^Field out-field (-> (or (get var-fields variable)
@@ -952,39 +933,23 @@
           (finally
             (run! util/try-close els)))))))
 
-(defn- ->data-vec [^BaseListVector list-vec]
-  (cond
-    (instance? BaseRepeatedValueVector list-vec)
-    (.getDataVector ^BaseRepeatedValueVector list-vec)
-
-    (instance? FixedSizeListVector list-vec)
-    (.getDataVector ^FixedSizeListVector list-vec)))
-
-(defmethod emit-expr :nth-const-idx [{:keys [coll-expr ^long idx]} col-name opts]
+(defmethod emit-expr :nth-const-n [{:keys [coll-expr ^long n]} col-name opts]
   (let [eval-coll (emit-expr coll-expr "nth-coll" opts)]
-    ;; TODO handle non-list and add test
     (fn [in-rel al params]
-      (with-open [^BaseListVector coll-res (eval-coll in-rel al params)]
-        (let [coll-field (.getField coll-res)
-              nullable? (let [arrow-type (.getType coll-field)]
-                          (or (not (instance? ArrowType$FixedSizeList arrow-type))
-                              (<= (.getListSize ^ArrowType$FixedSizeList arrow-type) idx)))
-
+      (with-open [^FieldVector coll-res (eval-coll in-rel al params)]
+        (let [list-rdr (.listReader (iv/->direct-vec coll-res))
+              coll-count (.getValueCount coll-res)
               out-vec (-> (types/->field col-name types/dense-union-type false)
                           (.createVector al))]
           (try
             (let [out-writer (vw/vec->writer out-vec)
-                  null-writer (when nullable?
-                                (.writerForType (.asDenseUnion out-writer) LegType/NULL))
-                  coll-count (.getValueCount coll-res)
-                  copier (.rowCopier out-writer (->data-vec coll-res))]
+                  copier (.elementCopier list-rdr out-writer)]
+
               (.setValueCount out-vec coll-count)
-              (dotimes [out-idx coll-count]
+
+              (dotimes [idx coll-count]
                 (.startValue out-writer)
-                (let [copy-idx (+ (.getElementStartIndex coll-res out-idx) idx)]
-                  (if (< copy-idx (.getElementEndIndex coll-res out-idx))
-                    (.copyRow copier copy-idx)
-                    (doto null-writer (.startValue) (.endValue))))
+                (.copyElement copier idx n)
                 (.endValue out-writer))
               out-vec)
             (catch Throwable e

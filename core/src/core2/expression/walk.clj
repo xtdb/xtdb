@@ -16,8 +16,8 @@
 (defmethod direct-child-exprs :dot-const-field [e] (map e [:struct-expr]))
 (defmethod direct-child-exprs :dot [e] (map e [:struct-expr :field-expr]))
 (defmethod direct-child-exprs :list [e] (:elements e))
-(defmethod direct-child-exprs :nth-const-idx [e] (map e [:coll-expr]))
-(defmethod direct-child-exprs :nth [e] (map e (map e [:coll-expr :idx-expr])))
+(defmethod direct-child-exprs :nth-const-n [e] (map e [:coll-expr]))
+(defmethod direct-child-exprs :nth [e] (map e (map e [:coll-expr :n-expr])))
 
 (defn expr-seq [expr]
   (lazy-seq
@@ -59,11 +59,11 @@
 (defmethod walk-expr :list [inner outer {:keys [elements]}]
   (outer {:op :list, :elements (mapv inner elements)}))
 
-(defmethod walk-expr :nth-const-idx [inner outer {:keys [coll-expr idx]}]
-  (outer {:op :nth-const-idx, :coll-expr (inner coll-expr), :idx idx}))
+(defmethod walk-expr :nth-const-n [inner outer {:keys [coll-expr n]}]
+  (outer {:op :nth-const-n, :coll-expr (inner coll-expr), :n n}))
 
-(defmethod walk-expr :nth [inner outer {:keys [coll-expr idx-expr]}]
-  (outer {:op :nth, :coll-expr (inner coll-expr), :idx-expr (inner idx-expr)}))
+(defmethod walk-expr :nth [inner outer {:keys [coll-expr n-expr]}]
+  (outer {:op :nth, :coll-expr (inner coll-expr), :n-expr (inner n-expr)}))
 
 ;; from clojure.walk
 (defn postwalk-expr [f expr]

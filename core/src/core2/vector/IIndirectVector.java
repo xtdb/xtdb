@@ -2,8 +2,13 @@ package core2.vector;
 
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.ValueVector;
+import org.apache.arrow.vector.types.pojo.Field;
+
+import java.util.Set;
 
 public interface IIndirectVector<V extends ValueVector> extends AutoCloseable {
+
+    boolean isPresent(int idx);
 
     V getVector();
 
@@ -23,6 +28,11 @@ public interface IIndirectVector<V extends ValueVector> extends AutoCloseable {
     IIndirectVector<V> copyTo(V vector);
 
     IIndirectVector<V> select(int[] idxs);
+
+    IRowCopier rowCopier(IVectorWriter<? super V> writer);
+
+    IStructReader structReader();
+    IListReader listReader();
 
     @Override
     default void close() {
