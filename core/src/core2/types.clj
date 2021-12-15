@@ -14,8 +14,8 @@
            java.util.function.Function
            [org.apache.arrow.vector BigIntVector BitVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType UnionMode]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -30,7 +30,7 @@
 (def timestamp-micro-tz-type (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
 (def duration-micro-type (ArrowType$Duration. TimeUnit/MICROSECOND))
 (def struct-type (.getType Types$MinorType/STRUCT))
-(def dense-union-type (.getType Types$MinorType/DENSEUNION))
+(def dense-union-type (ArrowType$Union. UnionMode/Dense (int-array 0)))
 (def list-type (.getType Types$MinorType/LIST))
 (def map-type (ArrowType$Map. false))
 
