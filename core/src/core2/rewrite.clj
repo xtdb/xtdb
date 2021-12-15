@@ -216,6 +216,126 @@
                                 loc)
                               loc))))))))
 
+;; Strategic Zippers based on Ztrategic
+;; https://arxiv.org/pdf/2110.07902.pdf
+
+(defn apply-tp [f z]
+  (f z))
+
+(declare all-tp-down all-tp-right maybe-keep)
+
+(defmacro seq-tp
+  ([x y] `(fn [z#]
+            (seq-tp ~x ~y z#)))
+  ([x y z]
+   `(maybe-keep ~x ~y ~z)))
+
+(defmacro choice-tp
+  ([x y] `(fn [z#]
+            (choice-tp ~x ~y z#)))
+  ([x y z]
+   `(let [z# ~z]
+      (if-some [z# (~y z#)]
+        z#
+        (~x z#)))))
+
+(defn full-td-tp [f]
+  (->> f
+       (seq-tp (all-tp-down (full-td-tp f)))
+       (seq-tp (all-tp-right (full-td-tp f)))))
+
+(defn full-bu-tp [f]
+  (->> (all-tp-down (full-bu-tp f))
+       (seq-tp (all-tp-right (full-bu-tp f)))
+       (seq-tp f)))
+
+(declare one-tp-down one-tp-right)
+
+(defn once-td-tp [f]
+  (->> f
+       (choice-tp (one-tp-down (once-td-tp f)))
+       (choice-tp (one-tp-right (once-td-tp f)))))
+
+(defn once-bu-tp [f]
+  (->> (one-tp-down (once-bu-tp f))
+       (choice-tp (one-tp-right (once-bu-tp f)))
+       (choice-tp f)))
+
+(declare z-try-apply-m z-try-apply-mz)
+
+(defn adhoc-tp [f g]
+  (maybe-keep f (z-try-apply-m g)))
+
+(defn adhoc-tpz [f g]
+  (maybe-keep f (z-try-apply-mz g)))
+
+(defn id-tp [x] x)
+
+(defn fail-tp [_])
+
+(defn maybe-keep
+  ([x y]
+   (partial maybe-keep x y))
+  ([x y z]
+   (if-some [r (y z)]
+     (if-some [k (x r)]
+       k
+       r)
+     (x z))))
+
+(defn all-tp-right
+  ([f] (partial all-tp-right f))
+  ([f z]
+   (if-some [r (zip/right z)]
+     (zip/left (f r))
+     z)))
+
+(defn all-tp-down
+  ([f] (partial all-tp-down f))
+  ([f z]
+   (if-some [d (zip/down z)]
+     (zip/up (f d))
+     z)))
+
+(defn one-tp-right
+  ([f] (partial one-tp-right f))
+  ([f z]
+   (when-some [r (zip/right z)]
+     (zip/left (f r)))))
+
+(defn one-tp-down
+  ([f] (partial one-tp-down f))
+  ([f z]
+   (when-some [d (zip/down z)]
+     (zip/up (f d)))))
+
+(def mono-tp (partial adhoc-tp fail-tp))
+
+(def mono-tpz (partial adhoc-tpz fail-tp))
+
+(defn try-tp [s]
+  (choice-tp id-tp s))
+
+(defn repeat-tp [s]
+  (try-tp (fn [z]
+            (when-some [z (s z)]
+              ((repeat-tp s) z)))))
+
+(defn innermost [s]
+  (repeat-tp (once-bu-tp s)))
+
+(defn outermost [s]
+  (repeat-tp (once-td-tp s)))
+
+(defn z-try-apply-mz [f]
+  (fn [z]
+    (some->> (f (zip/node z) z)
+             (zip/replace z))))
+
+(defn z-try-apply-m [f]
+  (fn [z]
+    (some->> (f (zip/node z))
+             (zip/replace z))))
 
 (comment
   (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
@@ -223,4 +343,7 @@
     (keep meta (tree-seq vector? seq tree)))
 
   (zip-match (zip/vector-zip '[:leaf n])
-             (zip/vector-zip [:leaf 2])))
+             (zip/vector-zip [:leaf 2]))
+
+  ((innermost (mono-tp (fn [x] (prn x) (when (number? x) (str x)))))
+   (zip/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]])))
