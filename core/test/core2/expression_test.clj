@@ -469,13 +469,13 @@
              (run-projection rel '{:x x, :y y})))
 
     (t/is (= {:res [3.4 8.25]
-              :leg-type LegType/FLOAT8
+              :leg-type #{LegType/FLOAT8}
               :nullable? false}
              (run-projection rel '(. {:x x, :y y} y))))
 
     (t/is (= {:res [nil nil]
-              :leg-type LegType/NULL
-              :nullable? true}
+              :leg-type #{LegType/NULL}
+              :nullable? false}
              (run-projection rel '(. {:x x, :y y} z))))))
 
 (t/deftest test-list-literals
@@ -511,18 +511,21 @@
                                        [{:a 42}
                                         {:a 12, :b 5}
                                         {:b 10}
-                                        {:a 15, :b 25}])])]
+                                        {:a 15, :b 25}
+                                        10.0])])]
     (t/is (= {:res [{:a 42}
                     {:a 12, :b 5}
                     {:b 10}
-                    {:a 15, :b 25}]
+                    {:a 15, :b 25}
+                    10.0]
               :leg-type #{(LegType/structOfKeys #{"a"})
                           (LegType/structOfKeys #{"a" "b"})
-                          (LegType/structOfKeys #{"b"})}
+                          (LegType/structOfKeys #{"b"})
+                          LegType/FLOAT8}
               :nullable? false}
              (run-projection rel 'x)))
 
-    (t/is (= {:res [42 12 nil 15]
+    (t/is (= {:res [42 12 nil 15 nil]
               ;; TODO: this could be a nullable BigIntVector, rather than a DUV
               :leg-type #{LegType/BIGINT LegType/NULL}
               :nullable? false}

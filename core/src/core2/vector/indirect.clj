@@ -3,7 +3,7 @@
             [core2.util :as util])
   (:import core2.DenseUnionUtil
            core2.types.LegType
-           [core2.vector IIndirectRelation IIndirectVector IRowCopier]
+           [core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter]
            [java.util LinkedHashMap Map]
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
@@ -27,28 +27,38 @@
   IIndirectVector
   (isPresent [_ _] false)
   (rowCopier [_ w]
-    (reify IRowCopier)))
+    (let [!w (delay
+               (-> (.asDenseUnion w)
+                   (.writerForType LegType/NULL)))]
+      (reify IRowCopier
+        (copyRow [_ _]
+          (doto ^IVectorWriter @!w (.startValue) (.endValue)))))))
 
 (defn- reader-for-key [^FieldVector v, ^String col-name]
   ;; TODO have only implemented a fraction of the required methods thus far
   (cond
     (instance? StructVector v)
-    (some-> (.getChild ^StructVector v col-name ValueVector)
-            (->direct-vec))
+    (if-let [child-vec (.getChild ^StructVector v col-name ValueVector)]
+      (->direct-vec child-vec)
+      (->NullIndirectVector))
 
     (instance? DenseUnionVector v)
     (let [^DenseUnionVector v v
           rdrs (mapv #(reader-for-key % col-name) (.getChildrenFromFields v))]
       (reify IIndirectVector
         (isPresent [_ idx]
-          (boolean (nth rdrs (.getTypeId v idx))))
+          ;; TODO `(.getOffset v idx)` rather than just `idx`?
+          ;; haven't made a test fail with it yet, either way.
+          (.isPresent ^IIndirectVector (nth rdrs (.getTypeId v idx)) idx))
 
         (rowCopier [_ivec w]
-          (let [copiers (mapv #(some-> ^IIndirectVector % (.rowCopier w)) rdrs)]
+          (let [copiers (mapv #(.rowCopier ^IIndirectVector % w) rdrs)]
             (reify IRowCopier
               (copyRow [_ idx]
-                (some-> ^IRowCopier (nth copiers (.getTypeId v idx))
-                        (.copyRow (.getOffset v idx)))))))))))
+                (.copyRow ^IRowCopier (nth copiers (.getTypeId v idx))
+                          (.getOffset v idx))))))))
+
+    :else (->NullIndirectVector)))
 
 (defrecord DirectVector [^ValueVector v, ^String name]
   IIndirectVector
@@ -76,8 +86,7 @@
     (struct-keys (.getField v)))
 
   (readerForKey [_ col-name]
-    (or (reader-for-key v col-name)
-        (->NullIndirectVector))))
+    (reader-for-key v col-name)))
 
 (defrecord IndirectVector [^ValueVector v, ^String col-name, ^ints idxs]
   IIndirectVector
