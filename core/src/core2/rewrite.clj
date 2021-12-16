@@ -342,14 +342,20 @@
 
 ;; Type Unifying
 
+(defn- mempty [z]
+  ((get (meta z) :zip/mempty vector)))
+
+(defn- mappend [z x y]
+  ((get (meta z) :zip/mappend into) x y))
+
 (defmacro seq-tu
   ([x y] `(fn [z#]
             (seq-tu ~x ~y z#)))
   ([x y z]
-   `(let [xs# (~x ~z)
-          ys# (~y ~z)]
-      (into (or (empty ys#) (empty xs#))
-            (concat xs# ys#)))))
+   `(let [z# ~z
+          xs# (~x z#)
+          ys# (~y z#)]
+      (mappend z# xs# ys#))))
 
 (defmacro choice-tu
   ([x y] `(fn [z#]
@@ -395,14 +401,16 @@
 (defn all-tu-down
   ([f] (partial all-tu-down f))
   ([f z]
-   (when-some [d (zip/down z)]
-     (f d))))
+   (if-some [d (zip/down z)]
+     (f d)
+     (mempty z))))
 
 (defn all-tu-right
   ([f] (partial all-tu-right f))
   ([f z]
-   (when-some [r (zip/right z)]
-     (f r))))
+   (if-some [r (zip/right z)]
+     (f r)
+     (mempty z))))
 
 (declare z-try-reduce-m z-try-reduce-mz)
 
@@ -450,6 +458,9 @@
   ([f z]
    (some->> (f (zip/node z))
             (zip/replace z))))
+
+(defn with-tu-monoid [z mempty mappend]
+  (vary-meta z assoc :zip/mempty mempty :zip/mappend mappend))
 
 (comment
   (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
