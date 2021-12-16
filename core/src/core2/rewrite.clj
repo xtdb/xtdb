@@ -231,7 +231,7 @@
      (fn [acc x]
        (if-some [acc (x acc)]
          acc
-         acc))
+         (reduced nil)))
      z
      xs)))
 
@@ -446,7 +446,7 @@
   (zip-match (zip/vector-zip '[:leaf n])
              (zip/vector-zip [:leaf 2]))
 
-  ((full-td-tp (mono-tp (fn [x] (prn x) (when (number? x) (str x)))))
+  ((full-td-tp (adhoc-tp id-tp (fn [x] (prn x) (when (number? x) (str x)))))
    (zip/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]))
 
   ((full-bu-tu (mono-tu (fn [x] (prn x) (when (number? x) [x]))))
