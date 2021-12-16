@@ -222,6 +222,7 @@
 
 ;; Strategic Zippers based on Ztrategic
 ;; https://arxiv.org/pdf/2110.07902.pdf
+;; https://www.di.uminho.pt/~joost/publications/SBLP2004LectureNotes.pdf
 
 ;; Type Preserving
 
@@ -272,7 +273,7 @@
 
 (declare z-try-apply-m z-try-apply-mz)
 
-(defn maybe-keep [x y]
+(defn- maybe-keep [x y]
   (fn [z]
    (if-some [r (y z)]
      (if-some [k (x r)]
@@ -290,13 +291,13 @@
 
 (defn fail-tp [_])
 
-(defn all-tp-right [f]
+(defn- all-tp-right [f]
   (fn [z]
     (if-some [r (zip/right z)]
       (zip/left (f r))
       z)))
 
-(defn all-tp-down [f]
+(defn- all-tp-down [f]
   (fn [z]
     (if-some [d (zip/down z)]
       (zip/up (f d))
@@ -382,12 +383,12 @@
   (fn self [z]
     ((choice-tu (all-tu self) f) z)))
 
-(defn all-tu-down [f]
+(defn- all-tu-down [f]
   (fn [z]
     (when-some [d (zip/down z)]
       (f d))))
 
-(defn all-tu-right [f]
+(defn- all-tu-right [f]
   (fn [z]
     (when-some [r (zip/right z)]
       (f r))))
