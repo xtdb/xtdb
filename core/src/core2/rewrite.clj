@@ -244,33 +244,31 @@
      nil
      xs)))
 
-(declare all-tp-down all-tp-right)
+(declare all-tp one-tp)
 
 (defn full-td-tp [f]
   (fn self [z]
-    ((seq-tp f (all-tp-right self) (all-tp-down self)) z)))
+    ((seq-tp f (all-tp self)) z)))
 
 (defn full-bu-tp [f]
   (fn self [z]
-    ((seq-tp (all-tp-down self) (all-tp-right self) f) z)))
-
-(declare one-tp-down one-tp-right)
+    ((seq-tp (all-tp self) f) z)))
 
 (defn once-td-tp [f]
   (fn self [z]
-    ((choice-tp f (one-tp-right self) (one-tp-down self)) z)))
+    ((choice-tp f (one-tp self)) z)))
 
 (defn once-bu-tp [f]
   (fn self [z]
-    ((choice-tp (one-tp-down self) (one-tp-right self) f) z)))
+    ((choice-tp (one-tp self) f) z)))
 
 (defn stop-td-tp [f]
   (fn self [z]
-    (seq-tp (one-tp-right self) (choice-tp f (one-tp-down self)) z)))
+    ((choice-tp f (all-tp self)) z)))
 
 (defn stop-bu-tp [f]
   (fn self [z]
-    ((seq-tp (choice-tp (one-tp-down self) f) (one-tp-right self)) z)))
+    ((choice-tp (all-tp self) f) z)))
 
 (declare z-try-apply-m z-try-apply-mz)
 
@@ -304,6 +302,9 @@
       (zip/up (f d))
       z)))
 
+(defn all-tp [f]
+  (seq-tp (all-tp-down f) (all-tp-right f)))
+
 (defn one-tp-right [f]
   (fn [z]
     (some->> (zip/right z)
@@ -315,6 +316,9 @@
     (some->> (zip/down z)
              (f)
              (zip/up))))
+
+(defn one-tp [f]
+  (choice-tp (one-tp-down f) (one-tp-right f)))
 
 (def mono-tp (partial adhoc-tp fail-tp))
 
@@ -352,31 +356,31 @@
 
 (def choice-tu choice-tp)
 
-(declare all-tu-down all-tu-right)
+(declare all-tu one-tu)
 
 (defn full-td-tu [f]
   (fn self [z]
-    ((seq-tu (all-tu-right self) (all-tu-down self) f) z)))
+    ((seq-tu (all-tu self) f) z)))
 
 (defn full-bu-tu [f]
   (fn self [z]
-    ((seq-tu f (all-tu-down self) (all-tu-right self)) z)))
+    ((seq-tu f (all-tu self)) z)))
 
 (defn once-td-tu [f]
   (fn self [z]
-    ((choice-tu (all-tu-right self) (all-tu-down self) f) z)))
+    ((choice-tu f (one-tu self)) z)))
 
 (defn once-bu-tu [f]
   (fn self [z]
-    ((choice-tu f (all-tu-down self) (all-tu-right self)) z)))
+    ((choice-tu (one-tu self) f) z)))
 
 (defn stop-td-tu [f]
   (fn self [z]
-    ((seq-tu (choice-tu (all-tu-down self) f) (all-tu-right self)) z)))
+    ((choice-tu f (all-tu self)) z)))
 
 (defn stop-bu-tu [f]
   (fn self [z]
-    ((seq-tu (choice-tu f (all-tu-down self)) (all-tu-right self)) z)))
+    ((choice-tu (all-tu self) f) z)))
 
 (defn all-tu-down [f]
   (fn [z]
@@ -389,6 +393,14 @@
     (if-some [r (zip/right z)]
       (f r)
       (mempty z))))
+
+(defn all-tu [f]
+  (fn [z]
+    ((seq-tu (all-tu-down f) (all-tu-right f)) z)))
+
+(defn one-tu [f]
+  (fn [z]
+    ((choice-tu (all-tu-down f) (all-tu-right f)) z)))
 
 (declare z-try-reduce-m z-try-reduce-mz)
 
