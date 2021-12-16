@@ -405,10 +405,10 @@
 (declare z-try-reduce-m z-try-reduce-mz)
 
 (defn adhoc-tu [f g]
-  (choice-tu f (z-try-reduce-m g)))
+  (choice-tu (z-try-reduce-m g) f))
 
 (defn adhoc-tuz [f g]
-  (choice-tu f (z-try-reduce-mz g)))
+  (choice-tu (z-try-reduce-mz g) f))
 
 (defn fail-tu [_])
 
