@@ -384,15 +384,13 @@
 
 (defn all-tu-down [f]
   (fn [z]
-    (if-some [d (zip/down z)]
-      (f d)
-      (mempty z))))
+    (when-some [d (zip/down z)]
+      (f d))))
 
 (defn all-tu-right [f]
   (fn [z]
-    (if-some [r (zip/right z)]
-      (f r)
-      (mempty z))))
+    (when-some [r (zip/right z)]
+      (f r))))
 
 (defn all-tu [f]
   (fn [z]
