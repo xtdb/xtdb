@@ -324,20 +324,20 @@
 
 (def mono-tpz (partial adhoc-tpz fail-tp))
 
-(defn try-tp [s]
-  (choice-tp s id-tp))
+(defn try-tp [f]
+  (choice-tp f id-tp))
 
-(defn repeat-tp [s]
+(defn repeat-tp [f]
   (fn [z]
-    (if-some [z (s z)]
+    (if-some [z (f z)]
       (recur z)
       z)))
 
-(defn innermost [s]
-  (repeat-tp (once-bu-tp s)))
+(defn innermost [f]
+  (repeat-tp (once-bu-tp f)))
 
-(defn outermost [s]
-  (repeat-tp (once-td-tp s)))
+(defn outermost [f]
+  (repeat-tp (once-td-tp f)))
 
 ;; Type Unifying
 
