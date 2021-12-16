@@ -225,56 +225,62 @@
 
 ;; Type Preserving
 
-(declare all-tp-down all-tp-right maybe-keep)
+(defn seq-tp [& xs]
+  (fn [z]
+    (reduce
+     (fn [acc x]
+       (if-some [acc (x acc)]
+         acc
+         acc))
+     z
+     xs)))
 
-(defmacro seq-tp
-  ([x y] `(fn [z#]
-            (seq-tp ~x ~y z#)))
-  ([x y z]
-   `(maybe-keep ~x ~y ~z)))
+(defn choice-tp [& xs]
+  (fn [z]
+    (reduce
+     (fn [_ x]
+       (when-some [z (x z)]
+         (reduced z)))
+     nil
+     xs)))
 
-(defmacro choice-tp
-  ([x y] `(fn [z#]
-            (choice-tp ~x ~y z#)))
-  ([x y z]
-   `(let [z# ~z]
-      (if-some [z# (~y z#)]
-        z#
-        (~x z#)))))
+(declare all-tp-down all-tp-right)
 
 (defn full-td-tp [f]
-  (->> f
-       (seq-tp (all-tp-right (full-td-tp f)))
-       (seq-tp (all-tp-down (full-td-tp f)))))
+  (fn self [z]
+    ((seq-tp f (all-tp-right self) (all-tp-down self)) z)))
 
 (defn full-bu-tp [f]
-  (->> (all-tp-down (full-bu-tp f))
-       (seq-tp (all-tp-right (full-bu-tp f)))
-       (seq-tp f)))
+  (fn self [z]
+    ((seq-tp (all-tp-down self) (all-tp-right self) f) z)))
 
 (declare one-tp-down one-tp-right)
 
 (defn once-td-tp [f]
-  (->> f
-       (choice-tp (one-tp-right (once-td-tp f)))
-       (choice-tp (one-tp-down (once-td-tp f)))))
+  (fn self [z]
+    ((choice-tp f (one-tp-right self) (one-tp-down self)) z)))
 
 (defn once-bu-tp [f]
-  (->> (one-tp-down (once-bu-tp f))
-       (choice-tp (one-tp-right (once-bu-tp f)))
-       (choice-tp f)))
+  (fn self [z]
+    ((choice-tp (one-tp-down self) (one-tp-right self) f) z)))
 
 (defn stop-td-tp [f]
-  (->> (one-tp-right (stop-td-tp f))
-       (seq-tp f)
-       (choice-tp (one-tp-down (stop-td-tp f)))))
+  (fn self [z]
+    (seq-tp (one-tp-right self) (choice-tp f (one-tp-down self)) z)))
 
 (defn stop-bu-tp [f]
-  (->> (one-tp-down (stop-bu-tp f))
-       (choice-tp f)
-       (seq-tp (one-tp-right (stop-bu-tp f)))))
+  (fn self [z]
+    ((seq-tp (choice-tp (one-tp-down self) f) (one-tp-right self)) z)))
 
 (declare z-try-apply-m z-try-apply-mz)
+
+(defn maybe-keep [x y]
+  (fn [z]
+   (if-some [r (y z)]
+     (if-some [k (x r)]
+       k
+       r)
+     (x z))))
 
 (defn adhoc-tp [f g]
   (maybe-keep f (z-try-apply-m g)))
@@ -285,16 +291,6 @@
 (defn id-tp [x] x)
 
 (defn fail-tp [_])
-
-(defn maybe-keep
-  ([x y]
-   (partial maybe-keep x y))
-  ([x y z]
-   (if-some [r (y z)]
-     (if-some [k (x r)]
-       k
-       r)
-     (x z))))
 
 (defn all-tp-right [f]
   (fn [z]
@@ -310,25 +306,28 @@
 
 (defn one-tp-right [f]
   (fn [z]
-    (when-some [r (zip/right z)]
-      (zip/left (f r)))))
+    (some->> (zip/right z)
+             (f)
+             (zip/left))))
 
 (defn one-tp-down [f]
   (fn [z]
-    (when-some [d (zip/down z)]
-      (zip/up (f d)))))
+    (some->> (zip/down z)
+             (f)
+             (zip/up))))
 
 (def mono-tp (partial adhoc-tp fail-tp))
 
 (def mono-tpz (partial adhoc-tpz fail-tp))
 
 (defn try-tp [s]
-  (choice-tp id-tp s))
+  (choice-tp s id-tp))
 
 (defn repeat-tp [s]
-  (try-tp (fn [z]
-            (when-some [z (s z)]
-              (recur z)))))
+  (fn [z]
+    (if-some [z (s z)]
+      (recur z)
+      z)))
 
 (defn innermost [s]
   (repeat-tp (once-bu-tp s)))
@@ -358,8 +357,8 @@
             (choice-tu ~x ~y z#)))
   ([x y z]
    `(let [z# ~z]
-      (if-some [z# (~y z#)]
-        z#
+      (if-some [acc# (~y z#)]
+        acc#
         (~x z#)))))
 
 (declare all-tu-down all-tu-right)
