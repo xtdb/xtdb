@@ -340,12 +340,15 @@
 (defn- mempty [z]
   ((get (meta z) :zip/mempty vector)))
 
+(defn- mappend [z]
+  (get (meta z) :zip/mappend into))
+
 (defn seq-tu [& xs]
   (fn [z]
-    (reduce
-     (get (meta z) :zip/mappend into)
-     (for [x (reverse xs)]
-       (x z)))))
+    (transduce (map (fn [x] (x z)))
+               (mappend z)
+               (mempty z)
+               (reverse xs))))
 
 (def choice-tu choice-tp)
 
@@ -359,8 +362,6 @@
   (fn self [z]
     ((seq-tu f (all-tu-down self) (all-tu-right self)) z)))
 
-(declare one-tu-down one-tu-right)
-
 (defn once-td-tu [f]
   (fn self [z]
     ((choice-tu (all-tu-right self) (all-tu-down self) f) z)))
@@ -371,11 +372,11 @@
 
 (defn stop-td-tu [f]
   (fn self [z]
-    ((seq-tu (choice-tu (all-tu-down (stop-td-tu f)) f) (all-tu-right (stop-td-tu f))) z)))
+    ((seq-tu (choice-tu (all-tu-down self) f) (all-tu-right self)) z)))
 
 (defn stop-bu-tu [f]
   (fn self [z]
-    ((seq-tu (choice-tu f (all-tu-down (stop-bu-tu f))) (all-tu-right (stop-bu-tu f))) z)))
+    ((seq-tu (choice-tu f (all-tu-down self)) (all-tu-right self)) z)))
 
 (defn all-tu-down [f]
   (fn [z]
