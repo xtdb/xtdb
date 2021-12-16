@@ -340,58 +340,42 @@
 (defn- mempty [z]
   ((get (meta z) :zip/mempty vector)))
 
-(defn- mappend [z x y]
-  ((get (meta z) :zip/mappend into) x y))
+(defn seq-tu [& xs]
+  (fn [z]
+    (reduce
+     (get (meta z) :zip/mappend into)
+     (for [x (reverse xs)]
+       (x z)))))
 
-(defmacro seq-tu
-  ([x y] `(fn [z#]
-            (seq-tu ~x ~y z#)))
-  ([x y z]
-   `(let [z# ~z
-          xs# (~x z#)
-          ys# (~y z#)]
-      (mappend z# xs# ys#))))
-
-(defmacro choice-tu
-  ([x y] `(fn [z#]
-            (choice-tu ~x ~y z#)))
-  ([x y z]
-   `(let [z# ~z]
-      (if-some [acc# (~y z#)]
-        acc#
-        (~x z#)))))
+(def choice-tu choice-tp)
 
 (declare all-tu-down all-tu-right)
 
 (defn full-td-tu [f]
-  (->> (all-tu-right (full-td-tu f))
-       (seq-tu (all-tu-down (full-td-tu f)))
-       (seq-tu f)))
+  (fn self [z]
+    ((seq-tu (all-tu-right self) (all-tu-down self) f) z)))
 
 (defn full-bu-tu [f]
-  (->> f
-       (seq-tu (all-tu-down (full-bu-tu f)))
-       (seq-tu (all-tu-right (full-bu-tu f)))))
+  (fn self [z]
+    ((seq-tu f (all-tu-down self) (all-tu-right self)) z)))
 
 (declare one-tu-down one-tu-right)
 
 (defn once-td-tu [f]
-  (->> (all-tu-right (once-td-tu f))
-       (choice-tu (all-tu-down (once-td-tu f)))
-       (choice-tu f)))
+  (fn self [z]
+    ((choice-tu (all-tu-right self) (all-tu-down self) f) z)))
 
 (defn once-bu-tu [f]
-  (->> f
-       (choice-tu (all-tu-down (once-bu-tu f)))
-       (choice-tu (all-tu-right (once-bu-tu f)))))
+  (fn self [z]
+    ((choice-tu f (all-tu-down self) (all-tu-right self)) z)))
 
 (defn stop-td-tu [f]
-  (->> (all-tu-right (stop-td-tu f))
-       (seq-tu (choice-tu f (all-tu-down (stop-td-tu f))))))
+  (fn self [z]
+    ((seq-tu (choice-tu (all-tu-down (stop-td-tu f)) f) (all-tu-right (stop-td-tu f))) z)))
 
 (defn stop-bu-tu [f]
-  (->> (choice-tu (all-tu-down (stop-bu-tu f)) f)
-       (seq-tu (all-tu-right (stop-bu-tu f)))))
+  (fn self [z]
+    ((seq-tu (choice-tu f (all-tu-down (stop-bu-tu f))) (all-tu-right (stop-bu-tu f))) z)))
 
 (defn all-tu-down [f]
   (fn [z]
