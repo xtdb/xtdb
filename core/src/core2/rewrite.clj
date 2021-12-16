@@ -296,31 +296,27 @@
        r)
      (x z))))
 
-(defn all-tp-right
-  ([f] (partial all-tp-right f))
-  ([f z]
-   (if-some [r (zip/right z)]
-     (zip/left (f r))
-     z)))
+(defn all-tp-right [f]
+  (fn [z]
+    (if-some [r (zip/right z)]
+      (zip/left (f r))
+      z)))
 
-(defn all-tp-down
-  ([f] (partial all-tp-down f))
-  ([f z]
-   (if-some [d (zip/down z)]
-     (zip/up (f d))
-     z)))
+(defn all-tp-down [f]
+  (fn [z]
+    (if-some [d (zip/down z)]
+      (zip/up (f d))
+      z)))
 
-(defn one-tp-right
-  ([f] (partial one-tp-right f))
-  ([f z]
-   (when-some [r (zip/right z)]
-     (zip/left (f r)))))
+(defn one-tp-right [f]
+  (fn [z]
+    (when-some [r (zip/right z)]
+      (zip/left (f r)))))
 
-(defn one-tp-down
-  ([f] (partial one-tp-down f))
-  ([f z]
-   (when-some [d (zip/down z)]
-     (zip/up (f d)))))
+(defn one-tp-down [f]
+  (fn [z]
+    (when-some [d (zip/down z)]
+      (zip/up (f d)))))
 
 (def mono-tp (partial adhoc-tp fail-tp))
 
@@ -332,7 +328,7 @@
 (defn repeat-tp [s]
   (try-tp (fn [z]
             (when-some [z (s z)]
-              ((repeat-tp s) z)))))
+              (recur z)))))
 
 (defn innermost [s]
   (repeat-tp (once-bu-tp s)))
@@ -398,35 +394,25 @@
   (->> (choice-tu (all-tu-down (stop-bu-tu f)) f)
        (seq-tu (all-tu-right (stop-bu-tu f)))))
 
-(defn all-tu-down
-  ([f] (partial all-tu-down f))
-  ([f z]
-   (if-some [d (zip/down z)]
-     (f d)
-     (mempty z))))
+(defn all-tu-down [f]
+  (fn [z]
+    (if-some [d (zip/down z)]
+      (f d)
+      (mempty z))))
 
-(defn all-tu-right
-  ([f] (partial all-tu-right f))
-  ([f z]
-   (if-some [r (zip/right z)]
-     (f r)
-     (mempty z))))
+(defn all-tu-right [f]
+  (fn [z]
+    (if-some [r (zip/right z)]
+      (f r)
+      (mempty z))))
 
 (declare z-try-reduce-m z-try-reduce-mz)
 
-(defn adhoc-tu
-  ([f g] (partial adhoc-tu f g))
-  ([f g z]
-   (if-some [id (z-try-reduce-m g z)]
-     id
-     (f z))))
+(defn adhoc-tu [f g]
+  (choice-tu f (z-try-reduce-m g)))
 
-(defn adhoc-tuz
-  ([f g] (partial adhoc-tuz f g))
-  ([f g z]
-   (if-some [id (z-try-reduce-mz g z)]
-     id
-     (f z))))
+(defn adhoc-tuz [f g]
+  (choice-tu f (z-try-reduce-mz g)))
 
 (defn fail-tu [_])
 
@@ -437,27 +423,23 @@
 
 (def mono-tuz (partial adhoc-tuz fail-tu))
 
-(defn z-try-reduce-mz
-  ([f] (partial z-try-reduce-mz f))
-  ([f z]
-   (some-> (zip/node z) (f z))))
+(defn z-try-reduce-mz [f]
+  (fn [z]
+    (some-> (zip/node z) (f z))))
 
-(defn z-try-reduce-m
-  ([f] (partial z-try-reduce-m f))
-  ([f z]
-   (some-> (zip/node z) (f))))
+(defn z-try-reduce-m [f]
+  (fn [z]
+    (some-> (zip/node z) (f))))
 
-(defn z-try-apply-mz
-  ([f] (partial z-try-apply-mz f))
-  ([f z]
-   (some->> (f (zip/node z) z)
-            (zip/replace z))))
+(defn z-try-apply-mz [f]
+  (fn [z]
+    (some->> (f (zip/node z) z)
+             (zip/replace z))))
 
-(defn z-try-apply-m
-  ([f] (partial z-try-apply-m f))
-  ([f z]
-   (some->> (f (zip/node z))
-            (zip/replace z))))
+(defn z-try-apply-m [f]
+  (fn [z]
+    (some->> (f (zip/node z))
+             (zip/replace z))))
 
 (defn with-tu-monoid [z mempty mappend]
   (vary-meta z assoc :zip/mempty mempty :zip/mappend mappend))
