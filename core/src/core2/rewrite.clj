@@ -23,6 +23,9 @@
 (defn- init-ctx [loc ctx]
   (vary-meta loc assoc ::ctx [ctx]))
 
+(defn ->ctx-stack [loc]
+  (::ctx (meta loc)))
+
 (defn vary-ctx [loc f & args]
   (vary-meta loc update-in [::ctx 0] (fn [ctx]
                                        (apply f ctx args))))

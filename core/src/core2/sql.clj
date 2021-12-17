@@ -41,6 +41,27 @@
   (let [[xs ys] (split-at (- (count query-specification) 2) query-specification)]
     (vec (concat xs (reverse ys)))))
 
+(defn- check-column-reference [ctx-stack column-reference]
+  (case (count column-reference)
+    1 (throw (IllegalArgumentException. (str "XTDB requires fully-qualified columns: " (first column-reference))))
+    (let [table-reference (first column-reference)
+          known-tables (reduce
+                        (fn [acc {:keys [table-or-query-name correlation-name]}]
+                          (cond
+                            (contains? acc correlation-name)
+                            acc
+
+                            (and (nil? correlation-name) (contains? acc table-or-query-name))
+                            acc
+
+                            :else
+                            (conj acc (or correlation-name table-or-query-name))))
+                        #{}
+                        (mapcat :tables ctx-stack))]
+      (when-not (contains? known-tables table-reference)
+        (throw (IllegalArgumentException. (str "Table not in scope: " table-reference))))
+      column-reference)))
+
 (def ^:private root-annotation-rules
   {:table_primary
    (rew/->scoped {:table_name (rew/->text :table-or-query-name)
@@ -51,7 +72,7 @@
 
    :column_reference
    (rew/->before (fn [loc _]
-                   (rew/conj-ctx loc :columns (rew/text-nodes loc))))
+                   (rew/conj-ctx loc :columns (check-column-reference (rew/->ctx-stack loc) (rew/text-nodes loc)))))
 
    :with_list_element
    (rew/->scoped {:query_name (rew/->text :query-name)}
