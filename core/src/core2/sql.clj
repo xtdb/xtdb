@@ -37,6 +37,10 @@
      :with with
      :correlated-columns correlated-columns}))
 
+(defn- swap-select-list-and-table-expression [query-specification]
+  (let [[xs ys] (split-at (- (count query-specification) 2) query-specification)]
+    (vec (concat xs (reverse ys)))))
+
 (def ^:private root-annotation-rules
   {:table_primary
    (rew/->scoped {:table_name (rew/->text :table-or-query-name)
@@ -53,6 +57,15 @@
    (rew/->scoped {:query_name (rew/->text :query-name)}
                  (fn [loc {:keys [query-name] :as old-ctx}]
                    (rew/conj-ctx loc :with query-name)))
+
+   ;; NOTE: this temporary swap is done so table_expression is walked
+   ;; first, ensuring its variables are in scope by the time
+   ;; select_list is walked.
+   :query_specification
+   (rew/->around (fn move-select-list-after-table-expression [loc _]
+                   (zip/edit loc swap-select-list-and-table-expression))
+                 (fn restore-select-list [loc _]
+                   (zip/edit loc swap-select-list-and-table-expression)))
 
    :query_expression
    (rew/->scoped {}

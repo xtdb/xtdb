@@ -56,6 +56,14 @@
     (<-- [_ loc]
       (after-fn loc (->ctx loc)))))
 
+(defn ->around [before-fn after-fn]
+  (reify Rule
+    (--> [_ loc]
+      (before-fn loc (->ctx loc)))
+
+    (<-- [_ loc]
+      (after-fn loc (->ctx loc)))))
+
 (defn ->text [kw]
   (->before
    (fn [loc _]
@@ -63,19 +71,22 @@
 
 (defn ->scoped
   ([rule-overrides]
-   (->scoped rule-overrides nil (fn [loc _]
+   (->scoped rule-overrides ->ctx (fn [loc _]
                                   loc)))
   ([rule-overrides after-fn]
-   (->scoped rule-overrides nil after-fn))
+   (->scoped rule-overrides ->ctx after-fn))
   ([rule-overrides ->ctx-fn after-fn]
-   (let [->ctx-fn (or ->ctx-fn ->ctx)]
-     (reify Rule
-       (--> [_ loc]
-         (push-ctx loc (update (->ctx-fn loc) :rules merge rule-overrides)))
+   (->scoped rule-overrides ->ctx-fn (fn [loc _]
+                                       loc) after-fn))
+  ([rule-overrides ->ctx-fn before-fn after-fn]
+   (reify Rule
+     (--> [_ loc]
+       (-> (before-fn loc (->ctx loc))
+           (push-ctx (update (->ctx-fn loc) :rules merge rule-overrides))))
 
-       (<-- [_ loc]
-         (-> (pop-ctx loc)
-             (after-fn (->ctx loc))))))))
+     (<-- [_ loc]
+       (-> (pop-ctx loc)
+           (after-fn (->ctx loc)))))))
 
 (defn rewrite-tree [tree ctx]
   (loop [loc (init-ctx (zip/vector-zip tree) ctx)]
