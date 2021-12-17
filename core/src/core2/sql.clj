@@ -18,7 +18,7 @@
   (memoize
    (fn self
      ([s]
-      (self s :direct_sql_data_statement))
+      (self s :directly_executable_statement))
      ([s start-rule]
       (parse-sql2011 s :start start-rule)))))
 
@@ -39,7 +39,8 @@
 
 (def ^:private root-annotation-rules
   {:table_primary
-   (rew/->scoped {:table_or_query_name (rew/->text :table-or-query-name)
+   (rew/->scoped {:table_name (rew/->text :table-or-query-name)
+                  :query_name (rew/->text :table-or-query-name)
                   :correlation_name (rew/->text :correlation-name)}
                  (fn [loc old-ctx]
                    (rew/conj-ctx loc :tables (select-keys old-ctx [:table-or-query-name :correlation-name]))))
@@ -70,7 +71,7 @@
   (time
    (parse-sql2011
     "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
-    :start :direct_sql_data_statement))
+    :start :directly_executable_statement))
 
   (time
    (parse
@@ -101,14 +102,14 @@
   (time
    (parse-sql2011
     "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)"
-    :start :direct_sql_data_statement))
+    :start :directly_executable_statement))
 
   (time
    (parse-sql2011
     "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END
   FROM t1
  ORDER BY 1"
-    :start :direct_sql_data_statement)))
+    :start :directly_executable_statement)))
 
 ;; SQL:2011 official grammar:
 

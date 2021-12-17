@@ -43,7 +43,7 @@
                                  (Double/parseDouble s)))
       ;; TODO: should this parse as signed_numeric_literal?
       :factor (if (and (= 2 (count (rest x)))
-                       (= [:sign [:minus_sign "-"]] (second x)))
+                       (= [:minus_sign "-"] (second x)))
                 (- (first (filter number? (flatten x))))
                 x)
       x)
@@ -52,7 +52,7 @@
 (defn insert->doc [tables insert-statement]
   (let [[_ _ _ insertion-target insert-columns-and-source] insert-statement
         table (first (filter string? (flatten insertion-target)))
-        from-subquery (second insert-columns-and-source)
+        from-subquery insert-columns-and-source
         columns (if (= 1 (count (rest from-subquery)))
                   (get tables table)
                   (let [insert-column-list (second from-subquery)]
@@ -75,24 +75,23 @@
 (defn skip-statement? [^String x]
   (boolean (re-find #"(?is)^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(\w+)\s+ON\s+(\w+)\s*\((.+)\)\s*$" x)))
 
-(defn- execute-statement [node direct-sql-data-statement-tree]
-  (case (first direct-sql-data-statement-tree)
-    :insert_statement (insert-statement node direct-sql-data-statement-tree)))
+(defn- execute-statement [node direct-sql-data-statement]
+  (case (first direct-sql-data-statement)
+    :insert_statement (insert-statement node direct-sql-data-statement)))
 
 (def ^:private normalize-query-rules
-  {:select_sublist
+  {:select_list
    (rew/->scoped {:derived_column (rew/->after
                                    (fn [loc _]
                                      (if (rew/single-child? loc)
-                                       (let [select-sublist-loc (zip/up loc)
-                                             column (str "col" (count (zip/lefts select-sublist-loc)))]
+                                       (let [column (str "col" (count (zip/lefts loc)))]
                                          (zip/append-child
                                           loc
                                           [:as_clause
                                            "AS"
                                            [:column_name
                                             [:identifier
-                                             [:actual_identifier [:regular_identifier column]]]]]))
+                                             [:regular_identifier column]]]]))
                                        loc)))})
 
    :identifier_chain
@@ -105,25 +104,25 @@
                                          table))]
                       (zip/replace loc [:identifier_chain
                                         [:identifier
-                                         [:actual_identifier
-                                          [:regular_identifier table]]]
+                                         [:regular_identifier table]]
                                         [:identifier
-                                         [:actual_identifier
-                                          [:regular_identifier column]]]]))
+                                         [:regular_identifier column]]]))
                     loc)))
 
    :sort_specification
-   (rew/->scoped {:unsigned_value_specification
+   (rew/->scoped {:numeric_value_expression
                   (rew/->after
                    (fn [loc _]
                      (let [ordinal (first (rew/text-nodes loc))
                            column (str "col" ordinal)]
-                       (zip/replace loc [:column_reference
-                                         [:basic_identifier_chain
-                                          [:identifier_chain
-                                           [:identifier
-                                            [:actual_identifier
-                                             [:regular_identifier column]]]]]]))))})})
+                       (zip/replace loc [:numeric_value_expression
+                                         [:term
+                                          [:factor
+                                           [:column_reference
+                                            [:basic_identifier_chain
+                                             [:identifier_chain
+                                              [:identifier
+                                               [:regular_identifier column]]]]]]]]))))})})
 
 (defn normalize-query-tree [tables tree]
   (rew/rewrite-tree tree {:tables tables :rules normalize-query-rules}))
@@ -150,7 +149,7 @@
   (execute-statement [this statement]
     (if (skip-statement? statement)
       this
-      (let [tree (sql/parse statement :direct_sql_data_statement)]
+      (let [tree (sql/parse statement :directly_executable_statement)]
         (if (insta/failure? tree)
           (if-let [record (or (parse-create-table statement)
                               (parse-create-view statement))]

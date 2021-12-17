@@ -110,7 +110,7 @@ CREATE UNIQUE INDEX t1i0 ON t1(
                              :query query
                              nil)]
                :when input
-               :let [tree (sql/parse-sql2011 input :start :direct_sql_data_statement)]]
+               :let [tree (sql/parse-sql2011 input :start :directly_executable_statement)]]
          (if-let [failure (instaparse.core/get-failure tree)]
            (println (or (xtdb-engine/parse-create-table input) failure))
            (print ".")))
