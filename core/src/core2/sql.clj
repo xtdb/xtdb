@@ -95,7 +95,7 @@
    (rew/->scoped {:rule-overrides {:table_name (rew/->text :table-or-query-name)
                                    :query_name (rew/->text :table-or-query-name)
                                    :correlation_name (rew/->text :correlation-name)}
-                  :after register-table-primary})
+                  :exit register-table-primary})
 
    :column_reference
    (rew/->after validate-column-reference)
@@ -108,14 +108,14 @@
    (rew/->scoped {:rule-overrides {:join_condition (->scoped-env)}
                   :init (fn [loc]
                           (assoc (rew/->ctx loc) :tables {}))
-                  :after (fn [loc {:keys [tables]}]
-                           (rew/into-ctx loc :tables tables))})
+                  :exit (fn [loc {:keys [tables]}]
+                          (rew/into-ctx loc :tables tables))})
 
    :lateral_derived_table (->scoped-env)
 
    :with_list_element
    (rew/->scoped {:rule-overrides {:query_name (rew/->text :query-name)}
-                  :after register-with-list-element})
+                  :exit register-with-list-element})
 
    ;; NOTE: this temporary swap is done so table_expression is walked
    ;; first, ensuring its variables are in scope by the time
@@ -129,8 +129,8 @@
    :query_expression
    (rew/->scoped {:init (fn [_]
                           (->root-annotation-ctx))
-                  :after (fn [loc old-ctx]
-                           (zip/edit loc vary-meta assoc ::scope (select-keys old-ctx [:with :tables :columns])))})})
+                  :exit (fn [loc old-ctx]
+                          (zip/edit loc vary-meta assoc ::scope (select-keys old-ctx [:with :tables :columns])))})})
 
 (defn- ->root-annotation-ctx []
   {:tables {} :columns #{} :with {} :rules root-annotation-rules})
