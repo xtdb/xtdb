@@ -71,14 +71,13 @@
         (zip/edit vary-meta assoc ::with-id id))))
 
 (defn- validate-column-reference [loc _]
-  (let [env (->env loc)
-        column-reference (zip/node loc)
-        identifiers (rew/text-nodes loc)]
+  (let [identifiers (rew/text-nodes loc)]
     (case (count identifiers)
       1 (throw (IllegalArgumentException.
                 (format "XTDB requires fully-qualified columns: %s %s"
                         (first identifiers) (->line-info-str loc))))
-      (let [table-reference (first identifiers)]
+      (let [env (->env loc)
+            table-reference (first identifiers)]
         (if-let [{:keys [id] :as table} (get env table-reference)]
           (-> (zip/edit loc vary-meta assoc ::table-id id)
               (rew/conj-ctx :columns {:identifiers identifiers :table-id id}))
