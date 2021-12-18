@@ -17,7 +17,7 @@
       (direction-fn rule loc)
       loc)))
 
-(defn- ->ctx [loc]
+(defn ->ctx [loc]
   (first (::ctx (meta loc))))
 
 (defn- init-ctx [loc ctx]
@@ -32,6 +32,12 @@
 
 (defn conj-ctx [loc k v]
   (vary-ctx loc update k conj v))
+
+(defn into-ctx [loc k v]
+  (vary-ctx loc update k into v))
+
+(defn assoc-ctx [loc k v]
+  (vary-ctx loc assoc k v))
 
 (defn- pop-ctx [loc]
   (vary-meta loc update ::ctx (comp vec rest)))
@@ -70,12 +76,12 @@
 (defn ->text [kw]
   (->before
    (fn [loc _]
-     (vary-ctx loc assoc kw (str/join (text-nodes loc))))))
+     (assoc-ctx loc kw (str/join (text-nodes loc))))))
 
 (defn ->scoped
   ([rule-overrides]
    (->scoped rule-overrides ->ctx (fn [loc _]
-                                  loc)))
+                                    loc)))
   ([rule-overrides after-fn]
    (->scoped rule-overrides ->ctx after-fn))
   ([rule-overrides ->ctx-fn after-fn]

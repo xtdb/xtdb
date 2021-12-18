@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.zip :as zip]
             [core2.rewrite :as rew]
-            [instaparse.core :as insta]))
+            [instaparse.core :as insta]
+            [instaparse.failure]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -20,64 +21,105 @@
      ([s]
       (self s :directly_executable_statement))
      ([s start-rule]
-      (parse-sql2011 s :start start-rule)))))
+      (vary-meta (parse-sql2011 s :start start-rule) assoc ::sql s)))))
 
 ;; Rewrite to annotate variable scopes.
 
 (declare ->root-annotation-ctx)
 
-(defn- ->scope-annotation [{:keys [tables with columns] :as ctx}]
-  (let [known-tables (set (for [{:keys [table-or-query-name correlation-name]} tables]
-                            (or correlation-name table-or-query-name)))
-        correlated-columns (set (for [c columns
-                                      :when (and (next c) (not (contains? known-tables (first c))))]
-                                  c))]
-    {:tables tables
-     :columns columns
-     :with with
-     :correlated-columns correlated-columns}))
-
 (defn- swap-select-list-and-table-expression [query-specification]
   (let [[xs ys] (split-at (- (count query-specification) 2) query-specification)]
-    (vec (concat xs (reverse ys)))))
+    (with-meta (vec (concat xs (reverse ys))) (meta query-specification))))
 
-(defn- check-column-reference [ctx-stack column-reference]
-  (case (count column-reference)
-    1 (throw (IllegalArgumentException. (str "XTDB requires fully-qualified columns: " (first column-reference))))
-    (let [table-reference (first column-reference)
-          known-tables (reduce
-                        (fn [acc {:keys [table-or-query-name correlation-name]}]
-                          (cond
-                            (contains? acc correlation-name)
-                            acc
+(defn- ->current-env [ctx-stack]
+  (some :env ctx-stack))
 
-                            (and (nil? correlation-name) (contains? acc table-or-query-name))
-                            acc
+(defn- ->env [loc]
+  (let [[{:keys [tables] :as ctx} :as ctx-stack] (rew/->ctx-stack loc)
+        new-env (reduce
+                 (fn [acc {:keys [correlation-name] :as table}]
+                   (if (contains? acc correlation-name)
+                     acc
+                     (assoc acc correlation-name table)))
+                 {}
+                 tables)]
+    (merge (->current-env ctx-stack) new-env)))
 
-                            :else
-                            (conj acc (or correlation-name table-or-query-name))))
-                        #{}
-                        (mapcat :tables ctx-stack))]
-      (when-not (contains? known-tables table-reference)
-        (throw (IllegalArgumentException. (str "Table not in scope: " table-reference))))
-      column-reference)))
+;; TODO: avoid recalculating.
+(defn- find-with-id [loc table-or-query-name]
+  (first (for [{:keys [with]} (rew/->ctx-stack loc)
+               {:keys [id query-name] :as w} with
+               :when (= query-name table-or-query-name)]
+           id)))
+
+(defn- ->line-info-str [loc]
+  (let [{:core2.sql/keys [sql]} (zip/root loc)
+        {:instaparse.gll/keys [start-index]} (meta (zip/node loc))
+        {:keys [line column]} (instaparse.failure/index->line-column start-index sql)]
+    (format "at line %d, column %d" line column)))
+
+(defn- check-column-reference [env column-reference-loc]
+  (let [column-reference (zip/node column-reference-loc)
+        identifiers (rew/text-nodes column-reference-loc)]
+    (case (count identifiers)
+      1 (throw (IllegalArgumentException.
+                (format "XTDB requires fully-qualified columns: %s %s"
+                        (first identifiers) (->line-info-str column-reference-loc))))
+      (let [table-reference (first identifiers)]
+        (if-let [{:keys [id] :as table} (get env table-reference)]
+          (zip/edit column-reference-loc  vary-meta assoc ::table-id id)
+          (throw (IllegalArgumentException.
+                  (format "Table not in scope: %s %s"
+                          table-reference (->line-info-str column-reference-loc)))))))))
+
+(defn- ->scoped-env []
+  (rew/->scoped {}
+                (fn [loc]
+                  (assoc (rew/->ctx loc) :env (->env loc)))
+                (fn [loc _]
+                  loc)))
 
 (def ^:private root-annotation-rules
   {:table_primary
    (rew/->scoped {:table_name (rew/->text :table-or-query-name)
                   :query_name (rew/->text :table-or-query-name)
                   :correlation_name (rew/->text :correlation-name)}
-                 (fn [loc old-ctx]
-                   (rew/conj-ctx loc :tables (select-keys old-ctx [:table-or-query-name :correlation-name]))))
+                 (fn [loc {:keys [table-or-query-name correlation-name] :as old-ctx}]
+                   (let [loc (vary-meta loc update ::next-id (fnil inc 0))
+                         {id ::next-id} (meta loc)
+                         with-id (find-with-id loc table-or-query-name)
+                         table {:table-or-query-name table-or-query-name
+                                :correlation-name (or correlation-name table-or-query-name )
+                                :id id}]
+                     (-> (rew/conj-ctx loc :tables (cond-> table
+                                                     with-id (assoc :with-id with-id)))
+                         (zip/edit vary-meta assoc ::table-id id)))))
 
    :column_reference
-   (rew/->before (fn [loc _]
-                   (rew/conj-ctx loc :columns (check-column-reference (rew/->ctx-stack loc) (rew/text-nodes loc)))))
+   (rew/->before (fn [loc {:keys [env]}]
+                   (let [loc (check-column-reference env loc)]
+                     (rew/conj-ctx loc :columns {:identifiers (rew/text-nodes loc)
+                                                 :table-id (::table-id (meta (zip/node loc)))}))))
+
+   :from_clause
+   (rew/->after (fn [loc _]
+                  (rew/assoc-ctx loc :env (->env loc))))
+
+   :qualified_join
+   (rew/->scoped {:join_condition (->scoped-env)}
+                 (fn [loc]
+                   (assoc (rew/->ctx loc) :tables #{}))
+                 (fn [loc {:keys [tables]}]
+                   (rew/into-ctx loc :tables tables)))
+
+   :lateral_derived_table (->scoped-env)
 
    :with_list_element
    (rew/->scoped {:query_name (rew/->text :query-name)}
                  (fn [loc {:keys [query-name] :as old-ctx}]
-                   (rew/conj-ctx loc :with query-name)))
+                   (let [loc (vary-meta loc update ::next-id (fnil inc 0))
+                         {id ::next-id} (meta loc)]
+                     (rew/conj-ctx loc :with {:query-name query-name :id id}))))
 
    ;; NOTE: this temporary swap is done so table_expression is walked
    ;; first, ensuring its variables are in scope by the time
@@ -93,7 +135,7 @@
                  (fn [_]
                    (->root-annotation-ctx))
                  (fn [loc old-ctx]
-                   (zip/edit loc vary-meta assoc ::scope (->scope-annotation old-ctx))))})
+                   (zip/edit loc vary-meta assoc ::scope (select-keys old-ctx [:with :tables :columns]))))})
 
 (defn- ->root-annotation-ctx []
   {:tables #{} :columns #{} :with #{} :rules root-annotation-rules})
