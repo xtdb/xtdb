@@ -12,18 +12,18 @@ SELECT t1.d-t1.e
         scopes (->> (sql/annotate-tree tree)
                     (tree-seq vector? seq)
                     (keep (comp :core2.sql/scope meta)))]
-    (t/is (= [{:with #{{:query-name "foo" :id 2}},
-               :tables #{{:table-or-query-name "t1" :correlation-name "t1" :id 3}
-                         {:table-or-query-name "foo" :correlation-name "baz" :id 4 :with-id 2}}
+    (t/is (= [{:with {"foo" {:query-name "foo" :id 2}}
+               :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 3}
+                        "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 4 :with-id 2}}
                :columns #{{:identifiers ["t1" "d"] :table-id 3}
                           {:identifiers ["t1" "e"] :table-id 3}
                           {:identifiers ["t1" "a"] :table-id 3}
                           {:identifiers ["t1" "b"] :table-id 3}}}
-              {:with #{}
-               :tables #{{:table-or-query-name "bar" :correlation-name "bar" :id 1}}
+              {:with {}
+               :tables {"bar" {:table-or-query-name "bar" :correlation-name "bar" :id 1}}
                :columns #{}}
-              {:with #{}
-               :tables #{{:table-or-query-name "t1" :correlation-name "x" :id 5}}
+              {:with {}
+               :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 5}}
                :columns #{{:identifiers ["x" "b"] :table-id 5}
                           {:identifiers ["t1" "b"] :table-id 3}}}]
              scopes))))

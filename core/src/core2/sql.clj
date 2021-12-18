@@ -35,21 +35,13 @@
   (some :env ctx-stack))
 
 (defn- ->env [loc]
-  (let [[{:keys [tables] :as ctx} :as ctx-stack] (rew/->ctx-stack loc)
-        new-env (reduce
-                 (fn [acc {:keys [correlation-name] :as table}]
-                   (if (contains? acc correlation-name)
-                     acc
-                     (assoc acc correlation-name table)))
-                 {}
-                 tables)]
-    (merge (->current-env ctx-stack) new-env)))
+  (let [[{:keys [tables] :as ctx} :as ctx-stack] (rew/->ctx-stack loc)]
+    (merge (->current-env ctx-stack) tables)))
 
-;; TODO: avoid recalculating.
 (defn- find-with-id [loc table-or-query-name]
   (first (for [{:keys [with]} (rew/->ctx-stack loc)
-               {:keys [id query-name] :as w} with
-               :when (= query-name table-or-query-name)]
+               :let [{:keys [id]} (get with table-or-query-name)]
+               :when id]
            id)))
 
 (defn- ->line-info-str [loc]
@@ -58,19 +50,41 @@
         {:keys [line column]} (instaparse.failure/index->line-column start-index sql)]
     (format "at line %d, column %d" line column)))
 
-(defn- check-column-reference [env column-reference-loc]
-  (let [column-reference (zip/node column-reference-loc)
-        identifiers (rew/text-nodes column-reference-loc)]
+(defn- next-id [loc]
+  (let [loc (vary-meta loc update ::next-id (fnil inc 0))]
+    [loc (::next-id (meta loc))]))
+
+(defn- register-table-primary [loc {:keys [table-or-query-name correlation-name] :as old-ctx}]
+  (let [[loc id] (next-id loc)
+        with-id (find-with-id loc table-or-query-name)
+        correlation-name (or correlation-name table-or-query-name)
+        table (cond-> {:table-or-query-name table-or-query-name
+                       :correlation-name correlation-name
+                       :id id}
+                with-id (assoc :with-id with-id))]
+    (-> (rew/assoc-in-ctx loc [:tables correlation-name] table)
+        (zip/edit vary-meta assoc ::table-id id))))
+
+(defn- register-with-list-element [loc {:keys [query-name] :as old-ctx}]
+  (let [[loc id] (next-id loc)]
+    (-> (rew/assoc-in-ctx loc [:with query-name] {:query-name query-name :id id})
+        (zip/edit vary-meta assoc ::with-id id))))
+
+(defn- validate-column-reference [loc _]
+  (let [env (->env loc)
+        column-reference (zip/node loc)
+        identifiers (rew/text-nodes loc)]
     (case (count identifiers)
       1 (throw (IllegalArgumentException.
                 (format "XTDB requires fully-qualified columns: %s %s"
-                        (first identifiers) (->line-info-str column-reference-loc))))
+                        (first identifiers) (->line-info-str loc))))
       (let [table-reference (first identifiers)]
         (if-let [{:keys [id] :as table} (get env table-reference)]
-          (zip/edit column-reference-loc  vary-meta assoc ::table-id id)
+          (-> (zip/edit loc vary-meta assoc ::table-id id)
+              (rew/conj-ctx :columns {:identifiers identifiers :table-id id}))
           (throw (IllegalArgumentException.
                   (format "Table not in scope: %s %s"
-                          table-reference (->line-info-str column-reference-loc)))))))))
+                          table-reference (->line-info-str loc)))))))))
 
 (defn- ->scoped-env []
   (rew/->scoped {}
@@ -84,22 +98,10 @@
    (rew/->scoped {:table_name (rew/->text :table-or-query-name)
                   :query_name (rew/->text :table-or-query-name)
                   :correlation_name (rew/->text :correlation-name)}
-                 (fn [loc {:keys [table-or-query-name correlation-name] :as old-ctx}]
-                   (let [loc (vary-meta loc update ::next-id (fnil inc 0))
-                         {id ::next-id} (meta loc)
-                         with-id (find-with-id loc table-or-query-name)
-                         table {:table-or-query-name table-or-query-name
-                                :correlation-name (or correlation-name table-or-query-name )
-                                :id id}]
-                     (-> (rew/conj-ctx loc :tables (cond-> table
-                                                     with-id (assoc :with-id with-id)))
-                         (zip/edit vary-meta assoc ::table-id id)))))
+                 register-table-primary)
 
    :column_reference
-   (rew/->before (fn [loc {:keys [env]}]
-                   (let [loc (check-column-reference env loc)]
-                     (rew/conj-ctx loc :columns {:identifiers (rew/text-nodes loc)
-                                                 :table-id (::table-id (meta (zip/node loc)))}))))
+   (rew/->after validate-column-reference)
 
    :from_clause
    (rew/->after (fn [loc _]
@@ -108,7 +110,7 @@
    :qualified_join
    (rew/->scoped {:join_condition (->scoped-env)}
                  (fn [loc]
-                   (assoc (rew/->ctx loc) :tables #{}))
+                   (assoc (rew/->ctx loc) :tables {}))
                  (fn [loc {:keys [tables]}]
                    (rew/into-ctx loc :tables tables)))
 
@@ -116,10 +118,7 @@
 
    :with_list_element
    (rew/->scoped {:query_name (rew/->text :query-name)}
-                 (fn [loc {:keys [query-name] :as old-ctx}]
-                   (let [loc (vary-meta loc update ::next-id (fnil inc 0))
-                         {id ::next-id} (meta loc)]
-                     (rew/conj-ctx loc :with {:query-name query-name :id id}))))
+                 register-with-list-element)
 
    ;; NOTE: this temporary swap is done so table_expression is walked
    ;; first, ensuring its variables are in scope by the time
@@ -138,7 +137,7 @@
                    (zip/edit loc vary-meta assoc ::scope (select-keys old-ctx [:with :tables :columns]))))})
 
 (defn- ->root-annotation-ctx []
-  {:tables #{} :columns #{} :with #{} :rules root-annotation-rules})
+  {:tables {} :columns #{} :with {} :rules root-annotation-rules})
 
 (defn annotate-tree [tree]
   (rew/rewrite-tree tree (->root-annotation-ctx)))

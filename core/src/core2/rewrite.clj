@@ -39,6 +39,9 @@
 (defn assoc-ctx [loc k v]
   (vary-ctx loc assoc k v))
 
+(defn assoc-in-ctx [loc ks v]
+  (vary-ctx loc assoc-in ks v))
+
 (defn- pop-ctx [loc]
   (vary-meta loc update ::ctx (comp vec rest)))
 
