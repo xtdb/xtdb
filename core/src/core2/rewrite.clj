@@ -81,24 +81,21 @@
    (fn [loc _]
      (assoc-ctx loc kw (str/join (text-nodes loc))))))
 
-(defn ->scoped
-  ([rule-overrides]
-   (->scoped rule-overrides ->ctx (fn [loc _]
-                                    loc)))
-  ([rule-overrides after-fn]
-   (->scoped rule-overrides ->ctx after-fn))
-  ([rule-overrides ->ctx-fn after-fn]
-   (->scoped rule-overrides ->ctx-fn (fn [loc _]
-                                       loc) after-fn))
-  ([rule-overrides ->ctx-fn before-fn after-fn]
-   (reify Rule
-     (--> [_ loc]
-       (-> (before-fn loc (->ctx loc))
-           (push-ctx (update (->ctx-fn loc) :rules merge rule-overrides))))
+(defn ->scoped [{:keys [rule-overrides init before after]
+                 :or {rule-overrides {}
+                      init ->ctx
+                      before (fn [loc _]
+                               loc)
+                      after (fn [loc _]
+                              loc)}}]
+  (reify Rule
+    (--> [_ loc]
+      (-> (before loc (->ctx loc))
+          (push-ctx (update (init loc) :rules merge rule-overrides))))
 
-     (<-- [_ loc]
-       (-> (pop-ctx loc)
-           (after-fn (->ctx loc)))))))
+    (<-- [_ loc]
+      (-> (pop-ctx loc)
+          (after (->ctx loc))))))
 
 (defn rewrite-tree [tree ctx]
   (loop [loc (init-ctx (zip/vector-zip tree) ctx)]

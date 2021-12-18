@@ -87,18 +87,15 @@
                           table-reference (->line-info-str loc)))))))))
 
 (defn- ->scoped-env []
-  (rew/->scoped {}
-                (fn [loc]
-                  (assoc (rew/->ctx loc) :env (->env loc)))
-                (fn [loc _]
-                  loc)))
+  (rew/->scoped {:init (fn [loc]
+                         (assoc (rew/->ctx loc) :env (->env loc)))}))
 
 (def ^:private root-annotation-rules
   {:table_primary
-   (rew/->scoped {:table_name (rew/->text :table-or-query-name)
-                  :query_name (rew/->text :table-or-query-name)
-                  :correlation_name (rew/->text :correlation-name)}
-                 register-table-primary)
+   (rew/->scoped {:rule-overrides {:table_name (rew/->text :table-or-query-name)
+                                   :query_name (rew/->text :table-or-query-name)
+                                   :correlation_name (rew/->text :correlation-name)}
+                  :after register-table-primary})
 
    :column_reference
    (rew/->after validate-column-reference)
@@ -108,17 +105,17 @@
                   (rew/assoc-ctx loc :env (->env loc))))
 
    :qualified_join
-   (rew/->scoped {:join_condition (->scoped-env)}
-                 (fn [loc]
-                   (assoc (rew/->ctx loc) :tables {}))
-                 (fn [loc {:keys [tables]}]
-                   (rew/into-ctx loc :tables tables)))
+   (rew/->scoped {:rule-overrides {:join_condition (->scoped-env)}
+                  :init (fn [loc]
+                          (assoc (rew/->ctx loc) :tables {}))
+                  :after (fn [loc {:keys [tables]}]
+                           (rew/into-ctx loc :tables tables))})
 
    :lateral_derived_table (->scoped-env)
 
    :with_list_element
-   (rew/->scoped {:query_name (rew/->text :query-name)}
-                 register-with-list-element)
+   (rew/->scoped {:rule-overrides {:query_name (rew/->text :query-name)}
+                  :after register-with-list-element})
 
    ;; NOTE: this temporary swap is done so table_expression is walked
    ;; first, ensuring its variables are in scope by the time
@@ -130,11 +127,10 @@
                    (zip/edit loc swap-select-list-and-table-expression)))
 
    :query_expression
-   (rew/->scoped {}
-                 (fn [_]
-                   (->root-annotation-ctx))
-                 (fn [loc old-ctx]
-                   (zip/edit loc vary-meta assoc ::scope (select-keys old-ctx [:with :tables :columns]))))})
+   (rew/->scoped {:init (fn [_]
+                          (->root-annotation-ctx))
+                  :after (fn [loc old-ctx]
+                           (zip/edit loc vary-meta assoc ::scope (select-keys old-ctx [:with :tables :columns])))})})
 
 (defn- ->root-annotation-ctx []
   {:tables {} :columns #{} :with {} :rules root-annotation-rules})
