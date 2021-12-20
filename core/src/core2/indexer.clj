@@ -257,25 +257,13 @@
                     (iv/->direct-vec)
                     (.structReader))
 
-        col-names (.structKeys doc-rdr)
-
-        live-roots (->> (for [col-name col-names]
-                          (MapEntry/create col-name (.getLiveRoot chunk-manager col-name)))
-                        (into {}))
-
-        vec-writers (->> (for [^String col-name col-names]
-                           (MapEntry/create col-name
-                                            (-> ^VectorSchemaRoot (get live-roots col-name)
-                                                (.getVector col-name)
-                                                (vw/vec->writer))))
-                         (into {}))
-
         doc-copiers (vec
-                     (for [col-name col-names
+                     (for [^String col-name (.structKeys doc-rdr)
                            :let [col-rdr (.readerForKey doc-rdr col-name)
-                                 ^VectorSchemaRoot live-root (get live-roots col-name)
+                                 ^VectorSchemaRoot live-root (.getLiveRoot chunk-manager col-name)
                                  ^BigIntVector row-id-vec (.getVector live-root "_row-id")
-                                 ^IVectorWriter vec-writer (get vec-writers col-name)
+                                 ^IVectorWriter vec-writer (-> (.getVector live-root col-name)
+                                                               (vw/vec->writer))
                                  row-copier (.rowCopier col-rdr vec-writer)]]
                        (reify DocRowCopier
                          (copyDocRow [_ row-id src-idx]
