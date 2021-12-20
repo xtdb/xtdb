@@ -11,7 +11,7 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import core2.types.LegType
-           [java.time Duration ZonedDateTime]
+           [java.time Duration ZonedDateTime ZoneId]
            [org.apache.arrow.vector DurationVector TimeStampVector ValueVector]
            [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Timestamp ArrowType$Union FieldType]
            org.apache.arrow.vector.types.TimeUnit))
@@ -131,25 +131,35 @@
 
 (t/deftest test-date-trunc
   (with-open [node (node/start-node {})]
-    (let [tx (c2/submit-tx node [[:put {:_id :foo, :date (util/->instant #inst "2021-01-21T12:34:56Z")}]])
+    (let [tx (c2/submit-tx node [[:put {:_id :foo,
+                                        :date (util/->instant #inst "2021-10-21T12:34:56Z")
+                                        :zdt (-> (util/->zdt #inst "2021-08-21T12:34:56Z")
+                                                 (.withZoneSameLocal (ZoneId/of "Europe/London")))}]])
           db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx)]
-      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21")}]
-               (op/query-ra '[:project [{trunc (date-trunc "DAY" date)}]
-                              [:scan [date]]]
-                            db)))
+      (letfn [(simple-trunc [time-unit]
+                (-> (op/query-ra [:project [{'trunc (list 'date-trunc time-unit 'date)}]
+                                  '[:scan [date]]]
+                                 db)
+                    first :trunc))]
+        (t/is (= (util/->zdt #inst "2021-10-21") (simple-trunc "DAY")))
+        (t/is (= (util/->zdt #inst "2021-10-21T12:34") (simple-trunc "MINUTE")))
+        (t/is (= (util/->zdt #inst "2021-10-01") (simple-trunc "MONTH")))
+        (t/is (= (util/->zdt #inst "2021-01-01") (simple-trunc "YEAR"))))
 
-      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21T12:34")}]
-               (op/query-ra '[:project [{trunc (date-trunc "MINUTE" date)}]
-                              [:scan [date]]]
-                            db)))
+      (t/is (= [{:trunc (-> (util/->zdt #inst "2021-08-21")
+                            (.withZoneSameLocal (ZoneId/of "Europe/London")))}]
+               (op/query-ra '[:project [{trunc (date-trunc "DAY" zdt)}]
+                              [:scan [zdt]]]
+                            db))
+            "timezone aware")
 
-      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21")}]
+      (t/is (= [{:trunc (util/->zdt #inst "2021-10-21")}]
                (op/query-ra '[:select (> trunc #inst "2021")
                               [:project [{trunc (date-trunc "DAY" date)}]
                                [:scan [date]]]]
                             db)))
 
-      (t/is (= [{:trunc (util/->zdt #inst "2021-01-21")}]
+      (t/is (= [{:trunc (util/->zdt #inst "2021-10-21")}]
                (op/query-ra '[:project [{trunc (date-trunc "DAY" trunc)}]
                               [:project [{trunc (date-trunc "MINUTE" date)}]
                                [:scan [date]]]]

@@ -15,7 +15,7 @@
            java.lang.reflect.Method
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
-           [java.time Duration Instant ZoneOffset]
+           [java.time Duration Instant ZonedDateTime ZoneId ZoneOffset]
            [java.time.temporal ChronoField ChronoUnit]
            [java.util Date HashMap LinkedList]
            java.util.stream.IntStream
@@ -624,16 +624,21 @@
   {:return-types #{date-type}
    :continue-call (fn [f [_ x]]
                     (f date-type
-                       `(util/instant->micros (.truncatedTo ^Instant (util/micros->instant ~x)
-                                                            ~(case field
-                                                               ;; can't truncate instants to years/months
-                                                               ;; ah, but you can truncate ZDTs, which is what these really are. TODO
-                                                               "DAY" `ChronoUnit/DAYS
-                                                               "HOUR" `ChronoUnit/HOURS
-                                                               "MINUTE" `ChronoUnit/MINUTES
-                                                               "SECOND" `ChronoUnit/SECONDS
-                                                               "MILLISECOND" `ChronoUnit/MILLIS
-                                                               "MICROSECOND" `ChronoUnit/MICROS)))))})
+                       `(util/instant->micros (-> (util/micros->instant ~x)
+                                                  ;; TODO only need to create the ZoneId once per batch
+                                                  ;; but getting calls to have batch-bindings isn't straightforward
+                                                  (ZonedDateTime/ofInstant (ZoneId/of ~(.getTimezone ^ArrowType$Timestamp date-type)))
+                                                  ~(case field
+                                                     "YEAR" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfYear 1))
+                                                     "MONTH" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfMonth 1))
+                                                     `(.truncatedTo ~(case field
+                                                                       "DAY" `ChronoUnit/DAYS
+                                                                       "HOUR" `ChronoUnit/HOURS
+                                                                       "MINUTE" `ChronoUnit/MINUTES
+                                                                       "SECOND" `ChronoUnit/SECONDS
+                                                                       "MILLISECOND" `ChronoUnit/MILLIS
+                                                                       "MICROSECOND" `ChronoUnit/MICROS)))
+                                                  (.toInstant)))))})
 
 (def ^:private type->arrow-type
   {Double/TYPE types/float8-type
