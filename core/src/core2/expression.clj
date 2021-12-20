@@ -107,7 +107,6 @@
   (let [[struct field] args]
     (->dot-expr (form->expr struct env) field env)))
 
-;; TODO macro?
 (defmethod parse-list-form '.. [[_ & args :as form] env]
   (let [[struct & fields] args]
     (when-not (seq fields)

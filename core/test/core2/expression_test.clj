@@ -487,6 +487,24 @@
               :nullable? false}
              (run-projection rel '(. {:x x, :y y} z))))))
 
+(t/deftest test-nested-structs
+  (with-open [rel (open-rel [(tu/->mono-vec "y" types/float8-type [1.2 3.4])])]
+    (t/is (= {:res [{:x {:y 1.2}}
+                    {:x {:y 3.4}}]
+              :leg-type (LegType/structOfKeys #{"x"})
+              :nullable? false}
+             (run-projection rel '{:x {:y y}})))
+
+    (t/is (= {:res [{:y 1.2} {:y 3.4}]
+              :leg-type #{(LegType/structOfKeys #{"y"})}
+              :nullable? false}
+             (run-projection rel '(. {:x {:y y}} x))))
+
+    (t/is (= {:res [1.2 3.4]
+              :leg-type #{LegType/FLOAT8}
+              :nullable? false}
+             (run-projection rel '(.. {:x {:y y}} x y))))))
+
 (t/deftest test-lists
   (t/testing "simple lists"
     (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])
