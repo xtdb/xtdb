@@ -191,8 +191,7 @@
 (defmethod emit-value String [_ code]
   `(-> (.getBytes ~code StandardCharsets/UTF_8) (ByteBuffer/wrap)))
 
-(defmethod emit-value Keyword [_ code]
-  `(-> (.getBytes (str (symbol ~code)) StandardCharsets/UTF_8) (ByteBuffer/wrap)))
+(defmethod emit-value Keyword [_ code] (emit-value String `(str (symbol ~code))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
   (let [return-type (.arrowType (types/value->leg-type literal))]
