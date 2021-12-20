@@ -3,17 +3,14 @@
             [clojure.string :as str]
             [core2.expression.macro :as macro]
             [core2.expression.walk :as walk]
-            core2.operator.project
-            core2.operator.select
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
   (:import [clojure.lang Keyword MapEntry]
-           core2.operator.project.ProjectionSpec
-           core2.operator.select.IRelationSelector
+           [core2.operator IProjectionSpec IRelationSelector]
            core2.types.LegType
-           [core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter]
+           [core2.vector IIndirectRelation IIndirectVector IRowCopier]
            [core2.vector.extensions KeywordType UuidType]
            java.lang.reflect.Method
            java.nio.ByteBuffer
@@ -21,11 +18,11 @@
            [java.time Duration Instant ZoneOffset]
            [java.time.temporal ChronoField ChronoUnit]
            [java.util Date HashMap LinkedList]
+           java.util.stream.IntStream
            [org.apache.arrow.vector BitVector DurationVector FieldVector ValueVector]
-           [org.apache.arrow.vector.complex BaseListVector BaseRepeatedValueVector DenseUnionVector FixedSizeListVector StructVector]
+           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
-           org.roaringbitmap.RoaringBitmap))
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -1024,22 +1021,21 @@
            (MapEntry/create var-sym (-> ivec (.getVector) (.getField)))))
        (into {})))
 
-(defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [^String col-name form params]
+(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [^String col-name form params]
   (let [expr (form->expr form {:params params})]
-    (reify ProjectionSpec
+    (reify IProjectionSpec
       (project [_ allocator in-rel]
         (let [eval-expr (emit-expr expr col-name {:var-fields (->var-fields in-rel expr)})]
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))
 
-(defn ->expression-relation-selector ^core2.operator.select.IRelationSelector [form params]
+(defn ->expression-relation-selector ^core2.operator.IRelationSelector [form params]
   (let [projector (->expression-projection-spec "select" form params)]
     (reify IRelationSelector
       (select [_ al in-rel]
         (with-open [selection (.project projector al in-rel)]
-          ;; TODO return an int-array here
           (let [^BitVector sel-vec (.getVector selection)
-                res (RoaringBitmap.)]
+                res (IntStream/builder)]
             (dotimes [idx (.getValueCount selection)]
               (when (= 1 (.get sel-vec (.getIndex selection idx)))
                 (.add res idx)))
-            res))))))
+            (.toArray (.build res))))))))

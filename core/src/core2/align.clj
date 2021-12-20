@@ -1,11 +1,9 @@
 (ns core2.align
+  (:require [core2.vector.indirect :as iv])
   (:import [java.util ArrayList LinkedList List Map]
-           java.util.function.IntConsumer
-           java.util.stream.IntStream
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            org.roaringbitmap.longlong.Roaring64Bitmap
-           org.roaringbitmap.RoaringBitmap)
-  (:require [core2.vector.indirect :as iv]))
+           org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -13,13 +11,13 @@
   (^org.roaringbitmap.longlong.Roaring64Bitmap [^BigIntVector row-id-vec]
    (->row-id-bitmap nil row-id-vec))
 
-  (^org.roaringbitmap.longlong.Roaring64Bitmap [^RoaringBitmap idxs ^BigIntVector row-id-vec]
+  (^org.roaringbitmap.longlong.Roaring64Bitmap [^ints idxs ^BigIntVector row-id-vec]
    (let [res (Roaring64Bitmap.)]
-     (-> (or (some-> idxs .stream)
-             (IntStream/range 0 (.getValueCount row-id-vec)))
-         (.forEach (reify IntConsumer
-                     (accept [_ n]
-                       (.addLong res (.get row-id-vec n))))))
+     (if idxs
+       (dotimes [idx (alength idxs)]
+         (.addLong res (.get row-id-vec (aget idxs idx))))
+       (dotimes [idx (.getValueCount row-id-vec)]
+         (.addLong res (.get row-id-vec idx))))
      res)))
 
 (defn- <-row-id-bitmap ^ints [^Roaring64Bitmap row-ids ^BigIntVector row-id-vec]

@@ -66,10 +66,9 @@
 (t/deftest can-compile-simple-expression
   (with-open [in-rel (open-rel (->data-vecs))]
     (letfn [(select-relation [form params]
-              (-> (.select (expr/->expression-relation-selector form params)
-                           tu/*allocator*
-                           in-rel)
-                  (.getCardinality)))]
+              (alength (.select (expr/->expression-relation-selector form params)
+                                tu/*allocator*
+                                in-rel)))]
 
       (t/testing "selector"
         (t/is (= 500 (select-relation '(>= a 500) {})))

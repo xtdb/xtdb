@@ -4,14 +4,11 @@
             [core2.vector.indirect :as iv])
   (:import core2.ICursor
            core2.vector.IIndirectRelation
+           core2.operator.IRelationSelector
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(definterface IRelationSelector
-  (^org.roaringbitmap.RoaringBitmap select [^org.apache.arrow.memory.BufferAllocator allocator
-                                            ^core2.vector.IIndirectRelation in-rel]))
 
 (deftype SelectCursor [^BufferAllocator allocator, ^ICursor in-cursor, ^IRelationSelector selector]
   ICursor
@@ -22,8 +19,8 @@
                                  (accept [_ in-rel]
                                    (let [^IIndirectRelation in-rel in-rel]
                                      (when-let [idxs (.select selector allocator in-rel)]
-                                       (when-not (.isEmpty idxs)
-                                         (.accept c (iv/select in-rel (.toArray idxs)))
+                                       (when-not (zero? (alength idxs))
+                                         (.accept c (iv/select in-rel idxs))
                                          (aset advanced? 0 true)))))))
                   (not (aget advanced? 0))))
       (aget advanced? 0)))

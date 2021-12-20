@@ -5,25 +5,22 @@
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            core2.ICursor
+           core2.operator.IProjectionSpec
            java.util.LinkedList))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(definterface ProjectionSpec
-  (^core2.vector.IIndirectVector project [^org.apache.arrow.memory.BufferAllocator allocator
-                                          ^core2.vector.IIndirectRelation readRelation]))
-
 (deftype IdentityProjectionSpec [^String col-name]
-  ProjectionSpec
+  IProjectionSpec
   (project [_ _allocator in-rel]
     (.vectorForName in-rel col-name)))
 
-(defn ->identity-projection-spec ^core2.operator.project.ProjectionSpec [^String col-name]
+(defn ->identity-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
   (IdentityProjectionSpec. col-name))
 
 (deftype ProjectCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
-                        ^List #_<ProjectionSpec> projection-specs]
+                        ^List #_<IProjectionSpec> projection-specs]
   ICursor
   (tryAdvance [_ c]
     (.tryAdvance in-cursor
@@ -31,7 +28,7 @@
                    (accept [_ read-rel]
                      (let [out-cols (LinkedList.)]
                        (try
-                         (doseq [^ProjectionSpec projection-spec projection-specs]
+                         (doseq [^IProjectionSpec projection-spec projection-specs]
                            (let [out-col (.project projection-spec allocator read-rel)]
                              (.add out-cols out-col)))
 
@@ -43,5 +40,5 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defn ->project-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List #_<ProjectionSpec> projection-specs]
+(defn ->project-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List #_<IProjectionSpec> projection-specs]
   (ProjectCursor. allocator in-cursor projection-specs))

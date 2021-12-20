@@ -12,7 +12,7 @@
            core2.buffer_pool.IBufferPool
            core2.ICursor
            core2.metadata.IMetadataManager
-           [core2.operator.select IRelationSelector]
+           core2.operator.IRelationSelector
            [core2.temporal ITemporalManager TemporalRoots]
            core2.tx.Watermark
            [java.util HashMap LinkedList List Map Queue]

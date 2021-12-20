@@ -1,17 +1,12 @@
 (ns core2.operator.set-test
   (:require [clojure.test :as t]
+            [core2.expression :as expr]
             [core2.operator.project :as project]
             [core2.operator.select :as select]
             [core2.operator.set :as set-op]
             [core2.test-util :as tu]
-            [core2.types :as ty]
-            [core2.vector.indirect :as iv]
-            [core2.expression :as expr])
-  (:import core2.operator.project.ProjectionSpec
-           core2.operator.select.IRelationSelector
-           org.apache.arrow.vector.BigIntVector
-           org.apache.arrow.vector.types.pojo.Schema
-           org.roaringbitmap.RoaringBitmap))
+            [core2.types :as ty])
+  (:import org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
 
