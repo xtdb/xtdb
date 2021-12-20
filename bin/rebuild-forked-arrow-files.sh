@@ -17,4 +17,5 @@ mkdir -p "$CORE2_PATH/core/src/org/apache/arrow/vector/complex"
     echo Copying files...
 
     cp vector/target/generated-sources/org/apache/arrow/vector/complex/DenseUnionVector.java "$CORE2_PATH/core/src/org/apache/arrow/vector/complex/"
+    cp vector/src/main/java/org/apache/arrow/vector/complex/AbstractContainerVector.java "$CORE2_PATH/core/src/org/apache/arrow/vector/complex/"
 )
