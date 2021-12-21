@@ -592,6 +592,11 @@
   (defmethod codegen-call [f ArrowType$Null ::types/Number] [_] call-returns-null)
   (defmethod codegen-call [f ArrowType$Null ArrowType$Null] [_] call-returns-null))
 
+(defmethod codegen-call [:double ::types/Number] [_]
+  (mono-fn-call types/float8-type #(do `(double ~@%))))
+
+(defmethod codegen-call [:double ArrowType$Null] [_] call-returns-null)
+
 ;; TODO extend min/max to non-numeric - numeric handled by `java.lang.Math`, below
 (doseq [f #{:min :max}]
   (defmethod codegen-call [f ::types/Number ArrowType$Null] [_] call-returns-null)
