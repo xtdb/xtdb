@@ -190,6 +190,18 @@
     (t/is (true? (run-test '< 1 2 4)))
     (t/is (false? (run-test '> 4 1 2)))))
 
+(t/deftest test-min-max
+  (letfn [(run-test [form vecs]
+            (with-open [rel (open-rel vecs)]
+              (-> (run-projection rel form)
+                  :res first)))]
+    (t/is (= 9 (run-test '(max x y)
+                         [(tu/->mono-vec "x" types/bigint-type [1])
+                          (tu/->mono-vec "y" types/bigint-type [9])])))
+    (t/is (= 1.0 (run-test '(min x y)
+                           [(tu/->mono-vec "x" types/float8-type [1.0])
+                            (tu/->mono-vec "y" types/float8-type [9.0])])))))
+
 (t/deftest can-return-string-multiple-times
   (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bigint-type) [1 2 3])])]
     (t/is (= {:res ["foo" "foo" "foo"]

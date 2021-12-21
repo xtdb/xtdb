@@ -575,19 +575,25 @@
      :continue-call (fn [f emitted-args]
                       (f return-type `(* ~@emitted-args)))}))
 
-(defmethod codegen-call [:% ::types/Number ::types/Number] [{:keys [ arg-types]}]
+(defmethod codegen-call [:% ::types/Number ::types/Number] [{:keys [arg-types]}]
   (mono-fn-call (types/least-upper-bound arg-types)
                 #(do `(mod ~@%))))
 
-(defmethod codegen-call [:/ ArrowType$Int ArrowType$Int] [{:keys [ arg-types]}]
+(defmethod codegen-call [:/ ArrowType$Int ArrowType$Int] [{:keys [arg-types]}]
   (mono-fn-call (types/least-upper-bound arg-types)
                 #(do `(quot ~@%))))
 
-(defmethod codegen-call [:/ ::types/Number ::types/Number] [{:keys [ arg-types]}]
+(defmethod codegen-call [:/ ::types/Number ::types/Number] [{:keys [arg-types]}]
   (mono-fn-call (types/least-upper-bound arg-types)
                 #(do `(/ ~@%))))
 
 (doseq [f #{:+ :- :* :/ :%}]
+  (defmethod codegen-call [f ::types/Number ArrowType$Null] [_] call-returns-null)
+  (defmethod codegen-call [f ArrowType$Null ::types/Number] [_] call-returns-null)
+  (defmethod codegen-call [f ArrowType$Null ArrowType$Null] [_] call-returns-null))
+
+;; TODO extend min/max to non-numeric - numeric handled by `java.lang.Math`, below
+(doseq [f #{:min :max}]
   (defmethod codegen-call [f ::types/Number ArrowType$Null] [_] call-returns-null)
   (defmethod codegen-call [f ArrowType$Null ::types/Number] [_] call-returns-null)
   (defmethod codegen-call [f ArrowType$Null ArrowType$Null] [_] call-returns-null))

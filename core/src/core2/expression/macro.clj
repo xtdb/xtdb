@@ -23,7 +23,7 @@
             (update expr :args rest)]}
     expr))
 
-(doseq [f #{:+ :- :* :/}]
+(doseq [f #{:+ :- :* :/ :min :max}]
   (defmethod macroexpand1-call f [expr] (macroexpand1l-call expr)))
 
 (doseq [f #{:and :or}]
