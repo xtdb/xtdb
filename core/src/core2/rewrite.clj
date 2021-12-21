@@ -241,6 +241,16 @@
 ;; https://arxiv.org/pdf/2110.07902.pdf
 ;; https://www.di.uminho.pt/~joost/publications/SBLP2004LectureNotes.pdf
 
+;; match (?), build (!), scope ({}), where
+;; dsig : p1 -> p2 (where s)? = {x... : ?p1; where(s); !p2 } // x... free vars in p1, s, p2
+;; guard = s1 < s2 + s3
+;; not(s) = s < fail + id
+;; where = {x: ?x; s; !x}
+;; if = where(s1) < s2 + s3
+;; <s>p = !p; s
+;; s => p = s; ?p
+;; <add>(i, j) => k = !(i, j); add; ?k
+
 ;; Type Preserving
 
 (defn seq-tp [& xs]
