@@ -181,7 +181,13 @@
 
     (DirectVector. (doto out-vec
                      (.setValueCount (alength idxs)))
-                   col-name)))
+                   col-name))
+
+  (rowCopier [this-vec w]
+    (let [copier (.rowCopier w v)]
+      (reify IRowCopier
+        (copyRow [_ idx]
+          (.copyRow copier (.getIndex this-vec idx)))))))
 
 (defn ->direct-vec ^core2.vector.IIndirectVector [^ValueVector in-vec]
   (DirectVector. in-vec (.getName in-vec)))
