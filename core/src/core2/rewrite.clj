@@ -201,24 +201,26 @@
              (zmatch loc# ~@clauses))))
       pattern)))
 
-(declare repmin globmin locmin)
+(comment
 
-(defn repmin [loc]
-  (zmatch loc
-    [:fork _ _] (->> (attr-children repmin loc)
-                     (into [:fork]))
-    [:leaf _] [:leaf (globmin loc)]))
+  (declare repmin globmin locmin)
 
-(defn locmin [loc]
-  (zmatch loc
-    [:fork _ _] (->> (attr-children locmin loc)
-                     (reduce min))
-    [:leaf n] n))
+  (defn repmin [loc]
+    (zmatch loc
+            [:fork _ _] (->> (attr-children repmin loc)
+                             (into [:fork]))
+            [:leaf _] [:leaf (globmin loc)]))
 
-(defn globmin [loc]
-  (if-let [p (zip/up loc)]
-    (globmin p)
-    (locmin loc)))
+  (defn locmin [loc]
+    (zmatch loc
+            [:fork _ _] (->> (attr-children locmin loc)
+                             (reduce min))
+            [:leaf n] n))
+
+  (defn globmin [loc]
+    (if-let [p (zip/up loc)]
+      (globmin p)
+      (locmin loc))))
 
 (defn annotate-tree [tree attr-vars]
   (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
