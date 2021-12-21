@@ -8,7 +8,8 @@
             [xtdb.fixtures.http-server :as fh]
             [xtdb.rdf :as rdf]
             [xtdb.tx :as tx]
-            [xtdb.tx.event :as txe])
+            [xtdb.tx.event :as txe]
+            [clojure.java.io :as io])
   (:import xtdb.api.NodeOutOfSyncException
            java.time.Duration
            java.util.Date
@@ -476,3 +477,86 @@
 
       (t/is (= clob-doc
                (xt/entity db :clob))))))
+
+(t/deftest test-pull
+  (fix/submit+await-tx (for [doc (read-string (slurp (io/resource "data/james-bond.edn")))]
+                         [::xt/put doc]))
+  (let [db (xt/db *api*)]
+    (t/testing "empty cases"
+      (t/is (= #{}
+               (xt/q db '{:find [(pull ?v [])]
+                          :where [[?v :not/here "N/A"]]})))
+
+      (t/is (= #{[nil]}
+               (xt/q db '{:find [(pull ?v [])]
+                          :where [[?v :vehicle/brand "Aston Martin"]]})))
+
+      (t/is (= #{[{}]}
+               (xt/q db '{:find [(pull ?v [:doesntexist])]
+                          :where [[?v :vehicle/brand "Aston Martin"]]}))))
+
+    (t/is (= #{[{:vehicle/brand "Aston Martin", :vehicle/model "DB5"}]
+               [{:vehicle/brand "Aston Martin", :vehicle/model "DB10"}]
+               [{:vehicle/brand "Aston Martin", :vehicle/model "DBS"}]
+               [{:vehicle/brand "Aston Martin", :vehicle/model "DBS V12"}]
+               [{:vehicle/brand "Aston Martin", :vehicle/model "V8 Vantage Volante"}]
+               [{:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}]}
+             (xt/q db '{:find [(pull ?v [:vehicle/brand :vehicle/model])]
+                        :where [[?v :vehicle/brand "Aston Martin"]]}))
+          "simple-props")
+
+    (t/is (= #{[{:film/year "2002",
+                 :film/name "Die Another Day"
+                 :film/bond {:person/name "Pierce Brosnan"},
+                 :film/director {:person/name "Lee Tamahori"},
+                 :film/vehicles #{{:vehicle/brand "Jaguar", :vehicle/model "XKR"}
+                                  {:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}
+                                  {:vehicle/brand "Ford", :vehicle/model "Thunderbird"}
+                                  {:vehicle/brand "Ford", :vehicle/model "Fairlane"}}}]}
+             (xt/q db '{:find [(pull ?f [{:film/bond [:person/name]}
+                                         {:film/director [:person/name]}
+                                         {(:film/vehicles {:into #{}}) [:vehicle/brand :vehicle/model]}
+                                         :film/name :film/year])]
+                        :where [[?f :film/name "Die Another Day"]]}))
+          "forward joins")
+
+    (t/is (= #{[{:person/name "Daniel Craig",
+                 :film/_bond #{#:film{:name "Skyfall", :year "2012"}
+                               #:film{:name "Spectre", :year "2015"}
+                               #:film{:name "Casino Royale", :year "2006"}
+                               #:film{:name "Quantum of Solace", :year "2008"}}}]}
+             (xt/q db '{:find [(pull ?dc [:person/name
+                                          {(:film/_bond {:into #{}}) [:film/name :film/year]}])]
+                        :where [[?dc :person/name "Daniel Craig"]]}))
+          "reverse joins")
+
+    (t/testing "pull *"
+      (t/is (= #{[{:xt/id :daniel-craig
+                   :person/name "Daniel Craig",
+                   :type :person}]}
+               (xt/q db '{:find [(pull ?dc [*])]
+                          :where [[?dc :person/name "Daniel Craig"]]}))))
+
+    (t/testing "pull fn"
+      (t/is (= #:film{:name "Spectre", :year "2015"}
+               (xt/pull db (pr-str [:film/name :film/year]) :spectre)))
+      (t/is (= #:film{:name "Spectre", :year "2015"}
+               (xt/pull db [:film/name :film/year] :spectre))))
+
+    (t/testing "pullMany fn"
+      (t/is (= #{#:film{:name "Skyfall", :year "2012"}
+                 #:film{:name "Spectre", :year "2015"}}
+               (set (xt/pull-many db (pr-str [:film/name :film/year]) #{:skyfall :spectre}))))
+
+      (t/is (= #{#:film{:name "Skyfall", :year "2012"}
+                 #:film{:name "Spectre", :year "2015"}}
+               (set (xt/pull-many db [:film/name :film/year] #{:skyfall :spectre})))))
+
+    (t/testing "pullMany fn vector"
+      (t/is (= [#:film {:name "Skyfall", :year "2012"}
+                #:film {:name "Spectre", :year "2015"}]
+               (xt/pull-many db (pr-str [:film/name :film/year]) #{:skyfall :spectre})))
+
+      (t/is (= [#:film {:name "Skyfall", :year "2012"}
+                #:film {:name "Spectre", :year "2015"}]
+               (xt/pull-many db [:film/name :film/year] #{:skyfall :spectre}))))))
