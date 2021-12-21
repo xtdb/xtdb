@@ -168,7 +168,7 @@
       (->> (xt/q this
                   {:find [(list 'pull ?eid projection)]
                    :in [[?eid '...]]}
-                  this)
+                  eids)
            (mapv first))))
 
   ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
