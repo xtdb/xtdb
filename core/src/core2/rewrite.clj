@@ -1,5 +1,6 @@
 (ns core2.rewrite
   (:require [clojure.string :as str]
+            [clojure.walk :as w]
             [clojure.zip :as zip]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -147,44 +148,47 @@
           (or (zip/right p)
               (recur p))))))
 
-(defn- zip-match [pattern-loc loc]
-  (loop [pattern-loc pattern-loc
-         loc loc
-         acc {}]
-    (cond
-      (or (nil? pattern-loc)
-          (zip/end? pattern-loc))
-      acc
+(defn- zip-match
+  ([pattern-loc loc]
+   (zip-match pattern-loc loc {}))
+  ([pattern-loc loc acc]
+   (loop [pattern-loc pattern-loc
+          loc loc
+          acc acc]
+     (cond
+       (or (nil? pattern-loc)
+           (zip/end? pattern-loc))
+       acc
 
-      (or (nil? loc)
-          (zip/end? loc))
-      nil
+       (or (nil? loc)
+           (zip/end? loc))
+       nil
 
-      (and (zip/branch? pattern-loc)
-           (zip/branch? loc))
-      (when (= (count (zip/children pattern-loc))
-               (count (zip/children loc)))
-        (recur (zip/down pattern-loc) (zip/down loc) acc))
+       (and (zip/branch? pattern-loc)
+            (zip/branch? loc))
+       (when (= (count (zip/children pattern-loc))
+                (count (zip/children loc)))
+         (recur (zip/down pattern-loc) (zip/down loc) acc))
 
-      :else
-      (let [pattern-node (zip/node pattern-loc)
-            node (zip/node loc)]
-        (cond
-          (= pattern-node node)
-          (recur (zip-next-skip-subtree pattern-loc) (zip-next-skip-subtree loc) acc)
+       :else
+       (let [pattern-node (zip/node pattern-loc)
+             node (zip/node loc)]
+         (cond
+           (= pattern-node node)
+           (recur (zip-next-skip-subtree pattern-loc) (zip-next-skip-subtree loc) acc)
 
-          (and (symbol? pattern-node)
-               (= node (get acc pattern-node node)))
-          (recur (zip/next pattern-loc)
-                 (zip-next-skip-subtree loc)
-                 (cond-> acc
-                   (not= '_ pattern-node) (assoc pattern-node
-                                                 (if (:z (meta pattern-node))
-                                                   loc
-                                                   node))))
+           (and (symbol? pattern-node)
+                (= node (get acc pattern-node node)))
+           (recur (zip/next pattern-loc)
+                  (zip-next-skip-subtree loc)
+                  (cond-> acc
+                    (not= '_ pattern-node) (assoc pattern-node
+                                                  (if (:z (meta pattern-node))
+                                                    loc
+                                                    node))))
 
-          :else
-          nil)))))
+           :else
+           nil))))))
 
 (defmacro zmatch {:style/indent 1} [loc & [pattern expr & clauses]]
   (when pattern
@@ -242,16 +246,6 @@
 ;; Strategic Zippers based on Ztrategic
 ;; https://arxiv.org/pdf/2110.07902.pdf
 ;; https://www.di.uminho.pt/~joost/publications/SBLP2004LectureNotes.pdf
-
-;; match (?), build (!), scope ({}), where
-;; dsig : p1 -> p2 (where s)? = {x... : ?p1; where(s); !p2 } // x... free vars in p1, s, p2
-;; guard = s1 < s2 + s3
-;; not(s) = s < fail + id
-;; where = {x: ?x; s; !x}
-;; if = where(s1) < s2 + s3
-;; <s>p = !p; s
-;; s => p = s; ?p
-;; <add>(i, j) => k = !(i, j); add; ?k
 
 ;; Type Preserving
 
@@ -368,6 +362,48 @@
 
 (defn outermost [f]
   (repeat-tp (once-td-tp f)))
+
+;; Matching
+
+;; match (?), build (!), scope ({}), where
+;; dsig : p1 -> p2 (where s)? = {x... : ?p1; where(s); !p2 } // x... free vars in p1, s, p2
+;; guard = s1 < s2 + s3
+;; not(s) = s < fail + id
+;; where = {x: ?x; s; !x}
+;; if = where(s1) < s2 + s3
+;; <s>p = !p; s
+;; s => p = s; ?p
+;; <add>(i, j) => k = !(i, j); add; ?k
+
+(defn match [pattern]
+  (let [pattern-loc (zip/vector-zip pattern)]
+    (fn [z]
+      (when-let [env (zip-match pattern-loc z (::env (meta z)))]
+        (vary-meta z assoc ::env env)))))
+
+(defn build [pattern]
+  (fn [z]
+    (when-let [env (::env (meta z))]
+      (zip/replace z (w/postwalk-replace env pattern)))))
+
+(defn scope [free-vars f]
+  (fn [z]
+    (let [parent-env (::env (meta z))
+          z (vary-meta z assoc ::env (apply dissoc parent-env free-vars))]
+      (when-let [z (f z)]
+        (vary-meta z update ::env merge (select-keys parent-env free-vars))))))
+
+(defn where [f]
+  (fn [z]
+    (when-let [new-env (::env (meta (f z)))]
+      (vary-meta z assoc ::env new-env))))
+
+(defn rule
+  ([p1 p2]
+   (rule p1 p2 {:where id-tp}))
+  ([p1 p2 {:keys [where]}]
+   (let [free-vars (filterv symbol? (flatten (concat p1 p2)))]
+     (scope free-vars (seq-tp (match p1) (match where) (build p2))))))
 
 ;; Type Unifying
 
