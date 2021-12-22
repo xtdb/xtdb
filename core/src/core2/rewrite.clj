@@ -211,20 +211,130 @@
 
   (defn repmin [loc]
     (zmatch loc
-            [:fork _ _] (->> (attr-children repmin loc)
-                             (into [:fork]))
-            [:leaf _] [:leaf (globmin loc)]))
+      [:fork _ _] (->> (attr-children repmin loc)
+                       (into [:fork]))
+      [:leaf _] [:leaf (globmin loc)]))
 
   (defn locmin [loc]
     (zmatch loc
-            [:fork _ _] (->> (attr-children locmin loc)
-                             (reduce min))
-            [:leaf n] n))
+      [:fork _ _] (->> (attr-children locmin loc)
+                       (reduce min))
+      [:leaf n] n))
 
   (defn globmin [loc]
     (if-let [p (zip/up loc)]
       (globmin p)
-      (locmin loc))))
+      (locmin loc)))
+
+
+  ;; https://www.sciencedirect.com/science/article/pii/S0167642316000812
+  ;; "Embedding attribute grammars and their extensions using functional zippers"
+
+  (defn ctor [loc]
+    (when loc
+      (let [node (zip/node loc)]
+        (when (vector? node)
+          (first node)))))
+
+  (defn z-nth [loc n]
+    (reduce
+     (fn [loc f]
+       (f loc))
+     (zip/down loc)
+     (repeat n zip/right)))
+
+  (defn lexme-nth [loc n]
+    (zip/node (z-nth loc n)))
+
+  (defn dcli [loc]
+    (case (ctor loc)
+      :root []
+      :let (case (ctor (zip/up loc))
+             :root (dcli (zip/up loc))
+             :cons-let (env (zip/up loc)))
+      (case (ctor (zip/up loc))
+        (:cons :cons-let) (vec (cons [(lexme-nth (zip/up loc) 1) (zip/up loc)]
+                                      (dcli (zip/up loc))))
+        (dcli (zip/up loc)))))
+
+  (defn dclo [loc]
+    (case (ctor loc)
+      :root (dclo (z-nth loc 1))
+      :let (dclo (z-nth loc 1))
+      (:cons :cons-let) (dclo (z-nth loc 3))
+      :empty (dcli loc)))
+
+  (defn env [loc]
+    (case (ctor loc)
+      :root (dclo loc)
+      (env (zip/up loc))))
+
+  (defn lev [loc]
+    (case (ctor loc)
+      :root 0
+      :let (case (ctor (zip/up loc))
+             :cons-let (inc (lev (zip/up loc)))
+             (lev (zip/up loc)))
+      (lev (zip/up loc))))
+
+  (defn errs [loc]
+    (case (ctor loc)
+      :root (errs (z-nth loc 1))
+      :let (vec (concat (errs (z-nth loc 1))
+                        (errs (z-nth loc 2))))
+      (:cons :cons-let) (vec (concat (let [v (lexme-nth loc 1)
+                                           r (get (into {} (dcli loc)) v)]
+                                       (if (and r (= (lev loc) (lev r)))
+                                         [v]
+                                         []))
+                                     (errs (z-nth loc 2))
+                                     (errs (z-nth loc 3))))
+      :empty []
+      (:plus :divide :minus :times) (vec (concat (errs (z-nth loc 1))
+                                                 (errs (z-nth loc 2))))
+      :variable (let [v (lexme-nth loc 1)]
+                  (if (contains? (into {} (env loc)) v)
+                    []
+                    [v]))
+      :constant []))
+
+  (zip/vector-zip
+   [:root
+    [:let
+     [:cons "a" [:plus [:variable "b"] [:constant 3]]
+      [:cons "c" [:constant 8]
+       [:cons "b" [:minus [:times [:variable "c"] [:constant 3]] [:variable "c"]]
+        [:empty]]]]
+     [:times [:plus [:variable "a"] [:constant 7]] [:variable "c"]]]])
+
+  (errs
+   (zip/vector-zip
+    [:root
+     [:let
+      [:cons "a" [:plus [:variable "b"] [:constant 3]]
+       [:cons "c" [:constant 8]
+        [:cons-let "w" [:let
+                        [:cons "c" [:times [:variable "a"] [:variable "b"]]
+                         [:empty]]
+                        [:times [:variable "c"] [:variable "b"]]]
+         [:cons "b" [:minus [:times [:variable "c"] [:constant 3]] [:variable "c"]]
+          [:empty]]]]]
+      [:minus [:times [:variable "c"] [:variable "w"]] [:variable "a"]]]]))
+
+  ;; let a = z + 3
+  ;;     c = 8
+  ;;     a = (c ∗ 3) − c
+  ;; in (a + 7) ∗ c
+
+  (errs
+   (zip/vector-zip
+    [:root
+     [:let
+      [:cons "a" [:plus [:variable "z"] [:constant 3]]
+       [:cons "c" [:constant 8]
+        [:cons "a" [:minus [:times [:variable "c"] [:constant 3]] [:variable "c"]]
+         [:empty]]]]
+      [:times [:plus [:variable "a"] [:constant 7]] [:variable "c"]]]])))
 
 (defn annotate-tree [tree attr-vars]
   (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
