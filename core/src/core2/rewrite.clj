@@ -230,72 +230,75 @@
   ;; https://www.sciencedirect.com/science/article/pii/S0167642316000812
   ;; "Embedding attribute grammars and their extensions using functional zippers"
 
-  (defn ctor [loc]
-    (when loc
-      (let [node (zip/node loc)]
+  ;; Chapter 3 & 4:
+
+  (defn ctor [ag]
+    (when ag
+      (let [node (zip/node ag)]
         (when (vector? node)
           (first node)))))
 
-  (defn z-nth [loc n]
+  (defn z-nth [ag n]
     (reduce
-     (fn [loc f]
-       (f loc))
-     (zip/down loc)
+     (fn [ag f]
+       (f ag))
+     (zip/down ag)
      (repeat n zip/right)))
 
-  (defn lexme-nth [loc n]
-    (zip/node (z-nth loc n)))
+  (def parent zip/up)
+  (def $ z-nth)
+  (def ++ (comp vec concat))
+  (def lexme (comp zip/node $))
 
-  (defn dcli [loc]
-    (case (ctor loc)
-      :root []
-      :let (case (ctor (zip/up loc))
-             :root (dcli (zip/up loc))
-             :cons-let (env (zip/up loc)))
-      (case (ctor (zip/up loc))
-        (:cons :cons-let) (vec (cons [(lexme-nth (zip/up loc) 1) (zip/up loc)]
-                                      (dcli (zip/up loc))))
-        (dcli (zip/up loc)))))
+  (defn dcli [ag]
+    (case (ctor ag)
+      :root {}
+      :let (case (ctor (parent ag))
+             :root (dcli (parent ag))
+             :cons-let (env (parent ag)))
+      (case (ctor (parent ag))
+        (:cons :cons-let) (assoc (dcli (parent ag))
+                                 (lexme (parent ag) 1)
+                                 (parent ag))
+        (dcli (parent ag)))))
 
-  (defn dclo [loc]
-    (case (ctor loc)
-      :root (dclo (z-nth loc 1))
-      :let (dclo (z-nth loc 1))
-      (:cons :cons-let) (dclo (z-nth loc 3))
-      :empty (dcli loc)))
+  (defn dclo [ag]
+    (case (ctor ag)
+      :root (dclo ($ ag 1))
+      :let (dclo ($ ag 1))
+      (:cons :cons-let) (dclo ($ ag 3))
+      :empty (dcli ag)))
 
-  (defn env [loc]
-    (case (ctor loc)
-      :root (dclo loc)
-      (env (zip/up loc))))
+  (defn env [ag]
+    (case (ctor ag)
+      :root (dclo ag)
+      (env (parent ag))))
 
-  (defn lev [loc]
-    (case (ctor loc)
+  (defn lev [ag]
+    (case (ctor ag)
       :root 0
-      :let (case (ctor (zip/up loc))
-             :cons-let (inc (lev (zip/up loc)))
-             (lev (zip/up loc)))
-      (lev (zip/up loc))))
+      :let (case (ctor (parent ag))
+             :cons-let (inc (lev (parent ag)))
+             (lev (parent ag)))
+      (lev (parent ag))))
 
-  (defn errs [loc]
-    (case (ctor loc)
-      :root (errs (z-nth loc 1))
-      :let (vec (concat (errs (z-nth loc 1))
-                        (errs (z-nth loc 2))))
-      (:cons :cons-let) (vec (concat (let [v (lexme-nth loc 1)
-                                           r (get (into {} (dcli loc)) v)]
-                                       (if (and r (= (lev loc) (lev r)))
-                                         [v]
-                                         []))
-                                     (errs (z-nth loc 2))
-                                     (errs (z-nth loc 3))))
+  (defn errs [ag]
+    (case (ctor ag)
+      :root (errs ($ ag 1))
+      :let (++ (errs ($ ag 1)) (errs ($ ag 2)))
+      (:cons :cons-let) (++ (let [n (lexme ag 1)
+                                  r (get (dcli ag) n)]
+                              (if (and r (= (lev ag) (lev r)))
+                                [n]
+                                []))
+                            (errs ($ ag 2))
+                            (errs ($ ag 3)))
       :empty []
-      (:plus :divide :minus :times) (vec (concat (errs (z-nth loc 1))
-                                                 (errs (z-nth loc 2))))
-      :variable (let [v (lexme-nth loc 1)]
-                  (if (contains? (into {} (env loc)) v)
+      (:plus :divide :minus :times) (++ (errs ($ ag 1)) (errs ($ ag 2)))
+      :variable (let [n (lexme ag 1)]
+                  (if (contains? (env ag) n)
                     []
-                    [v]))
+                    [n]))
       :constant []))
 
   (zip/vector-zip
