@@ -402,6 +402,9 @@
   ([p1 p2]
    (rule p1 p2 {:where id-tp}))
   ([p1 p2 {:keys [where]}]
+   ;; NOTE: this should also capture vars inside where, but this would
+   ;; require more plumbing as this will be a function, can manually
+   ;; wrap the rule in a scope.
    (let [free-vars (filterv symbol? (flatten (concat p1 p2)))]
      (scope free-vars (seq-tp (match p1) (match where) (build p2))))))
 
