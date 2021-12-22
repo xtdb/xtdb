@@ -398,6 +398,18 @@
     (when-let [new-env (::env (meta (f z)))]
       (vary-meta z assoc ::env new-env))))
 
+(defn guard [test then else]
+  (fn [z]
+    (if-let [z (test z)]
+      (then z)
+      (else z))))
+
+(defn not' [f]
+  (guard f fail-tp id-tp))
+
+(defn if' [test then else]
+  (guard (where test) then else))
+
 (defn rule
   ([p1 p2]
    (rule p1 p2 {:where id-tp}))
