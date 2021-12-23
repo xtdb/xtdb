@@ -131,12 +131,7 @@
 
 (defn- attr-children
   ([attr-fn loc]
-   (attr-children attr-fn
-                  (completing
-                   (fn
-                     ([] [])
-                     ([x y] (conj x y))))
-                  loc))
+   (attr-children attr-fn conj loc))
   ([attr-fn f loc]
    (loop [loc (zip/right (zip/down loc))
           acc (f)]
@@ -263,7 +258,6 @@
 
   (def parent zip/up)
   (def $ z-nth)
-  (def ++ (comp vec concat))
   (def lexme (comp zip/node $))
 
   (defn dcli [ag]
@@ -311,15 +305,12 @@
 
   (defn errs [ag]
     (case (ctor ag)
-      :root (errs ($ ag 1))
-      :let (++ (errs ($ ag 1)) (errs ($ ag 2)))
-      (:cons :cons-let) (++ (must-not-be-in (dcli ag) (lexme ag 1) ag)
-                            (errs ($ ag 2))
-                            (errs ($ ag 3)))
-      :empty []
-      (:plus :divide :minus :times) (++ (errs ($ ag 1)) (errs ($ ag 2)))
+      (:cons :cons-let) (->> [(must-not-be-in (dcli ag) (lexme ag 1) ag)
+                              (errs ($ ag 2))
+                              (errs ($ ag 3))]
+                             (reduce into))
       :variable (must-be-in (env ag) (lexme ag 1))
-      :constant []))
+      (attr-children errs into ag)))
 
   (zip/vector-zip
    [:root
