@@ -232,6 +232,20 @@
       (globmin p)
       (locmin loc)))
 
+  ;; https://web.fe.up.pt/~jacome/downloads/CEFP15.pdf
+  ;; "Watch out for that tree! A Tutorial on Shortcut Deforestation"
+
+  (defn repm [t]
+    (case (first t)
+      :leaf [(fn [z]
+               [:leaf z]) (second t)]
+      :fork (let [[t1 m1] (repm (second t))
+                  [t2 m2] (repm (last t))]
+              [(fn [z]
+                 [:fork (t1 z) (t2 z)]) (min m1 m2)])))
+
+  (let [[t m] (repm [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]])]
+    (t m))
 
   ;; http://hackage.haskell.org/package/ZipperAG
   ;; https://www.sciencedirect.com/science/article/pii/S0167642316000812
