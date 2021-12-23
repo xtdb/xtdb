@@ -124,11 +124,6 @@
 ;; https://haslab.uminho.pt/prmartins/files/phd.pdf
 ;; https://github.com/christoff-buerger/racr
 
-;; Ideas:
-
-;; Strategies?
-;; Replace rest of this rewrite ns entirely?
-
 (defn- use-attributes
   ([attr-fn loc]
    (use-attributes attr-fn conj loc))
@@ -238,6 +233,7 @@
       (locmin loc)))
 
 
+  ;; http://hackage.haskell.org/package/ZipperAG
   ;; https://www.sciencedirect.com/science/article/pii/S0167642316000812
   ;; "Embedding attribute grammars and their extensions using functional zippers"
 
@@ -351,7 +347,62 @@
        [:cons "c" [:constant 8]
         [:cons "a" [:minus [:times [:variable "c"] [:constant 3]] [:variable "c"]]
          [:empty]]]]
-      [:times [:plus [:variable "a"] [:constant 7]] [:variable "c"]]]])))
+      [:times [:plus [:variable "a"] [:constant 7]] [:variable "c"]]]]))
+
+  ;; https://github.com/christoff-buerger/racr
+  ;; https://dl.acm.org/doi/pdf/10.1145/2814251.2814257
+  ;; "Reference Attribute Grammar Controlled Graph Rewriting: Motivation and Overview"
+
+  (defn find-l-decl [n name]
+    (when n
+      (if (and (= :Decl (ctor n))
+               (= (lexme n 2) name))
+        n
+        (recur (zip/left n) name))))
+
+  (declare l-decl)
+
+  (defn g-decl [n name]
+    (case (ctor (parent n))
+      :Block (or (find-l-decl n name)
+                 (some-> n
+                         #_(parent)
+                         (parent)
+                         (g-decl name)))
+      :Prog (or (find-l-decl n name)
+                (zip/vector-zip [:DErr]))))
+
+  (defn l-decl [n name]
+    (case (ctor n)
+      :Decl (when (= (lexme n 1) name)
+              n)))
+
+  (defn type' [n]
+    (case (ctor n)
+      :Use (type' (g-decl n (lexme n 1)))
+      :Decl (lexme n 1)
+      :DErr "ErrorType"
+      (:Prog :Block) (type' (zip/rightmost (zip/down n)))))
+
+  (defn well-formed? [n]
+    (case (ctor n)
+      :Use (not= (type' n) "ErrorType")
+      :Decl (= (g-decl n (lexme n 2)) n)
+      :DErr false
+      (:Prog :Block) (use-attributes well-formed?
+                                     (completing
+                                      (fn
+                                        ([] true)
+                                        ([x y] (and x y))))
+                                     n)))
+
+  (well-formed?
+   (zip/vector-zip
+    [:Prog
+     [:Decl "Integer" "a"]
+     [:Block [:Use "b"] [:Use  "a"] [:Decl "Real" "a"] [:Use "a"]]
+     [:Use "a"]
+     [:Decl "Real" "a"]])))
 
 (defn ->attributed-tree [tree attr-vars]
   (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
