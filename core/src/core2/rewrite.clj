@@ -282,6 +282,9 @@
   (defn env [ag]
     (case (ctor ag)
       :root (dclo ag)
+      :let (case (ctor (parent ag))
+             :cons-let (dclo ag)
+             (env (parent ag)))
       (env (parent ag))))
 
   (defn lev [ag]
