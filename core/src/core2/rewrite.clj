@@ -282,23 +282,27 @@
              (lev (parent ag)))
       (lev (parent ag))))
 
+  (defn must-be-in [m n]
+    (if (contains? m n)
+      []
+      [n]))
+
+  (defn must-not-be-in [m n ag]
+    (let [r (get m n)]
+      (if (and r (= (lev ag) (lev r)))
+        [n]
+        [])))
+
   (defn errs [ag]
     (case (ctor ag)
       :root (errs ($ ag 1))
       :let (++ (errs ($ ag 1)) (errs ($ ag 2)))
-      (:cons :cons-let) (++ (let [n (lexme ag 1)
-                                  r (get (dcli ag) n)]
-                              (if (and r (= (lev ag) (lev r)))
-                                [n]
-                                []))
+      (:cons :cons-let) (++ (must-not-be-in (dcli ag) (lexme ag 1) ag)
                             (errs ($ ag 2))
                             (errs ($ ag 3)))
       :empty []
       (:plus :divide :minus :times) (++ (errs ($ ag 1)) (errs ($ ag 2)))
-      :variable (let [n (lexme ag 1)]
-                  (if (contains? (env ag) n)
-                    []
-                    [n]))
+      :variable (must-be-in (env ag) (lexme ag 1))
       :constant []))
 
   (zip/vector-zip
