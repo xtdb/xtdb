@@ -129,9 +129,9 @@
 ;; Strategies?
 ;; Replace rest of this rewrite ns entirely?
 
-(defn- attr-children
+(defn- use-attributes
   ([attr-fn loc]
-   (attr-children attr-fn conj loc))
+   (use-attributes attr-fn conj loc))
   ([attr-fn f loc]
    (loop [loc (zip/right (zip/down loc))
           acc (f)]
@@ -214,22 +214,22 @@
 
   (defn repmin [loc]
     (zmatch loc
-      [:fork _ _] (attr-children repmin
-                                 (completing
-                                  (fn
-                                    ([] [:fork])
-                                    ([x y] (conj x y))))
-                                 loc)
+      [:fork _ _] (use-attributes repmin
+                                  (completing
+                                   (fn
+                                     ([] [:fork])
+                                     ([x y] (conj x y))))
+                                  loc)
       [:leaf _] [:leaf (globmin loc)]))
 
   (defn locmin [loc]
     (zmatch loc
-      [:fork _ _] (->> (attr-children locmin
-                                      (completing
-                                       (fn
-                                         ([] Long/MAX_VALUE)
-                                         ([x y] (min x y))))
-                                      loc))
+      [:fork _ _] (use-attributes locmin
+                                  (completing
+                                   (fn
+                                     ([] Long/MAX_VALUE)
+                                     ([x y] (min x y))))
+                                  loc)
       [:leaf n] n))
 
   (defn globmin [loc]
@@ -350,7 +350,7 @@
          [:empty]]]]
       [:times [:plus [:variable "a"] [:constant 7]] [:variable "c"]]]])))
 
-(defn annotate-tree [tree attr-vars]
+(defn ->attributed-tree [tree attr-vars]
   (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
     (with-redefs-fn attrs
       #(loop [loc (zip/vector-zip tree)]
@@ -645,7 +645,7 @@
 
 (comment
   (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
-        tree (annotate-tree tree [#'repmin #'locmin #'globmin])]
+        tree (->attributed-tree tree [#'repmin #'locmin #'globmin])]
     (keep meta (tree-seq vector? seq tree)))
 
   (zip-match (zip/vector-zip '[:leaf n])
