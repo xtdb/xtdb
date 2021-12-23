@@ -129,17 +129,25 @@
 ;; Strategies?
 ;; Replace rest of this rewrite ns entirely?
 
-(defn- attr-children [attr-fn loc]
-  (loop [loc (zip/right (zip/down loc))
-         acc []]
-    (if loc
-      (recur (zip/right loc)
-             (if (zip/branch? loc)
-               (if-some [v (attr-fn loc)]
-                 (conj acc v)
-                 acc)
-               acc))
-      acc)))
+(defn- attr-children
+  ([attr-fn loc]
+   (attr-children attr-fn
+                  (completing
+                   (fn
+                     ([] [])
+                     ([x y] (conj x y))))
+                  loc))
+  ([attr-fn f loc]
+   (loop [loc (zip/right (zip/down loc))
+          acc (f)]
+     (if loc
+       (recur (zip/right loc)
+              (if (zip/branch? loc)
+                (if-some [v (attr-fn loc)]
+                  (f acc v)
+                  acc)
+                acc))
+       (f acc)))))
 
 (defn- zip-next-skip-subtree [loc]
   (or (zip/right loc)
@@ -211,14 +219,22 @@
 
   (defn repmin [loc]
     (zmatch loc
-      [:fork _ _] (->> (attr-children repmin loc)
-                       (into [:fork]))
+      [:fork _ _] (attr-children repmin
+                                 (completing
+                                  (fn
+                                    ([] [:fork])
+                                    ([x y] (conj x y))))
+                                 loc)
       [:leaf _] [:leaf (globmin loc)]))
 
   (defn locmin [loc]
     (zmatch loc
-      [:fork _ _] (->> (attr-children locmin loc)
-                       (reduce min))
+      [:fork _ _] (->> (attr-children locmin
+                                      (completing
+                                       (fn
+                                         ([] Long/MAX_VALUE)
+                                         ([x y] (min x y))))
+                                      loc))
       [:leaf n] n))
 
   (defn globmin [loc]
