@@ -416,24 +416,66 @@
      [:Decl "Integer" "a"]
      [:Block [:Use "b"] [:Use  "a"] [:Decl "Real" "a"] [:Use "a"]]
      [:Use "a"]
-     [:Decl "Real" "a"]])))
+     [:Decl "Real" "a"]]))
+
+  ;; Based number example
+
+  (defn base [n]
+    (case (ctor n)
+      :basechar (case (lexme n 1)
+                  "o" 8
+                  "d" 10)
+      :based-num (base ($ n 2))
+      (:num :digit) (base (parent n))))
+
+  (defn val [n]
+    (case (ctor n)
+      :digit (let [v (Double/parseDouble (lexme n 1))]
+               (if (> v (base n))
+                 Double/NaN
+                 v))
+      :num (if (= 2 (count (zip/children n)))
+             (val ($ n 1))
+             (+ (* (base n)
+                   (val ($ n 1)))
+                (val ($ n 2))))
+      :based-num (val ($ n 1))))
+
+  (time
+   (= 229.0
+      (with-memoized-attributes
+        [#'base #'val]
+        #(val
+          (zip/vector-zip
+           [:based-num
+            [:num
+             [:num
+              [:num
+               [:num
+                [:digit "3"]]
+               [:digit "4"]]
+              [:digit "5"]]]
+            [:basechar "o"]]))))))
+
+(defn with-memoized-attributes [attr-vars f]
+  (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
+    (with-redefs-fn attrs f)))
 
 (defn ->attributed-tree [tree attr-vars]
-  (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
-    (with-redefs-fn attrs
-      #(loop [loc (zip/vector-zip tree)]
-         (if (zip/end? loc)
-           (zip/node loc)
-           (recur (zip/next (if (zip/branch? loc)
-                              (if-let [acc (some->> (for [[k attr-fn] attrs
-                                                          :let [v (attr-fn loc)]
-                                                          :when (some? v)]
-                                                      [(:name (meta k)) v])
-                                                    (not-empty)
-                                                    (into {}))]
-                                (zip/edit loc vary-meta merge acc)
-                                loc)
-                              loc))))))))
+  (with-memoized-attributes attr-vars
+    #(loop [loc (zip/vector-zip tree)]
+       (if (zip/end? loc)
+         (zip/node loc)
+         (recur (zip/next (if (zip/branch? loc)
+                            (if-let [acc (some->> (for [k attr-vars
+                                                        :let [v (k loc)]
+                                                        :when (some? v)]
+                                                    [(:name (meta k)) v])
+                                                  (not-empty)
+                                                  (into {}))]
+                              (zip/edit loc vary-meta merge acc)
+                              loc)
+                            loc)))))))
 
 ;; Strategic Zippers based on Ztrategic
 ;; https://arxiv.org/pdf/2110.07902.pdf
