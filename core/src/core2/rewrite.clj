@@ -1,7 +1,8 @@
 (ns core2.rewrite
   (:require [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.zip :as zip]))
+            [clojure.zip :as zip])
+  (:import [clojure.lang IDeref Indexed IRecord]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -752,6 +753,76 @@
 
 (defn with-tu-monoid [z mempty mappend]
   (vary-meta z assoc :zip/mempty mempty :zip/mappend mappend))
+
+;; Alternative Zipper implementation:
+
+(defrecord Loc [tree path]
+  IDeref
+  (deref [_] tree)
+
+  Indexed
+  (nth [this n]
+    (.nth this n nil))
+
+  (nth [this n not-found]
+    (let [t (.tree this)]
+      (if (and (vector? t)
+               (< n (count t)))
+        (with-meta
+          (->Loc (nth t n) (->Node (with-meta (vec (take n t)) (meta t))
+                                   (.path this)
+                                   (drop (inc n) t)))
+          (meta this))
+        not-found))))
+
+(prefer-method print-method IRecord IDeref)
+
+(defrecord Node [left up right])
+
+(defn ->zipper ^core2.rewrite.Loc [x]
+  (when (vector? x)
+    (->Loc x nil)))
+
+(defn left ^core2.rewrite.Loc [^Loc loc]
+  (let [^Node p (.path loc)
+        left (.left p)]
+    (when-let [l (last left)]
+      (with-meta
+        (->Loc l (->Node (subvec left 0 (dec (count left)))
+                         (.up p)
+                         (cons (.tree loc) (.right p))))
+        (meta loc)))))
+
+(defn right ^core2.rewrite.Loc [^Loc loc]
+  (let [^Node p (.path loc)
+        right (.right p)]
+    (when-let [r (first right)]
+      (with-meta
+        (->Loc r (->Node (conj (.left p) (.tree loc))
+                         (.up p)
+                         (rest right)))
+        (meta loc)))))
+
+(defn up ^core2.rewrite.Loc [^Loc loc]
+  (when-let [^Node p (.path loc)]
+    (with-meta
+      (->Loc (into (.left p) (cons (.tree loc) (.right p))) (.up p))
+      (meta loc))))
+
+(defn down ^core2.rewrite.Loc [^Loc loc]
+  (nth loc 0))
+
+(defn root ^core2.rewrite.Loc [^Loc loc]
+  (loop [loc loc]
+    (if (.path loc)
+      (recur (up loc))
+      loc)))
+
+(defn edit ^core2.rewrite.Loc [^Loc loc f & args]
+  (when loc
+    (with-meta
+      (->Loc (apply f (.tree loc) args) (.path loc))
+      (meta loc))))
 
 (comment
   (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
