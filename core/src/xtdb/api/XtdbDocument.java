@@ -4,6 +4,7 @@ import clojure.java.api.Clojure;
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
+import clojure.lang.PersistentVector;
 
 import java.net.URI;
 import java.net.URL;
@@ -67,7 +68,7 @@ public final class XtdbDocument {
 
         private Builder put(Keyword key, Object value) {
             assertNotReserved(key);
-            data.put(key, value);
+            data.put(key, castValueIfNeeded(value));
             return this;
         }
 
@@ -188,6 +189,22 @@ public final class XtdbDocument {
         if (allowedIdTypes.noneMatch(c -> c.isInstance(id))) {
             throw new IllegalArgumentException("ID " + id.toString() + " is not a valid type.");
         }
+    }
+
+    private static Object castValueIfNeeded(Object value) {
+        if (value instanceof Collection) {
+            return PersistentVector.create(
+                    ((Collection<?>) value).stream()
+                            .map(XtdbDocument::castValueIfNeeded)
+                            .collect(Collectors.toList())
+            );
+        } else if (value instanceof Map) {
+            return ((Map<?, ?>) value).entrySet()
+                    .stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, e -> castValueIfNeeded(e.getValue())));
+        }
+
+        return value;
     }
 
     private Builder toBuilder() {

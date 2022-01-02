@@ -4,9 +4,12 @@ import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 
 import clojure.lang.PersistentArrayMap;
+import clojure.lang.PersistentVector;
 import xtdb.api.tx.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 
 import org.junit.Test;
 
@@ -64,6 +67,49 @@ public class DocumentTest {
 
         data.put("bar", 0);
         compare.put(bar, 0);
+
+        XtdbDocument document = XtdbDocument.create(documentId, data);
+
+        assertEquals(compare, document.toMap());
+        assertSameAfterPut(document);
+    }
+
+    @Test
+    public void collectionsAreConvertedToPersistentVec() {
+        HashMap<Keyword, Object> compare = new HashMap<>();
+        HashMap<String, Object> data = new HashMap<>();
+
+        compare.put(DB_ID, documentId);
+
+        HashMap<Keyword, Object> innerDataMap = new HashMap<>();
+        innerDataMap.put(bar, listOf(1, 2, 3));
+
+        data.put("foo", innerDataMap);
+        compare.put(foo, PersistentArrayMap.EMPTY.assoc(bar, PersistentVector.create(1, 2, 3)));
+
+        XtdbDocument document = XtdbDocument.create(documentId, data);
+
+        assertEquals(compare, document.toMap());
+        assertSameAfterPut(document);
+    }
+
+    @Test
+    public void nestedCollectionsAreConvertedToNestedPersistentVec() {
+        HashMap<Keyword, Object> compare = new HashMap<>();
+        HashMap<String, Object> data = new HashMap<>();
+
+        compare.put(DB_ID, documentId);
+
+        data.put("foo", listOf(
+                listOf(1, 2, 3),
+                new HashSet<>(listOf(4, 5, 6)),
+                listOf(7, 8, 9)
+        ));
+        compare.put(foo, PersistentVector.create(
+                PersistentVector.create(1, 2, 3),
+                PersistentVector.create(4, 5, 6),
+                PersistentVector.create(7, 8, 9)
+        ));
 
         XtdbDocument document = XtdbDocument.create(documentId, data);
 
