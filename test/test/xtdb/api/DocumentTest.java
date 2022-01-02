@@ -183,6 +183,11 @@ public class DocumentTest {
         document.plus("baz", 7);
     }
 
+    @Test(expected = IllegalArgumentException.class)
+    public void idsMustObeyTypeRules() {
+        XtdbDocument.create(1.1);
+    }
+
     private void assertSameAfterPut(XtdbDocument document) {
         try (IXtdb node = IXtdb.startNode()) {
             TransactionInstant transaction = node.submitTx(Transaction.buildTx(tx -> {

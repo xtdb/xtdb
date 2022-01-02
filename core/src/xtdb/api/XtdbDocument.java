@@ -5,10 +5,12 @@ import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.net.URI;
+import java.net.URL;
+import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public final class XtdbDocument {
     private static final Keyword DB_ID = Keyword.intern("xt/id");
@@ -18,6 +20,7 @@ public final class XtdbDocument {
     private final IPersistentMap data;
 
     private XtdbDocument(Object id, IPersistentMap data) {
+        assertValidIdType(id);
         this.id = id;
         this.data = data;
     }
@@ -169,6 +172,22 @@ public final class XtdbDocument {
     private static void assertNotReserved(Keyword key) {
         if (DB_ID.equals(key)) throw new IllegalArgumentException(":xt/id is a reserved key");
         if (FN_ID.equals(key)) throw new IllegalArgumentException(":xt/fn is a reserved key");
+    }
+
+    private static void assertValidIdType(Object id) {
+        final Stream<Class<?>> allowedIdTypes = Stream.of(
+                Keyword.class,
+                String.class,
+                Long.class,
+                UUID.class,
+                URI.class,
+                URL.class,
+                Map.class
+        );
+
+        if (allowedIdTypes.noneMatch(c -> c.isInstance(id))) {
+            throw new IllegalArgumentException("ID " + id.toString() + " is not a valid type.");
+        }
     }
 
     private Builder toBuilder() {
