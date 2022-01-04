@@ -395,14 +395,11 @@ The following types of `:xt/id` are allowed:
 |String|`"my-id"`
 |Integers/Longs|`42`
 |UUID|`#uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"`
-|URI|`#xtdb/id "mailto:hello@xtdb.com"`
-|URL|`#xtdb/id "https://github.com/xtdb/xtdb"`
+|URI|`(URI. "mailto:hello@xtdb.com")`
 |Maps|`{:this :id-field}`
 |===
 
-The `#xtdb/id` reader literal will take URI/URL strings and attempt to coerce them into valid IDs.
-
-URIs and URLs are interpreted using Java classes (java.net.URI and java.net.URL respectively) and therefore you can also use these directly.
+`URLs` are valid IDs for historical reasons, but discouraged due to their `hashCode` depending on a DNS lookup.
 --
 ====
 
