@@ -45,7 +45,7 @@
     (let [snapshot-factory (tu/component node ::snap/snapshot-factory)
           tx @(c2/submit-tx node [[:put {:_id :doc}
                                    {:_valid-time-start #inst "2021"
-                                    :_valid-time-end #inst "2022"}]])]
+                                    :_valid-time-end #inst "3000"}]])]
 
       (let [res (first (op/query-ra '[:scan [_id
                                              _valid-time-start _valid-time-end
@@ -54,10 +54,10 @@
         (t/is (= #{:_id :_valid-time-start :_valid-time-end :_tx-time-end :_tx-time-start}
                  (-> res keys set)))
 
-        (t/is (= {:_id :doc, :_valid-time-start (util/->zdt #inst "2021"), :_valid-time-end (util/->zdt #inst "2022")}
+        (t/is (= {:_id :doc, :_valid-time-start (util/->zdt #inst "2021"), :_valid-time-end (util/->zdt #inst "3000")}
                  (dissoc res :_tx-time-start :_tx-time-end))))
 
-      (t/is (= {:_id :doc, :vt-start (util/->zdt #inst "2021"), :vt-end (util/->zdt #inst "2022")}
+      (t/is (= {:_id :doc, :vt-start (util/->zdt #inst "2021"), :vt-end (util/->zdt #inst "3000")}
                (-> (first (op/query-ra '[:project [_id
                                                    {vt-start _valid-time-start}
                                                    {vt-end _valid-time-end}]
