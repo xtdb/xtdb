@@ -8,19 +8,25 @@
 
 (t/deftest test-java-types
   (t/testing "Can use Java List/Map types when using submit-tx"
-    (t/is (xt/submit-tx *api* [[::xt/put (HashMap. {:xt/id :test})]]))
+    (fix/submit+await-tx (fix/vec->array-list
+                          [(fix/vec->array-list
+                            [::xt/put
+                             (HashMap. {:xt/id :test})])]))
 
-    (t/is (xt/submit-tx *api* (fix/vec->array-list [[::xt/put {:xt/id :test}]])))
+    (t/is (= {:xt/id :test} (xt/entity (xt/db *api*) :test)))
 
-    (t/is (xt/submit-tx *api* (fix/vec->array-list
-                                 [[::xt/put
-                                   (HashMap. {:xt/id :test})]])))
+    (fix/submit+await-tx [[::xt/put {:xt/id :test-java
+                                     :list (fix/vec->array-list [1 2 3])
+                                     :map (HashMap. {:foo "bar"})}]
+                          [::xt/put {:xt/id :test-clj
+                                     :list [1 2 3]
+                                     :map {:foo "bar"}}]])
 
-    (t/is (xt/submit-tx *api* (fix/vec->array-list
-                                 [(fix/vec->array-list
-                                   [::xt/put {:xt/id :test2}])])))
+    #_ ; FIXME #1684
+    (t/is (= #{[:test-java] [:test-clj]}
+             (xt/q (xt/db *api*)
+                   '{:find [?e], :where [[?e :list 2]]})))
 
-    (t/is (xt/submit-tx *api* (fix/vec->array-list
-                                 [(fix/vec->array-list
-                                   [::xt/put
-                                    (HashMap. {:xt/id :test2})])])))))
+    (t/is (= #{[:test-java] [:test-clj]}
+             (xt/q (xt/db *api*)
+                   '{:find [?e], :where [[?e :map {:foo "bar"}]]})))))
