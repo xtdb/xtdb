@@ -376,9 +376,10 @@ The following types of document IDs are allowed:
 |Long|`42L`
 |UUID|`UUID.randomUUID()`
 |URI|`URI.create("mailto:hello@xtdb.com")`
-|URL|`new URL("https://github.com/xtdb/xtdb")`
 |IPersistentMap|`PersistentArrayMap.EMPTY.assoc("foo", "bar")`
 |===
+
+``URL``s are valid IDs for historical reasons, but discouraged due to their `hashCode` depending on a DNS lookup.
 --
 
 Clojure::
@@ -399,7 +400,7 @@ The following types of `:xt/id` are allowed:
 |Maps|`{:this :id-field}`
 |===
 
-`URLs` are valid IDs for historical reasons, but discouraged due to their `hashCode` depending on a DNS lookup.
+``URL``s are valid IDs for historical reasons, but discouraged due to their `hashCode` depending on a DNS lookup.
 --
 ====
 
