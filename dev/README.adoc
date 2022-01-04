@@ -34,6 +34,19 @@ The recommended way of running the full test suite is `./bin/build.sh`.
 
 The test suite relies on the `timeout` command line utility, this comes as a default on Linux but isn't preinstalled on MacOS. You can get it with `brew install coreutils && echo 'alias timeout=gtimeout' >> ~/.bashrc'`
 
+== CI
+
+We use CircleCI for continuous integration - you'll likely want to set it up to build commits pushed to your fork.
+
+You'll need to add the following environment variables, values for which are stored in Pass under the `circleci.com` directory.
+
+* `AWS_REGION`
+* `BENCH_AWS_ACCESS_KEY`
+* `BENCH_AWS_SECRET_KEY`
+* `BENCH_ECR_ACCOUNT_URL`
+* `SITE_AWS_ACCESS_KEY`
+* `SITE_AWS_SECRET_KEY`
+
 == Releasing
 
 See link:./RELEASING.adoc[RELEASING.adoc]
