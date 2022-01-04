@@ -70,10 +70,48 @@ Project directories are published to Maven independently so that you can
 maintain granular dependencies on precisely the individual components needed
 for your application.
 
+## Pre-Release Snapshot Builds
+
+Maven snapshot versions are periodically published under `dev-SNAPSHOT` and are
+used to facilitate support and debugging activities during the development
+cycle. To access snapshots versions, the Sonatype snapshot repository must be
+added to your project definition:
+
+```xml
+<repository>
+  <id>sonatype.snapshots</id>
+  <name>Sonatype Snapshot Repository</name>
+  <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
+  <releases>
+    <enabled>false</enabled>
+  </releases>
+  <snapshots>
+    <enabled>true</enabled>
+  </snapshots>
+</repository>
+```
+
+```clojure
+;; project.clj
+:repositories [["sonatype snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"]]
+```
+
+```clojure
+;; deps.edn
+:mvn/repos {"sonatype snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
+```
+
+In contrast to regular releases which are immutable, a `dev-SNAPSHOT` release
+can be "updated" - this mutability can often be useful but may also cause
+unexpected surprises when depending on `dev-SNAPSHOT` for longer than necessary.
+Snapshot versions, including full `dev-<timestamp>` coordinates (which are
+useful to avoid being caught out by mutation), can be browsed
+[here](https://s01.oss.sonatype.org/content/repositories/snapshots/com/xtdb/xtdb-core/dev-SNAPSHOT/).
+
 ## Copyright & License
 The MIT License (MIT)
 
-Copyright © 2018-2021 JUXT LTD.
+Copyright © 2018-2022 JUXT LTD.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
