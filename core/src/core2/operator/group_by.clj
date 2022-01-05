@@ -332,6 +332,41 @@
               (util/try-close sum-agg)
               (util/try-close count-agg))))))))
 
+(defmethod ->aggregate-factory :variance [_ ^String from-name, ^String to-name]
+  (let [avgx-agg (->aggregate-factory :avg from-name "avgx")
+        avgx2-agg (->aggregate-factory :avg "x2" "avgx2")
+        from-var (symbol from-name)
+        x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var) {})
+        finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx)) {})]
+    (reify IAggregateSpecFactory
+      (build [_ al]
+        (let [avgx-agg (.build avgx-agg al)
+              avgx2-agg (.build avgx2-agg al)
+              res-vec (Float8Vector. to-name al)]
+          (reify
+            IAggregateSpec
+            (aggregate [_ in-rel group-mapping]
+              (with-open [x2 (.project x2-projecter al in-rel)]
+                (.aggregate avgx-agg in-rel group-mapping)
+                (.aggregate avgx2-agg (iv/->indirect-rel [x2]) group-mapping)))
+
+            (finish [_]
+              (let [avgx-ivec (.finish avgx-agg)
+                    avgx2-ivec (.finish avgx2-agg)
+                    out-ivec (.project finish-projecter al (iv/->indirect-rel [avgx-ivec avgx2-ivec]))]
+                (if (instance? NullVector (.getVector out-ivec))
+                  out-ivec
+                  (do
+                    (doto (.makeTransferPair (.getVector out-ivec) res-vec)
+                      (.transfer))
+                    (iv/->direct-vec res-vec)))))
+
+            Closeable
+            (close [_]
+              (util/try-close res-vec)
+              (util/try-close avgx-agg)
+              (util/try-close avgx2-agg))))))))
+
 (defn- min-max-factory
   "update-if-f-kw: update the accumulated value if `(f el acc)`"
   [from-name to-name update-if-f-kw]
