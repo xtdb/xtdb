@@ -429,24 +429,24 @@
       :based-num (base ($ n 2))
       (:num :digit) (base (parent n))))
 
-  (defn val [n]
+  (defn value [n]
     (case (ctor n)
       :digit (let [v (Double/parseDouble (lexme n 1))]
                (if (> v (base n))
                  Double/NaN
                  v))
       :num (if (= 2 (count (zip/children n)))
-             (val ($ n 1))
+             (value ($ n 1))
              (+ (* (base n)
-                   (val ($ n 1)))
-                (val ($ n 2))))
-      :based-num (val ($ n 1))))
+                   (value ($ n 1)))
+                (value ($ n 2))))
+      :based-num (value ($ n 1))))
 
   (time
    (= 229.0
       (with-memoized-attributes
-        [#'base #'val]
-        #(val
+        [#'base #'value]
+        #(value
           (zip/vector-zip
            [:based-num
             [:num
@@ -780,28 +780,27 @@
 (prefer-method print-method IRecord IDeref)
 
 (defn ->zipper ^core2.rewrite.Loc [x]
-  (when (vector? x)
-    (->Loc x nil)))
+  (->Loc x nil))
 
 (defn left ^core2.rewrite.Loc [^Loc loc]
-  (let [^Node p (.path loc)
-        left (.left p)]
-    (when-let [l (last left)]
-      (with-meta
-        (->Loc l (->Node (subvec left 0 (dec (count left)))
-                         (.up p)
-                         (cons (.tree loc) (.right p))))
-        (meta loc)))))
+  (when-let [^Node p (.path loc)]
+    (let [left (.left p)]
+      (when-let [l (last left)]
+        (with-meta
+          (->Loc l (->Node (subvec left 0 (dec (count left)))
+                           (.up p)
+                           (cons (.tree loc) (.right p))))
+          (meta loc))))))
 
 (defn right ^core2.rewrite.Loc [^Loc loc]
-  (let [^Node p (.path loc)
-        right (.right p)]
-    (when-let [r (first right)]
-      (with-meta
-        (->Loc r (->Node (conj (.left p) (.tree loc))
-                         (.up p)
-                         (rest right)))
-        (meta loc)))))
+  (when-let [^Node p (.path loc)]
+    (let [right (.right p)]
+      (when-let [r (first right)]
+        (with-meta
+          (->Loc r (->Node (conj (.left p) (.tree loc))
+                           (.up p)
+                           (rest right)))
+          (meta loc))))))
 
 (defn up ^core2.rewrite.Loc [^Loc loc]
   (when-let [^Node p (.path loc)]
@@ -823,6 +822,108 @@
     (with-meta
       (->Loc (apply f (.tree loc) args) (.path loc))
       (meta loc))))
+
+(defn- skip-subtree ^core2.rewrite.Loc [^Loc loc]
+  (or (right loc)
+      (loop [p loc]
+        (when-let [p (up p)]
+          (or (right p)
+              (recur p))))))
+
+(defn zip2-next ^core2.rewrite.Loc [^Loc loc]
+  (or (and (vector? @loc) (down loc))
+      (skip-subtree loc)))
+
+(defn- zip2-match
+  ([pattern-loc loc]
+   (zip2-match pattern-loc loc {}))
+  ([pattern-loc loc acc]
+   (loop [pattern-loc pattern-loc
+          loc loc
+          acc acc]
+     (cond
+       (nil? pattern-loc)
+       acc
+
+       (nil? loc)
+       nil
+
+       (and (vector? @pattern-loc)
+            (vector? @loc))
+       (when (= (count @pattern-loc)
+                (count @loc))
+         (recur (down pattern-loc) (down loc) acc))
+
+       :else
+       (let [pattern-node @pattern-loc
+             node @loc]
+         (cond
+           (= pattern-node node)
+           (recur (skip-subtree pattern-loc) (skip-subtree loc) acc)
+
+           (and (symbol? pattern-node)
+                (= loc (get acc pattern-node loc)))
+           (recur (zip2-next pattern-loc)
+                  (skip-subtree loc)
+                  (cond-> acc
+                    (not= '_ pattern-node) (assoc pattern-node loc)))
+
+           :else
+           nil))))))
+
+(defmacro zcase {:style/indent 1} [loc & [pattern expr & clauses]]
+  (when pattern
+    (if expr
+      (let [vars (->> (flatten pattern)
+                      (filter symbol?)
+                      (remove '#{_}))]
+        `(let [loc# ~loc
+               loc# (if (instance? Loc loc#)
+                      loc#
+                      (->zipper loc#))]
+           (if-let [{:syms [~@vars] :as acc#} (zip2-match (->zipper '~pattern) loc#)]
+             ~expr
+             (zcase loc# ~@clauses))))
+      pattern)))
+
+(comment
+  ;; Based number example, alternative zippers.
+
+  (defn base [n]
+    (zcase n
+      [:basechar x] (case @x
+                      "o" 8
+                      "d" 10)
+      [:based-num _ basechar] (base basechar)
+      _ (base (up n))))
+
+  (defn value [n]
+    (zcase n
+      [:digit x] (let [v (Double/parseDouble @x)]
+                   (if (> v (base n))
+                     Double/NaN
+                     v))
+      [:num x] (value x)
+      [:num x y] (+ (* (base n)
+                       (value x))
+                    (value y))
+      [:based-num x _] (value x)))
+
+  (time
+   (= 229.0
+      (with-memoized-attributes
+        [#'base #'value]
+        #(value
+          (->zipper
+           [:based-num
+            [:num
+             [:num
+              [:num
+               [:num
+                [:digit "3"]]
+               [:digit "4"]]
+              [:digit "5"]]]
+            [:basechar "o"]]))))))
 
 (comment
   (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
