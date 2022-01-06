@@ -1,336 +1,404 @@
 (ns core2.operator.group-by
-  (:require [core2.types :as types]
+  (:require [core2.expression :as expr]
+            [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
   (:import core2.ICursor
-           core2.types.LegType
-           core2.vector.IIndirectRelation
-           [java.util ArrayList Comparator DoubleSummaryStatistics HashMap LinkedList List LongSummaryStatistics Map Optional Spliterator]
-           [java.util.function BiConsumer Consumer Function IntConsumer ObjDoubleConsumer ObjIntConsumer ObjLongConsumer Supplier]
-           [java.util.stream Collector Collector$Characteristics Collectors IntStream]
+           [core2.vector IIndirectVector IRowCopier IVectorWriter]
+           java.io.Closeable
+           [java.util HashMap LinkedList List Map Spliterator]
+           [java.util.function Consumer Function]
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.memory.util.ArrowBufPointer
-           [org.apache.arrow.vector BigIntVector Float8Vector]
-           org.apache.arrow.vector.complex.DenseUnionVector
+           org.apache.arrow.memory.util.hash.MurmurHasher
+           [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector ValueVector]
+           org.apache.arrow.vector.types.pojo.FieldType
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(definterface AggregateSpec
-  (^String columnName [])
-  (^Object aggregate [^core2.vector.IIndirectRelation inRelation ^Object container ^org.roaringbitmap.RoaringBitmap idx-bitmap])
-  (^Object finish [^Object container]))
+(definterface IGroupMapper
+  (^org.apache.arrow.vector.IntVector groupMapping [^core2.vector.IIndirectRelation inRelation])
+  (^java.util.List #_<IIndirectVector> finish []))
 
-(deftype GroupSpec [^String col-name]
-  AggregateSpec
-  (columnName [_] col-name)
+(deftype NullGroupMapper [^IntVector group-mapping]
+  IGroupMapper
+  (groupMapping [_ in-rel]
+    (.clear group-mapping)
+    (let [row-count (.rowCount in-rel)]
+      (.setValueCount group-mapping row-count)
+      (dotimes [idx row-count]
+        (.set group-mapping idx 0))
+      group-mapping))
 
-  (aggregate [_ in-rel container idx-bitmap]
-    (or container
-        (let [col (.vectorForName in-rel col-name)]
-          (types/get-object (.getVector col)
-                            (.getIndex col (.first idx-bitmap))))))
+  (finish [_] [])
 
-  (finish [_ container]
-    container))
+  Closeable
+  (close [_]
+    (.close group-mapping)))
 
-(defn ->group-spec ^core2.operator.group_by.AggregateSpec [^String col-name]
-  (GroupSpec. col-name))
+(definterface IntIntPredicate
+  (^boolean test [^int l, ^int r]))
 
-(defn- <-optional [result]
-  (if (instance? Optional result)
-    (.orElse ^Optional result nil)
-    result))
+(defn- ->comparator ^core2.operator.group_by.IntIntPredicate [group-cols group-col-writers]
+  (->> (map (fn [^IIndirectVector in-col, ^IVectorWriter group-writer]
+              (let [group-col (iv/->direct-vec (.getVector group-writer))
+                    f (eval
+                       (let [in-val-types (expr/field->value-types (.getField (.getVector in-col)))
+                             group-val-types (expr/field->value-types (.getField (.getVector group-col)))
+                             in-vec (gensym 'in-vec)
+                             in-idx (gensym 'in-idx)
+                             group-vec (gensym 'group-vec)
+                             group-idx (gensym 'group-idx)]
+                         `(fn [~(expr/with-tag in-vec IIndirectVector)
+                               ~(expr/with-tag group-vec IIndirectVector)]
+                            (reify IntIntPredicate
+                              (test [_ ~in-idx ~group-idx]
+                                ~(let [{continue-in :continue}
+                                       (-> (expr/form->expr in-vec {})
+                                           (assoc :idx in-idx)
+                                           (expr/codegen-expr {:var->types {in-vec in-val-types}}))
 
-(deftype FunctionSpec [^String from-name ^String to-name ^Collector collector]
-  AggregateSpec
-  (columnName [_] to-name)
+                                       {continue-group :continue}
+                                       (-> (expr/form->expr group-vec {})
+                                           (assoc :idx group-idx)
+                                           (expr/codegen-expr {:var->types {group-vec group-val-types}}))]
 
-  (aggregate [_ in-rel container idx-bitmap]
-    (let [from-col (.vectorForName in-rel from-name)
-          from-vec (.getVector from-col)
-          accumulator (.accumulator collector)]
-      (.collect ^IntStream (.stream idx-bitmap)
-                (if (some? container)
-                  (reify Supplier
-                    (get [_] container))
-                  (.supplier collector))
-                (reify ObjIntConsumer
-                  (accept [_ acc idx]
-                    (.accept accumulator acc (types/get-object from-vec (.getIndex from-col idx)))))
-                accumulator)))
+                                   (continue-in
+                                    (fn [in-type in-code]
+                                      (continue-group
+                                       (fn [group-type group-code]
+                                         (let [{continue-= :continue-call}
+                                               (expr/codegen-call {:op :call, :f :=,
+                                                                   :arg-types [in-type group-type]})]
+                                           (continue-= (fn [_out-type out-code] out-code)
+                                                       [in-code group-code]))))))))))))]
 
-  (finish [_ container]
-    (-> (.apply (.finisher collector) container)
-        (<-optional))))
+                (f in-col group-col)))
+            group-cols
+            group-col-writers)
 
-(defn ->function-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name ^Collector collector]
-  (FunctionSpec. from-name to-name collector))
+       (reduce (fn [^IntIntPredicate p1, ^IntIntPredicate p2]
+                 (reify IntIntPredicate
+                   (test [_ l r]
+                     (and (.test p1 l r)
+                          (.test p2 l r))))))))
 
-(deftype NumberFunctionSpec [^String from-name
-                             ^String to-name
-                             ^Supplier supplier
-                             accumulator ;; <ObjLongConsumer & ObjDoubleConsumer>
-                             ^Function finisher]
-  AggregateSpec
-  (columnName [_] to-name)
+(deftype GroupMapper [^BufferAllocator allocator
+                      ^List group-col-names
+                      ^List group-col-writers
+                      ^Map group-hash->bitmap
+                      ^IntVector group-mapping]
+  IGroupMapper
+  (groupMapping [_ in-rel]
+    (.clear group-mapping)
+    (let [group-cols (mapv (fn [^String col-name]
+                             (.vectorForName in-rel col-name))
+                           group-col-names)
+          group-col-copiers (mapv (fn [^IIndirectVector in-vec, ^IVectorWriter out-writer]
+                                    (let [copier (.rowCopier in-vec out-writer)]
+                                      (reify IRowCopier
+                                        (copyRow [_ idx]
+                                          (.startValue out-writer)
+                                          (.copyRow copier idx)
+                                          (.endValue out-writer)))))
+                                  group-cols
+                                  group-col-writers)
 
-  (aggregate [_ in-rel container idx-bitmap]
-    (let [from-col (.vectorForName in-rel from-name)
-          acc (if (some? container)
-                container
-                (.get supplier))
-          leg-types (iv/col->leg-types from-col)
-          consumer (cond
-                     (= #{LegType/BIGINT} leg-types)
-                     (let [from-col (-> from-col
-                                        (iv/reader-for-type LegType/BIGINT))
-                           ^BigIntVector from-vec (.getVector from-col)]
-                       (reify IntConsumer
-                         (accept [_ idx]
-                           (.accept ^ObjLongConsumer accumulator acc
-                                    (.get from-vec (.getIndex from-col idx))))))
+          comparator (->comparator group-cols group-col-writers)
+          hasher (MurmurHasher.)]
 
-                     (= #{LegType/FLOAT8} leg-types)
-                     (let [from-col (-> from-col
-                                        (iv/reader-for-type LegType/FLOAT8))
-                           ^Float8Vector from-vec (.getVector from-col)]
-                       (reify IntConsumer
-                         (accept [_ idx]
-                           (.accept ^ObjDoubleConsumer accumulator acc
-                                    (.get from-vec (.getIndex from-col idx))))))
+      (.setValueCount group-mapping (.rowCount in-rel))
 
-                     :else
-                     (let [from-vec (.getVector from-col)]
-                       (reify IntConsumer
-                         (accept [_ idx]
-                           (let [v (types/get-object from-vec idx)]
-                             (if (integer? v)
-                               (.accept ^ObjLongConsumer accumulator acc v)
-                               (.accept ^ObjDoubleConsumer accumulator acc v)))))))]
-      (.forEach ^IntStream (.stream idx-bitmap) consumer)
-      acc))
+      (dotimes [idx (.rowCount in-rel)]
+        (let [row-hash (mapv (fn [^IIndirectVector group-col]
+                               (.hashCode (.getVector group-col)
+                                          (.getIndex group-col idx)
+                                          hasher))
+                             group-cols)
+              ^RoaringBitmap hash-bitmap (.computeIfAbsent group-hash->bitmap
+                                                           row-hash
+                                                           (reify Function
+                                                             (apply [_ _]
+                                                               (RoaringBitmap.))))]
+          (if-let [^long out-idx (-> (filter (fn [^long out-idx]
+                                               (.test comparator idx out-idx))
+                                             hash-bitmap)
+                                     first)]
+            (.set group-mapping idx out-idx)
 
-  (finish [_ container]
-    (-> (.apply finisher container)
-        (<-optional))))
+            (let [out-idx (.getValueCount (.getVector ^IVectorWriter (first group-col-writers)))]
+              (.add hash-bitmap out-idx)
+              (.set group-mapping idx out-idx)
 
-(defn ->number-function-spec
-  ^core2.operator.group_by.AggregateSpec
-  [^String from-name, ^String to-name, ^Supplier supplier, accumulator, ^Function finisher]
-  (NumberFunctionSpec. from-name to-name supplier accumulator finisher))
+              (doseq [^IRowCopier copier group-col-copiers]
+                (.copyRow copier idx))))))
 
-(deftype NumberSummaryStatistics [^LongSummaryStatistics long-summary
-                                  ^DoubleSummaryStatistics double-summary])
+      group-mapping))
 
-(def number-summary-supplier
-  (reify Supplier
-    (get [_]
-      (NumberSummaryStatistics. (LongSummaryStatistics.) (DoubleSummaryStatistics.)))))
+  (finish [_]
+    (mapv #(iv/->direct-vec (.getVector ^IVectorWriter %)) group-col-writers))
 
-(def number-summary-accumulator
-  (reify
-    ObjLongConsumer
-    (^void accept [_ acc ^long x]
-     (.accept ^LongSummaryStatistics (.long-summary ^NumberSummaryStatistics acc) x))
+  Closeable
+  (close [_]
+    (.close group-mapping)
+    (run! util/try-close group-col-writers)))
 
-    ObjDoubleConsumer
-    (^void accept [_ acc ^double x]
-     (.accept ^DoubleSummaryStatistics (.double-summary ^NumberSummaryStatistics acc) x))))
+(defn- ->group-mapper [^BufferAllocator allocator, group-col-names]
+  (let [gm-vec (IntVector. "group-mapping" allocator)]
+    (if (seq group-col-names)
+      (GroupMapper. allocator group-col-names
+                    (vec (for [col-name group-col-names]
+                           (-> (.createVector (types/->field col-name types/dense-union-type false) allocator)
+                               vw/vec->writer)))
+                    (HashMap.)
+                    gm-vec)
+      (NullGroupMapper. gm-vec))))
 
-(def number-sum-finisher
-  (reify Function
-    (apply [_ acc]
-      (let [^NumberSummaryStatistics acc acc
-            ^DoubleSummaryStatistics double-summary (.double-summary acc)
-            ^LongSummaryStatistics long-summary (.long-summary acc)]
-        (if (zero? (.getCount double-summary))
-          (if (zero? (.getCount long-summary))
-            (.getSum double-summary)
-            (.getSum long-summary))
-          (+ (.getSum long-summary)
-             (.getSum double-summary)))))))
+(definterface IAggregateSpec
+  (^void aggregate [^core2.vector.IIndirectRelation inRelation,
+                    ^org.apache.arrow.vector.IntVector groupMapping])
+  (^core2.vector.IIndirectVector finish []))
 
-(def number-avg-finisher
-  (reify Function
-    (apply [_ acc]
-      (let [^NumberSummaryStatistics acc acc
-            ^DoubleSummaryStatistics double-summary (.double-summary acc)
-            ^LongSummaryStatistics long-summary (.long-summary acc)
-            cnt (+ (.getCount long-summary)
-                   (.getCount double-summary))]
-        (if (zero? cnt)
-          (.getAverage double-summary)
-          (/ (+ (.getSum long-summary)
-                (.getSum double-summary)) cnt))))))
+(definterface IAggregateSpecFactory
+  (^core2.operator.group_by.IAggregateSpec build [^org.apache.arrow.memory.BufferAllocator allocator]))
 
-(def number-min-finisher
-  (reify Function
-    (apply [_ acc]
-      (let [^NumberSummaryStatistics acc acc
-            ^DoubleSummaryStatistics double-summary (.double-summary acc)
-            ^LongSummaryStatistics long-summary (.long-summary acc)]
-        (if (zero? (.getCount double-summary))
-          (if (zero? (.getCount long-summary))
-            (.getMin double-summary)
-            (.getMin long-summary))
-          (min (.getMin ^LongSummaryStatistics long-summary)
-               (.getMin ^DoubleSummaryStatistics double-summary)))))))
+(defmulti ^core2.operator.group_by.IAggregateSpecFactory ->aggregate-factory
+  (fn [f from-name to-name]
+    (keyword (name f))))
 
-(def number-max-finisher
-  (reify Function
-    (apply [_ acc]
-      (let [^NumberSummaryStatistics acc acc
-            ^DoubleSummaryStatistics double-summary (.double-summary acc)
-            ^LongSummaryStatistics long-summary (.long-summary acc)]
-        (if (zero? (.getCount double-summary))
-          (if (zero? (.getCount long-summary))
-            (.getMax double-summary)
-            (.getMax long-summary))
-          (max (.getMax ^LongSummaryStatistics long-summary)
-               (.getMax ^DoubleSummaryStatistics double-summary)))))))
+(defn- emit-agg [from-var from-val-types emit-step]
+  (let [acc-sym (gensym 'acc)
+        group-mapping-sym (gensym 'group-mapping)
+        group-idx-sym (gensym 'group-idx)]
+    (eval
+     `(fn [~(-> acc-sym (expr/with-tag ValueVector))
+           ~(-> from-var (expr/with-tag IIndirectVector))
+           ~(-> group-mapping-sym (expr/with-tag IntVector))]
 
-(defn ->avg-number-spec [^String from-name ^String to-name]
-  (->number-function-spec from-name to-name
-                          number-summary-supplier
-                          number-summary-accumulator
-                          number-avg-finisher))
+        ~(let [{continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {}) {:var->types {from-var from-val-types}})]
+           `(dotimes [~expr/idx-sym (.getValueCount ~from-var)]
+              (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
+                (when-not (> (.getValueCount ~acc-sym) ~group-idx-sym)
+                  (.setValueCount ~acc-sym (inc ~group-idx-sym)))
+                ~(continue-var (fn [var-type val-code]
+                                 (emit-step var-type acc-sym group-idx-sym val-code))))))))))
 
-(defn ->sum-number-spec [^String from-name ^String to-name]
-  (->number-function-spec from-name to-name
-                          number-summary-supplier
-                          number-summary-accumulator
-                          number-sum-finisher))
+(defn- emit-count-step [var-type acc-sym group-idx-sym _val-code]
+  `(let [~(-> acc-sym (expr/with-tag BigIntVector)) ~acc-sym]
+     (.setIndexDefined ~acc-sym ~group-idx-sym)
+     (when-not ~(= var-type types/null-type)
+       (.set ~acc-sym ~group-idx-sym
+             (inc (.get ~acc-sym ~group-idx-sym))))))
 
-(defn ->min-number-spec [^String from-name ^String to-name]
-  (->number-function-spec from-name to-name
-                          number-summary-supplier
-                          number-summary-accumulator
-                          number-min-finisher))
+(defmethod ->aggregate-factory :count [_ ^String from-name, ^String to-name]
+  (let [from-var (symbol from-name)]
+    (reify IAggregateSpecFactory
+      (build [_ al]
+        (let [out-vec (BigIntVector. to-name al)]
+          (reify
+            IAggregateSpec
+            (aggregate [_ in-rel group-mapping]
+              (let [in-vec (.vectorForName in-rel (name from-var))
+                    from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
+                    f (emit-agg from-var from-val-types emit-count-step)]
+                (f out-vec in-vec group-mapping)))
 
-(defn ->max-number-spec [^String from-name ^String to-name]
-  (->number-function-spec from-name to-name
-                          number-summary-supplier
-                          number-summary-accumulator
-                          number-max-finisher))
+            (finish [_] (iv/->direct-vec out-vec))
 
-(defn ->min-spec [^String from-name ^String to-name]
-  (->function-spec from-name to-name (Collectors/minBy (Comparator/nullsFirst (Comparator/naturalOrder)))))
+            Closeable
+            (close [_] (.close out-vec))))))))
 
-(defn ->max-spec [^String from-name ^String to-name]
-  (->function-spec from-name to-name (Collectors/maxBy (Comparator/nullsFirst (Comparator/naturalOrder)))))
+(definterface IPromotableVector
+  (^org.apache.arrow.vector.ValueVector getVector [])
+  (^org.apache.arrow.vector.ValueVector maybePromote [valueTypes]))
 
-(defn ->count-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name]
-  (->function-spec from-name to-name (Collectors/counting)))
+(def ^:private emit-copy-vec
+  (let [in-vec-sym (gensym 'in)
+        out-vec-sym (gensym 'out)]
+    (-> (fn [in-type out-type]
+          (eval
+           `(fn [~(-> in-vec-sym (expr/with-tag (types/arrow-type->vector-type in-type)))
+                 ~(-> out-vec-sym (expr/with-tag (types/arrow-type->vector-type out-type)))]
+              (let [row-count# (.getValueCount ~in-vec-sym)]
+                (.setValueCount ~out-vec-sym row-count#)
+                (dotimes [idx# row-count#]
+                  (.set ~out-vec-sym idx# (~(expr/type->cast out-type) (.get ~in-vec-sym idx#))))
+                ~out-vec-sym))))
+        (memoize))))
 
-(defn ->count-not-null-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name]
-  (let [counting-collector (Collectors/counting)
-        accumulator (.accumulator counting-collector)]
-    (->function-spec from-name to-name (Collector/of (.supplier counting-collector)
-                                                     (reify BiConsumer
-                                                       (accept [_ acc x]
-                                                         (when-not (nil? x)
-                                                           (.accept accumulator acc x))))
-                                                     (.combiner counting-collector)
-                                                     (.finisher counting-collector)
-                                                     (into-array Collector$Characteristics (.characteristics counting-collector))))))
+(deftype PromotableVector [^BufferAllocator allocator,
+                           ^:unsynchronized-mutable ^ValueVector v]
+  Closeable
+  (close [this] (util/try-close (.getVector this)))
 
+  IPromotableVector
+  (getVector [_] v)
 
+  (maybePromote [this from-val-types]
+    (let [^ValueVector cur-vec (.getVector this)
+          cur-type (.getType (.getField cur-vec))
 
-(defn- copy-group-key [^BufferAllocator allocator ^List k]
-  (dotimes [n (.size k)]
-    (let [x (.get k n)]
-      (.set k n (util/maybe-copy-pointer allocator x))))
-  k)
+          new-type (types/least-upper-bound (->> (cond-> from-val-types
+                                                   (not (coll? from-val-types)) vector)
+                                                 (map #(.getType ^FieldType %))
+                                                 (cons cur-type)
+                                                 (into [] (filter #(isa? types/arrow-type-hierarchy (class %) ::types/Number)))))
 
-(defn- release-group-key [k]
-  (doseq [x k
-          :when (instance? ArrowBufPointer x)]
-    (util/try-close (.getBuf ^ArrowBufPointer x)))
-  k)
+          new-vec (if (= cur-type new-type)
+                    cur-vec
 
-(defn- ->group-key [^IIndirectRelation in-rel ^List group-specs ^long idx]
-  (let [ks (ArrayList. (.size group-specs))]
-    (doseq [^GroupSpec group-spec group-specs]
-      (let [from-col (.vectorForName in-rel (.col-name group-spec))]
-        (.add ks (util/pointer-or-object (.getVector from-col) (.getIndex from-col idx)))))
-    ks))
+                    (let [new-vec (.createVector (types/->field (.getName cur-vec) new-type false) allocator)]
+                      (try
+                        (when-not (= types/null-type cur-type)
+                          (let [copy-vec (emit-copy-vec cur-type new-type)]
+                            (copy-vec cur-vec new-vec)))
+                        new-vec
 
-(defn- aggregate-groups [^BufferAllocator allocator ^IIndirectRelation in-rel ^List aggregate-specs ^Map group->accs]
-  (let [group->idx-bitmap (HashMap.)
-        ^List group-specs (vec (filter #(instance? GroupSpec %) aggregate-specs))]
+                        (catch Throwable e
+                          (.close new-vec)
+                          (throw e))
 
-    (dotimes [idx (.rowCount in-rel)]
-      (let [group-key (->group-key in-rel group-specs idx)
-            ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key
-                                                        (reify Function
-                                                          (apply [_ _]
-                                                            (RoaringBitmap.))))]
-        (.add idx-bitmap idx)))
+                        (finally
+                          (.close cur-vec)))))]
 
-    (doseq [[group-key ^RoaringBitmap idx-bitmap] group->idx-bitmap
-            :let [^objects accs (if-let [accs (.get group->accs group-key)]
-                                  accs
-                                  (let [accs (object-array (.size aggregate-specs))]
-                                    (.put group->accs (copy-group-key allocator group-key) accs)
-                                    accs))]]
-      (dotimes [n (.size aggregate-specs)]
-        (aset accs n (.aggregate ^AggregateSpec (.get aggregate-specs n)
-                                 in-rel
-                                 (aget accs n)
-                                 idx-bitmap))))))
+      (set! (.v this) new-vec)
 
-(defn- finish-groups ^core2.vector.IIndirectRelation [^BufferAllocator allocator
-                                                      ^List aggregate-specs
-                                                      ^Map group->accs]
-  (let [all-accs (ArrayList. ^List (vals group->accs))
-        out-cols (LinkedList.)
-        row-count (.size all-accs)]
-    (dotimes [n (.size aggregate-specs)]
-      (let [^AggregateSpec aggregate-spec (.get aggregate-specs n)
-            col-name (.columnName aggregate-spec)
-            append-vec (DenseUnionVector/empty col-name allocator)
-            duv-writer (.asDenseUnion (vw/vec->writer append-vec))]
-        (dotimes [idx row-count]
-          (.startValue duv-writer)
-          (let [^objects accs (.get all-accs idx)
-                v (.finish aggregate-spec (aget accs n))]
-            (doto (.writerForType duv-writer (types/value->leg-type v))
-              (.startValue)
-              (->> (types/write-value! v))
-              (.endValue)))
-          (.endValue duv-writer))
+      new-vec)))
 
-        (.add out-cols (iv/->direct-vec append-vec))))
-    (iv/->indirect-rel out-cols)))
+(defn- promotable-agg-factory [^String from-name, ^String to-name, emit-step]
+  (let [from-var (symbol from-name)]
+    (reify IAggregateSpecFactory
+      (build [_ al]
+        (let [out-pvec (PromotableVector. al (NullVector. to-name))]
+          (reify
+            IAggregateSpec
+            (aggregate [_ in-rel group-mapping]
+              (when (pos? (.rowCount in-rel))
+                (let [in-vec (.vectorForName in-rel (name from-var))
+                      from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
+                      out-vec (.maybePromote out-pvec from-val-types)
+                      f (emit-agg from-var from-val-types
+                                  (partial emit-step (.getType (.getField out-vec))))]
+                  (f out-vec in-vec group-mapping))))
+
+            (finish [_] (iv/->direct-vec (.getVector out-pvec)))
+
+            Closeable
+            (close [_] (util/try-close out-pvec))))))))
+
+(defmethod ->aggregate-factory :sum [_ ^String from-name, ^String to-name]
+  (promotable-agg-factory from-name to-name
+                          (fn emit-sum-step [acc-type var-type acc-sym group-idx-sym val-code]
+                            ;; TODO `DoubleSummaryStatistics` uses 'Kahan's summation algorithm'
+                            ;; to compensate for rounding errors - should we?
+                            (let [{:keys [continue-call]} (expr/codegen-call {:op :call, :f :+, :arg-types [acc-type var-type]})]
+                              `(let [~(-> acc-sym (expr/with-tag (types/arrow-type->vector-type acc-type))) ~acc-sym]
+                                 (.setIndexDefined ~acc-sym ~group-idx-sym)
+                                 ~(continue-call (fn [arrow-type res-code]
+                                                   (expr/set-value-form arrow-type acc-sym group-idx-sym res-code))
+                                                 [(expr/get-value-form var-type acc-sym group-idx-sym)
+                                                  val-code]))))))
+
+(defmethod ->aggregate-factory :avg [_ ^String from-name, ^String to-name]
+  (let [sum-agg (->aggregate-factory :sum from-name "sum")
+        count-agg (->aggregate-factory :count from-name "cnt")
+        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt) {})]
+    (reify IAggregateSpecFactory
+      (build [_ al]
+        (let [sum-agg (.build sum-agg al)
+              count-agg (.build count-agg al)
+              res-vec (Float8Vector. to-name al)]
+          (reify
+            IAggregateSpec
+            (aggregate [_ in-rel group-mapping]
+              (.aggregate sum-agg in-rel group-mapping)
+              (.aggregate count-agg in-rel group-mapping))
+
+            (finish [_]
+              (let [sum-ivec (.finish sum-agg)
+                    count-ivec (.finish count-agg)
+                    out-vec (.project projecter al (iv/->indirect-rel [sum-ivec count-ivec]))]
+                (if (instance? NullVector (.getVector out-vec))
+                  out-vec
+                  (do
+                    (doto (.makeTransferPair (.getVector out-vec) res-vec)
+                      (.transfer))
+                    (iv/->direct-vec res-vec)))))
+
+            Closeable
+            (close [_]
+              (util/try-close res-vec)
+              (util/try-close sum-agg)
+              (util/try-close count-agg))))))))
+
+(defn- min-max-factory
+  "update-if-f-kw: update the accumulated value if `(f el acc)`"
+  [from-name to-name update-if-f-kw]
+
+  ;; TODO: this still only works for fixed-width values, but it's reasonable to want (e.g.) `(min <string-col>)`
+  (promotable-agg-factory from-name to-name
+                          (fn emit-min-max-step [acc-type var-type acc-sym group-idx-sym val-code]
+                            (let [{:keys [continue-call]} (expr/codegen-call {:op :call, :f update-if-f-kw,
+                                                                              :arg-types [var-type acc-type]})
+                                  val-sym (gensym 'val)]
+                              `(let [~(-> acc-sym (expr/with-tag (types/arrow-type->vector-type acc-type))) ~acc-sym
+                                     ~val-sym ~val-code]
+                                 (if (.isNull ~acc-sym ~group-idx-sym)
+                                   ~(expr/set-value-form acc-type acc-sym group-idx-sym val-sym)
+
+                                   ~(continue-call (fn [_arrow-type res-code]
+                                                     `(when ~res-code
+                                                        ~(expr/set-value-form acc-type acc-sym group-idx-sym val-sym)))
+                                                   [val-sym
+                                                    (expr/get-value-form var-type acc-sym group-idx-sym)])))))))
+
+(defmethod ->aggregate-factory :min [_ from-name to-name] (min-max-factory from-name to-name :<))
+(defmethod ->aggregate-factory :max [_ from-name to-name] (min-max-factory from-name to-name :>))
 
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
+                        ^IGroupMapper group-mapper
                         ^List aggregate-specs]
   ICursor
   (tryAdvance [_ c]
-    (let [group->accs (HashMap.)]
-      (try
-        (.forEachRemaining in-cursor
-                           (reify Consumer
-                             (accept [_ in-rel]
-                               (aggregate-groups allocator in-rel aggregate-specs group->accs))))
+    (try
+      (.forEachRemaining in-cursor
+                         (reify Consumer
+                           (accept [_ in-rel]
+                             (with-open [group-mapping (.groupMapping group-mapper in-rel)]
+                               (doseq [^IAggregateSpec agg-spec aggregate-specs]
+                                 (.aggregate agg-spec in-rel group-mapping))))))
 
-        (if-not (.isEmpty group->accs)
-          (with-open [out-rel (finish-groups allocator aggregate-specs group->accs)]
+      (let [out-rel (iv/->indirect-rel (concat (.finish group-mapper)
+                                               (map #(.finish ^IAggregateSpec %) aggregate-specs)))]
+        (if (pos? (.rowCount out-rel))
+          (do
             (.accept c out-rel)
             true)
-          false)
-
-        (finally
-          (run! release-group-key (keys group->accs))))))
+          false))
+      (finally
+        (util/try-close group-mapper)
+        (run! util/try-close aggregate-specs))))
 
   (characteristics [_]
     (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE))
 
   (close [_]
-    (util/try-close in-cursor)))
+    (run! util/try-close aggregate-specs)
+    (util/try-close in-cursor)
+    (util/try-close group-mapper)))
 
-(defn ->group-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List aggregate-specs]
-  (GroupByCursor. allocator in-cursor aggregate-specs))
+(defn ->group-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor,
+                                        ^List #_<String> group-col-names
+                                        ^List #_<IAggregateSpecFactory> agg-factories]
+  (let [agg-specs (LinkedList.)]
+    (try
+      (doseq [^IAggregateSpecFactory factory agg-factories]
+        (.add agg-specs (.build factory allocator)))
+
+      (GroupByCursor. allocator in-cursor (->group-mapper allocator group-col-names) (vec agg-specs))
+
+      (catch Exception e
+        (run! util/try-close agg-specs)
+        (throw e)))))

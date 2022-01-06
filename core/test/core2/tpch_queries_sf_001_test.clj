@@ -12,42 +12,42 @@
   (t/is (= [{:l_returnflag "A"
              :l_linestatus "F"
              :sum_qty 380456.0
-             :sum_base_price 5.3234821165E8
-             :sum_disc_price 5.058224414861E8
-             :sum_charge 5.26165934000839E8
+             :sum_base_price 5.323482116499983E8
+             :sum_disc_price 5.05822441486102E8
+             :sum_charge 5.261659340008392E8
              :avg_qty 25.575154611454693
-             :avg_price 35785.709306937344
-             :avg_disc 0.05008133906964238
+             :avg_price 35785.709306937235
+             :avg_disc 0.05008133906963965
              :count_order 14876}
             {:l_returnflag "N"
              :l_linestatus "F"
              :sum_qty 8971.0
-             :sum_base_price 1.238480137E7
-             :sum_disc_price 1.1798257208E7
-             :sum_charge 1.2282485056933E7
+             :sum_base_price 1.2384801369999997E7
+             :sum_disc_price 1.1798257208000004E7
+             :sum_charge 1.2282485056933003E7
              :avg_qty 25.778735632183906
-             :avg_price 35588.50968390804
-             :avg_disc 0.047758620689655175
+             :avg_price 35588.509683908036
+             :avg_disc 0.04775862068965505
              :count_order 348}
             {:l_returnflag "N"
              :l_linestatus "O"
              :sum_qty 742802.0
-             :sum_base_price 1.04150284145E9
-             :sum_disc_price 9.897375186346E8
-             :sum_charge 1.02941853152335E9
+             :sum_base_price 1.0415028414499979E9
+             :sum_disc_price 9.89737518634604E8
+             :sum_charge 1.0294185315233523E9
              :avg_qty 25.45498783454988
-             :avg_price 35691.1292090744
-             :avg_disc 0.04993111956409993
+             :avg_price 35691.12920907432
+             :avg_disc 0.04993111956408442
              :count_order 29181}
             {:l_returnflag "R"
              :l_linestatus "F"
              :sum_qty 381449.0
-             :sum_base_price 5.3459444535E8
-             :sum_disc_price 5.079964544067E8
-             :sum_charge 5.28524219358903E8
+             :sum_base_price 5.345944453499986E8
+             :sum_disc_price 5.079964544066988E8
+             :sum_charge 5.2852421935890585E8
              :avg_qty 25.597168165346933
-             :avg_price 35874.00653268018
-             :avg_disc 0.049827539927526504
+             :avg_price 35874.00653268008
+             :avg_disc 0.049827539927524055
              :count_order 14902}]
            (tpch-test/run-query tpch/tpch-q1-pricing-summary-report))))
 
@@ -93,7 +93,7 @@
              :o_orderdate (util/->zdt #inst "1995-03-11")
              :o_shippriority 0}
             {:l_orderkey "orderkey_22276"
-             :revenue 266351.5562
+             :revenue 266351.55620000005
              :o_orderdate (util/->zdt #inst "1995-01-29")
              :o_shippriority 0}
             {:l_orderkey "orderkey_32965"
@@ -121,7 +121,7 @@
              :o_orderdate (util/->zdt #inst "1995-03-05")
              :o_shippriority 0}
             {:l_orderkey "orderkey_47204"
-             :revenue 204478.52130000002
+             :revenue 204478.5213
              :o_orderdate (util/->zdt #inst "1995-03-13")
              :o_shippriority 0}
             {:l_orderkey "orderkey_9696"
@@ -152,7 +152,7 @@
            (tpch-test/run-query tpch/tpch-q5-local-supplier-volume))))
 
 (t/deftest ^:integration test-q6-forecasting-revenue-change
-  (t/is (= [{:revenue 1193053.2253}]
+  (t/is (= [{:revenue 1193053.2252999984}]
            (tpch-test/run-query tpch/tpch-q6-forecasting-revenue-change))))
 
 (t/deftest ^:integration test-q7-volume-shipping
@@ -161,17 +161,17 @@
              :l_year 1995
              :revenue 268068.5774}
             {:supp_nation "FRANCE"
-            :cust_nation "GERMANY"
-            :l_year 1996,
-            :revenue 303862.298}
+             :cust_nation "GERMANY"
+             :l_year 1996,
+             :revenue 303862.298}
             {:supp_nation "GERMANY"
              :cust_nation "FRANCE"
              :l_year 1995
-             :revenue 621159.4882}
+             :revenue 621159.4881999999}
             {:supp_nation "GERMANY"
              :cust_nation"FRANCE"
              :l_year 1996,
-             :revenue 379095.88539999997}]
+             :revenue 379095.8854}]
            (tpch-test/run-query tpch/tpch-q7-volume-shipping))))
 
 (t/deftest ^:integration test-q8-national-market-share
@@ -181,147 +181,147 @@
 
 (t/deftest ^:integration test-q9-product-type-profit-measure
   (t/is (= [{:nation "ALGERIA" :o_year 1998 :sum_profit 97864.56820000001}
-            {:nation "ALGERIA" :o_year 1997 :sum_profit 368231.6695}
-            {:nation "ALGERIA" :o_year 1996 :sum_profit 196525.80459999997}
-            {:nation "ALGERIA" :o_year 1995 :sum_profit 341438.6885}
+            {:nation "ALGERIA" :o_year 1997 :sum_profit 368231.66949999996}
+            {:nation "ALGERIA" :o_year 1996 :sum_profit 196525.8046}
+            {:nation "ALGERIA" :o_year 1995 :sum_profit 341438.68850000005}
             {:nation "ALGERIA" :o_year 1994 :sum_profit 677444.016}
-            {:nation "ALGERIA" :o_year 1993 :sum_profit 458756.91569999995}
-            {:nation "ALGERIA" :o_year 1992 :sum_profit 549243.9511}
+            {:nation "ALGERIA" :o_year 1993 :sum_profit 458756.9157}
+            {:nation "ALGERIA" :o_year 1992 :sum_profit 549243.9511000001}
             {:nation "ARGENTINA" :o_year 1998 :sum_profit 80448.76800000001}
             {:nation "ARGENTINA" :o_year 1997 :sum_profit 186279.16179999997}
             {:nation "ARGENTINA" :o_year 1996 :sum_profit 154041.88220000002}
             {:nation "ARGENTINA" :o_year 1995 :sum_profit 113143.3119}
             {:nation "ARGENTINA" :o_year 1994 :sum_profit 169680.4239}
             {:nation "ARGENTINA" :o_year 1993 :sum_profit 116513.81409999999}
-            {:nation "ARGENTINA" :o_year 1992 :sum_profit 202404.7608}
+            {:nation "ARGENTINA" :o_year 1992 :sum_profit 202404.76080000002}
             {:nation "BRAZIL" :o_year 1998 :sum_profit 75952.5946}
-            {:nation "BRAZIL" :o_year 1997 :sum_profit 190548.11039999998}
+            {:nation "BRAZIL" :o_year 1997 :sum_profit 190548.11039999995}
             {:nation "BRAZIL" :o_year 1996 :sum_profit 219059.06919999997}
-            {:nation "BRAZIL" :o_year 1995 :sum_profit 186435.2023}
+            {:nation "BRAZIL" :o_year 1995 :sum_profit 186435.20230000003}
             {:nation "BRAZIL" :o_year 1994 :sum_profit 96835.187}
             {:nation "BRAZIL" :o_year 1993 :sum_profit 186365.4109}
-            {:nation "BRAZIL" :o_year 1992 :sum_profit 152546.44389999998}
+            {:nation "BRAZIL" :o_year 1992 :sum_profit 152546.4439}
             {:nation "CANADA" :o_year 1998 :sum_profit 101030.3336}
             {:nation "CANADA" :o_year 1997 :sum_profit 101197.34409999999}
-            {:nation "CANADA" :o_year 1996 :sum_profit 257697.1355}
+            {:nation "CANADA" :o_year 1996 :sum_profit 257697.13549999997}
             {:nation "CANADA" :o_year 1995 :sum_profit 91474.88200000001}
-            {:nation "CANADA" :o_year 1994 :sum_profit 249182.7548}
-            {:nation "CANADA" :o_year 1993 :sum_profit 185737.83789999998}
+            {:nation "CANADA" :o_year 1994 :sum_profit 249182.75480000002}
+            {:nation "CANADA" :o_year 1993 :sum_profit 185737.8379}
             {:nation "CANADA" :o_year 1992 :sum_profit 143371.7465}
-            {:nation "CHINA" :o_year 1998 :sum_profit 508364.5444}
+            {:nation "CHINA" :o_year 1998 :sum_profit 508364.5443999999}
             {:nation "CHINA" :o_year 1997 :sum_profit 650235.1646}
             {:nation "CHINA" :o_year 1996 :sum_profit 911366.0697999999}
             {:nation "CHINA" :o_year 1995 :sum_profit 797268.4075999999}
-            {:nation "CHINA" :o_year 1994 :sum_profit 529989.3095}
+            {:nation "CHINA" :o_year 1994 :sum_profit 529989.3095000001}
             {:nation "CHINA" :o_year 1993 :sum_profit 573864.3972}
-            {:nation "CHINA" :o_year 1992 :sum_profit 751688.7613}
+            {:nation "CHINA" :o_year 1992 :sum_profit 751688.7613000002}
             {:nation "EGYPT" :o_year 1998 :sum_profit 306325.2842}
             {:nation "EGYPT" :o_year 1997 :sum_profit 568461.6699}
             {:nation "EGYPT" :o_year 1996 :sum_profit 465081.9232}
             {:nation "EGYPT" :o_year 1995 :sum_profit 542886.5087}
-            {:nation "EGYPT" :o_year 1994 :sum_profit 745807.8123}
+            {:nation "EGYPT" :o_year 1994 :sum_profit 745807.8122999999}
             {:nation "EGYPT" :o_year 1993 :sum_profit 381503.2008}
-            {:nation "EGYPT" :o_year 1992 :sum_profit 641866.4367}
-            {:nation "ETHIOPIA" :o_year 1998 :sum_profit 226054.5716}
-            {:nation "ETHIOPIA" :o_year 1997 :sum_profit 585193.2802}
+            {:nation "EGYPT" :o_year 1992 :sum_profit 641866.4367000001}
+            {:nation "ETHIOPIA" :o_year 1998 :sum_profit 226054.57159999997}
+            {:nation "ETHIOPIA" :o_year 1997 :sum_profit 585193.2801999999}
             {:nation "ETHIOPIA" :o_year 1996 :sum_profit 405412.7741}
-            {:nation "ETHIOPIA" :o_year 1995 :sum_profit 270455.7637}
-            {:nation "ETHIOPIA" :o_year 1994 :sum_profit 567875.4279}
+            {:nation "ETHIOPIA" :o_year 1995 :sum_profit 270455.76369999995}
+            {:nation "ETHIOPIA" :o_year 1994 :sum_profit 567875.4278999999}
             {:nation "ETHIOPIA" :o_year 1993 :sum_profit 412302.28709999996}
             {:nation "ETHIOPIA" :o_year 1992 :sum_profit 551284.5821}
             {:nation "FRANCE" :o_year 1998 :sum_profit 135723.405}
-            {:nation "FRANCE" :o_year 1997 :sum_profit 249664.7578}
-            {:nation "FRANCE" :o_year 1996 :sum_profit 175882.8934}
-            {:nation "FRANCE" :o_year 1995 :sum_profit 116394.78659999999}
+            {:nation "FRANCE" :o_year 1997 :sum_profit 249664.75779999996}
+            {:nation "FRANCE" :o_year 1996 :sum_profit 175882.89340000003}
+            {:nation "FRANCE" :o_year 1995 :sum_profit 116394.7866}
             {:nation "FRANCE" :o_year 1994 :sum_profit 197695.24379999997}
-            {:nation "FRANCE" :o_year 1993 :sum_profit 231878.6201}
-            {:nation "FRANCE" :o_year 1992 :sum_profit 199131.20369999998}
-            {:nation "GERMANY" :o_year 1998 :sum_profit 172741.1024}
+            {:nation "FRANCE" :o_year 1993 :sum_profit 231878.62009999997}
+            {:nation "FRANCE" :o_year 1992 :sum_profit 199131.20369999995}
+            {:nation "GERMANY" :o_year 1998 :sum_profit 172741.10239999997}
             {:nation "GERMANY" :o_year 1997 :sum_profit 393833.46599999996}
             {:nation "GERMANY" :o_year 1996 :sum_profit 335634.59359999996}
             {:nation "GERMANY" :o_year 1995 :sum_profit 378106.0763}
             {:nation "GERMANY" :o_year 1994 :sum_profit 250107.6653}
             {:nation "GERMANY" :o_year 1993 :sum_profit 327154.9365}
-            {:nation "GERMANY" :o_year 1992 :sum_profit 387240.08849999995}
-            {:nation "INDIA" :o_year 1998 :sum_profit 347548.76039999997}
+            {:nation "GERMANY" :o_year 1992 :sum_profit 387240.0885}
+            {:nation "INDIA" :o_year 1998 :sum_profit 347548.7603999999}
             {:nation "INDIA" :o_year 1997 :sum_profit 656797.967}
-            {:nation "INDIA" :o_year 1996 :sum_profit 522759.3529}
+            {:nation "INDIA" :o_year 1996 :sum_profit 522759.35289999994}
             {:nation "INDIA" :o_year 1995 :sum_profit 574428.6693}
-            {:nation "INDIA" :o_year 1994 :sum_profit 741983.7846}
-            {:nation "INDIA" :o_year 1993 :sum_profit 729948.5340999999}
-            {:nation "INDIA" :o_year 1992 :sum_profit 661061.1415}
-            {:nation "INDONESIA" :o_year 1998 :sum_profit 91791.50959999999}
+            {:nation "INDIA" :o_year 1994 :sum_profit 741983.7846000001}
+            {:nation "INDIA" :o_year 1993 :sum_profit 729948.5340999998}
+            {:nation "INDIA" :o_year 1992 :sum_profit 661061.1415000001}
+            {:nation "INDONESIA" :o_year 1998 :sum_profit 91791.5096}
             {:nation "INDONESIA" :o_year 1997 :sum_profit 183956.46130000002}
-            {:nation "INDONESIA" :o_year 1996 :sum_profit 415234.7848}
-            {:nation "INDONESIA" :o_year 1995 :sum_profit 427155.38039999997}
+            {:nation "INDONESIA" :o_year 1996 :sum_profit 415234.78479999996}
+            {:nation "INDONESIA" :o_year 1995 :sum_profit 427155.3803999999}
             {:nation "INDONESIA" :o_year 1994 :sum_profit 286271.2875}
-            {:nation "INDONESIA" :o_year 1993 :sum_profit 551178.8822999999}
+            {:nation "INDONESIA" :o_year 1993 :sum_profit 551178.8823}
             {:nation "INDONESIA" :o_year 1992 :sum_profit 274513.2685}
             {:nation "IRAN" :o_year 1998 :sum_profit 47959.821899999995}
-            {:nation "IRAN" :o_year 1997 :sum_profit 184335.0615}
+            {:nation "IRAN" :o_year 1997 :sum_profit 184335.06149999998}
             {:nation "IRAN" :o_year 1996 :sum_profit 223115.2464}
             {:nation "IRAN" :o_year 1995 :sum_profit 125339.09270000001}
             {:nation "IRAN" :o_year 1994 :sum_profit 117228.31219999999}
-            {:nation "IRAN" :o_year 1993 :sum_profit 208030.3229}
-            {:nation "IRAN" :o_year 1992 :sum_profit 161835.5475}
-            {:nation "IRAQ" :o_year 1998 :sum_profit 161797.4924}
-            {:nation "IRAQ" :o_year 1997 :sum_profit 224876.5436}
+            {:nation "IRAN" :o_year 1993 :sum_profit 208030.32289999997}
+            {:nation "IRAN" :o_year 1992 :sum_profit 161835.54750000002}
+            {:nation "IRAQ" :o_year 1998 :sum_profit 161797.49239999996}
+            {:nation "IRAQ" :o_year 1997 :sum_profit 224876.54360000003}
             {:nation "IRAQ" :o_year 1996 :sum_profit 145277.89800000002}
-            {:nation "IRAQ" :o_year 1995 :sum_profit 467955.25049999997}
+            {:nation "IRAQ" :o_year 1995 :sum_profit 467955.2504999999}
             {:nation "IRAQ" :o_year 1994 :sum_profit 97455.299}
-            {:nation "IRAQ" :o_year 1993 :sum_profit 114821.644}
+            {:nation "IRAQ" :o_year 1993 :sum_profit 114821.64400000001}
             {:nation "IRAQ" :o_year 1992 :sum_profit 213307.1574}
-            {:nation "JAPAN" :o_year 1998 :sum_profit 307594.598}
+            {:nation "JAPAN" :o_year 1998 :sum_profit 307594.59800000006}
             {:nation "JAPAN" :o_year 1997 :sum_profit 339018.14879999997}
-            {:nation "JAPAN" :o_year 1996 :sum_profit 649578.3367999999}
-            {:nation "JAPAN" :o_year 1995 :sum_profit 671644.0911}
-            {:nation "JAPAN" :o_year 1994 :sum_profit 576266.2386}
-            {:nation "JAPAN" :o_year 1993 :sum_profit 514190.84369999997}
-            {:nation "JAPAN" :o_year 1992 :sum_profit 534914.9339}
+            {:nation "JAPAN" :o_year 1996 :sum_profit 649578.3368000002}
+            {:nation "JAPAN" :o_year 1995 :sum_profit 671644.0910999998}
+            {:nation "JAPAN" :o_year 1994 :sum_profit 576266.2385999999}
+            {:nation "JAPAN" :o_year 1993 :sum_profit 514190.8437000001}
+            {:nation "JAPAN" :o_year 1992 :sum_profit 534914.9339000001}
             {:nation "JORDAN" :o_year 1996 :sum_profit 33460.2447}
             {:nation "JORDAN" :o_year 1995 :sum_profit 20364.162300000004}
             {:nation "JORDAN" :o_year 1994 :sum_profit 15528.608800000002}
             {:nation "JORDAN" :o_year 1993 :sum_profit 14640.988899999998}
             {:nation "JORDAN" :o_year 1992 :sum_profit 10904.293099999999}
-            {:nation "KENYA" :o_year 1998 :sum_profit 521926.5198}
-            {:nation "KENYA" :o_year 1997 :sum_profit 559632.3408}
+            {:nation "KENYA" :o_year 1998 :sum_profit 521926.51979999995}
+            {:nation "KENYA" :o_year 1997 :sum_profit 559632.3407999999}
             {:nation "KENYA" :o_year 1996 :sum_profit 772855.7939}
             {:nation "KENYA" :o_year 1995 :sum_profit 516452.50669999997}
             {:nation "KENYA" :o_year 1994 :sum_profit 543665.8154}
             {:nation "KENYA" :o_year 1993 :sum_profit 866924.8754}
-            {:nation "KENYA" :o_year 1992 :sum_profit 567410.5501999999}
-            {:nation "MOROCCO" :o_year 1998 :sum_profit 217794.49730000002}
-            {:nation "MOROCCO" :o_year 1997 :sum_profit 439240.9287}
-            {:nation "MOROCCO" :o_year 1996 :sum_profit 399969.46799999994}
-            {:nation "MOROCCO" :o_year 1995 :sum_profit 258131.9398}
+            {:nation "KENYA" :o_year 1992 :sum_profit 567410.5502}
+            {:nation "MOROCCO" :o_year 1998 :sum_profit 217794.49730000005}
+            {:nation "MOROCCO" :o_year 1997 :sum_profit 439240.9286999999}
+            {:nation "MOROCCO" :o_year 1996 :sum_profit 399969.468}
+            {:nation "MOROCCO" :o_year 1995 :sum_profit 258131.93980000002}
             {:nation "MOROCCO" :o_year 1994 :sum_profit 386972.14239999995}
             {:nation "MOROCCO" :o_year 1993 :sum_profit 145468.0381}
-            {:nation "MOROCCO" :o_year 1992 :sum_profit 284314.2813}
-            {:nation "MOZAMBIQUE" :o_year 1998 :sum_profit 518693.2238}
-            {:nation "MOZAMBIQUE" :o_year 1997 :sum_profit 613873.2960999999}
-            {:nation "MOZAMBIQUE" :o_year 1996 :sum_profit 936793.5612}
+            {:nation "MOROCCO" :o_year 1992 :sum_profit 284314.28130000003}
+            {:nation "MOZAMBIQUE" :o_year 1998 :sum_profit 518693.2237999998}
+            {:nation "MOZAMBIQUE" :o_year 1997 :sum_profit 613873.2961}
+            {:nation "MOZAMBIQUE" :o_year 1996 :sum_profit 936793.5612000001}
             {:nation "MOZAMBIQUE" :o_year 1995 :sum_profit 727204.7718}
             {:nation "MOZAMBIQUE" :o_year 1994 :sum_profit 1104618.1807}
-            {:nation "MOZAMBIQUE" :o_year 1993 :sum_profit 893266.053}
-            {:nation "MOZAMBIQUE" :o_year 1992 :sum_profit 1062432.0884}
+            {:nation "MOZAMBIQUE" :o_year 1993 :sum_profit 893266.0530000003}
+            {:nation "MOZAMBIQUE" :o_year 1992 :sum_profit 1062432.0883999998}
             {:nation "PERU" :o_year 1998 :sum_profit 287242.97969999997}
-            {:nation "PERU" :o_year 1997 :sum_profit 532358.366}
-            {:nation "PERU" :o_year 1996 :sum_profit 398435.7507}
-            {:nation "PERU" :o_year 1995 :sum_profit 462031.6251}
+            {:nation "PERU" :o_year 1997 :sum_profit 532358.3659999999}
+            {:nation "PERU" :o_year 1996 :sum_profit 398435.75070000003}
+            {:nation "PERU" :o_year 1995 :sum_profit 462031.62509999995}
             {:nation "PERU" :o_year 1994 :sum_profit 304235.4118}
-            {:nation "PERU" :o_year 1993 :sum_profit 505885.48899999994}
-            {:nation "PERU" :o_year 1992 :sum_profit 382290.09469999996}
+            {:nation "PERU" :o_year 1993 :sum_profit 505885.489}
+            {:nation "PERU" :o_year 1992 :sum_profit 382290.0947}
             {:nation "ROMANIA" :o_year 1998 :sum_profit 357824.55280000006}
-            {:nation "ROMANIA" :o_year 1997 :sum_profit 569806.5564}
-            {:nation "ROMANIA" :o_year 1996 :sum_profit 732001.5568}
+            {:nation "ROMANIA" :o_year 1997 :sum_profit 569806.5564000001}
+            {:nation "ROMANIA" :o_year 1996 :sum_profit 732001.5568000001}
             {:nation "ROMANIA" :o_year 1995 :sum_profit 408657.1154}
-            {:nation "ROMANIA" :o_year 1994 :sum_profit 540702.5463}
-            {:nation "ROMANIA" :o_year 1993 :sum_profit 883158.5056}
+            {:nation "ROMANIA" :o_year 1994 :sum_profit 540702.5462999999}
+            {:nation "ROMANIA" :o_year 1993 :sum_profit 883158.5056000001}
             {:nation "ROMANIA" :o_year 1992 :sum_profit 505488.9501}
             {:nation "RUSSIA" :o_year 1998 :sum_profit 34448.63569999999}
-            {:nation "RUSSIA" :o_year 1997 :sum_profit 314972.04459999996}
+            {:nation "RUSSIA" :o_year 1997 :sum_profit 314972.0445999999}
             {:nation "RUSSIA" :o_year 1996 :sum_profit 430049.5821}
-            {:nation "RUSSIA" :o_year 1995 :sum_profit 360538.0586}
+            {:nation "RUSSIA" :o_year 1995 :sum_profit 360538.05859999993}
             {:nation "RUSSIA" :o_year 1994 :sum_profit 301791.0114}
             {:nation "RUSSIA" :o_year 1993 :sum_profit 308993.9622}
             {:nation "RUSSIA" :o_year 1992 :sum_profit 289868.6564}
@@ -331,7 +331,7 @@
             {:nation "SAUDI ARABIA" :o_year 1995 :sum_profit 62668.72499999999}
             {:nation "SAUDI ARABIA" :o_year 1994 :sum_profit 94629.15379999999}
             {:nation "SAUDI ARABIA" :o_year 1993 :sum_profit 57768.307100000005}
-            {:nation "SAUDI ARABIA" :o_year 1992 :sum_profit 66520.10930000001}
+            {:nation "SAUDI ARABIA" :o_year 1992 :sum_profit 66520.1093}
             {:nation "UNITED KINGDOM" :o_year 1998 :sum_profit 80437.6523}
             {:nation "UNITED KINGDOM" :o_year 1997 :sum_profit 252509.7351}
             {:nation "UNITED KINGDOM" :o_year 1996 :sum_profit 231152.85820000002}
@@ -339,19 +339,19 @@
             {:nation "UNITED KINGDOM" :o_year 1994 :sum_profit 239161.20609999998}
             {:nation "UNITED KINGDOM" :o_year 1993 :sum_profit 122103.11420000001}
             {:nation "UNITED KINGDOM" :o_year 1992 :sum_profit 60882.308000000005}
-            {:nation "UNITED STATES" :o_year 1998 :sum_profit 440347.66579999996}
-            {:nation "UNITED STATES" :o_year 1997 :sum_profit 652958.9371}
+            {:nation "UNITED STATES" :o_year 1998 :sum_profit 440347.6658000001}
+            {:nation "UNITED STATES" :o_year 1997 :sum_profit 652958.9370999999}
             {:nation "UNITED STATES" :o_year 1996 :sum_profit 1004593.8282}
-            {:nation "UNITED STATES" :o_year 1995 :sum_profit 860144.1029}
-            {:nation "UNITED STATES" :o_year 1994 :sum_profit 807797.4876999999}
-            {:nation "UNITED STATES" :o_year 1993 :sum_profit 736669.4711}
-            {:nation "UNITED STATES" :o_year 1992 :sum_profit 877851.4103}
-            {:nation "VIETNAM" :o_year 1998 :sum_profit 358248.0159}
-            {:nation "VIETNAM" :o_year 1997 :sum_profit 394817.2842}
-            {:nation "VIETNAM" :o_year 1996 :sum_profit 439390.0836}
-            {:nation "VIETNAM" :o_year 1995 :sum_profit 418626.6325}
-            {:nation "VIETNAM" :o_year 1994 :sum_profit 422644.81680000003}
-            {:nation "VIETNAM" :o_year 1993 :sum_profit 309063.402}
+            {:nation "UNITED STATES" :o_year 1995 :sum_profit 860144.1028999998}
+            {:nation "UNITED STATES" :o_year 1994 :sum_profit 807797.4876999998}
+            {:nation "UNITED STATES" :o_year 1993 :sum_profit 736669.4711000001}
+            {:nation "UNITED STATES" :o_year 1992 :sum_profit 877851.4102999999}
+            {:nation "VIETNAM" :o_year 1998 :sum_profit 358248.01589999994}
+            {:nation "VIETNAM" :o_year 1997 :sum_profit 394817.28420000005}
+            {:nation "VIETNAM" :o_year 1996 :sum_profit 439390.08359999995}
+            {:nation "VIETNAM" :o_year 1995 :sum_profit 418626.63249999995}
+            {:nation "VIETNAM" :o_year 1994 :sum_profit 422644.8168}
+            {:nation "VIETNAM" :o_year 1993 :sum_profit 309063.40199999994}
             {:nation "VIETNAM" :o_year 1992 :sum_profit 716126.5378}]
            (tpch-test/run-query tpch/tpch-q9-product-type-profit-measure))))
 
@@ -366,7 +366,7 @@
              :c_comment "ely pending frays boost carefully"}
             {:c_custkey "custkey_1201"
              :c_name "Customer#000001201"
-             :revenue 374331.534
+             :revenue 374331.53400000004
              :c_acctbal 5165.39
              :c_phone "20-825-400-1187"
              :n_name "IRAN"
@@ -406,7 +406,7 @@
              :c_comment "packages boost slyly along the furiously express foxes. ev"}
             {:c_custkey "custkey_853"
              :c_name "Customer#000000853"
-             :revenue 341236.6246
+             :revenue 341236.6245999999
              :c_acctbal -444.73
              :c_phone "12-869-161-3468"
              :n_name "BRAZIL"
@@ -438,7 +438,7 @@
              :c_comment "y regular requests above the blithely ironic accounts use slyly bold packages: regular pinto beans eat carefully spe"}
             {:c_custkey "custkey_223"
              :c_name "Customer#000000223"
-             :revenue 319564.27499999997
+             :revenue 319564.275
              :c_acctbal 7476.2
              :c_phone "30-193-643-1517"
              :n_name "SAUDI ARABIA"
@@ -454,7 +454,7 @@
              :c_comment " unusual deposits. furiously even packages against the furiously even ac"}
             {:c_custkey "custkey_478"
              :c_name "Customer#000000478"
-             :revenue 299651.8026
+             :revenue 299651.80260000005
              :c_acctbal -210.4
              :c_phone "11-655-291-2694"
              :n_name "ARGENTINA"
@@ -462,7 +462,7 @@
              :c_comment "o the foxes. ironic requests sleep. c"}
             {:c_custkey "custkey_1441"
              :c_name "Customer#000001441"
-             :revenue 294705.3935
+             :revenue 294705.39350000006
              :c_acctbal 9465.15
              :c_phone "33-681-334-4499"
              :n_name "UNITED KINGDOM"
@@ -470,7 +470,7 @@
              :c_comment "nts haggle quietly quickly final accounts. slyly regular accounts among the sl"}
             {:c_custkey "custkey_1478"
              :c_name "Customer#000001478"
-             :revenue 294431.9178
+             :revenue 294431.91780000005
              :c_acctbal 9701.54
              :c_phone "17-420-484-5959"
              :n_name "GERMANY"
@@ -926,11 +926,11 @@
            (tpch-test/run-query tpch/tpch-q13-customer-distribution))))
 
 (t/deftest ^:integration test-q14-promotion-effect
-  (t/is (= [{:promo_revenue 15.486545812284072}]
+  (t/is (= [{:promo_revenue 15.486545812284078}]
            (tpch-test/run-query tpch/tpch-q14-promotion-effect))))
 
 (t/deftest ^:integration test-q15-top-supplier
-  (t/is (= [{:total_revenue 1161099.4636
+  (t/is (= [{:total_revenue 1161099.4635999997
              :s_suppkey "suppkey_21"
              :s_name "Supplier#000000021"
              :s_address "81CavellcrJ0PQ3CPBID0Z0JwyJm0ka5igEs"
@@ -1278,7 +1278,7 @@
              :totacctbal 62288.98}
             {:cntrycode "18"
              :numcust 14
-             :totacctbal 111072.45}
+             :totacctbal 111072.44999999998}
             {:cntrycode "23"
              :numcust 5
              :totacctbal 40458.86}
@@ -1287,7 +1287,7 @@
              :totacctbal 88722.85}
             {:cntrycode "30"
              :numcust 17
-             :totacctbal 122189.33}
+             :totacctbal 122189.33000000002}
             {:cntrycode "31"
              :numcust 8
              :totacctbal 66313.16}]

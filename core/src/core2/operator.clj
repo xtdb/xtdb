@@ -35,30 +35,6 @@
 
 (alter-meta! #'emit-op assoc :private true)
 
-(defmulti ->aggregate-spec
-  (fn [name from-name to-name & args]
-    name))
-
-(alter-meta! #'->aggregate-spec assoc :private true)
-
-(defmethod ->aggregate-spec :avg [_ from-name to-name]
-  (group-by/->avg-number-spec from-name to-name))
-
-(defmethod ->aggregate-spec :sum [_ from-name to-name]
-  (group-by/->sum-number-spec from-name to-name))
-
-(defmethod ->aggregate-spec :min [_ from-name to-name]
-  (group-by/->min-spec from-name to-name))
-
-(defmethod ->aggregate-spec :max [_ from-name to-name]
-  (group-by/->max-spec from-name to-name))
-
-(defmethod ->aggregate-spec :count [_ from-name to-name]
-  (group-by/->count-spec from-name to-name))
-
-(defmethod ->aggregate-spec :count-not-null [_ from-name to-name]
-  (group-by/->count-not-null-spec from-name to-name))
-
 (defmethod emit-op :scan [{:keys [source columns]} srcs]
   (let [col-names (distinct (for [[col-type arg] columns]
                               (str (case col-type
@@ -217,18 +193,16 @@
                                                right (name right-col))))))
 
 (defmethod emit-op :group-by [{:keys [columns relation]} srcs]
-  (let [agg-specs (for [[col-type arg] columns]
-                    (case col-type
-                      :group-by (group-by/->group-spec (name arg))
-                      :aggregate (let [[to-column aggregate] (first arg)
-                                       {:keys [aggregate-fn from-column]} aggregate]
-                                   (->aggregate-spec (keyword (name aggregate-fn))
-                                                     (name from-column)
-                                                     (name to-column)))
-                      [col-type arg]))]
+  (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
+        group-cols (mapv (comp name second) group-cols)
+        agg-factories (for [[_ agg] aggs]
+                        (let [[to-column {:keys [aggregate-fn from-column]}] (first agg)]
+                          (group-by/->aggregate-factory aggregate-fn
+                                                        (name from-column)
+                                                        (name to-column))))]
     (unary-op relation srcs
               (fn [{:keys [allocator]} inner]
-                (group-by/->group-by-cursor allocator inner agg-specs)))))
+                (group-by/->group-by-cursor allocator inner group-cols agg-factories)))))
 
 (defmethod emit-op :order-by [{:keys [order relation]} srcs]
   (let [order-specs (for [arg order

@@ -333,7 +333,7 @@
                  Orders [:scan [{o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]
         [:order-by [{custdist :desc} {c_count :desc}]
          [:group-by [c_count {custdist (count c_custkey)}]
-          [:group-by [c_custkey {c_count (count-not-null o_comment)}]
+          [:group-by [c_custkey {c_count (count o_comment)}]
            [:union-all
             [:project [c_custkey o_comment]
              [:join {c_custkey o_custkey} Customers Orders]]

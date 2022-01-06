@@ -2,101 +2,97 @@
   (:require [clojure.test :as t]
             [core2.operator.group-by :as group-by]
             [core2.test-util :as tu]
-            [core2.types :as ty])
+            [core2.types :as types]
+            [core2.util :as util]
+            [core2.vector.indirect :as iv])
   (:import org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-group-by
-  (let [a-field (ty/->field "a" ty/bigint-type false)
-        b-field (ty/->field "b" ty/bigint-type false)
-        aggregate-spec [(group-by/->group-spec "a")
-                        (group-by/->sum-number-spec "b" "sum")
-                        (group-by/->avg-number-spec "b" "avg")
-                        (group-by/->count-spec "b" "cnt")
-                        (group-by/->min-number-spec "b" "min")
-                        (group-by/->max-number-spec "b" "max")]]
-    (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
-                                       [[{:a 1 :b 10}
-                                         {:a 1 :b 20}
-                                         {:a 2 :b 30}
-                                         {:a 2 :b 40}]
-                                        [{:a 1 :b 50}
-                                         {:a 1 :b 60}
-                                         {:a 2 :b 70}
-                                         {:a 3 :b 80}
-                                         {:a 3 :b 90}]])
-                group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor aggregate-spec)]
+  (let [a-field (types/->field "a" types/bigint-type false)
+        b-field (types/->field "b" types/bigint-type false)]
+    (letfn [(run-test [group-cols agg-specs blocks]
+              (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field]) blocks)
+                          group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor group-cols agg-specs)]
+                (set (first (tu/<-cursor group-by-cursor)))))]
 
-      (t/is (= [#{{:a 1, :sum 140, :avg 35.0, :cnt 4 :min 10 :max 60}
-                  {:a 2, :sum 140, :avg 46.666666666666664, :cnt 3 :min 30 :max 70}
-                  {:a 3, :sum 170, :avg 85.0, :cnt 2 :min 80 :max 90}}]
-               (mapv set (tu/<-cursor group-by-cursor)))))
+      (let [agg-specs [(group-by/->aggregate-factory :sum "b" "sum")
+                       (group-by/->aggregate-factory :avg "b" "avg")
+                       (group-by/->aggregate-factory :count "b" "cnt")
+                       (group-by/->aggregate-factory :min "b" "min")
+                       (group-by/->aggregate-factory :max "b" "max")]]
 
-    (t/testing "empty input"
-      (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
-                                         [])
-                  group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor aggregate-spec)]
-        (t/is (empty? (tu/<-cursor group-by-cursor))))
+        (t/is (= #{{:a 1, :sum 140, :avg 35.0, :cnt 4 :min 10 :max 60}
+                   {:a 2, :sum 140, :avg 46.666666666666664, :cnt 3 :min 30 :max 70}
+                   {:a 3, :sum 170, :avg 85.0, :cnt 2 :min 80 :max 90}}
+                 (run-test ["a"] agg-specs
+                           [[{:a 1 :b 20}
+                             {:a 1 :b 10}
+                             {:a 2 :b 30}
+                             {:a 2 :b 40}]
+                            [{:a 1 :b 50}
+                             {:a 1 :b 60}
+                             {:a 2 :b 70}
+                             {:a 3 :b 80}
+                             {:a 3 :b 90}]])))
 
-      (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
-                                         [[]])
-                  group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor aggregate-spec)]
-        (t/is (empty? (tu/<-cursor group-by-cursor)))))
+        (t/is (empty? (run-test ["a"] agg-specs []))
+              "empty input"))
 
-    (t/testing "multiple group columns (distinct)"
-      (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
-                                         [[{:a 1 :b 10}
-                                           {:a 1 :b 20}
-                                           {:a 2 :b 10}
-                                           {:a 2 :b 20}]
-                                          [{:a 1 :b 10}
-                                           {:a 1 :b 20}
-                                           {:a 2 :b 10}
-                                           {:a 3 :b 20}
-                                           {:a 3 :b 10}]])
-                  group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor [(group-by/->group-spec "a")
-                                                                                        (group-by/->group-spec "b")
-                                                                                        (group-by/->count-spec "b" "cnt")])]
+      (t/is (= #{{:a 1} {:a 2} {:a 3}}
+               (run-test ["a"] []
+                         [[{:a 1 :b 10}
+                           {:a 1 :b 20}
+                           {:a 2 :b 10}
+                           {:a 2 :b 20}]
+                          [{:a 1 :b 10}
+                           {:a 1 :b 20}
+                           {:a 2 :b 10}
+                           {:a 3 :b 20}
+                           {:a 3 :b 10}]]))
+            "group without aggregate")
 
-        (t/is (= [#{{:a 1, :b 10, :cnt 2}
-                    {:a 1, :b 20, :cnt 2}
-                    {:a 2, :b 10, :cnt 2}
-                    {:a 2, :b 20, :cnt 1}
-                    {:a 3, :b 10, :cnt 1}
-                    {:a 3, :b 20, :cnt 1}}]
-                 (mapv set (tu/<-cursor group-by-cursor))))))
+      (t/is (= #{{:a 1, :b 10, :cnt 2}
+                 {:a 1, :b 20, :cnt 2}
+                 {:a 2, :b 10, :cnt 2}
+                 {:a 2, :b 20, :cnt 1}
+                 {:a 3, :b 10, :cnt 1}
+                 {:a 3, :b 20, :cnt 1}}
+               (run-test ["a" "b"] [(group-by/->aggregate-factory :count "b" "cnt")]
+                         [[{:a 1 :b 10}
+                           {:a 1 :b 20}
+                           {:a 2 :b 10}
+                           {:a 2 :b 20}]
+                          [{:a 1 :b 10}
+                           {:a 1 :b 20}
+                           {:a 2 :b 10}
+                           {:a 3 :b 20}
+                           {:a 3 :b 10}]]))
+            "multiple group columns (distinct)")
 
-    (t/testing "group without aggregate"
-      (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
-                                         [[{:a 1 :b 10}
-                                           {:a 1 :b 20}
-                                           {:a 2 :b 10}
-                                           {:a 2 :b 20}]
-                                          [{:a 1 :b 10}
-                                           {:a 1 :b 20}
-                                           {:a 2 :b 10}
-                                           {:a 3 :b 20}
-                                           {:a 3 :b 10}]])
-                  group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor [(group-by/->group-spec "a")])]
+      (t/is (= #{{:cnt 9}}
+               (run-test [] [(group-by/->aggregate-factory :count "b" "cnt")]
+                         [[{:a 1 :b 10}
+                           {:a 1 :b 20}
+                           {:a 2 :b 10}
+                           {:a 2 :b 20}]
+                          [{:a 1 :b 10}
+                           {:a 1 :b 20}
+                           {:a 2 :b 10}
+                           {:a 3 :b 20}
+                           {:a 3 :b 10}]]))
+            "aggregate without group"))))
 
-        (t/is (= [#{{:a 1}
-                    {:a 2}
-                    {:a 3}}]
-                 (mapv set (tu/<-cursor group-by-cursor))))))
-
-    (t/testing "aggregate without group"
-      (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
-                                         [[{:a 1 :b 10}
-                                           {:a 1 :b 20}
-                                           {:a 2 :b 10}
-                                           {:a 2 :b 20}]
-                                          [{:a 1 :b 10}
-                                           {:a 1 :b 20}
-                                           {:a 2 :b 10}
-                                           {:a 3 :b 20}
-                                           {:a 3 :b 10}]])
-                  group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor [(group-by/->count-spec "b" "cnt")])]
-
-        (t/is (= [#{{:cnt 9}}]
-                 (mapv set (tu/<-cursor group-by-cursor))))))))
+(t/deftest test-promoting-sum
+  (with-open [group-mapping (tu/->mono-vec "gm" types/int-type (map int [0 0 0]))
+              v0 (tu/->mono-vec "v" types/bigint-type [1 2 3])
+              v1 (tu/->duv "v" [1 2.0 3])]
+    (let [sum-spec (-> (group-by/->aggregate-factory :sum "v" "vsum")
+                       (.build tu/*allocator*))]
+      (try
+        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v0)]) group-mapping)
+        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v1)]) group-mapping)
+        (t/is (= [12.0] (tu/<-column (.finish sum-spec))))
+        (finally
+          (util/try-close sum-spec))))))

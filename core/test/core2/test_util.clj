@@ -106,7 +106,7 @@
 
     duv))
 
-(defn ->duv [col-name vs]
+(defn ->duv ^org.apache.arrow.vector.complex.DenseUnionVector [col-name vs]
   (let [res (.createVector (ty/->field col-name ty/dense-union-type false) *allocator*)]
     (try
       (doto res (write-duv! vs))

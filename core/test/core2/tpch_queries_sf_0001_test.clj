@@ -12,42 +12,42 @@
   (t/is (= [{:l_returnflag "A"
              :l_linestatus "F"
              :sum_qty 37474.0
-             :sum_base_price 3.756962464E7
-             :sum_disc_price 3.5676192097E7
-             :sum_charge 3.7101416222424E7
+             :sum_base_price 3.756962463999998E7
+             :sum_disc_price 3.5676192096999995E7
+             :sum_charge 3.710141622242404E7
              :avg_qty 25.354533152909337
-             :avg_price 25419.231826792962
-             :avg_disc 0.0508660351826793
+             :avg_price 25419.231826792948
+             :avg_disc 0.050866035182679493
              :count_order 1478}
             {:l_returnflag "N"
              :l_linestatus "F"
              :sum_qty 1041.0
              :sum_base_price 1041301.07
-             :sum_disc_price 999060.898
-             :sum_charge 1036450.8022800001
+             :sum_disc_price 999060.8979999998
+             :sum_charge 1036450.80228
              :avg_qty 27.394736842105264
              :avg_price 27402.659736842103
-             :avg_disc 0.04289473684210526
+             :avg_disc 0.042894736842105284
              :count_order 38}
             {:l_returnflag "N"
              :l_linestatus "O"
              :sum_qty 75168.0
-             :sum_base_price 7.538495537E7
-             :sum_disc_price 7.16531663034E7
-             :sum_charge 7.4498798133073E7
+             :sum_base_price 7.538495536999969E7
+             :sum_disc_price 7.165316630340016E7
+             :sum_charge 7.449879813307281E7
              :avg_qty 25.558653519211152
-             :avg_price 25632.42277116627
-             :avg_disc 0.049697381842910573
+             :avg_price 25632.422771166166
+             :avg_disc 0.04969738184291069
              :count_order 2941}
             {:l_returnflag "R"
              :l_linestatus "F"
              :sum_qty 36511.0
              :sum_base_price 3.657084124E7
-             :sum_disc_price 3.47384728758E7
-             :sum_charge 3.6169060112193E7
+             :sum_disc_price 3.473847287580004E7
+             :sum_charge 3.616906011219294E7
              :avg_qty 25.059025394646532
              :avg_price 25100.09693891558
-             :avg_disc 0.05002745367192862
+             :avg_disc 0.050027453671928686
              :count_order 1457}]
            (tpch-test/run-query tpch/tpch-q1-pricing-summary-report))))
 
@@ -121,7 +121,7 @@
   (t/is (= [{:nation "ARGENTINA", :o_year 1998, :sum_profit 17779.069700000007}
             {:nation "ARGENTINA", :o_year 1997, :sum_profit 13943.953800000003}
             {:nation "ARGENTINA", :o_year 1996, :sum_profit 7641.422700000003}
-            {:nation "ARGENTINA", :o_year 1995, :sum_profit 20892.7525}
+            {:nation "ARGENTINA", :o_year 1995, :sum_profit 20892.752500000002}
             {:nation "ARGENTINA", :o_year 1994, :sum_profit 15088.352599999998}
             {:nation "ARGENTINA", :o_year 1993, :sum_profit 17586.344600000004}
             {:nation "ARGENTINA", :o_year 1992, :sum_profit 28732.461499999994}
@@ -137,7 +137,7 @@
             {:nation "IRAN", :o_year 1993, :sum_profit 49876.41499999999}
             {:nation "IRAN", :o_year 1992, :sum_profit 52064.24}
             {:nation "IRAQ", :o_year 1998, :sum_profit 11619.960399999996}
-            {:nation "IRAQ", :o_year 1997, :sum_profit 47910.24600000001}
+            {:nation "IRAQ", :o_year 1997, :sum_profit 47910.246}
             {:nation "IRAQ", :o_year 1996, :sum_profit 18459.567499999997}
             {:nation "IRAQ", :o_year 1995, :sum_profit 32782.37010000001}
             {:nation "IRAQ", :o_year 1994, :sum_profit 9041.2317}
@@ -146,31 +146,31 @@
             {:nation "KENYA", :o_year 1998, :sum_profit 33148.3345}
             {:nation "KENYA", :o_year 1997, :sum_profit 54355.016500000005}
             {:nation "KENYA", :o_year 1996, :sum_profit 43794.4118}
-            {:nation "KENYA", :o_year 1995, :sum_profit 69156.8625}
-            {:nation "KENYA", :o_year 1994, :sum_profit 88510.8477}
-            {:nation "KENYA", :o_year 1993, :sum_profit 95483.29560000001}
-            {:nation "KENYA", :o_year 1992, :sum_profit 93473.447}
+            {:nation "KENYA", :o_year 1995, :sum_profit 69156.86249999999}
+            {:nation "KENYA", :o_year 1994, :sum_profit 88510.84769999998}
+            {:nation "KENYA", :o_year 1993, :sum_profit 95483.2956}
+            {:nation "KENYA", :o_year 1992, :sum_profit 93473.44700000001}
             {:nation "MOROCCO", :o_year 1998, :sum_profit 80034.8312}
-            {:nation "MOROCCO", :o_year 1997, :sum_profit 48218.429}
-            {:nation "MOROCCO", :o_year 1996, :sum_profit 111533.75679999999}
+            {:nation "MOROCCO", :o_year 1997, :sum_profit 48218.429000000004}
+            {:nation "MOROCCO", :o_year 1996, :sum_profit 111533.7568}
             {:nation "MOROCCO", :o_year 1995, :sum_profit 190286.556}
             {:nation "MOROCCO", :o_year 1994, :sum_profit 120458.78839999999}
-            {:nation "MOROCCO", :o_year 1993, :sum_profit 121013.2187}
+            {:nation "MOROCCO", :o_year 1993, :sum_profit 121013.21870000001}
             {:nation "MOROCCO", :o_year 1992, :sum_profit 170329.14880000002}
             {:nation "PERU", :o_year 1998, :sum_profit 58330.754799999995}
             {:nation "PERU", :o_year 1997, :sum_profit 54422.6497}
-            {:nation "PERU", :o_year 1996, :sum_profit 22129.370899999998}
+            {:nation "PERU", :o_year 1996, :sum_profit 22129.370899999994}
             {:nation "PERU", :o_year 1995, :sum_profit 94384.7288}
             {:nation "PERU", :o_year 1994, :sum_profit 55023.063200000004}
             {:nation "PERU", :o_year 1993, :sum_profit 87328.3271}
-            {:nation "PERU", :o_year 1992, :sum_profit 59177.1184}
+            {:nation "PERU", :o_year 1992, :sum_profit 59177.11840000001}
             {:nation "UNITED KINGDOM", :o_year 1998, :sum_profit 62507.25600000001}
             {:nation "UNITED KINGDOM", :o_year 1997, :sum_profit 52221.212199999994}
-            {:nation "UNITED KINGDOM", :o_year 1996, :sum_profit 114503.25}
-            {:nation "UNITED KINGDOM", :o_year 1995, :sum_profit 147460.9296}
+            {:nation "UNITED KINGDOM", :o_year 1996, :sum_profit 114503.24999999999}
+            {:nation "UNITED KINGDOM", :o_year 1995, :sum_profit 147460.92960000003}
             {:nation "UNITED KINGDOM", :o_year 1994, :sum_profit 70682.74199999998}
             {:nation "UNITED KINGDOM", :o_year 1993, :sum_profit 192054.806}
-            {:nation "UNITED KINGDOM", :o_year 1992, :sum_profit 29955.240400000006}
+            {:nation "UNITED KINGDOM", :o_year 1992, :sum_profit 29955.24040000001}
             {:nation "UNITED STATES", :o_year 1998, :sum_profit 32847.96}
             {:nation "UNITED STATES", :o_year 1997, :sum_profit 30849.5}
             {:nation "UNITED STATES", :o_year 1996, :sum_profit 56125.46000000001}
@@ -183,7 +183,7 @@
 (t/deftest test-q10-returned-item-reporting
   (t/is (= [{:c_custkey "custkey_121"
              :c_name "Customer#000000121"
-             :revenue 282635.1719
+             :revenue 282635.17189999996
              :c_acctbal 6428.32
              :c_phone "27-411-990-2959"
              :n_name "PERU"
@@ -207,7 +207,7 @@
              :c_comment "lose slyly. ironic accounts along the evenly regular theodolites wake about the special, final gifts. "}
             {:c_custkey "custkey_16"
              :c_name "Customer#000000016"
-             :revenue 161422.04609999998
+             :revenue 161422.0461
              :c_acctbal 4681.03
              :c_phone "20-781-609-3107"
              :n_name "IRAN"
@@ -223,7 +223,7 @@
              :c_comment "r requests around the unusual, bold a"}
             {:c_custkey "custkey_71"
              :c_name "Customer#000000071"
-             :revenue 129481.0245
+             :revenue 129481.02450000001
              :c_acctbal -611.19
              :c_phone "17-710-812-5403"
              :n_name "GERMANY"
@@ -239,7 +239,7 @@
              :c_comment "counts are slyly beyond the slyly final accounts. quickly final ideas wake. r"}
             {:c_custkey "custkey_112"
              :c_name "Customer#000000112"
-             :revenue 111137.7141
+             :revenue 111137.71409999998
              :c_acctbal 2953.35
              :c_phone "29-233-262-8382"
              :n_name "ROMANIA"
@@ -263,7 +263,7 @@
              :c_comment "ffily regular dinos are slyly unusual requests. slyly specia"}
             {:c_custkey "custkey_19"
              :c_name "Customer#000000019"
-             :revenue 99306.0127
+             :revenue 99306.01270000002
              :c_acctbal 8914.71
              :c_phone "28-396-526-5053"
              :n_name "CHINA"
@@ -271,7 +271,7 @@
              :c_comment " nag. furiously careful packages are slyly at the accounts. furiously regular in"}
             {:c_custkey "custkey_145"
              :c_name "Customer#000000145"
-             :revenue 99256.90179999999
+             :revenue 99256.9018
              :c_acctbal 9748.93
              :c_phone "23-562-444-8454"
              :n_name "JORDAN"
@@ -387,7 +387,7 @@
            (tpch-test/run-query tpch/tpch-q13-customer-distribution))))
 
 (t/deftest test-q14-promotion-effect
-  (t/is (= [{:promo_revenue 15.23021261159725}]
+  (t/is (= [{:promo_revenue 15.230212611597254}]
            (tpch-test/run-query tpch/tpch-q14-promotion-effect))))
 
 (t/deftest test-q15-top-supplier

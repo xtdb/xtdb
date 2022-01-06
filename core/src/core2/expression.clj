@@ -249,7 +249,7 @@
              [[(-> variable (with-tag IIndirectVector))
                `(.vectorForName ~rel-sym ~(name variable))]])))
 
-(defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->types]}]
+(defmethod codegen-expr :variable [{:keys [variable idx], :or {idx idx-sym}} {:keys [var->types]}]
   (let [field-types (or (get var->types variable)
                         (throw (AssertionError. (str "unknown variable: " variable))))
         var-idx-sym (gensym 'var-idx)
@@ -263,7 +263,7 @@
         {:return-types (cond-> #{arrow-type}
                          nullable? (conj types/null-type))
          :continue (fn [f]
-                     `(let [~var-idx-sym (.getIndex ~variable ~idx-sym)
+                     `(let [~var-idx-sym (.getIndex ~variable ~idx)
                             ~(-> var-vec-sym (with-tag vec-type)) (.getVector ~variable)]
                         ~(let [get-value (f arrow-type (get-value-form arrow-type var-vec-sym var-idx-sym))]
                            (if nullable?
@@ -280,7 +280,7 @@
 
        :continue
        (fn [f]
-         `(let [~var-idx-sym (.getIndex ~variable ~idx-sym)
+         `(let [~var-idx-sym (.getIndex ~variable ~idx)
                 ~(-> var-vec-sym (with-tag DenseUnionVector)) (.getVector ~variable)]
             (case (.getTypeId ~var-vec-sym ~var-idx-sym)
               ~@(->> field-types
@@ -727,11 +727,12 @@
 
 (defn- return-types->field-type ^org.apache.arrow.vector.types.pojo.FieldType [return-types]
   (let [without-null (disj return-types types/null-type)]
-    (if (>= (count without-null) 2)
-      (FieldType. false types/dense-union-type nil)
-      (FieldType. (contains? return-types types/null-type)
-                  (first without-null)
-                  nil))))
+    (case (count without-null)
+      0 (FieldType. true types/null-type nil)
+      1 (FieldType. (contains? return-types types/null-type)
+                    (first without-null)
+                    nil)
+      (FieldType. false types/dense-union-type nil))))
 
 (defn- write-value-out-code [^FieldType field-type return-types]
   (if-not (= types/dense-union-type (.getType field-type))
@@ -980,6 +981,7 @@
                                               expr
                                               {:op :variable
                                                :variable (gensym 'var)
+                                               :idx idx-sym
                                                :expr expr}))))
         var-sub-exprs (->> (walk/expr-seq prim-expr)
                            (filter #(= :variable (:op %))))
