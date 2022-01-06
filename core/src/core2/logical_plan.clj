@@ -137,6 +137,12 @@
          :left ::ra-expression
          :right ::ra-expression))
 
+(defmethod ra-expr :full-outer-join [_]
+  (s/cat :op #{:⟗ :full-outer-join}
+         :columns ::equi-join-columns
+         :left ::ra-expression
+         :right ::ra-expression))
+
 (defmethod ra-expr :semi-join [_]
   (s/cat :op #{:⋉ :semi-join}
          :columns ::equi-join-columns

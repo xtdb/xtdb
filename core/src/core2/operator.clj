@@ -165,41 +165,19 @@
              (fn [{:keys [allocator]} left right]
                (join/->cross-join-cursor allocator left right))))
 
-(defmethod emit-op :join [{:keys [columns left right]} srcs]
-  (let [[left-col] (keys columns)
-        [right-col] (vals columns)]
-    (binary-op left right srcs
-               (fn [{:keys [allocator]} left right]
-                 (join/->equi-join-cursor allocator
-                                          left (name left-col)
-                                          right (name right-col))))))
-
-(defmethod emit-op :left-outer-join [{:keys [columns left right]} srcs]
-  (let [[left-col] (keys columns)
-        [right-col] (vals columns)]
-    (binary-op left right srcs
-               (fn [{:keys [allocator]} left right]
-                 (join/->left-outer-equi-join-cursor allocator
-                                                     left (name left-col)
-                                                     right (name right-col))))))
-
-(defmethod emit-op :semi-join [{:keys [columns left right]} srcs]
-  (let [[left-col] (keys columns)
-        [right-col] (vals columns)]
-    (binary-op left right srcs
-               (fn [{:keys [allocator]} left right]
-                 (join/->left-semi-equi-join-cursor allocator
-                                                    left (name left-col)
-                                                    right (name right-col))))))
-
-(defmethod emit-op :anti-join [{:keys [columns left right]} srcs]
-  (let [[left-col] (keys columns)
-        [right-col] (vals columns)]
-    (binary-op left right srcs
-               (fn [{:keys [allocator]} left right]
-                 (join/->left-anti-semi-equi-join-cursor allocator
-                                                         left (name left-col)
-                                                         right (name right-col))))))
+(doseq [[join-op-k ->join-cursor] [[:join join/->equi-join-cursor]
+                                   [:left-outer-join join/->left-outer-equi-join-cursor]
+                                   [:full-outer-join join/->full-outer-equi-join-cursor]
+                                   [:semi-join join/->left-semi-equi-join-cursor]
+                                   [:anti-join join/->left-anti-semi-equi-join-cursor]]]
+  (defmethod emit-op join-op-k [{:keys [columns left right]} srcs]
+    (let [[left-col] (keys columns)
+          [right-col] (vals columns)]
+      (binary-op left right srcs
+                 (fn [{:keys [allocator]} left right]
+                   (->join-cursor allocator
+                                  left (name left-col)
+                                  right (name right-col)))))))
 
 (defmethod emit-op :group-by [{:keys [columns relation]} srcs]
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)

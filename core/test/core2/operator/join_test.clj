@@ -160,6 +160,46 @@
                                  [[]])
                   (mapv set))))))
 
+(t/deftest test-full-outer-join
+  (t/is (= [#{{:a 12, :b 12, :c 0} {:a nil, :b 2, :c 1}}
+            #{{:a 12, :b 12, :c 2} {:a 100, :b 100, :c 3}}
+            #{{:a 0, :b nil, :c nil}}]
+           (->> (run-join-test join/->full-outer-equi-join-cursor
+                               [[{:a 12}, {:a 0}]
+                                [{:a 12}, {:a 100}]]
+                               [[{:b 12, :c 0}, {:b 2, :c 1}]
+                                [{:b 12, :c 2}, {:b 100, :c 3}]]
+                               {:right-fields [b-field c-field]})
+                (mapv set)))
+        "missing on both sides")
+
+  (t/is (= [#{{:a 100, :b 100, :c 3} {:a 12, :b 12, :c 0}}
+            #{{:a 12, :b 12, :c 2}}]
+           (->> (run-join-test join/->full-outer-equi-join-cursor
+                               [[{:a 12}]
+                                [{:a 12}, {:a 100}]]
+                               [[{:b 12, :c 0}, {:b 100, :c 3}]
+                                [{:b 12, :c 2}]]
+                               {:right-fields [b-field c-field]})
+                (mapv set)))
+        "all matched")
+
+  (t/testing "empty input"
+    (t/is (= [#{{:a 12}, {:a 0}, {:a 100}}]
+             (->> (run-join-test join/->full-outer-equi-join-cursor
+                                 [[{:a 12}, {:a 0}]
+                                  [{:a 100}]]
+                                 [])
+                  (mapv set))))
+
+    (t/is (= [#{{:b 12}, {:b 2}}
+              #{{:b 100} {:b 0}}]
+             (->> (run-join-test join/->full-outer-equi-join-cursor
+                                 []
+                                 [[{:b 12}, {:b 2}]
+                                  [{:b 100} {:b 0}]])
+                  (mapv set))))))
+
 (t/deftest test-anti-equi-join
   (t/is (= [#{{:a 0}}]
            (->> (run-join-test join/->left-anti-semi-equi-join-cursor

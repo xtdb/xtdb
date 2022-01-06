@@ -3,7 +3,8 @@
             [core2.operator.scan :as scan]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [clojure.set :as set])
   (:import core2.ICursor
            core2.types.LegType
            [core2.vector IIndirectRelation IIndirectVector IRelationWriter IRowCopier IVectorWriter]
@@ -78,15 +79,24 @@
 (definterface IBuildRow
   (^void copyRow []))
 
-(deftype BuildPointer [^List #_<IRowCopier> row-copiers, ^int idx, pointer-or-object]
+(definterface IBuildPointer
+  (^boolean isMatched [])
+  (^void markMatched []))
+
+(deftype BuildPointer [^List #_<IRowCopier> row-copiers, ^int idx, pointer-or-object,
+                       ^:unsynchronized-mutable ^boolean matched?]
+  IBuildPointer
+  (isMatched [_] matched?)
+  (markMatched [this] (set! (.matched? this) true))
+
   IBuildRow
   (copyRow [_]
     (doseq [^IRowCopier copier row-copiers]
       (.copyRow copier idx))))
 
-(defn- ->null-build-row [^IRelationWriter rel-writer, ^List build-col-names]
-  (let [cols (vec (for [build-col-name build-col-names]
-                    (let [writer (.writerForName rel-writer build-col-name)
+(defn- ->null-build-row ^core2.operator.join.IBuildRow [^IRelationWriter rel-writer, ^List col-names]
+  (let [cols (vec (for [col-name col-names]
+                    (let [writer (.writerForName rel-writer col-name)
                           null-writer (-> (.asDenseUnion writer)
                                           (.writerForType LegType/NULL))]
                       (reify IBuildRow
@@ -123,7 +133,8 @@
                                         (apply [_ _x]
                                           (ArrayList.))))
           (.add (BuildPointer. row-copiers build-idx
-                               (util/pointer-or-object internal-vec idx))))))))
+                               (util/pointer-or-object internal-vec idx)
+                               false)))))))
 
 (defn- probe-phase ^core2.vector.IIndirectRelation [^IRelationWriter rel-writer
                                                     ^IBuildRow null-build-row
@@ -134,7 +145,7 @@
   (when (pos? (.rowCount probe-rel))
     (let [semi-join? (contains? #{:semi :anti-semi} join-type)
           anti-join? (= :anti-semi join-type)
-          outer-join? (= :left-outer join-type)
+          outer-join? (contains? #{:full-outer :left-outer} join-type)
 
           probe-row-copiers (vec (for [^IIndirectVector col probe-rel]
                                    (vw/->row-copier (.writerForName rel-writer (.getName col)) col)))
@@ -159,6 +170,7 @@
                                semi-join? true
 
                                :else (do
+                                       (.markMatched build-pointer)
                                        (.add matching-build-rows build-pointer)
                                        (.add matching-probe-idxs probe-idx)
                                        (recur true)))
@@ -202,38 +214,55 @@
                                             join-key->build-pointers pushdown-bloom
                                             semi-join?)))))
 
-      (let [yield-missing? (contains? #{:anti-semi :left-outer} join-type)
+      (let [yield-missing? (contains? #{:anti-semi :left-outer :full-outer} join-type)
             build-rel-col-names (into #{}
                                       (mapcat (fn [^IIndirectRelation build-rel]
                                                 (for [^IIndirectVector build-vec build-rel]
                                                   (.getName build-vec))))
                                       build-rels)]
         (boolean
-         (when (or (not (.isEmpty join-key->build-pointers))
-                   yield-missing?)
-           (let [advanced? (boolean-array 1)]
-             (binding [scan/*column->pushdown-bloom* (if yield-missing?
-                                                       scan/*column->pushdown-bloom*
-                                                       (assoc scan/*column->pushdown-bloom* probe-column-name pushdown-bloom))]
-               (while (and (not (aget advanced? 0))
-                           (.tryAdvance probe-cursor
-                                        (reify Consumer
-                                          (accept [_ probe-rel]
-                                            (let [null-build-row (when (= :left-outer join-type)
-                                                                   (->null-build-row rel-writer build-rel-col-names))]
-                                              (probe-phase rel-writer null-build-row
-                                                           probe-rel join-key->build-pointers
-                                                           probe-column-name join-type))
+         (or (when (or (not (.isEmpty join-key->build-pointers))
+                       yield-missing?)
+               (let [advanced? (boolean-array 1)]
+                 (binding [scan/*column->pushdown-bloom* (if yield-missing?
+                                                           scan/*column->pushdown-bloom*
+                                                           (assoc scan/*column->pushdown-bloom* probe-column-name pushdown-bloom))]
+                   (while (and (not (aget advanced? 0))
+                               (.tryAdvance probe-cursor
+                                            (reify Consumer
+                                              (accept [_ probe-rel]
+                                                (let [null-build-row (when (contains? #{:full-outer :left-outer} join-type)
+                                                                       (->null-build-row rel-writer build-rel-col-names))]
+                                                  (probe-phase rel-writer null-build-row
+                                                               probe-rel join-key->build-pointers
+                                                               probe-column-name join-type))
 
-                                            (let [out-rel (vw/rel-writer->reader rel-writer)]
-                                              (try
-                                                (when (pos? (.rowCount out-rel))
-                                                  (aset advanced? 0 true)
-                                                  (.accept c out-rel))
-                                                (finally
-                                                  (vw/clear-rel rel-writer)
-                                                  (util/try-close out-rel))))))))))
-             (aget advanced? 0)))))))
+                                                (with-open [out-rel (vw/rel-writer->reader rel-writer)]
+                                                  (try
+                                                    (when (pos? (.rowCount out-rel))
+                                                      (aset advanced? 0 true)
+                                                      (.accept c out-rel))
+                                                    (finally
+                                                      (vw/clear-rel rel-writer))))))))))
+                 (aget advanced? 0)))
+
+             (when (and (= :full-outer join-type) (not (.isEmpty join-key->build-pointers)))
+               (with-open [out-rel (vw/rel-writer->reader rel-writer)]
+                 (let [null-build-row (->null-build-row rel-writer (set/difference (into #{}
+                                                                                         (map (fn [^IVectorWriter w]
+                                                                                                (.getName (.getVector w))))
+                                                                                         rel-writer)
+                                                                                   (set build-rel-col-names)))]
+                   (doseq [build-pointers (vals join-key->build-pointers)
+                           ^BuildPointer build-pointer build-pointers
+                           :when (not (.isMatched build-pointer))]
+                     (.copyRow build-pointer))
+                   (.copyRow null-build-row))
+
+                 (.clear join-key->build-pointers)
+                 (when (pos? (.rowCount out-rel))
+                   (.accept c out-rel)
+                   true))))))))
 
   (close [_]
     (.clear pushdown-bloom)
@@ -268,6 +297,15 @@
                (vw/->rel-writer allocator)
                (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
                :left-outer))
+
+(defn ->full-outer-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
+                                                    ^ICursor left-cursor, ^String left-column-name,
+                                                    ^ICursor right-cursor, ^String right-column-name]
+  (JoinCursor. allocator
+               left-cursor left-column-name right-cursor right-column-name
+               (vw/->rel-writer allocator)
+               (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
+               :full-outer))
 
 (defn ->left-anti-semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
                                                         ^ICursor left-cursor, ^String left-column-name,
