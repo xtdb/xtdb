@@ -22,11 +22,15 @@
                        (group-by/->aggregate-factory :count "b" "cnt")
                        (group-by/->aggregate-factory :min "b" "min")
                        (group-by/->aggregate-factory :max "b" "max")
-                       (group-by/->aggregate-factory :variance "b" "variance")]]
+                       (group-by/->aggregate-factory :variance "b" "variance")
+                       (group-by/->aggregate-factory :std-dev "b" "std-dev")]]
 
-        (t/is (= #{{:a 1, :sum 140, :avg 35.0, :cnt 4 :min 10 :max 60, :variance 425.0}
-                   {:a 2, :sum 140, :avg 46.666666666666664, :cnt 3 :min 30 :max 70 :variance 288.88888888888914}
-                   {:a 3, :sum 170, :avg 85.0, :cnt 2 :min 80 :max 90, :variance 25.0}}
+        (t/is (= #{{:a 1, :sum 140, :avg 35.0, :cnt 4 :min 10 :max 60,
+                    :variance 425.0, :std-dev 20.615528128088304}
+                   {:a 2, :sum 140, :avg 46.666666666666664, :cnt 3 :min 30 :max 70
+                    :variance 288.88888888888914, :std-dev 16.996731711975958}
+                   {:a 3, :sum 170, :avg 85.0, :cnt 2 :min 80 :max 90,
+                    :variance 25.0, :std-dev 5.0}}
                  (run-test ["a"] agg-specs
                            [[{:a 1 :b 20}
                              {:a 1 :b 10}

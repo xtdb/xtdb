@@ -367,6 +367,33 @@
               (util/try-close avgx-agg)
               (util/try-close avgx2-agg))))))))
 
+(defmethod ->aggregate-factory :std-dev [_ ^String from-name, ^String to-name]
+  (let [variance-agg (->aggregate-factory :variance from-name "variance")
+        finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance) {})]
+    (reify IAggregateSpecFactory
+      (build [_ al]
+        (let [variance-agg (.build variance-agg al)
+              res-vec (Float8Vector. to-name al)]
+          (reify
+            IAggregateSpec
+            (aggregate [_ in-rel group-mapping]
+              (.aggregate variance-agg in-rel group-mapping))
+
+            (finish [_]
+              (let [variance-ivec (.finish variance-agg)
+                    out-ivec (.project finish-projecter al (iv/->indirect-rel [variance-ivec]))]
+                (if (instance? NullVector (.getVector out-ivec))
+                  out-ivec
+                  (do
+                    (doto (.makeTransferPair (.getVector out-ivec) res-vec)
+                      (.transfer))
+                    (iv/->direct-vec res-vec)))))
+
+            Closeable
+            (close [_]
+              (util/try-close res-vec)
+              (util/try-close variance-agg))))))))
+
 (defn- min-max-factory
   "update-if-f-kw: update the accumulated value if `(f el acc)`"
   [from-name to-name update-if-f-kw]

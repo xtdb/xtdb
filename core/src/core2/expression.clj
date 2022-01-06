@@ -665,6 +665,8 @@
                       (f return-type
                          `(~(symbol "Math" math-op) ~@emitted-args)))}))
 
+(defmethod codegen-call [:sqrt ArrowType$Null] [_] call-returns-null)
+
 (defmulti set-value-form
   (fn [arrow-type out-vec-sym idx-sym code]
     (class arrow-type)))
