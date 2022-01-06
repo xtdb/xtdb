@@ -27,27 +27,25 @@
                                                    left-cursor left-join-col
                                                    right-cursor right-join-col)]
 
-     (mapv set (tu/<-cursor join-cursor)))))
+     (vec (tu/<-cursor join-cursor)))))
 
 (t/deftest test-cross-join
   (letfn [(->cross-join-cursor [al lc _ljc rc _rjc]
             (join/->cross-join-cursor al lc rc))]
-    (t/is (= [#{{:a 12, :b 10, :c 1}
-                {:a 0, :b 10, :c 1}
-                {:a 0, :b 15, :c 2}
-                {:a 12, :b 15, :c 2}}
-              #{{:a 100, :b 10, :c 1}
-                {:a 100, :b 15, :c 2}}
-              #{{:a 0, :b 83, :c 3}
-                {:a 12, :b 83, :c 3}}
-              #{{:a 100, :b 83, :c 3}}]
+    (t/is (= [{{:a 12, :b 10, :c 1} 2,
+               {:a 12, :b 15, :c 2} 2,
+               {:a 0, :b 10, :c 1} 1,
+               {:a 0, :b 15, :c 2} 1}
+              {{:a 100, :b 10, :c 1} 1, {:a 100, :b 15, :c 2} 1}
+              {{:a 12, :b 83, :c 3} 2, {:a 0, :b 83, :c 3} 1}
+              {{:a 100, :b 83, :c 3} 1}]
              (->> (run-join-test ->cross-join-cursor
-                                 [[{:a 12}, {:a 0}]
+                                 [[{:a 12}, {:a 12}, {:a 0}]
                                   [{:a 100}]]
                                  [[{:b 10 :c 1}, {:b 15 :c 2}]
                                   [{:b 83 :c 3}]]
                                  {:right-fields [b-field c-field]})
-                  (mapv set))))
+                  (mapv frequencies))))
 
     (t/is (empty? (run-join-test ->cross-join-cursor
                                  [[{:a 12}, {:a 0}]
@@ -66,16 +64,16 @@
                                 [{:b 100} {:b 0}]])
                 (mapv set))))
 
-  (t/is (= [#{{:a 12}}
-            #{{:a 100}, {:a 0}}]
+  (t/is (= [{{:a 12} 2}
+            {{:a 100} 1, {:a 0} 1}]
            (->> (run-join-test join/->equi-join-cursor
                                [[{:a 12}, {:a 0}]
-                                [{:a 100}]]
+                                [{:a 12}, {:a 100}]]
                                [[{:a 12}, {:a 2}]
                                 [{:a 100} {:a 0}]]
                                {:left-fields [a-field], :right-fields [a-field]
                                 :left-join-col "a", :right-join-col "a"})
-                (mapv set)))
+                (mapv frequencies)))
         "same column name")
 
   (t/is (empty? (run-join-test join/->equi-join-cursor
@@ -92,13 +90,13 @@
         "empty output"))
 
 (t/deftest test-semi-equi-join
-  (t/is (= [#{{:a 12}} #{{:a 100}}]
+  (t/is (= [{{:a 12} 2} {{:a 100} 1}]
            (->> (run-join-test join/->left-semi-equi-join-cursor
-                               [[{:a 12}, {:a 0}]
+                               [[{:a 12}, {:a 12}, {:a 0}]
                                 [{:a 100}]]
                                [[{:b 12}, {:b 2}]
                                 [{:b 100}]])
-                (mapv set))))
+                (mapv frequencies))))
 
   (t/testing "empty input"
     (t/is (empty? (run-join-test join/->left-semi-equi-join-cursor
@@ -161,53 +159,74 @@
                   (mapv set))))))
 
 (t/deftest test-full-outer-join
-  (t/is (= [#{{:a 12, :b 12, :c 0} {:a nil, :b 2, :c 1}}
-            #{{:a 12, :b 12, :c 2} {:a 100, :b 100, :c 3}}
-            #{{:a 0, :b nil, :c nil}}]
-           (->> (run-join-test join/->full-outer-equi-join-cursor
-                               [[{:a 12}, {:a 0}]
-                                [{:a 12}, {:a 100}]]
-                               [[{:b 12, :c 0}, {:b 2, :c 1}]
-                                [{:b 12, :c 2}, {:b 100, :c 3}]]
-                               {:right-fields [b-field c-field]})
-                (mapv set)))
-        "missing on both sides")
+  (t/testing "missing on both sides"
+    (t/is (= [{{:a 12, :b 12, :c 0} 2, {:a nil, :b 2, :c 1} 1}
+              {{:a 12, :b 12, :c 2} 2, {:a 100, :b 100, :c 3} 1}
+              {{:a 0, :b nil, :c nil} 1}]
+             (->> (run-join-test join/->full-outer-equi-join-cursor
+                                 [[{:a 12}, {:a 0}]
+                                  [{:a 12}, {:a 100}]]
+                                 [[{:b 12, :c 0}, {:b 2, :c 1}]
+                                  [{:b 12, :c 2}, {:b 100, :c 3}]]
+                                 {:right-fields [b-field c-field]})
+                  (mapv frequencies))))
 
-  (t/is (= [#{{:a 100, :b 100, :c 3} {:a 12, :b 12, :c 0}}
-            #{{:a 12, :b 12, :c 2}}]
-           (->> (run-join-test join/->full-outer-equi-join-cursor
-                               [[{:a 12}]
-                                [{:a 12}, {:a 100}]]
-                               [[{:b 12, :c 0}, {:b 100, :c 3}]
-                                [{:b 12, :c 2}]]
-                               {:right-fields [b-field c-field]})
-                (mapv set)))
-        "all matched")
+    (t/is (= [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2, {:a nil, :b 2, :c 1} 1}
+              {{:a 100, :b 100, :c 3} 1}
+              {{:a 0, :b nil, :c nil} 1}]
+             (->> (run-join-test join/->full-outer-equi-join-cursor
+                                 [[{:a 12}, {:a 0}]
+                                  [{:a 12}, {:a 100}]]
+                                 [[{:b 12, :c 0}, {:b 12, :c 2}, {:b 2, :c 1}]
+                                  [{:b 100, :c 3}]]
+                                 {:right-fields [b-field c-field]})
+                  (mapv frequencies)))))
+
+  (t/testing "all matched"
+    (t/is (= [{{:a 12, :b 12, :c 0} 2, {:a 100, :b 100, :c 3} 1}
+              {{:a 12, :b 12, :c 2} 2}]
+             (->> (run-join-test join/->full-outer-equi-join-cursor
+                                 [[{:a 12}]
+                                  [{:a 12}, {:a 100}]]
+                                 [[{:b 12, :c 0}, {:b 100, :c 3}]
+                                  [{:b 12, :c 2}]]
+                                 {:right-fields [b-field c-field]})
+                  (mapv frequencies))))
+
+    (t/is (= [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2}
+              {{:a 100, :b 100, :c 3} 1}]
+             (->> (run-join-test join/->full-outer-equi-join-cursor
+                                 [[{:a 12}]
+                                  [{:a 12}, {:a 100}]]
+                                 [[{:b 12, :c 0}, {:b 12, :c 2}]
+                                  [{:b 100, :c 3}]]
+                                 {:right-fields [b-field c-field]})
+                  (mapv frequencies)))))
 
   (t/testing "empty input"
-    (t/is (= [#{{:a 12}, {:a 0}, {:a 100}}]
+    (t/is (= [{{:a 0} 1, {:a 100} 1, {:a 12} 1}]
              (->> (run-join-test join/->full-outer-equi-join-cursor
                                  [[{:a 12}, {:a 0}]
                                   [{:a 100}]]
                                  [])
-                  (mapv set))))
+                  (mapv frequencies))))
 
-    (t/is (= [#{{:b 12}, {:b 2}}
-              #{{:b 100} {:b 0}}]
+    (t/is (= [{{:b 12} 1, {:b 2} 1}
+              {{:b 100} 1, {:b 0} 1}]
              (->> (run-join-test join/->full-outer-equi-join-cursor
                                  []
                                  [[{:b 12}, {:b 2}]
                                   [{:b 100} {:b 0}]])
-                  (mapv set))))))
+                  (mapv frequencies))))))
 
 (t/deftest test-anti-equi-join
-  (t/is (= [#{{:a 0}}]
+  (t/is (= [{{:a 0} 2}]
            (->> (run-join-test join/->left-anti-semi-equi-join-cursor
-                               [[{:a 12}, {:a 0}]
+                               [[{:a 12}, {:a 0}, {:a 0}]
                                 [{:a 100}]]
                                [[{:b 12}, {:b 2}]
                                 [{:b 100}]])
-                (mapv set))))
+                (mapv frequencies))))
 
   (t/testing "empty input"
     (t/is (empty? (run-join-test join/->left-anti-semi-equi-join-cursor
