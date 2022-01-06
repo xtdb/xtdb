@@ -1,7 +1,6 @@
 (ns core2.logical-plan
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [core2.types :as types]
             [core2.util :as util]))
 
 ;; Partly based on
@@ -128,6 +127,12 @@
 
 (defmethod ra-expr :join [_]
   (s/cat :op #{:⋈ :join}
+         :columns ::equi-join-columns
+         :left ::ra-expression
+         :right ::ra-expression))
+
+(defmethod ra-expr :left-outer-join [_]
+  (s/cat :op #{:⟕ :left-outer-join}
          :columns ::equi-join-columns
          :left ::ra-expression
          :right ::ra-expression))

@@ -329,17 +329,12 @@
                     '?end-date #inst "1995-01-01"})))
 
 (def tpch-q13-customer-distribution
-  (-> '[:assign [Customers [:scan [c_custkey]]
-                 Orders [:scan [{o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]
-        [:order-by [{custdist :desc} {c_count :desc}]
-         [:group-by [c_count {custdist (count c_custkey)}]
-          [:group-by [c_custkey {c_count (count o_comment)}]
-           [:union-all
-            [:project [c_custkey o_comment]
-             [:join {c_custkey o_custkey} Customers Orders]]
-            [:cross-join
-             [:anti-join {c_custkey o_custkey} Customers Orders]
-             [:table [{o_comment nil}]]]]]]]]
+  (-> '[:order-by [{custdist :desc} {c_count :desc}]
+        [:group-by [c_count {custdist (count c_custkey)}]
+         [:group-by [c_custkey {c_count (count o_comment)}]
+          [:left-outer-join {c_custkey o_custkey}
+           [:scan [c_custkey]]
+           [:scan [{o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]]]]
       #_
       (with-params {'?word1 "special"
                     '?word2 "requests"})))
