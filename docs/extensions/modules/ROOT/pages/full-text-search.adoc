@@ -161,7 +161,7 @@ In the normal case for `text-search` and `wildcard-text-search`, we index each E
 This allows for some degree of structural sharing, which should help in the case where there is a lot historical data in XTDB.
 
 By contrast, `lucene-text-search` indexes a single document per document-version in XTDB.
-The downside of this is there is no structural sharing (besides whatever tricks Lucene employs under the hood), but the upside is taking advantage of more of the Lucene query language capability, e.g. to perform queries that multiple fields into account.
+The downside of this is there is no structural sharing (besides whatever tricks Lucene employs under the hood), but the upside is taking advantage of more of the Lucene query language capability, e.g. to perform queries that take multiple fields into account.
 
 To enable `lucene-text-search`, you must configure the Lucene Indexer, such like:
 
