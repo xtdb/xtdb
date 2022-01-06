@@ -756,6 +756,8 @@
 
 ;; Alternative Zipper implementation:
 
+(defrecord Node [left up right])
+
 (defrecord Loc [tree path]
   IDeref
   (deref [_] tree)
@@ -776,8 +778,6 @@
         not-found))))
 
 (prefer-method print-method IRecord IDeref)
-
-(defrecord Node [left up right])
 
 (defn ->zipper ^core2.rewrite.Loc [x]
   (when (vector? x)
