@@ -324,16 +324,7 @@
                               (errs ($ ag 3))]
                              (reduce into))
       :variable (must-be-in (env ag) (lexme ag 1))
-      (attr-children errs into ag)))
-
-  (zip/vector-zip
-   [:root
-    [:let
-     [:cons "a" [:plus [:variable "b"] [:constant 3]]
-      [:cons "c" [:constant 8]
-       [:cons "b" [:minus [:times [:variable "c"] [:constant 3]] [:variable "c"]]
-        [:empty]]]]
-     [:times [:plus [:variable "a"] [:constant 7]] [:variable "c"]]]])
+      (use-attributes errs into ag)))
 
   (errs
    (zip/vector-zip
@@ -923,7 +914,118 @@
                 [:digit "3"]]
                [:digit "4"]]
               [:digit "5"]]]
-            [:basechar "o"]]))))))
+            [:basechar "o"]])))))
+
+  ;; ZipperAG example:
+
+  (defn- use-attributes
+    ([attr-fn loc]
+     (use-attributes attr-fn conj loc))
+    ([attr-fn f loc]
+     (loop [loc (right (down loc))
+            acc (f)]
+       (if loc
+         (recur (right loc)
+                (if (vector? @loc)
+                  (if-some [v (attr-fn loc)]
+                    (f acc v)
+                    acc)
+                  acc))
+         (f acc)))))
+
+  (declare env)
+
+  (defn dcli [ag]
+    (zcase ag
+      [:root _] {}
+      [:let _ _] (zcase (up ag)
+                   [:root _] (dcli (up ag))
+                   [:cons-let _ _ _] (env (up ag)))
+      (zcase (up ag)
+        [:cons x _ _] (assoc (dcli (up ag))
+                             @x
+                             (up ag))
+        [:cons-let x _ _] (assoc (dcli (up ag))
+                                 @x
+                                 (up ag))
+        _ (dcli (up ag)))))
+
+  (defn dclo [ag]
+    (zcase ag
+      [:root x] (dclo x)
+      [:let x _] (dclo x)
+      [:cons _ _ x] (dclo x)
+      [:cons-let _ _ x] (dclo x)
+      [:empty] (dcli ag)))
+
+  (defn env [ag]
+    (zcase ag
+      [:root _] (dclo ag)
+      [:let _ _] (zcase (up ag)
+                   [:cons-let _ _ _] (dclo ag)
+                   _ (env (up ag)))
+      _ (env (up ag))))
+
+  (defn lev [ag]
+    (zcase ag
+      [:root _] 0
+      [:let _ _] (zcase (up ag)
+                   [:cons-let _ _ _] (inc (lev (up ag)))
+                   _ (lev (up ag)))
+      _ (lev (up ag))))
+
+  (defn must-be-in [m n]
+    (if (contains? m n)
+      []
+      [n]))
+
+  (defn must-not-be-in [m n ag]
+    (let [r (get m n)]
+      (if (and r (= (lev ag) (lev r)))
+        [n]
+        [])))
+
+  (defn errs [ag]
+    (zcase ag
+      [:cons x y z] (->> [(must-not-be-in (dcli ag) @x ag)
+                          (errs y)
+                          (errs z)]
+                         (reduce into))
+      [:cons-let x y z] (->> [(must-not-be-in (dcli ag) @x ag)
+                              (errs y)
+                              (errs z)]
+                             (reduce into))
+      [:variable x] (must-be-in (env ag) @x)
+      _ (use-attributes errs into ag)))
+
+  (errs
+   (->zipper
+    [:root
+     [:let
+      [:cons "a" [:plus [:variable "b"] [:constant 3]]
+       [:cons "c" [:constant 8]
+        [:cons-let "w" [:let
+                        [:cons "c" [:times [:variable "a"] [:variable "b"]]
+                         [:empty]]
+                        [:times [:variable "c"] [:variable "b"]]]
+         [:cons "b" [:minus [:times [:variable "c"] [:constant 3]] [:variable "c"]]
+          [:empty]]]]]
+      [:minus [:times [:variable "c"] [:variable "w"]] [:variable "a"]]]]))
+
+  ;; let a = z + 3
+  ;;     c = 8
+  ;;     a = (c ∗ 3) − c
+  ;; in (a + 7) ∗ c
+
+  (errs
+   (->zipper
+    [:root
+     [:let
+      [:cons "a" [:plus [:variable "z"] [:constant 3]]
+       [:cons "c" [:constant 8]
+        [:cons "a" [:minus [:times [:variable "c"] [:constant 3]] [:variable "c"]]
+         [:empty]]]]
+      [:times [:plus [:variable "a"] [:constant 7]] [:variable "c"]]]])))
 
 (comment
   (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
