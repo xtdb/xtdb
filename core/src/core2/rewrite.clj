@@ -117,28 +117,7 @@
                          (recur parent))
                        [(zip/node p) :end])))))))))
 
-;; Attribute Grammar spike.
-
-;; See:
-;; https://inkytonik.github.io/kiama/Attribution
-;; https://arxiv.org/pdf/2110.07902.pdf
-;; https://haslab.uminho.pt/prmartins/files/phd.pdf
-;; https://github.com/christoff-buerger/racr
-
-(defn- use-attributes
-  ([attr-fn loc]
-   (use-attributes attr-fn conj loc))
-  ([attr-fn f loc]
-   (loop [loc (zip/right (zip/down loc))
-          acc (f)]
-     (if loc
-       (recur (zip/right loc)
-              (if (zip/branch? loc)
-                (if-some [v (attr-fn loc)]
-                  (f acc v)
-                  acc)
-                acc))
-       (f acc)))))
+;; Zipper pattern matching
 
 (defn- zip-next-skip-subtree [loc]
   (or (zip/right loc)
@@ -204,6 +183,66 @@
              (zmatch loc# ~@clauses))))
       pattern)))
 
+;; Attribute Grammar spike.
+
+;; See:
+;; https://inkytonik.github.io/kiama/Attribution
+;; https://arxiv.org/pdf/2110.07902.pdf
+;; https://haslab.uminho.pt/prmartins/files/phd.pdf
+;; https://github.com/christoff-buerger/racr
+
+(defn use-attributes
+  ([attr-fn loc]
+   (use-attributes attr-fn conj loc))
+  ([attr-fn f loc]
+   (loop [loc (zip/right (zip/down loc))
+          acc (f)]
+     (if loc
+       (recur (zip/right loc)
+              (if (zip/branch? loc)
+                (if-some [v (attr-fn loc)]
+                  (f acc v)
+                  acc)
+                acc))
+       (f acc)))))
+
+(defn ctor [ag]
+  (when ag
+    (let [node (zip/node ag)]
+      (when (vector? node)
+        (first node)))))
+
+(defn- z-nth [ag n]
+  (reduce
+   (fn [ag f]
+     (f ag))
+   (zip/down ag)
+   (repeat n zip/right)))
+
+(def parent zip/up)
+(def $ z-nth)
+(def lexme (comp zip/node $))
+
+(defn with-memoized-attributes [attr-vars f]
+  (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
+    (with-redefs-fn attrs f)))
+
+(defn ->attributed-tree [tree attr-vars]
+  (with-memoized-attributes attr-vars
+    #(loop [loc (zip/vector-zip tree)]
+       (if (zip/end? loc)
+         (zip/node loc)
+         (recur (zip/next (if (zip/branch? loc)
+                            (if-let [acc (some->> (for [k attr-vars
+                                                        :let [v (k loc)]
+                                                        :when (some? v)]
+                                                    [(:name (meta k)) v])
+                                                  (not-empty)
+                                                  (into {}))]
+                              (zip/edit loc vary-meta merge acc)
+                              loc)
+                            loc)))))))
+
 (comment
 
   (declare repmin globmin locmin)
@@ -253,23 +292,6 @@
   ;; "Embedding attribute grammars and their extensions using functional zippers"
 
   ;; Chapter 3 & 4:
-
-  (defn ctor [ag]
-    (when ag
-      (let [node (zip/node ag)]
-        (when (vector? node)
-          (first node)))))
-
-  (defn z-nth [ag n]
-    (reduce
-     (fn [ag f]
-       (f ag))
-     (zip/down ag)
-     (repeat n zip/right)))
-
-  (def parent zip/up)
-  (def $ z-nth)
-  (def lexme (comp zip/node $))
 
   (defn dcli [ag]
     (case (ctor ag)
@@ -448,26 +470,6 @@
                [:digit "4"]]
               [:digit "5"]]]
             [:basechar "o"]]))))))
-
-(defn with-memoized-attributes [attr-vars f]
-  (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
-    (with-redefs-fn attrs f)))
-
-(defn ->attributed-tree [tree attr-vars]
-  (with-memoized-attributes attr-vars
-    #(loop [loc (zip/vector-zip tree)]
-       (if (zip/end? loc)
-         (zip/node loc)
-         (recur (zip/next (if (zip/branch? loc)
-                            (if-let [acc (some->> (for [k attr-vars
-                                                        :let [v (k loc)]
-                                                        :when (some? v)]
-                                                    [(:name (meta k)) v])
-                                                  (not-empty)
-                                                  (into {}))]
-                              (zip/edit loc vary-meta merge acc)
-                              loc)
-                            loc)))))))
 
 ;; Strategic Zippers based on Ztrategic
 ;; https://arxiv.org/pdf/2110.07902.pdf
