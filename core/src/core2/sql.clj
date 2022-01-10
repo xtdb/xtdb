@@ -189,11 +189,11 @@
                                               query-name
                                               cte))
                   :query_expression_body (some->> ag
-                                                  (zip/left)
+                                                  (zip/left) ;; :with_clause
                                                   (zip/down)
-                                                  (zip/rightmost)
+                                                  (zip/rightmost) ;; :with_list
                                                   (zip/down)
-                                                  (zip/rightmost)
+                                                  (zip/rightmost) ;; :with_list_element
                                                   (cte-env))
                   (cte-env (rew/parent ag)))))
             (cte [ag]
