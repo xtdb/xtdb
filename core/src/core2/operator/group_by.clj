@@ -1,16 +1,17 @@
 (ns core2.operator.group-by
   (:require [core2.expression :as expr]
+            [core2.expression.hash :as hash]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import core2.ICursor
+  (:import core2.expression.hash.IVectorHasher
+           core2.ICursor
            [core2.vector IIndirectVector IRowCopier IVectorWriter]
            java.io.Closeable
            [java.util HashMap LinkedList List Map Spliterator]
            [java.util.function Consumer Function]
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.memory.util.hash.MurmurHasher
            [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector ValueVector]
            org.apache.arrow.vector.types.pojo.FieldType
            org.roaringbitmap.RoaringBitmap))
@@ -106,16 +107,14 @@
                                   group-col-writers)
 
           comparator (->comparator group-cols group-col-writers)
-          hasher (MurmurHasher.)]
+          hashers (mapv hash/->hasher group-cols)]
 
       (.setValueCount group-mapping (.rowCount in-rel))
 
       (dotimes [idx (.rowCount in-rel)]
-        (let [row-hash (mapv (fn [^IIndirectVector group-col]
-                               (.hashCode (.getVector group-col)
-                                          (.getIndex group-col idx)
-                                          hasher))
-                             group-cols)
+        (let [row-hash (mapv (fn [^IVectorHasher hasher]
+                               (.hashCode hasher idx))
+                             hashers)
               ^RoaringBitmap hash-bitmap (.computeIfAbsent group-hash->bitmap
                                                            row-hash
                                                            (reify Function

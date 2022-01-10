@@ -1,5 +1,6 @@
 (ns core2.operator.join
   (:require [core2.bloom :as bloom]
+            [core2.expression.hash :as hash]
             [core2.operator.scan :as scan]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
@@ -123,12 +124,13 @@
                                  :when (not= col-name probe-column-name)]
                              (vw/->row-copier (.writerForName rel-writer col-name) col))))
         build-col (.vectorForName build-rel build-column-name)
+        hasher (hash/->hasher build-col)
         internal-vec (.getVector build-col)]
     (dotimes [build-idx (.getValueCount build-col)]
       (let [idx (.getIndex build-col build-idx)]
         (.add pushdown-bloom ^ints (bloom/bloom-hashes internal-vec idx))
         (doto ^List (.computeIfAbsent join-key->build-pointers
-                                      (.hashCode internal-vec idx)
+                                      (.hashCode hasher build-idx)
                                       (reify Function
                                         (apply [_ _x]
                                           (ArrayList.))))
@@ -153,11 +155,12 @@
           probe-pointer (ArrowBufPointer.)
           matching-build-rows (ArrayList.)
           matching-probe-idxs (IntStream/builder)
-          internal-vec (.getVector probe-col)]
+          internal-vec (.getVector probe-col)
+          hasher (hash/->hasher probe-col)]
 
       (dotimes [probe-idx (.getValueCount probe-col)]
         (let [internal-idx (.getIndex probe-col probe-idx)
-              match? (when-let [^List build-pointers (.get join-key->build-pointers (.hashCode internal-vec internal-idx))]
+              match? (when-let [^List build-pointers (.get join-key->build-pointers (.hashCode hasher probe-idx))]
                        (let [probe-pointer-or-object (util/pointer-or-object internal-vec internal-idx probe-pointer)
                              build-pointer-it (.iterator build-pointers)]
                          (loop [match? false]
