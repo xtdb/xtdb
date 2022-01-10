@@ -222,6 +222,9 @@
              n)
            zip/right)))
 
+(defn first-child? [ag]
+  (= 1 (count (zip/lefts ag))))
+
 (def parent zip/up)
 (def $ z-nth)
 (def lexme (comp zip/node $))
