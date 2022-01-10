@@ -147,6 +147,108 @@
    (parse
     "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"))
 
+  ;; Very rough draft attribute grammar for SQL semantics, aiming to
+  ;; match the current annotation semantics. Does not handle
+  ;; joined_table or the with_clause.
+
+  ;; TODO:
+  ;; - way too verbose.
+  ;; - too complex threading logic.
+  ;; - unclear.
+  ;; - mutable ids, use references instead?
+  ;; - should really be modular and not single letfn.
+
+  (let [next-id (atom 0)
+        ->id (memoize
+              (fn [_]
+                (swap! next-id inc)))]
+    (letfn [(env [ag]
+              (when ag
+                (case (rew/ctor ag)
+                  (:select_list
+                   :where_clause
+                   :group_by_clause
+                   :having_clause) (dclo (rew/parent ag))
+                  (:join_condition
+                   :lateral_derived_table) (dcli (rew/parent ag))
+                  (env (rew/parent ag)))))
+            (dcli [ag]
+              (when ag
+                (case (rew/ctor ag)
+                  :table_expression (env (rew/parent ag))
+                  :table_factor (let [{:keys [correlation-name] :as table} (table ag)
+                                      dcli (if (> (count (zip/lefts ag)) 1)
+                                             (dcli (zip/left ag))
+                                             (dcli (rew/parent ag)))]
+                                  (assoc dcli correlation-name table))
+                  (dcli (rew/parent ag)))))
+            (dclo [ag]
+              (case (rew/ctor ag)
+                :query_specification (dclo (zip/rightmost (zip/down ag)))
+                :table_expression (dclo (rew/$ ag 1))
+                :from_clause (dclo (rew/$ ag 2))
+                :table_reference_list (dcli (zip/rightmost (zip/down ag)))))
+            (identifiers [ag]
+              (case (rew/ctor ag)
+                (:column_reference
+                 :basic_identifier_chain) (identifiers (rew/$ ag 1))
+                :identifier_chain (rew/use-attributes identifier ag)))
+            (identifier [ag]
+              (case (rew/ctor ag)
+                (:table_name
+                 :query_name
+                 :correlation_name
+                 :identifier) (identifier (rew/$ ag 1))
+                :regular_identifier (rew/lexme ag 1)))
+            (table [ag]
+              :table_factor (let [table-name (table-or-query-name ag)
+                                  correlation-name (correlation-name ag)]
+                              {:table-or-query-name table-name
+                               :correlation-name correlation-name
+                               :id (->id ag)}))
+            (tables [ag]
+              (case (rew/ctor ag)
+                :table_factor [(table ag)]
+                (rew/use-attributes tables into ag)))
+            (column [ag]
+              (case (rew/ctor ag)
+                :column_reference (let [identifiers (identifiers ag)
+                                        qualified? (> (count identifiers) 1)]
+                                    {:identifiers identifiers
+                                     :qualified? qualified?
+                                     :table-id (when qualified?
+                                                 (get-in (env ag) [(first identifiers) :id]))})))
+            (columns [ag]
+              (case (rew/ctor ag)
+                :column_reference [(column ag)]
+                (rew/use-attributes columns into ag)))
+            (errs [ag]
+              (case (rew/ctor ag)
+                :column_reference (let [{:keys [identifiers qualified? table-id]} (column ag)]
+                                    (cond
+                                      (not qualified?)
+                                      [(format "XTDB requires fully-qualified columns: %s %s"
+                                               (first identifiers) (->line-info-str ag))]
+
+                                      (not table-id)
+                                      [(format "Table not in scope: %s %s"
+                                               (first identifiers) (->line-info-str ag))]))
+                (rew/use-attributes errs into ag)))
+            (table-or-query-name [ag]
+              (case (rew/ctor ag)
+                (:table_factor
+                 :table_primary) (table-or-query-name (rew/$ ag 1))
+                (:table_name
+                 :query_name) (identifier ag)))
+            (correlation-name [ag]
+              (case (rew/ctor ag)
+                :table_factor (correlation-name (rew/$ ag 1))
+                :table_primary (or (correlation-name (zip/rightmost (zip/down ag)))
+                                   (table-or-query-name ag))
+                :correlation_name (identifier ag)
+                nil))]
+      (errs (zip/vector-zip (parse "SELECT foo.a, b, bar.c FROM foo, bar AS baz" :query_specification)))))
+
   (time
    (parse-sql2011
     "TIME '20:00:00.000'"
