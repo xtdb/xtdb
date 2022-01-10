@@ -44,9 +44,15 @@
                :when id]
            id)))
 
+(defn- skip-whitespace ^long [^String s ^long n]
+  (if (Character/isWhitespace (.charAt s n))
+    (recur s (inc n))
+    n))
+
 (defn- ->line-info-str [loc]
-  (let [{:core2.sql/keys [sql]} (zip/root loc)
+  (let [{:core2.sql/keys [sql]} (meta (zip/root loc))
         {:instaparse.gll/keys [start-index]} (meta (zip/node loc))
+        start-index (skip-whitespace sql start-index)
         {:keys [line column]} (instaparse.failure/index->line-column start-index sql)]
     (format "at line %d, column %d" line column)))
 
@@ -173,6 +179,30 @@
                   (:join_condition
                    :lateral_derived_table) (dcli (rew/parent ag))
                   (env (rew/parent ag)))))
+            (cte-env [ag]
+              (when ag
+                (case (rew/ctor ag)
+                  :with_list_element (let [{:keys [query-name] :as cte} (cte ag)]
+                                       (assoc (if (> (count (zip/lefts ag)) 1)
+                                                (cte-env (zip/left ag))
+                                                (cte-env (rew/parent ag)))
+                                              query-name
+                                              cte))
+                  :query_expression_body (some->> ag
+                                                  (zip/left)
+                                                  (zip/down)
+                                                  (zip/rightmost)
+                                                  (zip/down)
+                                                  (zip/rightmost)
+                                                  (cte-env))
+                  (cte-env (rew/parent ag)))))
+            (cte [ag]
+              :with_list_element {:query-name (table-or-query-name ag)
+                                  :id (->id ag)})
+            (ctes [ag]
+              (case (rew/ctor ag)
+                :with_list_element [(cte ag)]
+                (rew/use-attributes ctes into ag)))
             (prev-dcli [ag]
               (if (> (count (zip/lefts ag)) 1)
                 (dcli (zip/left ag))
@@ -216,10 +246,12 @@
                 :regular_identifier (rew/lexme ag 1)))
             (table [ag]
               :table_factor (let [table-name (table-or-query-name ag)
-                                  correlation-name (correlation-name ag)]
-                              {:table-or-query-name table-name
-                               :correlation-name correlation-name
-                               :id (->id ag)}))
+                                  correlation-name (correlation-name ag)
+                                  cte-id (get-in (cte-env ag) [table-name :id])]
+                              (cond-> {:table-or-query-name table-name
+                                       :correlation-name correlation-name
+                                       :id (->id ag)}
+                                cte-id (assoc :cte-id cte-id))))
             (tables [ag]
               (case (rew/ctor ag)
                 :table_factor [(table ag)]
@@ -227,11 +259,12 @@
             (column [ag]
               (case (rew/ctor ag)
                 :column_reference (let [identifiers (identifiers ag)
-                                        qualified? (> (count identifiers) 1)]
-                                    {:identifiers identifiers
-                                     :qualified? qualified?
-                                     :table-id (when qualified?
-                                                 (get-in (env ag) [(first identifiers) :id]))})))
+                                        qualified? (> (count identifiers) 1)
+                                        table-id (when qualified?
+                                                   (get-in (env ag) [(first identifiers) :id]))]
+                                    (cond-> {:identifiers identifiers
+                                             :qualified? qualified?}
+                                      table-id (assoc :table-id table-id)))))
             (columns [ag]
               (case (rew/ctor ag)
                 :column_reference [(column ag)]
@@ -251,7 +284,8 @@
             (table-or-query-name [ag]
               (case (rew/ctor ag)
                 (:table_factor
-                 :table_primary) (table-or-query-name (rew/$ ag 1))
+                 :table_primary
+                 :with_list_element) (table-or-query-name (rew/$ ag 1))
                 (:table_name
                  :query_name) (identifier ag)))
             (correlation-name [ag]
@@ -262,7 +296,8 @@
                                    (table-or-query-name ag))
                 :correlation_name (identifier ag)
                 nil))]
-      (errs (zip/vector-zip (parse "SELECT foo.a, b, bar.c FROM foo, bar AS baz" :query_specification)))))
+      (errs (zip/vector-zip (parse "WITH foo AS (SELECT 1 FROM bar)
+ SELECT foo.a, b, bar.c FROM foo, bar AS baz" :query_expression)))))
 
   (time
    (parse-sql2011

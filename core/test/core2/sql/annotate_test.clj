@@ -29,10 +29,10 @@ SELECT t1.d-t1.e
              scopes))))
 
 (t/deftest test-scope-rules
-  (t/is (thrown-with-msg? IllegalArgumentException #"XTDB requires fully-qualified columns: a at line 1, column 7"
+  (t/is (thrown-with-msg? IllegalArgumentException #"XTDB requires fully-qualified columns: a at line 1, column 8"
                           (sql/annotate-tree (sql/parse "SELECT a FROM foo"))))
 
-  (t/is (thrown-with-msg? IllegalArgumentException #"Table not in scope: bar at line 1, column 7"
+  (t/is (thrown-with-msg? IllegalArgumentException #"Table not in scope: bar at line 1, column 8"
                           (sql/annotate-tree (sql/parse "SELECT bar.a FROM foo"))))
   (t/is (thrown-with-msg? IllegalArgumentException #"Table not in scope: bar"
                           (sql/annotate-tree (sql/parse "SELECT bar.a FROM bar AS foo"))))
