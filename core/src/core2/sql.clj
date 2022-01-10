@@ -188,13 +188,12 @@
                                                 (cte-env (rew/parent ag)))
                                               query-name
                                               cte))
-                  :query_expression_body (some->> ag
-                                                  (zip/left) ;; :with_clause
-                                                  (zip/down)
-                                                  (zip/rightmost) ;; :with_list
-                                                  (zip/down)
-                                                  (zip/rightmost) ;; :with_list_element
-                                                  (cte-env))
+                  :query_expression_body (if (> (count (zip/lefts ag)) 1)
+                                           (-> (zip/left ag) ;; :with-clause
+                                               (rew/$ -1) ;; :with_list
+                                               (rew/$ -1) ;; :with_list_element
+                                               (cte-env))
+                                           (cte-env (rew/parent ag)))
                   (cte-env (rew/parent ag)))))
             (cte [ag]
               :with_list_element {:query-name (table-or-query-name ag)
@@ -217,21 +216,21 @@
                                   (dcli (rew/$ ag 1))
                                   (-extend-env (prev-dcli ag) (table ag)))
                   :cross_join (-> (-extend-env (prev-dcli ag) (table (rew/$ ag 1)))
-                                  (-extend-env (table (zip/rightmost (zip/down ag)))))
+                                  (-extend-env (table (rew/$ ag -1))))
                   :qualified_join (-> (-extend-env (prev-dcli ag) (table (rew/$ ag 1)))
-                                      (-extend-env (table (zip/left (zip/rightmost (zip/down ag))))))
+                                      (-extend-env (table (rew/$ ag -2))))
                   :natural_join (-> (-extend-env (prev-dcli ag) (table (rew/$ ag 1)))
-                                    (-extend-env (table (zip/rightmost (zip/down ag)))))
+                                    (-extend-env (table (rew/$ ag -1))))
                   (dcli (rew/parent ag)))))
             (dclo [ag]
               (case (rew/ctor ag)
                 (:query_expression_body
                  :query_term
                  :query_primary) (dclo (rew/$ ag 1))
-                :query_specification (dclo (zip/rightmost (zip/down ag)))
+                :query_specification (dclo (rew/$ ag -1))
                 :table_expression (dclo (rew/$ ag 1))
                 :from_clause (dclo (rew/$ ag 2))
-                :table_reference_list (dcli (zip/rightmost (zip/down ag)))))
+                :table_reference_list (dcli (rew/$ ag -1))))
             (identifiers [ag]
               (case (rew/ctor ag)
                 (:column_reference
@@ -291,8 +290,8 @@
             (correlation-name [ag]
               (case (rew/ctor ag)
                 :table_factor (correlation-name (rew/$ ag 1))
-                :table_primary (or (correlation-name (zip/rightmost (zip/down ag)))
-                                   (correlation-name (zip/right (zip/rightmost (zip/down ag))))
+                :table_primary (or (correlation-name (rew/$ ag -1))
+                                   (correlation-name (rew/$ ag -2))
                                    (table-or-query-name ag))
                 :correlation_name (identifier ag)
                 nil))]

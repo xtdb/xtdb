@@ -217,7 +217,10 @@
    (fn [ag f]
      (f ag))
    (zip/down ag)
-   (repeat n zip/right)))
+   (repeat (if (neg? n)
+             (+ (count (zip/children ag)) n)
+             n)
+           zip/right)))
 
 (def parent zip/up)
 (def $ z-nth)
