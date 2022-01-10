@@ -168,22 +168,36 @@
                   (:select_list
                    :where_clause
                    :group_by_clause
-                   :having_clause) (dclo (rew/parent ag))
+                   :having_clause
+                   :order_by_clause) (dclo (rew/parent ag))
                   (:join_condition
                    :lateral_derived_table) (dcli (rew/parent ag))
                   (env (rew/parent ag)))))
+            (prev-dcli [ag]
+              (if (> (count (zip/lefts ag)) 1)
+                (dcli (zip/left ag))
+                (dcli (rew/parent ag))))
+            (-extend-env [env {:keys [correlation-name] :as table}]
+              (assoc env correlation-name table))
             (dcli [ag]
               (when ag
                 (case (rew/ctor ag)
                   :table_expression (env (rew/parent ag))
-                  :table_factor (let [{:keys [correlation-name] :as table} (table ag)
-                                      dcli (if (> (count (zip/lefts ag)) 1)
-                                             (dcli (zip/left ag))
-                                             (dcli (rew/parent ag)))]
-                                  (assoc dcli correlation-name table))
+                  :table_factor (if (= :parenthesized_joined_table (rew/ctor (rew/$ ag 1)))
+                                  (dcli (rew/$ ag 1))
+                                  (-extend-env (prev-dcli ag) (table ag)))
+                  :cross_join (-> (-extend-env (prev-dcli ag) (table (rew/$ ag 1)))
+                                  (-extend-env (table (zip/rightmost (zip/down ag)))))
+                  :qualified_join (-> (-extend-env (prev-dcli ag) (table (rew/$ ag 1)))
+                                      (-extend-env (table (zip/left (zip/rightmost (zip/down ag))))))
+                  :natural_join (-> (-extend-env (prev-dcli ag) (table (rew/$ ag 1)))
+                                    (-extend-env (table (zip/rightmost (zip/down ag)))))
                   (dcli (rew/parent ag)))))
             (dclo [ag]
               (case (rew/ctor ag)
+                (:query_expression_body
+                 :query_term
+                 :query_primary) (dclo (rew/$ ag 1))
                 :query_specification (dclo (zip/rightmost (zip/down ag)))
                 :table_expression (dclo (rew/$ ag 1))
                 :from_clause (dclo (rew/$ ag 2))
@@ -244,6 +258,7 @@
               (case (rew/ctor ag)
                 :table_factor (correlation-name (rew/$ ag 1))
                 :table_primary (or (correlation-name (zip/rightmost (zip/down ag)))
+                                   (correlation-name (zip/right (zip/rightmost (zip/down ag))))
                                    (table-or-query-name ag))
                 :correlation_name (identifier ag)
                 nil))]
