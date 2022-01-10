@@ -1,42 +1,15 @@
 (ns core2.operator.set
-  (:require [core2.error :as err]
-            [core2.types :as t]
-            [core2.util :as util]
+  (:require [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import core2.ICursor
-           [core2.vector IIndirectVector IIndirectRelation]
+           [core2.vector IIndirectRelation IIndirectVector]
            [java.util ArrayList HashSet LinkedList List Set]
            java.util.function.Consumer
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.memory.util.ArrowBufPointer
-           [org.apache.arrow.vector.types.pojo Field Schema]))
+           org.apache.arrow.memory.util.ArrowBufPointer))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defn- ->union-compatible-schema [^Schema x ^Schema y]
-  ;; TODO reinstate this check somewhere?
-  (letfn [(union-incompatible []
-            (err/illegal-arg :union-incompatible
-                             {::err/message "Schemas are not union compatible"
-                              :left x, :right y}))]
-    (let [x-fields (.getFields x)
-          y-fields (.getFields y)]
-      (when-not (= (count x-fields) (count y-fields))
-        (throw (union-incompatible)))
-      (Schema. (for [[^Field x-field, ^Field y-field] (map vector x-fields y-fields)
-                     :let [x-name (.getName x-field)
-                           x-type (.getType x-field)
-                           y-name (.getName y-field)
-                           y-type (.getType y-field)]]
-                 (cond
-                   (not (and (= x-name y-name) (= x-type y-type)))
-                   (throw (union-incompatible))
-
-                   (= t/dense-union-type x-type y-type)
-                   (t/->field x-name t/dense-union-type true)
-
-                   :else x-field))))))
 
 (deftype UnionAllCursor [^ICursor left-cursor
                          ^ICursor right-cursor]
