@@ -35,16 +35,16 @@
         {:keys [line column]} (instaparse.failure/index->line-column start-index sql)]
     (format "at line %d, column %d" line column)))
 
-;; Very rough draft attribute grammar for SQL semantics, aiming to
-;; match the current annotation semantics. Does not handle
-;; joined_table or the with_clause.
+;; Very rough draft attribute grammar for SQL semantics.
 
 ;; TODO:
-;; - way too verbose.
 ;; - too complex threading logic.
-;; - unclear.
+;; - unclear?
 ;; - mutable ids, use references instead?
 ;; - should really be modular and not single letfn.
+
+(defn- extend-env [env {:keys [correlation-name] :as table}]
+  (assoc env correlation-name table))
 
 (defn analyze-query [query]
   (let [next-id (atom 0)
@@ -58,43 +58,22 @@
                  :group_by_clause
                  :having_clause
                  :order_by_clause) (dclo (r/parent ag))
-                :qualified_join (-> (-extend-env (env (r/parent ag)) (table (r/$ ag 1)))
-                                    (-extend-env (table (r/$ ag -2))))
+                :qualified_join (-> (extend-env (env (r/parent ag)) (table (r/$ ag 1)))
+                                    (extend-env (table (r/$ ag -2))))
                 :lateral_derived_table (dcli (r/parent ag))
                 (some-> (r/parent ag) (env))))
-            (cte-env [ag]
-              (case (r/ctor ag)
-                :with_list_element (let [{:keys [query-name] :as cte} (cte ag)]
-                                     (assoc (cte-env (r/prev ag)) query-name cte))
-                :query_expression_body (if (r/first-child? ag)
-                                         (cte-env (r/parent ag))
-                                         (-> (z/left ag) ;; :with-clause
-                                             (r/$ -1)    ;; :with_list
-                                             (r/$ -1) ;; :with_list_element
-                                             (cte-env)))
-                (some-> (r/parent ag) (cte-env))))
-            (cte [ag]
-              :with_list_element {:query-name (table-or-query-name ag)
-                                  :id (->id ag)})
-            (ctes [ag]
-              (case (r/ctor ag)
-                :subquery []
-                :with_list_element [(cte ag)]
-                (r/use-attributes ctes into ag)))
-            (-extend-env [env {:keys [correlation-name] :as table}]
-              (assoc env correlation-name table))
             (dcli [ag]
               (case (r/ctor ag)
                 :table_expression (env (r/parent ag))
                 :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
                                 (dcli (r/$ ag 1))
-                                (-extend-env (dcli (r/prev ag)) (table ag)))
-                :cross_join (-> (-extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
-                                (-extend-env (table (r/$ ag -1))))
-                :qualified_join (-> (-extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
-                                    (-extend-env (table (r/$ ag -2))))
-                :natural_join (-> (-extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
-                                  (-extend-env (table (r/$ ag -1))))
+                                (extend-env (dcli (r/prev ag)) (table ag)))
+                :cross_join (-> (extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
+                                (extend-env (table (r/$ ag -1))))
+                :qualified_join (-> (extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
+                                    (extend-env (table (r/$ ag -2))))
+                :natural_join (-> (extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
+                                  (extend-env (table (r/$ ag -1))))
                 (some-> (r/parent ag) (dcli))))
             (dclo [ag]
               (case (r/ctor ag)
@@ -105,6 +84,31 @@
                 :query_specification (dclo (r/$ ag -1))
                 :from_clause (dclo (r/$ ag 2))
                 :table_reference_list (dcli (r/$ ag -1))))
+            (ctei [ag]
+              (case (r/ctor ag)
+                :query_expression (cte-env (r/parent ag))
+                :with_list_element (let [{:keys [query-name] :as cte} (cte ag)]
+                                     (assoc (ctei (r/prev ag)) query-name cte))
+                (some-> (r/parent ag) (ctei))))
+            (cteo [ag]
+              (case (r/ctor ag)
+                :query_expression (when (= :with_clause (r/ctor (r/$ ag 1)))
+                                    (cteo (r/$ ag 1)))
+                :with_clause (cteo (r/$ ag -1))
+                :with_list (ctei (r/$ ag -1))))
+            (cte-env [ag]
+              (case (r/ctor ag)
+                :query_expression_body (cteo (r/parent ag))
+                :with_list_element (ctei (r/prev ag))
+                (some-> (r/parent ag) (cte-env))))
+            (cte [ag]
+              :with_list_element {:query-name (table-or-query-name ag)
+                                  :id (->id ag)})
+            (ctes [ag]
+              (case (r/ctor ag)
+                :subquery []
+                :with_list_element [(cte ag)]
+                (r/use-attributes ctes into ag)))
             (identifier [ag]
               (case (r/ctor ag)
                 (:table_name
