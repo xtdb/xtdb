@@ -185,7 +185,7 @@
                                      :columns (set (columns ag))})))
             (scopes [ag]
               (case (r/ctor ag)
-                :query_expression (into [(scope ag)] (r/use-attributes scopes into ag) )
+                :query_expression (into [(scope ag)] (r/use-attributes scopes into ag))
                 (r/use-attributes scopes into ag)))]
       {:scopes (scopes (z/vector-zip query))
        :errs (errs (z/vector-zip query))})))
