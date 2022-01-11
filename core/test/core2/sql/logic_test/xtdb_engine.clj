@@ -99,11 +99,12 @@
       [:identifier_chain
        [:identifier [:regular_identifier column]]]
       ;;=>
-      [:identifier_chain
-       [:identifier
-        [:regular_identifier (get column->table column)]]
-       [:identifier
-        [:regular_identifier column]]]
+      (when-let [table (get column->table column)]
+        [:identifier_chain
+         [:identifier
+          [:regular_identifier table]]
+         [:identifier
+          [:regular_identifier column]]])
 
       [:sort_key
        [:numeric_value_expression
@@ -126,7 +127,7 @@
                              [column table])
                            (into {}))]
     (->> (z/vector-zip query)
-         ((r/full-bu-tp (r/adhoc-tpz r/id-tp (normalize-rewrite column->table))))
+         ((r/innermost (r/mono-tpz (normalize-rewrite column->table))))
          (z/node))))
 
 (defn parse-create-table [^String x]

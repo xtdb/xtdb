@@ -261,8 +261,12 @@
       (recur z)
       z)))
 
+;; (defn innermost [f]
+;;   (repeat-tp (once-bu-tp f)))
+
 (defn innermost [f]
-  (repeat-tp (once-bu-tp f)))
+  (fn self [z]
+    ((seq-tp (all-tp self) (try-tp (seq-tp f self))) z)))
 
 (defn outermost [f]
   (repeat-tp (once-td-tp f)))
