@@ -123,9 +123,10 @@
                 :identifier_chain (r/use-attributes identifier ag)))
             (table [ag]
               :table_factor (let [table-name (table-or-query-name ag)
+                                  correlation-name (correlation-name ag)
                                   cte-id (get-in (cte-env ag) [table-name :id])]
-                              (cond-> {:table-or-query-name table-name
-                                       :correlation-name (correlation-name ag)
+                              (cond-> {:table-or-query-name (or table-name correlation-name)
+                                       :correlation-name correlation-name
                                        :id (->id ag)}
                                 cte-id (assoc :cte-id cte-id))))
             (tables [ag]
@@ -166,7 +167,7 @@
                  :with_list_element) (table-or-query-name (r/$ ag 1))
                 (:table_name
                  :query_name) (identifier ag)
-                (correlation-name ag)))
+                nil))
             (correlation-name [ag]
               (case (r/ctor ag)
                 :table_factor (correlation-name (r/$ ag 1))
