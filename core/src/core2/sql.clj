@@ -92,10 +92,10 @@
                 (some-> (r/parent ag) (ctei))))
             (cteo [ag]
               (case (r/ctor ag)
-                :query_expression (when (= :with_clause (r/ctor (r/$ ag 1)))
-                                    (cteo (r/$ ag 1)))
+                :query_expression (cteo (r/$ ag 1))
                 :with_clause (cteo (r/$ ag -1))
-                :with_list (ctei (r/$ ag -1))))
+                :with_list (ctei (r/$ ag -1))
+                nil))
             (cte-env [ag]
               (case (r/ctor ag)
                 :query_expression_body (cteo (r/parent ag))
