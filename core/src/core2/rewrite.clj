@@ -95,18 +95,6 @@
                 acc))
        (f acc)))))
 
-;; TODO: this should go and really be done via rewrite rules.
-(defn use-children
-  ([attr-fn loc]
-   (use-children attr-fn conj loc))
-  ([attr-fn f loc]
-   (loop [loc (z/down loc)
-          acc (f)]
-     (if loc
-       (recur (z/right loc)
-              (f acc (attr-fn loc)))
-       (f acc)))))
-
 (defn ctor [ag]
   (when ag
     (let [node (z/node ag)]
@@ -158,235 +146,8 @@
                             loc)
                           loc)))))))
 
-(comment
-
-  (declare repmin globmin locmin)
-
-  (defn repmin [loc]
-    (zmatch loc
-      [:fork _ _] (use-attributes repmin
-                                  (completing
-                                   (fn
-                                     ([] [:fork])
-                                     ([x y] (conj x y))))
-                                  loc)
-      [:leaf _] [:leaf (globmin loc)]))
-
-  (defn locmin [loc]
-    (zmatch loc
-      [:fork _ _] (use-attributes locmin
-                                  (completing
-                                   (fn
-                                     ([] Long/MAX_VALUE)
-                                     ([x y] (min x y))))
-                                  loc)
-      [:leaf n] n))
-
-  (defn globmin [loc]
-    (if-let [p (z/up loc)]
-      (globmin p)
-      (locmin loc)))
-
-  ;; https://web.fe.up.pt/~jacome/downloads/CEFP15.pdf
-  ;; "Watch out for that tree! A Tutorial on Shortcut Deforestation"
-
-  (defn repm [t]
-    (case (first t)
-      :leaf [(fn [z]
-               [:leaf z]) (second t)]
-      :fork (let [[t1 m1] (repm (second t))
-                  [t2 m2] (repm (last t))]
-              [(fn [z]
-                 [:fork (t1 z) (t2 z)]) (min m1 m2)])))
-
-  (let [[t m] (repm [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]])]
-    (t m))
-
-  ;; http://hackage.haskell.org/package/ZipperAG
-  ;; https://www.sciencedirect.com/science/article/pii/S0167642316000812
-  ;; "Embedding attribute grammars and their extensions using functional zippers"
-
-  ;; Chapter 3 & 4:
-
-  (defn dcli [ag]
-    (case (ctor ag)
-      :root {}
-      :let (case (ctor (parent ag))
-             :root (dcli (parent ag))
-             :cons-let (env (parent ag)))
-      (case (ctor (parent ag))
-        (:cons :cons-let) (assoc (dcli (parent ag))
-                                 (lexme (parent ag) 1)
-                                 (parent ag))
-        (dcli (parent ag)))))
-
-  (defn dclo [ag]
-    (case (ctor ag)
-      :root (dclo ($ ag 1))
-      :let (dclo ($ ag 1))
-      (:cons :cons-let) (dclo ($ ag 3))
-      :empty (dcli ag)))
-
-  (defn env [ag]
-    (case (ctor ag)
-      :root (dclo ag)
-      :let (case (ctor (parent ag))
-             :cons-let (dclo ag)
-             (env (parent ag)))
-      (env (parent ag))))
-
-  (defn lev [ag]
-    (case (ctor ag)
-      :root 0
-      :let (case (ctor (parent ag))
-             :cons-let (inc (lev (parent ag)))
-             (lev (parent ag)))
-      (lev (parent ag))))
-
-  (defn must-be-in [m n]
-    (if (contains? m n)
-      []
-      [n]))
-
-  (defn must-not-be-in [m n ag]
-    (let [r (get m n)]
-      (if (and r (= (lev ag) (lev r)))
-        [n]
-        [])))
-
-  (defn errs [ag]
-    (case (ctor ag)
-      (:cons :cons-let) (->> [(must-not-be-in (dcli ag) (lexme ag 1) ag)
-                              (errs ($ ag 2))
-                              (errs ($ ag 3))]
-                             (reduce into))
-      :variable (must-be-in (env ag) (lexme ag 1))
-      (use-attributes errs into ag)))
-
-  (errs
-   (z/vector-zip
-    [:root
-     [:let
-      [:cons "a" [:plus [:variable "b"] [:constant 3]]
-       [:cons "c" [:constant 8]
-        [:cons-let "w" [:let
-                        [:cons "c" [:times [:variable "a"] [:variable "b"]]
-                         [:empty]]
-                        [:times [:variable "c"] [:variable "b"]]]
-         [:cons "b" [:minus [:times [:variable "c"] [:constant 3]] [:variable "c"]]
-          [:empty]]]]]
-      [:minus [:times [:variable "c"] [:variable "w"]] [:variable "a"]]]]))
-
-  ;; let a = z + 3
-  ;;     c = 8
-  ;;     a = (c ∗ 3) − c
-  ;; in (a + 7) ∗ c
-
-  (errs
-   (z/vector-zip
-    [:root
-     [:let
-      [:cons "a" [:plus [:variable "z"] [:constant 3]]
-       [:cons "c" [:constant 8]
-        [:cons "a" [:minus [:times [:variable "c"] [:constant 3]] [:variable "c"]]
-         [:empty]]]]
-      [:times [:plus [:variable "a"] [:constant 7]] [:variable "c"]]]]))
-
-  ;; https://github.com/christoff-buerger/racr
-  ;; https://dl.acm.org/doi/pdf/10.1145/2814251.2814257
-  ;; "Reference Attribute Grammar Controlled Graph Rewriting: Motivation and Overview"
-
-  (defn find-l-decl [n name]
-    (when n
-      (if (and (= :Decl (ctor n))
-               (= (lexme n 2) name))
-        n
-        (recur (z/left n) name))))
-
-  (declare l-decl)
-
-  (defn g-decl [n name]
-    (case (ctor (parent n))
-      :Block (or (find-l-decl n name)
-                 (some-> n
-                         #_(parent)
-                         (parent)
-                         (g-decl name)))
-      :Prog (or (find-l-decl n name)
-                (z/vector-zip [:DErr]))))
-
-  (defn l-decl [n name]
-    (case (ctor n)
-      :Decl (when (= (lexme n 1) name)
-              n)))
-
-  (defn type' [n]
-    (case (ctor n)
-      :Use (type' (g-decl n (lexme n 1)))
-      :Decl (lexme n 1)
-      :DErr "ErrorType"
-      (:Prog :Block) (type' (z/rightmost (z/down n)))))
-
-  (defn well-formed? [n]
-    (case (ctor n)
-      :Use (not= (type' n) "ErrorType")
-      :Decl (= (g-decl n (lexme n 2)) n)
-      :DErr false
-      (:Prog :Block) (use-attributes well-formed?
-                                     (completing
-                                      (fn
-                                        ([] true)
-                                        ([x y] (and x y))))
-                                     n)))
-
-  (well-formed?
-   (z/vector-zip
-    [:Prog
-     [:Decl "Integer" "a"]
-     [:Block [:Use "b"] [:Use  "a"] [:Decl "Real" "a"] [:Use "a"]]
-     [:Use "a"]
-     [:Decl "Real" "a"]]))
-
-  ;; Based number example
-
-  (defn base [n]
-    (case (ctor n)
-      :basechar (case (lexme n 1)
-                  "o" 8
-                  "d" 10)
-      :based-num (base ($ n 2))
-      (:num :digit) (base (parent n))))
-
-  (defn value [n]
-    (case (ctor n)
-      :digit (let [v (Double/parseDouble (lexme n 1))]
-               (if (> v (base n))
-                 Double/NaN
-                 v))
-      :num (if (= 2 (count (z/children n)))
-             (value ($ n 1))
-             (+ (* (base n)
-                   (value ($ n 1)))
-                (value ($ n 2))))
-      :based-num (value ($ n 1))))
-
-  (time
-   (= 229.0
-      (with-memoized-attributes
-        [#'base #'value]
-        #(value
-          (z/vector-zip
-           [:based-num
-            [:num
-             [:num
-              [:num
-               [:num
-                [:digit "3"]]
-               [:digit "4"]]
-              [:digit "5"]]]
-            [:basechar "o"]]))))))
-
 ;; Strategic Zippers based on Ztrategic
+
 ;; https://arxiv.org/pdf/2110.07902.pdf
 ;; https://www.di.uminho.pt/~joost/publications/SBLP2004LectureNotes.pdf
 
@@ -662,234 +423,90 @@
 (defn with-tu-monoid [z mempty mappend]
   (vary-meta z assoc :z/mempty mempty :z/mappend mappend))
 
-;; Alternative Zipper implementation:
-
-(defrecord Node [left up right])
-
-(defrecord Loc [tree path]
-  IDeref
-  (deref [_] tree)
-
-  Indexed
-  (nth [this n]
-    (.nth this n nil))
-
-  (nth [this n not-found]
-    (let [t (.tree this)]
-      (if (and (vector? t)
-               (< n (count t)))
-        (with-meta
-          (->Loc (nth t n) (->Node (with-meta (vec (take n t)) (meta t))
-                                   (.path this)
-                                   (drop (inc n) t)))
-          (meta this))
-        not-found))))
-
-(prefer-method print-method IRecord IDeref)
-
-(defn ->zipper ^core2.rewrite.Loc [x]
-  (->Loc x nil))
-
-(defn left ^core2.rewrite.Loc [^Loc loc]
-  (when-let [^Node p (.path loc)]
-    (let [left (.left p)]
-      (when-let [l (last left)]
-        (with-meta
-          (->Loc l (->Node (subvec left 0 (dec (count left)))
-                           (.up p)
-                           (cons (.tree loc) (.right p))))
-          (meta loc))))))
-
-(defn right ^core2.rewrite.Loc [^Loc loc]
-  (when-let [^Node p (.path loc)]
-    (let [right (.right p)]
-      (when-let [r (first right)]
-        (with-meta
-          (->Loc r (->Node (conj (.left p) (.tree loc))
-                           (.up p)
-                           (rest right)))
-          (meta loc))))))
-
-(defn up ^core2.rewrite.Loc [^Loc loc]
-  (when-let [^Node p (.path loc)]
-    (with-meta
-      (->Loc (into (.left p) (cons (.tree loc) (.right p))) (.up p))
-      (meta loc))))
-
-(defn down ^core2.rewrite.Loc [^Loc loc]
-  (nth loc 0))
-
-(defn root ^core2.rewrite.Loc [^Loc loc]
-  (loop [loc loc]
-    (if (.path loc)
-      (recur (up loc))
-      loc)))
-
-(defn edit ^core2.rewrite.Loc [^Loc loc f & args]
-  (when loc
-    (with-meta
-      (->Loc (apply f (.tree loc) args) (.path loc))
-      (meta loc))))
-
-(defn- skip-subtree ^core2.rewrite.Loc [^Loc loc]
-  (or (right loc)
-      (loop [p loc]
-        (when-let [p (up p)]
-          (or (right p)
-              (recur p))))))
-
-(defn zip2-next ^core2.rewrite.Loc [^Loc loc]
-  (or (and (vector? @loc) (down loc))
-      (skip-subtree loc)))
-
-(defn- zip2-match
-  ([pattern-loc loc]
-   (zip2-match pattern-loc loc {}))
-  ([pattern-loc loc acc]
-   (loop [pattern-loc pattern-loc
-          loc loc
-          acc acc]
-     (cond
-       (nil? pattern-loc)
-       acc
-
-       (nil? loc)
-       nil
-
-       (and (vector? @pattern-loc)
-            (vector? @loc))
-       (when (= (count @pattern-loc)
-                (count @loc))
-         (recur (down pattern-loc) (down loc) acc))
-
-       :else
-       (let [pattern-node @pattern-loc
-             node @loc]
-         (cond
-           (= pattern-node node)
-           (recur (skip-subtree pattern-loc) (skip-subtree loc) acc)
-
-           (and (symbol? pattern-node)
-                (= loc (get acc pattern-node loc)))
-           (recur (zip2-next pattern-loc)
-                  (skip-subtree loc)
-                  (cond-> acc
-                    (not= '_ pattern-node) (assoc pattern-node loc)))
-
-           :else
-           nil))))))
-
-(defmacro zcase {:style/indent 1} [loc & [pattern expr & clauses]]
-  (when pattern
-    (if expr
-      (let [vars (->> (flatten pattern)
-                      (filter symbol?)
-                      (remove '#{_}))]
-        `(let [loc# ~loc
-               loc# (if (instance? Loc loc#)
-                      loc#
-                      (->zipper loc#))]
-           (if-let [{:syms [~@vars] :as acc#} (zip2-match (->zipper '~pattern) loc#)]
-             ~expr
-             (zcase loc# ~@clauses))))
-      pattern)))
-
 (comment
-  ;; Based number example, alternative zippers.
 
-  (defn base [n]
-    (zcase n
-      [:basechar x] (case @x
-                      "o" 8
-                      "d" 10)
-      [:based-num _ basechar] (base basechar)
-      _ (base (up n))))
+  (declare repmin globmin locmin)
 
-  (defn value [n]
-    (zcase n
-      [:digit x] (let [v (Double/parseDouble @x)]
-                   (if (> v (base n))
-                     Double/NaN
-                     v))
-      [:num x] (value x)
-      [:num x y] (+ (* (base n)
-                       (value x))
-                    (value y))
-      [:based-num x _] (value x)))
+  (defn repmin [loc]
+    (zmatch loc
+      [:fork _ _] (use-attributes repmin
+                                  (completing
+                                   (fn
+                                     ([] [:fork])
+                                     ([x y] (conj x y))))
+                                  loc)
+      [:leaf _] [:leaf (globmin loc)]))
 
-  (time
-   (= 229.0
-      (with-memoized-attributes
-        [#'base #'value]
-        #(value
-          (->zipper
-           [:based-num
-            [:num
-             [:num
-              [:num
-               [:num
-                [:digit "3"]]
-               [:digit "4"]]
-              [:digit "5"]]]
-            [:basechar "o"]])))))
+  (defn locmin [loc]
+    (zmatch loc
+      [:fork _ _] (use-attributes locmin
+                                  (completing
+                                   (fn
+                                     ([] Long/MAX_VALUE)
+                                     ([x y] (min x y))))
+                                  loc)
+      [:leaf n] n))
 
-  ;; ZipperAG example:
+  (defn globmin [loc]
+    (if-let [p (z/up loc)]
+      (globmin p)
+      (locmin loc)))
 
-  (defn- use-attributes
-    ([attr-fn loc]
-     (use-attributes attr-fn conj loc))
-    ([attr-fn f loc]
-     (loop [loc (right (down loc))
-            acc (f)]
-       (if loc
-         (recur (right loc)
-                (if (vector? @loc)
-                  (if-some [v (attr-fn loc)]
-                    (f acc v)
-                    acc)
-                  acc))
-         (f acc)))))
+  ;; https://web.fe.up.pt/~jacome/downloads/CEFP15.pdf
+  ;; "Watch out for that tree! A Tutorial on Shortcut Deforestation"
 
-  (declare env)
+  (defn repm [t]
+    (case (first t)
+      :leaf [(fn [z]
+               [:leaf z]) (second t)]
+      :fork (let [[t1 m1] (repm (second t))
+                  [t2 m2] (repm (last t))]
+              [(fn [z]
+                 [:fork (t1 z) (t2 z)]) (min m1 m2)])))
+
+  (let [[t m] (repm [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]])]
+    (t m))
+
+  ;; http://hackage.haskell.org/package/ZipperAG
+  ;; https://www.sciencedirect.com/science/article/pii/S0167642316000812
+  ;; "Embedding attribute grammars and their extensions using functional zippers"
+
+  ;; Chapter 3 & 4:
 
   (defn dcli [ag]
-    (zcase ag
-      [:root _] {}
-      [:let _ _] (zcase (up ag)
-                   [:root _] (dcli (up ag))
-                   [:cons-let _ _ _] (env (up ag)))
-      (zcase (up ag)
-        [:cons x _ _] (assoc (dcli (up ag))
-                             @x
-                             (up ag))
-        [:cons-let x _ _] (assoc (dcli (up ag))
-                                 @x
-                                 (up ag))
-        _ (dcli (up ag)))))
+    (case (ctor ag)
+      :root {}
+      :let (case (ctor (parent ag))
+             :root (dcli (parent ag))
+             :cons-let (env (parent ag)))
+      (case (ctor (parent ag))
+        (:cons :cons-let) (assoc (dcli (parent ag))
+                                 (lexme (parent ag) 1)
+                                 (parent ag))
+        (dcli (parent ag)))))
 
   (defn dclo [ag]
-    (zcase ag
-      [:root x] (dclo x)
-      [:let x _] (dclo x)
-      [:cons _ _ x] (dclo x)
-      [:cons-let _ _ x] (dclo x)
-      [:empty] (dcli ag)))
+    (case (ctor ag)
+      :root (dclo ($ ag 1))
+      :let (dclo ($ ag 1))
+      (:cons :cons-let) (dclo ($ ag 3))
+      :empty (dcli ag)))
 
   (defn env [ag]
-    (zcase ag
-      [:root _] (dclo ag)
-      [:let _ _] (zcase (up ag)
-                   [:cons-let _ _ _] (dclo ag)
-                   _ (env (up ag)))
-      _ (env (up ag))))
+    (case (ctor ag)
+      :root (dclo ag)
+      :let (case (ctor (parent ag))
+             :cons-let (dclo ag)
+             (env (parent ag)))
+      (env (parent ag))))
 
   (defn lev [ag]
-    (zcase ag
-      [:root _] 0
-      [:let _ _] (zcase (up ag)
-                   [:cons-let _ _ _] (inc (lev (up ag)))
-                   _ (lev (up ag)))
-      _ (lev (up ag))))
+    (case (ctor ag)
+      :root 0
+      :let (case (ctor (parent ag))
+             :cons-let (inc (lev (parent ag)))
+             (lev (parent ag)))
+      (lev (parent ag))))
 
   (defn must-be-in [m n]
     (if (contains? m n)
@@ -903,20 +520,16 @@
         [])))
 
   (defn errs [ag]
-    (zcase ag
-      [:cons x y z] (->> [(must-not-be-in (dcli ag) @x ag)
-                          (errs y)
-                          (errs z)]
-                         (reduce into))
-      [:cons-let x y z] (->> [(must-not-be-in (dcli ag) @x ag)
-                              (errs y)
-                              (errs z)]
+    (case (ctor ag)
+      (:cons :cons-let) (->> [(must-not-be-in (dcli ag) (lexme ag 1) ag)
+                              (errs ($ ag 2))
+                              (errs ($ ag 3))]
                              (reduce into))
-      [:variable x] (must-be-in (env ag) @x)
-      _ (use-attributes errs into ag)))
+      :variable (must-be-in (env ag) (lexme ag 1))
+      (use-attributes errs into ag)))
 
   (errs
-   (->zipper
+   (z/vector-zip
     [:root
      [:let
       [:cons "a" [:plus [:variable "b"] [:constant 3]]
@@ -935,14 +548,108 @@
   ;; in (a + 7) ∗ c
 
   (errs
-   (->zipper
+   (z/vector-zip
     [:root
      [:let
       [:cons "a" [:plus [:variable "z"] [:constant 3]]
        [:cons "c" [:constant 8]
         [:cons "a" [:minus [:times [:variable "c"] [:constant 3]] [:variable "c"]]
          [:empty]]]]
-      [:times [:plus [:variable "a"] [:constant 7]] [:variable "c"]]]])))
+      [:times [:plus [:variable "a"] [:constant 7]] [:variable "c"]]]]))
+
+  ;; https://github.com/christoff-buerger/racr
+  ;; https://dl.acm.org/doi/pdf/10.1145/2814251.2814257
+  ;; "Reference Attribute Grammar Controlled Graph Rewriting: Motivation and Overview"
+
+  (defn find-l-decl [n name]
+    (when n
+      (if (and (= :Decl (ctor n))
+               (= (lexme n 2) name))
+        n
+        (recur (z/left n) name))))
+
+  (declare l-decl)
+
+  (defn g-decl [n name]
+    (case (ctor (parent n))
+      :Block (or (find-l-decl n name)
+                 (some-> n
+                         #_(parent)
+                         (parent)
+                         (g-decl name)))
+      :Prog (or (find-l-decl n name)
+                (z/vector-zip [:DErr]))))
+
+  (defn l-decl [n name]
+    (case (ctor n)
+      :Decl (when (= (lexme n 1) name)
+              n)))
+
+  (defn type' [n]
+    (case (ctor n)
+      :Use (type' (g-decl n (lexme n 1)))
+      :Decl (lexme n 1)
+      :DErr "ErrorType"
+      (:Prog :Block) (type' (z/rightmost (z/down n)))))
+
+  (defn well-formed? [n]
+    (case (ctor n)
+      :Use (not= (type' n) "ErrorType")
+      :Decl (= (g-decl n (lexme n 2)) n)
+      :DErr false
+      (:Prog :Block) (use-attributes well-formed?
+                                     (completing
+                                      (fn
+                                        ([] true)
+                                        ([x y] (and x y))))
+                                     n)))
+
+  (well-formed?
+   (z/vector-zip
+    [:Prog
+     [:Decl "Integer" "a"]
+     [:Block [:Use "b"] [:Use  "a"] [:Decl "Real" "a"] [:Use "a"]]
+     [:Use "a"]
+     [:Decl "Real" "a"]]))
+
+  ;; Based number example
+
+  (defn base [n]
+    (case (ctor n)
+      :basechar (case (lexme n 1)
+                  "o" 8
+                  "d" 10)
+      :based-num (base ($ n 2))
+      (:num :digit) (base (parent n))))
+
+  (defn value [n]
+    (case (ctor n)
+      :digit (let [v (Double/parseDouble (lexme n 1))]
+               (if (> v (base n))
+                 Double/NaN
+                 v))
+      :num (if (= 2 (count (z/children n)))
+             (value ($ n 1))
+             (+ (* (base n)
+                   (value ($ n 1)))
+                (value ($ n 2))))
+      :based-num (value ($ n 1))))
+
+  (time
+   (= 229.0
+      (with-memoized-attributes
+        [#'base #'value]
+        #(value
+          (z/vector-zip
+           [:based-num
+            [:num
+             [:num
+              [:num
+               [:num
+                [:digit "3"]]
+               [:digit "4"]]
+              [:digit "5"]]]
+            [:basechar "o"]]))))))
 
 (comment
   (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
