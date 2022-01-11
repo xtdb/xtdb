@@ -1,8 +1,7 @@
 (ns core2.rewrite
   (:require [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.zip :as z])
-  (:import [clojure.lang IDeref Indexed IRecord]))
+            [clojure.zip :as z]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
