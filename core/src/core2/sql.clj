@@ -143,27 +143,18 @@
 (defn annotate-tree [tree]
   (r/rewrite-tree tree (->root-annotation-ctx)))
 
-(comment
-  (time
-   (parse-sql2011
-    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
-    :start :directly_executable_statement))
+;; Very rough draft attribute grammar for SQL semantics, aiming to
+;; match the current annotation semantics. Does not handle
+;; joined_table or the with_clause.
 
-  (time
-   (parse
-    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"))
+;; TODO:
+;; - way too verbose.
+;; - too complex threading logic.
+;; - unclear.
+;; - mutable ids, use references instead?
+;; - should really be modular and not single letfn.
 
-  ;; Very rough draft attribute grammar for SQL semantics, aiming to
-  ;; match the current annotation semantics. Does not handle
-  ;; joined_table or the with_clause.
-
-  ;; TODO:
-  ;; - way too verbose.
-  ;; - too complex threading logic.
-  ;; - unclear.
-  ;; - mutable ids, use references instead?
-  ;; - should really be modular and not single letfn.
-
+(defn analyze-query [query]
   (let [next-id (atom 0)
         ->id (memoize
               (fn [_]
@@ -175,8 +166,9 @@
                  :group_by_clause
                  :having_clause
                  :order_by_clause) (dclo (r/parent ag))
-                (:join_condition
-                 :lateral_derived_table) (dcli (r/parent ag))
+                :qualified_join (-> (-extend-env (env (r/parent ag)) (table (r/$ ag 1)))
+                                    (-extend-env (table (r/$ ag -2))))
+                :lateral_derived_table (dcli (r/parent ag))
                 (some-> (r/parent ag) (env))))
             (cte-env [ag]
               (case (r/ctor ag)
@@ -186,7 +178,7 @@
                                          (cte-env (r/parent ag))
                                          (-> (z/left ag) ;; :with-clause
                                              (r/$ -1)    ;; :with_list
-                                             (r/$ -1)    ;; :with_list_element
+                                             (r/$ -1) ;; :with_list_element
                                              (cte-env)))
                 (some-> (r/parent ag) (cte-env))))
             (cte [ag]
@@ -194,6 +186,7 @@
                                   :id (->id ag)})
             (ctes [ag]
               (case (r/ctor ag)
+                :subquery []
                 :with_list_element [(cte ag)]
                 (r/use-attributes ctes into ag)))
             (-extend-env [env {:keys [correlation-name] :as table}]
@@ -241,6 +234,7 @@
                                 cte-id (assoc :cte-id cte-id))))
             (tables [ag]
               (case (r/ctor ag)
+                :subquery []
                 :table_factor [(table ag)]
                 (r/use-attributes tables into ag)))
             (column [ag]
@@ -254,6 +248,7 @@
                                       table-id (assoc :table-id table-id)))))
             (columns [ag]
               (case (r/ctor ag)
+                :subquery []
                 :column_reference [(column ag)]
                 (r/use-attributes columns into ag)))
             (errs [ag]
@@ -274,7 +269,8 @@
                  :table_primary
                  :with_list_element) (table-or-query-name (r/$ ag 1))
                 (:table_name
-                 :query_name) (identifier ag)))
+                 :query_name) (identifier ag)
+                (correlation-name ag)))
             (correlation-name [ag]
               (case (r/ctor ag)
                 :table_factor (correlation-name (r/$ ag 1))
@@ -282,9 +278,30 @@
                                    (correlation-name (r/$ ag -2))
                                    (table-or-query-name ag))
                 :correlation_name (identifier ag)
-                nil))]
-      (errs (z/vector-zip (parse "WITH foo AS (SELECT 1 FROM bar)
- SELECT foo.a, b, bar.c FROM foo, bar AS baz" :query_expression)))))
+                nil))
+            (scope [ag]
+              (case (r/ctor ag)
+                :query_expression (let [ctes (ctes ag)
+                                        tables (tables ag)]
+                                    {:ctes (zipmap (map :query-name ctes) ctes)
+                                     :tables (zipmap (map :correlation-name tables) tables)
+                                     :columns (set (columns ag))})))
+            (scopes [ag]
+              (case (r/ctor ag)
+                :query_expression (into [(scope ag)] (r/use-attributes scopes into ag) )
+                (r/use-attributes scopes into ag)))]
+      {:scopes (scopes (z/vector-zip query))
+       :errs (errs (z/vector-zip query))})))
+
+(comment
+  (time
+   (parse-sql2011
+    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
+    :start :directly_executable_statement))
+
+  (time
+   (parse
+    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"))
 
   (time
    (parse-sql2011
