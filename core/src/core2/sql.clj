@@ -23,27 +23,6 @@
      ([s start-rule]
       (vary-meta (parse-sql2011 s :start start-rule) assoc ::sql s)))))
 
-;; Rewrite to annotate variable scopes.
-
-(declare ->root-annotation-ctx)
-
-(defn- swap-select-list-and-table-expression [query-specification]
-  (let [[xs ys] (split-at (- (count query-specification) 2) query-specification)]
-    (with-meta (vec (concat xs (reverse ys))) (meta query-specification))))
-
-(defn- ->current-env [ctx-stack]
-  (some :env ctx-stack))
-
-(defn- ->env [loc]
-  (let [[{:keys [tables] :as ctx} :as ctx-stack] (r/->ctx-stack loc)]
-    (merge (->current-env ctx-stack) tables)))
-
-(defn- find-with-id [loc table-or-query-name]
-  (first (for [{:keys [with]} (r/->ctx-stack loc)
-               :let [{:keys [id]} (get with table-or-query-name)]
-               :when id]
-           id)))
-
 (defn- skip-whitespace ^long [^String s ^long n]
   (if (Character/isWhitespace (.charAt s n))
     (recur s (inc n))
@@ -55,93 +34,6 @@
         start-index (skip-whitespace sql start-index)
         {:keys [line column]} (instaparse.failure/index->line-column start-index sql)]
     (format "at line %d, column %d" line column)))
-
-(defn- next-id [loc]
-  (let [loc (vary-meta loc update ::next-id (fnil inc 0))]
-    [loc (::next-id (meta loc))]))
-
-(defn- register-table-primary [loc {:keys [table-or-query-name correlation-name] :as old-ctx}]
-  (let [[loc id] (next-id loc)
-        with-id (find-with-id loc table-or-query-name)
-        correlation-name (or correlation-name table-or-query-name)
-        table (cond-> {:table-or-query-name table-or-query-name
-                       :correlation-name correlation-name
-                       :id id}
-                with-id (assoc :with-id with-id))]
-    (-> (r/assoc-in-ctx loc [:tables correlation-name] table)
-        (z/edit vary-meta assoc ::table-id id))))
-
-(defn- register-with-list-element [loc {:keys [query-name] :as old-ctx}]
-  (let [[loc id] (next-id loc)]
-    (-> (r/assoc-in-ctx loc [:with query-name] {:query-name query-name :id id})
-        (z/edit vary-meta assoc ::with-id id))))
-
-(defn- validate-column-reference [loc _]
-  (let [identifiers (r/text-nodes loc)]
-    (case (count identifiers)
-      1 (throw (IllegalArgumentException.
-                (format "XTDB requires fully-qualified columns: %s %s"
-                        (first identifiers) (->line-info-str loc))))
-      (let [env (->env loc)
-            table-reference (first identifiers)]
-        (if-let [{:keys [id] :as table} (get env table-reference)]
-          (-> (z/edit loc vary-meta assoc ::table-id id)
-              (r/conj-ctx :columns {:identifiers identifiers :table-id id}))
-          (throw (IllegalArgumentException.
-                  (format "Table not in scope: %s %s"
-                          table-reference (->line-info-str loc)))))))))
-
-(defn- ->scoped-env []
-  (r/->scoped {:init (fn [loc]
-                       (assoc (r/->ctx loc) :env (->env loc)))}))
-
-(def ^:private root-annotation-rules
-  {:table_primary
-   (r/->scoped {:rule-overrides {:table_name (r/->text :table-or-query-name)
-                                 :query_name (r/->text :table-or-query-name)
-                                 :correlation_name (r/->text :correlation-name)}
-                :exit register-table-primary})
-
-   :column_reference
-   (r/->after validate-column-reference)
-
-   :from_clause
-   (r/->after (fn [loc _]
-                (r/assoc-ctx loc :env (->env loc))))
-
-   :qualified_join
-   (r/->scoped {:rule-overrides {:join_condition (->scoped-env)}
-                :init (fn [loc]
-                        (assoc (r/->ctx loc) :tables {}))
-                :exit (fn [loc {:keys [tables]}]
-                        (r/into-ctx loc :tables tables))})
-
-   :lateral_derived_table (->scoped-env)
-
-   :with_list_element
-   (r/->scoped {:rule-overrides {:query_name (r/->text :query-name)}
-                :exit register-with-list-element})
-
-   ;; NOTE: this temporary swap is done so table_expression is walked
-   ;; first, ensuring its variables are in scope by the time
-   ;; select_list is walked.
-   :query_specification
-   (r/->around (fn move-select-list-after-table-expression [loc _]
-                 (z/edit loc swap-select-list-and-table-expression))
-               (fn restore-select-list [loc _]
-                 (z/edit loc swap-select-list-and-table-expression)))
-
-   :query_expression
-   (r/->scoped {:init (fn [_]
-                        (->root-annotation-ctx))
-                :exit (fn [loc old-ctx]
-                        (z/edit loc vary-meta assoc ::scope (select-keys old-ctx [:with :tables :columns])))})})
-
-(defn- ->root-annotation-ctx []
-  {:tables {} :columns #{} :with {} :rules root-annotation-rules})
-
-(defn annotate-tree [tree]
-  (r/rewrite-tree tree (->root-annotation-ctx)))
 
 ;; Very rough draft attribute grammar for SQL semantics, aiming to
 ;; match the current annotation semantics. Does not handle
@@ -213,11 +105,6 @@
                 :query_specification (dclo (r/$ ag -1))
                 :from_clause (dclo (r/$ ag 2))
                 :table_reference_list (dcli (r/$ ag -1))))
-            (identifiers [ag]
-              (case (r/ctor ag)
-                (:column_reference
-                 :basic_identifier_chain) (identifiers (r/$ ag 1))
-                :identifier_chain (r/use-attributes identifier ag)))
             (identifier [ag]
               (case (r/ctor ag)
                 (:table_name
@@ -225,6 +112,11 @@
                  :correlation_name
                  :identifier) (identifier (r/$ ag 1))
                 :regular_identifier (r/lexme ag 1)))
+            (identifiers [ag]
+              (case (r/ctor ag)
+                (:column_reference
+                 :basic_identifier_chain) (identifiers (r/$ ag 1))
+                :identifier_chain (r/use-attributes identifier ag)))
             (table [ag]
               :table_factor (let [table-name (table-or-query-name ag)
                                   cte-id (get-in (cte-env ag) [table-name :id])]

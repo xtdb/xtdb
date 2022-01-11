@@ -6,117 +6,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-;; Rewrite engine.
-
-(defprotocol Rule
-  (--> [_ loc])
-  (<-- [_ loc]))
-
-(defn- zip-dispatch [loc direction-fn]
-  (let [tree (z/node loc)]
-    (if-let [rule (and (vector? tree)
-                       (get-in (meta loc) [::ctx 0 :rules (first tree)]))]
-      (direction-fn rule loc)
-      loc)))
-
-(defn ->ctx [loc]
-  (first (::ctx (meta loc))))
-
-(defn- init-ctx [loc ctx]
-  (vary-meta loc assoc ::ctx [ctx]))
-
-(defn ->ctx-stack [loc]
-  (::ctx (meta loc)))
-
-(defn vary-ctx [loc f & args]
-  (vary-meta loc update-in [::ctx 0] (fn [ctx]
-                                       (apply f ctx args))))
-
-(defn conj-ctx [loc k v]
-  (vary-ctx loc update k conj v))
-
-(defn into-ctx [loc k v]
-  (vary-ctx loc update k into v))
-
-(defn assoc-ctx [loc k v]
-  (vary-ctx loc assoc k v))
-
-(defn assoc-in-ctx [loc ks v]
-  (vary-ctx loc assoc-in ks v))
-
-(defn- pop-ctx [loc]
-  (vary-meta loc update ::ctx (comp vec rest)))
-
-(defn- push-ctx [loc ctx]
-  (vary-meta loc update ::ctx (partial into [ctx])))
-
-(defn text-nodes [loc]
-  (filterv string? (flatten (z/node loc))))
-
-(defn single-child? [loc]
-  (= 1 (count (rest (z/children loc)))))
-
-(defn ->before [before-fn]
-  (reify Rule
-    (--> [_ loc]
-      (before-fn loc (->ctx loc)))
-
-    (<-- [_ loc] loc)))
-
-(defn ->after [after-fn]
-  (reify Rule
-    (--> [_ loc] loc)
-
-    (<-- [_ loc]
-      (after-fn loc (->ctx loc)))))
-
-(defn ->around [before-fn after-fn]
-  (reify Rule
-    (--> [_ loc]
-      (before-fn loc (->ctx loc)))
-
-    (<-- [_ loc]
-      (after-fn loc (->ctx loc)))))
-
-(defn ->text [kw]
-  (->before
-   (fn [loc _]
-     (assoc-ctx loc kw (str/join (text-nodes loc))))))
-
-(defn ->scoped [{:keys [rule-overrides init exit]
-                 :or {rule-overrides {}
-                      init ->ctx
-                      exit (fn [loc _]
-                             loc)}}]
-  (reify Rule
-    (--> [_ loc]
-      (push-ctx loc (update (init loc) :rules merge rule-overrides)))
-
-    (<-- [_ loc]
-      (-> (pop-ctx loc)
-          (exit (->ctx loc))))))
-
-(defn rewrite-tree [tree ctx]
-  (loop [loc (init-ctx (z/vector-zip tree) ctx)]
-    (if (z/end? loc)
-      (z/root loc)
-      (let [loc (zip-dispatch loc -->)]
-        (recur (cond
-                 (z/branch? loc)
-                 (z/down loc)
-
-                 (seq (z/rights loc))
-                 (z/right (zip-dispatch loc <--))
-
-                 :else
-                 (loop [p loc]
-                   (let [p (zip-dispatch p <--)]
-                     (if-let [parent (z/up p)]
-                       (if (seq (z/rights parent))
-                         (z/right (zip-dispatch parent <--))
-                         (recur parent))
-                       [(z/node p) :end])))))))))
-
 ;; Zipper pattern matching
 
 (defn- zip-next-skip-subtree [loc]
@@ -206,6 +95,18 @@
                 acc))
        (f acc)))))
 
+;; TODO: this should go and really be done via rewrite rules.
+(defn use-children
+  ([attr-fn loc]
+   (use-children attr-fn conj loc))
+  ([attr-fn f loc]
+   (loop [loc (z/down loc)
+          acc (f)]
+     (if loc
+       (recur (z/right loc)
+              (f acc (attr-fn loc)))
+       (f acc)))))
+
 (defn ctor [ag]
   (when ag
     (let [node (z/node ag)]
@@ -229,11 +130,13 @@
 (defn first-child? [ag]
   (= 1 (count (z/lefts ag))))
 
+(defn single-child? [loc]
+  (= 1 (count (rest (z/children loc)))))
+
 (defn prev [ag]
   (if (first-child? ag)
     (parent ag)
     (z/left ag)))
-
 
 (defn with-memoized-attributes [attr-vars f]
   (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]

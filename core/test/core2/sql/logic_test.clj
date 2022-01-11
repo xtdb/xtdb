@@ -89,7 +89,7 @@ CREATE UNIQUE INDEX t1i0 ON t1(
         query "SELECT a+b*2+c*3+d*4+e*5, (a+b+c+d+e)/5 FROM t1 ORDER BY 1,2"
         expected "SELECT t1.a+t1.b*2+t1.c*3+t1.d*4+t1.e*5 AS col1, (t1.a+t1.b+t1.c+t1.d+t1.e)/5 AS col2 FROM t1 ORDER BY col1,col2"]
     (t/is (= (sql/parse expected :query_expression)
-             (xtdb-engine/normalize-query-tree tables (sql/parse query :query_expression))))))
+             (xtdb-engine/normalize-query tables (sql/parse query :query_expression))))))
 
 (t/deftest test-insert->doc
   (let [tables {"t1" ["a" "b" "c" "d" "e"]}]

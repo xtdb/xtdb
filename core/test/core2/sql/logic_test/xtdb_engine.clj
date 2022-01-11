@@ -79,56 +79,68 @@
   (case (first direct-sql-data-statement)
     :insert_statement (insert-statement node direct-sql-data-statement)))
 
-(defn ensure-column-has-as-clause [loc _]
-  (if (r/single-child? loc)
-    (let [column (str "col" (count (z/lefts loc)))]
-      (z/append-child
-       loc
-       [:as_clause
-        "AS"
-        [:column_name
-         [:identifier
-          [:regular_identifier column]]]]))
-    loc))
+;; TODO:
+;; - needs cleanup.
+;; - this should really use proper rewrite rules.
+;; - should be able to reuse basic rules.
 
-(defn- ensure-columns-are-qualified [loc {:keys [tables] :as old-ctx}]
-  (if (r/single-child? loc)
-    ;; TODO: does not take renamed tables into account.
-    (let [column (first (r/text-nodes loc))
-          table (first (for [[table columns] tables
-                             :when (contains? (set columns) column)]
-                         table))]
-      (z/replace loc [:identifier_chain
-                      [:identifier
-                       [:regular_identifier table]]
-                      [:identifier
-                       [:regular_identifier column]]]))
-    loc))
-
-(defn- replace-ordinal-sort-with-column-reference [loc _]
-  (let [ordinal (first (r/text-nodes loc))
-        column (str "col" ordinal)]
-    (z/replace loc [:numeric_value_expression
-                    [:term
-                     [:factor
-                      [:column_reference
-                       [:basic_identifier_chain
-                        [:identifier_chain
-                         [:identifier
-                          [:regular_identifier column]]]]]]]])))
-
-(def ^:private normalize-query-rules
-  {:select_list
-   (r/->scoped {:rule-overrides {:derived_column (r/->after ensure-column-has-as-clause)}})
-
-   :identifier_chain
-   (r/->after ensure-columns-are-qualified)
-
-   :sort_specification
-   (r/->scoped {:rule-overrides {:numeric_value_expression (r/->after replace-ordinal-sort-with-column-reference)}})})
-
-(defn normalize-query-tree [tables tree]
-  (r/rewrite-tree tree {:tables tables :rules normalize-query-rules}))
+(defn normalize-query [tables query]
+  (letfn [(identifier [ag]
+            (case (r/ctor ag)
+              :identifier (identifier (r/$ ag 1))
+              :regular_identifier (r/lexme ag 1)))
+          (number [ag]
+            (case (r/ctor ag)
+              (:numeric_value_expression
+               :term
+               :factor
+               :exact_numeric_literal) (number (r/$ ag 1))
+              :unsigned_integer (r/lexme ag 1)))
+          (qualify [ag]
+            (case (r/ctor ag)
+              :identifier_chain (z/node
+                                 (if (r/single-child? ag)
+                                   ;; TODO: does not take renamed tables into account.
+                                   (let [column (identifier (r/$ ag 1))
+                                         table (first (for [[table columns] tables
+                                                            :when (contains? (set columns) column)]
+                                                        table))]
+                                     (z/replace ag [:identifier_chain
+                                                    [:identifier
+                                                     [:regular_identifier table]]
+                                                    [:identifier
+                                                     [:regular_identifier column]]]))
+                                   ag))
+              (if (z/branch? ag)
+                (r/use-children qualify ag)
+                (z/node ag))))
+          (normalize [ag]
+            (case (r/ctor ag)
+              :derived_column (if (r/single-child? ag)
+                                (let [column (str "col" (count (z/lefts ag)))]
+                                  (conj (qualify ag)
+                                        [:as_clause
+                                         "AS"
+                                         [:column_name
+                                          [:identifier
+                                           [:regular_identifier column]]]]))
+                                (z/node ag))
+              :identifier_chain (qualify ag)
+              :sort_key (let [ordinal (number (r/$ ag 1))
+                              column (str "col" ordinal)]
+                          (z/node (z/replace ag [:sort_key
+                                                 [:numeric_value_expression
+                                                  [:term
+                                                   [:factor
+                                                    [:column_reference
+                                                     [:basic_identifier_chain
+                                                      [:identifier_chain
+                                                       [:identifier
+                                                        [:regular_identifier column]]]]]]]]])))
+              (if (z/branch? ag)
+                (r/use-children normalize ag)
+                (z/node ag))))]
+    (normalize (z/vector-zip query))))
 
 (defn parse-create-table [^String x]
   (when-let [[_ table-name columns] (re-find #"(?is)^\s*CREATE\s+TABLE\s+(\w+)\s*\((.+)\)\s*$" x)]
@@ -166,6 +178,6 @@
           db (snap/snapshot snapshot-factory)]
       (when (insta/failure? tree)
         (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
-      (let [tree (normalize-query-tree (:tables this) tree)]
+      (let [tree (normalize-query (:tables this) tree)]
         (->> (op/query-ra '[:scan [_id]] db)
              (mapv (comp vec keys)))))))
