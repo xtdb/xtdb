@@ -15,7 +15,7 @@
           (or (z/right p)
               (recur p))))))
 
-(defn- zip-match
+(defn zip-match
   ([pattern-loc loc]
    (zip-match pattern-loc loc {}))
   ([pattern-loc loc acc]
@@ -64,7 +64,7 @@
                       (filter symbol?)
                       (remove '#{_}))]
         `(let [loc# ~loc
-               loc# (if (:z/make-node (meta loc#))
+               loc# (if (:zip/make-node (meta loc#))
                       loc#
                       (z/vector-zip loc#))]
            (if-let [{:syms [~@vars] :as acc#} (zip-match (z/vector-zip '~pattern) loc#)]
@@ -114,6 +114,7 @@
 (def parent z/up)
 (def $ z-nth)
 (def lexme (comp z/node $))
+(def child-idx (comp count z/lefts))
 
 (defn first-child? [ag]
   (= 1 (count (z/lefts ag))))
@@ -317,20 +318,20 @@
 (defn rule
   ([p1 p2]
    (rule p1 p2 {:where id-tp}))
-  ([p1 p2 {:keys [where]}]
+  ([p1 p2 {f :where}]
    ;; NOTE: this should also capture vars inside where, but this would
    ;; require more plumbing as this will be a function, can manually
    ;; wrap the rule in a scope.
    (let [free-vars (filterv symbol? (flatten (concat p1 p2)))]
-     (scope free-vars (seq-tp (match p1) (match where) (build p2))))))
+     (scope free-vars (seq-tp (match p1) (where f) (build p2))))))
 
 ;; Type Unifying
 
 (defn- mempty [z]
-  ((get (meta z) :z/mempty vector)))
+  ((get (meta z) :zip/mempty vector)))
 
 (defn- mappend [z]
-  (get (meta z) :z/mappend into))
+  (get (meta z) :zip/mappend into))
 
 (defn seq-tu [& xs]
   (fn [z]
@@ -421,7 +422,7 @@
              (z/replace z))))
 
 (defn with-tu-monoid [z mempty mappend]
-  (vary-meta z assoc :z/mempty mempty :z/mappend mappend))
+  (vary-meta z assoc :zip/mempty mempty :zip/mappend mappend))
 
 (comment
 
