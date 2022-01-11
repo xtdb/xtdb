@@ -169,28 +169,26 @@
               (fn [_]
                 (swap! next-id inc)))]
     (letfn [(env [ag]
-              (when ag
-                (case (r/ctor ag)
-                  (:select_list
-                   :where_clause
-                   :group_by_clause
-                   :having_clause
-                   :order_by_clause) (dclo (r/parent ag))
-                  (:join_condition
-                   :lateral_derived_table) (dcli (r/parent ag))
-                  (env (r/parent ag)))))
+              (case (r/ctor ag)
+                (:select_list
+                 :where_clause
+                 :group_by_clause
+                 :having_clause
+                 :order_by_clause) (dclo (r/parent ag))
+                (:join_condition
+                 :lateral_derived_table) (dcli (r/parent ag))
+                (some-> (r/parent ag) (env))))
             (cte-env [ag]
-              (when ag
-                (case (r/ctor ag)
-                  :with_list_element (let [{:keys [query-name] :as cte} (cte ag)]
-                                       (assoc (cte-env (r/prev ag)) query-name cte))
-                  :query_expression_body (if (r/first-child? ag)
-                                           (cte-env (r/parent ag))
-                                           (-> (z/left ag) ;; :with-clause
-                                               (r/$ -1) ;; :with_list
-                                               (r/$ -1) ;; :with_list_element
-                                               (cte-env)))
-                  (cte-env (r/parent ag)))))
+              (case (r/ctor ag)
+                :with_list_element (let [{:keys [query-name] :as cte} (cte ag)]
+                                     (assoc (cte-env (r/prev ag)) query-name cte))
+                :query_expression_body (if (r/first-child? ag)
+                                         (cte-env (r/parent ag))
+                                         (-> (z/left ag) ;; :with-clause
+                                             (r/$ -1)    ;; :with_list
+                                             (r/$ -1)    ;; :with_list_element
+                                             (cte-env)))
+                (some-> (r/parent ag) (cte-env))))
             (cte [ag]
               :with_list_element {:query-name (table-or-query-name ag)
                                   :id (->id ag)})
@@ -201,26 +199,25 @@
             (-extend-env [env {:keys [correlation-name] :as table}]
               (assoc env correlation-name table))
             (dcli [ag]
-              (when ag
-                (case (r/ctor ag)
-                  :table_expression (env (r/parent ag))
-                  :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
-                                  (dcli (r/$ ag 1))
-                                  (-extend-env (dcli (r/prev ag)) (table ag)))
-                  :cross_join (-> (-extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
+              (case (r/ctor ag)
+                :table_expression (env (r/parent ag))
+                :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
+                                (dcli (r/$ ag 1))
+                                (-extend-env (dcli (r/prev ag)) (table ag)))
+                :cross_join (-> (-extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
+                                (-extend-env (table (r/$ ag -1))))
+                :qualified_join (-> (-extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
+                                    (-extend-env (table (r/$ ag -2))))
+                :natural_join (-> (-extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
                                   (-extend-env (table (r/$ ag -1))))
-                  :qualified_join (-> (-extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
-                                      (-extend-env (table (r/$ ag -2))))
-                  :natural_join (-> (-extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
-                                    (-extend-env (table (r/$ ag -1))))
-                  (dcli (r/parent ag)))))
+                (some-> (r/parent ag) (dcli))))
             (dclo [ag]
               (case (r/ctor ag)
                 (:query_expression_body
                  :query_term
-                 :query_primary) (dclo (r/$ ag 1))
+                 :query_primary
+                 :table_expression) (dclo (r/$ ag 1))
                 :query_specification (dclo (r/$ ag -1))
-                :table_expression (dclo (r/$ ag 1))
                 :from_clause (dclo (r/$ ag 2))
                 :table_reference_list (dcli (r/$ ag -1))))
             (identifiers [ag]
@@ -237,10 +234,9 @@
                 :regular_identifier (r/lexme ag 1)))
             (table [ag]
               :table_factor (let [table-name (table-or-query-name ag)
-                                  correlation-name (correlation-name ag)
                                   cte-id (get-in (cte-env ag) [table-name :id])]
                               (cond-> {:table-or-query-name table-name
-                                       :correlation-name correlation-name
+                                       :correlation-name (correlation-name ag)
                                        :id (->id ag)}
                                 cte-id (assoc :cte-id cte-id))))
             (tables [ag]
