@@ -7,5 +7,7 @@ import org.apache.arrow.memory.BufferAllocator;
 import java.nio.Buffer;
 
 public interface IProjectionSpec {
+    String getColumnName();
+
     IIndirectVector<?> project(BufferAllocator allocator, IIndirectRelation readRelation);
 }

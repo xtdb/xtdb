@@ -17,6 +17,13 @@
                        ^Map #_#_<String, String> rename-map
                        ^String prefix]
   ICursor
+  (getColumnNames [_]
+    (->> (.getColumnNames in-cursor)
+         (into #{}
+               (map (fn [old-name]
+                      (cond->> (get rename-map old-name old-name)
+                        prefix (str prefix relation-prefix-delimiter)))))))
+
   (tryAdvance [_ c]
     (binding [scan/*column->pushdown-bloom* (let [prefix-pattern (re-pattern (str "^" prefix relation-prefix-delimiter))
                                                   invert-rename-map (set/map-invert rename-map)]

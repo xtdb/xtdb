@@ -5,8 +5,7 @@
            [core2 DenseUnionUtil ICursor]
            [java.io ByteArrayOutputStream File]
            java.lang.AutoCloseable
-           [java.lang.invoke LambdaMetafactory MethodHandles MethodType]
-           [java.lang.reflect Field Method]
+           java.lang.reflect.Method
            java.net.URI
            java.nio.ByteBuffer
            [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
@@ -15,7 +14,7 @@
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant LocalDateTime ZonedDateTime ZoneId]
            java.time.temporal.ChronoUnit
-           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList List Map$Entry Queue UUID]
+           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList Map$Entry Queue UUID]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
            [java.util.function BiFunction Consumer Function IntUnaryOperator Supplier]
@@ -27,6 +26,7 @@
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
+           [org.apache.arrow.vector.types.pojo Field Schema]
            org.apache.arrow.vector.util.VectorSchemaRootAppender
            org.roaringbitmap.RoaringBitmap))
 
@@ -220,29 +220,6 @@
     (apply [_ a b]
       (f a b))))
 
-(defn ->sam [f ^Class target-interface]
-  (let [caller (MethodHandles/lookup)
-
-        implementing-class (class f)
-        [implementing-method] (.getDeclaredMethods implementing-class)
-        implementing-method-handle (.unreflect caller implementing-method)
-
-        [^Method sam-method] (for [^Method m (.getMethods target-interface)
-                                   :when (not (.isDefault m))]
-                               m)
-        sam-method-type (.type (.unreflect caller sam-method))
-        sam-method-type-without-this (.dropParameterTypes sam-method-type 0 1)
-
-        factory-method-type (MethodType/methodType target-interface implementing-class)
-        call-site (LambdaMetafactory/metafactory caller
-                                                 (.getName sam-method)
-                                                 factory-method-type
-                                                 sam-method-type-without-this
-                                                 implementing-method-handle
-                                                 sam-method-type-without-this)
-        ^List args [f]]
-    (.invokeWithArguments (.getTarget call-site) args)))
-
 (defn then-apply {:style/indent :defn}
   ^java.util.concurrent.CompletableFuture
   [^CompletableFuture fut f]
@@ -273,7 +250,7 @@
 
 (def uncaught-exception-handler
   (reify Thread$UncaughtExceptionHandler
-    (uncaughtException [_ thread throwable]
+    (uncaughtException [_ _thread throwable]
       (log/error throwable "Uncaught exception:"))))
 
 (defn install-uncaught-exception-handler! []
@@ -293,6 +270,13 @@
 (defn root-field-count ^long [^VectorSchemaRoot root]
   (.size (.getFields (.getSchema root))))
 
+(defn schema->col-names [^Schema schema]
+  (set (for [^Field field (.getFields schema)]
+         (.getName field))))
+
+(defn root->col-names [^VectorSchemaRoot root]
+  (schema->col-names (.getSchema root)))
+
 ;; TODO: can maybe tweak in DenseUnionVector, but that doesn't
 ;; solve the VSR calling this.
 (defn set-value-count [^ValueVector v ^long value-count]
@@ -311,7 +295,7 @@
       :else
       (.setValueCount v value-count))))
 
-(def ^:private ^Field vector-schema-root-row-count-field
+(def ^:private ^java.lang.reflect.Field vector-schema-root-row-count-field
   (doto (.getDeclaredField VectorSchemaRoot "rowCount")
     (.setAccessible true)))
 
@@ -484,6 +468,9 @@
                       ^:unsynchronized-mutable ^ArrowRecordBatch current-batch
                       ^boolean close-buffer?]
   ICursor
+  (getColumnNames [_]
+    (root->col-names root))
+
   (tryAdvance [this c]
     (when current-batch
       (try-close current-batch)
@@ -620,7 +607,7 @@
            (.clear buffers)
            (proxy-super close)))))))
 
-(def ^:private ^Field arrow-writer-unloader-field
+(def ^:private ^java.lang.reflect.Field arrow-writer-unloader-field
   (doto (.getDeclaredField ArrowWriter "unloader")
     (.setAccessible true)))
 

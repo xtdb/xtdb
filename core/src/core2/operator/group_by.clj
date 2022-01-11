@@ -19,11 +19,13 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IGroupMapper
+  (^java.util.Set getColumnNames [])
   (^org.apache.arrow.vector.IntVector groupMapping [^core2.vector.IIndirectRelation inRelation])
   (^java.util.List #_<IIndirectVector> finish []))
 
 (deftype NullGroupMapper [^IntVector group-mapping]
   IGroupMapper
+  (getColumnNames [_] #{})
   (groupMapping [_ in-rel]
     (.clear group-mapping)
     (let [row-count (.rowCount in-rel)]
@@ -91,6 +93,7 @@
                       ^Map group-hash->bitmap
                       ^IntVector group-mapping]
   IGroupMapper
+  (getColumnNames [_] (set group-col-names))
   (groupMapping [_ in-rel]
     (.clear group-mapping)
     (let [group-cols (mapv (fn [^String col-name]
@@ -155,6 +158,7 @@
       (NullGroupMapper. gm-vec))))
 
 (definterface IAggregateSpec
+  (^String getColumnName [])
   (^void aggregate [^core2.vector.IIndirectRelation inRelation,
                     ^org.apache.arrow.vector.IntVector groupMapping])
   (^core2.vector.IIndirectVector finish []))
@@ -272,6 +276,8 @@
         (let [out-pvec (PromotableVector. al (NullVector. to-name))]
           (reify
             IAggregateSpec
+            (getColumnName [_] to-name)
+
             (aggregate [_ in-rel group-mapping]
               (when (pos? (.rowCount in-rel))
                 (let [in-vec (.vectorForName in-rel (name from-var))
@@ -310,6 +316,8 @@
               res-vec (Float8Vector. to-name al)]
           (reify
             IAggregateSpec
+            (getColumnName [_] to-name)
+
             (aggregate [_ in-rel group-mapping]
               (.aggregate sum-agg in-rel group-mapping)
               (.aggregate count-agg in-rel group-mapping))
@@ -344,6 +352,8 @@
               res-vec (Float8Vector. to-name al)]
           (reify
             IAggregateSpec
+            (getColumnName [_] to-name)
+
             (aggregate [_ in-rel group-mapping]
               (with-open [x2 (.project x2-projecter al in-rel)]
                 (.aggregate avgx-agg in-rel group-mapping)
@@ -375,6 +385,8 @@
               res-vec (Float8Vector. to-name al)]
           (reify
             IAggregateSpec
+            (getColumnName [_] to-name)
+
             (aggregate [_ in-rel group-mapping]
               (.aggregate variance-agg in-rel group-mapping))
 
@@ -422,6 +434,11 @@
                         ^IGroupMapper group-mapper
                         ^List aggregate-specs]
   ICursor
+  (getColumnNames [_]
+    (into (.getColumnNames group-mapper)
+          (map #(.getColumnName ^IAggregateSpec %))
+          aggregate-specs))
+
   (tryAdvance [_ c]
     (try
       (.forEachRemaining in-cursor

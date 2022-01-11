@@ -11,9 +11,20 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype UnionAllCursor [^ICursor left-cursor
+(defn union-compatible-col-names [^ICursor left, ^ICursor right]
+  (let [left-col-names (.getColumnNames left)
+        right-col-names (.getColumnNames right)]
+    (when-not (= left-col-names right-col-names)
+      (throw (IllegalArgumentException. (format "union incompatible cols: %s vs %s" (pr-str left-col-names) (pr-str right-col-names)))))
+
+    left-col-names))
+
+(deftype UnionAllCursor [^Set col-names
+                         ^ICursor left-cursor
                          ^ICursor right-cursor]
   ICursor
+  (getColumnNames [_] col-names)
+
   (tryAdvance [_ c]
     (boolean
      (or (.tryAdvance left-cursor
@@ -35,7 +46,8 @@
     (util/try-close right-cursor)))
 
 (defn ->union-all-cursor ^core2.ICursor [^ICursor left-cursor, ^ICursor right-cursor]
-  (UnionAllCursor. left-cursor right-cursor))
+  (UnionAllCursor. (union-compatible-col-names left-cursor right-cursor)
+                   left-cursor right-cursor))
 
 (defn- copy-set-key [^BufferAllocator allocator ^List k]
   (dotimes [n (.size k)]
@@ -56,11 +68,14 @@
     set-key))
 
 (deftype IntersectionCursor [^BufferAllocator allocator
+                             ^Set col-names
                              ^ICursor left-cursor
                              ^ICursor right-cursor
                              ^Set intersection-set
                              difference?]
   ICursor
+  (getColumnNames [_] col-names)
+
   (tryAdvance [_ c]
     (.forEachRemaining right-cursor
                        (reify Consumer
@@ -105,15 +120,21 @@
     (util/try-close right-cursor)))
 
 (defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) true))
+  (IntersectionCursor. allocator (union-compatible-col-names left-cursor right-cursor)
+                       left-cursor right-cursor
+                       (HashSet.) true))
 
 (defn ->intersection-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) false))
+  (IntersectionCursor. allocator (union-compatible-col-names left-cursor right-cursor)
+                       left-cursor right-cursor
+                       (HashSet.) false))
 
 (deftype DistinctCursor [^BufferAllocator allocator
                          ^ICursor in-cursor
                          ^Set seen-set]
   ICursor
+  (getColumnNames [_] (.getColumnNames in-cursor))
+
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
       (while (and (not (aget advanced? 0))
@@ -180,6 +201,9 @@
                          ^:unsynchronized-mutable ^ICursor recursive-cursor
                          ^:unsynchronized-mutable continue?]
   ICursor
+  ;; HACK assumes recursive-cursor-factory has the same cols
+  (getColumnNames [_] (.getColumnNames base-cursor))
+
   (tryAdvance [this c]
     (if-not (or continue? recursive-cursor)
       false

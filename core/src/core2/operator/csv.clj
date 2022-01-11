@@ -1,15 +1,14 @@
 (ns core2.operator.csv
   (:require [clojure.data.csv :as csv]
             [clojure.instant :as inst]
+            [core2.edn :as edn]
             [core2.types :as types]
             [core2.util :as util]
-            [core2.vector.writer :as vw]
             [core2.vector.indirect :as iv]
-            [core2.edn :as edn])
+            [core2.vector.writer :as vw])
   (:import core2.ICursor
            java.lang.AutoCloseable
            [java.nio.file Files Path]
-           java.time.Duration
            [java.util Base64 Iterator]
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.types.pojo.Schema
@@ -22,6 +21,8 @@
                     col-parsers
                     ^Iterator row-batches]
   ICursor
+  (getColumnNames [_] (util/root->col-names root))
+
   (tryAdvance [_ c]
     (if (.hasNext row-batches)
       (let [row-batch (.next row-batches)

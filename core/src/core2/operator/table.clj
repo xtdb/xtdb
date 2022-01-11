@@ -15,6 +15,9 @@
                       ^List rows
                       ^:unsynchronized-mutable done?]
   ICursor
+  (getColumnNames [_]
+    (into #{} (map name) (keys (first rows))))
+
   (tryAdvance [this c]
     (if (or done? (.isEmpty rows))
       false

@@ -1042,6 +1042,8 @@
 (defn ->expression-projection-spec ^core2.operator.IProjectionSpec [^String col-name form params]
   (let [expr (form->expr form {:params params})]
     (reify IProjectionSpec
+      (getColumnName [_] col-name)
+
       (project [_ allocator in-rel]
         (let [eval-expr (emit-expr expr col-name {:var-fields (->var-fields in-rel expr)})]
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))

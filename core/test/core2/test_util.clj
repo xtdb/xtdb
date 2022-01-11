@@ -24,7 +24,7 @@
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo ArrowType FieldType Schema]))
+           [org.apache.arrow.vector.types.pojo ArrowType Field FieldType Schema]))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 
@@ -156,10 +156,12 @@
 
     root))
 
-(defn ->cursor ^core2.ICursor [schema blocks]
+(defn ->cursor ^core2.ICursor [^Schema schema, blocks]
   (let [blocks (LinkedList. blocks)
         root (VectorSchemaRoot/create schema *allocator*)]
     (reify ICursor
+      (getColumnNames [_] (util/schema->col-names schema))
+
       (tryAdvance [_ c]
         (if-let [block (some-> (.poll blocks) vec)]
           (do

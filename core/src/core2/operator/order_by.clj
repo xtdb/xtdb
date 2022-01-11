@@ -64,6 +64,8 @@
                         ^ICursor in-cursor
                         ^List #_<OrderSpec> order-specs]
   ICursor
+  (getColumnNames [_] (.getColumnNames in-cursor))
+
   (tryAdvance [_ c]
     (with-open [read-rel (accumulate-relations allocator in-cursor)]
       (if (pos? (.rowCount read-rel))

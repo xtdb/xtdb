@@ -157,6 +157,8 @@
                      ^:unsynchronized-mutable ^Map #_#_<String, ICursor> chunks
                      ^:unsynchronized-mutable ^boolean live-chunk-done?]
   ICursor
+  (getColumnNames [_] (set col-names))
+
   (tryAdvance [this c]
     (let [real-col-names (remove temporal/temporal-column? col-names)]
       (letfn [(next-block [chunks]

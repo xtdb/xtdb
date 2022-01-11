@@ -12,6 +12,7 @@
 
 (deftype IdentityProjectionSpec [^String col-name]
   IProjectionSpec
+  (getColumnName [_] col-name)
   (project [_ _allocator in-rel]
     (.vectorForName in-rel col-name)))
 
@@ -22,6 +23,9 @@
                         ^ICursor in-cursor
                         ^List #_<IProjectionSpec> projection-specs]
   ICursor
+  (getColumnNames [_]
+    (into #{} (map #(.getColumnName ^IProjectionSpec %)) projection-specs))
+
   (tryAdvance [_ c]
     (.tryAdvance in-cursor
                  (reify Consumer

@@ -11,6 +11,9 @@
                       ^:unsynchronized-mutable ^int start-idx
                       ^:unsynchronized-mutable ^VectorSchemaRoot current-slice]
   ICursor
+  (getColumnNames [_]
+    )
+
   (tryAdvance [this c]
     (when current-slice
       (.close current-slice)

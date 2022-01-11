@@ -41,6 +41,10 @@
                           ^:unsynchronized-mutable ^Iterator left-rel-iterator
                           ^:unsynchronized-mutable ^IIndirectRelation right-rel]
   ICursor
+  (getColumnNames [_]
+    (set/union (set (.getColumnNames left-cursor))
+               (set (.getColumnNames right-cursor))))
+
   (tryAdvance [this c]
     (.forEachRemaining left-cursor
                        (reify Consumer
@@ -205,6 +209,10 @@
                      ^MutableRoaringBitmap pushdown-bloom
                      join-type]
   ICursor
+  (getColumnNames [_]
+    (set/union (set (.getColumnNames build-cursor))
+               (set (.getColumnNames probe-cursor))))
+
   (tryAdvance [_ c]
     (let [semi-join? (contains? #{:semi :anti-semi} join-type)]
       (.forEachRemaining build-cursor
