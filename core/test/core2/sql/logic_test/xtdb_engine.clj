@@ -1,9 +1,9 @@
 (ns core2.sql.logic-test.xtdb-engine
   (:require [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.zip :as zip]
+            [clojure.zip :as z]
             [core2.api :as c2]
-            [core2.rewrite :as rew]
+            [core2.rewrite :as r]
             [core2.snapshot :as snap]
             [core2.sql :as sql]
             [core2.sql.logic-test.runner :as slt]
@@ -80,9 +80,9 @@
     :insert_statement (insert-statement node direct-sql-data-statement)))
 
 (defn ensure-column-has-as-clause [loc _]
-  (if (rew/single-child? loc)
-    (let [column (str "col" (count (zip/lefts loc)))]
-      (zip/append-child
+  (if (r/single-child? loc)
+    (let [column (str "col" (count (z/lefts loc)))]
+      (z/append-child
        loc
        [:as_clause
         "AS"
@@ -92,43 +92,43 @@
     loc))
 
 (defn- ensure-columns-are-qualified [loc {:keys [tables] :as old-ctx}]
-  (if (rew/single-child? loc)
+  (if (r/single-child? loc)
     ;; TODO: does not take renamed tables into account.
-    (let [column (first (rew/text-nodes loc))
+    (let [column (first (r/text-nodes loc))
           table (first (for [[table columns] tables
                              :when (contains? (set columns) column)]
                          table))]
-      (zip/replace loc [:identifier_chain
-                        [:identifier
-                         [:regular_identifier table]]
-                        [:identifier
-                         [:regular_identifier column]]]))
+      (z/replace loc [:identifier_chain
+                      [:identifier
+                       [:regular_identifier table]]
+                      [:identifier
+                       [:regular_identifier column]]]))
     loc))
 
 (defn- replace-ordinal-sort-with-column-reference [loc _]
-  (let [ordinal (first (rew/text-nodes loc))
+  (let [ordinal (first (r/text-nodes loc))
         column (str "col" ordinal)]
-    (zip/replace loc [:numeric_value_expression
-                      [:term
-                       [:factor
-                        [:column_reference
-                         [:basic_identifier_chain
-                          [:identifier_chain
-                           [:identifier
-                            [:regular_identifier column]]]]]]]])))
+    (z/replace loc [:numeric_value_expression
+                    [:term
+                     [:factor
+                      [:column_reference
+                       [:basic_identifier_chain
+                        [:identifier_chain
+                         [:identifier
+                          [:regular_identifier column]]]]]]]])))
 
 (def ^:private normalize-query-rules
   {:select_list
-   (rew/->scoped {:rule-overrides {:derived_column (rew/->after ensure-column-has-as-clause)}})
+   (r/->scoped {:rule-overrides {:derived_column (r/->after ensure-column-has-as-clause)}})
 
    :identifier_chain
-   (rew/->after ensure-columns-are-qualified)
+   (r/->after ensure-columns-are-qualified)
 
    :sort_specification
-   (rew/->scoped {:rule-overrides {:numeric_value_expression (rew/->after replace-ordinal-sort-with-column-reference)}})})
+   (r/->scoped {:rule-overrides {:numeric_value_expression (r/->after replace-ordinal-sort-with-column-reference)}})})
 
 (defn normalize-query-tree [tables tree]
-  (rew/rewrite-tree tree {:tables tables :rules normalize-query-rules}))
+  (r/rewrite-tree tree {:tables tables :rules normalize-query-rules}))
 
 (defn parse-create-table [^String x]
   (when-let [[_ table-name columns] (re-find #"(?is)^\s*CREATE\s+TABLE\s+(\w+)\s*\((.+)\)\s*$" x)]

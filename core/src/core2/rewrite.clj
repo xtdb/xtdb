@@ -1,7 +1,7 @@
 (ns core2.rewrite
   (:require [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.zip :as zip])
+            [clojure.zip :as z])
   (:import [clojure.lang IDeref Indexed IRecord]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -13,7 +13,7 @@
   (<-- [_ loc]))
 
 (defn- zip-dispatch [loc direction-fn]
-  (let [tree (zip/node loc)]
+  (let [tree (z/node loc)]
     (if-let [rule (and (vector? tree)
                        (get-in (meta loc) [::ctx 0 :rules (first tree)]))]
       (direction-fn rule loc)
@@ -51,10 +51,10 @@
   (vary-meta loc update ::ctx (partial into [ctx])))
 
 (defn text-nodes [loc]
-  (filterv string? (flatten (zip/node loc))))
+  (filterv string? (flatten (z/node loc))))
 
 (defn single-child? [loc]
-  (= 1 (count (rest (zip/children loc)))))
+  (= 1 (count (rest (z/children loc)))))
 
 (defn ->before [before-fn]
   (reify Rule
@@ -97,33 +97,33 @@
           (exit (->ctx loc))))))
 
 (defn rewrite-tree [tree ctx]
-  (loop [loc (init-ctx (zip/vector-zip tree) ctx)]
-    (if (zip/end? loc)
-      (zip/root loc)
+  (loop [loc (init-ctx (z/vector-zip tree) ctx)]
+    (if (z/end? loc)
+      (z/root loc)
       (let [loc (zip-dispatch loc -->)]
         (recur (cond
-                 (zip/branch? loc)
-                 (zip/down loc)
+                 (z/branch? loc)
+                 (z/down loc)
 
-                 (seq (zip/rights loc))
-                 (zip/right (zip-dispatch loc <--))
+                 (seq (z/rights loc))
+                 (z/right (zip-dispatch loc <--))
 
                  :else
                  (loop [p loc]
                    (let [p (zip-dispatch p <--)]
-                     (if-let [parent (zip/up p)]
-                       (if (seq (zip/rights parent))
-                         (zip/right (zip-dispatch parent <--))
+                     (if-let [parent (z/up p)]
+                       (if (seq (z/rights parent))
+                         (z/right (zip-dispatch parent <--))
                          (recur parent))
-                       [(zip/node p) :end])))))))))
+                       [(z/node p) :end])))))))))
 
 ;; Zipper pattern matching
 
 (defn- zip-next-skip-subtree [loc]
-  (or (zip/right loc)
+  (or (z/right loc)
       (loop [p loc]
-        (when-let [p (zip/up p)]
-          (or (zip/right p)
+        (when-let [p (z/up p)]
+          (or (z/right p)
               (recur p))))))
 
 (defn- zip-match
@@ -135,29 +135,29 @@
           acc acc]
      (cond
        (or (nil? pattern-loc)
-           (zip/end? pattern-loc))
+           (z/end? pattern-loc))
        acc
 
        (or (nil? loc)
-           (zip/end? loc))
+           (z/end? loc))
        nil
 
-       (and (zip/branch? pattern-loc)
-            (zip/branch? loc))
-       (when (= (count (zip/children pattern-loc))
-                (count (zip/children loc)))
-         (recur (zip/down pattern-loc) (zip/down loc) acc))
+       (and (z/branch? pattern-loc)
+            (z/branch? loc))
+       (when (= (count (z/children pattern-loc))
+                (count (z/children loc)))
+         (recur (z/down pattern-loc) (z/down loc) acc))
 
        :else
-       (let [pattern-node (zip/node pattern-loc)
-             node (zip/node loc)]
+       (let [pattern-node (z/node pattern-loc)
+             node (z/node loc)]
          (cond
            (= pattern-node node)
            (recur (zip-next-skip-subtree pattern-loc) (zip-next-skip-subtree loc) acc)
 
            (and (symbol? pattern-node)
                 (= node (get acc pattern-node node)))
-           (recur (zip/next pattern-loc)
+           (recur (z/next pattern-loc)
                   (zip-next-skip-subtree loc)
                   (cond-> acc
                     (not= '_ pattern-node) (assoc pattern-node
@@ -175,10 +175,10 @@
                       (filter symbol?)
                       (remove '#{_}))]
         `(let [loc# ~loc
-               loc# (if (:zip/make-node (meta loc#))
+               loc# (if (:z/make-node (meta loc#))
                       loc#
-                      (zip/vector-zip loc#))]
-           (if-let [{:syms [~@vars] :as acc#} (zip-match (zip/vector-zip '~pattern) loc#)]
+                      (z/vector-zip loc#))]
+           (if-let [{:syms [~@vars] :as acc#} (zip-match (z/vector-zip '~pattern) loc#)]
              ~expr
              (zmatch loc# ~@clauses))))
       pattern)))
@@ -195,11 +195,11 @@
   ([attr-fn loc]
    (use-attributes attr-fn conj loc))
   ([attr-fn f loc]
-   (loop [loc (zip/right (zip/down loc))
+   (loop [loc (z/right (z/down loc))
           acc (f)]
      (if loc
-       (recur (zip/right loc)
-              (if (zip/branch? loc)
+       (recur (z/right loc)
+              (if (z/branch? loc)
                 (if-some [v (attr-fn loc)]
                   (f acc v)
                   acc)
@@ -208,26 +208,32 @@
 
 (defn ctor [ag]
   (when ag
-    (let [node (zip/node ag)]
+    (let [node (z/node ag)]
       (when (vector? node)
         (first node)))))
 
-(defn- z-nth [ag n]
+(defn- z-nth [ag ^long n]
   (reduce
    (fn [ag f]
      (f ag))
-   (zip/down ag)
+   (z/down ag)
    (repeat (if (neg? n)
-             (+ (count (zip/children ag)) n)
+             (+ (count (z/children ag)) n)
              n)
-           zip/right)))
+           z/right)))
+
+(def parent z/up)
+(def $ z-nth)
+(def lexme (comp z/node $))
 
 (defn first-child? [ag]
-  (= 1 (count (zip/lefts ag))))
+  (= 1 (count (z/lefts ag))))
 
-(def parent zip/up)
-(def $ z-nth)
-(def lexme (comp zip/node $))
+(defn prev [ag]
+  (if (first-child? ag)
+    (parent ag)
+    (z/left ag)))
+
 
 (defn with-memoized-attributes [attr-vars f]
   (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
@@ -235,19 +241,19 @@
 
 (defn ->attributed-tree [tree attr-vars]
   (with-memoized-attributes attr-vars
-    #(loop [loc (zip/vector-zip tree)]
-       (if (zip/end? loc)
-         (zip/node loc)
-         (recur (zip/next (if (zip/branch? loc)
-                            (if-let [acc (some->> (for [k attr-vars
-                                                        :let [v (k loc)]
-                                                        :when (some? v)]
-                                                    [(:name (meta k)) v])
-                                                  (not-empty)
-                                                  (into {}))]
-                              (zip/edit loc vary-meta merge acc)
-                              loc)
-                            loc)))))))
+    #(loop [loc (z/vector-zip tree)]
+       (if (z/end? loc)
+         (z/node loc)
+         (recur (z/next (if (z/branch? loc)
+                          (if-let [acc (some->> (for [k attr-vars
+                                                      :let [v (k loc)]
+                                                      :when (some? v)]
+                                                  [(:name (meta k)) v])
+                                                (not-empty)
+                                                (into {}))]
+                            (z/edit loc vary-meta merge acc)
+                            loc)
+                          loc)))))))
 
 (comment
 
@@ -274,7 +280,7 @@
       [:leaf n] n))
 
   (defn globmin [loc]
-    (if-let [p (zip/up loc)]
+    (if-let [p (z/up loc)]
       (globmin p)
       (locmin loc)))
 
@@ -355,7 +361,7 @@
       (use-attributes errs into ag)))
 
   (errs
-   (zip/vector-zip
+   (z/vector-zip
     [:root
      [:let
       [:cons "a" [:plus [:variable "b"] [:constant 3]]
@@ -374,7 +380,7 @@
   ;; in (a + 7) ∗ c
 
   (errs
-   (zip/vector-zip
+   (z/vector-zip
     [:root
      [:let
       [:cons "a" [:plus [:variable "z"] [:constant 3]]
@@ -392,7 +398,7 @@
       (if (and (= :Decl (ctor n))
                (= (lexme n 2) name))
         n
-        (recur (zip/left n) name))))
+        (recur (z/left n) name))))
 
   (declare l-decl)
 
@@ -404,7 +410,7 @@
                          (parent)
                          (g-decl name)))
       :Prog (or (find-l-decl n name)
-                (zip/vector-zip [:DErr]))))
+                (z/vector-zip [:DErr]))))
 
   (defn l-decl [n name]
     (case (ctor n)
@@ -416,7 +422,7 @@
       :Use (type' (g-decl n (lexme n 1)))
       :Decl (lexme n 1)
       :DErr "ErrorType"
-      (:Prog :Block) (type' (zip/rightmost (zip/down n)))))
+      (:Prog :Block) (type' (z/rightmost (z/down n)))))
 
   (defn well-formed? [n]
     (case (ctor n)
@@ -431,7 +437,7 @@
                                      n)))
 
   (well-formed?
-   (zip/vector-zip
+   (z/vector-zip
     [:Prog
      [:Decl "Integer" "a"]
      [:Block [:Use "b"] [:Use  "a"] [:Decl "Real" "a"] [:Use "a"]]
@@ -454,7 +460,7 @@
                (if (> v (base n))
                  Double/NaN
                  v))
-      :num (if (= 2 (count (zip/children n)))
+      :num (if (= 2 (count (z/children n)))
              (value ($ n 1))
              (+ (* (base n)
                    (value ($ n 1)))
@@ -466,7 +472,7 @@
       (with-memoized-attributes
         [#'base #'value]
         #(value
-          (zip/vector-zip
+          (z/vector-zip
            [:based-num
             [:num
              [:num
@@ -532,11 +538,11 @@
 
 (defn- maybe-keep [x y]
   (fn [z]
-   (if-some [r (y z)]
-     (if-some [k (x r)]
-       k
-       r)
-     (x z))))
+    (if-some [r (y z)]
+      (if-some [k (x r)]
+        k
+        r)
+      (x z))))
 
 (defn adhoc-tp [f g]
   (maybe-keep f (z-try-apply-m g)))
@@ -550,14 +556,14 @@
 
 (defn- all-tp-right [f]
   (fn [z]
-    (if-some [r (zip/right z)]
-      (zip/left (f r))
+    (if-some [r (z/right z)]
+      (z/left (f r))
       z)))
 
 (defn- all-tp-down [f]
   (fn [z]
-    (if-some [d (zip/down z)]
-      (zip/up (f d))
+    (if-some [d (z/down z)]
+      (z/up (f d))
       z)))
 
 (defn all-tp [f]
@@ -565,15 +571,15 @@
 
 (defn one-tp-right [f]
   (fn [z]
-    (some->> (zip/right z)
+    (some->> (z/right z)
              (f)
-             (zip/left))))
+             (z/left))))
 
 (defn one-tp-down [f]
   (fn [z]
-    (some->> (zip/down z)
+    (some->> (z/down z)
              (f)
-             (zip/up))))
+             (z/up))))
 
 (defn one-tp [f]
   (choice-tp (one-tp-down f) (one-tp-right f)))
@@ -610,7 +616,7 @@
 ;; <add>(i, j) => k = !(i, j); add; ?k
 
 (defn match [pattern]
-  (let [pattern-loc (zip/vector-zip pattern)]
+  (let [pattern-loc (z/vector-zip pattern)]
     (fn [z]
       (when-let [env (zip-match pattern-loc z (::env (meta z)))]
         (vary-meta z assoc ::env env)))))
@@ -618,7 +624,7 @@
 (defn build [pattern]
   (fn [z]
     (when-let [env (::env (meta z))]
-      (zip/replace z (w/postwalk-replace env pattern)))))
+      (z/replace z (w/postwalk-replace env pattern)))))
 
 (defn scope [free-vars f]
   (fn [z]
@@ -657,10 +663,10 @@
 ;; Type Unifying
 
 (defn- mempty [z]
-  ((get (meta z) :zip/mempty vector)))
+  ((get (meta z) :z/mempty vector)))
 
 (defn- mappend [z]
-  (get (meta z) :zip/mappend into))
+  (get (meta z) :z/mappend into))
 
 (defn seq-tu [& xs]
   (fn [z]
@@ -699,12 +705,12 @@
 
 (defn- all-tu-down [f]
   (fn [z]
-    (when-some [d (zip/down z)]
+    (when-some [d (z/down z)]
       (f d))))
 
 (defn- all-tu-right [f]
   (fn [z]
-    (when-some [r (zip/right z)]
+    (when-some [r (z/right z)]
       (f r))))
 
 (defn all-tu [f]
@@ -734,24 +740,24 @@
 
 (defn z-try-reduce-mz [f]
   (fn [z]
-    (some-> (zip/node z) (f z))))
+    (some-> (z/node z) (f z))))
 
 (defn z-try-reduce-m [f]
   (fn [z]
-    (some-> (zip/node z) (f))))
+    (some-> (z/node z) (f))))
 
 (defn z-try-apply-mz [f]
   (fn [z]
-    (some->> (f (zip/node z) z)
-             (zip/replace z))))
+    (some->> (f (z/node z) z)
+             (z/replace z))))
 
 (defn z-try-apply-m [f]
   (fn [z]
-    (some->> (f (zip/node z))
-             (zip/replace z))))
+    (some->> (f (z/node z))
+             (z/replace z))))
 
 (defn with-tu-monoid [z mempty mappend]
-  (vary-meta z assoc :zip/mempty mempty :zip/mappend mappend))
+  (vary-meta z assoc :z/mempty mempty :z/mappend mappend))
 
 ;; Alternative Zipper implementation:
 
@@ -1040,14 +1046,14 @@
         tree (->attributed-tree tree [#'repmin #'locmin #'globmin])]
     (keep meta (tree-seq vector? seq tree)))
 
-  (zip-match (zip/vector-zip '[:leaf n])
-             (zip/vector-zip [:leaf 2]))
+  (zip-match (z/vector-zip '[:leaf n])
+             (z/vector-zip [:leaf 2]))
 
   ((full-td-tp (adhoc-tp id-tp (fn [x] (prn x) (when (number? x) (str x)))))
-   (zip/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]))
+   (z/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]))
 
   ((full-bu-tu (mono-tu (fn [x] (prn x) (when (number? x) [x]))))
-   (zip/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]))
+   (z/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]))
 
   (= ["a" "c" "b" "c"]
      ((full-td-tu (mono-tu
@@ -1055,7 +1061,7 @@
                       [:assign s _ _] [s]
                       [:nested-let s _ _] [s]
                       _ [])))
-      (zip/vector-zip
+      (z/vector-zip
        [:let
         [:assign "a"
          [:add [:var "b"] [:const 0]]
