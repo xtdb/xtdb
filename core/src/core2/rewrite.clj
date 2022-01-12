@@ -337,7 +337,7 @@
   (fn [z]
     (transduce (map (fn [x] (x z)))
                (monoid z)
-               (reverse xs))))
+               xs)))
 
 (def choice-tu choice-tp)
 
@@ -664,7 +664,7 @@
    (z/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]))
 
   (= ["a" "c" "b" "c"]
-     ((full-td-tu (mono-tu
+     ((full-bu-tu (mono-tu
                    #(zmatch %
                       [:assign s _ _] [s]
                       [:nested-let s _ _] [s]
