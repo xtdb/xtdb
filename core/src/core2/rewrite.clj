@@ -333,7 +333,6 @@
 (defn- monoid [z]
   (get (meta z) :zip/monoid into))
 
-
 (defn seq-tu [& xs]
   (fn [z]
     (transduce (map (fn [x] (x z)))
