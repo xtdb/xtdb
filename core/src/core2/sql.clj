@@ -40,6 +40,7 @@
 ;; TODO:
 ;; - too complex threading logic.
 ;; - unclear?
+;; - join tables should be added into the env one by one?
 ;; - mutable ids, use references instead?
 ;; - should really be modular and not single letfn.
 
@@ -58,8 +59,8 @@
                  :group_by_clause
                  :having_clause
                  :order_by_clause) (dclo (r/parent ag))
-                :qualified_join (-> (extend-env (env (r/parent ag)) (table (r/$ ag 1)))
-                                    (extend-env (table (r/$ ag -2))))
+                :join_condition (-> (extend-env (env (r/parent ag)) (table (r/$ (r/parent ag) 1)))
+                                    (extend-env (table (r/$ (r/parent ag) -2))))
                 :lateral_derived_table (dcli (r/parent ag))
                 (some-> (r/parent ag) (env))))
             (dcli [ag]
