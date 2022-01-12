@@ -330,17 +330,14 @@
 
 ;; Type Unifying
 
-(defn- mempty [z]
-  ((get (meta z) :zip/mempty vector)))
+(defn- monoid [z]
+  (get (meta z) :zip/monoid into))
 
-(defn- mappend [z]
-  (get (meta z) :zip/mappend into))
 
 (defn seq-tu [& xs]
   (fn [z]
     (transduce (map (fn [x] (x z)))
-               (mappend z)
-               (mempty z)
+               (monoid z)
                (reverse xs))))
 
 (def choice-tu choice-tp)
@@ -424,8 +421,8 @@
     (some->> (f (z/node z))
              (z/replace z))))
 
-(defn with-tu-monoid [z mempty mappend]
-  (vary-meta z assoc :zip/mempty mempty :zip/mappend mappend))
+(defn with-tu-monoid [z f]
+  (vary-meta z assoc :zip/monoid f))
 
 (comment
 
