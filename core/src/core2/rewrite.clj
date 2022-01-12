@@ -378,12 +378,10 @@
       (f r))))
 
 (defn all-tu [f]
-  (fn [z]
-    ((seq-tu (all-tu-down f) (all-tu-right f)) z)))
+  (seq-tu (all-tu-down f) (all-tu-right f)))
 
 (defn one-tu [f]
-  (fn [z]
-    ((choice-tu (all-tu-down f) (all-tu-right f)) z)))
+  (choice-tu (all-tu-down f) (all-tu-right f)))
 
 (declare z-try-reduce-m z-try-reduce-mz)
 
