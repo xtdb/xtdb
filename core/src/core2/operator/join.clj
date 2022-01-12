@@ -1,19 +1,20 @@
 (ns core2.operator.join
-  (:require [core2.bloom :as bloom]
-            [core2.expression.hash :as hash]
+  (:require [clojure.set :as set]
+            [core2.bloom :as bloom]
+            [core2.expression.map :as emap]
             [core2.operator.scan :as scan]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw]
-            [clojure.set :as set])
-  (:import core2.ICursor
+            [core2.vector.writer :as vw])
+  (:import core2.expression.map.IRelationMap
+           core2.ICursor
            core2.types.LegType
            [core2.vector IIndirectRelation IIndirectVector IRelationWriter IRowCopier IVectorWriter]
-           [java.util ArrayList HashMap Iterator List Map]
-           [java.util.function Consumer Function]
+           [java.util ArrayList Iterator List]
+           java.util.function.Consumer
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.memory.util.ArrowBufPointer
+           [org.roaringbitmap IntConsumer RoaringBitmap]
            org.roaringbitmap.buffer.MutableRoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -81,131 +82,98 @@
 (defn ->cross-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
   (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))
 
-(definterface IBuildRow
-  (^void copyRow []))
-
-(definterface IBuildPointer
-  (^boolean isMatched [])
-  (^void markMatched []))
-
-(deftype BuildPointer [^List #_<IRowCopier> row-copiers, ^int idx, pointer-or-object,
-                       ^:unsynchronized-mutable ^boolean matched?]
-  IBuildPointer
-  (isMatched [_] matched?)
-  (markMatched [this] (set! (.matched? this) true))
-
-  IBuildRow
-  (copyRow [_]
-    (doseq [^IRowCopier copier row-copiers]
-      (.copyRow copier idx))))
-
-(defn- ->null-build-row ^core2.operator.join.IBuildRow [^IRelationWriter rel-writer, ^List col-names]
-  (let [cols (vec (for [col-name col-names]
-                    (let [writer (.writerForName rel-writer col-name)
-                          null-writer (-> (.asDenseUnion writer)
-                                          (.writerForType LegType/NULL))]
-                      (reify IBuildRow
-                        (copyRow [_]
-                          (.startValue writer)
-                          (.startValue null-writer)
-                          (.endValue null-writer)
-                          (.endValue writer))))))]
-    (reify IBuildRow
-      (copyRow [_]
-        (doseq [^IBuildRow col cols]
-          (.copyRow col))))))
-
-(defn- build-phase [^IRelationWriter rel-writer
-                    ^IIndirectRelation build-rel
+(defn- build-phase [^IIndirectRelation build-rel
                     ^String build-column-name
-                    ^String probe-column-name
-                    ^Map join-key->build-pointers
-                    ^MutableRoaringBitmap pushdown-bloom
-                    semi-join?]
-  (let [row-copiers (when-not semi-join?
-                      (vec (for [^IIndirectVector col build-rel
-                                 :let [col-name (.getName col)]
-                                 :when (not= col-name probe-column-name)]
-                             (vw/->row-copier (.writerForName rel-writer col-name) col))))
-        build-col (.vectorForName build-rel build-column-name)
-        hasher (hash/->hasher build-col)
-        internal-vec (.getVector build-col)]
-    (dotimes [build-idx (.getValueCount build-col)]
-      (let [idx (.getIndex build-col build-idx)]
-        (.add pushdown-bloom ^ints (bloom/bloom-hashes internal-vec idx))
-        (doto ^List (.computeIfAbsent join-key->build-pointers
-                                      (.hashCode hasher build-idx)
-                                      (reify Function
-                                        (apply [_ _x]
-                                          (ArrayList.))))
-          (.add (BuildPointer. row-copiers build-idx
-                               (util/pointer-or-object internal-vec idx)
-                               false)))))))
+                    ^IRelationMap rel-map
+                    ^MutableRoaringBitmap pushdown-bloom]
+  (let [build-col (.vectorForName build-rel build-column-name)
+        internal-vec (.getVector build-col)
+        rel-map-builder (.buildFromRelation rel-map build-rel)]
+    (dotimes [build-idx (.rowCount build-rel)]
+      (.add rel-map-builder build-idx)
+      (.add pushdown-bloom ^ints (bloom/bloom-hashes internal-vec (.getIndex build-col build-idx))))))
+
+(defn- ->null-row-copier ^core2.vector.IRowCopier [^IVectorWriter out-writer]
+  (let [null-writer (-> out-writer
+                        (.asDenseUnion)
+                        (.writerForType LegType/NULL))]
+    (reify IRowCopier
+      (copyRow [_ _idx]
+        (.startValue out-writer)
+        (.startValue null-writer)
+        (.endValue null-writer)
+        (.endValue out-writer)))))
+
+(defn- ->nullable-row-copier ^core2.vector.IRowCopier [^IIndirectVector in-col, ^IRelationWriter out-rel, join-type]
+  (let [col-name (.getName in-col)
+        writer (.writerForName out-rel col-name)
+        row-copier (vw/->row-copier writer in-col)
+        null-copier (when (contains? #{:full-outer :left-outer} join-type)
+                      (->null-row-copier writer))]
+    (reify IRowCopier
+      (copyRow [_ idx]
+        (if (neg? idx)
+          (.copyRow null-copier idx)
+          (.copyRow row-copier idx))))))
 
 (defn- probe-phase ^core2.vector.IIndirectRelation [^IRelationWriter rel-writer
-                                                    ^IBuildRow null-build-row
                                                     ^IIndirectRelation probe-rel
-                                                    ^Map join-key->build-pointers
+                                                    ^IRelationMap rel-map
                                                     ^String probe-column-name
+                                                    ^RoaringBitmap matched-build-idxs
                                                     join-type]
   (when (pos? (.rowCount probe-rel))
     (let [semi-join? (contains? #{:semi :anti-semi} join-type)
           anti-join? (= :anti-semi join-type)
           outer-join? (contains? #{:full-outer :left-outer} join-type)
 
-          probe-row-copiers (vec (for [^IIndirectVector col probe-rel]
-                                   (vw/->row-copier (.writerForName rel-writer (.getName col)) col)))
           probe-col (.vectorForName probe-rel probe-column-name)
-          probe-pointer (ArrowBufPointer.)
-          matching-build-rows (ArrayList.)
+          matching-build-idxs (IntStream/builder)
           matching-probe-idxs (IntStream/builder)
-          internal-vec (.getVector probe-col)
-          hasher (hash/->hasher probe-col)]
+          rel-map-prober (.probeFromRelation rel-map probe-rel)]
 
       (dotimes [probe-idx (.getValueCount probe-col)]
-        (let [internal-idx (.getIndex probe-col probe-idx)
-              match? (when-let [^List build-pointers (.get join-key->build-pointers (.hashCode hasher probe-idx))]
-                       (let [probe-pointer-or-object (util/pointer-or-object internal-vec internal-idx probe-pointer)
-                             build-pointer-it (.iterator build-pointers)]
-                         (loop [match? false]
-                           (if-let [^BuildPointer build-pointer (when (.hasNext build-pointer-it)
-                                                                  (.next build-pointer-it))]
-                             (cond
-                               (not= (.pointer-or-object build-pointer) probe-pointer-or-object)
-                               (recur match?)
-
-                               semi-join? true
-
-                               :else (do
-                                       (.markMatched build-pointer)
-                                       (.add matching-build-rows build-pointer)
-                                       (.add matching-probe-idxs probe-idx)
-                                       (recur true)))
-                             match?))))]
+        (let [match? (if semi-join?
+                       (not (neg? (.indexOf rel-map-prober probe-idx)))
+                       (when-let [build-idxs (.getAll rel-map-prober probe-idx)]
+                         (.forEach build-idxs
+                                   (reify IntConsumer
+                                     (accept [_ build-idx]
+                                       (when matched-build-idxs
+                                         (.add matched-build-idxs build-idx))
+                                       (.add matching-build-idxs build-idx)
+                                       (.add matching-probe-idxs probe-idx))))
+                         true))]
           (cond
             outer-join? (when-not match?
                           (.add matching-probe-idxs probe-idx)
-                          (.add matching-build-rows null-build-row))
+                          (.add matching-build-idxs -1))
             anti-join? (when-not match?
                          (.add matching-probe-idxs probe-idx))
             semi-join? (when match?
                          (.add matching-probe-idxs probe-idx)))))
 
-      (when-not semi-join?
-        (doseq [^IBuildRow build-row matching-build-rows]
-          (.copyRow build-row)))
+      (letfn [(copy-rel [^IIndirectRelation in-rel, ^ints idxs]
+                (doseq [^IIndirectVector in-col in-rel
+                        :when (or (= in-rel probe-rel)
+                                  (not= (.getName in-col) probe-column-name))
+                        :let [row-copier (->nullable-row-copier in-col rel-writer join-type)]]
+                  (dotimes [idx (alength idxs)]
+                    (.copyRow row-copier (aget idxs idx)))))]
 
-      (let [probe-idxs (.toArray (.build matching-probe-idxs))]
-        (doseq [^IRowCopier row-copier probe-row-copiers]
-          (dotimes [idx (alength probe-idxs)]
-            (.copyRow row-copier (aget probe-idxs idx))))))))
+        (when-not semi-join?
+          (copy-rel (.getBuiltRelation rel-map)
+                    (.toArray (.build matching-build-idxs))))
+
+        (copy-rel probe-rel (.toArray (.build matching-probe-idxs)))))))
 
 (deftype JoinCursor [^BufferAllocator allocator
                      ^ICursor build-cursor, ^String build-column-name
                      ^ICursor probe-cursor, ^String probe-column-name
                      ^IRelationWriter rel-writer
                      ^List build-rels
-                     ^Map join-key->build-pointers
+                     ^IRelationMap rel-map
+                     ^RoaringBitmap matched-build-idxs
                      ^MutableRoaringBitmap pushdown-bloom
                      join-type]
   ICursor
@@ -214,69 +182,61 @@
                (set (.getColumnNames probe-cursor))))
 
   (tryAdvance [_ c]
-    (let [semi-join? (contains? #{:semi :anti-semi} join-type)]
-      (.forEachRemaining build-cursor
-                         (reify Consumer
-                           (accept [_ build-rel]
-                             (let [build-rel (iv/copy build-rel allocator)]
-                               (.add build-rels build-rel)
-                               (build-phase rel-writer build-rel
-                                            build-column-name probe-column-name
-                                            join-key->build-pointers pushdown-bloom
-                                            semi-join?)))))
+    (.forEachRemaining build-cursor
+                       (reify Consumer
+                         (accept [_ build-rel]
+                           (let [build-rel (iv/copy build-rel allocator)]
+                             (.add build-rels build-rel)
+                             (build-phase build-rel build-column-name rel-map pushdown-bloom)))))
 
-      (let [yield-missing? (contains? #{:anti-semi :left-outer :full-outer} join-type)
-            build-rel-col-names (into #{}
-                                      (mapcat (fn [^IIndirectRelation build-rel]
-                                                (for [^IIndirectVector build-vec build-rel]
-                                                  (.getName build-vec))))
-                                      build-rels)]
-        (boolean
-         (or (when (or (not (.isEmpty join-key->build-pointers))
-                       yield-missing?)
-               (let [advanced? (boolean-array 1)]
-                 (binding [scan/*column->pushdown-bloom* (if yield-missing?
-                                                           scan/*column->pushdown-bloom*
-                                                           (assoc scan/*column->pushdown-bloom* probe-column-name pushdown-bloom))]
-                   (while (and (not (aget advanced? 0))
-                               (.tryAdvance probe-cursor
-                                            (reify Consumer
-                                              (accept [_ probe-rel]
-                                                (let [null-build-row (when (contains? #{:full-outer :left-outer} join-type)
-                                                                       (->null-build-row rel-writer build-rel-col-names))]
-                                                  (probe-phase rel-writer null-build-row
-                                                               probe-rel join-key->build-pointers
-                                                               probe-column-name join-type))
+    (let [yield-missing? (contains? #{:anti-semi :left-outer :full-outer} join-type)]
+      (boolean
+       (or (let [advanced? (boolean-array 1)]
+             (binding [scan/*column->pushdown-bloom* (if yield-missing?
+                                                       scan/*column->pushdown-bloom*
+                                                       (assoc scan/*column->pushdown-bloom* probe-column-name pushdown-bloom))]
+               (while (and (not (aget advanced? 0))
+                           (.tryAdvance probe-cursor
+                                        (reify Consumer
+                                          (accept [_ probe-rel]
+                                            (probe-phase rel-writer probe-rel rel-map probe-column-name matched-build-idxs join-type)
 
-                                                (with-open [out-rel (vw/rel-writer->reader rel-writer)]
-                                                  (try
-                                                    (when (pos? (.rowCount out-rel))
-                                                      (aset advanced? 0 true)
-                                                      (.accept c out-rel))
-                                                    (finally
-                                                      (vw/clear-rel rel-writer))))))))))
-                 (aget advanced? 0)))
+                                            (with-open [out-rel (vw/rel-writer->reader rel-writer)]
+                                              (try
+                                                (when (pos? (.rowCount out-rel))
+                                                  (aset advanced? 0 true)
+                                                  (.accept c out-rel))
+                                                (finally
+                                                  (vw/clear-rel rel-writer))))))))))
+             (aget advanced? 0))
 
-             (when (and (= :full-outer join-type) (not (.isEmpty join-key->build-pointers)))
-               (with-open [out-rel (vw/rel-writer->reader rel-writer)]
-                 (let [null-build-row (->null-build-row rel-writer (set/difference (into #{}
-                                                                                         (map (fn [^IVectorWriter w]
-                                                                                                (.getName (.getVector w))))
-                                                                                         rel-writer)
-                                                                                   (set build-rel-col-names)))]
-                   (doseq [build-pointers (vals join-key->build-pointers)
-                           ^BuildPointer build-pointer build-pointers
-                           :when (not (.isMatched build-pointer))]
-                     (.copyRow build-pointer))
-                   (.copyRow null-build-row))
+           (when (= :full-outer join-type)
+             (let [build-rel (.getBuiltRelation rel-map)
+                   build-row-count (long (.rowCount build-rel))
+                   unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
+               (when-not (.isEmpty unmatched-build-idxs)
+                 (.add matched-build-idxs 0 build-row-count)
 
-                 (.clear join-key->build-pointers)
-                 (when (pos? (.rowCount out-rel))
+                 (doseq [^IRowCopier row-copier (concat (for [col-name (.getColumnNames build-cursor)]
+                                                          (vw/->row-copier (.writerForName rel-writer col-name) (.vectorForName build-rel col-name)))
+
+                                                        (for [probe-col-name (set/difference (.getColumnNames probe-cursor)
+                                                                                             (.getColumnNames build-cursor))]
+                                                          (->null-row-copier (.writerForName rel-writer probe-col-name))))]
+
+                   (.forEach unmatched-build-idxs
+                             (reify IntConsumer
+                               (accept [_ build-idx]
+                                 (.copyRow row-copier build-idx)))))
+
+                 (with-open [out-rel (vw/rel-writer->reader rel-writer)]
                    (.accept c out-rel)
                    true))))))))
 
   (close [_]
     (.clear pushdown-bloom)
+    (util/try-close rel-writer)
+    (util/try-close rel-map)
     (run! util/try-close build-rels)
     (.clear build-rels)
     (util/try-close build-cursor)
@@ -288,7 +248,11 @@
   (JoinCursor. allocator
                left-cursor left-column-name right-cursor right-column-name
                (vw/->rel-writer allocator)
-               (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
+               (ArrayList.)
+               (emap/->relation-map allocator {:build-key-col-names [left-column-name]
+                                               :probe-key-col-names [right-column-name]})
+               nil
+               (MutableRoaringBitmap.)
                :inner))
 
 (defn ->left-semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
@@ -297,7 +261,11 @@
   (JoinCursor. allocator
                right-cursor right-column-name left-cursor left-column-name
                (vw/->rel-writer allocator)
-               (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
+               (ArrayList.)
+               (emap/->relation-map allocator {:build-key-col-names [right-column-name]
+                                               :probe-key-col-names [left-column-name]})
+               nil
+               (MutableRoaringBitmap.)
                :semi))
 
 (defn ->left-outer-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
@@ -306,7 +274,11 @@
   (JoinCursor. allocator
                right-cursor right-column-name left-cursor left-column-name
                (vw/->rel-writer allocator)
-               (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
+               (ArrayList.)
+               (emap/->relation-map allocator {:build-key-col-names [right-column-name]
+                                               :probe-key-col-names [left-column-name]})
+               nil
+               (MutableRoaringBitmap.)
                :left-outer))
 
 (defn ->full-outer-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
@@ -315,7 +287,12 @@
   (JoinCursor. allocator
                left-cursor left-column-name right-cursor right-column-name
                (vw/->rel-writer allocator)
-               (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
+               (ArrayList.)
+               (emap/->relation-map allocator {:build-key-col-names [left-column-name]
+
+                                               :probe-key-col-names [right-column-name]})
+               (RoaringBitmap.)
+               (MutableRoaringBitmap.)
                :full-outer))
 
 (defn ->left-anti-semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
@@ -324,5 +301,9 @@
   (JoinCursor. allocator
                right-cursor right-column-name left-cursor left-column-name
                (vw/->rel-writer allocator)
-               (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
+               (ArrayList.)
+               (emap/->relation-map allocator {:build-key-col-names [right-column-name]
+                                               :probe-key-col-names [left-column-name]})
+               nil
+               (MutableRoaringBitmap.)
                :anti-semi))

@@ -1,20 +1,18 @@
 (ns core2.operator.group-by
   (:require [core2.expression :as expr]
-            [core2.expression.hash :as hash]
+            [core2.expression.map :as emap]
             [core2.types :as types]
             [core2.util :as util]
-            [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
-  (:import core2.expression.hash.IVectorHasher
+            [core2.vector.indirect :as iv])
+  (:import core2.expression.map.IRelationMap
            core2.ICursor
-           [core2.vector IIndirectVector IRowCopier IVectorWriter]
+           core2.vector.IIndirectVector
            java.io.Closeable
-           [java.util HashMap LinkedList List Map Spliterator]
-           [java.util.function Consumer Function]
+           [java.util LinkedList List Spliterator]
+           java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector ValueVector]
-           org.apache.arrow.vector.types.pojo.FieldType
-           org.roaringbitmap.RoaringBitmap))
+           org.apache.arrow.vector.types.pojo.FieldType))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -40,120 +38,35 @@
   (close [_]
     (.close group-mapping)))
 
-(definterface IntIntPredicate
-  (^boolean test [^int l, ^int r]))
-
-(defn- ->comparator ^core2.operator.group_by.IntIntPredicate [group-cols group-col-writers]
-  (->> (map (fn [^IIndirectVector in-col, ^IVectorWriter group-writer]
-              (let [group-col (iv/->direct-vec (.getVector group-writer))
-                    f (eval
-                       (let [in-val-types (expr/field->value-types (.getField (.getVector in-col)))
-                             group-val-types (expr/field->value-types (.getField (.getVector group-col)))
-                             in-vec (gensym 'in-vec)
-                             in-idx (gensym 'in-idx)
-                             group-vec (gensym 'group-vec)
-                             group-idx (gensym 'group-idx)]
-                         `(fn [~(expr/with-tag in-vec IIndirectVector)
-                               ~(expr/with-tag group-vec IIndirectVector)]
-                            (reify IntIntPredicate
-                              (test [_ ~in-idx ~group-idx]
-                                ~(let [{continue-in :continue}
-                                       (-> (expr/form->expr in-vec {})
-                                           (assoc :idx in-idx)
-                                           (expr/codegen-expr {:var->types {in-vec in-val-types}}))
-
-                                       {continue-group :continue}
-                                       (-> (expr/form->expr group-vec {})
-                                           (assoc :idx group-idx)
-                                           (expr/codegen-expr {:var->types {group-vec group-val-types}}))]
-
-                                   (continue-in
-                                    (fn [in-type in-code]
-                                      (continue-group
-                                       (fn [group-type group-code]
-                                         (let [{continue-= :continue-call}
-                                               (expr/codegen-call {:op :call, :f :=,
-                                                                   :arg-types [in-type group-type]})]
-                                           (continue-= (fn [_out-type out-code] out-code)
-                                                       [in-code group-code]))))))))))))]
-
-                (f in-col group-col)))
-            group-cols
-            group-col-writers)
-
-       (reduce (fn [^IntIntPredicate p1, ^IntIntPredicate p2]
-                 (reify IntIntPredicate
-                   (test [_ l r]
-                     (and (.test p1 l r)
-                          (.test p2 l r))))))))
-
-(deftype GroupMapper [^BufferAllocator allocator
-                      ^List group-col-names
-                      ^List group-col-writers
-                      ^Map group-hash->bitmap
+(deftype GroupMapper [^List group-col-names
+                      ^IRelationMap rel-map
                       ^IntVector group-mapping]
   IGroupMapper
   (getColumnNames [_] (set group-col-names))
   (groupMapping [_ in-rel]
     (.clear group-mapping)
-    (let [group-cols (mapv (fn [^String col-name]
-                             (.vectorForName in-rel col-name))
-                           group-col-names)
-          group-col-copiers (mapv (fn [^IIndirectVector in-vec, ^IVectorWriter out-writer]
-                                    (let [copier (.rowCopier in-vec out-writer)]
-                                      (reify IRowCopier
-                                        (copyRow [_ idx]
-                                          (.startValue out-writer)
-                                          (.copyRow copier idx)
-                                          (.endValue out-writer)))))
-                                  group-cols
-                                  group-col-writers)
+    (.setValueCount group-mapping (.rowCount in-rel))
 
-          comparator (->comparator group-cols group-col-writers)
-          hashers (mapv hash/->hasher group-cols)]
-
-      (.setValueCount group-mapping (.rowCount in-rel))
-
+    (let [builder (.buildFromRelation rel-map in-rel)]
       (dotimes [idx (.rowCount in-rel)]
-        (let [row-hash (mapv (fn [^IVectorHasher hasher]
-                               (.hashCode hasher idx))
-                             hashers)
-              ^RoaringBitmap hash-bitmap (.computeIfAbsent group-hash->bitmap
-                                                           row-hash
-                                                           (reify Function
-                                                             (apply [_ _]
-                                                               (RoaringBitmap.))))]
-          (if-let [^long out-idx (-> (filter (fn [^long out-idx]
-                                               (.test comparator idx out-idx))
-                                             hash-bitmap)
-                                     first)]
-            (.set group-mapping idx out-idx)
+        (.set group-mapping idx (emap/inserted-idx (.addIfNotPresent builder idx)))))
 
-            (let [out-idx (.getValueCount (.getVector ^IVectorWriter (first group-col-writers)))]
-              (.add hash-bitmap out-idx)
-              (.set group-mapping idx out-idx)
-
-              (doseq [^IRowCopier copier group-col-copiers]
-                (.copyRow copier idx))))))
-
-      group-mapping))
+    group-mapping)
 
   (finish [_]
-    (mapv #(iv/->direct-vec (.getVector ^IVectorWriter %)) group-col-writers))
+    (seq (.getBuiltRelation rel-map)))
 
   Closeable
   (close [_]
     (.close group-mapping)
-    (run! util/try-close group-col-writers)))
+    (util/try-close rel-map)))
 
 (defn- ->group-mapper [^BufferAllocator allocator, group-col-names]
   (let [gm-vec (IntVector. "group-mapping" allocator)]
     (if (seq group-col-names)
-      (GroupMapper. allocator group-col-names
-                    (vec (for [col-name group-col-names]
-                           (-> (.createVector (types/->field col-name types/dense-union-type false) allocator)
-                               vw/vec->writer)))
-                    (HashMap.)
+      (GroupMapper. group-col-names
+                    (emap/->relation-map allocator {:key-col-names group-col-names,
+                                                    :store-col-names #{}})
                     gm-vec)
       (NullGroupMapper. gm-vec))))
 

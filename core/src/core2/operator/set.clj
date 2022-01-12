@@ -1,7 +1,9 @@
 (ns core2.operator.set
-  (:require [core2.util :as util]
+  (:require [core2.expression.map :as emap]
+            [core2.util :as util]
             [core2.vector.indirect :as iv])
-  (:import core2.ICursor
+  (:import core2.expression.map.IRelationMap
+           core2.ICursor
            [core2.vector IIndirectRelation IIndirectVector]
            [java.util ArrayList HashSet LinkedList List Set]
            java.util.function.Consumer
@@ -49,89 +51,66 @@
   (UnionAllCursor. (union-compatible-col-names left-cursor right-cursor)
                    left-cursor right-cursor))
 
-(defn- copy-set-key [^BufferAllocator allocator ^List k]
-  (dotimes [n (.size k)]
-    (let [x (.get k n)]
-      (.set k n (util/maybe-copy-pointer allocator x))))
-  k)
-
-(defn- release-set-key [k]
-  (doseq [x k
-          :when (instance? ArrowBufPointer x)]
-    (util/try-close (.getBuf ^ArrowBufPointer x)))
-  k)
-
-(defn- ->set-key [^List cols ^long idx]
-  (let [set-key (ArrayList. (count cols))]
-    (doseq [^IIndirectVector col cols]
-      (.add set-key (util/pointer-or-object (.getVector col) (.getIndex col idx))))
-    set-key))
-
-(deftype IntersectionCursor [^BufferAllocator allocator
-                             ^Set col-names
+(deftype IntersectionCursor [^Set col-names
                              ^ICursor left-cursor
                              ^ICursor right-cursor
-                             ^Set intersection-set
+                             ^IRelationMap rel-map
                              difference?]
   ICursor
   (getColumnNames [_] col-names)
-
   (tryAdvance [_ c]
     (.forEachRemaining right-cursor
                        (reify Consumer
                          (accept [_ in-rel]
                            (let [^IIndirectRelation in-rel in-rel
-                                 row-count (.rowCount in-rel)]
-                             (when (pos? row-count)
-                               (let [cols (seq in-rel)]
-                                 (dotimes [idx row-count]
-                                   (let [set-key (->set-key cols idx)]
-                                     (when-not (.contains intersection-set set-key)
-                                       (.add intersection-set (copy-set-key allocator set-key)))))))))))
+                                 builder (.buildFromRelation rel-map in-rel)]
+                             (dotimes [idx (.rowCount in-rel)]
+                               (.addIfNotPresent builder idx))))))
 
     (boolean
-     (when (or difference? (not (.isEmpty intersection-set)))
-       (let [advanced? (boolean-array 1)]
-         (while (and (not (aget advanced? 0))
-                     (.tryAdvance left-cursor
-                                  (reify Consumer
-                                    (accept [_ in-rel]
-                                      (let [^IIndirectRelation in-rel in-rel
-                                            row-count (.rowCount in-rel)]
+     (let [advanced? (boolean-array 1)]
+       (while (and (not (aget advanced? 0))
+                   (.tryAdvance left-cursor
+                                (reify Consumer
+                                  (accept [_ in-rel]
+                                    (let [^IIndirectRelation in-rel in-rel
+                                          row-count (.rowCount in-rel)
+                                          prober (.probeFromRelation rel-map in-rel)]
 
-                                        (when (pos? row-count)
-                                          (let [in-cols (seq in-rel)
-                                                idxs (IntStream/builder)]
-                                            (dotimes [idx row-count]
-                                              (when (cond-> (.contains intersection-set (->set-key in-cols idx))
-                                                      difference? not)
-                                                (.add idxs idx)))
+                                      (when (pos? row-count)
+                                        (let [idxs (IntStream/builder)]
+                                          (dotimes [idx row-count]
+                                            (when (cond-> (pos? (.indexOf prober idx))
+                                                    difference? not)
+                                              (.add idxs idx)))
 
-                                            (let [idxs (.toArray (.build idxs))]
-                                              (when-not (empty? idxs)
-                                                (aset advanced? 0 true)
-                                                (.accept c (iv/select in-rel idxs))))))))))))
-         (aget advanced? 0)))))
+                                          (let [idxs (.toArray (.build idxs))]
+                                            (when-not (empty? idxs)
+                                              (aset advanced? 0 true)
+                                              (.accept c (iv/select in-rel idxs))))))))))))
+       (aget advanced? 0))))
 
   (close [_]
-    (run! release-set-key intersection-set)
-    (.clear intersection-set)
+    (util/try-close rel-map)
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
 (defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (IntersectionCursor. allocator (union-compatible-col-names left-cursor right-cursor)
-                       left-cursor right-cursor
-                       (HashSet.) true))
+  (let [col-names (union-compatible-col-names left-cursor right-cursor)]
+    (IntersectionCursor. col-names
+                         left-cursor right-cursor
+                         (emap/->relation-map allocator {:key-col-names col-names})
+                         true)))
 
 (defn ->intersection-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (IntersectionCursor. allocator (union-compatible-col-names left-cursor right-cursor)
-                       left-cursor right-cursor
-                       (HashSet.) false))
+  (let [col-names (union-compatible-col-names left-cursor right-cursor)]
+    (IntersectionCursor. col-names
+                         left-cursor right-cursor
+                         (emap/->relation-map allocator {:key-col-names col-names})
+                         false)))
 
-(deftype DistinctCursor [^BufferAllocator allocator
-                         ^ICursor in-cursor
-                         ^Set seen-set]
+(deftype DistinctCursor [^ICursor in-cursor
+                         ^IRelationMap rel-map]
   ICursor
   (getColumnNames [_] (.getColumnNames in-cursor))
 
@@ -144,13 +123,11 @@
                                    (let [^IIndirectRelation in-rel in-rel
                                          row-count (.rowCount in-rel)]
                                      (when (pos? row-count)
-                                       (let [in-cols (seq in-rel)
+                                       (let [builder (.buildFromRelation rel-map in-rel)
                                              idxs (IntStream/builder)]
                                          (dotimes [idx row-count]
-                                           (let [k (->set-key in-cols idx)]
-                                             (when-not (.contains seen-set k)
-                                               (.add seen-set (copy-set-key allocator k))
-                                               (.add idxs idx))))
+                                           (when (neg? (.addIfNotPresent builder idx))
+                                             (.add idxs idx)))
 
                                          (let [idxs (.toArray (.build idxs))]
                                            (when-not (empty? idxs)
@@ -159,12 +136,29 @@
       (aget advanced? 0)))
 
   (close [_]
-    (run! release-set-key seen-set)
-    (.clear seen-set)
+    (util/try-close rel-map)
     (util/try-close in-cursor)))
 
 (defn ->distinct-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor]
-  (DistinctCursor. allocator in-cursor (HashSet.)))
+  (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (vec (.getColumnNames in-cursor))})))
+
+(defn- ->set-key [^List cols ^long idx]
+  (let [set-key (ArrayList. (count cols))]
+    (doseq [^IIndirectVector col cols]
+      (.add set-key (util/pointer-or-object (.getVector col) (.getIndex col idx))))
+    set-key))
+
+(defn- copy-set-key [^BufferAllocator allocator ^List k]
+  (dotimes [n (.size k)]
+    (let [x (.get k n)]
+      (.set k n (util/maybe-copy-pointer allocator x))))
+  k)
+
+(defn- release-set-key [k]
+  (doseq [x k
+          :when (instance? ArrowBufPointer x)]
+    (util/try-close (.getBuf ^ArrowBufPointer x)))
+  k)
 
 (definterface ICursorFactory
   (^core2.ICursor createCursor []))

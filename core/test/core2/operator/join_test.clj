@@ -122,19 +122,19 @@
         "empty output"))
 
 (t/deftest test-left-equi-join
-  (t/is (= [#{{:a 12, :b 12, :c 0}, {:a 12, :b 12, :c 2}, {:a 0, :b nil, :c nil}}
-            #{{:a 12, :b 12, :c 0}, {:a 12, :b 12, :c 2}, {:a 100, :b 100, :c 3}}]
+  (t/is (= [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0, :b nil, :c nil} 1}
+            {{:a 12, :b 12, :c 2} 1, {:a 100, :b 100, :c 3} 1, {:a 12, :b 12, :c 0} 1}]
            (->> (run-join-test join/->left-outer-equi-join-cursor
                                [[{:a 12}, {:a 0}]
                                 [{:a 12}, {:a 100}]]
                                [[{:b 12, :c 0}, {:b 2, :c 1}]
                                 [{:b 12, :c 2}, {:b 100, :c 3}]]
                                {:right-fields [b-field c-field]})
-                (mapv set))))
+                (mapv frequencies))))
 
   (t/testing "empty input"
-    (t/is (= [#{{:a 12}, {:a 0}}
-              #{{:a 100}}]
+    (t/is (= [#{{:a 12, :b nil}, {:a 0, :b nil}}
+              #{{:a 100, :b nil}}]
              (->> (run-join-test join/->left-outer-equi-join-cursor
                                  [[{:a 12}, {:a 0}]
                                   [{:a 100}]]
@@ -146,10 +146,6 @@
                                  [[{:b 12}, {:b 2}]
                                   [{:b 100} {:b 0}]])))
 
-    ;; TODO weird that this includes `:b nil` but the above doesn't?
-    ;; dynamic schema's likely always going to have these kinds of impacts
-    ;; unless we could give ICursors knowledge of the columns, so that we at least get the same cols every time?
-    ;; (we used to, but got rid of it because we didn't need it at the time)
     (t/is (= [#{{:a 12, :b nil}, {:a 0, :b nil}}
               #{{:a 100, :b nil}}]
              (->> (run-join-test join/->left-outer-equi-join-cursor
@@ -204,15 +200,15 @@
                   (mapv frequencies)))))
 
   (t/testing "empty input"
-    (t/is (= [{{:a 0} 1, {:a 100} 1, {:a 12} 1}]
+    (t/is (= [{{:a 0, :b nil} 1, {:a 100, :b nil} 1, {:a 12, :b nil} 1}]
              (->> (run-join-test join/->full-outer-equi-join-cursor
                                  [[{:a 12}, {:a 0}]
                                   [{:a 100}]]
                                  [])
                   (mapv frequencies))))
 
-    (t/is (= [{{:b 12} 1, {:b 2} 1}
-              {{:b 100} 1, {:b 0} 1}]
+    (t/is (= [{{:a nil, :b 12} 1, {:a nil, :b 2} 1}
+              {{:a nil, :b 100} 1, {:a nil, :b 0} 1}]
              (->> (run-join-test join/->full-outer-equi-join-cursor
                                  []
                                  [[{:b 12}, {:b 2}]
