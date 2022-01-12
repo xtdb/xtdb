@@ -286,7 +286,7 @@
 (defn match [pattern]
   (let [pattern-loc (z/vector-zip pattern)]
     (fn [z]
-      (when-let [env (zip-match pattern-loc z (::env (meta z)))]
+      (when-let [env (zip-match pattern-loc z (get (meta z) ::env {}))]
         (vary-meta z assoc ::env env)))))
 
 (defn build [pattern]
