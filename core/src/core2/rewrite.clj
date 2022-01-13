@@ -79,21 +79,6 @@
 ;; https://haslab.uminho.pt/prmartins/files/phd.pdf
 ;; https://github.com/christoff-buerger/racr
 
-(defn use-attributes
-  ([attr-fn loc]
-   (use-attributes attr-fn conj loc))
-  ([attr-fn f loc]
-   (loop [loc (z/right (z/down loc))
-          acc (f)]
-     (if loc
-       (recur (z/right loc)
-              (if (z/branch? loc)
-                (if-some [v (attr-fn loc)]
-                  (f acc v)
-                  acc)
-                acc))
-       (f acc)))))
-
 (defn ctor [ag]
   (when ag
     (let [node (z/node ag)]
@@ -151,6 +136,11 @@
 ;; https://arxiv.org/pdf/2110.07902.pdf
 ;; https://www.di.uminho.pt/~joost/publications/SBLP2004LectureNotes.pdf
 
+;; Strafunski:
+;; https://www.di.uminho.pt/~joost/publications/AStrafunskiApplicationLetter.pdf
+;; https://arxiv.org/pdf/cs/0212048.pdf
+;; https://arxiv.org/pdf/cs/0204015.pdf
+
 ;; Type Preserving
 
 (defn seq-tp [& xs]
@@ -190,13 +180,11 @@
   (fn self [z]
     ((choice-tp (one-tp self) f) z)))
 
+(declare all-tp-down all-tp-right)
+
 (defn stop-td-tp [f]
   (fn self [z]
-    ((choice-tp f (all-tp self)) z)))
-
-(defn stop-bu-tp [f]
-  (fn self [z]
-    ((choice-tp (all-tp self) f) z)))
+    ((seq-tp (choice-tp f (all-tp-down self)) (all-tp-right self)) z)))
 
 (declare z-try-apply-m z-try-apply-mz)
 
@@ -261,9 +249,6 @@
       (recur z)
       z)))
 
-;; (defn innermost [f]
-;;   (repeat-tp (once-bu-tp f)))
-
 (defn innermost [f]
   (fn self [z]
     ((seq-tp (all-tp self) (try-tp (seq-tp f self))) z)))
@@ -271,68 +256,13 @@
 (defn outermost [f]
   (repeat-tp (once-td-tp f)))
 
-;; Matching
-
-;; match (?), build (!), scope ({}), where
-;; dsig : p1 -> p2 (where s)? = {x... : ?p1; where(s); !p2 } // x... free vars in p1, s, p2
-;; guard = s1 < s2 + s3
-;; not(s) = s < fail + id
-;; where = {x: ?x; s; !x}
-;; if = where(s1) < s2 + s3
-;; <s>p = !p; s
-;; s => p = s; ?p
-;; <add>(i, j) => k = !(i, j); add; ?k
-
-(defn match [pattern]
-  (let [pattern-loc (z/vector-zip pattern)]
-    (fn [z]
-      (when-let [env (zip-match pattern-loc z (get (meta z) ::env {}))]
-        (vary-meta z assoc ::env env)))))
-
-(defn build [pattern]
-  (fn [z]
-    (when-let [env (::env (meta z))]
-      (z/replace z (w/postwalk-replace env pattern)))))
-
-(defn scope [free-vars f]
-  (fn [z]
-    (let [parent-env (::env (meta z))
-          z (vary-meta z assoc ::env (apply dissoc parent-env free-vars))]
-      (when-let [z (f z)]
-        (vary-meta z update ::env merge (select-keys parent-env free-vars))))))
-
-(defn where [f]
-  (fn [z]
-    (when-let [new-env (::env (meta (f z)))]
-      (vary-meta z assoc ::env new-env))))
-
-(defn guard [test then else]
-  (fn [z]
-    (if-let [z (test z)]
-      (then z)
-      (else z))))
-
-(defn not' [f]
-  (guard f fail-tp id-tp))
-
-(defn if' [test then else]
-  (guard (where test) then else))
-
-(defn rule
-  ([p1 p2]
-   (rule p1 p2 {:where id-tp}))
-  ([p1 p2 {f :where}]
-   ;; NOTE: this should also capture vars inside where, but this would
-   ;; require more plumbing as this will be a function, can manually
-   ;; wrap the rule in a scope.
-   (let [free-vars (filterv symbol? (flatten (concat p1 p2)))]
-     (scope free-vars (seq-tp (match p1) (where f) (build p2))))))
-
 ;; Type Unifying
 
 (defn- monoid [z]
   (get (meta z) :zip/monoid into))
 
+;; TODO: should this short-circuit properly? Ztrategic doesn't seem
+;; to.
 (defn seq-tu [& xs]
   (fn [z]
     (transduce (map (fn [x] (x z)))
@@ -359,23 +289,23 @@
   (fn self [z]
     ((choice-tu (one-tu self) f) z)))
 
+(declare all-tu-down all-tu-right)
+
 (defn stop-td-tu [f]
   (fn self [z]
-    ((choice-tu f (all-tu self)) z)))
-
-(defn stop-bu-tu [f]
-  (fn self [z]
-    ((choice-tu (all-tu self) f) z)))
+    ((seq-tu (choice-tu f (all-tu-down self)) (all-tu-right self)) z)))
 
 (defn- all-tu-down [f]
   (fn [z]
-    (when-some [d (z/down z)]
-      (f d))))
+    (if-some [d (z/down z)]
+      (f d)
+      ((monoid z)))))
 
 (defn- all-tu-right [f]
   (fn [z]
-    (when-some [r (z/right z)]
-      (f r))))
+    (if-some [r (z/right z)]
+      (f r)
+      ((monoid z)))))
 
 (defn all-tu [f]
   (seq-tu (all-tu-down f) (all-tu-right f)))
@@ -422,6 +352,23 @@
   (vary-meta z assoc :zip/monoid f))
 
 (comment
+
+  (defn use-attributes
+    ([attr-fn loc]
+     (use-attributes attr-fn conj loc))
+    ([attr-fn f loc]
+     (loop [loc (z/right (z/down loc))
+            acc (f)]
+       (if loc
+         (recur (z/right loc)
+                (if (z/branch? loc)
+                  (if-some [v (attr-fn loc)]
+                    (f acc v)
+                    acc)
+                  acc))
+         (f acc)))))
+
+
 
   (declare repmin globmin locmin)
 

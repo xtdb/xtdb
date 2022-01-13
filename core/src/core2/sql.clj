@@ -103,38 +103,52 @@
                 :with_list_element (ctei (r/prev ag))
                 (some-> (r/parent ag) (cte-env))))
             (cte [ag]
-              :with_list_element {:query-name (table-or-query-name ag)
-                                  :id (->id ag)})
-            (ctes [ag]
               (case (r/ctor ag)
-                :subquery []
-                :with_list_element [(cte ag)]
-                (r/use-attributes ctes into ag)))
+                :with_list_element {:query-name (table-or-query-name ag)
+                                    :id (->id ag)}))
+            (ctes [ag]
+              (letfn [(step [_ ag]
+                        (case (r/ctor ag)
+                          :with_list_element [(cte ag)]
+                          :subquery []
+                          nil))]
+                ((r/stop-td-tu (r/mono-tuz step)) ag)))
             (identifier [ag]
               (case (r/ctor ag)
                 (:table_name
                  :query_name
                  :correlation_name
                  :identifier) (identifier (r/$ ag 1))
-                :regular_identifier (r/lexme ag 1)))
+                :regular_identifier (r/lexme ag 1)
+                nil))
             (identifiers [ag]
               (case (r/ctor ag)
                 (:column_reference
                  :basic_identifier_chain) (identifiers (r/$ ag 1))
-                :identifier_chain (r/use-attributes identifier ag)))
+                :identifier_chain
+                (letfn [(step [_ ag]
+                          (case (r/ctor ag)
+                            :regular_identifier [(r/lexme ag 1)]
+                            []))]
+                  ((r/full-td-tu (r/mono-tuz step)) ag))))
             (table [ag]
-              :table_factor (let [table-name (table-or-query-name ag)
-                                  correlation-name (correlation-name ag)
-                                  cte-id (get-in (cte-env ag) [table-name :id])]
-                              (cond-> {:table-or-query-name (or table-name correlation-name)
-                                       :correlation-name correlation-name
-                                       :id (->id ag)}
-                                cte-id (assoc :cte-id cte-id))))
-            (tables [ag]
               (case (r/ctor ag)
-                :subquery []
-                :table_factor [(table ag)]
-                (r/use-attributes tables into ag)))
+                :table_factor (let [table-name (table-or-query-name ag)
+                                    correlation-name (correlation-name ag)
+                                    cte-id (get-in (cte-env ag) [table-name :id])]
+                                (cond-> {:table-or-query-name (or table-name correlation-name)
+                                         :correlation-name correlation-name
+                                         :id (->id ag)}
+                                  cte-id (assoc :cte-id cte-id)))))
+            (tables [ag]
+              (letfn [(step [_ ag]
+                        (case (r/ctor ag)
+                          :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
+                                          (tables (r/$ ag 1))
+                                          [(table ag)])
+                          :subquery []
+                          nil))]
+                ((r/stop-td-tu (r/mono-tuz step)) ag)))
             (column [ag]
               (case (r/ctor ag)
                 :column_reference (let [identifiers (identifiers ag)
@@ -145,22 +159,26 @@
                                              :qualified? qualified?}
                                       table-id (assoc :table-id table-id)))))
             (columns [ag]
-              (case (r/ctor ag)
-                :subquery []
-                :column_reference [(column ag)]
-                (r/use-attributes columns into ag)))
+              (letfn [(step [_ ag]
+                        (case (r/ctor ag)
+                          :column_reference [(column ag)]
+                          :subquery []
+                          nil))]
+                ((r/stop-td-tu (r/mono-tuz step)) ag)))
             (errs [ag]
-              (case (r/ctor ag)
-                :column_reference (let [{:keys [identifiers qualified? table-id]} (column ag)]
-                                    (cond
-                                      (not qualified?)
-                                      [(format "XTDB requires fully-qualified columns: %s %s"
-                                               (first identifiers) (->line-info-str ag))]
+              (letfn [(step [_ ag]
+                        (case (r/ctor ag)
+                          :column_reference (let [{:keys [identifiers qualified? table-id]} (column ag)]
+                                              (cond
+                                                (not qualified?)
+                                                [(format "XTDB requires fully-qualified columns: %s %s"
+                                                         (first identifiers) (->line-info-str ag))]
 
-                                      (not table-id)
-                                      [(format "Table not in scope: %s %s"
-                                               (first identifiers) (->line-info-str ag))]))
-                (r/use-attributes errs into ag)))
+                                                (not table-id)
+                                                [(format "Table not in scope: %s %s"
+                                                         (first identifiers) (->line-info-str ag))]))
+                          []))]
+                ((r/full-td-tu (r/mono-tuz step)) ag)))
             (table-or-query-name [ag]
               (case (r/ctor ag)
                 (:table_factor
@@ -185,9 +203,11 @@
                                      :tables (zipmap (map :correlation-name tables) tables)
                                      :columns (set (columns ag))})))
             (scopes [ag]
-              (case (r/ctor ag)
-                :query_expression (into [(scope ag)] (r/use-attributes scopes into ag))
-                (r/use-attributes scopes into ag)))]
+              (letfn [(step [_ ag]
+                        (case (r/ctor ag)
+                          :query_expression [(scope ag)]
+                          []))]
+                ((r/full-bu-tu (r/mono-tuz step)) ag)))]
       {:scopes (scopes (z/vector-zip query))
        :errs (errs (z/vector-zip query))})))
 
