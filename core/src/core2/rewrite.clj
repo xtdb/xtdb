@@ -162,7 +162,24 @@
      nil
      xs)))
 
-(declare all-tp one-tp)
+(defn all-tp [f]
+  (fn [z]
+    (if-some [d (z/down z)]
+      (loop [z d]
+        (when-some [z (f z)]
+          (if-some [r (z/right z)]
+            (recur r)
+            (z/up z))))
+      z)))
+
+(defn one-tp [f]
+  (fn [z]
+    (when-some [d (z/down z)]
+      (loop [z d]
+        (if-some [z (f z)]
+          (z/up z)
+          (when-some [r (z/right z)]
+            (recur r)))))))
 
 (defn full-td-tp [f]
   (fn self [z]
@@ -186,8 +203,6 @@
   (fn self [z]
     ((choice-tp f (all-tp self)) z)))
 
-(declare z-try-apply-m z-try-apply-mz)
-
 (defn- maybe-keep [x y]
   (fn [z]
     (if-some [r (y z)]
@@ -195,6 +210,16 @@
         k
         r)
       (x z))))
+
+(defn z-try-apply-mz [f]
+  (fn [z]
+    (some->> (f (z/node z) z)
+             (z/replace z))))
+
+(defn z-try-apply-m [f]
+  (fn [z]
+    (some->> (f (z/node z))
+             (z/replace z))))
 
 (defn adhoc-tp [f g]
   (maybe-keep f (z-try-apply-m g)))
@@ -205,25 +230,6 @@
 (defn id-tp [x] x)
 
 (defn fail-tp [_])
-
-(defn all-tp [f]
-  (fn [z]
-    (if-some [d (z/down z)]
-      (loop [z d]
-        (when-some [z (f z)]
-          (if-some [r (z/right z)]
-            (recur r)
-            (z/up z))))
-      z)))
-
-(defn one-tp [f]
-  (fn [z]
-    (when-some [d (z/down z)]
-      (loop [z d]
-        (if-some [z (f z)]
-          (z/up z)
-          (when-some [r (z/right z)]
-            (recur r)))))))
 
 (def mono-tp (partial adhoc-tp fail-tp))
 
@@ -260,28 +266,6 @@
 
 (def choice-tu choice-tp)
 
-(declare all-tu one-tu)
-
-(defn full-td-tu [f]
-  (fn self [z]
-    ((seq-tu (all-tu self) f) z)))
-
-(defn full-bu-tu [f]
-  (fn self [z]
-    ((seq-tu f (all-tu self)) z)))
-
-(defn once-td-tu [f]
-  (fn self [z]
-    ((choice-tu f (one-tu self)) z)))
-
-(defn once-bu-tu [f]
-  (fn self [z]
-    ((choice-tu (one-tu self) f) z)))
-
-(defn stop-td-tu [f]
-  (fn self [z]
-    ((choice-tu f (all-tu self)) z)))
-
 (defn all-tu [f]
   (fn [z]
     (let [m (monoid z)]
@@ -306,7 +290,33 @@
             (when-some [r (z/right z)]
               (recur r acc))))))))
 
-(declare z-try-reduce-m z-try-reduce-mz)
+(defn full-td-tu [f]
+  (fn self [z]
+    ((seq-tu (all-tu self) f) z)))
+
+(defn full-bu-tu [f]
+  (fn self [z]
+    ((seq-tu f (all-tu self)) z)))
+
+(defn once-td-tu [f]
+  (fn self [z]
+    ((choice-tu f (one-tu self)) z)))
+
+(defn once-bu-tu [f]
+  (fn self [z]
+    ((choice-tu (one-tu self) f) z)))
+
+(defn stop-td-tu [f]
+  (fn self [z]
+    ((choice-tu f (all-tu self)) z)))
+
+(defn z-try-reduce-mz [f]
+  (fn [z]
+    (some-> (z/node z) (f z))))
+
+(defn z-try-reduce-m [f]
+  (fn [z]
+    (some-> (z/node z) (f))))
 
 (defn adhoc-tu [f g]
   (choice-tu (z-try-reduce-m g) f))
@@ -322,24 +332,6 @@
 (def mono-tu (partial adhoc-tu fail-tu))
 
 (def mono-tuz (partial adhoc-tuz fail-tu))
-
-(defn z-try-reduce-mz [f]
-  (fn [z]
-    (some-> (z/node z) (f z))))
-
-(defn z-try-reduce-m [f]
-  (fn [z]
-    (some-> (z/node z) (f))))
-
-(defn z-try-apply-mz [f]
-  (fn [z]
-    (some->> (f (z/node z) z)
-             (z/replace z))))
-
-(defn z-try-apply-m [f]
-  (fn [z]
-    (some->> (f (z/node z))
-             (z/replace z))))
 
 (defn with-tu-monoid [z f]
   (vary-meta z assoc :zip/monoid f))
