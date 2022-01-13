@@ -184,7 +184,7 @@
 
 (defn stop-td-tp [f]
   (fn self [z]
-    ((seq-tp (choice-tp f (all-tp-down self)) (all-tp-right self)) z)))
+    ((choice-tp f (all-tp self)) z)))
 
 (declare z-try-apply-m z-try-apply-mz)
 
@@ -206,35 +206,24 @@
 
 (defn fail-tp [_])
 
-(defn- all-tp-right [f]
-  (fn [z]
-    (if-some [r (z/right z)]
-      (z/left (f r))
-      z)))
-
-(defn- all-tp-down [f]
+(defn all-tp [f]
   (fn [z]
     (if-some [d (z/down z)]
-      (z/up (f d))
+      (loop [z d]
+        (when-some [z (f z)]
+          (if-some [r (z/right z)]
+            (recur r)
+            (z/up z))))
       z)))
 
-(defn all-tp [f]
-  (seq-tp (all-tp-down f) (all-tp-right f)))
-
-(defn one-tp-right [f]
-  (fn [z]
-    (some->> (z/right z)
-             (f)
-             (z/left))))
-
-(defn one-tp-down [f]
-  (fn [z]
-    (some->> (z/down z)
-             (f)
-             (z/up))))
-
 (defn one-tp [f]
-  (choice-tp (one-tp-down f) (one-tp-right f)))
+  (fn [z]
+    (when-some [d (z/down z)]
+      (loop [z d]
+        (if-some [z (f z)]
+          (z/up z)
+          (when-some [r (z/right z)]
+            (recur r)))))))
 
 (def mono-tp (partial adhoc-tp fail-tp))
 
@@ -289,29 +278,33 @@
   (fn self [z]
     ((choice-tu (one-tu self) f) z)))
 
-(declare all-tu-down all-tu-right)
-
 (defn stop-td-tu [f]
   (fn self [z]
-    ((seq-tu (choice-tu f (all-tu-down self)) (all-tu-right self)) z)))
-
-(defn- all-tu-down [f]
-  (fn [z]
-    (if-some [d (z/down z)]
-      (f d)
-      ((monoid z)))))
-
-(defn- all-tu-right [f]
-  (fn [z]
-    (if-some [r (z/right z)]
-      (f r)
-      ((monoid z)))))
+    ((choice-tu f (all-tu self)) z)))
 
 (defn all-tu [f]
-  (seq-tu (all-tu-down f) (all-tu-right f)))
+  (fn [z]
+    (let [m (monoid z)]
+      (if-some [d (z/down z)]
+        (loop [z d
+               acc (m)]
+          (when-some [x (f z)]
+            (let [acc (m acc x)]
+              (if-some [r (z/right z)]
+                (recur r acc)
+                (m acc)))))
+        (m)))))
 
 (defn one-tu [f]
-  (choice-tu (all-tu-down f) (all-tu-right f)))
+  (fn [z]
+    (let [m (monoid z)]
+      (when-some [d (z/down z)]
+        (loop [z d
+               acc (m)]
+          (if-some [x (f z)]
+            (m acc x)
+            (when-some [r (z/right z)]
+              (recur r acc))))))))
 
 (declare z-try-reduce-m z-try-reduce-mz)
 
@@ -367,8 +360,6 @@
                     acc)
                   acc))
          (f acc)))))
-
-
 
   (declare repmin globmin locmin)
 
