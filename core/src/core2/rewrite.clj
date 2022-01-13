@@ -292,11 +292,11 @@
 
 (defn full-td-tu [f]
   (fn self [z]
-    ((seq-tu (all-tu self) f) z)))
+    ((seq-tu f (all-tu self)) z)))
 
 (defn full-bu-tu [f]
   (fn self [z]
-    ((seq-tu f (all-tu self)) z)))
+    ((seq-tu (all-tu self) f) z)))
 
 (defn once-td-tu [f]
   (fn self [z]
@@ -594,7 +594,7 @@
    (z/vector-zip [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]))
 
   (= ["a" "c" "b" "c"]
-     ((full-bu-tu (mono-tu
+     ((full-td-tu (mono-tu
                    #(zmatch %
                       [:assign s _ _] [s]
                       [:nested-let s _ _] [s]

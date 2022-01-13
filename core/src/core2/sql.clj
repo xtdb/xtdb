@@ -207,7 +207,7 @@
                         (case (r/ctor ag)
                           :query_expression [(scope ag)]
                           []))]
-                ((r/full-bu-tu (r/mono-tuz step)) ag)))]
+                ((r/full-td-tu (r/mono-tuz step)) ag)))]
       {:scopes (scopes (z/vector-zip query))
        :errs (errs (z/vector-zip query))})))
 
