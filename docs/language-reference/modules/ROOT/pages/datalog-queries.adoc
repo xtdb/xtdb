@@ -405,7 +405,7 @@ Use a unification predicate, either `==` or `!=`, to constrain two independent l
 
 [[p :age a]
  [p2 :age a2]
- (not [(= a a2]])]
+ (not [(= a a2)])]
 ----
 
 [#clause-not]
