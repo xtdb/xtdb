@@ -26,11 +26,11 @@
   (when cw-namespace
     (when-let [^List
                metric-data (seq (for [{:keys [time-taken-ms bench-type] :as result} results
-                                      :when (and (:crux-node-type result)
+                                      :when (and (:xtdb-node-type result)
                                                  (:success? result))
                                       :when (contains? #{:ingest :queries :queries-warm} bench-type)]
                                   (let [^List
-                                        dimensions (for [k #{:crux-node-type :bench-ns :bench-type}]
+                                        dimensions (for [k #{:xtdb-node-type :bench-ns :bench-type}]
                                                      (->cw-dimension k (get result k)))]
                                     (.. (MetricDatum/builder)
                                         (metricName "time-taken")

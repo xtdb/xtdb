@@ -86,7 +86,7 @@
 ;; I don't know which is correct!
 
 (defn summarise-query-results [watdiv-query-results]
-  (let [base-map (select-keys (first watdiv-query-results) [:bench-ns :crux-node-type])
+  (let [base-map (select-keys (first watdiv-query-results) [:bench-ns :xtdb-node-type])
         query-summary (merge base-map
                              {:success? true
                               :bench-type :queries

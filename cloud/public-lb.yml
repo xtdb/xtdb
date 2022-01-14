@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 
 Parameters:
-  CertificateARN:
+  CertificateId:
     Type: String
-    Default: 'arn:aws:acm:eu-west-1:199686536682:certificate/928c2c31-7338-4506-8914-a27b6f3fc38d'
+    Default: '928c2c31-7338-4506-8914-a27b6f3fc38d'
 
 Resources:
   LoadBalancerSG:
@@ -49,7 +49,7 @@ Resources:
       Port: 443
       Protocol: HTTPS
       Certificates:
-         - CertificateArn: !Ref CertificateARN
+         - CertificateArn: !Sub 'arn:aws:acm:${AWS::Region}:${AWS::AccountId}:certificate/${CertificateId}'
       DefaultActions:
         - Type: 'fixed-response'
           FixedResponseConfig:

@@ -21,18 +21,18 @@ REV=${REV:-HEAD}
 SHA="$(git rev-parse ${REV})"
 
 TASKDEF_ARN=$(aws ecs register-task-definition\
-                  --family "crux-bench-dev" \
+                  --family "xtdb-bench-dev" \
                   --cpu "4 vCPU" \
                   --memory "12GB" \
-                  --task-role-arn "arn:aws:iam::955308952094:role/crux-bench-ECSTaskRole-1QHM7XK4QT25X" \
-                  --execution-role-arn "arn:aws:iam::955308952094:role/crux-bench-ECSTaskExecutionRole-14WW8A7NF1D2V" \
+                  --task-role-arn "arn:aws:iam::955308952094:role/xtdb-bench-ECSTaskRole-1QHM7XK4QT25X" \
+                  --execution-role-arn "arn:aws:iam::955308952094:role/xtdb-bench-ECSTaskExecutionRole-14WW8A7NF1D2V" \
                   --network-mode "host" \
                   --container-definitions \
                   '[{
                       "name":"zookeeper-container",
                       "cpu":1024,
                       "memory":2048,
-                      "image":"confluentinc/cp-zookeeper:5.3.1",
+                      "image":"confluentinc/cp-zookeeper:6.1.1",
                       "essential":true,
                       "environment":[{"name":"ZOOKEEPER_CLIENT_PORT", "value":"2181"},{"name":"ZOOKEEPER_TICK_TIME", "value":"2000"}],
                       "portMappings":[{"containerPort":2181}]
@@ -40,7 +40,7 @@ TASKDEF_ARN=$(aws ecs register-task-definition\
                       "name":"broker-container",
                       "cpu":1024,
                       "memory":2048,
-                      "image":"confluentinc/cp-enterprise-kafka:5.3.1",
+                      "image":"confluentinc/cp-kafka:6.1.1",
                       "dependsOn":[{"condition":"START","containerName":"zookeeper-container"}],
                       "essential":true,
                       "environment":[{"name":"KAFKA_BROKER_ID","value":"1"},
@@ -52,7 +52,7 @@ TASKDEF_ARN=$(aws ecs register-task-definition\
                       "name":"bench-container",
                       "cpu":2048,
                       "memory":8192,
-                      "image":"955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:commit-'${SHA}'",
+                      "image":"955308952094.dkr.ecr.eu-west-2.amazonaws.com/xtdb-bench:commit-'${SHA}'",
                       "dependsOn":[{"condition":"START","containerName":"broker-container"}],
                       "essential":true,
                       "secrets":[{"name":"SLACK_URL","valueFrom":"arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ"}],
@@ -60,7 +60,7 @@ TASKDEF_ARN=$(aws ecs register-task-definition\
                         "logDriver":"awslogs",
                         "options": {
                           "awslogs-region":"eu-west-2",
-                          "awslogs-group":"crux-bench-dev",
+                          "awslogs-group":"xtdb-bench-dev",
                           "awslogs-stream-prefix":"'$(whoami)'-'${COMMIT_SHA}'"
                         }
                       }
@@ -70,7 +70,7 @@ TASKDEF_ARN=$(aws ecs register-task-definition\
 echo "Starting ECS task @ ${SHA:0:8}. Failures:"
 aws ecs run-task \
     --task-definition "$TASKDEF_ARN" \
-    --cluster crux-bench \
+    --cluster xtdb-bench \
     --launch-type EC2 \
     --count 1 \
     --overrides '{"containerOverrides": [{"name": "bench-container", "command": '"$COMMAND"'}]}' \

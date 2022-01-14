@@ -107,7 +107,7 @@
        :compacted-bytes-on-disk (:xtdb.kv/size (xt/status node))})))
 
 (defn post-to-slack [message]
-  (if-let [slack-url (System/getenv "SLACK_URL")]
+  (if-let [slack-url (System/getenv "BENCH_SECRETS")]
     (try
       (client/post (-> slack-url
                        (json/read-str)
@@ -142,7 +142,7 @@
                         (Duration/ofMillis maximum-time-taken-this-week)
                         (sparkline times-taken)
                         (let [time-taken-seconds (/ time-taken-ms 1000)]
-                          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :xtdb-commit :time-taken-ms
+                          (pr-str (dissoc bench-map :bench-ns :bench-type :xtdb-node-type :xtdb-commit :time-taken-ms
                                           :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week :times-taken))))]
                (when (and (= bench-type :ingest) doc-count av-count bytes-indexed)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
@@ -155,7 +155,7 @@
 (defn results->slack-message [results]
   (format "*%s* (%s)\n========\n%s\n"
           (:bench-ns (first results))
-          (:crux-node-type (first results))
+          (:xtdb-node-type (first results))
           (->> results
                (map result->slack-message)
                (string/join "\n"))))
@@ -172,7 +172,7 @@
                         (Duration/ofMillis minimum-time-taken-this-week)
                         (Duration/ofMillis maximum-time-taken-this-week)
                         (sparkline times-taken)
-                        (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :xtdb-commit :time-taken-ms
+                        (pr-str (dissoc bench-map :bench-ns :bench-type :xtdb-node-type :xtdb-commit :time-taken-ms
                                         :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week :times-taken)))]
                (when (= bench-type :ingest)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
@@ -187,9 +187,9 @@
   (str "<h1>XTDB bench results</h1>"
        (->> (for [[bench-ns results] (group-by :bench-ns bench-results)]
               (str (format "<h2>%s</h2>" bench-ns)
-                   (->> (for [[crux-node-type results] (group-by :crux-node-type results)]
+                   (->> (for [[xtdb-node-type results] (group-by :xtdb-node-type results)]
                           (format "<h3>%s</h3> %s"
-                                  crux-node-type
+                                  xtdb-node-type
                                   (->> results
                                        (map result->html)
                                        (string/join " "))))
@@ -342,7 +342,7 @@
   (->> (for [[node-type ->node] nodes]
          (f/with-tmp-dir "xtdb-node" [data-dir]
            (with-open [node (xt/start-node (->node data-dir))]
-             (with-dimensions {:crux-node-type node-type}
+             (with-dimensions {:xtdb-node-type node-type}
                (log/infof "Running bench on %s node." node-type)
                (f node)))))
        (apply concat)
@@ -388,7 +388,7 @@
   (try
     (.putObject ^S3Client @s3-client
                 (-> (PutObjectRequest/builder)
-                    (.bucket "crux-bench")
+                    (.bucket "xtdb-bench")
                     (.key (generate-s3-filename database version))
                     ^PutObjectRequest (.build))
                 (RequestBody/fromFile file))
@@ -399,7 +399,7 @@
   (try
     (.getObject ^S3Client @s3-client
                 (-> (GetObjectRequest/builder)
-                    (.bucket "crux-bench")
+                    (.bucket "xtdb-bench")
                     (.key key)
                     ^GetObjectRequest (.build)))
     (catch SdkClientException e
@@ -413,12 +413,12 @@
         (log/info "AWS credentials not found! Cannot get comparison times.")))))
 
 (defn get-comparison-times [results]
-  (let [query-requests (for [{:keys [crux-node-type bench-type bench-ns time-taken-ms] :as result} results]
+  (let [query-requests (for [{:keys [xtdb-node-type bench-type bench-ns time-taken-ms] :as result} results]
                          (let [query-id (-> (.startQuery ^AWSLogsClient @log-client
                                                          (-> (StartQueryRequest.)
-                                                             (.withLogGroupName "crux-bench")
-                                                             (.withQueryString (format  "fields `time-taken-ms` | filter `crux-node-type` = '%s' | filter `bench-type` = '%s' | filter `bench-ns` = '%s' | sort @timestamp desc"
-                                                                                        crux-node-type (name bench-type) (name bench-ns)))
+                                                             (.withLogGroupName "xtdb-bench")
+                                                             (.withQueryString (format  "fields `time-taken-ms` | filter `xtdb-node-type` = '%s' | filter `bench-type` = '%s' | filter `bench-ns` = '%s' | sort @timestamp desc"
+                                                                                        xtdb-node-type (name bench-type) (name bench-ns)))
                                                              (.withStartTime (-> (Date.)
                                                                                  (.toInstant)
                                                                                  (.minus (Duration/ofDays 7))

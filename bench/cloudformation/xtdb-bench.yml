@@ -2,9 +2,9 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: A stack for running XTDB Benchmarks
 
 Parameters:
-  SecretArn:
+  SecretId:
     Type: String
-    Default: arn:aws:secretsmanager:eu-west-1:199686536682:secret:xtdb-bench-2tWiZM
+    Default: xtdb-bench-2tWiZM
 
 Resources:
   # ECS Resources
@@ -21,6 +21,12 @@ Resources:
     Properties:
       LogGroupName: 'xtdb-bench'
       RetentionInDays: 365
+
+  LogGroupDev:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'xtdb-bench-dev'
+      RetentionInDays: 14
 
   ECRRepository:
     Type: AWS::ECR::Repository
@@ -103,13 +109,19 @@ Resources:
                 - 'logs:CreateLogStream'
                 - 'logs:PutLogEvents'
 
-                # Allow the ECS tasks to get secret values from the secrets manager
-                - 'secretsmanager:GetSecretValue'
-
                 # Allow the ECS tasks to upload/download from s3
                 - 's3:PutObject'
                 - 's3:GetObject'
               Resource: '*'
+
+            - Effect: Allow
+              Action:
+                # Allow the ECS tasks to get secret values from the secrets manager
+                - 'secretsmanager:GetSecretValue'
+                - 'ssm:GetParameters'
+                - 'kms:Decrypt'
+              Resource: '*'
+
 
   ECSTaskRole:
     Type: AWS::IAM::Role
@@ -171,7 +183,7 @@ Resources:
           PortMappings:
             - ContainerPort: 5432
         - Name: 'zookeeper-container'
-          Image: confluentinc/cp-zookeeper:5.3.1
+          Image: confluentinc/cp-zookeeper:6.1.1
           Essential: true
           Environment:
             - Name: 'ZOOKEEPER_CLIENT_PORT'
@@ -181,7 +193,7 @@ Resources:
           PortMappings:
             - ContainerPort: 2181
         - Name: 'broker-container'
-          Image: confluentinc/cp-enterprise-kafka:5.3.1
+          Image: confluentinc/cp-kafka:6.1.1
           DependsOn:
             - Condition: 'START'
               ContainerName: 'zookeeper-container'
@@ -203,8 +215,8 @@ Resources:
           Image: !Join [':', [ !GetAtt [ 'ECRRepository', 'RepositoryUri' ], 'master' ] ]
           Essential: true
           Secrets:
-            - Name: "SLACK_URL"
-              ValueFrom: !Ref SecretArn
+            - Name: "BENCH_SECRETS"
+              ValueFrom: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretId}'
           Environment:
             - Name: 'XTDB_BENCH_CW_METRICS'
               Value: 'true'
@@ -432,8 +444,8 @@ Resources:
           region = 'eu-west-1'
           http = urllib3.PoolManager()
           secrets_manager = boto3.client('secretsmanager', region_name=region)
-          slack_url_secret = secrets_manager.get_secret_value(SecretId='${SecretArn}')
-          url = json.loads(slack_url_secret['SecretString'])['slack-url']
+          bench_secrets = secrets_manager.get_secret_value(SecretId='${SecretId}')
+          url = json.loads(bench_secrets['SecretString'])['slack-url']
           def send_message(event, context):
             task_containers = event['detail']['containers']
             for container in task_containers:
