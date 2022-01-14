@@ -32,10 +32,10 @@ Resources:
             "rules": [
             {
               "rulePriority": 1,
-              "description": "Only keep latest five images of main",
+              "description": "Only keep latest five images of master",
               "selection": {
                 "tagStatus": "tagged",
-                "tagPrefixList": ["main"],
+                "tagPrefixList": ["master"],
                 "countType": "imageCountMoreThan",
                 "countNumber": 5
               },
@@ -43,10 +43,10 @@ Resources:
             },
             {
               "rulePriority": 2,
-              "description": "Only keep main-images for 14 days",
+              "description": "Only keep master-images for 14 days",
               "selection": {
                 "tagStatus": "tagged",
-                "tagPrefixList": ["main-"],
+                "tagPrefixList": ["master-"],
                 "countType": "sinceImagePushed",
                 "countNumber": 14,
                 "countUnit": "days"
@@ -200,7 +200,7 @@ Resources:
         - Name: 'bench-container'
           Cpu: 2048
           Memory: 8192
-          Image: !Join [':', [ !GetAtt [ 'ECRRepository', 'RepositoryUri' ], 'main' ] ]
+          Image: !Join [':', [ !GetAtt [ 'ECRRepository', 'RepositoryUri' ], 'master' ] ]
           Essential: true
           Secrets:
             - Name: "SLACK_URL"
