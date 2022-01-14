@@ -140,6 +140,7 @@
 ;; https://www.di.uminho.pt/~joost/publications/AStrafunskiApplicationLetter.pdf
 ;; https://arxiv.org/pdf/cs/0212048.pdf
 ;; https://arxiv.org/pdf/cs/0204015.pdf
+;; https://arxiv.org/pdf/cs/0205018.pdf
 
 ;; Type Preserving
 
