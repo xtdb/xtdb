@@ -97,7 +97,7 @@
 
 (def parent z/up)
 (def $ z-nth)
-(def lexme (comp z/node $))
+(def lexeme (comp z/node $))
 (def child-idx (comp count z/lefts))
 
 (defn first-child? [ag]
@@ -410,7 +410,7 @@
              :cons-let (env (parent ag)))
       (case (ctor (parent ag))
         (:cons :cons-let) (assoc (dcli (parent ag))
-                                 (lexme (parent ag) 1)
+                                 (lexeme (parent ag) 1)
                                  (parent ag))
         (dcli (parent ag)))))
 
@@ -450,11 +450,11 @@
 
   (defn errs [ag]
     (case (ctor ag)
-      (:cons :cons-let) (->> [(must-not-be-in (dcli ag) (lexme ag 1) ag)
+      (:cons :cons-let) (->> [(must-not-be-in (dcli ag) (lexeme ag 1) ag)
                               (errs ($ ag 2))
                               (errs ($ ag 3))]
                              (reduce into))
-      :variable (must-be-in (env ag) (lexme ag 1))
+      :variable (must-be-in (env ag) (lexeme ag 1))
       (use-attributes errs into ag)))
 
   (errs
@@ -493,7 +493,7 @@
   (defn find-l-decl [n name]
     (when n
       (if (and (= :Decl (ctor n))
-               (= (lexme n 2) name))
+               (= (lexeme n 2) name))
         n
         (recur (z/left n) name))))
 
@@ -511,20 +511,20 @@
 
   (defn l-decl [n name]
     (case (ctor n)
-      :Decl (when (= (lexme n 1) name)
+      :Decl (when (= (lexeme n 1) name)
               n)))
 
   (defn type' [n]
     (case (ctor n)
-      :Use (type' (g-decl n (lexme n 1)))
-      :Decl (lexme n 1)
+      :Use (type' (g-decl n (lexeme n 1)))
+      :Decl (lexeme n 1)
       :DErr "ErrorType"
       (:Prog :Block) (type' (z/rightmost (z/down n)))))
 
   (defn well-formed? [n]
     (case (ctor n)
       :Use (not= (type' n) "ErrorType")
-      :Decl (= (g-decl n (lexme n 2)) n)
+      :Decl (= (g-decl n (lexeme n 2)) n)
       :DErr false
       (:Prog :Block) (use-attributes well-formed?
                                      (completing
@@ -545,7 +545,7 @@
 
   (defn base [n]
     (case (ctor n)
-      :basechar (case (lexme n 1)
+      :basechar (case (lexeme n 1)
                   "o" 8
                   "d" 10)
       :based-num (base ($ n 2))
@@ -553,7 +553,7 @@
 
   (defn value [n]
     (case (ctor n)
-      :digit (let [v (Double/parseDouble (lexme n 1))]
+      :digit (let [v (Double/parseDouble (lexeme n 1))]
                (if (> v (base n))
                  Double/NaN
                  v))

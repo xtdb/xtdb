@@ -119,7 +119,7 @@
                  :query_name
                  :correlation_name
                  :identifier) (identifier (r/$ ag 1))
-                :regular_identifier (r/lexme ag 1)
+                :regular_identifier (r/lexeme ag 1)
                 nil))
             (identifiers [ag]
               (case (r/ctor ag)
@@ -128,7 +128,7 @@
                 :identifier_chain
                 (letfn [(step [_ ag]
                           (case (r/ctor ag)
-                            :regular_identifier [(r/lexme ag 1)]
+                            :regular_identifier [(r/lexeme ag 1)]
                             []))]
                   ((r/full-td-tu (r/mono-tuz step)) ag))))
             (table [ag]
