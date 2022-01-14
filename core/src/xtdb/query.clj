@@ -1184,13 +1184,14 @@
     (do (validate-existing-vars var->bindings not-clause not-vars)
         {:join-depth not-join-depth
          :constraint-fn
-         (fn not-constraint [index-snapshot db _idx-id->idx join-keys]
-           (let [db (assoc db :index-snapshot index-snapshot)
-                 in-args (when (seq not-vars)
-                           [(vec (for [var-binding not-var-bindings]
-                                   (bound-result-for-var index-snapshot var-binding join-keys)))])
-                 {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause not-in-bindings in-args rule-name->rules)]
-             (empty? (idx/layered-idx->seq n-ary-join))))})))
+         (fn not-constraint [_index-snapshot db _idx-id->idx join-keys]
+           (with-open [index-snapshot ^Closeable (open-index-snapshot db)]
+             (let [db (assoc db :index-snapshot index-snapshot)
+                   in-args (when (seq not-vars)
+                             [(vec (for [var-binding not-var-bindings]
+                                     (bound-result-for-var index-snapshot var-binding join-keys)))])
+                   {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause not-in-bindings in-args rule-name->rules)]
+               (empty? (idx/layered-idx->seq n-ary-join)))))})))
 
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars]
   (let [g (->> (keys var->joins)
