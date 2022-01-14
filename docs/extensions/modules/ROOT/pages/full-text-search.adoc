@@ -155,7 +155,7 @@ There is an entirely different Lucene search function available for multi-field 
 `lucene-text-search` accepts a Lucene query string whose format is documented extensively https://lucene.apache.org/core/8_9_0/queryparser/org/apache/lucene/queryparser/classic/package-summary.html#package.description[elsewhere].
 
 To enable this document-oriented query model, the structure of the indexes stored in Lucene is fundamentally different to the structure required for the EAV-oriented features discussed above,
-Using both querying and indexing approaches within the same node is supported and discussed discussed below.
+Using both querying and indexing approaches within the same node is supported and discussed below.
 
 In the normal case for `text-search` and `wildcard-text-search`, we index each EAV in an XTDB document as individual documents in Lucene.
 This allows for some degree of structural sharing, which should help in the case where there is a lot historical data in XTDB.
