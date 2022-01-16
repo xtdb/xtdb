@@ -3,7 +3,7 @@
             [core2.sql :as sql]))
 
 (t/deftest test-annotate-query-scopes
-  (let [tree (sql/parse "WITH foo AS (SELECT 1 FROM bar)
+  (let [tree (sql/parse "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
 SELECT t1.d-t1.e
   FROM t1, foo AS baz
  WHERE EXISTS(SELECT 1 FROM t1 AS x WHERE x.b<t1.b)
@@ -17,7 +17,7 @@ SELECT t1.d-t1.e
                           {:identifiers ["t1" "a"] :table-id 2 :qualified? true}
                           {:identifiers ["t1" "b"] :table-id 2 :qualified? true}}}
               {:ctes {}
-               :tables {"bar" {:table-or-query-name "bar" :correlation-name "bar" :id 4}}
+               :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :cte-id 1}}
                :columns #{}}
               {:ctes {}
                :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 5}}
@@ -49,12 +49,10 @@ SELECT t1.d-t1.e
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 JOIN t2 ON (t1.x = t2.y)")))))
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT * FROM foo, LATERAL (SELECT t1.b FROM t1 JOIN t2 ON (t1.x = t2.y AND t1.x = foo.x)) AS t2")))))
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT * FROM foo WHERE foo.x = (SELECT t1.b FROM t1 JOIN t2 ON (t1.x = t2.y AND t1.x = foo.x))")))))
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM foo, t1 JOIN t2 ON (t1.x = foo.y)")))))
+
   (t/is (re-find #"Table not in scope: foo"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM (SELECT t1.b FROM t1 JOIN t2 ON (t1.x = t2.y AND t1.x = foo.x)) AS t2"))))))
-
-  (t/is (re-find #"Table not in scope: foo"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM foo, t1 JOIN t2 ON (t1.x = foo.y)"))))))
-
   (t/is (re-find #"Table not in scope: t1"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT t2.b FROM (SELECT x.b FROM t1 AS x WHERE x.b < t1.b) AS t2, t1"))))))
   (t/is (re-find #"Table not in scope: bar"

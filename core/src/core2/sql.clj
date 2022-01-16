@@ -40,9 +40,10 @@
 ;; TODO:
 ;; - too complex threading logic.
 ;; - unclear?
-;; - join tables should be added into the env one by one?
 ;; - mutable ids, use references instead?
 ;; - should really be modular and not single letfn.
+;; - duplicates should be errors, variable, derived columns, ctes.
+;; - join tables should have proper env calculated.
 
 (defn- extend-env [env {:keys [correlation-name] :as table}]
   (assoc env correlation-name table))
@@ -59,9 +60,9 @@
                  :group_by_clause
                  :having_clause
                  :order_by_clause) (dclo (r/parent ag))
-                :join_condition (-> (extend-env (env (r/parent ag)) (table (r/$ (r/parent ag) 1)))
-                                    (extend-env (table (r/$ (r/parent ag) -2))))
-                :lateral_derived_table (dcli (r/parent ag))
+                (:collection_derived_table
+                 :join_condition
+                 :lateral_derived_table) (dcli (r/parent ag))
                 (some-> (r/parent ag) (env))))
             (dcli [ag]
               (case (r/ctor ag)
@@ -69,12 +70,9 @@
                 :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
                                 (dcli (r/$ ag 1))
                                 (extend-env (dcli (r/prev ag)) (table ag)))
-                :cross_join (-> (extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
-                                (extend-env (table (r/$ ag -1))))
-                :qualified_join (-> (extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
-                                    (extend-env (table (r/$ ag -2))))
-                :natural_join (-> (extend-env (dcli (r/prev ag)) (table (r/$ ag 1)))
-                                  (extend-env (table (r/$ ag -1))))
+                (:cross_join
+                 :natural_join
+                 :qualified_join) (reduce extend-env (dcli (r/prev ag)) (tables ag))
                 (some-> (r/parent ag) (dcli))))
             (dclo [ag]
               (case (r/ctor ag)
@@ -93,14 +91,18 @@
                 (some-> (r/parent ag) (ctei))))
             (cteo [ag]
               (case (r/ctor ag)
-                :query_expression (cteo (r/$ ag 1))
+                :query_expression (if (= :with_clause (r/ctor (r/$ ag 1)))
+                                    (cteo (r/$ ag 1))
+                                    (ctei ag))
                 :with_clause (cteo (r/$ ag -1))
                 :with_list (ctei (r/$ ag -1))
                 nil))
             (cte-env [ag]
               (case (r/ctor ag)
                 :query_expression_body (cteo (r/parent ag))
-                :with_list_element (ctei (r/prev ag))
+                :with_list_element (if (= "RECURSIVE" (r/lexeme (r/parent (r/parent ag)) 2))
+                                     (cteo (r/parent ag))
+                                     (ctei (r/prev ag)))
                 (some-> (r/parent ag) (cte-env))))
             (cte [ag]
               (case (r/ctor ag)
