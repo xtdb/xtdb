@@ -18,10 +18,12 @@ SELECT t1.d-t1.e
                           {:identifiers ["t1" "a"] :table-id 3 :qualified? true}
                           {:identifiers ["t1" "b"] :table-id 3 :qualified? true}}}
               {:id 5
+               :parent-id 1
                :ctes {}
                :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 6 :cte-id 2}}
                :columns #{}}
               {:id 7
+               :parent-id 1
                :ctes {}
                :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 8}}
                :columns #{{:identifiers ["x" "b"] :table-id 8 :qualified? true}

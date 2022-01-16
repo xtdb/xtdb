@@ -250,12 +250,15 @@
 (defn- scope [ag]
   (case (r/ctor ag)
     :query_expression (let [id (->id ag)
+                            parent-id (:id (scope (r/parent ag)))
                             ctes (local-ctes ag)
                             tables (local-tables ag)]
-                        {:id id
-                         :ctes (zipmap (map :query-name ctes) ctes)
-                         :tables (zipmap (map :correlation-name tables) tables)
-                         :columns (set (column-references ag))})))
+                        (cond-> {:id id
+                                 :ctes (zipmap (map :query-name ctes) ctes)
+                                 :tables (zipmap (map :correlation-name tables) tables)
+                                 :columns (set (column-references ag))}
+                          parent-id (assoc :parent-id parent-id)))
+    (r/inherit ag)))
 (defn- scopes [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)
