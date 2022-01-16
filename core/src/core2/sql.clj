@@ -145,7 +145,7 @@
     :with_list_element (if (= "RECURSIVE" (r/lexeme (r/parent (r/parent ag)) 2))
                          (cteo (r/parent ag))
                          (ctei (r/prev ag)))
-    (some-> (r/parent ag) (cte-env))))
+    (r/inherit ag)))
 
 ;; Inherited
 (defn- ctei [ag]
@@ -153,7 +153,7 @@
     :query_expression (cte-env (r/parent ag))
     :with_list_element (let [{:keys [query-name] :as cte} (cte ag)]
                          (assoc (ctei (r/prev ag)) query-name cte))
-    (some-> (r/parent ag) (ctei))))
+    (r/inherit ag)))
 
 ;; Synthesised
 (defn- cteo [ag]
@@ -200,7 +200,7 @@
     (:collection_derived_table
      :join_condition
      :lateral_derived_table) (dcli (r/parent ag))
-    (some-> (r/parent ag) (env))))
+    (r/inherit ag)))
 
 ;; Inherited
 (defn- dcli [ag]
@@ -212,7 +212,7 @@
     (:cross_join
      :natural_join
      :qualified_join) (reduce extend-env (dcli (r/prev ag)) (local-tables ag))
-    (some-> (r/parent ag) (dcli))))
+    (r/inherit ag)))
 
 ;; Synthesised
 (defn- dclo [ag]
@@ -249,9 +249,11 @@
 
 (defn- scope [ag]
   (case (r/ctor ag)
-    :query_expression (let [ctes (local-ctes ag)
+    :query_expression (let [id (->id ag)
+                            ctes (local-ctes ag)
                             tables (local-tables ag)]
-                        {:ctes (zipmap (map :query-name ctes) ctes)
+                        {:id id
+                         :ctes (zipmap (map :query-name ctes) ctes)
                          :tables (zipmap (map :correlation-name tables) tables)
                          :columns (set (column-references ag))})))
 (defn- scopes [ag]

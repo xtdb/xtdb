@@ -111,6 +111,9 @@
     (parent ag)
     (z/left ag)))
 
+(defmacro inherit [ag]
+  `(some-> (parent ~ag) (recur)))
+
 (defn with-memoized-attributes [attr-vars f]
   (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
     (with-redefs-fn attrs f)))

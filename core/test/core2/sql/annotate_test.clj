@@ -9,20 +9,23 @@ SELECT t1.d-t1.e
  WHERE EXISTS(SELECT 1 FROM t1 AS x WHERE x.b<t1.b)
    AND t1.a>t1.b
  ORDER BY 1")]
-    (t/is (= [{:ctes {"foo" {:query-name "foo" :id 1}}
-               :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 2}
-                        "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 3 :cte-id 1}}
-               :columns #{{:identifiers ["t1" "d"] :table-id 2 :qualified? true}
-                          {:identifiers ["t1" "e"] :table-id 2 :qualified? true}
-                          {:identifiers ["t1" "a"] :table-id 2 :qualified? true}
-                          {:identifiers ["t1" "b"] :table-id 2 :qualified? true}}}
-              {:ctes {}
-               :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :cte-id 1}}
+    (t/is (= [{:id 1
+               :ctes {"foo" {:query-name "foo" :id 2}}
+               :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 3}
+                        "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 4 :cte-id 2}}
+               :columns #{{:identifiers ["t1" "d"] :table-id 3 :qualified? true}
+                          {:identifiers ["t1" "e"] :table-id 3 :qualified? true}
+                          {:identifiers ["t1" "a"] :table-id 3 :qualified? true}
+                          {:identifiers ["t1" "b"] :table-id 3 :qualified? true}}}
+              {:id 5
+               :ctes {}
+               :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 6 :cte-id 2}}
                :columns #{}}
-              {:ctes {}
-               :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 5}}
-               :columns #{{:identifiers ["x" "b"] :table-id 5 :qualified? true}
-                          {:identifiers ["t1" "b"] :table-id 2 :qualified? true}}}]
+              {:id 7
+               :ctes {}
+               :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 8}}
+               :columns #{{:identifiers ["x" "b"] :table-id 8 :qualified? true}
+                          {:identifiers ["t1" "b"] :table-id 3 :qualified? true}}}]
              (:scopes (sql/analyze-query tree))))))
 
 (t/deftest test-scope-rules
