@@ -97,7 +97,7 @@
                                  :qualified? qualified?}
                           table-id (assoc :table-id table-id)))))
 
-(defn- column-references [ag]
+(defn- local-column-references [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)
               :column_reference [(column-reference ag)]
@@ -256,7 +256,7 @@
                         (cond-> {:id id
                                  :ctes (zipmap (map :query-name ctes) ctes)
                                  :tables (zipmap (map :correlation-name tables) tables)
-                                 :columns (set (column-references ag))}
+                                 :columns (set (local-column-references ag))}
                           parent-id (assoc :parent-id parent-id)))
     (r/inherit ag)))
 (defn- scopes [ag]
