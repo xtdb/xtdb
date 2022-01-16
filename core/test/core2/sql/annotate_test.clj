@@ -58,4 +58,11 @@ SELECT t1.d-t1.e
   (t/is (re-find #"Table not in scope: bar"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT bar.a FROM foo WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)"))))))
   (t/is (re-find #"Table not in scope: foo"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM foo AS baz WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)")))))))
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM foo AS baz WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)"))))))
+
+  (t/is (re-find #"Table variable duplicated: baz"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM foo AS baz, baz"))))))
+  (t/is (re-find #"CTE query name duplicated: foo"
+                 (first (:errs (sql/analyze-query (sql/parse "WITH foo AS (SELECT 1 FROM foo), foo AS (SELECT 1 FROM foo) SELECT * FROM foo"))))))
+  (t/is (re-find #"Column name duplicated: foo"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM (SELECT 1, 2 FROM foo) AS bar (foo, foo)")))))))
