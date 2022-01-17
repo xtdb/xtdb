@@ -207,14 +207,6 @@
   (fn self [z]
     ((choice-tp f (all-tp self)) z)))
 
-(defn- maybe-keep [x y]
-  (fn [z]
-    (if-some [r (y z)]
-      (if-some [k (x r)]
-        k
-        r)
-      (x z))))
-
 (defn z-try-apply-mz [f]
   (fn [z]
     (some->> (f (z/node z) z)
@@ -226,10 +218,10 @@
              (z/replace z))))
 
 (defn adhoc-tp [f g]
-  (maybe-keep f (z-try-apply-m g)))
+  (choice-tp (z-try-apply-m g) f))
 
 (defn adhoc-tpz [f g]
-  (maybe-keep f (z-try-apply-mz g)))
+  (choice-tp (z-try-apply-mz g) f))
 
 (defn id-tp [x] x)
 
