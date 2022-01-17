@@ -72,6 +72,8 @@
 
 ;; Attributes
 
+(declare cte-env env)
+
 ;; Ids
 
 (def ^:private ^:dynamic *next-id* (atom 0))
@@ -103,26 +105,6 @@
                 []))]
       ((r/full-td-tu (r/mono-tuz step)) ag))))
 
-(declare env)
-
-(defn- column-reference [ag]
-  (case (r/ctor ag)
-    :column_reference (let [identifiers (identifiers ag)
-                            qualified? (> (count identifiers) 1)
-                            table-id (when qualified?
-                                       (:id (find-decl (env ag) (first identifiers))))]
-                        (cond-> {:identifiers identifiers
-                                 :qualified? qualified?}
-                          table-id (assoc :table-id table-id)))))
-
-(defn- local-column-references [ag]
-  (letfn [(step [_ ag]
-            (case (r/ctor ag)
-              :column_reference [(column-reference ag)]
-              :subquery []
-              nil))]
-    ((r/stop-td-tu (r/mono-tuz step)) ag)))
-
 (defn- table-or-query-name [ag]
   (case (r/ctor ag)
     (:table_factor
@@ -143,19 +125,10 @@
 
 ;; CTEs
 
-(declare cteo ctei)
-
 (defn- cte [ag]
   (case (r/ctor ag)
     :with_list_element {:query-name (table-or-query-name ag)
                         :id (->id ag)}))
-(defn- cte-env [ag]
-  (case (r/ctor ag)
-    :query_expression (cteo ag)
-    :with_list_element (if (= "RECURSIVE" (r/lexeme (r/parent (r/parent ag)) 2))
-                         (cteo (r/parent ag))
-                         (ctei (r/prev ag)))
-    (r/inherit ag)))
 
 ;; Inherited
 (defn- ctei [ag]
@@ -174,6 +147,14 @@
                         (ctei ag))
     :with_clause (cteo (r/$ ag -1))
     :with_list (ctei (r/$ ag -1))))
+
+(defn- cte-env [ag]
+  (case (r/ctor ag)
+    :query_expression (cteo ag)
+    :with_list_element (if (= "RECURSIVE" (r/lexeme (r/parent (r/parent ag)) 2))
+                         (cteo (r/parent ag))
+                         (ctei (r/prev ag)))
+    (r/inherit ag)))
 
 ;; Tables
 
@@ -197,17 +178,6 @@
               :subquery []
               nil))]
     ((r/stop-td-tu (r/mono-tuz step)) ag)))
-
-(declare dclo dcli)
-
-(defn- env [ag]
-  (case (r/ctor ag)
-    :query_expression (dclo ag)
-    :from_clause (parent-env (dclo ag))
-    (:collection_derived_table
-     :join_condition
-     :lateral_derived_table) (dcli (r/parent ag))
-    (r/inherit ag)))
 
 ;; Inherited
 (defn- dcli [ag]
@@ -239,6 +209,35 @@
     :query_specification (dclo (r/$ ag -1))
     :from_clause (dclo (r/$ ag 2))
     :table_reference_list (dcli (r/$ ag -1))))
+
+(defn- env [ag]
+  (case (r/ctor ag)
+    :query_expression (dclo ag)
+    :from_clause (parent-env (dclo ag))
+    (:collection_derived_table
+     :join_condition
+     :lateral_derived_table) (dcli (r/parent ag))
+    (r/inherit ag)))
+
+;; Column references
+
+(defn- column-reference [ag]
+  (case (r/ctor ag)
+    :column_reference (let [identifiers (identifiers ag)
+                            qualified? (> (count identifiers) 1)
+                            table-id (when qualified?
+                                       (:id (find-decl (env ag) (first identifiers))))]
+                        (cond-> {:identifiers identifiers
+                                 :qualified? qualified?}
+                          table-id (assoc :table-id table-id)))))
+
+(defn- local-column-references [ag]
+  (letfn [(step [_ ag]
+            (case (r/ctor ag)
+              :column_reference [(column-reference ag)]
+              :subquery []
+              nil))]
+    ((r/stop-td-tu (r/mono-tuz step)) ag)))
 
 ;; Errors
 
