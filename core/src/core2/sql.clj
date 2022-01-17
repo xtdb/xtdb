@@ -284,13 +284,12 @@
 
 (defn analyze-query [query]
   (r/with-memoized-attributes [#'id
-                               #'cte-env
                                #'ctei
                                #'cteo
-                               #'local-tables
-                               #'env
+                               #'cte-env
+                               #'dcli
                                #'dclo
-                               #'dcli]
+                               #'env]
     #(let [ag (z/vector-zip query)]
        {:scopes (scopes ag)
         :errs (errs ag)})))
