@@ -41,10 +41,25 @@
 ;; - too complex threading logic.
 ;; - unclear?
 ;; - mutable ids, use references instead?
-;; - join tables should have proper env calculated.
+;; - join tables should have proper env calculated and not use local-tables.
 
-(defn- extend-env [env {:keys [correlation-name] :as table}]
-  (assoc env correlation-name table))
+(defn- enter-env-scope [env]
+  (cons {} env))
+
+(defn- extend-env [[s & ss :as env] k v]
+  (cons (update s k conj v) ss))
+
+(defn- local-env [[s]]
+  s)
+
+(defn- find-decl [[s & ss :as env] k]
+  (when s
+    (or (first (get s k))
+        (recur ss k))))
+
+(defn- local-names [[s & ss] k]
+  (->> (mapcat val s)
+       (map k)))
 
 (defn- check-duplicates [label ag xs]
   (vec (for [[x ^long freq] (frequencies xs)
@@ -92,7 +107,7 @@
     :column_reference (let [identifiers (identifiers ag)
                             qualified? (> (count identifiers) 1)
                             table-id (when qualified?
-                                       (get-in (env ag) [(first identifiers) :id]))]
+                                       (:id (find-decl (env ag) (first identifiers))))]
                         (cond-> {:identifiers identifiers
                                  :qualified? qualified?}
                           table-id (assoc :table-id table-id)))))
@@ -131,14 +146,6 @@
   (case (r/ctor ag)
     :with_list_element {:query-name (table-or-query-name ag)
                         :id (->id ag)}))
-(defn- local-ctes [ag]
-  (letfn [(step [_ ag]
-            (case (r/ctor ag)
-              :with_list_element [(cte ag)]
-              :subquery []
-              nil))]
-    ((r/stop-td-tu (r/mono-tuz step)) ag)))
-
 (defn- cte-env [ag]
   (case (r/ctor ag)
     :query_expression_body (cteo (r/parent ag))
@@ -150,9 +157,10 @@
 ;; Inherited
 (defn- ctei [ag]
   (case (r/ctor ag)
-    :query_expression (cte-env (r/parent ag))
-    :with_list_element (let [{:keys [query-name] :as cte} (cte ag)]
-                         (assoc (ctei (r/prev ag)) query-name cte))
+    :query_expression (enter-env-scope (cte-env (r/parent ag)))
+    :with_list_element (let [cte-env (ctei (r/prev ag))
+                             {:keys [query-name] :as cte} (cte ag)]
+                         (extend-env cte-env query-name cte))
     (r/inherit ag)))
 
 ;; Synthesised
@@ -162,8 +170,7 @@
                         (cteo (r/$ ag 1))
                         (ctei ag))
     :with_clause (cteo (r/$ ag -1))
-    :with_list (ctei (r/$ ag -1))
-    nil))
+    :with_list (ctei (r/$ ag -1))))
 
 ;; Tables
 
@@ -172,7 +179,7 @@
     :table_factor (when-not (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
                     (let [table-name (table-or-query-name ag)
                           correlation-name (correlation-name ag)
-                          cte-id (get-in (cte-env ag) [table-name :id])]
+                          cte-id (:id (find-decl (cte-env ag) table-name))]
                       (cond-> {:table-or-query-name (or table-name correlation-name)
                                :correlation-name correlation-name
                                :id (->id ag)}
@@ -205,18 +212,26 @@
 ;; Inherited
 (defn- dcli [ag]
   (case (r/ctor ag)
-    :table_expression (env (r/parent ag))
+    :table_expression (enter-env-scope (env (r/parent ag)))
     :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
                     (dcli (r/$ ag 1))
-                    (extend-env (dcli (r/prev ag)) (table ag)))
+                    (let [env (dcli (r/prev ag))
+                          {:keys [correlation-name] :as table} (table ag)]
+                      (extend-env env correlation-name table)))
     (:cross_join
      :natural_join
-     :qualified_join) (reduce extend-env (dcli (r/prev ag)) (local-tables ag))
+     :qualified_join) (reduce (fn [acc {:keys [correlation-name] :as table}]
+                                (extend-env acc correlation-name table))
+                              (dcli (r/prev ag))
+                              (local-tables ag))
     (r/inherit ag)))
 
 ;; Synthesised
 (defn- dclo [ag]
   (case (r/ctor ag)
+    :query_expression (if (= :with_clause (r/ctor (r/$ ag 1)))
+                        (dclo (r/$ ag 2))
+                        (dclo (r/$ ag 1)))
     (:query_expression_body
      :query_term
      :query_primary
@@ -230,8 +245,10 @@
 (defn- errs [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)
-              :table_reference_list (check-duplicates "Table variable" ag (map :correlation-name (local-tables ag)))
-              :with_list (check-duplicates "CTE query name" ag (map :query-name (local-ctes ag)))
+              :table_reference_list (check-duplicates "Table variable" ag
+                                                      (local-names (dclo ag) :correlation-name))
+              :with_list (check-duplicates "CTE query name" ag
+                                           (local-names (cteo ag) :query-name))
               :column_name_list (check-duplicates "Column name" ag (identifiers ag))
               :column_reference (let [{:keys [identifiers qualified? table-id]} (column-reference ag)]
                                   (cond
@@ -250,12 +267,10 @@
 (defn- scope [ag]
   (case (r/ctor ag)
     :query_expression (let [id (->id ag)
-                            parent-id (:id (scope (r/parent ag)))
-                            ctes (local-ctes ag)
-                            tables (local-tables ag)]
+                            parent-id (:id (scope (r/parent ag)))]
                         (cond-> {:id id
-                                 :ctes (zipmap (map :query-name ctes) ctes)
-                                 :tables (zipmap (map :correlation-name tables) tables)
+                                 :ctes (local-env (cteo ag))
+                                 :tables (local-env (dclo ag))
                                  :columns (set (local-column-references ag))}
                           parent-id (assoc :parent-id parent-id)))
     (r/inherit ag)))
@@ -271,7 +286,6 @@
 
 (defn analyze-query [query]
   (r/with-memoized-attributes [#'->id
-                               #'local-ctes
                                #'cte-env
                                #'ctei
                                #'cteo
