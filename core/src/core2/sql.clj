@@ -78,9 +78,9 @@
 
 (defn- id [ag]
   (case (r/ctor ag)
-    :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
-                    (id (z/prev ag))
-                    (inc ^long (id (z/prev ag))))
+    :table_primary (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
+                     (id (z/prev ag))
+                     (inc ^long (id (z/prev ag))))
     (:query_expression
      :with_list_element) (inc ^long (id (z/prev ag)))
     (or (some-> (z/prev ag) (id)) 0)))
@@ -164,21 +164,21 @@
 
 (defn- table [ag]
   (case (r/ctor ag)
-    :table_factor (when-not (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
-                    (let [table-name (table-or-query-name ag)
-                          correlation-name (correlation-name ag)
-                          cte-id (:id (find-decl (cte-env ag) table-name))]
-                      (cond-> {:table-or-query-name (or table-name correlation-name)
-                               :correlation-name correlation-name
-                               :id (id ag)}
-                        cte-id (assoc :cte-id cte-id))))))
+    :table_primary (when-not (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
+                     (let [table-name (table-or-query-name ag)
+                           correlation-name (correlation-name ag)
+                           cte-id (:id (find-decl (cte-env ag) table-name))]
+                       (cond-> {:table-or-query-name (or table-name correlation-name)
+                                :correlation-name correlation-name
+                                :id (id ag)}
+                         cte-id (assoc :cte-id cte-id))))))
 
 (defn- local-tables [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)
-              :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
-                              (local-tables (r/$ ag 1))
-                              [(table ag)])
+              :table_primary (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
+                               (local-tables (r/$ ag 1))
+                               [(table ag)])
               :subquery []
               nil))]
     ((r/stop-td-tu (r/mono-tuz step)) ag)))
@@ -187,12 +187,8 @@
 (defn- dcli [ag]
   (case (r/ctor ag)
     :query_expression (enter-env-scope (env (r/parent ag)))
-    :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
-                    (dcli (r/$ ag 1))
-                    (let [env (dcli (r/left-or-parent ag))
-                          {:keys [correlation-name] :as table} (table ag)]
-                      (extend-env env correlation-name table)))
-    (:cross_join
+    (:table_factor
+     :cross_join
      :natural_join
      :qualified_join) (reduce (fn [acc {:keys [correlation-name] :as table}]
                                 (extend-env acc correlation-name table))
