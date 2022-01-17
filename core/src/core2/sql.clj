@@ -138,7 +138,7 @@
 (defn- ctei [ag]
   (case (r/ctor ag)
     :query_expression (enter-env-scope (cte-env (r/parent ag)))
-    :with_list_element (let [cte-env (ctei (r/prev ag))
+    :with_list_element (let [cte-env (ctei (r/left-or-parent ag))
                              {:keys [query-name] :as cte} (cte ag)]
                          (extend-env cte-env query-name cte))
     (r/inherit ag)))
@@ -157,7 +157,7 @@
     :query_expression (cteo ag)
     :with_list_element (if (= "RECURSIVE" (r/lexeme (r/parent (r/parent ag)) 2))
                          (cteo (r/parent ag))
-                         (ctei (r/prev ag)))
+                         (ctei (r/left-or-parent ag)))
     (r/inherit ag)))
 
 ;; Tables
@@ -189,14 +189,14 @@
     :query_expression (enter-env-scope (env (r/parent ag)))
     :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
                     (dcli (r/$ ag 1))
-                    (let [env (dcli (r/prev ag))
+                    (let [env (dcli (r/left-or-parent ag))
                           {:keys [correlation-name] :as table} (table ag)]
                       (extend-env env correlation-name table)))
     (:cross_join
      :natural_join
      :qualified_join) (reduce (fn [acc {:keys [correlation-name] :as table}]
                                 (extend-env acc correlation-name table))
-                              (dcli (r/prev ag))
+                              (dcli (r/left-or-parent ag))
                               (local-tables ag))
     (r/inherit ag)))
 

@@ -106,7 +106,7 @@
 (defn single-child? [loc]
   (= 1 (count (rest (z/children loc)))))
 
-(defn prev [ag]
+(defn left-or-parent [ag]
   (if (first-child? ag)
     (parent ag)
     (z/left ag)))
