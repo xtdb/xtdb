@@ -259,6 +259,7 @@
                                  :columns (set (local-column-references ag))}
                           parent-id (assoc :parent-id parent-id)))
     (r/inherit ag)))
+
 (defn- scopes [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)
