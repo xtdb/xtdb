@@ -52,12 +52,15 @@
 (defn- local-env [[s]]
   s)
 
+(defn- parent-env [[_ & ss]]
+  ss)
+
 (defn- find-decl [[s & ss :as env] k]
   (when s
     (or (first (get s k))
         (recur ss k))))
 
-(defn- local-names [[s & ss] k]
+(defn- local-names [[s :as env] k]
   (->> (mapcat val s)
        (map k)))
 
@@ -148,7 +151,7 @@
                         :id (->id ag)}))
 (defn- cte-env [ag]
   (case (r/ctor ag)
-    :query_expression_body (cteo (r/parent ag))
+    :query_expression (cteo ag)
     :with_list_element (if (= "RECURSIVE" (r/lexeme (r/parent (r/parent ag)) 2))
                          (cteo (r/parent ag))
                          (ctei (r/prev ag)))
@@ -199,11 +202,8 @@
 
 (defn- env [ag]
   (case (r/ctor ag)
-    (:select_list
-     :where_clause
-     :group_by_clause
-     :having_clause
-     :order_by_clause) (dclo (r/parent ag))
+    :query_expression (dclo ag)
+    :from_clause (parent-env (dclo ag))
     (:collection_derived_table
      :join_condition
      :lateral_derived_table) (dcli (r/parent ag))
@@ -212,7 +212,7 @@
 ;; Inherited
 (defn- dcli [ag]
   (case (r/ctor ag)
-    :table_expression (enter-env-scope (env (r/parent ag)))
+    :query_expression (enter-env-scope (env (r/parent ag)))
     :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
                     (dcli (r/$ ag 1))
                     (let [env (dcli (r/prev ag))
