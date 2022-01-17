@@ -11,23 +11,23 @@ SELECT t1.d-t1.e
  ORDER BY 1")]
     (t/is (= [{:id 1
                :ctes {"foo" [{:query-name "foo" :id 2}]}
-               :tables {"t1" [{:table-or-query-name "t1" :correlation-name "t1" :id 3}]
-                        "baz" [{:table-or-query-name "foo" :correlation-name "baz" :id 4 :cte-id 2}]}
-               :columns #{{:identifiers ["t1" "d"] :table-id 3 :qualified? true}
-                          {:identifiers ["t1" "e"] :table-id 3 :qualified? true}
-                          {:identifiers ["t1" "a"] :table-id 3 :qualified? true}
-                          {:identifiers ["t1" "b"] :table-id 3 :qualified? true}}}
-              {:id 5
+               :tables {"t1" [{:table-or-query-name "t1" :correlation-name "t1" :id 5}]
+                        "baz" [{:table-or-query-name "foo" :correlation-name "baz" :id 6 :cte-id 2}]}
+               :columns #{{:identifiers ["t1" "d"] :table-id 5 :qualified? true}
+                          {:identifiers ["t1" "e"] :table-id 5 :qualified? true}
+                          {:identifiers ["t1" "a"] :table-id 5 :qualified? true}
+                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true}}}
+              {:id 3
                :parent-id 1
                :ctes {}
-               :tables {"bar" [{:table-or-query-name "foo" :correlation-name "bar" :id 6 :cte-id 2}]}
+               :tables {"bar" [{:table-or-query-name "foo" :correlation-name "bar" :id 4 :cte-id 2}]}
                :columns #{}}
               {:id 7
                :parent-id 1
                :ctes {}
                :tables {"x" [{:table-or-query-name "t1" :correlation-name "x" :id 8}]}
                :columns #{{:identifiers ["x" "b"] :table-id 8 :qualified? true}
-                          {:identifiers ["t1" "b"] :table-id 3 :qualified? true}}}]
+                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true}}}]
              (:scopes (sql/analyze-query tree))))))
 
 (t/deftest test-scope-rules

@@ -76,10 +76,14 @@
 
 ;; Ids
 
-(def ^:private ^:dynamic *next-id* (atom 0))
-
-(defn- ->id [_]
-  (swap! *next-id* inc))
+(defn- id [ag]
+  (case (r/ctor ag)
+    :table_factor (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
+                    (id (z/prev ag))
+                    (inc ^long (id (z/prev ag))))
+    (:query_expression
+     :with_list_element) (inc ^long (id (z/prev ag)))
+    (or (some-> (z/prev ag) (id)) 0)))
 
 ;; Identifiers
 
@@ -128,7 +132,7 @@
 (defn- cte [ag]
   (case (r/ctor ag)
     :with_list_element {:query-name (table-or-query-name ag)
-                        :id (->id ag)}))
+                        :id (id ag)}))
 
 ;; Inherited
 (defn- ctei [ag]
@@ -166,7 +170,7 @@
                           cte-id (:id (find-decl (cte-env ag) table-name))]
                       (cond-> {:table-or-query-name (or table-name correlation-name)
                                :correlation-name correlation-name
-                               :id (->id ag)}
+                               :id (id ag)}
                         cte-id (assoc :cte-id cte-id))))))
 
 (defn- local-tables [ag]
@@ -265,9 +269,8 @@
 
 (defn- scope [ag]
   (case (r/ctor ag)
-    :query_expression (let [id (->id ag)
-                            parent-id (:id (scope (r/parent ag)))]
-                        (cond-> {:id id
+    :query_expression (let [parent-id (:id (scope (r/parent ag)))]
+                        (cond-> {:id (id ag)
                                  :ctes (local-env (cteo ag))
                                  :tables (local-env (dclo ag))
                                  :columns (set (local-column-references ag))}
@@ -284,7 +287,7 @@
 ;; API
 
 (defn analyze-query [query]
-  (r/with-memoized-attributes [#'->id
+  (r/with-memoized-attributes [#'id
                                #'cte-env
                                #'ctei
                                #'cteo
@@ -292,10 +295,9 @@
                                #'env
                                #'dclo
                                #'dcli]
-    #(binding [*next-id* (atom 0)]
-       (let [ag (z/vector-zip query)]
-         {:scopes (scopes ag)
-          :errs (errs ag)}))))
+    #(let [ag (z/vector-zip query)]
+       {:scopes (scopes ag)
+        :errs (errs ag)})))
 
 (comment
   (time
