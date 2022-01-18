@@ -1104,14 +1104,14 @@
     (when (and found-v (mem/buffers=? v found-v))
       [])))
 
-(def ^:private ^:dynamic *recursion-table* {})
-
 ;; TODO: This tabling mechanism attempts at avoiding infinite
 ;; recursion, but does not actually cache anything. Short-circuits
 ;; identical sub trees. Passes tests, unsure if this really works in
 ;; the general case. Depends on the eager expansion of rules for some
 ;; cases to pass. One alternative is maybe to try to cache the
 ;; sequence and reuse it, somehow detecting if it loops.
+(def ^:private ^:dynamic *recursion-table* {})
+
 (defn- build-or-constraints
   [rule-name->rules or-clause+idx-id+or-branches var->bindings vars-in-join-order]
   (for [[clause idx-id [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+idx-id+or-branches
