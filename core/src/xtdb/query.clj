@@ -445,30 +445,35 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- blank-var? [v]
-  (when (logic-var? v)
-    (re-find #"^_\d*$" (name v))))
+  (and (logic-var? v)
+       (re-find #"^_\d*$" (name v))))
 
 (defn- normalize-triple-clause [{:keys [e a v] :as clause}]
   (cond-> clause
     (or (blank-var? v)
         (not (contains? clause :v)))
-    (-> (assoc :v (gensym "_")) (with-meta {:ignore-v? true}))
+    (-> (assoc :v (gensym "_"))
+        (with-meta {:ignore-v? true}))
+
     (blank-var? e)
     (assoc :e (gensym "_"))
+
     (or (nil? a) (= a :xt/id))
     (assoc :a :crux.db/id)))
 
-(def ^:private pred->built-in-range-pred {< (comp neg? compare)
-                                          <= (comp not pos? compare)
-                                          > (comp pos? compare)
-                                          >= (comp not neg? compare)
-                                          = =})
+(def ^:private pred->built-in-range-pred
+  {< (comp neg? compare)
+   <= (comp not pos? compare)
+   > (comp pos? compare)
+   >= (comp not neg? compare)
+   = =})
 
-(def ^:private range->inverse-range '{< >
-                                      <= >=
-                                      > <
-                                      >= <=
-                                      = =})
+(def ^:private range->inverse-range
+  '{< >
+    <= >=
+    > <
+    >= <=
+    = =})
 
 (defn- maybe-unquote [x]
   (if (and (seq? x) (= 'quote (first x)) (= 2 (count x)))
@@ -477,54 +482,50 @@
 
 (defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
   (let [v-var (gensym (str "self-join_" v "_"))]
-    {:triple [(with-meta
-                (assoc triple :v v-var)
-                {:self-join? true})]
-     :pred [{:pred {:pred-fn '== :args [v-var e]}}]}))
+    {:triple [(-> (assoc triple :v v-var)
+                  (with-meta {:self-join? true}))]
+     :pred [{:pred {:pred-fn '==, :args [v-var e]}}]}))
 
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
-         (if (= :triple type)
-           (let [{:keys [e v] :as clause} (normalize-triple-clause clause)]
-             (if (and (logic-var? e) (= e v))
-               (rewrite-self-join-triple-clause clause)
-               {:triple [clause]}))
+         (case type
+           :triple (let [{:keys [e v] :as clause} (normalize-triple-clause clause)]
+                     (if (and (logic-var? e) (= e v))
+                       (rewrite-self-join-triple-clause clause)
+                       {:triple [clause]}))
 
-           (case type
-             :pred {:pred [(let [{:keys [pred return]} clause
-                                 {:keys [pred-fn args]} pred
-                                 clause (if-let [range-pred (and (= 2 (count args))
-                                                                 (every? logic-var? args)
-                                                                 (get pred->built-in-range-pred pred-fn))]
-                                          (assoc-in clause [:pred :pred-fn] range-pred)
-                                          clause)]
-                             (if return
-                               (assoc clause :return (w/postwalk #(if (blank-var? %)
-                                                                    (gensym "_")
-                                                                    %)
-                                                                 return))
-                               clause))]}
+           :pred {:pred [(let [{:keys [pred return]} clause
+                               {:keys [pred-fn args]} pred
+                               range-pred (and (= 2 (count args))
+                                               (every? logic-var? args)
+                                               (get pred->built-in-range-pred pred-fn))]
+                           (cond-> clause
+                             range-pred (assoc-in [:pred :pred-fn] range-pred)
+                             return (assoc :return (w/postwalk #(if (blank-var? %)
+                                                                  (gensym "_")
+                                                                  %)
+                                                               return))))]}
 
-             :range (let [[order clause] (first clause)
-                          [order clause] (if (= :sym-sym order) ;; NOTE: to deal with rule expansion
-                                           (let [{:keys [op sym-a sym-b]} clause]
-                                             (cond
-                                               (literal? sym-a)
-                                               [:val-sym {:op op :val sym-a :sym sym-b}]
-                                               (literal? sym-b)
-                                               [:sym-val {:op op :val sym-b :sym sym-a}]
-                                               :else
-                                               [order clause]))
-                                           [order clause])
-                          {:keys [op sym val] :as clause} (cond-> clause
-                                                            (= :val-sym order) (update :op range->inverse-range))]
-                      (if (and (not= :sym-sym order)
-                               (not (logic-var? sym)))
-                        {:pred [{:pred {:pred-fn (get pred->built-in-range-pred (var-get (resolve op)))
-                                        :args [sym val]}}]}
-                        {:range [clause]}))
+           :range (let [[order clause] (first clause)
+                        [order clause] (if (= :sym-sym order) ;; NOTE: to deal with rule expansion
+                                         (let [{:keys [op sym-a sym-b]} clause]
+                                           (cond
+                                             (literal? sym-a)
+                                             [:val-sym {:op op :val sym-a :sym sym-b}]
+                                             (literal? sym-b)
+                                             [:sym-val {:op op :val sym-b :sym sym-a}]
+                                             :else
+                                             [order clause]))
+                                         [order clause])
+                        {:keys [op sym val] :as clause} (cond-> clause
+                                                          (= :val-sym order) (update :op range->inverse-range))]
+                    (if (and (not= :sym-sym order)
+                             (not (logic-var? sym)))
+                      {:pred [{:pred {:pred-fn (get pred->built-in-range-pred (var-get (resolve op)))
+                                      :args [sym val]}}]}
+                      {:range [clause]}))
 
-             {type [clause]})))
+           {type [clause]}))
 
        (apply merge-with into)))
 
@@ -1402,9 +1403,10 @@
 (defn- compile-sub-query [encode-value-fn stats {:keys [fn-allow-list pred-ctx] :as db} where in rule-name->rules]
   (try
     (let [where (-> (expand-rules where rule-name->rules {})
-                    (build-pred-fns fn-allow-list))
+                    (build-pred-fns fn-allow-list)
+                    (normalize-clauses))
           in-vars (set (find-binding-vars (:bindings in)))
-          [type->clauses project-only-leaf-vars] (expand-leaf-preds (normalize-clauses where) in-vars db)
+          [type->clauses project-only-leaf-vars] (expand-leaf-preds where in-vars db)
           {triple-clauses :triple
            range-clauses :range
            pred-clauses :pred
@@ -1425,7 +1427,7 @@
           known-vars (set/union e-vars v-vars in-vars)
           known-vars (add-pred-returns-bound-at-top-level known-vars pred-clauses)
           [or-clause+idx-id+or-branches known-vars var->joins] (or-joins :or or-clauses var->joins known-vars)
-          [or-join-clause+idx-id+or-branches known-vars var->joins] (or-joins :or-join or-join-clauses var->joins known-vars)
+          [or-join-clause+idx-id+or-branches _known-vars var->joins] (or-joins :or-join or-join-clauses var->joins known-vars)
           or-clause+idx-id+or-branches (concat or-clause+idx-id+or-branches
                                                or-join-clause+idx-id+or-branches)
           join-depth (count var->joins)
