@@ -609,9 +609,14 @@
                                                     [e :name "Ivan"]))]})))))
 
 (t/deftest test-ors-must-use-same-vars
+  (fix/submit+await-tx [[::xt/put {:xt/id 1, :type :a}]
+                        [::xt/put {:xt/id 2, :type :b}]
+                        [::xt/put {:xt/id 3, :type :b, :extra :val}]
+                        [::xt/put {:xt/id 4, :type :c}]])
+
   (t/is (thrown-with-msg?
          IllegalArgumentException
-         #"Or requires same logic variables"
+         #"Or branches require same free-variables: .*"
          (xt/q (xt/db *api*) '{:find [e]
                                :where [[e :name name]
                                        (or [e1 :last-name "Ivanov"]
@@ -619,15 +624,35 @@
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
-         #"Or join variable never used: x"
+         #"Or join free variable never used: x"
          (xt/q (xt/db *api*) '{:find [x]
                                :where [(or-join [x]
-                                                [e1 :last-name "Ivanov"])]}))))
+                                                [e1 :last-name "Ivanov"])]})))
+
+  (t/is (= #{[1] [3]}
+           (xt/q (xt/db *api*)
+                 '{:find [?e]
+                   :where [[?e :type ?type]
+                           (or-join [?e ?type]
+                                    [(= ?type :a)]
+                                    [(= ?e 3)])]}))
+        "don't need to mention all bound or vars though")
+
+  (t/is (= #{[1] [3]}
+           (xt/q (xt/db *api*)
+                 '{:find [?e]
+                   :where [[?e :type ?type]
+                           (or-join [?e ?type]
+                                    (and [(= ?type :a)]
+                                         [(any? ?e)])
+                                    (and [(= ?e 3)]
+                                         [(any? ?type)]))]}))
+        "we used to have to use a lot of `any?` - check for backwards compatibility"))
 
 (t/deftest test-ors-can-introduce-new-bindings
-  (let [[petr ivan ivanova] (fix/transact! *api* (fix/people [{:name "Petr" :last-name "Smith" :sex :male}
-                                                              {:name "Ivan" :last-name "Ivanov" :sex :male}
-                                                              {:name "Ivanova" :last-name "Ivanov" :sex :female}]))]
+  (let [[_petr ivan _ivanova] (fix/transact! *api* (fix/people [{:name "Petr" :last-name "Smith" :sex :male}
+                                                                {:name "Ivan" :last-name "Ivanov" :sex :male}
+                                                                {:name "Ivanova" :last-name "Ivanov" :sex :female}]))]
 
     (t/testing "?p2 introduced only inside of an Or"
       (t/is (= #{[(:xt/id ivan)]} (xt/q (xt/db *api*) '{:find [?p2]

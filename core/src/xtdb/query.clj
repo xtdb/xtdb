@@ -191,7 +191,7 @@
          :return (s/? ::binding)))
 
 (defmethod pred-args-spec 'get-attr [_]
-  (s/cat :pred-fn  #{'get-attr}
+  (s/cat :pred-fn #{'get-attr}
          :args (s/spec (s/cat :e-var logic-var?, :attr literal?, :not-found (s/? any?)))
          :return (s/? ::binding)))
 
@@ -816,10 +816,10 @@
                                                  (count (set free-args)))
                                       (throw (err/illegal-arg :indistinct-or-join-vars
                                                               {::err/message (str "Or join free variables not distinct: " (xio/pr-edn-str clause))})))
-                                    (doseq [var or-vars
+                                    (doseq [var free-vars
                                             :when (not (contains? body-vars var))]
                                       (throw (err/illegal-arg :unused-or-join-var
-                                                              {::err/message  (str "Or join variable never used: " var " " (xio/pr-edn-str clause))}))))
+                                                              {::err/message (str "Or join free variable never used: " var " " (xio/pr-edn-str clause))}))))
                                   {:or-vars or-vars
                                    :free-vars free-vars
                                    :bound-vars bound-vars
@@ -831,9 +831,9 @@
                        {:id idx-id
                         :idx-fn (fn [{:keys [value-serde]} _]
                                   (idx/new-relation-virtual-index [] (count free-vars) value-serde))})]
-            (when (not (apply = (map :or-vars or-branches)))
+            (when (not (apply = (map :free-vars or-branches)))
               (throw (err/illegal-arg :or-requires-same-logic-vars
-                                      {::err/message  (str "Or requires same logic variables: " (xio/pr-edn-str clause))})))
+                                      {::err/message (str "Or branches require same free-variables: " (pr-str (mapv :free-vars or-branches)))})))
             [(conj or-clause+idx-id+or-branches [clause idx-id or-branches])
              (into known-vars free-vars)
              (apply merge-with into var->joins (for [v free-vars]
@@ -951,7 +951,7 @@
           :when (not (or (pred-constraint? var)
                          (contains? var->bindings var)))]
     (throw (err/illegal-arg :clause-unknown-var
-                            {::err/message  (str "Clause refers to unknown variable: " var " " (xio/pr-edn-str clause))}))))
+                            {::err/message (str "Clause refers to unknown variable: " var " " (xio/pr-edn-str clause))}))))
 
 (defn bind-binding [bind-type tuple-idxs-in-join-order idx result]
   (case bind-type
@@ -1741,7 +1741,7 @@
       (doseq [{:keys [find-arg]} order-by
               :when (not (some #{find-arg} find))]
         (throw (err/illegal-arg :order-by-requires-find-element
-                                {::err/message  (str "Order by requires an element from :find. unreturned element: " find-arg)})))
+                                {::err/message (str "Order by requires an element from :find. unreturned element: " find-arg)})))
 
       (lazy-seq
        (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
