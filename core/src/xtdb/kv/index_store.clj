@@ -493,14 +493,14 @@
                  (enrich-entity-tx entity-tx v)
                  z]
                 [::deleted-entity entity-tx z]))
-            (let [[litmax bigmin] (morton/morton-range-search min max z)]
+            (let [[_litmax bigmin] (morton/morton-range-search min max z)]
               (when-not (neg? (.compareTo ^Comparable bigmin z))
                 (recur (kv/seek i (encode-bitemp-z-key-to (.get seek-buffer-tl)
                                                           eid
                                                           bigmin)))))))))))
 
 (defn- find-entity-tx-within-range-with-highest-valid-time [i min max eid prev-candidate]
-  (if-let [[_ ^EntityTx entity-tx z :as candidate] (find-first-entity-tx-within-range i min max eid)]
+  (if-let [[_ _entity-tx z :as candidate] (find-first-entity-tx-within-range i min max eid)]
     (let [[^long x ^long y] (morton/morton-number->longs z)
           min-x (long (first (morton/morton-number->longs min)))
           max-x (dec x)]
@@ -656,7 +656,6 @@
                             thread-mgr
                             cav-cache
                             canonical-buffer-cache
-                            ^Map temp-hash-cache
                             ^AtomicBoolean closed?]
   Closeable
   (close [_]
@@ -841,7 +840,7 @@
           :else latest-tx))))
 
   (open-nested-index-snapshot [_]
-    (let [nested-index-snapshot (new-kv-index-snapshot snapshot false nil cav-cache canonical-buffer-cache temp-hash-cache)]
+    (let [nested-index-snapshot (new-kv-index-snapshot snapshot false nil cav-cache canonical-buffer-cache)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
       nested-index-snapshot))
 
@@ -850,18 +849,12 @@
     (assert (some? value-buffer))
     (if (c/can-decode-value-buffer? value-buffer)
       (c/decode-value-buffer value-buffer)
-      (or (.get temp-hash-cache value-buffer)
-          (let [i @decode-value-iterator-delay]
-            (when (advance-iterator-to-hash-cache-value i value-buffer)
-              (xio/with-nippy-thaw-all
-                (some-> (kv/value i) (mem/<-nippy-buffer))))))))
+      (let [i @decode-value-iterator-delay]
+        (when (advance-iterator-to-hash-cache-value i value-buffer)
+          (xio/with-nippy-thaw-all
+            (some-> (kv/value i) (mem/<-nippy-buffer)))))))
 
-  (encode-value [_ value]
-    (let [value-buffer (c/->value-buffer value)]
-      (when (and (not (c/can-decode-value-buffer? value-buffer))
-                 (not (advance-iterator-to-hash-cache-value @decode-value-iterator-delay value-buffer)))
-        (.put temp-hash-cache (canonical-buffer-lookup canonical-buffer-cache value-buffer) value))
-      value-buffer))
+  (encode-value [_ value] (c/->value-buffer value))
 
   db/AttributeStats
   (all-attrs [_]
@@ -891,7 +884,7 @@
   (-read-index-meta [_ k not-found]
     (read-meta-snapshot snapshot k not-found)))
 
-(defn- new-kv-index-snapshot [snapshot close-snapshot? thread-mgr cav-cache canonical-buffer-cache temp-hash-cache]
+(defn- new-kv-index-snapshot [snapshot close-snapshot? thread-mgr cav-cache canonical-buffer-cache]
   (when close-snapshot?
     (snapshot-opened thread-mgr snapshot))
 
@@ -906,7 +899,6 @@
                      thread-mgr
                      cav-cache
                      canonical-buffer-cache
-                     temp-hash-cache
                      (AtomicBoolean.)))
 
 ;;;; IndexStore
@@ -964,7 +956,7 @@
                       (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer)
                                              (mem/->nippy-buffer v))))))))))
 
-(defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache temp-hash-cache]
+(defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache]
   db/IndexStoreTx
   (index-docs [_ docs]
     (with-open [persistent-kv-snapshot (kv/new-snapshot persistent-kv-store)
@@ -1064,7 +1056,7 @@
         ;; the bitemp indices will ensure these are never returned in queries
         (kv/store persistent-kv-store
                   (conj (->> (seq snapshot)
-                             (filter (fn [[^DirectBuffer k-buf v-buf]]
+                             (filter (fn [[^DirectBuffer k-buf _v-buf]]
                                        (= c/ecav-index-id (.getByte k-buf 0)))))
 
                         (MapEntry/create (encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer)
@@ -1073,11 +1065,11 @@
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
     (fork/->MergedIndexSnapshot (-> (new-kv-index-snapshot (kv/new-snapshot persistent-kv-store) true thread-mgr
-                                                           cav-cache canonical-buffer-cache temp-hash-cache)
+                                                           cav-cache canonical-buffer-cache)
                                     (fork/->CappedIndexSnapshot (::xt/valid-time fork-at)
                                                                 (get fork-at ::xt/tx-id (::xt/tx-id tx))))
                                 (new-kv-index-snapshot (kv/new-snapshot transient-kv-store) true thread-mgr
-                                                       cav-cache canonical-buffer-cache temp-hash-cache)
+                                                       cav-cache canonical-buffer-cache)
                                 @!evicted-eids)))
 
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache]
@@ -1089,7 +1081,7 @@
                 [(MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)])
       (->KvIndexStoreTx kv-store transient-kv-store tx fork-at
                         (atom #{}) thread-mgr
-                        (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) (HashMap.))))
+                        (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))))
 
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
@@ -1108,7 +1100,7 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (new-kv-index-snapshot (kv/new-snapshot kv-store) true thread-mgr cav-cache canonical-buffer-cache (HashMap.)))
+    (new-kv-index-snapshot (kv/new-snapshot kv-store) true thread-mgr cav-cache canonical-buffer-cache))
 
   status/Status
   (status-map [this]

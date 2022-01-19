@@ -3,16 +3,14 @@
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
             [xtdb.checkpoint :as cp]
-            [xtdb.codec :as cc]
+            [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.io :as xio]
             [xtdb.query :as q]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
-            [xtdb.tx.conform :as txc]
-            [xtdb.codec :as c])
-  (:import xtdb.query.VarBinding
-           [java.io Closeable File]
+            [xtdb.tx.conform :as txc])
+  (:import [java.io Closeable File]
            java.nio.file.Path
            java.time.Duration
            org.apache.lucene.analysis.Analyzer
@@ -22,7 +20,8 @@
            org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc SearcherManager TermQuery TopDocs]
-           [org.apache.lucene.store ByteBuffersDirectory FSDirectory IOContext]))
+           [org.apache.lucene.store ByteBuffersDirectory FSDirectory IOContext]
+           xtdb.query.VarBinding))
 
 (defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer
                        cp-job ^Thread fsync-thread, ^Thread refresh-thread]
@@ -35,7 +34,7 @@
     (xio/try-close directory)))
 
 (defn ^String ->hash-str [eid]
-  (str (cc/new-id eid)))
+  (str (c/new-id eid)))
 
 (defrecord DocumentId [e a v])
 
@@ -142,10 +141,10 @@
               (parse-query lucene-store query opts)))))
 
 (defn pred-constraint [query-builder results-resolver {:keys [arg-bindings idx-id return-type tuple-idxs-in-join-order] :as pred-ctx}]
-  (fn pred-lucene-constraint [index-snapshot db idx-id->idx join-keys]
+  (fn pred-lucene-constraint [{:keys [value-serde] :as db} idx-id->idx join-keys]
     (let [arg-bindings (map (fn [a]
                               (if (instance? VarBinding a)
-                                (q/bound-result-for-var index-snapshot a join-keys)
+                                (q/bound-result-for-var value-serde a join-keys)
                                 a))
                             (rest arg-bindings))
           last-arg (last arg-bindings)
@@ -157,7 +156,7 @@
           tuples (with-open [search-results ^xtdb.api.ICursor (search* lucene-store query)]
                    (->> search-results
                         iterator-seq
-                        (results-resolver index-snapshot db)
+                        (results-resolver db)
                         (into [])))]
       (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) tuples))))
 
@@ -173,17 +172,21 @@
 (defn resolve-search-results-a-v
   "Given search results each containing a single A/V pair document,
   perform a temporal resolution against A/V to resolve the eid."
-  [attr index-snapshot {:keys [entity-resolver-fn]} search-results]
+  [attr {:keys [entity-resolver-fn index-snapshot value-serde]} search-results]
   (->> search-results
        (map (fn [[^Document doc score]]
               [attr (.get ^Document doc field-xt-val) score]))
        distinct ; could distinct by virtue of the `ave` call instead if eid was reversible
        (mapcat (fn [[a v score]]
                  (for [eid (doall (db/ave index-snapshot a v nil entity-resolver-fn))]
-                   [(db/decode-value index-snapshot eid) v score])))))
+                   [(db/decode-value value-serde eid) v score])))))
 
 (defmethod q/pred-args-spec 'text-search [_]
-  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v (some-fn string? q/logic-var?) :opts (s/? (some-fn map? q/logic-var?)))) :return (s/? :xtdb.query/binding)))
+  (s/cat :pred-fn #{'text-search}
+         :args (s/spec (s/cat :attr keyword?
+                              :v (some-fn string? q/logic-var?)
+                              :opts (s/? (some-fn map? q/logic-var?))))
+         :return (s/? :xtdb.query/binding)))
 
 (defmethod q/pred-constraint 'text-search [_ pred-ctx]
   (let [resolver (partial resolve-search-results-a-v (second (:arg-bindings pred-ctx)))]
@@ -192,7 +195,7 @@
 (defn- resolve-search-results-a-v-wildcard
   "Given search results each containing a single A/V pair document,
   perform a temporal resolution against A/V to resolve the eid."
-  [index-snapshot {:keys [entity-resolver-fn]} search-results]
+  [{:keys [entity-resolver-fn index-snapshot]} search-results]
   (->> search-results
        (map (fn [[^Document doc score]]
               [(keyword (.get ^Document doc field-xt-attr))
@@ -230,7 +233,7 @@
     (doseq [{e :crux.db/id, :as doc} (vals docs)
             [a v] (->> (dissoc doc :crux.db/id)
                        (mapcat (fn [[a v]]
-                                 (for [v (cc/vectorize-value v)
+                                 (for [v (c/vectorize-value v)
                                        :when (string? v)]
                                    [a v]))))
             :let [id-str (->hash-str (->DocumentId e a v))

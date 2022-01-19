@@ -28,85 +28,84 @@
                                          :where '[[(text-search :name "Ivan") [[?e]]]]})))))
 
 (t/deftest test-can-search-string
-  (let [doc {:xt/id :ivan :name "Ivan"}]
-    (submit+await-tx [[::xt/put {:xt/id :ivan :name "Ivan"}]])
+  (submit+await-tx [[::xt/put {:xt/id :ivan :name "Ivan"}]])
 
-    (t/testing "using Lucene directly"
-      (with-open [search-results (l/search *api* "Ivan" {:default-field "name"})]
-        (let [docs (iterator-seq search-results)]
-          (t/is (= 1 (count docs)))
-          (t/is (= "Ivan" (.get ^Document (ffirst docs) l/field-xt-val))))))
+  (t/testing "using Lucene directly"
+    (with-open [search-results (l/search *api* "Ivan" {:default-field "name"})]
+      (let [docs (iterator-seq search-results)]
+        (t/is (= 1 (count docs)))
+        (t/is (= "Ivan" (.get ^Document (ffirst docs) l/field-xt-val))))))
 
-    (t/testing "using in-built function"
-      (with-open [db (xt/open-db *api*)]
+  (t/testing "using in-built function"
+    (with-open [db (xt/open-db *api*)]
+      (t/is (= #{[:ivan]} (xt/q db {:find '[?e]
+                                    :where '[[(text-search :name "Ivan") [[?e]]]]})))
+
+      (t/testing "bad spec"
+        (t/is (thrown-with-msg? clojure.lang.ExceptionInfo #""
+                                (xt/q db {:find '[?e]
+                                          :where '[[(text-search "Wot" "Ivan") [[?e]]]]}))))
+
+      (t/testing "fuzzy"
         (t/is (= #{[:ivan]} (xt/q db {:find '[?e]
-                                      :where '[[(text-search :name "Ivan") [[?e]]]]})))
+                                      :where '[[(text-search :name "Iv*") [[?e]]]]}))))))
 
-        (t/testing "bad spec"
-          (t/is (thrown-with-msg? clojure.lang.ExceptionInfo #""
-                                  (xt/q db {:find '[?e]
-                                            :where '[[(text-search "Wot" "Ivan") [[?e]]]]}))))
+  (t/testing "Subsequent tx/doc"
+    (with-open [before-db (xt/open-db *api*)]
+      (submit+await-tx [[::xt/put {:xt/id :ivan2 :name "Ivbn"}]])
+      (let [q {:find '[?e] :where '[[(text-search :name "Iv?n") [[?e]]] [?e :xt/id]]}]
+        (t/is (= #{[:ivan]} (xt/q before-db q)))
+        (with-open [db (xt/open-db *api*)]
+          (t/is (= #{[:ivan] [:ivan2]} (xt/q db q)))))))
 
-        (t/testing "fuzzy"
-          (t/is (= #{[:ivan]} (xt/q db {:find '[?e]
-                                        :where '[[(text-search :name "Iv*") [[?e]]]]}))))))
+  (t/testing "Modifying doc"
+    (with-open [before-db (xt/open-db *api*)]
+      (submit+await-tx [[::xt/put {:xt/id :ivan :name "Derek"}]])
+      (let [q {:find '[?e] :where '[[(text-search :name "Derek") [[?e]]] [?e :xt/id]]}]
+        (t/is (not (seq (xt/q before-db q))))
+        (with-open [db (xt/open-db *api*)]
+          (t/is (= #{[:ivan]} (xt/q db q)))))))
 
-    (t/testing "Subsequent tx/doc"
-      (with-open [before-db (xt/open-db *api*)]
-        (submit+await-tx [[::xt/put {:xt/id :ivan2 :name "Ivbn"}]])
-        (let [q {:find '[?e] :where '[[(text-search :name "Iv?n") [[?e]]] [?e :xt/id]]}]
-          (t/is (= #{[:ivan]} (xt/q before-db q)))
-          (with-open [db (xt/open-db *api*)]
-            (t/is (= #{[:ivan] [:ivan2]} (xt/q db q)))))))
+  (t/testing "Eviction"
+    (submit+await-tx [[::xt/put {:xt/id :ivan2 :name "Derek"}]])
+    (submit+await-tx [[::xt/evict :ivan]])
+    (with-open [db (xt/open-db *api*)]
+      (t/is (empty? (xt/q db {:find '[?e]
+                              :where
+                              '[[(text-search :name "Ivan") [[?e]]]
+                                [?e :xt/id]]}))))
+    (with-open [search-results (l/search *api* "Ivan" {:default-field "name"})]
+      (t/is (empty? (iterator-seq search-results))))
+    (with-open [search-results (l/search *api* "Derek" {:default-field "name"})]
+      (t/is (seq (iterator-seq search-results)))))
 
-    (t/testing "Modifying doc"
-      (with-open [before-db (xt/open-db *api*)]
-        (submit+await-tx [[::xt/put {:xt/id :ivan :name "Derek"}]])
-        (let [q {:find '[?e] :where '[[(text-search :name "Derek") [[?e]]] [?e :xt/id]]}]
-          (t/is (not (seq (xt/q before-db q))))
-          (with-open [db (xt/open-db *api*)]
-            (t/is (= #{[:ivan]} (xt/q db q)))))))
+  (t/testing "Scores"
+    (submit+await-tx [[::xt/put {:xt/id "test0" :name "ivon"}]])
+    (submit+await-tx [[::xt/put {:xt/id "test1" :name "ivan"}]])
+    (submit+await-tx [[::xt/put {:xt/id "test2" :name "testivantest"}]])
+    (submit+await-tx [[::xt/put {:xt/id "test3" :name "testing"}]])
+    (submit+await-tx [[::xt/put {:xt/id "test4" :name "ivanpost"}]])
+    (with-open [db (xt/open-db *api*)]
+      (t/is (= #{["test1" "ivan" 1.0] ["test4" "ivanpost" 1.0]}
+               (xt/q db {:find '[?e ?v ?score]
+                         :where '[[(text-search :name "ivan*") [[?e ?v ?score]]]
+                                  [?e :xt/id]]})))))
 
-    (t/testing "Eviction"
-      (submit+await-tx [[::xt/put {:xt/id :ivan2 :name "Derek"}]])
-      (submit+await-tx [[::xt/evict :ivan]])
-      (with-open [db (xt/open-db *api*)]
-        (t/is (empty? (xt/q db {:find '[?e]
-                                :where
-                                '[[(text-search :name "Ivan") [[?e]]]
+  (t/testing "cardinality many"
+    (submit+await-tx [[::xt/put {:xt/id :ivan :foo #{"atar" "abar" "nomatch"}}]])
+
+    (with-open [db (xt/open-db *api*)]
+      (t/is (= #{[:ivan "atar"]}
+               (xt/q db {:find '[?e ?v]
+                         :where '[[(text-search :foo "atar") [[?e ?v]]]
                                   [?e :xt/id]]}))))
-      (with-open [search-results (l/search *api* "Ivan" {:default-field "name"})]
-        (t/is (empty? (iterator-seq search-results))))
-      (with-open [search-results (l/search *api* "Derek" {:default-field "name"})]
-        (t/is (seq (iterator-seq search-results)))))
 
-    (t/testing "Scores"
-      (submit+await-tx [[::xt/put {:xt/id "test0" :name "ivon"}]])
-      (submit+await-tx [[::xt/put {:xt/id "test1" :name "ivan"}]])
-      (submit+await-tx [[::xt/put {:xt/id "test2" :name "testivantest"}]])
-      (submit+await-tx [[::xt/put {:xt/id "test3" :name "testing"}]])
-      (submit+await-tx [[::xt/put {:xt/id "test4" :name "ivanpost"}]])
-      (with-open [db (xt/open-db *api*)]
-        (t/is (= #{["test1" "ivan" 1.0] ["test4" "ivanpost" 1.0]}
-                 (xt/q db {:find '[?e ?v ?score]
-                           :where '[[(text-search :name "ivan*") [[?e ?v ?score]]]
-                                    [?e :xt/id]]})))))
-
-    (t/testing "cardinality many"
-      (submit+await-tx [[::xt/put {:xt/id :ivan :foo #{"atar" "abar" "nomatch"}}]])
-
-      (with-open [db (xt/open-db *api*)]
-        (t/is (= #{[:ivan "atar"]}
-                 (xt/q db {:find '[?e ?v]
-                           :where '[[(text-search :foo "atar") [[?e ?v]]]
-                                    [?e :xt/id]]}))))
-
-      (with-open [db (xt/open-db *api*)]
-        (t/is (= #{[:ivan "abar"]
-                   [:ivan "atar"]}
-                 (xt/q db {:find '[?e ?v]
-                           :where '[[(text-search :foo "a?ar") [[?e ?v]]]
-                                    [?e :xt/id]]})))))))
+    (with-open [db (xt/open-db *api*)]
+      (t/is (= #{[:ivan "abar"]
+                 [:ivan "atar"]}
+               (xt/q db {:find '[?e ?v]
+                         :where '[[(text-search :foo "a?ar") [[?e ?v]]]
+                                  [?e :xt/id]]}))))))
 
 (t/deftest test-can-search-string-across-attributes
   (submit+await-tx [[::xt/put {:xt/id :ivan :name "Ivan"}]])
@@ -419,7 +418,6 @@
       (let [search-results (iterator-seq search-iterator)]
         (t/is (<= (count search-results)
                   (count (l/resolve-search-results-a-v (cc/->id-buffer :foo)
-                                                       (:index-snapshot db)
                                                        db
                                                        search-results))))))))
 

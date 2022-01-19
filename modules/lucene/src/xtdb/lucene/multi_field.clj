@@ -16,7 +16,7 @@
 (defrecord MultiFieldIndexer []
   l/LuceneIndexer
 
-  (index! [this index-writer docs]
+  (index! [_ index-writer docs]
     (->> docs
          (map (fn [[content-hash doc]]
                 (let [d (Document.)]
@@ -30,7 +30,7 @@
                   d)))
          (.addDocuments ^IndexWriter index-writer)))
 
-  (evict! [this index-writer eids]
+  (evict! [_ index-writer eids]
     (doseq [eid eids
             :let [q (TermQuery. (Term. field-eid (str (cc/new-id eid))))]]
       (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [q])))))
@@ -44,7 +44,7 @@
 (defn- resolve-search-results-content-hash
   "Given search results each containing a content-hash, perform a
   temporal resolution to resolve the eid."
-  [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
+  [{:keys [entity-resolver-fn] :as _db} search-results]
   (keep (fn [[^Document doc score]]
           (let [content-hash (mem/as-buffer (.-bytes (.getBinaryValue doc field-content-hash)))
                 eid (cc/decode-value-buffer (mem/as-buffer (.-bytes (.getBinaryValue doc field-eid))))]
@@ -53,7 +53,11 @@
         search-results))
 
 (defmethod q/pred-args-spec 'lucene-text-search [_]
-  (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query (some-fn string? q/logic-var?) :bindings (s/* (some-fn string? q/logic-var?)) :opts (s/? (some-fn map? q/logic-var?)))) :return (s/? :xtdb.query/binding)))
+  (s/cat :pred-fn #{'lucene-text-search}
+         :args (s/spec (s/cat :query (some-fn string? q/logic-var?)
+                              :bindings (s/* (some-fn string? q/logic-var?))
+                              :opts (s/? (some-fn map? q/logic-var?))))
+         :return (s/? :xtdb.query/binding)))
 
 (defmethod q/pred-constraint 'lucene-text-search [_ pred-ctx]
   (l/pred-constraint #'build-lucene-text-query #'resolve-search-results-content-hash pred-ctx))

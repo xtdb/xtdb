@@ -337,7 +337,7 @@
   (^void updateIndex [tree rootIndex]))
 
 (deftype RelationVirtualIndex [^long max-depth
-                               encode-value-fn
+                               value-serde
                                ^:unsynchronized-mutable tree
                                ^:unsynchronized-mutable ^long depth
                                ^:unsynchronized-mutable ^objects path
@@ -394,26 +394,26 @@
 
 (defn update-relation-virtual-index!
   ([^RelationVirtualIndex relation tuples]
-   (update-relation-virtual-index! relation tuples (.encode_value_fn relation) false))
-  ([^RelationVirtualIndex relation tuples encode-value-fn single-values?]
+   (update-relation-virtual-index! relation tuples (.value_serde relation) false))
+  ([^RelationVirtualIndex relation tuples value-serde single-values?]
    (let [tree (when-not single-values?
                 (reduce
                  (fn [acc tuple]
-                   (tree-map-put-in acc (mapv encode-value-fn tuple) nil))
+                   (tree-map-put-in acc (mapv (partial db/encode-value value-serde) tuple) nil))
                  (TreeMap. mem/buffer-comparator)
                  tuples))
          root-idx (if single-values?
                     (new-sorted-virtual-index (if (instance? NavigableSet tuples)
                                                 tuples
                                                 (doto (TreeSet. mem/buffer-comparator)
-                                                  (.addAll (mapv encode-value-fn tuples)))))
+                                                  (.addAll (mapv (partial db/encode-value value-serde) tuples)))))
                     (new-sorted-virtual-index (.navigableKeySet ^NavigableMap tree)))]
      (.updateIndex relation tree root-idx)
      relation)))
 
-(defn new-relation-virtual-index [tuples max-depth encode-value-fn]
+(defn new-relation-virtual-index [tuples max-depth value-serde]
   (update-relation-virtual-index! (->RelationVirtualIndex max-depth
-                                                          encode-value-fn
+                                                          value-serde
                                                           nil
                                                           0
                                                           (object-array (long max-depth))
@@ -428,5 +428,5 @@
 
   (next-values [_]))
 
-(defn new-singleton-virtual-index [v encode-value-fn]
-  (->SingletonVirtualIndex (encode-value-fn v)))
+(defn new-singleton-virtual-index [v value-serde]
+  (->SingletonVirtualIndex (db/encode-value value-serde v)))
