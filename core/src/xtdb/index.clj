@@ -3,19 +3,18 @@
             [xtdb.memory :as mem])
   (:import [clojure.lang Box IDeref IPersistentVector]
            java.util.function.Function
-           [java.util ArrayList Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
-           org.agrona.DirectBuffer))
+           [java.util ArrayList Arrays Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype DerefIndex [idx ^:unsynchronized-mutable x]
   db/Index
-  (seek-values [this k]
+  (seek-values [_ k]
     (let [v (db/seek-values idx k)]
       (set! x v)
       v))
 
-  (next-values [this]
+  (next-values [_]
     (let [v (db/next-values idx)]
       (set! x v)
       v))
@@ -41,12 +40,12 @@
 
 (deftype SeekFnIndex [seek-fn ^:unsynchronized-mutable xs]
   db/Index
-  (seek-values [this k]
+  (seek-values [_ k]
     (let [[v & vs] (seq (seek-fn k))]
       (set! xs vs)
       v))
 
-  (next-values [this]
+  (next-values [_]
     (when-let [[v & vs] xs]
       (set! xs vs)
       v)))
@@ -58,12 +57,12 @@
 
 (deftype PredicateVirtualIndex [idx pred seek-k-fn]
   db/Index
-  (seek-values [this k]
+  (seek-values [_ k]
     (when-let [v (db/seek-values idx (seek-k-fn k))]
       (when (pred v)
         v)))
 
-  (next-values [this]
+  (next-values [_]
     (when-let [v (db/next-values idx)]
       (when (pred v)
         v)))
@@ -112,11 +111,11 @@
 
 (deftype GreaterThanVirtualIndex [idx]
   db/Index
-  (seek-values [this k]
+  (seek-values [_ k]
     (or (db/seek-values idx k)
         (db/next-values idx)))
 
-  (next-values [this]
+  (next-values [_]
     (db/next-values idx))
 
   db/LayeredIndex
@@ -195,7 +194,7 @@
                        (if (= n (alength acc))
                          acc
                          (let [idx ^DerefIndex (aget indexes n)]
-                           (when-let [v (db/seek-values idx k)]
+                           (when (db/seek-values idx k)
                              (recur (inc n) acc)))))]
       (do (doto indexes
             (Arrays/sort unary-join-iterator-state-comparator))
@@ -205,41 +204,42 @@
       (set! state nil)))
 
   (next-values [this]
-    (when (and state (not (identical? init-state state)))
-      (let [idx (aget indexes index)]
-        (if (if (identical? next-state state)
-              (db/next-values idx)
-              (db/seek-values idx state))
-          (let [index (inc index)
-                index (if (= index (alength indexes))
-                        0
-                        index)]
-            (set! (.index this) index))
-          (set! state nil))))
-    (when state
-      (let [idx ^DerefIndex (aget indexes index)
-            max-index (if (zero? index)
-                        (dec (alength indexes))
-                        (dec index))
-            max-k (.deref ^DerefIndex (aget indexes max-index))
-            match? (mem/buffers=? (.deref idx) max-k)]
-        (set! state (if match?
-                      next-state
-                      max-k))
-        (if match?
-          max-k
-          (recur)))))
+    (loop []
+      (when (and state (not (identical? init-state state)))
+        (let [idx (aget indexes index)]
+          (if (if (identical? next-state state)
+                (db/next-values idx)
+                (db/seek-values idx state))
+            (let [index (inc index)
+                  index (if (= index (alength indexes))
+                          0
+                          index)]
+              (set! (.index this) index))
+            (set! state nil))))
+      (when state
+        (let [idx ^DerefIndex (aget indexes index)
+              max-index (if (zero? index)
+                          (dec (alength indexes))
+                          (dec index))
+              max-k (.deref ^DerefIndex (aget indexes max-index))
+              match? (mem/buffers=? (.deref idx) max-k)]
+          (set! state (if match?
+                        next-state
+                        max-k))
+          (if match?
+            max-k
+            (recur))))))
 
   db/LayeredIndex
-  (open-level [this]
+  (open-level [_]
     (doseq [idx indexes]
       (db/open-level idx)))
 
-  (close-level [this]
+  (close-level [_]
     (doseq [idx indexes]
       (db/close-level idx)))
 
-  (max-depth [this]
+  (max-depth [_]
     1))
 
 (defn new-unary-join-virtual-index [indexes]
@@ -263,25 +263,26 @@
         v
         (db/next-values this))))
 
-  (next-values [this]
-    (when-let [v (db/next-values (aget indexes depth))]
-      (if (constrain-result-fn (doto join-keys
-                                 (.set depth v)) (inc depth))
-        v
-        (recur))))
+  (next-values [_]
+    (loop []
+      (when-let [v (db/next-values (aget indexes depth))]
+        (if (constrain-result-fn (doto join-keys
+                                   (.set depth v)) (inc depth))
+          v
+          (recur)))))
 
   db/LayeredIndex
-  (open-level [this]
+  (open-level [_]
     (db/open-level (aget indexes depth))
     (set! depth (inc depth))
     nil)
 
-  (close-level [this]
+  (close-level [_]
     (db/close-level (aget indexes (dec depth)))
     (set! depth (dec depth))
     nil)
 
-  (max-depth [this]
+  (max-depth [_]
     (alength indexes)))
 
 (defn new-n-ary-join-layered-virtual-index
@@ -325,7 +326,7 @@
     (set! iterator (.iterator (.tailSet s (or k mem/empty-buffer))))
     (db/next-values this))
 
-  (next-values [this]
+  (next-values [_]
     (when (and iterator (.hasNext iterator))
       (.next iterator))))
 
@@ -342,18 +343,18 @@
                                ^:unsynchronized-mutable ^objects path
                                ^:unsynchronized-mutable ^objects indexes]
   db/Index
-  (seek-values [this k]
+  (seek-values [_ k]
     (when-let [k (db/seek-values (aget indexes depth) (or k mem/empty-buffer))]
       (aset path depth k)
       k))
 
-  (next-values [this]
+  (next-values [_]
     (when-let [k (db/next-values (aget indexes depth))]
       (aset path depth k)
       k))
 
   db/LayeredIndex
-  (open-level [this]
+  (open-level [_]
     (when (= max-depth depth)
       (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
     (set! depth (inc depth))
@@ -365,7 +366,7 @@
           (recur (inc n) (.get tree (aget path n))))))
     nil)
 
-  (close-level [this]
+  (close-level [_]
     (when (zero? depth)
       (throw (IllegalStateException. "Cannot close level at root.")))
     (set! depth (dec depth))
@@ -385,7 +386,7 @@
     (doto m
       (-> (.computeIfAbsent k
                             (reify Function
-                              (apply [_ k]
+                              (apply [_ _k]
                                 (TreeMap. (.comparator m)))))
           (tree-map-put-in ks v)))
     (doto m
