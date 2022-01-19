@@ -69,14 +69,16 @@
                                      (cond-> capped-valid-time (update :start-valid-time date-min capped-valid-time))
                                      (update :start-tx-id long-min capped-tx-id))))))
 
-  (decode-value [_ value-buffer] (db/decode-value index-snapshot value-buffer))
-  (encode-value [_ value] (db/encode-value index-snapshot value))
   (resolve-tx [_ tx] (db/resolve-tx index-snapshot tx))
 
   (open-nested-index-snapshot ^java.io.Closeable [_]
     (->CappedIndexSnapshot (db/open-nested-index-snapshot index-snapshot)
                            capped-valid-time
                            capped-tx-id))
+
+  db/ValueSerde
+  (decode-value [_ value-buffer] (db/decode-value index-snapshot value-buffer))
+  (encode-value [_ value] (db/encode-value index-snapshot value))
 
   db/AttributeStats
   (all-attrs [_] (db/all-attrs index-snapshot))
@@ -145,13 +147,6 @@
                   [:desc true] #(compare [(.vt ^EntityTx %2) (.tx-id ^EntityTx %2)]
                                          [(.vt ^EntityTx %1) (.tx-id ^EntityTx %1)]))))
 
-  (decode-value [_ value-buffer]
-    (or (db/decode-value transient-index-snapshot value-buffer)
-        (db/decode-value persistent-index-snapshot value-buffer)))
-
-  (encode-value [_ value]
-    (db/encode-value transient-index-snapshot value))
-
   (resolve-tx [_ tx]
     (or (db/resolve-tx transient-index-snapshot tx)
         (db/resolve-tx persistent-index-snapshot tx)))
@@ -160,6 +155,14 @@
     (->MergedIndexSnapshot (db/open-nested-index-snapshot persistent-index-snapshot)
                            (db/open-nested-index-snapshot transient-index-snapshot)
                            evicted-eids))
+
+  db/ValueSerde
+  (decode-value [_ value-buffer]
+    (or (db/decode-value transient-index-snapshot value-buffer)
+        (db/decode-value persistent-index-snapshot value-buffer)))
+
+  (encode-value [_ value]
+    (db/encode-value transient-index-snapshot value))
 
   db/AttributeStats
   (all-attrs [_]

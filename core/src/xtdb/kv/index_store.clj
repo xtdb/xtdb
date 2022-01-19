@@ -802,23 +802,6 @@
                                :desc entity-history-seq-descending)]
       (entity-history-seq i eid opts)))
 
-  (decode-value [_ value-buffer]
-    (assert (some? value-buffer))
-    (if (c/can-decode-value-buffer? value-buffer)
-      (c/decode-value-buffer value-buffer)
-      (or (.get temp-hash-cache value-buffer)
-          (let [i @decode-value-iterator-delay]
-            (when (advance-iterator-to-hash-cache-value i value-buffer)
-              (xio/with-nippy-thaw-all
-                (some-> (kv/value i) (mem/<-nippy-buffer))))))))
-
-  (encode-value [_ value]
-    (let [value-buffer (c/->value-buffer value)]
-      (when (and (not (c/can-decode-value-buffer? value-buffer))
-                 (not (advance-iterator-to-hash-cache-value @decode-value-iterator-delay value-buffer)))
-        (.put temp-hash-cache (canonical-buffer-lookup canonical-buffer-cache value-buffer) value))
-      value-buffer))
-
   (resolve-tx [_ {::xt/keys [tx-time tx-id] :as tx}]
     (with-open [i (-> (kv/new-iterator snapshot)
                       (new-prefix-kv-iterator tx-time-mapping-prefix))]
@@ -861,6 +844,24 @@
     (let [nested-index-snapshot (new-kv-index-snapshot snapshot false nil cav-cache canonical-buffer-cache temp-hash-cache)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
       nested-index-snapshot))
+
+  db/ValueSerde
+  (decode-value [_ value-buffer]
+    (assert (some? value-buffer))
+    (if (c/can-decode-value-buffer? value-buffer)
+      (c/decode-value-buffer value-buffer)
+      (or (.get temp-hash-cache value-buffer)
+          (let [i @decode-value-iterator-delay]
+            (when (advance-iterator-to-hash-cache-value i value-buffer)
+              (xio/with-nippy-thaw-all
+                (some-> (kv/value i) (mem/<-nippy-buffer))))))))
+
+  (encode-value [_ value]
+    (let [value-buffer (c/->value-buffer value)]
+      (when (and (not (c/can-decode-value-buffer? value-buffer))
+                 (not (advance-iterator-to-hash-cache-value @decode-value-iterator-delay value-buffer)))
+        (.put temp-hash-cache (canonical-buffer-lookup canonical-buffer-cache value-buffer) value))
+      value-buffer))
 
   db/AttributeStats
   (all-attrs [_]

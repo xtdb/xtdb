@@ -40,6 +40,10 @@
   (^double value-cardinality [this attr])
   (^double eid-cardinality [this attr]))
 
+(defprotocol ValueSerde
+  (decode-value [this value-buffer])
+  (encode-value [this value]))
+
 (defprotocol IndexSnapshot
   (av [this a min-v])
   (ave [this a v min-e entity-resolver-fn])
@@ -49,8 +53,6 @@
   (entity-as-of-resolver [this eid valid-time tx-id])
   (entity-as-of ^xtdb.codec.EntityTx [this eid valid-time tx-id])
   (entity-history [this eid sort-order opts])
-  (decode-value [this value-buffer])
-  (encode-value [this value])
   (resolve-tx [this tx])
   (open-nested-index-snapshot ^java.io.Closeable [this]))
 
