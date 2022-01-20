@@ -22,11 +22,12 @@
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
             [xtdb.tx.conform :as txc])
-  (:import [clojure.lang Box ExceptionInfo]
-           [java.io Closeable Writer]
-           [java.util Collection Comparator Date HashMap List Map UUID]
-           [java.util.concurrent Executors Future ScheduledExecutorService TimeoutException TimeUnit]
-           xtdb.codec.EntityTx))
+  (:import (clojure.lang Box ExceptionInfo)
+           (java.io Closeable Writer)
+           (java.util Collection Comparator Date HashMap List Map UUID)
+           (java.util.concurrent Executors Future ScheduledExecutorService TimeoutException TimeUnit)
+           (org.agrona DirectBuffer)
+           (xtdb.codec EntityTx)))
 
 (defn logic-var? [x]
   (and (symbol? x)
@@ -1014,10 +1015,10 @@
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
-         (fn or-constraint [{:keys [value-serde] :as db} idx-id->idx join-keys]
+         (fn or-constraint [db idx-id->idx ^List join-keys]
            (let [in-args (when (seq bound-vars)
-                           [(vec (for [var-binding bound-var-bindings]
-                                   (bound-result-for-var value-serde var-binding join-keys)))])
+                           [(vec (for [^VarBinding var-binding bound-var-bindings]
+                                   (.get join-keys (.result-index var-binding))))])
                  branch-results (for [[branch-index {:keys [where single-e-var-triple?]}] (map-indexed vector or-branches)
                                       :let [cache-key (when rule-name
                                                         [rule-name branch-index (count free-vars) in-args])
@@ -1071,12 +1072,12 @@
     (do (validate-existing-vars var->bindings not-clause not-vars)
         {:join-depth not-join-depth
          :constraint-fn
-         (fn not-constraint [{:keys [value-serde] :as db} _idx-id->idx join-keys]
+         (fn not-constraint [db _idx-id->idx ^List join-keys]
            (with-open [index-snapshot ^Closeable (open-index-snapshot db)]
              (let [db (assoc db :index-snapshot index-snapshot)
                    in-args (when (seq not-vars)
-                             [(vec (for [var-binding not-var-bindings]
-                                     (bound-result-for-var value-serde var-binding join-keys)))])
+                             [(vec (for [^VarBinding var-binding not-var-bindings]
+                                     (.get join-keys (.result-index var-binding))))])
                    {:keys [n-ary-join]} (build-sub-query db not-clause not-in-bindings in-args rule-name->rules)]
                (empty? (idx/layered-idx->seq n-ary-join)))))})))
 
@@ -1490,11 +1491,13 @@
 (defrecord CachedSerde [inner-serde, unpooled?, ^Map hash-cache]
   db/ValueSerde
   (encode-value [_ v]
-    (let [v-buf (cond-> (db/encode-value inner-serde v)
-                  unpooled? mem/copy-to-unpooled-buffer)]
-      (when-not (c/can-decode-value-buffer? v-buf)
-        (.put hash-cache (cond-> v-buf (not unpooled?) mem/copy-buffer) v))
-      v-buf))
+    (if (instance? DirectBuffer v)
+      v
+      (let [v-buf (cond-> (db/encode-value inner-serde v)
+                    unpooled? mem/copy-to-unpooled-buffer)]
+        (when-not (c/can-decode-value-buffer? v-buf)
+          (.put hash-cache (cond-> v-buf (not unpooled?) mem/copy-buffer) v))
+        v-buf)))
 
   (decode-value [_ v-buf]
     (or (.get hash-cache v-buf)
@@ -1735,7 +1738,7 @@
       (lazy-seq
        (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
                   (mapv (fn [var-binding]
-                          (bound-result-for-var index-snapshot var-binding join-keys))
+                          (bound-result-for-var value-serde var-binding join-keys))
                         var-bindings))
 
          aggregate? (aggregate-result compiled-find)
