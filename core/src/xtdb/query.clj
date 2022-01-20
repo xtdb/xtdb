@@ -611,8 +611,8 @@
 
 (defn- new-literal-index [value-serde v]
   (if (c/multiple-values? v)
-    (idx/new-relation-virtual-index (mapv vector v) 1 value-serde)
-    (idx/new-singleton-virtual-index v value-serde)))
+    (idx/new-collection-virtual-index (mapv (partial db/encode-value value-serde) v))
+    (idx/new-scalar-virtual-index (db/encode-value value-serde v))))
 
 (defn- triple-joins [triple-clauses var->joins]
   (reduce (fn [var->joins {:keys [e v] :as clause}]

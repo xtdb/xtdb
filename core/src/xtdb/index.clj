@@ -320,7 +320,7 @@
       (when (pos? max-depth)
         (step (vec (repeat max-depth nil)) 0 true)))))
 
-(deftype SortedVirtualIndex [^NavigableSet s ^:unsynchronized-mutable ^Iterator iterator]
+(deftype CollectionVirtualIndex [^NavigableSet s ^:unsynchronized-mutable ^Iterator iterator]
   db/Index
   (seek-values [this k]
     (set! iterator (.iterator (.tailSet s (or k mem/empty-buffer))))
@@ -330,8 +330,23 @@
     (when (and iterator (.hasNext iterator))
       (.next iterator))))
 
-(defn- new-sorted-virtual-index [s]
-  (->SortedVirtualIndex s nil))
+(defn new-collection-virtual-index [s]
+  (->CollectionVirtualIndex (if (instance? NavigableSet s)
+                              s
+                              (doto (TreeSet. mem/buffer-comparator)
+                                (.addAll s)))
+                            nil))
+
+(deftype ScalarVirtualIndex [v]
+  db/Index
+  (seek-values [_ k]
+    (when-not (pos? (mem/compare-buffers (or k mem/empty-buffer) v))
+      v))
+
+  (next-values [_]))
+
+(defn new-scalar-virtual-index [v]
+  (->ScalarVirtualIndex v))
 
 (definterface IRelationVirtualIndexUpdate
   (^void updateIndex [tree rootIndex]))
@@ -362,7 +377,7 @@
            ^NavigableMap tree tree]
       (when tree
         (if (= depth n)
-          (aset indexes depth (new-sorted-virtual-index (.navigableKeySet tree)))
+          (aset indexes depth (new-collection-virtual-index (.navigableKeySet tree)))
           (recur (inc n) (.get tree (aget path n))))))
     nil)
 
@@ -402,31 +417,21 @@
                    (tree-map-put-in acc (mapv (partial db/encode-value value-serde) tuple) nil))
                  (TreeMap. mem/buffer-comparator)
                  tuples))
-         root-idx (if single-values?
-                    (new-sorted-virtual-index (if (instance? NavigableSet tuples)
-                                                tuples
-                                                (doto (TreeSet. mem/buffer-comparator)
-                                                  (.addAll (mapv (partial db/encode-value value-serde) tuples)))))
-                    (new-sorted-virtual-index (.navigableKeySet ^NavigableMap tree)))]
+         root-idx (new-collection-virtual-index (if single-values?
+                                                  ;; TODO once we don't encode in here this whole inner `if` is just `tuples`
+                                                  (if (instance? NavigableSet tuples)
+                                                    tuples
+                                                    (doto (TreeSet. mem/buffer-comparator)
+                                                      (.addAll (mapv (partial db/encode-value value-serde) tuples))))
+                                                  (.navigableKeySet ^NavigableMap tree)))]
      (.updateIndex relation tree root-idx)
      relation)))
 
 (defn new-relation-virtual-index [tuples max-depth value-serde]
-  (update-relation-virtual-index! (->RelationVirtualIndex max-depth
-                                                          value-serde
-                                                          nil
-                                                          0
-                                                          (object-array (long max-depth))
-                                                          (object-array (long max-depth)))
-                                  tuples))
-
-(deftype SingletonVirtualIndex [v]
-  db/Index
-  (seek-values [_ k]
-    (when-not (pos? (mem/compare-buffers (or k mem/empty-buffer) v))
-      v))
-
-  (next-values [_]))
-
-(defn new-singleton-virtual-index [v value-serde]
-  (->SingletonVirtualIndex (db/encode-value value-serde v)))
+  (doto (->RelationVirtualIndex max-depth
+                                value-serde
+                                nil
+                                0
+                                (object-array (long max-depth))
+                                (object-array (long max-depth)))
+    (update-relation-virtual-index! tuples)))
