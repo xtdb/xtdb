@@ -609,12 +609,16 @@
         (log/debug :join-order :aev e (xio/pr-edn-str v) (xio/pr-edn-str clause))
         (idx/new-n-ary-join-layered-virtual-index [e-idx v-idx])))))
 
-(defn- new-literal-index [value-serde v]
+(defn- ->literal-index-fn [v value-serde]
   (if (c/multiple-values? v)
-    (idx/new-collection-virtual-index (mapv (partial db/encode-value value-serde) v))
-    (idx/new-scalar-virtual-index (db/encode-value value-serde v))))
+    (let [v-bufs (mapv (partial db/encode-value value-serde) v)]
+      (fn [_ _]
+        (idx/new-collection-virtual-index v-bufs)))
+    (let [v-buf (db/encode-value value-serde v)]
+      (fn [_ _]
+        (idx/new-scalar-virtual-index v-buf)))))
 
-(defn- triple-joins [triple-clauses var->joins]
+(defn- triple-joins [triple-clauses value-serde var->joins]
   (reduce (fn [var->joins {:keys [e v] :as clause}]
             (let [join {:id (gensym "triple")
                         :idx-fn (fn [db compiled-query]
@@ -623,15 +627,8 @@
                   (update v (fnil conj []) join)
                   (update e (fnil conj []) join)
 
-                  (cond-> (literal? e) (update e conj
-                                               {:idx-fn
-                                                (fn [{:keys [value-serde]} _compiled-query]
-                                                  (new-literal-index value-serde e))})
-
-                          (literal? v) (update v conj
-                                               {:idx-fn
-                                                (fn [{:keys [value-serde]} _compiled-query]
-                                                  (new-literal-index value-serde v))})))))
+                  (cond-> (literal? e) (update e conj {:idx-fn (->literal-index-fn e value-serde)})
+                          (literal? v) (update v conj {:idx-fn (->literal-index-fn v value-serde)})))))
           var->joins
           triple-clauses))
 
@@ -1401,7 +1398,7 @@
            or-join-clauses :or-join
            :as type->clauses} type->clauses
           {:keys [e-vars v-vars]} (collect-vars type->clauses)
-          var->joins (triple-joins triple-clauses {})
+          var->joins (triple-joins triple-clauses value-serde {})
           [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
           [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
           known-vars (set/union e-vars v-vars in-vars)
@@ -1491,20 +1488,24 @@
                                                     logic-var+range-constraint)))))
     compiled-query))
 
-(defrecord CachedSerde [inner-serde, ^Map hash-cache]
+(defrecord CachedSerde [inner-serde, unpooled?, ^Map hash-cache]
   db/ValueSerde
   (encode-value [_ v]
-    (let [v-buf (db/encode-value inner-serde v)]
+    (let [v-buf (cond-> (db/encode-value inner-serde v)
+                  unpooled? mem/copy-to-unpooled-buffer)]
       (when-not (c/can-decode-value-buffer? v-buf)
-        (.put hash-cache (mem/copy-to-unpooled-buffer v-buf) v))
+        (.put hash-cache (cond-> v-buf (not unpooled?) mem/copy-buffer) v))
       v-buf))
 
   (decode-value [_ v-buf]
     (or (.get hash-cache v-buf)
         (db/decode-value inner-serde v-buf))))
 
-(defn- ->cached-serde ^xtdb.query.CachedSerde [inner-serde]
-  (->CachedSerde inner-serde (HashMap.)))
+(defn- ^xtdb.query.CachedSerde ->cached-serde
+  ([inner-serde] (->cached-serde inner-serde {}))
+
+  ([inner-serde {:keys [unpooled?]}]
+   (->CachedSerde inner-serde unpooled? (HashMap.))))
 
 (defn- merge-hash-cache! [^CachedSerde cached-serde, ^Map hash-cache]
   (.putAll ^Map (.hash-cache cached-serde) hash-cache))
@@ -1524,7 +1525,7 @@
                                   [where in rule-name->rules]
                                   identity
                                   (fn [_]
-                                    (let [static-serde (->cached-serde value-serde)]
+                                    (let [static-serde (->cached-serde value-serde {:unpooled? true})]
                                       (-> (compile-sub-query (assoc db :value-serde static-serde) (->stats index-snapshot) where in rule-name->rules)
                                           (assoc :static-hash-cache (.hash-cache static-serde))))))
                                  (add-logic-var-constraints))
