@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
+RUN_MODE=FARGATE
+REV=HEAD
+
 # COMMAND = '["xtdb.bench.main", "foo", "bar"]'
 COMMAND='["xtdb.bench.main"'
 
@@ -8,6 +11,15 @@ while [[ "$#" -gt 0 ]]; do
     case $1 in
         -r|--rev)
             REV="$2";
+            shift 2;;
+        --run-mode)
+            RUN_MODE="$2"
+
+            if [ "$RUN_MODE" != 'FARGATE' -a "$RUN_MODE" != 'EC2' ]; then
+                echo "--run-mode :: FARGATE | EC2";
+                exit 1
+            fi
+
             shift 2;;
         --nodes|--tests|--tpch-query-count|--tpch-field-count|--repeat)
             COMMAND+=", \"$1\", \"$2\""
@@ -17,8 +29,14 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 COMMAND+="]"
-REV=${REV:-HEAD}
-SHA="$(git rev-parse ${REV})"
+SHA=$(git rev-parse ${REV})
+
+case $RUN_MODE in
+    FARGATE)
+        NETWORK_MODE='awsvpc';;
+    EC2)
+        NETWORK_MODE='host';;
+esac
 
 REGION=$(aws configure get region)
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -56,6 +74,7 @@ CONTAINER_DEFINITIONS='
     "cpu":2048,
     "memory":8192,
     "image":"'${ECR_REPO_URI}':commit-'${SHA}'",
+    "command":'"${COMMAND}"',
     "dependsOn":[{"condition":"START","containerName":"broker-container"}],
     "essential":true,
     "secrets":[{"name":"BENCH_SECRETS","valueFrom":"/aws/reference/secretsmanager/xtdb-bench"}],
@@ -76,20 +95,33 @@ TASKDEF_ARN=$(aws ecs register-task-definition\
                   --memory "12GB" \
                   --task-role-arn "$TASK_ROLE" \
                   --execution-role-arn "$EXECUTION_ROLE" \
-                  --network-mode "awsvpc" \
+                  --network-mode "$NETWORK_MODE" \
                   --container-definitions "$CONTAINER_DEFINITIONS"\
                   --output text --query taskDefinition.taskDefinitionArn)
 
-VPC_STACK_ARN=$(aws cloudformation describe-stacks --stack-name 'xtdb-vpc' --query 'Stacks[0].StackId' --output text)
-SUBNET=$(aws cloudformation describe-stack-resource --logical-resource-id PublicSubnetOne --stack-name "$VPC_STACK_ARN" --output text --query StackResourceDetail.PhysicalResourceId)
+case $RUN_MODE in
+    FARGATE)
+        VPC_STACK_ARN=$(aws cloudformation describe-stacks --stack-name 'xtdb-vpc' --query 'Stacks[0].StackId' --output text)
+        SUBNET=$(aws cloudformation describe-stack-resource --logical-resource-id PublicSubnetOne --stack-name "$VPC_STACK_ARN" --output text --query StackResourceDetail.PhysicalResourceId)
 
-echo "Starting ECS task @ ${SHA:0:8}. Failures:"
-aws ecs run-task \
-    --task-definition "$TASKDEF_ARN" \
-    --cluster xtdb-bench \
-    --launch-type FARGATE \
-    --count 1 \
-    --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],assignPublicIp=\"ENABLED\"}" \
-    --overrides '{"containerOverrides": [{"name": "bench-container", "command": '"$COMMAND"'}]}' \
-    --output json \
-    | jq .failures
+        echo "Starting ECS task @ ${SHA:0:8}. Failures:"
+        aws ecs run-task \
+            --task-definition "$TASKDEF_ARN" \
+            --cluster xtdb-bench \
+            --launch-type FARGATE \
+            --count 1 \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],assignPublicIp=\"ENABLED\"}" \
+            --overrides '{"containerOverrides": [{"name": "bench-container", "command": '"$COMMAND"'}]}' \
+            --output json --query failures
+        ;;
+    EC2)
+        echo "Starting ECS task on EC2 @ ${SHA:0:8}. Failures:"
+        aws ecs run-task \
+            --task-definition "$TASKDEF_ARN" \
+            --cluster xtdb-bench \
+            --launch-type EC2 \
+            --count 1 \
+            --overrides '{"containerOverrides": [{"name": "bench-container", "command": '"$COMMAND"'}]}' \
+            --output json --query failures
+        ;;
+esac
