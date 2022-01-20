@@ -1,14 +1,13 @@
 (ns xtdb.bench
-  (:require [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as client]
-            [clojure.data.json :as json]
+  (:require [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as client]
             [xtdb.api :as xt]
             [xtdb.bench.cloudwatch :as cw]
             [xtdb.bus :as bus]
             [xtdb.fixtures :as f]
-            [xtdb.io :as xio]
             [xtdb.jdbc :as j]
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
@@ -19,15 +18,15 @@
            (com.amazonaws.services.logs.model GetQueryResultsRequest ResultField StartQueryRequest)
            (com.amazonaws.services.simpleemail AmazonSimpleEmailServiceClient AmazonSimpleEmailServiceClientBuilder)
            (com.amazonaws.services.simpleemail.model Body Content Destination Message SendEmailRequest)
-           java.io.File
-           java.time.Duration
+           (java.io File)
+           (java.time Duration)
            (java.util Date List UUID)
            (java.util.concurrent Executors ExecutorService)
-           software.amazon.awssdk.core.exception.SdkClientException
-           software.amazon.awssdk.core.sync.RequestBody
-           software.amazon.awssdk.regions.Region
-           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)
-           software.amazon.awssdk.services.s3.S3Client))
+           (software.amazon.awssdk.core.exception SdkClientException)
+           (software.amazon.awssdk.core.sync RequestBody)
+           (software.amazon.awssdk.regions Region)
+           (software.amazon.awssdk.services.s3 S3Client)
+           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)))
 
 (def commit-hash
   (System/getenv "COMMIT_HASH"))
@@ -141,9 +140,8 @@
                         (Duration/ofMillis minimum-time-taken-this-week)
                         (Duration/ofMillis maximum-time-taken-this-week)
                         (sparkline times-taken)
-                        (let [time-taken-seconds (/ time-taken-ms 1000)]
-                          (pr-str (dissoc bench-map :bench-ns :bench-type :xtdb-node-type :xtdb-commit :time-taken-ms
-                                          :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week :times-taken))))]
+                        (pr-str (dissoc bench-map :bench-ns :bench-type :xtdb-node-type :xtdb-commit :time-taken-ms
+                                        :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week :times-taken)))]
                (when (and (= bench-type :ingest) doc-count av-count bytes-indexed)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
                         {:docs-per-second (int (/ doc-count time-taken-seconds))
@@ -329,10 +327,10 @@
 
 (defn with-embedded-kafka* [f]
   (f/with-tmp-dir "embedded-kafka" [data-dir]
-    (with-open [emb (ek/start-embedded-kafka
-                     #::ek{:zookeeper-data-dir (str (io/file data-dir "zookeeper"))
-                           :kafka-log-dir (str (io/file data-dir "kafka-log"))
-                           :kafka-port 9091})]
+    (with-open [_emb (ek/start-embedded-kafka
+                      #::ek{:zookeeper-data-dir (str (io/file data-dir "zookeeper"))
+                            :kafka-log-dir (str (io/file data-dir "kafka-log"))
+                            :kafka-port 9091})]
       (f))))
 
 (defmacro with-embedded-kafka [& body]
@@ -392,7 +390,7 @@
                     (.key (generate-s3-filename database version))
                     ^PutObjectRequest (.build))
                 (RequestBody/fromFile file))
-    (catch SdkClientException e
+    (catch SdkClientException _
       "AWS credentials not found! Results file not saved.")))
 
 (defn load-from-s3 [key]
@@ -402,19 +400,20 @@
                     (.bucket "xtdb-bench")
                     (.key key)
                     ^GetObjectRequest (.build)))
-    (catch SdkClientException e
+    (catch SdkClientException _
       (log/warn (format "AWS credentials not found! File %s not loaded" key)))))
 
 (def log-client
   (delay
     (try
       (AWSLogsClientBuilder/defaultClient)
-      (catch com.amazonaws.SdkClientException e
+      (catch com.amazonaws.SdkClientException _
         (log/info "AWS credentials not found! Cannot get comparison times.")))))
 
 (defn get-comparison-times [results]
-  (let [query-requests (for [{:keys [xtdb-node-type bench-type bench-ns time-taken-ms] :as result} results]
-                         (let [query-id (-> (.startQuery ^AWSLogsClient @log-client
+  (let [^AWSLogsClient log-client @log-client
+        query-requests (for [{:keys [xtdb-node-type bench-type bench-ns]} results]
+                         (let [query-id (-> (.startQuery log-client
                                                          (-> (StartQueryRequest.)
                                                              (.withLogGroupName "xtdb-bench")
                                                              (.withQueryString (format  "fields `time-taken-ms` | filter `xtdb-node-type` = '%s' | filter `bench-type` = '%s' | filter `bench-ns` = '%s' | sort @timestamp desc"
@@ -430,40 +429,44 @@
 
     (while (not-any? (fn [query-request]
                        (= "Complete"
-                          (->> (.getQueryResults ^AWSLogsClient @log-client query-request)
+                          (->> (.getQueryResults log-client query-request)
                                (.getStatus))))
                      query-requests)
       (Thread/sleep 100))
 
-    (map (fn [query-request]
-           (->> (map first (-> (.getQueryResults ^AWSLogsClient @log-client query-request)
-                               (.getResults)))
-                (map #(.getValue ^ResultField %))
-                (map #(Integer/parseInt %))))
-         query-requests)))
+    (mapv (fn [query-request]
+            (->> (map first (-> (.getQueryResults log-client query-request)
+                                (.getResults)))
+                 (map #(.getValue ^ResultField %))
+                 (map #(Integer/parseInt %))))
+          query-requests)))
 
 (defn with-comparison-times [results]
-  (let [comparison-times (get-comparison-times results)]
-    (map (fn [{:keys [time-taken-ms] :as result} times-taken]
-           (if (empty? times-taken)
-             (assoc
-              result
-              :percentage-difference-since-last-run 0.0
-              :minimum-time-taken-this-week 0
-              :maximum-time-taken-this-week 0
-              :times-taken [time-taken-ms])
-             (assoc
-              result
-              :percentage-difference-since-last-run (-> time-taken-ms
-                                                        (- (first times-taken))
-                                                        (/ (double (first times-taken)))
-                                                        (* 100)
-                                                        (double))
-              :minimum-time-taken-this-week (apply min times-taken)
-              :maximum-time-taken-this-week (apply max times-taken)
-              :times-taken (conj (vec (reverse times-taken)) time-taken-ms))))
-         results
-         comparison-times)))
+  (map (fn [{:keys [time-taken-ms] :as result} times-taken]
+         (if (empty? times-taken)
+           (assoc
+            result
+            :percentage-difference-since-last-run 0.0
+            :minimum-time-taken-this-week 0
+            :maximum-time-taken-this-week 0
+            :times-taken [time-taken-ms])
+           (assoc
+            result
+            :percentage-difference-since-last-run (-> time-taken-ms
+                                                      (- (first times-taken))
+                                                      (/ (double (first times-taken)))
+                                                      (* 100)
+                                                      (double))
+            :minimum-time-taken-this-week (apply min times-taken)
+            :maximum-time-taken-this-week (apply max times-taken)
+            :times-taken (conj (vec (reverse times-taken)) time-taken-ms))))
+       results
+       (try
+         (get-comparison-times results)
+         (catch Exception e
+           ;; TODO something about the above is triggering AWS Logs rate limits, #1693
+           (log/warn e "error getting comparison times: " (.getMessage e))
+           (vec (repeat (count results) nil))))))
 
 (defn send-email-via-ses [message]
   (try
