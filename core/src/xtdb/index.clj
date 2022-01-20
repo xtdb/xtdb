@@ -1,9 +1,9 @@
 (ns ^:no-doc xtdb.index
   (:require [xtdb.db :as db]
             [xtdb.memory :as mem])
-  (:import [clojure.lang Box IDeref IPersistentVector]
-           java.util.function.Function
-           [java.util ArrayList Arrays Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]))
+  (:import (clojure.lang Box IDeref IPersistentVector)
+           (java.util ArrayList Arrays Comparator Iterator List NavigableMap NavigableSet TreeMap TreeSet)
+           (java.util.function Function)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -356,7 +356,6 @@
   (^void updateIndex [tree rootIndex]))
 
 (deftype RelationVirtualIndex [^long max-depth
-                               value-serde
                                ^:unsynchronized-mutable tree
                                ^:unsynchronized-mutable ^long depth
                                ^:unsynchronized-mutable ^objects path
@@ -413,27 +412,22 @@
 
 (defn update-relation-virtual-index!
   ([^RelationVirtualIndex relation tuples]
-   (update-relation-virtual-index! relation tuples (.value_serde relation) false))
-  ([^RelationVirtualIndex relation tuples value-serde single-values?]
-   (let [tree (when-not single-values?
-                (reduce
-                 (fn [acc tuple]
-                   (tree-map-put-in acc (mapv (partial db/encode-value value-serde) tuple) nil))
-                 (TreeMap. mem/buffer-comparator)
-                 tuples))
-         root-idx (new-collection-virtual-index (if single-values?
-                                                  ;; TODO once we don't encode in here this whole inner `if` is just `tuples`
-                                                  (if (instance? NavigableSet tuples)
-                                                    tuples
-                                                    (doto (TreeSet. mem/buffer-comparator)
-                                                      (.addAll (mapv (partial db/encode-value value-serde) tuples))))
-                                                  (.navigableKeySet ^NavigableMap tree)))]
-     (.updateIndex relation tree root-idx)
-     relation)))
+   (update-relation-virtual-index! relation tuples false))
+  ([^RelationVirtualIndex relation tuples single-var?]
+   (if single-var?
+     (.updateIndex relation nil (new-collection-virtual-index tuples))
 
-(defn new-relation-virtual-index [tuples max-depth value-serde]
+     (let [tree (->> (reduce (fn [acc tuple]
+                               (tree-map-put-in acc tuple nil))
+                             (TreeMap. mem/buffer-comparator)
+                             tuples))
+           root-idx (new-collection-virtual-index (.navigableKeySet ^NavigableMap tree))]
+       (.updateIndex relation tree root-idx)))
+
+   relation))
+
+(defn new-relation-virtual-index [tuples max-depth]
   (doto (->RelationVirtualIndex max-depth
-                                value-serde
                                 nil
                                 0
                                 (object-array (long max-depth))

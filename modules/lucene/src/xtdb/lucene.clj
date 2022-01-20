@@ -158,7 +158,7 @@
                         iterator-seq
                         (results-resolver db)
                         (into [])))]
-      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) tuples))))
+      (q/bind-binding return-type value-serde tuple-idxs-in-join-order (get idx-id->idx idx-id) tuples))))
 
 (defn ^Query build-query
   "Standard build query fn, taking a single field/val lucene term string."

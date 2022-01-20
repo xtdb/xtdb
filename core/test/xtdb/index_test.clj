@@ -5,45 +5,18 @@
             [xtdb.index :as idx])
   (:import clojure.lang.Box))
 
-(def ^:private serde
-  (reify db/ValueSerde
-    (encode-value [_ v]
-      (c/->value-buffer v))))
+(defn new-relation-virtual-index
+  ([rel] (new-relation-virtual-index rel (count (first rel))))
+
+  ([rel max-depth]
+   (idx/new-relation-virtual-index (mapv #(mapv c/->value-buffer %) rel) max-depth)))
 
 (t/deftest test-can-perform-unary-join
-  (let [a-idx (idx/new-relation-virtual-index [[0]
-                                               [1]
-                                               [3]
-                                               [4]
-                                               [5]
-                                               [6]
-                                               [7]
-                                               [8]
-                                               [9]
-                                               [11]
-                                               [12]]
-                                              1
-                                              serde)
-        b-idx (idx/new-relation-virtual-index [[0]
-                                               [2]
-                                               [6]
-                                               [7]
-                                               [8]
-                                               [9]
-                                               [12]]
-                                              1
-                                              serde)
-        c-idx (idx/new-relation-virtual-index [[2]
-                                               [4]
-                                               [5]
-                                               [8]
-                                               [10]
-                                               [12]]
-                                              1
-                                              serde)]
+  (let [a-idx (new-relation-virtual-index [[0] [1] [3] [4] [5] [6] [7] [8] [9] [11] [12]])
+        b-idx (new-relation-virtual-index [[0] [2] [6] [7] [8] [9] [12]])
+        c-idx (new-relation-virtual-index [[2] [4] [5] [8] [10] [12]])]
 
-    (t/is (= [8
-              12]
+    (t/is (= [8 12]
              (->> (idx/new-unary-join-virtual-index [a-idx b-idx c-idx])
                   (idx/idx->seq)
                   (map c/decode-value-buffer))))))
@@ -59,29 +32,23 @@
 ;; (3, 5, 2)
 ;; TODO: Same as above.
 (t/deftest test-can-perform-n-ary-join
-  (let [r (idx/new-relation-virtual-index [[1 3]
-                                           [1 4]
-                                           [1 5]
-                                           [3 5]]
-                                          2
-                                          serde)
-        s (idx/new-relation-virtual-index [[3 4]
-                                           [3 5]
-                                           [4 6]
-                                           [4 8]
-                                           [4 9]
-                                           [5 2]]
-                                          2
-                                          serde)
-        t (idx/new-relation-virtual-index [[1 4]
-                                           [1 5]
-                                           [1 6]
-                                           [1 8]
-                                           [1 9]
-                                           [1 2]
-                                           [3 2]]
-                                          2
-                                          serde)]
+  (let [r (new-relation-virtual-index [[1 3]
+                                       [1 4]
+                                       [1 5]
+                                       [3 5]])
+        s (new-relation-virtual-index [[3 4]
+                                       [3 5]
+                                       [4 6]
+                                       [4 8]
+                                       [4 9]
+                                       [5 2]])
+        t (new-relation-virtual-index [[1 4]
+                                       [1 5]
+                                       [1 6]
+                                       [1 8]
+                                       [1 9]
+                                       [1 2]
+                                       [3 2]])]
     (t/testing "n-ary join"
       (let [index-groups [[r t]
                           [r s]
@@ -100,13 +67,7 @@
                    (mapv c/decode-value-buffer join-keys))))))))
 
 (t/deftest test-range-predicates
-  (let [r (idx/new-relation-virtual-index [[1]
-                                           [2]
-                                           [3]
-                                           [4]
-                                           [5]]
-                                          1
-                                          serde)]
+  (let [r (new-relation-virtual-index [[1] [2] [3] [4] [5]])]
 
     (t/is (= [1 2 3 4 5]
              (->> (idx/idx->seq r)
@@ -155,24 +116,18 @@
 ;; twice in two positions. All relations and the join order must be in
 ;; the same order for it to work.
 (t/deftest test-n-ary-join-based-on-relational-tuples
-  (let [r-idx (idx/new-relation-virtual-index [[7 4]
-                                               ;; extra sanity check
-                                               [8 4]]
-                                              2
-                                              serde)
-        s-idx (idx/new-relation-virtual-index [[4 0]
-                                               [4 1]
-                                               [4 2]
-                                               [4 3]]
-                                              2
-                                              serde)
-        t-idx (idx/new-relation-virtual-index [[7 0]
-                                               [7 1]
-                                               [7 2]
-                                               [8 1]
-                                               [8 2]]
-                                              2
-                                              serde)
+  (let [r-idx (new-relation-virtual-index [[7 4]
+                                           ;; extra sanity check
+                                           [8 4]])
+        s-idx (new-relation-virtual-index [[4 0]
+                                           [4 1]
+                                           [4 2]
+                                           [4 3]])
+        t-idx (new-relation-virtual-index [[7 0]
+                                           [7 1]
+                                           [7 2]
+                                           [8 1]
+                                           [8 2]])
         index-groups [[r-idx t-idx]
                       [r-idx s-idx]
                       [s-idx t-idx]]]
@@ -187,21 +142,9 @@
                     (mapv c/decode-value-buffer join-keys)))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-unary-conjunction
-  (let [p-idx (idx/new-relation-virtual-index [[1]
-                                               [2]
-                                               [3]]
-                                              1
-                                              serde)
-        q-idx (idx/new-relation-virtual-index [[2]
-                                               [3]
-                                               [4]]
-                                              1
-                                              serde)
-        r-idx (idx/new-relation-virtual-index [[3]
-                                               [4]
-                                               [5]]
-                                              1
-                                              serde)]
+  (let [p-idx (new-relation-virtual-index [[1] [2] [3]])
+        q-idx (new-relation-virtual-index [[2] [3] [4]])
+        r-idx (new-relation-virtual-index [[3] [4] [5]])]
     (t/testing "conjunction"
       (let [unary-and-idx (idx/new-unary-join-virtual-index [p-idx
                                                              q-idx
@@ -212,21 +155,17 @@
                         (mapv c/decode-value-buffer join-keys)))))))))
 
 (t/deftest test-empty-unary-join
-  (let [p-idx (idx/new-relation-virtual-index [] 1 serde)
-        q-idx (idx/new-relation-virtual-index [] 1 serde)]
+  (let [p-idx (new-relation-virtual-index [] 1)
+        q-idx (new-relation-virtual-index [] 1)]
     (t/is (empty? (idx/idx->seq (idx/new-unary-join-virtual-index [p-idx q-idx]))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-n-ary-conjunction-and-disjunction
-  (let [p-idx (idx/new-relation-virtual-index [[1 3]
-                                               [2 4]
-                                               [2 20]]
-                                              2
-                                              serde)
-        q-idx (idx/new-relation-virtual-index [[1 10]
-                                               [2 20]
-                                               [3 30]]
-                                              2
-                                              serde)
+  (let [p-idx (new-relation-virtual-index [[1 3]
+                                           [2 4]
+                                           [2 20]])
+        q-idx (new-relation-virtual-index [[1 10]
+                                           [2 20]
+                                           [3 30]])
         index-groups [[p-idx q-idx]
                       [p-idx]
                       [q-idx]]]
@@ -240,9 +179,7 @@
                       (mapv c/decode-value-buffer join-keys))))))
 
     (t/testing "disjunction"
-      (let [zero-idx (idx/new-relation-virtual-index [[0]]
-                                                     1
-                                                     serde)
+      (let [zero-idx (new-relation-virtual-index [[0]])
             lhs-index (idx/new-n-ary-join-layered-virtual-index
                        [(idx/new-unary-join-virtual-index [p-idx])
                         (idx/new-unary-join-virtual-index [p-idx])

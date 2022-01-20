@@ -638,9 +638,8 @@
      (let [bind-vars (find-binding-vars in)
            idx-id (gensym "in")
            join {:id idx-id
-                 :idx-fn
-                 (fn [{:keys [value-serde]} _]
-                   (idx/new-relation-virtual-index [] (count bind-vars) value-serde))}]
+                 :idx-fn (fn [_ _]
+                           (idx/new-relation-virtual-index [] (count bind-vars)))}]
        [(conj acc idx-id)
         (->> bind-vars
              (reduce
@@ -659,8 +658,8 @@
             (let [idx-id (gensym "pred-return")
                   return-vars (find-binding-vars return)
                   join {:id idx-id
-                        :idx-fn (fn [{:keys [value-serde]} _]
-                                  (idx/new-relation-virtual-index [] (count return-vars) value-serde))}]
+                        :idx-fn (fn [_ _]
+                                  (idx/new-relation-virtual-index [] (count return-vars)))}]
               [(conj pred-clause+idx-ids [pred-clause idx-id])
                (->> return-vars
                     (reduce
@@ -727,8 +726,8 @@
                 idx-id (gensym "or-free-vars")
                 join (when (seq free-vars)
                        {:id idx-id
-                        :idx-fn (fn [{:keys [value-serde]} _]
-                                  (idx/new-relation-virtual-index [] (count free-vars) value-serde))})]
+                        :idx-fn (fn [_ _]
+                                  (idx/new-relation-virtual-index [] (count free-vars)))})]
             (when (not (apply = (map :free-vars or-branches)))
               (throw (err/illegal-arg :or-requires-same-logic-vars
                                       {::err/message (str "Or branches require same free-variables: " (pr-str (mapv :free-vars or-branches)))})))
@@ -853,26 +852,27 @@
     (throw (err/illegal-arg :clause-unknown-var
                             {::err/message (str "Clause refers to unknown variable: " var " " (xio/pr-edn-str clause))}))))
 
-(defn bind-binding [bind-type tuple-idxs-in-join-order idx result]
-  (case bind-type
-    :scalar
-    (do (idx/update-relation-virtual-index! idx [[result]])
-        true)
+(defn bind-binding [bind-type value-serde tuple-idxs-in-join-order idx result]
+  (let [encode-value (partial db/encode-value value-serde)]
+    (case bind-type
+      :scalar
+      (do (idx/update-relation-virtual-index! idx [(encode-value result)] true)
+          true)
 
-    :collection
-    (do (idx/update-relation-virtual-index! idx (mapv vector result))
+      :collection
+      (do (idx/update-relation-virtual-index! idx (mapv encode-value result) true)
+          (not-empty result))
+
+      (:tuple :relation)
+      (let [result (if (= :relation bind-type)
+                     result
+                     [result])]
+        (->> (for [tuple result]
+               (mapv #(encode-value (nth tuple % nil)) tuple-idxs-in-join-order))
+             (idx/update-relation-virtual-index! idx))
         (not-empty result))
 
-    (:tuple :relation)
-    (let [result (if (= :relation bind-type)
-                   result
-                   [result])]
-      (->> (for [tuple result]
-             (mapv #(nth tuple % nil) tuple-idxs-in-join-order))
-           (idx/update-relation-virtual-index! idx))
-      (not-empty result))
-
-    result))
+      result)))
 
 (defmethod pred-constraint 'get-attr [_ {:keys [idx-id arg-bindings return-type tuple-idxs-in-join-order]}]
   (let [arg-bindings (rest arg-bindings)
@@ -885,12 +885,12 @@
             is-empty? (or (nil? vs) (.isEmpty ^Collection vs))]
         (if (and (= :collection return-type)
                  (not is-empty?))
-          (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) vs identity true)
+          (do (idx/update-relation-virtual-index! (get idx-id->idx idx-id) vs true)
               true)
           (let [values (if (and is-empty? not-found?)
                          [not-found]
                          (mapv #(db/decode-value value-serde %) vs))]
-            (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (not-empty values))))))))
+            (bind-binding return-type value-serde tuple-idxs-in-join-order (get idx-id->idx idx-id) (not-empty values))))))))
 
 (defmethod pred-constraint 'q [_ {:keys [idx-id arg-bindings rule-name->rules return-type tuple-idxs-in-join-order]}]
   (let [parent-rules (:rules (meta rule-name->rules))
@@ -903,7 +903,7 @@
                              (bound-result-for-var value-serde arg-binding join-keys)
                              arg-binding))]
         (with-open [pred-result (xt/open-q* db query (object-array args))]
-          (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (iterator-seq pred-result)))))))
+          (bind-binding return-type value-serde tuple-idxs-in-join-order (get idx-id->idx idx-id) (iterator-seq pred-result)))))))
 
 (defn- built-in-unification-pred [unifier-fn {:keys [value-serde arg-bindings]}]
   (let [arg-bindings (vec (for [arg-binding (rest arg-bindings)]
@@ -937,7 +937,7 @@
                                :else
                                arg-binding))
           pred-result (apply pred-fn args)]
-      (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) pred-result))))
+      (bind-binding return-type value-serde tuple-idxs-in-join-order (get idx-id->idx idx-id) pred-result))))
 
 (defn- build-tuple-idxs-in-join-order [bind-vars vars-in-join-order]
   (let [bind-vars->tuple-idx (zipmap bind-vars (range))]
@@ -1040,14 +1040,13 @@
                                         (binding [*recursion-table* (if cache-key
                                                                       (assoc *recursion-table* cache-key [])
                                                                       *recursion-table*)]
-                                          (let [{:keys [n-ary-join
-                                                        var->bindings]} (build-sub-query db where or-in-bindings in-args rule-name->rules)
+                                          (let [{:keys [n-ary-join var->bindings]} (build-sub-query db where or-in-bindings in-args rule-name->rules)
                                                 free-vars-in-join-order-bindings (map var->bindings free-vars-in-join-order)]
                                             (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
                                               (if has-free-vars?
-                                                (vec (for [join-keys idx-seq]
-                                                       (vec (for [var-binding free-vars-in-join-order-bindings]
-                                                              (bound-result-for-var value-serde var-binding join-keys)))))
+                                                (vec (for [^List join-keys idx-seq]
+                                                       (vec (for [^VarBinding var-binding free-vars-in-join-order-bindings]
+                                                              (mem/copy-buffer (.get join-keys (.result-index var-binding)))))))
                                                 []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -1548,10 +1547,7 @@
 
     (binding [nippy/*freeze-fallback* :write-unfreezable]
       (doseq [[{:keys [idx-id bind-type tuple-idxs-in-join-order]} in-arg] (map vector in-bindings in-args)]
-        (bind-binding bind-type
-                      tuple-idxs-in-join-order
-                      (get idx-id->idx idx-id)
-                      in-arg)))
+        (bind-binding bind-type value-serde tuple-idxs-in-join-order (get idx-id->idx idx-id) in-arg)))
 
     {:n-ary-join (when (constrain-result-fn [] 0)
                    (idx/new-n-ary-join-layered-virtual-index unary-join-indexes constrain-result-fn))
