@@ -7,6 +7,10 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+;; NOTE: you might be tempted to try to include instances of these in the query cache to avoid re-creating them, as I was...
+;; while instances could possibly be re-used so long as they were only used from one thread at any one time,
+;; including them in the query cache may mean they would be used from _multiple_ threads at the same time.
+
 (deftype DerefIndex [idx ^:unsynchronized-mutable x]
   db/Index
   (seek-values [_ k]
