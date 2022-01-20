@@ -712,12 +712,15 @@
                                 (vec (concat join-order new-vars-to-add))
                                 (cons (set/difference new-reachable-vars (set new-vars-to-add)) reachable-var-groups)))
                        (vec (distinct join-order))))]
-    [(->> join-order
-          (partition 2 1)
-          (reduce (fn [g [a b]]
-                    (dep/depend g b a))
-                  (dep/graph)))
-     var->cardinality]))
+
+    (log/debug :triple-joins-var->cardinality var->cardinality)
+    (log/debug :triple-joins-join-order join-order)
+
+    (->> join-order
+         (partition 2 1)
+         (reduce (fn [g [a b]]
+                   (dep/depend g b a))
+                 (dep/graph)))))
 
 (defn- in-joins [in var->joins]
   (reduce
@@ -1396,7 +1399,7 @@
            :as type->clauses} type->clauses
           {:keys [e-vars v-vars]} (collect-vars type->clauses)
           var->joins (triple-joins triple-clauses {})
-          [triple-join-deps var->cardinality] (triple-join-order triple-clauses type->clauses in-vars stats)
+          triple-join-deps (triple-join-order triple-clauses type->clauses in-vars stats)
           [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
           [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
           known-vars (set/union e-vars v-vars in-vars)
@@ -1448,7 +1451,6 @@
        :vars-in-join-order vars-in-join-order
        :var->joins var->joins
        :var->bindings var->bindings
-       :var->cardinality var->cardinality
        :in-bindings in-bindings})
     (catch ExceptionInfo e
       (let [{:keys [reason] :as cycle} (ex-data e)]
