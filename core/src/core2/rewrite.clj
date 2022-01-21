@@ -620,9 +620,12 @@
             (zmatch z
               [:get l [:record attrs]]
               ;;=> RecordBeta
-              (first (for [[_ k v] (rest attrs)
-                           :when (= k l)]
-                       v))
+              (letfn [(step [n z]
+                        (case (ctor z)
+                          :attr (when (= l (lexeme z 1))
+                                  (lexeme z 2))
+                          nil))]
+                ((once-td-tu (mono-tuz step)) ($ z -1)))
 
               [:for x [:yield M] N]
               ;;=> ForYield
