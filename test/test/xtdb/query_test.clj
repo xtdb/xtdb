@@ -3778,7 +3778,8 @@
                                           :type "extra type"}]))
 
     (t/is (= '[?name ?e ?type]
-             (-> (q/query-plan-for (xt/db *api*) query)
+             (-> (q/query-plan-for (xt/db *api*) query
+                                   ["person-104" :person])
                  :vars-in-join-order)))
 
     (fix/submit+await-tx [[::xt/put {:xt/id (UUID/randomUUID)
@@ -3787,7 +3788,8 @@
                                      :name "another extra name"}]])
 
     (t/is (= '[?name ?e ?type]
-             (-> (q/query-plan-for (xt/db *api*) query)
+             (-> (q/query-plan-for (xt/db *api*) query
+                                   ["person-104" :person])
                  :vars-in-join-order)))))
 
 (defn- date->inverted-long [^Date d]
@@ -3935,7 +3937,7 @@
        (->> (map vector tpch/tpch-queries join-orders)
             (map-indexed (fn [q-idx [q expected-order]]
                            (t/is (= expected-order
-                                    (-> (:vars-in-join-order (q/query-plan-for db q))
+                                    (-> (:vars-in-join-order (q/query-plan-for db q (::tpch/in-args (meta q))))
                                         #_(doto prn) ; for regenerating the output file
                                         ))
                                  (str "Q" (inc q-idx))))))))))

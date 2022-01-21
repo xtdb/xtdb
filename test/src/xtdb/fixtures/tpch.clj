@@ -723,7 +723,7 @@
               query (assoc (get tpch-queries (dec n)) :timeout 120000)
               actual (xt/q db query)]
           (prn n
-               (:vars-in-join-order (q/query-plan-for db query))
+               (:vars-in-join-order (q/query-plan-for db query (::in-args (meta query))))
                (validate-tpch-query actual (parse-tpch-result n))))))))
 
   )

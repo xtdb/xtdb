@@ -22,7 +22,7 @@
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
             [xtdb.tx.conform :as txc])
-  (:import (clojure.lang Box ExceptionInfo)
+  (:import (clojure.lang Box ExceptionInfo MapEntry)
            (java.io Closeable Writer)
            (java.util Collection Comparator Date HashMap List Map UUID)
            (java.util.concurrent Executors Future ScheduledExecutorService TimeoutException TimeUnit)
@@ -586,6 +586,25 @@
                                   arg))
                            or-join-vars)}))
 
+(defn- ->approx-in-var-cardinalities [{in-bindings :bindings} in-args]
+  (assert (= (count in-bindings) (count in-args))
+          (pr-str [(count in-bindings) (count in-args)]))
+
+  (->> (mapcat (fn [[b-type :as in-binding] in-arg]
+                 (let [b-vars (find-binding-vars in-binding)
+                       cardinality (case b-type
+                                     (:scalar :tuple) 1
+                                     (:collection :relation) (Long/highestOneBit (count in-arg)))]
+                   (case b-type
+                     (:scalar :collection)
+                     [(MapEntry/create (first b-vars) cardinality)]
+
+                     (:tuple :relation)
+                     (for [b-var b-vars]
+                       (MapEntry/create b-var cardinality)))))
+               in-bindings in-args)
+       (into {})))
+
 (defn- ->binary-index-fn [{:keys [e a v] :as clause}]
   (let [attr-buffer (mem/copy-to-unpooled-buffer (c/->id-buffer a))]
     (fn [{:keys [entity-resolver-fn index-snapshot]} {:keys [vars-in-join-order]}]
@@ -1010,7 +1029,9 @@
               has-free-vars? (boolean (seq free-vars))
               bound-vars (vec bound-vars)
               bound-var-bindings (mapv var->bindings bound-vars)
-              or-in-bindings {:bindings [[:tuple bound-vars]]}
+              or-in-bindings {:bindings (if (seq bound-vars)
+                                          [[:tuple bound-vars]]
+                                          [])}
               {:keys [rule-name]} (meta clause)]]
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
@@ -1081,7 +1102,8 @@
                    {:keys [n-ary-join]} (build-sub-query db not-clause not-in-bindings in-args rule-name->rules)]
                (empty? (idx/layered-idx->seq n-ary-join)))))})))
 
-(defn- triple-join-order [{triple-clauses :triple, range-clauses :range, pred-clauses :pred, :as type->clauses} in-vars stats]
+(defn- triple-join-order [{triple-clauses :triple, range-clauses :range, pred-clauses :pred, :as type->clauses} in-var-cardinalities stats]
+  ;; TODO make more use of in-var-cardinalities
   (let [collected-vars (collect-vars type->clauses)
         pred-var-frequencies (frequencies
                               (for [{:keys [pred return]} pred-clauses
@@ -1096,14 +1118,12 @@
                                  sym))
         cardinality-for-var (fn [var cardinality]
                               (cond-> (double (cond
-                                                (literal? var)
-                                                0.0
+                                                (literal? var) 0.0
 
-                                                (contains? in-vars var)
+                                                (contains? in-var-cardinalities var)
                                                 (/ 0.5 (double cardinality))
 
-                                                :else
-                                                cardinality))
+                                                :else cardinality))
 
                                 (or (contains? (:not-vars collected-vars) var)
                                     (contains? (:pred-return-vars collected-vars) var))
@@ -1167,7 +1187,7 @@
 (defn- calculate-join-order [query-vars
                              {pred-clauses :pred, :as type->clauses}
                              or-clause+idx-id+or-branches
-                             stats in-vars project-only-leaf-vars]
+                             stats in-var-cardinalities project-only-leaf-vars]
   (let [g (reduce (fn [g v]
                     (dep/depend g v ::root))
                   (dep/graph)
@@ -1176,7 +1196,7 @@
         g (reduce (fn [g [a b]]
                     (dep/depend g b a))
                   g
-                  (->> (triple-join-order type->clauses in-vars stats)
+                  (->> (triple-join-order type->clauses in-var-cardinalities stats)
                        (partition 2 1)))
 
         g (reduce (fn [g {:keys [pred return]}]
@@ -1382,12 +1402,14 @@
     (eid-cardinality [_ a] (db/eid-cardinality index-snapshot a))
     (value-cardinality [_ a] (db/value-cardinality index-snapshot a))))
 
-(defn- compile-sub-query [{:keys [fn-allow-list pred-ctx value-serde] :as db} stats where in rule-name->rules]
+(defn- compile-sub-query [{:keys [fn-allow-list pred-ctx value-serde] :as db}
+                          stats where in in-var-cardinalities
+                          rule-name->rules]
   (try
     (let [where (-> (expand-rules where rule-name->rules {})
                     (build-pred-fns fn-allow-list)
                     (normalize-clauses))
-          in-vars (set (find-binding-vars (:bindings in)))
+          in-vars (set (keys in-var-cardinalities))
           [type->clauses project-only-leaf-vars] (expand-leaf-preds where in-vars stats)
           {triple-clauses :triple
            range-clauses :range
@@ -1408,7 +1430,7 @@
           or-clause+idx-id+or-branches (concat or-clause+idx-id+or-branches
                                                or-join-clause+idx-id+or-branches)
           join-depth (count var->joins)
-          vars-in-join-order (calculate-join-order (keys var->joins) type->clauses or-clause+idx-id+or-branches stats in-vars project-only-leaf-vars)
+          vars-in-join-order (calculate-join-order (keys var->joins) type->clauses or-clause+idx-id+or-branches stats in-var-cardinalities project-only-leaf-vars)
           var->values-result-index (zipmap vars-in-join-order (range))
           v-var->e (build-v-var->e triple-clauses var->values-result-index)
           v-var->attr (->> (for [{:keys [e a v]} triple-clauses
@@ -1456,7 +1478,7 @@
         (if (and (= ::dep/circular-dependency reason)
                  (not (contains? *broken-cycles* cycle)))
           (binding [*broken-cycles* (conj *broken-cycles* cycle)]
-            (compile-sub-query db stats (break-cycle where cycle) in rule-name->rules))
+            (compile-sub-query db stats (break-cycle where cycle) in in-var-cardinalities rule-name->rules))
           (throw e))))))
 
 (defn- build-idx-id->idx [db {:keys [var->joins] :as compiled-query}]
@@ -1513,9 +1535,9 @@
   (.putAll ^Map (.hash-cache cached-serde) hash-cache))
 
 (defn- build-sub-query [{:keys [query-cache value-serde index-snapshot] :as db} where in in-args rule-name->rules]
-  ;; NOTE: this implies argument sets with different vars get compiled
-  ;; differently.
-  (let [{:keys [depth->constraints
+  ;; NOTE: this implies argument sets with different vars get compiled differently.
+  (let [in-var-cardinalities (->approx-in-var-cardinalities in in-args)
+        {:keys [depth->constraints
                 vars-in-join-order
                 var->range-constraints
                 var->joins
@@ -1524,11 +1546,14 @@
                 static-hash-cache]
          :as compiled-query} (-> (cache/compute-if-absent
                                   query-cache
-                                  [where in rule-name->rules]
+                                  [where in in-var-cardinalities rule-name->rules]
                                   identity
                                   (fn [_]
                                     (let [static-serde (->cached-serde value-serde {:unpooled? true})]
-                                      (-> (compile-sub-query (assoc db :value-serde static-serde) (->stats index-snapshot) where in rule-name->rules)
+                                      (-> (compile-sub-query (assoc db :value-serde static-serde)
+                                                             (->stats index-snapshot)
+                                                             where in in-var-cardinalities
+                                                             rule-name->rules)
                                           (assoc :static-hash-cache (.hash-cache static-serde))))))
                                  (add-logic-var-constraints))
         _ (merge-hash-cache! value-serde static-hash-cache)
@@ -1686,16 +1711,20 @@
                   in-args))])
     [in in-args]))
 
-(defn query-plan-for [db q]
-  (s/assert ::query q)
-  (with-open [index-snapshot (open-index-snapshot db)]
-    (let [value-serde (->cached-serde index-snapshot)
-          db (assoc db
-                    :index-snapshot index-snapshot
-                    :value-serde value-serde)
-          {:keys [where rules] :as conformed-q} (s/conform ::query q)
-          [in _in-args] (add-legacy-args conformed-q [])]
-      (compile-sub-query db (->stats index-snapshot) where in (rule-name->rules rules)))))
+(defn query-plan-for
+  ([db q] (query-plan-for db q []))
+  ([db q in-args]
+   (s/assert ::query q)
+   (with-open [index-snapshot (open-index-snapshot db)]
+     (let [value-serde (->cached-serde index-snapshot)
+           db (assoc db
+                     :index-snapshot index-snapshot
+                     :value-serde value-serde)
+           {:keys [where rules] :as conformed-q} (s/conform ::query q)
+           [in in-args] (add-legacy-args conformed-q in-args)]
+       (compile-sub-query db (->stats index-snapshot) where
+                          in (->approx-in-var-cardinalities in in-args)
+                          (rule-name->rules rules))))))
 
 (defn- ->return-maps [{:keys [keys syms strs]}]
   (let [ks (or (some->> keys (mapv keyword))
