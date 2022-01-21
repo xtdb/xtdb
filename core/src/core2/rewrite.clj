@@ -604,3 +604,96 @@
                             [:add [:var "c"] [:var "c"]]]
            [:empty-list]]]]
         [:sub [:add [:var "a"] [:const 7]] [:var "c"]]]))))
+
+;; Experimental comprehension rewrites based on rules in
+;; https://okmij.org/ftp/meta-programming/quel.pdf
+
+;; See also:
+;; https://lists.w3.org/Archives/Public/public-rif-wg/2008Oct/att-0054/p457-fegaras.pdf
+;; https://db.inf.uni-tuebingen.de/staticfiles/publications/Comprehensions.pdf
+;; https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.9148&rep=rep1&type=pdf
+;; https://www.researchgate.net/publication/2724181_Improving_List_Comprehension_Database_Queries
+;; https://homepages.inf.ed.ac.uk/jcheney/publications/cheney13icfp.pdf
+
+(defn- normalize-comprehension [comprehension]
+  (letfn [(stage-1-symbolic-reduction [_ z]
+            (zmatch z
+              [:for x [:yield M] N]
+              ;;=> ForYield
+              (letfn [(step [n z]
+                        (case (ctor z)
+                          :for (when (= x (lexeme z 1))
+                                 n)
+                          (when (= x n)
+                            M)))]
+                (z/node ((stop-td-tp (mono-tuz step)) ($ z -1))))
+
+              [:for x [:for y L M] N]
+              ;;=> ForFor
+              [:for y L [:for x M N]] ;; if y not free in N
+
+              [:for x [:where L M] N]
+              ;;=> ForWhere1
+              [:where L [:for x M N]]
+
+              [:for x [] N]
+              ;;=> ForEmpty1
+              []
+
+              [:for x [:union-all L M] N]
+              ;;=>ForUnionAll1
+              [:union-all [:for x L N] [:for x M N]]
+
+              [:where true M]
+              ;;=> WhereTrue
+              M
+
+              [:where false M]
+              ;;=> WhereFalse
+              []))
+
+          (stage-2-adhoc-rules [_ z]
+            (zmatch z
+              [:for x L [:union-all M N]]
+              ;;=> ForUnionAll2
+              [:union-all [:for x L M] [:for x L N]]
+
+              [:for x M []]
+              ;;=> ForEmpty2
+              []
+
+              [:where L [:union-all M N]]
+              ;;=> WhereUnion
+              [:union-all [:where L M] [:where L N]]
+
+              [:where L []]
+              ;;=> WhereEmpty
+              []
+
+              [:where L [:where M N]]
+              ;;=> WhereWhere
+              [:where [:and L M] N]
+
+              [:where L [:for x M N]]
+              ;;=> WhereFor
+              [:for x M [:where L N]]))]
+
+    (->> (z/vector-zip comprehension)
+         ((innermost (mono-tpz stage-1-symbolic-reduction)))
+         ((innermost (mono-tpz stage-2-adhoc-rules)))
+         (z/node))))
+
+(comment
+  (time
+   (= '[:for e [:table employee]
+        [:for d [:table department]
+         [:where [:and [:> (:wage e) 20] [:= (:d deptID) (:e deptID)]]
+          [:yield {:name (:name e), :dep (:name d), :wage (:wage e)}]]]]
+      (doto (normalize-comprehension
+             '[:for e [:for e [:table employee]
+                       [:where [:> (:wage e) 20]
+                        [:yield e]]]
+               [:for d [:table department]
+                [:where [:= (:d deptID) (:e deptID)]
+                 [:yield {:name (:name e) :dep (:name d) :wage (:wage e)}]]]])
+        (clojure.pprint/pprint)))))
