@@ -618,6 +618,12 @@
 (defn- normalize-comprehension [comprehension]
   (letfn [(stage-1-symbolic-reduction [_ z]
             (zmatch z
+              [:get l [:record attrs]]
+              ;;=> RecordBeta
+              (first (for [[_ k v] (rest attrs)
+                           :when (= k l)]
+                       v))
+
               [:for x [:yield M] N]
               ;;=> ForYield
               (letfn [(step [n z]
@@ -626,7 +632,7 @@
                                  n)
                           (when (= x n)
                             M)))]
-                (z/node ((stop-td-tp (mono-tuz step)) ($ z -1))))
+                (z/node ((stop-td-tp (mono-tpz step)) ($ z -1))))
 
               [:for x [:for y L M] N]
               ;;=> ForFor
@@ -687,13 +693,48 @@
   (time
    (= '[:for e [:table employee]
         [:for d [:table department]
-         [:where [:and [:> (:wage e) 20] [:= (:deptID d) (:deptID e)]]
-          [:yield {:name (:name e), :dep (:name d), :wage (:wage e)}]]]]
+         [:where [:and [:> [:get :wage e] 20] [:= [:get :deptID d] [:get :deptID e]]]
+          [:yield [:record
+                   [:attrs
+                    [:attr :name [:get :name e]]
+                    [:attr :dep [:get :name d]]
+                    [:attr :wage [:get :wage e]]]]]]]]
       (doto (normalize-comprehension
              '[:for e [:for e [:table employee]
-                       [:where [:> (:wage e) 20]
+                       [:where [:> [:get :wage e] 20]
                         [:yield e]]]
                [:for d [:table department]
-                [:where [:= (:deptID d) (:deptID e)]
-                 [:yield {:name (:name e) :dep (:name d) :wage (:wage e)}]]]])
+                [:where [:= [:get :deptID d] [:get :deptID e]]
+                 [:yield [:record
+                          [:attrs
+                           [:attr :name [:get :name e]]
+                           [:attr :dep [:get :name d]]
+                           [:attr :wage [:get :wage e]]]]]]]])
+        (clojure.pprint/pprint))))
+
+  (time
+   (= '[:for o [:table orders]
+        [:for p [:table products]
+         [:where
+          [:and [:eq [:get :oid o] oid] [:eq [:get :pid p] [:get :pid o]]]
+          [:yield
+           [:record
+            [:attrs
+             [:attr :pid [:get :pid p]]
+             [:attr :name [:get :name p]]
+             [:attr :sale [:* [:get :price p] [:get :qty o]]]]]]]]]
+      (doto (normalize-comprehension
+             '[:for y [:for o [:table orders]
+                       [:where [:eq [:get :oid o] oid]
+                        [:yield [:record
+                                 [:attrs
+                                  [:attr :pid [:get :pid o]]
+                                  [:attr :qty [:get :qty o]]]]]]]
+               [:for p [:table products]
+                [:where [:eq [:get :pid p] [:get :pid y]]
+                 [:yield [:record
+                          [:attrs
+                           [:attr :pid [:get :pid p]]
+                           [:attr :name [:get :name p]]
+                           [:attr :sale [:* [:get :price p] [:get :qty y]]]]]]]]])
         (clojure.pprint/pprint)))))
