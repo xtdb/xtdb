@@ -1,13 +1,11 @@
 (ns xtdb.bench.cloudwatch
   (:import java.util.List
-           software.amazon.awssdk.regions.Region
            software.amazon.awssdk.services.cloudwatch.CloudWatchClient
            [software.amazon.awssdk.services.cloudwatch.model Dimension MetricDatum PutMetricDataRequest StandardUnit]))
 
 (def ^CloudWatchClient ^:private cloudwatch-client
   (delay
     (.. (CloudWatchClient/builder)
-        (region (Region/EU_WEST_2))
         (build))))
 
 (defn- ->cw-dimension ^Dimension [k v]

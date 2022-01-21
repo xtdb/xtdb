@@ -24,7 +24,6 @@
            (java.util.concurrent Executors ExecutorService)
            (software.amazon.awssdk.core.exception SdkClientException)
            (software.amazon.awssdk.core.sync RequestBody)
-           (software.amazon.awssdk.regions Region)
            (software.amazon.awssdk.services.s3 S3Client)
            (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest)))
 
@@ -379,7 +378,6 @@
 (def s3-client
   (delay
     (-> (S3Client/builder)
-        (.region Region/EU_WEST_2)
         (.build))))
 
 (defn save-to-s3 [{:keys [database version]} ^File file]
