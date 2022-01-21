@@ -4,19 +4,22 @@
 
 (t/deftest test-annotate-query-scopes
   (let [tree (sql/parse "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
-SELECT t1.d-t1.e
+SELECT t1.d-t1.e, SUM(t1.a)
   FROM t1, foo AS baz
  WHERE EXISTS(SELECT 1 FROM t1 AS x WHERE x.b<t1.b)
    AND t1.a>t1.b
+ GROUP BY t1.d
  ORDER BY 1")]
     (t/is (= [{:id 1
                :ctes {"foo" [{:query-name "foo" :id 2}]}
                :tables {"t1" [{:table-or-query-name "t1" :correlation-name "t1" :id 5}]
                         "baz" [{:table-or-query-name "foo" :correlation-name "baz" :id 6 :cte-id 2}]}
-               :columns #{{:identifiers ["t1" "d"] :table-id 5 :qualified? true}
-                          {:identifiers ["t1" "e"] :table-id 5 :qualified? true}
-                          {:identifiers ["t1" "a"] :table-id 5 :qualified? true}
-                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true}}}
+               :columns #{{:identifiers ["t1" "d"] :table-id 5 :qualified? true :type :group-invariant}
+                          {:identifiers ["t1" "d"] :table-id 5 :qualified? true :type :ordinary}
+                          {:identifiers ["t1" "e"] :table-id 5 :qualified? true :type :invalid-group-invariant}
+                          {:identifiers ["t1" "a"] :table-id 5 :qualified? true :type :ordinary}
+                          {:identifiers ["t1" "a"] :table-id 5 :qualified? true :type :within-group-varying}
+                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :ordinary}}}
               {:id 3
                :parent-id 1
                :ctes {}
@@ -26,8 +29,8 @@ SELECT t1.d-t1.e
                :parent-id 1
                :ctes {}
                :tables {"x" [{:table-or-query-name "t1" :correlation-name "x" :id 8}]}
-               :columns #{{:identifiers ["x" "b"] :table-id 8 :qualified? true}
-                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true}}}]
+               :columns #{{:identifiers ["x" "b"] :table-id 8 :qualified? true :type :ordinary}
+                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :ordinary}}}]
              (:scopes (sql/analyze-query tree))))))
 
 (t/deftest test-scope-rules
@@ -71,4 +74,10 @@ SELECT t1.d-t1.e
   (t/is (re-find #"CTE query name duplicated: foo"
                  (first (:errs (sql/analyze-query (sql/parse "WITH foo AS (SELECT 1 FROM foo), foo AS (SELECT 1 FROM foo) SELECT * FROM foo"))))))
   (t/is (re-find #"Column name duplicated: foo"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM (SELECT 1, 2 FROM foo) AS bar (foo, foo)")))))))
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM (SELECT 1, 2 FROM foo) AS bar (foo, foo)"))))))
+
+  (t/is (re-find #"Column reference is not a grouping column: t1.a"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.a FROM t1 GROUP BY t1.b"))))))
+  (t/is (re-find #"Column reference is not a grouping column: t1.a"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 GROUP BY t1.b HAVING t1.a"))))))
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b, COUNT(t1.a) FROM t1 GROUP BY t1.b"))))))

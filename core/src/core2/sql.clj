@@ -1,5 +1,6 @@
 (ns core2.sql
   (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.zip :as z]
             [core2.rewrite :as r]
             [instaparse.core :as insta]
@@ -99,7 +100,8 @@
 
 (defn- identifiers [ag]
   (case (r/ctor ag)
-    (:column_reference
+    (:grouping_column_reference
+     :column_reference
      :basic_identifier_chain) (identifiers (r/$ ag 1))
     (:column_name_list
      :identifier_chain)
@@ -221,23 +223,75 @@
 
 ;; Column references
 
+(defn- grouping-column-references [ag]
+  (letfn [(step [_ ag]
+            (case (r/ctor ag)
+              :grouping_column_reference [(identifiers ag)]
+              []))]
+    ((r/full-td-tu (r/mono-tuz step)) ag)))
+
+(defn- grouping-columns [ag]
+  (case (r/ctor ag)
+    :query_expression (if (= :with_clause (r/ctor (r/$ ag 1)))
+                        (grouping-columns (r/$ ag 2))
+                        (grouping-columns (r/$ ag 1)))
+    (:query_expression_body
+     :query_term
+     :query_primary) (grouping-columns (r/$ ag 1))
+    :query_specification (grouping-columns (r/$ ag -1))
+    :table_expression (cond
+                        (= :group_by_clause (r/ctor (r/$ ag 2)))
+                        (grouping-columns (r/$ ag 2))
+
+                        (= :group_by_clause (r/ctor (r/$ ag 3)))
+                        (grouping-columns (r/$ ag 3)))
+    :group_by_clause (grouping-column-references ag)
+    (r/inherit ag)))
+
 (defn- column-reference [ag]
   (case (r/ctor ag)
     :column_reference (let [identifiers (identifiers ag)
                             qualified? (> (count identifiers) 1)
                             table-id (when qualified?
                                        (:id (find-decl (env ag) (first identifiers))))]
-                        (cond-> {:identifiers identifiers
-                                 :qualified? qualified?}
-                          table-id (assoc :table-id table-id)))))
+                        (with-meta
+                          (cond-> {:identifiers identifiers
+                                   :qualified? qualified?
+                                   :type :ordinary}
+                            table-id (assoc :table-id table-id))
+                          {::ag ag}))))
 
 (defn- local-column-references [ag]
-  (letfn [(step [_ ag]
-            (case (r/ctor ag)
-              :column_reference [(column-reference ag)]
-              :subquery []
-              nil))]
-    ((r/stop-td-tu (r/mono-tuz step)) ag)))
+  (let [grouping-columns (some-> (grouping-columns ag) (set))]
+    (letfn [(base-step [_ ag]
+              (case (r/ctor ag)
+                :column_reference [(column-reference ag)]
+                :subquery []
+                nil))
+            (aggregate-step [n ag]
+              (or (base-step n ag)
+                  (case (r/ctor ag)
+                    :aggregate_function (vec (for [cr ((r/stop-td-tu (r/mono-tuz base-step)) ag)]
+                                               (assoc cr :type :within-group-varying)))
+                    nil)))
+            (step [n ag]
+              (or (base-step n ag)
+                  (case (r/ctor ag)
+                    (:select_list
+                     :having_clause) (vec (for [{:keys [identifiers type] :as cr} ((r/stop-td-tu (r/mono-tuz aggregate-step)) ag)
+                                                :let [type (cond
+                                                             (or (nil? grouping-columns)
+                                                                 (= :within-group-varying type))
+                                                             type
+
+                                                             (contains? grouping-columns identifiers)
+                                                             :group-invariant
+
+                                                             :else
+                                                             :invalid-group-invariant)]]
+                                            (assoc cr :type type)))
+                    nil)))]
+      ((r/stop-td-tu (r/mono-tuz step)) ag))))
 
 ;; Errors
 
@@ -249,15 +303,21 @@
               :with_list (check-duplicates "CTE query name" ag
                                            (local-names (cteo ag) :query-name))
               :column_name_list (check-duplicates "Column name" ag (identifiers ag))
-              :column_reference (let [{:keys [identifiers qualified? table-id]} (column-reference ag)]
-                                  (cond
-                                    (not qualified?)
-                                    [(format "XTDB requires fully-qualified columns: %s %s"
-                                             (first identifiers) (->line-info-str ag))]
+              :query_expression (->> (for [{:keys [identifiers qualified? table-id type] :as cr} (local-column-references ag)
+                                           :let [ag (::ag (meta cr))]]
+                                       (cond
+                                         (not qualified?)
+                                         [(format "XTDB requires fully-qualified columns: %s %s"
+                                                  (first identifiers) (->line-info-str ag))]
 
-                                    (not table-id)
-                                    [(format "Table not in scope: %s %s"
-                                             (first identifiers) (->line-info-str ag))]))
+                                         (not table-id)
+                                         [(format "Table not in scope: %s %s"
+                                                  (first identifiers) (->line-info-str ag))]
+
+                                         (= :invalid-group-invariant type)
+                                         [(format "Column reference is not a grouping column: %s %s"
+                                                  (str/join "." identifiers) (->line-info-str ag))]))
+                                     (reduce into))
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
@@ -289,7 +349,9 @@
                                #'cte-env
                                #'dcli
                                #'dclo
-                               #'env]
+                               #'env
+                               #'local-column-references
+                               #'scope]
     #(let [ag (z/vector-zip query)]
        {:scopes (scopes ag)
         :errs (errs ag)})))
