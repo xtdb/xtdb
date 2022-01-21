@@ -1,20 +1,24 @@
 (ns dev
   "Internal development namespace for XTDB. For end-user usage, see
   examples.clj"
-  (:require [xtdb.api :as xt]
+  (:require [clojure.java.io :as io]
             [integrant.core :as i]
+            [integrant.repl :as ir]
             [integrant.repl.state :refer [system]]
-            [integrant.repl :as ir :refer [go halt reset reset-all]]
+            [xtdb.api :as xt]
+            [xtdb.db :as db]
             [xtdb.io :as xio]
-            [xtdb.lucene]
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
+            [xtdb.lucene]
             [xtdb.rocksdb :as rocks]
-            [clojure.java.io :as io])
-  (:import (xtdb.api IXtdb)
+            [xtdb.fixtures.tpch :as tpch]
+            [xtdb.query :as q])
+  (:import (ch.qos.logback.classic Level Logger)
            (java.io Closeable File)
-           [ch.qos.logback.classic Level Logger]
-           org.slf4j.LoggerFactory))
+           (java.lang AutoCloseable)
+           (org.slf4j LoggerFactory)
+           (xtdb.api IXtdb)))
 
 (defn set-log-level! [ns level]
   (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
@@ -90,3 +94,9 @@
 
 (defn xtdb-node []
   (::xtdb system))
+
+(comment
+  (time
+   (xt/q (xt/db (xtdb-node))
+         (-> tpch/q19
+             (assoc :timeout 120000)))))

@@ -5,9 +5,11 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.fixtures :as fix :refer [*api*]])
-  (:import [io.airlift.tpch GenerateUtils TpchColumn TpchColumnType$Base TpchEntity TpchTable]
-           java.util.UUID))
+            [xtdb.fixtures :as fix :refer [*api*]]
+            [xtdb.db :as db])
+  (:import (io.airlift.tpch GenerateUtils TpchColumn TpchColumnType$Base TpchEntity TpchTable)
+           (java.lang AutoCloseable)
+           (java.util UUID)))
 
 (def tpch-column-types->xtdb-calcite-type
   {TpchColumnType$Base/INTEGER :bigint
@@ -683,6 +685,24 @@
        (every? boolean)))
 
 (comment
+  ;; regen stats
+  (with-open [^AutoCloseable is (db/open-index-snapshot (:index-store (xt/db (dev/xtdb-node))))]
+    (->> (db/all-attrs is)
+         (map (fn [attr]
+                [attr {:doc-count (db/doc-count is attr)
+                       :eids (db/eid-cardinality is attr)
+                       :vals (db/value-cardinality is attr)}]))
+         (into {}))))
+
+(defn ->attr-stats []
+  (let [stats (read-string (slurp (io/resource "xtdb/fixtures/tpch/attr-stats.edn")))]
+    (reify db/AttributeStats
+      (all-attrs [_] (set (keys stats)))
+      (doc-count [_ attr] (get-in stats [attr :doc-count]))
+      (eid-cardinality [_ attr] (get-in stats [attr :eids]))
+      (value-cardinality [_ attr] (get-in stats [attr :vals])))))
+
+(comment
   (require '[xtdb.query :as q] 'dev)
 
   ;; SF 0.01
@@ -704,4 +724,6 @@
               actual (xt/q db query)]
           (prn n
                (:vars-in-join-order (q/query-plan-for db query))
-               (validate-tpch-query actual (parse-tpch-result n)))))))))
+               (validate-tpch-query actual (parse-tpch-result n))))))))
+
+  )

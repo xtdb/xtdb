@@ -4,10 +4,12 @@
             [clojure.walk :as w]
             [xtdb.api :as xt]
             [xtdb.fixtures :as fix :refer [*api*]]
+            [xtdb.fixtures.tpch :as tpch]
             [xtdb.index :as idx]
-            [xtdb.query :as q])
-  (:import [java.util Arrays Date UUID]
-           java.util.concurrent.TimeoutException))
+            [xtdb.query :as q]
+            [clojure.java.io :as io])
+  (:import (java.util Arrays Date UUID)
+           (java.util.concurrent TimeoutException)))
 
 (t/use-fixtures :each fix/with-node)
 
@@ -3921,3 +3923,16 @@
                            [(pointsTo start end)
                             [start :next intermediate]
                             (pointsTo end intermediate)]]}))))
+
+(t/deftest test-tpch-join-orders
+  ;; these aren't necessarily the best join orders, but just to give you a heads-up if something changes
+  ;; only does the top-level queries, but again, hopefully enough to spot an unexpected change.
+  (let [db (xt/db *api*)
+        tpch-stats (tpch/->attr-stats)
+        join-orders (read-string (slurp (io/resource "xtdb/tpch-current-join-orders.edn")))]
+    (with-redefs [q/->stats (constantly tpch-stats)]
+      (doall
+       (->> (map vector tpch/tpch-queries join-orders)
+            (map-indexed (fn [q-idx [q expected-order]]
+                           (t/is (= expected-order (:vars-in-join-order (q/query-plan-for db q)))
+                                 (str "Q" (inc q-idx))))))))))

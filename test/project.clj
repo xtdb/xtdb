@@ -54,6 +54,7 @@
   :junit-formatter :brief
 
   :test-paths ["test"
+               "test-resources"
                "../docs/reference/modules/ROOT/examples/test"
                "../docs/about/modules/ROOT/examples/test"]
 
