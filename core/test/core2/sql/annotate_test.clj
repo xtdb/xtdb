@@ -45,6 +45,10 @@ SELECT t1.d-t1.e, SUM(t1.a)
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT bar.a FROM bar")))))
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT bar.a FROM foo AS bar")))))
 
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT bar.a FROM foo AS bar ORDER BY bar.y")))))
+  (t/is (re-find #"Table not in scope: baz"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT bar.a FROM foo AS bar ORDER BY baz.y"))))))
+
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE EXISTS (SELECT x.b FROM t1 AS x WHERE x.b < t1.b)")))))
 
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1, LATERAL (SELECT x.b FROM t1 AS x WHERE x.b < t1.b) AS t2")))))

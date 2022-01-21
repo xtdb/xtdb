@@ -214,7 +214,8 @@
 
 (defn- env [ag]
   (case (r/ctor ag)
-    :query_expression (dclo ag)
+    (:query_expression
+     :query_specification) (dclo ag)
     :from_clause (parent-env (dclo ag))
     (:collection_derived_table
      :join_condition
