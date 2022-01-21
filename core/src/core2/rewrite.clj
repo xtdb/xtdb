@@ -687,13 +687,13 @@
   (time
    (= '[:for e [:table employee]
         [:for d [:table department]
-         [:where [:and [:> (:wage e) 20] [:= (:d deptID) (:e deptID)]]
+         [:where [:and [:> (:wage e) 20] [:= (:deptID d) (:deptID e)]]
           [:yield {:name (:name e), :dep (:name d), :wage (:wage e)}]]]]
       (doto (normalize-comprehension
              '[:for e [:for e [:table employee]
                        [:where [:> (:wage e) 20]
                         [:yield e]]]
                [:for d [:table department]
-                [:where [:= (:d deptID) (:e deptID)]
+                [:where [:= (:deptID d) (:deptID e)]
                  [:yield {:name (:name e) :dep (:name d) :wage (:wage e)}]]]])
         (clojure.pprint/pprint)))))
