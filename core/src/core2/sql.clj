@@ -294,50 +294,6 @@
        {:scopes (scopes ag)
         :errs (errs ag)})))
 
-(comment
-  (time
-   (parse-sql2011
-    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"
-    :start :directly_executable_statement))
-
-  (time
-   (parse
-    "SELECT * FROM user WHERE user.id = TIME '20:00:00.000' ORDER BY id DESC"))
-
-  (time
-   (parse-sql2011
-    "TIME '20:00:00.000'"
-    :start :literal))
-
-  (time
-   (parse-sql2011
-    "TIME (3) WITH TIME ZONE"
-    :start :data_type))
-
-  (parse-sql2011
-   "GRAPH_TABLE ( myGraph,
-    MATCH
-      (Creator IS Person WHERE Creator.email = :email1)
-      -[ IS Created ]->
-      (M IS Message)
-      <-[ IS Commented ]-
-      (Commenter IS Person WHERE Commenter.email = :email2)
-    COLUMNS ( M.creationDate, M.content )
-    )"
-   :start :graph_table)
-
-  (time
-   (parse-sql2011
-    "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)"
-    :start :directly_executable_statement))
-
-  (time
-   (parse-sql2011
-    "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END
-  FROM t1
- ORDER BY 1"
-    :start :directly_executable_statement)))
-
 ;; SQL:2011 official grammar:
 
 ;; https://jakewheat.github.io/sql-overview/sql-2011-foundation-grammar.html
