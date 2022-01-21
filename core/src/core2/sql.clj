@@ -247,13 +247,23 @@
                         (group-env (r/$ ag 3))
 
                         :else
-                        {:column-reference-type :ordinary})
+                        {:group-column-reference-type :ordinary
+                         :column-reference-type :ordinary})
     :group_by_clause {:grouping-columns (grouping-column-references ag)
                       :group-column-reference-type :ordinary
                       :column-reference-type :ordinary}
     (:select_list
-     :having_clause) (let [{:keys [grouping-columns] :as group-env} (group-env (r/parent ag))]
-                       (cond-> group-env
+     :having_clause) (let [{:keys [grouping-columns] :as group-env} (group-env (r/parent ag))
+                           grouping-columns (if (and (empty? grouping-columns)
+                                                     (true? (first (letfn [(step [_ ag]
+                                                                             (case (r/ctor ag)
+                                                                               :aggregate_function [true]
+                                                                               :subquery []
+                                                                               nil))]
+                                                                     ((r/stop-td-tu (r/mono-tuz step)) ag)))))
+                                              []
+                                              grouping-columns)]
+                       (cond-> (assoc group-env :grouping-columns grouping-columns)
                          grouping-columns (assoc :group-column-reference-type :group-invariant
                                                  :column-reference-type :invalid-group-invariant)))
     :aggregate_function (assoc (group-env (r/parent ag))
