@@ -232,15 +232,15 @@
 
 (defn- group-env [ag]
   (case (r/ctor ag)
-    :query_expression (letfn [(step [_ ag]
-                                (case (r/ctor ag)
-                                  :aggregate_function [[]]
-                                  :group_by_clause [(grouping-column-references ag)]
-                                  :subquery []
-                                  nil))]
-                        (cond-> {:grouping-columns (last (sort-by count ((r/stop-td-tu (r/mono-tuz step)) ag)))
-                                 :group-column-reference-type :ordinary
-                                 :column-reference-type :ordinary}))
+    :query_specification (letfn [(step [_ ag]
+                                   (case (r/ctor ag)
+                                     :aggregate_function [[]]
+                                     :group_by_clause [(grouping-column-references ag)]
+                                     :subquery []
+                                     nil))]
+                           (cond-> {:grouping-columns (last (sort-by count ((r/stop-td-tu (r/mono-tuz step)) ag)))
+                                    :group-column-reference-type :ordinary
+                                    :column-reference-type :ordinary}))
     (:select_list
      :having_clause) (let [{:keys [grouping-columns] :as group-env} (group-env (r/parent ag))]
                        (cond-> group-env
