@@ -3,20 +3,17 @@
   examples.clj"
   (:require [clojure.java.io :as io]
             [integrant.core :as i]
-            [integrant.repl :as ir]
+            [integrant.repl :as ir :refer :all]
             [integrant.repl.state :refer [system]]
             [xtdb.api :as xt]
-            [xtdb.db :as db]
+            [xtdb.fixtures.tpch :as tpch]
             [xtdb.io :as xio]
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
             [xtdb.lucene]
-            [xtdb.rocksdb :as rocks]
-            [xtdb.fixtures.tpch :as tpch]
-            [xtdb.query :as q])
+            [xtdb.rocksdb :as rocks])
   (:import (ch.qos.logback.classic Level Logger)
            (java.io Closeable File)
-           (java.lang AutoCloseable)
            (org.slf4j LoggerFactory)
            (xtdb.api IXtdb)))
 
