@@ -586,29 +586,30 @@
                                   arg))
                            or-join-vars)}))
 
-(defn- new-binary-index [{:keys [e a v] :as clause} {:keys [entity-resolver-fn index-snapshot]} {:keys [vars-in-join-order]}]
-  (let [order (filter #(contains? #{e v} %) vars-in-join-order)
-        nested-index-snapshot (db/open-nested-index-snapshot index-snapshot)
-        attr-buffer (mem/copy-to-unpooled-buffer (c/->id-buffer a))]
-    (if (= v (first order))
-      (let [v-idx (idx/new-deref-index
-                   (idx/new-seek-fn-index
-                    (fn [k]
-                      (db/av nested-index-snapshot attr-buffer k))))
-            e-idx (idx/new-seek-fn-index
-                   (fn [k]
-                     (db/ave nested-index-snapshot attr-buffer (.deref v-idx) k entity-resolver-fn)))]
-        (log/debug :join-order :ave (xio/pr-edn-str v) e (xio/pr-edn-str clause))
-        (idx/new-n-ary-join-layered-virtual-index [v-idx e-idx]))
-      (let [e-idx (idx/new-deref-index
-                   (idx/new-seek-fn-index
-                    (fn [k]
-                      (db/ae nested-index-snapshot attr-buffer k))))
-            v-idx (idx/new-seek-fn-index
-                   (fn [k]
-                     (db/aev nested-index-snapshot attr-buffer (.deref e-idx) k entity-resolver-fn)))]
-        (log/debug :join-order :aev e (xio/pr-edn-str v) (xio/pr-edn-str clause))
-        (idx/new-n-ary-join-layered-virtual-index [e-idx v-idx])))))
+(defn- ->binary-index-fn [{:keys [e a v] :as clause}]
+  (let [attr-buffer (mem/copy-to-unpooled-buffer (c/->id-buffer a))]
+    (fn [{:keys [entity-resolver-fn index-snapshot]} {:keys [vars-in-join-order]}]
+      (let [order (filter #(or (= e %) (= v %)) vars-in-join-order)
+            nested-index-snapshot (db/open-nested-index-snapshot index-snapshot)]
+        (if (= v (first order))
+          (let [v-idx (idx/new-deref-index
+                       (idx/new-seek-fn-index
+                        (fn [k]
+                          (db/av nested-index-snapshot attr-buffer k))))
+                e-idx (idx/new-seek-fn-index
+                       (fn [k]
+                         (db/ave nested-index-snapshot attr-buffer (.deref v-idx) k entity-resolver-fn)))]
+            (log/debug :join-order :ave (xio/pr-edn-str v) e (xio/pr-edn-str clause))
+            (idx/new-n-ary-join-layered-virtual-index [v-idx e-idx]))
+          (let [e-idx (idx/new-deref-index
+                       (idx/new-seek-fn-index
+                        (fn [k]
+                          (db/ae nested-index-snapshot attr-buffer k))))
+                v-idx (idx/new-seek-fn-index
+                       (fn [k]
+                         (db/aev nested-index-snapshot attr-buffer (.deref e-idx) k entity-resolver-fn)))]
+            (log/debug :join-order :aev e (xio/pr-edn-str v) (xio/pr-edn-str clause))
+            (idx/new-n-ary-join-layered-virtual-index [e-idx v-idx])))))))
 
 (defn- ->literal-index-fn [v value-serde]
   (if (c/multiple-values? v)
@@ -622,8 +623,7 @@
 (defn- triple-joins [triple-clauses value-serde var->joins]
   (reduce (fn [var->joins {:keys [e v] :as clause}]
             (let [join {:id (gensym "triple")
-                        :idx-fn (fn [db compiled-query]
-                                  (new-binary-index clause db compiled-query))}]
+                        :idx-fn (->binary-index-fn clause)}]
               (-> var->joins
                   (update v (fnil conj []) join)
                   (update e (fnil conj []) join)
