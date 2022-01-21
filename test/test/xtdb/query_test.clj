@@ -3932,7 +3932,10 @@
         join-orders (read-string (slurp (io/resource "xtdb/tpch-current-join-orders.edn")))]
     (with-redefs [q/->stats (constantly tpch-stats)]
       (doall
-       (->> (map vector tpch/tpch-queries join-orders)
-            (map-indexed (fn [q-idx [q expected-order]]
-                           (t/is (= expected-order (:vars-in-join-order (q/query-plan-for db q)))
+       (->> (for [q tpch/tpch-queries]
+              (:vars-in-join-order (q/query-plan-for db q)))
+            #_(#(doto % (-> vec clojure.pprint/pprint))) ; for regenerating the output file
+            (map vector join-orders)
+            (map-indexed (fn [q-idx [expected-order actual-order]]
+                           (t/is (= expected-order actual-order)
                                  (str "Q" (inc q-idx))))))))))
