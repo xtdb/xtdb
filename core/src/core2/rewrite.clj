@@ -614,6 +614,7 @@
 ;; https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.9148&rep=rep1&type=pdf
 ;; https://www.researchgate.net/publication/2724181_Improving_List_Comprehension_Database_Queries
 ;; https://homepages.inf.ed.ac.uk/jcheney/publications/cheney13icfp.pdf
+;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.365.3145&rep=rep1&type=pdf
 
 (defn- normalize-comprehension [comprehension]
   (letfn [(stage-1-symbolic-reduction [_ z]
