@@ -250,7 +250,18 @@
             (db/index-docs {(c/new-id ivan2) ivan2})
             (db/commit-index-tx))
 
-          (t/is (= {:doc-count 3, :values 3, :eids 2} (:name (->stats *index-store*)))))))
+          (t/is (= {:doc-count 3, :values 3, :eids 2} (:name (->stats *index-store*)))))
+
+        (t/testing "duplicate docs are reflected twice in the doc-count"
+          ;; this isn't ideal, but stats won't ever be 100% accurate
+
+          (let [index-store-tx (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1} nil)]
+
+            (db/index-docs index-store-tx {(c/new-id petr) petr})
+            (t/is (= {:doc-count 4, :values 3, :eids 2}
+                     (:name (->stats index-store-tx))))
+
+            (db/commit-index-tx index-store-tx)))))
 
     (with-fresh-index-store
       (let [id-iterator (.iterator ^Iterable (range))]

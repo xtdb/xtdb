@@ -1486,3 +1486,19 @@
       (t/is (= #{[url]}
                (xt/q db '{:find [id]
                           :where [[id :xt/id]]}))))))
+
+(t/deftest match-failure-of-a-put-shouldnt-affect-subsequent-indexing-1683
+  (fix/submit+await-tx [[::xt/match :bar {:xt/id :bar}]
+                        [::xt/put {:xt/id :foo}]])
+
+  (let [db (xt/db *api*)]
+    (t/is (nil? (xt/entity db :foo))))
+
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo}]])
+
+  (let [db (xt/db *api*)]
+    (t/is (= {:xt/id :foo}
+             (xt/entity db :foo)))
+
+    (t/is (= #{[:foo]}
+             (xt/q db '{:find [e], :where [[e :xt/id]]})))))

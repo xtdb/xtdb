@@ -1,7 +1,8 @@
 (ns xtdb.fixtures.kv
   (:require [clojure.java.io :as io]
             [xtdb.fixtures :as fix]
-            [xtdb.system :as sys]))
+            [xtdb.system :as sys]
+            [clojure.test :as t]))
 
 (def ^:dynamic *kv-opts* {})
 
@@ -33,7 +34,8 @@
                     :db-dir-suffix "lmdb-jnr"
                     :env-mapsize 4096}]]
     (binding [*kv-opts* (merge *kv-opts* kv-opts)]
-      (f))))
+      (t/testing (:xtdb/module *kv-opts*)
+        (f)))))
 
 (defmacro with-each-kv-store [& body]
   `(with-each-kv-store* (fn [] ~@body)))
