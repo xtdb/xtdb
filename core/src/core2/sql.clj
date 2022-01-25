@@ -267,6 +267,7 @@
 (defn- order-by-index [ag]
   (case (r/ctor ag)
     :query_expression nil
+    :sort_specification (order-by-index (r/$ ag 1))
     :sort_key (first (for [{:keys [normal-form index identifier]} (order-env ag)
                            :when (or (= normal-form (r/lexeme ag 1))
                                      (= identifier (->src-str ag)))]
