@@ -356,6 +356,14 @@
                                              (->src-str ag) (->line-info-str ag))]))
               :aggregate_function (check-aggregate-or-subquery "Aggregate functions" ag)
               :sort_specification (check-aggregate-or-subquery "Sort specifications" ag)
+              :where_clause (letfn [(step [_ ag]
+                                      (case (r/ctor ag)
+                                        :set_function_specification
+                                        [(format "WHERE clause cannot contain aggregate functions: %s %s"
+                                                 (->src-str ag) (->line-info-str ag))]
+                                        :subquery []
+                                        nil))]
+                              ((r/stop-td-tu (r/mono-tuz step)) ag))
               :fetch_first_row_count (check-unsigned-integer "Fetch first row count" (r/$ ag 1))
               :offset_row_count (check-unsigned-integer "Offset row count" (r/$ ag 1))
               []))]

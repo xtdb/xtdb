@@ -93,7 +93,7 @@ SELECT t1.d-t1.e, SUM(t1.a)
   (t/is (re-find #"Column reference is not a grouping column: t1.a"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT t1.a, COUNT(t1.b) FROM t1")))))))
 
-(t/deftest test-aggregate-and-sort-not-containing-aggregates-or-queries
+(t/deftest test-clauses-not-allowed-to-contain-aggregates-or-queries
   (t/is (re-find #"Aggregate functions cannot contain aggregate functions"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT COUNT(SUM(t1.b)) FROM t1"))))))
   (t/is (re-find #"Aggregate functions cannot contain nested queries"
@@ -102,7 +102,11 @@ SELECT t1.d-t1.e, SUM(t1.a)
   (t/is (re-find #"Sort specifications cannot contain aggregate functions"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 ORDER BY COUNT(t1.a)"))))))
   (t/is (re-find #"Sort specifications cannot contain nested queries"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 ORDER BY (SELECT 1 FROM foo)")))))))
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 ORDER BY (SELECT 1 FROM foo)"))))))
+
+  (t/is (re-find #"WHERE clause cannot contain aggregate functions"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 WHERE COUNT(t1.a)"))))))
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 WHERE 1 = (SELECT COUNT(t1.a) FROM t1)"))))))
 
 (t/deftest test-fetch-and-offset-type
   (t/is (re-find #"Fetch first row count must be an integer"
