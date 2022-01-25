@@ -105,7 +105,7 @@
         (t/is (= :completed (:status (first recent-queries))))))
 
     (t/is (thrown-with-msg? Exception
-                            #"Find refers to unknown variable: f"
+                            #"Find refers to unknown variables: #\{f\}"
                             (xt/q db '{:find [f], :where [[e :xt/id _]]})))
 
     (t/testing "test recent-query - post failed query"

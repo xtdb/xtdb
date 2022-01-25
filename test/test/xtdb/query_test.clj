@@ -381,7 +381,7 @@
   (t/testing "Unbound query variable"
     (t/is (thrown-with-msg?
            IllegalArgumentException
-           #"Find refers to unknown variable: bah"
+           #"Find refers to unknown variables: #\{bah\}"
            (xt/q (xt/db *api*) '{:find [bah]
                                  :where [[e :name]]})))
 

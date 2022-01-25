@@ -184,14 +184,8 @@
     (fn [value db]
       (pull-child value db nil))))
 
-(defn ->pull-result [db compiled-find q-conformed res]
+(defn ->pull-result [db q-conformed res]
   (->> res
-       (map (let [result-fns (mapv :->result compiled-find)]
-              (fn [row]
-                (mapv (fn [->result value]
-                        (->result value db))
-                      result-fns
-                      row))))
        (partition-all (or (:batch-size q-conformed)
                           (:batch-size db)
                           100))

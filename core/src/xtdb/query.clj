@@ -1606,26 +1606,33 @@
                      order-by))))))))
 
 (defn- compile-find [conformed-find {:keys [var->bindings]} {:keys [pull-cache]}]
-  (for [[var-type arg] conformed-find]
-    (case var-type
-      :logic-var {:logic-var arg
-                  :var-type :logic-var
-                  :var-binding (var->bindings arg)
-                  :->result (fn [value _] value)}
-      :pull {:logic-var (:logic-var arg)
-             :var-type :pull
-             :var-binding (var->bindings (:logic-var arg))
-             :->result (cache/compute-if-absent pull-cache (:pull-spec arg)
-                                                identity
-                                                (fn [spec]
-                                                  (pull/compile-pull-spec (s/unform ::eql/query spec))))}
-      :aggregate (do (s/assert ::aggregate-args [(:aggregate-fn arg) (vec (:args arg))])
-                     {:logic-var (:logic-var arg)
+  (letfn [(result-fn [logic-var]
+            (let [var-binding (get var->bindings logic-var)]
+              (fn [join-keys {:keys [value-serde]}]
+                (bound-result-for-var value-serde var-binding join-keys))))]
+    (for [[var-type arg] conformed-find]
+      (case var-type
+        :logic-var {:logic-var arg
+                    :var-type :logic-var
+                    :->result (result-fn arg)}
+
+        :pull (let [{:keys [logic-var pull-spec]} arg]
+                {:logic-var logic-var
+                 :var-type :pull
+                 :->result (let [->result (result-fn logic-var)
+                                 pull-fn (cache/compute-if-absent pull-cache pull-spec identity
+                                                                  (fn [pull-spec]
+                                                                    (pull/compile-pull-spec (s/unform ::eql/query pull-spec))))]
+                             (fn [join-keys db]
+                               (-> (->result join-keys db)
+                                   (pull-fn db))))})
+
+        :aggregate (let [{:keys [logic-var args aggregate-fn]} arg]
+                     (s/assert ::aggregate-args [aggregate-fn (vec args)])
+                     {:logic-var logic-var
                       :var-type :aggregate
-                      :var-binding (var->bindings (:logic-var arg))
-                      :aggregate-fn (apply aggregate (:aggregate-fn arg) (:args arg))
-                      :->result (fn [value _]
-                                  value)}))))
+                      :aggregate-fn (apply aggregate aggregate-fn args)
+                      :->result (result-fn logic-var)})))))
 
 (defn- aggregate-result [compiled-find result]
   (let [indexed-compiled-find (map-indexed vector compiled-find)
@@ -1719,33 +1726,36 @@
                     :value-serde value-serde
                     :entity-resolver-fn (or (:entity-resolver-fn db)
                                             (new-entity-resolver-fn db)))
-          {:keys [n-ary-join] :as built-query} (build-sub-query db where in in-args rule-name->rules)
+          {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query db where in in-args rule-name->rules)
           compiled-find (compile-find find built-query db)
           var-types (set (map :var-type compiled-find))
           aggregate? (contains? var-types :aggregate)
           pull? (contains? var-types :pull)
-          return-maps? (some q [:keys :syms :strs])
-          var-bindings (mapv :var-binding compiled-find)]
-      (doseq [{:keys [logic-var var-binding]} compiled-find
-              :when (nil? var-binding)]
+          return-maps? (some q [:keys :syms :strs])]
+
+      (when-let [unknown-vars (not-empty
+                               (set/difference (into #{} (map :logic-var) compiled-find)
+                                               (set (keys var->bindings))))]
         (throw (err/illegal-arg :find-unknown-var
-                                {::err/message (str "Find refers to unknown variable: " logic-var)})))
+                                {::err/message (str "Find refers to unknown variables: " unknown-vars)})))
+
       (doseq [{:keys [find-arg]} order-by
               :when (not (some #{find-arg} find))]
         (throw (err/illegal-arg :order-by-requires-find-element
                                 {::err/message (str "Order by requires an element from :find. unreturned element: " find-arg)})))
 
       (lazy-seq
-       (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
-                  (mapv (fn [var-binding]
-                          (bound-result-for-var value-serde var-binding join-keys))
-                        var-bindings))
+       (cond->> (let [result-fns (mapv :->result compiled-find)]
+                  (->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
+                         (mapv (fn [->result]
+                                 (->result join-keys db))
+                               result-fns))))
 
          aggregate? (aggregate-result compiled-find)
          order-by (xio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
-         pull? (pull/->pull-result db compiled-find q-conformed)
+         pull? (pull/->pull-result db q-conformed)
          return-maps? (map (->return-maps q)))))))
 
 (defn entity-tx [{:keys [valid-time tx-id] :as _db} index-snapshot eid]
