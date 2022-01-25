@@ -86,4 +86,9 @@ SELECT t1.d-t1.e, SUM(t1.a)
                  (first (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 GROUP BY t1.b HAVING t1.a"))))))
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b, COUNT(t1.a) FROM t1 GROUP BY t1.b")))))
   (t/is (re-find #"Column reference is not a grouping column: t1.a"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.a, COUNT(t1.b) FROM t1")))))))
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.a, COUNT(t1.b) FROM t1"))))))
+
+  (t/is (re-find #"Aggregate functions cannot be nested"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT COUNT(SUM(t1.b)) FROM t1"))))))
+  (t/is (re-find #"Aggregate functions cannot contain nested queries"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT COUNT((SELECT 1 FROM foo)) FROM t1")))))))

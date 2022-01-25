@@ -299,6 +299,16 @@
                                     (= :invalid-group-invariant type)
                                     [(format "Column reference is not a grouping column: %s %s"
                                              (str/join "." identifiers) (->line-info-str ag))]))
+              :aggregate_function (letfn [(step [_ ag]
+                                            (case (r/ctor ag)
+                                              :set_function_specification
+                                              [(format "Aggregate functions cannot be nested %s"
+                                                       (->line-info-str ag))]
+                                              :query_expression
+                                              [(format "Aggregate functions cannot contain nested queries %s"
+                                                       (->line-info-str ag))]
+                                              []))]
+                                    ((r/full-td-tu (r/mono-tuz step)) ag))
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
@@ -376,3 +386,5 @@
 
 ;; Graph database applications with SQL/PGQ
 ;; https://download.oracle.com/otndocs/products/spatial/pdf/AnD2020/AD_Develop_Graph_Apps_SQL_PGQ.pdf
+
+;; Dependent join symbols:  ⧑ ⧔ ⯈
