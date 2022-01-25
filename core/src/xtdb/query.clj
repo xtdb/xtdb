@@ -129,10 +129,18 @@
         :rule ::rule
         :pred ::pred))
 
+(s/def ::form
+  (s/or :nil nil?
+        :boolean boolean?
+        :number number?
+        :string string?
+        :symbol symbol?
+        :list (s/spec (s/* ::form))))
+
 (s/def ::aggregate
   (s/cat :aggregate-fn aggregate?
          :args (s/* literal?)
-         :logic-var logic-var?))
+         :form ::form))
 
 (s/def ::find-arg
   (s/or :logic-var logic-var?
@@ -1634,34 +1642,71 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- compile-find [conformed-find {:keys [var->bindings]} {:keys [pull-cache]}]
+(defn- compile-aggregate-expr [form]
+  (let [[form-type form-arg] form]
+    (case form-type
+      (:nil :number :string :boolean)
+      {:logic-vars #{}
+       :eval-expr (constantly form-arg)}
+
+      :symbol {:logic-vars #{form-arg}
+               :eval-expr (fn [env]
+                            (get env form-arg))}
+      :list (let [[f-form & arg-forms] form-arg
+                  [f-type f-arg] f-form
+                  f (or (when (= f-type :symbol)
+                          @(if (qualified-symbol? f-arg)
+                             (requiring-resolve f-arg)
+                             (ns-resolve 'user f-arg)))
+                        (throw (err/illegal-arg :invalid-f-in-agg-expr
+                                                {::err/message "Invalid function in aggregate expr"
+                                                 :f f-arg})))
+                  compiled-args (mapv compile-aggregate-expr arg-forms)
+                  arg-fns (mapv :eval-expr compiled-args)]
+              {:logic-vars (into #{} (mapcat :logic-vars) compiled-args)
+               :eval-expr (fn [env]
+                            (apply f (mapv (fn [->arg] (->arg env)) arg-fns)))}))))
+
+(defn- compile-find [conformed-find {:keys [var->bindings]} {:keys [find-cache]}]
   (letfn [(result-fn [logic-var]
             (let [var-binding (get var->bindings logic-var)]
               (fn [join-keys {:keys [value-serde]}]
                 (bound-result-for-var value-serde var-binding join-keys))))]
     (for [[var-type arg] conformed-find]
       (case var-type
-        :logic-var {:logic-var arg
+        :logic-var {:logic-vars #{arg}
                     :var-type :logic-var
                     :->result (result-fn arg)}
 
         :pull (let [{:keys [logic-var pull-spec]} arg]
-                {:logic-var logic-var
+                {:logic-vars #{logic-var}
                  :var-type :pull
                  :->result (let [->result (result-fn logic-var)
-                                 pull-fn (cache/compute-if-absent pull-cache pull-spec identity
-                                                                  (fn [pull-spec]
+                                 pull-fn (cache/compute-if-absent find-cache [:pull pull-spec] identity
+                                                                  (fn [[_ pull-spec]]
                                                                     (pull/compile-pull-spec (s/unform ::eql/query pull-spec))))]
                              (fn [join-keys db]
                                (-> (->result join-keys db)
                                    (pull-fn db))))})
 
-        :aggregate (let [{:keys [logic-var args aggregate-fn]} arg]
+        :aggregate (let [{:keys [form args aggregate-fn]} arg
+                         {:keys [logic-vars eval-expr]} (cache/compute-if-absent find-cache [:agg form] identity
+                                                                                 (fn [[_ form]]
+                                                                                   (compile-aggregate-expr form)))
+                         result-fns (mapv (fn [logic-var]
+                                            (let [->result (result-fn logic-var)]
+                                              (fn [join-keys db]
+                                                (MapEntry/create logic-var (->result join-keys db)))))
+                                          logic-vars)
+                         ->env (fn [join-keys db]
+                                 (into {}
+                                       (map (fn [->result] (->result join-keys db)))
+                                       result-fns))]
                      (s/assert ::aggregate-args [aggregate-fn (vec args)])
-                     {:logic-var logic-var
+                     {:logic-vars logic-vars
                       :var-type :aggregate
                       :aggregate-fn (apply aggregate aggregate-fn args)
-                      :->result (result-fn logic-var)})))))
+                      :->result (comp eval-expr ->env)})))))
 
 (defn- aggregate-result [compiled-find result]
   (let [indexed-compiled-find (map-indexed vector compiled-find)
@@ -1767,7 +1812,7 @@
           return-maps? (some q [:keys :syms :strs])]
 
       (when-let [unknown-vars (not-empty
-                               (set/difference (into #{} (map :logic-var) compiled-find)
+                               (set/difference (into #{} (mapcat :logic-vars) compiled-find)
                                                (set (keys var->bindings))))]
         (throw (err/illegal-arg :find-unknown-var
                                 {::err/message (str "Find refers to unknown variables: " unknown-vars)})))
@@ -2000,7 +2045,7 @@
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         index-store bus !pred-ctx
-                        query-cache conform-cache pull-cache]
+                        query-cache conform-cache find-cache]
   xt/DBProvider
   (db [this] (xt/db this nil))
   (db [this valid-time tx-time] (xt/db this {::xt/valid-time valid-time, ::xt/tx-time tx-time}))
@@ -2067,7 +2112,7 @@
                                                 :cache-size 10240}
                                   :conform-cache {:xtdb/module 'xtdb.cache/->cache
                                                   :cache-size 10240}
-                                  :pull-cache {:xtdb/module 'xtdb.cache/->cache
+                                  :find-cache {:xtdb/module 'xtdb.cache/->cache
                                                :cache-size 10240}}
                       ::sys/args {:entity-cache-size {:doc "Query Entity Cache Size"
                                                       :default (* 32 1024)

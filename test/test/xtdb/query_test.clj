@@ -2869,6 +2869,15 @@
                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
                #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
 
+(t/deftest test-aggregate-exprs
+  (t/is (= #{[0 0 1] [1 1 5] [2 3 14] [3 6 30]}
+           (xt/q (xt/db *api*)
+                 '{:find [?x (sum ?y) (sum (+ (* ?y ?y) ?x 1))]
+                   :in [[[?x ?y]]]}
+                 (for [x (range 4)
+                       y (range (inc x))]
+                   [x y])))))
+
 (t/deftest test-can-bind-function-returns-to-falsy
   ;; Datomic does allow binding falsy values, DataScript doesn't
   ;; see "Returning nil from function filters out tuple from result"
