@@ -22,7 +22,7 @@
      ([s]
       (self s :directly_executable_statement))
      ([s start-rule]
-      (vary-meta (parse-sql2011 s :start start-rule) assoc ::sql s)))))
+      (vary-meta (parse-sql2011 (str/trimr s) :start start-rule) assoc ::sql s)))))
 
 (defn- skip-whitespace ^long [^String s ^long n]
   (if (Character/isWhitespace (.charAt s n))
@@ -35,6 +35,12 @@
         start-index (skip-whitespace sql start-index)
         {:keys [line column]} (instaparse.failure/index->line-column start-index sql)]
     (format "at line %d, column %d" line column)))
+
+(defn- ->src-str [loc]
+  (let [{:core2.sql/keys [sql]} (meta (z/root loc))
+        {:instaparse.gll/keys [start-index end-index]} (meta (z/node loc))
+        start-index (skip-whitespace sql start-index)]
+    (subs sql start-index end-index)))
 
 ;; Very rough draft attribute grammar for SQL semantics.
 
@@ -284,18 +290,18 @@
                [:exact_numeric_literal
                 [:unsigned_integer _]]] true
               [:host_parameter_name _] true)
-    [(format (str label " must be an integer %s")
-             (->line-info-str ag))]))
+    [(format (str label " must be an integer: %s %s")
+             (->src-str ag) (->line-info-str ag))]))
 
 (defn- check-aggregate-or-subquery [label ag]
-  (letfn [(step [_ ag]
-            (case (r/ctor ag)
+  (letfn [(step [_ inner-ag]
+            (case (r/ctor inner-ag)
               :set_function_specification
-              [(format (str label " cannot contain aggregate functions %s")
-                       (->line-info-str ag))]
+              [(format (str label " cannot contain aggregate functions: %s %s")
+                       (->src-str ag) (->line-info-str ag))]
               :query_expression
-              [(format (str label " cannot contain nested queries %s")
-                       (->line-info-str ag))]
+              [(format (str label " cannot contain nested queries: %s %s")
+                       (->src-str ag) (->line-info-str ag))]
               nil))]
     ((r/stop-td-tu (r/mono-tuz step)) ag)))
 
@@ -311,7 +317,7 @@
                                   (cond
                                     (not qualified?)
                                     [(format "XTDB requires fully-qualified columns: %s %s"
-                                             (first identifiers) (->line-info-str ag))]
+                                             (->src-str ag) (->line-info-str ag))]
 
                                     (not table-id)
                                     [(format "Table not in scope: %s %s"
@@ -319,7 +325,7 @@
 
                                     (= :invalid-group-invariant type)
                                     [(format "Column reference is not a grouping column: %s %s"
-                                             (str/join "." identifiers) (->line-info-str ag))]))
+                                             (->src-str ag) (->line-info-str ag))]))
               :aggregate_function (check-aggregate-or-subquery "Aggregate functions" ag)
               :sort_specification (check-aggregate-or-subquery "Sort specifications" ag)
               :fetch_first_row_count (check-unsigned-integer "Fetch first row count" (r/$ ag 1))
