@@ -307,8 +307,8 @@
                                               :query_expression
                                               [(format "Aggregate functions cannot contain nested queries %s"
                                                        (->line-info-str ag))]
-                                              []))]
-                                    ((r/full-td-tu (r/mono-tuz step)) ag))
+                                              nil))]
+                                    ((r/stop-td-tu (r/mono-tuz step)) ag))
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
