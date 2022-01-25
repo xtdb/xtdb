@@ -71,24 +71,43 @@ SELECT t1.d-t1.e, SUM(t1.a)
   (t/is (re-find #"Table not in scope: bar"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT bar.a FROM foo WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)"))))))
   (t/is (re-find #"Table not in scope: foo"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM foo AS baz WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)"))))))
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM foo AS baz WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)")))))))
 
+(t/deftest test-variable-duplication
   (t/is (re-find #"Table variable duplicated: baz"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM foo AS baz, baz"))))))
   (t/is (re-find #"CTE query name duplicated: foo"
                  (first (:errs (sql/analyze-query (sql/parse "WITH foo AS (SELECT 1 FROM foo), foo AS (SELECT 1 FROM foo) SELECT * FROM foo"))))))
   (t/is (re-find #"Column name duplicated: foo"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM (SELECT 1, 2 FROM foo) AS bar (foo, foo)"))))))
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM (SELECT 1, 2 FROM foo) AS bar (foo, foo)")))))))
 
+(t/deftest test-grouping-columns
   (t/is (re-find #"Column reference is not a grouping column: t1.a"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT t1.a FROM t1 GROUP BY t1.b"))))))
   (t/is (re-find #"Column reference is not a grouping column: t1.a"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 GROUP BY t1.b HAVING t1.a"))))))
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b, COUNT(t1.a) FROM t1 GROUP BY t1.b")))))
   (t/is (re-find #"Column reference is not a grouping column: t1.a"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.a, COUNT(t1.b) FROM t1"))))))
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.a, COUNT(t1.b) FROM t1")))))))
 
-  (t/is (re-find #"Aggregate functions cannot be nested"
+(t/deftest test-aggregate-and-sort-not-containing-aggregates-or-queries
+  (t/is (re-find #"Aggregate functions cannot contain aggregate functions"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT COUNT(SUM(t1.b)) FROM t1"))))))
   (t/is (re-find #"Aggregate functions cannot contain nested queries"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT COUNT((SELECT 1 FROM foo)) FROM t1")))))))
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT COUNT((SELECT 1 FROM foo)) FROM t1"))))))
+
+  (t/is (re-find #"Sort specifications cannot contain aggregate functions"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 ORDER BY COUNT(t1.a)"))))))
+  (t/is (re-find #"Sort specifications cannot contain nested queries"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 ORDER BY (SELECT 1 FROM foo)")))))))
+
+(t/deftest test-fetch-and-offset-type
+  (t/is (re-find #"Fetch first row count must be an integer"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 FETCH FIRST 'foo' ROWS ONLY"))))))
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 FETCH FIRST 1 ROWS ONLY")))))
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 FETCH FIRST :foo ROWS ONLY")))))
+
+  (t/is (re-find #"Offset row count must be an integer"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 OFFSET 'foo' ROWS"))))))
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 OFFSET 1 ROWS")))))
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1 OFFSET :foo ROWS"))))))

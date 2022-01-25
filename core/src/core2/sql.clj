@@ -61,16 +61,6 @@
     (or (first (get s k))
         (recur ss k))))
 
-(defn- local-names [[s :as env] k]
-  (->> (mapcat val s)
-       (map k)))
-
-(defn- check-duplicates [label ag xs]
-  (vec (for [[x ^long freq] (frequencies xs)
-             :when (> freq 1)]
-         (format (str label " duplicated: %s %s")
-                 x (->line-info-str ag)))))
-
 ;; Attributes
 
 (declare cte-env env)
@@ -278,6 +268,37 @@
 
 ;; Errors
 
+(defn- local-names [[s :as env] k]
+  (->> (mapcat val s)
+       (map k)))
+
+(defn- check-duplicates [label ag xs]
+  (vec (for [[x ^long freq] (frequencies xs)
+             :when (> freq 1)]
+         (format (str label " duplicated: %s %s")
+                 x (->line-info-str ag)))))
+
+(defn- check-unsigned-integer [label ag]
+  (when-not (r/zmatch ag
+              [:signed_numeric_literal
+               [:exact_numeric_literal
+                [:unsigned_integer _]]] true
+              [:host_parameter_name _] true)
+    [(format (str label " must be an integer %s")
+             (->line-info-str ag))]))
+
+(defn- check-aggregate-or-subquery [label ag]
+  (letfn [(step [_ ag]
+            (case (r/ctor ag)
+              :set_function_specification
+              [(format (str label " cannot contain aggregate functions %s")
+                       (->line-info-str ag))]
+              :query_expression
+              [(format (str label " cannot contain nested queries %s")
+                       (->line-info-str ag))]
+              nil))]
+    ((r/stop-td-tu (r/mono-tuz step)) ag)))
+
 (defn- errs [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)
@@ -299,16 +320,10 @@
                                     (= :invalid-group-invariant type)
                                     [(format "Column reference is not a grouping column: %s %s"
                                              (str/join "." identifiers) (->line-info-str ag))]))
-              :aggregate_function (letfn [(step [_ ag]
-                                            (case (r/ctor ag)
-                                              :set_function_specification
-                                              [(format "Aggregate functions cannot be nested %s"
-                                                       (->line-info-str ag))]
-                                              :query_expression
-                                              [(format "Aggregate functions cannot contain nested queries %s"
-                                                       (->line-info-str ag))]
-                                              nil))]
-                                    ((r/stop-td-tu (r/mono-tuz step)) ag))
+              :aggregate_function (check-aggregate-or-subquery "Aggregate functions" ag)
+              :sort_specification (check-aggregate-or-subquery "Sort specifications" ag)
+              :fetch_first_row_count (check-unsigned-integer "Fetch first row count" (r/$ ag 1))
+              :offset_row_count (check-unsigned-integer "Offset row count" (r/$ ag 1))
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
