@@ -260,7 +260,8 @@
   (case (r/ctor ag)
     :query_specification (letfn [(step [_ ag]
                                    (case (r/ctor ag)
-                                     :aggregate_function [[]]
+                                     (:aggregate_function
+                                      :having_clause) [[]]
                                      :group_by_clause [(grouping-column-references ag)]
                                      :subquery []
                                      nil))]
