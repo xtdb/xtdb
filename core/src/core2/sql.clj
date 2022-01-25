@@ -91,6 +91,7 @@
      :correlation_name
      :column_name
      :identifier) (identifier (r/$ ag 1))
+    :as_clause (identifier (r/$ ag -1))
     :regular_identifier (r/lexeme ag 1)
     nil))
 
@@ -247,6 +248,31 @@
                                :column-reference-type :within-group-varying)
     (r/inherit ag)))
 
+(defn- order-env [ag]
+  (case (r/ctor ag)
+    :query_expression nil
+    :order_by_clause (letfn [(step [_ ag]
+                               (case (r/ctor ag)
+                                 :derived_column [{:normal-form (r/lexeme ag 1)
+                                                   :index (dec ^long (r/child-idx ag))
+                                                   :identifier (when (= :as_clause (r/ctor (r/$ ag -1)))
+                                                                 (identifier (r/$ ag -1)))}]
+                                 :subquery []
+                                 nil))]
+                       (->> (z/left ag)
+                            ((r/stop-td-tu (r/mono-tuz step)))
+                            (not-empty)))
+    (r/inherit ag)))
+
+(defn- order-by-index [ag]
+  (case (r/ctor ag)
+    :query_expression nil
+    :sort_key (first (for [{:keys [normal-form index identifier]} (order-env ag)
+                           :when (or (= normal-form (r/lexeme ag 1))
+                                     (= identifier (->src-str ag)))]
+                       index))
+    (r/inherit ag)))
+
 (defn- column-reference [ag]
   (case (r/ctor ag)
     :column_reference (let [identifiers (identifiers ag)
@@ -258,10 +284,12 @@
                                     column-reference-type]} (group-env ag)
                             column-reference-type (if (contains? (set grouping-columns) identifiers)
                                                     group-column-reference-type
-                                                    column-reference-type)]
+                                                    column-reference-type)
+                            order-by-index (order-by-index ag)]
                         (cond-> {:identifiers identifiers
                                  :qualified? qualified?
                                  :type column-reference-type}
+                          order-by-index (assoc :order-by-index order-by-index)
                           table-id (assoc :table-id table-id)))))
 
 (defn- local-column-references [ag]
@@ -313,8 +341,11 @@
               :with_list (check-duplicates "CTE query name" ag
                                            (local-names (cteo ag) :query-name))
               :column_name_list (check-duplicates "Column name" ag (identifiers ag))
-              :column_reference (let [{:keys [identifiers qualified? table-id type] :as cr} (column-reference ag)]
+              :column_reference (let [{:keys [identifiers qualified? table-id type order-by-index] :as cr} (column-reference ag)]
                                   (cond
+                                    order-by-index
+                                    []
+
                                     (not qualified?)
                                     [(format "XTDB requires fully-qualified columns: %s %s"
                                              (->src-str ag) (->line-info-str ag))]
@@ -363,6 +394,7 @@
                                #'dclo
                                #'env
                                #'group-env
+                               #'order-env
                                #'column-reference
                                #'scope]
     #(let [ag (z/vector-zip query)]
