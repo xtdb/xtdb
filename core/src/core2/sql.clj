@@ -219,7 +219,35 @@
      :lateral_derived_table) (dcli (r/parent ag))
     (r/inherit ag)))
 
-;; Column references
+;; Order by
+
+(defn- order-env [ag]
+  (case (r/ctor ag)
+    :query_expression nil
+    :order_by_clause (letfn [(step [_ ag]
+                               (case (r/ctor ag)
+                                 :derived_column [{:normal-form (r/lexeme ag 1)
+                                                   :index (dec ^long (r/child-idx ag))
+                                                   :identifier (when (= :as_clause (r/ctor (r/$ ag -1)))
+                                                                 (identifier (r/$ ag -1)))}]
+                                 :subquery []
+                                 nil))]
+                       (->> (z/left ag)
+                            ((r/stop-td-tu (r/mono-tuz step)))
+                            (not-empty)))
+    (r/inherit ag)))
+
+(defn- order-by-index [ag]
+  (case (r/ctor ag)
+    :query_expression nil
+    :sort_specification (order-by-index (r/$ ag 1))
+    :sort_key (first (for [{:keys [normal-form index identifier]} (order-env ag)
+                           :when (or (= normal-form (r/lexeme ag 1))
+                                     (= identifier (->src-str ag)))]
+                       index))
+    (r/inherit ag)))
+
+;; Group by
 
 (defn- grouping-column-references [ag]
   (letfn [(step [_ ag]
@@ -248,31 +276,7 @@
                                :column-reference-type :within-group-varying)
     (r/inherit ag)))
 
-(defn- order-env [ag]
-  (case (r/ctor ag)
-    :query_expression nil
-    :order_by_clause (letfn [(step [_ ag]
-                               (case (r/ctor ag)
-                                 :derived_column [{:normal-form (r/lexeme ag 1)
-                                                   :index (dec ^long (r/child-idx ag))
-                                                   :identifier (when (= :as_clause (r/ctor (r/$ ag -1)))
-                                                                 (identifier (r/$ ag -1)))}]
-                                 :subquery []
-                                 nil))]
-                       (->> (z/left ag)
-                            ((r/stop-td-tu (r/mono-tuz step)))
-                            (not-empty)))
-    (r/inherit ag)))
-
-(defn- order-by-index [ag]
-  (case (r/ctor ag)
-    :query_expression nil
-    :sort_specification (order-by-index (r/$ ag 1))
-    :sort_key (first (for [{:keys [normal-form index identifier]} (order-env ag)
-                           :when (or (= normal-form (r/lexeme ag 1))
-                                     (= identifier (->src-str ag)))]
-                       index))
-    (r/inherit ag)))
+;; Column references
 
 (defn- column-reference [ag]
   (case (r/ctor ag)
@@ -290,16 +294,8 @@
                         (cond-> {:identifiers identifiers
                                  :qualified? qualified?
                                  :type column-reference-type}
-                          order-by-index (assoc :order-by-index order-by-index)
+                          order-by-index (assoc :inside-resolved-sort-key? true)
                           table-id (assoc :table-id table-id)))))
-
-(defn- local-column-references [ag]
-  (letfn [(step [_ ag]
-            (case (r/ctor ag)
-              :column_reference [(column-reference ag)]
-              :subquery []
-              nil))]
-    ((r/stop-td-tu (r/mono-tuz step)) ag)))
 
 ;; Errors
 
@@ -342,9 +338,9 @@
               :with_list (check-duplicates "CTE query name" ag
                                            (local-names (cteo ag) :query-name))
               :column_name_list (check-duplicates "Column name" ag (identifiers ag))
-              :column_reference (let [{:keys [identifiers qualified? table-id type order-by-index] :as cr} (column-reference ag)]
+              :column_reference (let [{:keys [identifiers qualified? inside-resolved-sort-key? table-id type] :as cr} (column-reference ag)]
                                   (cond
-                                    order-by-index
+                                    inside-resolved-sort-key?
                                     []
 
                                     (not qualified?)
@@ -366,6 +362,14 @@
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
 ;; Scopes
+
+(defn- local-column-references [ag]
+  (letfn [(step [_ ag]
+            (case (r/ctor ag)
+              :column_reference [(column-reference ag)]
+              :subquery []
+              nil))]
+    ((r/stop-td-tu (r/mono-tuz step)) ag)))
 
 (defn- scope [ag]
   (case (r/ctor ag)
