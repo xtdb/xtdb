@@ -62,9 +62,13 @@
 (defn- parent-env [[_ & ss]]
   ss)
 
+(defn- find-local-decl [[s & ss :as env] k]
+  (when s
+    (first (get s k))))
+
 (defn- find-decl [[s & ss :as env] k]
   (when s
-    (or (first (get s k))
+    (or (find-local-decl env k)
         (recur ss k))))
 
 ;; Attributes
@@ -283,13 +287,21 @@
   (case (r/ctor ag)
     :column_reference (let [identifiers (identifiers ag)
                             qualified? (> (count identifiers) 1)
+                            env (env ag)
                             table-id (when qualified?
-                                       (:id (find-decl (env ag) (first identifiers))))
+                                       (:id (find-decl env (first identifiers))))
+                            outer-reference? (and qualified? (not (find-local-decl env (first identifiers))))
                             {:keys [grouping-columns
                                     group-column-reference-type
                                     column-reference-type]} (group-env ag)
-                            column-reference-type (if (contains? (set grouping-columns) identifiers)
+                            column-reference-type (cond
+                                                    outer-reference?
+                                                    :outer
+
+                                                    (contains? (set grouping-columns) identifiers)
                                                     group-column-reference-type
+
+                                                    :else
                                                     column-reference-type)
                             order-by-index (order-by-index ag)]
                         (cond-> {:identifiers identifiers

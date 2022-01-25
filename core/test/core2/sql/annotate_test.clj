@@ -30,7 +30,7 @@ SELECT t1.d-t1.e, SUM(t1.a)
                :ctes {}
                :tables {"x" [{:table-or-query-name "t1" :correlation-name "x" :id 8}]}
                :columns #{{:identifiers ["x" "b"] :table-id 8 :qualified? true :type :ordinary}
-                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :ordinary}}}]
+                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :outer}}}]
              (:scopes (sql/analyze-query tree))))))
 
 (t/deftest test-scope-rules
