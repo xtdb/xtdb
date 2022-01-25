@@ -3941,3 +3941,25 @@
                                         #_(doto prn) ; for regenerating the output file
                                         ))
                                  (str "Q" (inc q-idx))))))))))
+
+(t/deftest test-same-literal-treated-as-separate-variables-1695
+  (fix/submit+await-tx [[::xt/put {:xt/id :x
+                                   :value :v1
+                                   :y :y}]
+                        [::xt/put {:xt/id :y
+                                   :value :v2}]])
+
+  (t/is (= #{[:x :y]}
+           (xt/q (xt/db *api*)
+                 '{:find [x y]
+                   :where [[x :y y]
+                           [x :value #{:v1 :v2}]
+                           [y :value #{:v1 :v2 :v3}]]})))
+
+  #_ ; FIXME
+  (t/is (= #{[:x :y]}
+           (xt/q (xt/db *api*)
+                 '{:find [x y]
+                   :where [[x :y y]
+                           [x :value #{:v1 :v2}]
+                           [y :value #{:v1 :v2}]]}))))
