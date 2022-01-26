@@ -6,31 +6,34 @@
   (let [tree (sql/parse "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
 SELECT t1.d-t1.e, SUM(t1.a)
   FROM t1, foo AS baz
- WHERE EXISTS(SELECT 1 FROM t1 AS x WHERE x.b<t1.b)
+ WHERE EXISTS(SELECT 1 FROM t1 AS x WHERE x.b<t1.c)
    AND t1.a>t1.b
  GROUP BY t1.d
  ORDER BY 1")]
     (t/is (= [{:id 1
-               :ctes {"foo" [{:query-name "foo" :id 2}]}
-               :tables {"t1" [{:table-or-query-name "t1" :correlation-name "t1" :id 5}]
-                        "baz" [{:table-or-query-name "foo" :correlation-name "baz" :id 6 :cte-id 2}]}
+               :ctes {"foo" {:query-name "foo" :id 2}}
+               :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 5 :projection #{["t1" "a"] ["t1" "b"] ["t1" "c"]  ["t1" "d"] ["t1" "e"]}}
+                        "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 6 :cte-id 2 :projection #{}}}
                :columns #{{:identifiers ["t1" "d"] :table-id 5 :qualified? true :type :group-invariant}
                           {:identifiers ["t1" "d"] :table-id 5 :qualified? true :type :ordinary}
                           {:identifiers ["t1" "e"] :table-id 5 :qualified? true :type :invalid-group-invariant}
                           {:identifiers ["t1" "a"] :table-id 5 :qualified? true :type :ordinary}
                           {:identifiers ["t1" "a"] :table-id 5 :qualified? true :type :within-group-varying}
-                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :ordinary}}}
+                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :ordinary}}
+               :nested-used-columns #{{:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}}
               {:id 3
                :parent-id 1
                :ctes {}
-               :tables {"bar" [{:table-or-query-name "foo" :correlation-name "bar" :id 4 :cte-id 2}]}
-               :columns #{}}
+               :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :cte-id 2 :projection #{}}}
+               :columns #{}
+               :nested-used-columns #{}}
               {:id 7
                :parent-id 1
                :ctes {}
-               :tables {"x" [{:table-or-query-name "t1" :correlation-name "x" :id 8}]}
+               :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 8 :projection #{["x" "b"]}}}
                :columns #{{:identifiers ["x" "b"] :table-id 8 :qualified? true :type :ordinary}
-                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :outer}}}]
+                          {:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}
+               :nested-used-columns #{}}]
              (:scopes (sql/analyze-query tree))))))
 
 (t/deftest test-scope-rules

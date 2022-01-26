@@ -1,5 +1,6 @@
 (ns core2.sql
   (:require [clojure.java.io :as io]
+            [clojure.set :as set]
             [clojure.string :as str]
             [clojure.zip :as z]
             [core2.rewrite :as r]
@@ -58,6 +59,11 @@
 
 (defn- local-env [[s]]
   s)
+
+(defn- local-env-singleton-values [[s]]
+  (->> (for [[k [v]] s]
+         [k v])
+       (into {})))
 
 (defn- parent-env [[_ & ss]]
   ss)
@@ -392,13 +398,39 @@
               nil))]
     ((r/stop-td-tu (r/mono-tuz step)) ag)))
 
+(defn- used-column-references [local-tables ag]
+  (let [local-table-ids (set (map :id (vals local-tables)))]
+    (letfn [(step [_ ag]
+              (case (r/ctor ag)
+                :column_reference (let [column-reference (column-reference ag)]
+                                    (if (contains? local-table-ids (:table-id column-reference))
+                                      [column-reference]
+                                      []))
+                []))]
+      ((r/full-td-tu (r/mono-tuz step)) ag))))
+
 (defn- scope [ag]
   (case (r/ctor ag)
-    :query_expression (let [parent-id (:id (scope (r/parent ag)))]
-                        (cond-> {:id (id ag)
-                                 :ctes (local-env (cteo ag))
-                                 :tables (local-env (dclo ag))
-                                 :columns (set (local-column-references ag))}
+    :query_expression (let [id (id ag)
+                            parent-id (:id (scope (r/parent ag)))
+                            local-ctes (local-env-singleton-values (cteo ag))
+                            local-tables (local-env-singleton-values (dclo ag))
+                            local-columns (set (local-column-references ag))
+                            used-columns (set (used-column-references local-tables ag))
+                            nested-used-columns (set/difference used-columns local-columns)
+                            table-id->columns (->> (set/union local-columns nested-used-columns)
+                                                   (group-by :table-id))
+                            local-tables (->> (for [[k {:keys [id] :as table}] local-tables
+                                                    :let [projection (->> (get table-id->columns id)
+                                                                          (map :identifiers)
+                                                                          (set))]]
+                                                [k (assoc table :projection projection)])
+                                              (into {}))]
+                        (cond-> {:id id
+                                 :ctes local-ctes
+                                 :tables local-tables
+                                 :columns local-columns
+                                 :nested-used-columns nested-used-columns}
                           parent-id (assoc :parent-id parent-id)))
     (r/inherit ag)))
 
