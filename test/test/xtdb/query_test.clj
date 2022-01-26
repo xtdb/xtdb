@@ -7,7 +7,8 @@
             [xtdb.fixtures.tpch :as tpch]
             [xtdb.index :as idx]
             [xtdb.query :as q]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.string :as str])
   (:import (java.util Arrays Date UUID)
            (java.util.concurrent TimeoutException)))
 
@@ -3926,21 +3927,29 @@
                             [start :next intermediate]
                             (pointsTo end intermediate)]]}))))
 
+#_{:clj-kondo/ignore #{:unused-private-var}}
+(defn- regen-join-order-file [join-orders file]
+  (with-open [w (io/writer file)]
+    (doseq [join-order join-orders]
+      (.write w (prn-str join-order)))))
+
 (t/deftest test-tpch-join-orders
   ;; these aren't necessarily the best join orders, but just to give you a heads-up if something changes
   ;; only does the top-level queries, but again, hopefully enough to spot an unexpected change.
   (let [db (xt/db *api*)
         tpch-stats (tpch/->attr-stats)
-        join-orders (read-string (slurp (io/resource "xtdb/tpch-current-join-orders.edn")))]
+        join-order-file (io/resource "xtdb/tpch-current-join-orders.edn")
+        expected-join-orders (mapv read-string (str/split-lines (slurp join-order-file)))]
     (with-redefs [q/->stats (constantly tpch-stats)]
-      (doall
-       (->> (map vector tpch/tpch-queries join-orders)
-            (map-indexed (fn [q-idx [q expected-order]]
-                           (t/is (= expected-order
-                                    (-> (:vars-in-join-order (q/query-plan-for db q (::tpch/in-args (meta q))))
-                                        #_(doto prn) ; for regenerating the output file
-                                        ))
-                                 (str "Q" (inc q-idx))))))))))
+      (let [actual-join-orders (doto (for [q tpch/tpch-queries]
+                                       (:vars-in-join-order (q/query-plan-for db q (::tpch/in-args (meta q)))))
+                                 #_(regen-join-order-file (io/as-file join-order-file)))]
+
+        (doall
+         (->> (map vector expected-join-orders actual-join-orders)
+              (map-indexed (fn [q-idx [expected-order actual-order]]
+                             (t/is (= expected-order actual-order)
+                                   (str "Q" (inc q-idx)))))))))))
 
 (t/deftest test-same-literal-treated-as-separate-variables-1695
   (fix/submit+await-tx [[::xt/put {:xt/id :x
