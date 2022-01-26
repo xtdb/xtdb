@@ -20,20 +20,23 @@ SELECT t1.d-t1.e, SUM(t1.a)
                           {:identifiers ["t1" "a"] :table-id 5 :qualified? true :type :ordinary}
                           {:identifiers ["t1" "a"] :table-id 5 :qualified? true :type :within-group-varying}
                           {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :ordinary}}
-               :nested-used-columns #{{:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}}
+               :nested-used-columns #{{:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}
+               :dependent-columns #{}}
               {:id 3
                :parent-id 1
                :ctes {}
                :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :cte-id 2 :projection #{}}}
                :columns #{}
-               :nested-used-columns #{}}
+               :nested-used-columns #{}
+               :dependent-columns #{}}
               {:id 7
                :parent-id 1
                :ctes {}
                :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 8 :projection #{["x" "b"]}}}
                :columns #{{:identifiers ["x" "b"] :table-id 8 :qualified? true :type :ordinary}
                           {:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}
-               :nested-used-columns #{}}]
+               :nested-used-columns #{}
+               :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}}]
              (:scopes (sql/analyze-query tree))))))
 
 (t/deftest test-scope-rules

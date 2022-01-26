@@ -390,6 +390,13 @@
 
 ;; Scopes
 
+(defn- all-column-references [ag]
+  (letfn [(step [_ ag]
+            (case (r/ctor ag)
+              :column_reference [(column-reference ag)]
+              []))]
+    ((r/full-td-tu (r/mono-tuz step)) ag)))
+
 (defn- local-column-references [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)
@@ -398,39 +405,37 @@
               nil))]
     ((r/stop-td-tu (r/mono-tuz step)) ag)))
 
-(defn- used-column-references [local-tables ag]
-  (let [local-table-ids (set (map :id (vals local-tables)))]
-    (letfn [(step [_ ag]
-              (case (r/ctor ag)
-                :column_reference (let [column-reference (column-reference ag)]
-                                    (if (contains? local-table-ids (:table-id column-reference))
-                                      [column-reference]
-                                      []))
-                []))]
-      ((r/full-td-tu (r/mono-tuz step)) ag))))
-
 (defn- scope [ag]
   (case (r/ctor ag)
-    :query_expression (let [id (id ag)
+    :query_expression (let [^long scope-id (id ag)
                             parent-id (:id (scope (r/parent ag)))
                             local-ctes (local-env-singleton-values (cteo ag))
                             local-tables (local-env-singleton-values (dclo ag))
+                            local-table-ids (map :id (vals local-tables))
                             local-columns (set (local-column-references ag))
-                            used-columns (set (used-column-references local-tables ag))
-                            nested-used-columns (set/difference used-columns local-columns)
-                            table-id->columns (->> (set/union local-columns nested-used-columns)
-                                                   (group-by :table-id))
+                            all-columns (all-column-references ag)
+                            table-id->all-columns (->> (group-by :table-id all-columns)
+                                                       (into (sorted-map)))
+                            all-used-columns (set (mapcat table-id->all-columns local-table-ids))
+                            nested-used-columns (set/difference all-used-columns local-columns)
+                            ;; NOTE: assumes that tables declared in
+                            ;; outer scopes have lower ids than the
+                            ;; current scope.
+                            dependent-columns (->> (subseq table-id->all-columns < scope-id)
+                                                   (mapcat val)
+                                                   (set))
                             local-tables (->> (for [[k {:keys [id] :as table}] local-tables
-                                                    :let [projection (->> (get table-id->columns id)
+                                                    :let [projection (->> (get table-id->all-columns id)
                                                                           (map :identifiers)
                                                                           (set))]]
                                                 [k (assoc table :projection projection)])
                                               (into {}))]
-                        (cond-> {:id id
+                        (cond-> {:id scope-id
                                  :ctes local-ctes
                                  :tables local-tables
                                  :columns local-columns
-                                 :nested-used-columns nested-used-columns}
+                                 :nested-used-columns nested-used-columns
+                                 :dependent-columns dependent-columns}
                           parent-id (assoc :parent-id parent-id)))
     (r/inherit ag)))
 
