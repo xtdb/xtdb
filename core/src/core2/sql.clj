@@ -436,13 +436,10 @@
                             parent-id (scope-id (r/parent ag))
                             local-ctes (local-env-singleton-values (cteo ag))
                             local-tables (local-env-singleton-values (dclo ag))
-                            local-table-ids (map :id (vals local-tables))
                             all-columns (all-column-references ag)
+                            local-columns (set (get (group-by :scope-id all-columns) id))
                             table-id->all-columns (->> (group-by :table-id all-columns)
                                                        (into (sorted-map)))
-                            local-columns (set (get (group-by :scope-id all-columns) id))
-                            all-used-columns (set (mapcat table-id->all-columns local-table-ids))
-                            nested-used-columns (set/difference all-used-columns local-columns)
                             ;; NOTE: assumes that tables declared in
                             ;; outer scopes have lower ids than the
                             ;; current scope.
@@ -459,7 +456,6 @@
                                  :ctes local-ctes
                                  :tables local-tables
                                  :columns local-columns
-                                 :nested-used-columns nested-used-columns
                                  :dependent-columns dependent-columns}
                           parent-id (assoc :parent-id parent-id)))
     (r/inherit ag)))

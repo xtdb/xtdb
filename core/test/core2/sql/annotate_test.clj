@@ -21,15 +21,12 @@ SELECT t1.d-t1.e, SUM(t1.a)
                           {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
                           {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :within-group-varying}
                           {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}}
-               :nested-used-columns #{{:identifiers ["t1" "b"]  :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}
-                                      {:identifiers ["t1" "c"]  :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}}
                :dependent-columns #{}}
               {:id 3
                :parent-id 1
                :ctes {}
                :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :scope-id 3 :cte-id 2 :projection #{}}}
                :columns #{}
-               :nested-used-columns #{}
                :dependent-columns #{}}
               {:id 7
                :parent-id 1
@@ -37,7 +34,6 @@ SELECT t1.d-t1.e, SUM(t1.a)
                :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 8 :scope-id 7 :projection #{["x" "b"]}}}
                :columns #{{:identifiers ["x" "b"] :table-id 8 :table-scope-id 7 :scope-id 7 :qualified? true :type :ordinary}
                           {:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}}
-               :nested-used-columns #{}
                :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}
                                     {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}
               {:id 9
@@ -46,7 +42,6 @@ SELECT t1.d-t1.e, SUM(t1.a)
                :tables {"t2" {:table-or-query-name "t2" :correlation-name "t2" :id 10 :scope-id 9 :projection #{["t2" "b"]}}}
                :columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}
                           {:identifiers ["t2" "b"] :table-id 10 :table-scope-id 9 :scope-id 9 :qualified? true :type :ordinary}}
-               :nested-used-columns #{}
                :dependent-columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}]
              (:scopes (sql/analyze-query tree))))))
 
