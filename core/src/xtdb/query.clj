@@ -1335,45 +1335,49 @@
        (sort-by (comp var->values-result-index second))
        (into {})))
 
-(defn- sort-triple-clauses [triple-clauses stats]
-  (->> triple-clauses
-       (sort-by (fn [{:keys [a]}]
-                  (db/doc-count stats a)))))
+(defn- expand-leaf-preds [{triple-clauses :triple, pred-clauses :pred, :as type->clauses} in-vars stats]
+  (let [{:keys [e-vars v-vars range-vars or-vars not-vars]} (collect-vars type->clauses)
+        potential-leaf-vars (set/difference v-vars
+                                            (set in-vars)
+                                            e-vars range-vars not-vars or-vars
+                                            (->> (map :v triple-clauses)
+                                                 (filter logic-var?)
+                                                 (frequencies)
+                                                 (filter (comp #(> (long %) 1) val))
+                                                 (into #{} (map key)))
+                                            (set (for [{:keys [pred]} pred-clauses
+                                                       arg (:args pred)
+                                                       :when (logic-var? arg)]
+                                                   arg)))
 
-(defn- expand-leaf-preds [{triple-clauses :triple
-                           pred-clauses :pred
-                           :as type->clauses}
-                          in-vars
-                          stats]
-  (let [{:keys [e-vars v-vars range-vars not-vars or-vars] :as collected-vars} (collect-vars type->clauses)
-        pred-vars (set (for [{:keys [pred]} pred-clauses
-                             arg (:args pred)
-                             :when (logic-var? arg)]
-                         arg))
-        invalid-leaf-vars (set (concat in-vars e-vars range-vars not-vars or-vars pred-vars))
-        non-leaf-v-vars (set (for [[v-var non-leaf-group] (group-by :v triple-clauses)
-                                   :when (> (count non-leaf-group) 1)]
-                               v-var))
-        potential-leaf-v-vars (set/difference v-vars invalid-leaf-vars non-leaf-v-vars)
-        leaf-groups (->> (for [[e-var leaf-group] (group-by :e (filter (comp potential-leaf-v-vars :v) triple-clauses))
-                               :when (logic-var? e-var)]
-                           [e-var (sort-triple-clauses leaf-group stats)])
-                         (into {}))
-        leaf-triple-clauses (->> (for [[_e-var leaf-group] leaf-groups]
-                                   leaf-group)
-                                 (reduce into #{}))
-        triple-clauses (remove leaf-triple-clauses triple-clauses)
-        new-triple-clauses (for [[_e-var leaf-group] leaf-groups]
-                             (with-meta (first leaf-group) {:ignore-v? true}))
-        leaf-preds (for [[_e-var leaf-group] leaf-groups
-                         {:keys [e a v]} (next leaf-group)]
-                     {:pred {:pred-fn 'get-attr :args [e a]}
-                      :return [:collection v]})]
+        potential-leaf-clauses (->> triple-clauses
+                                    (into #{} (filter (every-pred (comp logic-var? :e)
+                                                                  (comp potential-leaf-vars :v)))))
+
+        ;; even if all of the clauses for an e-var are leaf-clauses, we need to keep at least one
+        required-leaf-clauses (->> (for [[e-var e-clauses] (->> triple-clauses
+                                                                (filter (comp logic-var? :e))
+                                                                (group-by :e))
+                                         :when (and (not (v-vars e-var))
+                                                    (every? potential-leaf-clauses e-clauses))]
+                                     (-> (->> e-clauses
+                                              (sort-by (comp #(db/doc-count stats %) :a))
+                                              (first))
+                                         (vary-meta assoc :ignore-v? true)))
+                                   (into #{}))
+
+        leaf-triple-clauses (set/difference potential-leaf-clauses required-leaf-clauses)]
+
     [(assoc type->clauses
-            :triple (vec (concat triple-clauses new-triple-clauses))
-            :pred (vec (concat pred-clauses leaf-preds)))
-     (set/difference (set (map :v leaf-triple-clauses))
-                     (reduce set/union (vals (dissoc collected-vars :v-vars))))]))
+            :triple (vec (concat (remove leaf-triple-clauses triple-clauses)
+                                 required-leaf-clauses))
+
+            :pred (vec (concat pred-clauses
+                               (for [{:keys [e a v]} leaf-triple-clauses]
+                                 {:pred {:pred-fn 'get-attr :args [e a]}
+                                  :return [:collection v]}))))
+
+     (set/difference potential-leaf-vars (into #{} (map :v) required-leaf-clauses))]))
 
 (defn- update-depth->constraints [depth->join-depth constraints]
   (reduce

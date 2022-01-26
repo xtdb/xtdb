@@ -1,5 +1,5 @@
 [l_tax l l_discount l_shipdate l_extendedprice ret_1 ret_2 ret_3 ret_4 l_linestatus l_returnflag l_quantity]
-[15 "EUROPE" p p_type ps s n r ps_supplycost s_comment s_name s_address s_phone s_acctbal n_name p_mfgr]
+[15 "EUROPE" p p_type ps s n r s_comment s_name s_address ps_supplycost s_phone s_acctbal n_name p_mfgr]
 ["BUILDING" c o o_orderdate l l_discount l_shipdate l_extendedprice ret_1 ret_2 o_shippriority]
 [o_orderdate o o_orderpriority]
 ["ASIA" r n s l l_discount o o_orderdate c l_extendedprice ret_1 ret_2 n_name]
