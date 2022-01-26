@@ -51,11 +51,18 @@
 ;; - mutable ids, use references instead?
 ;; - join tables should have proper env calculated and not use local-tables.
 
-(defn- enter-env-scope [env]
-  (cons {} env))
+(defn- enter-env-scope
+  ([env]
+   (enter-env-scope env {}))
+  ([env new-scope]
+   (cons new-scope env)))
 
-(defn- extend-env [[s & ss :as env] k v]
-  (cons (update s k conj v) ss))
+(defn- update-env [[s & ss :as env] f]
+  (cons (f s) ss))
+
+(defn- extend-env [env k v]
+  (update-env env (fn [s]
+                    (update s k conj v))))
 
 (defn- local-env [[s]]
   s)
@@ -276,16 +283,21 @@
                                      :group_by_clause [(grouping-column-references ag)]
                                      :subquery []
                                      nil))]
-                           (cond-> {:grouping-columns (last (sort-by count ((r/stop-td-tu (r/mono-tuz step)) ag)))
-                                    :group-column-reference-type :ordinary
-                                    :column-reference-type :ordinary}))
+                           (enter-env-scope (group-env (r/parent ag))
+                                            {:grouping-columns (last (sort-by count ((r/stop-td-tu (r/mono-tuz step)) ag)))
+                                             :group-column-reference-type :ordinary
+                                             :column-reference-type :ordinary}))
     (:select_list
-     :having_clause) (let [{:keys [grouping-columns] :as group-env} (group-env (r/parent ag))]
+     :having_clause) (let [group-env (group-env (r/parent ag))
+                           {:keys [grouping-columns]} (local-env group-env)]
                        (cond-> group-env
-                         grouping-columns (assoc :group-column-reference-type :group-invariant
-                                                 :column-reference-type :invalid-group-invariant)))
-    :aggregate_function (assoc (group-env (r/parent ag))
-                               :column-reference-type :within-group-varying)
+                         grouping-columns (update-env (fn [s]
+                                                        (assoc s
+                                                               :group-column-reference-type :group-invariant
+                                                               :column-reference-type :invalid-group-invariant)))))
+    :aggregate_function (update-env (group-env (r/parent ag))
+                                    (fn [s]
+                                      (assoc s :column-reference-type :within-group-varying)))
     (r/inherit ag)))
 
 ;; Column references
@@ -300,17 +312,21 @@
                              table-scope-id :scope-id} (when qualified?
                                                          (find-decl env (first identifiers)))
                             outer-reference? (and qualified? (not= table-scope-id column-scope-id))
-                            {:keys [grouping-columns
-                                    group-column-reference-type
-                                    column-reference-type]} (group-env ag)
-                            column-reference-type (cond
-                                                    outer-reference?
-                                                    :outer
-
-                                                    (contains? (set grouping-columns) identifiers)
-                                                    group-column-reference-type
-
-                                                    :else
+                            group-env (group-env ag)
+                            column-reference-type (reduce
+                                                   (fn [acc {:keys [grouping-columns
+                                                                    group-column-reference-type]}]
+                                                     (if (contains? (set grouping-columns) identifiers)
+                                                       (reduced group-column-reference-type)
+                                                       acc))
+                                                   (get (local-env group-env) :column-reference-type :ordinary)
+                                                   group-env)
+                            column-reference-type (if outer-reference?
+                                                    (case column-reference-type
+                                                      :ordinary :outer
+                                                      :group-invariant :outer-group-invariant
+                                                      :within-group-varying :invalid-outer-within-group-varying
+                                                      :invalid-group-invariant :invalid-outer-group-invariant)
                                                     column-reference-type)
                             order-by-index (order-by-index ag)]
                         (cond-> {:identifiers identifiers
@@ -376,6 +392,14 @@
 
                                     (= :invalid-group-invariant type)
                                     [(format "Column reference is not a grouping column: %s %s"
+                                             (->src-str ag) (->line-info-str ag))]
+
+                                    (= :invalid-outer-group-invariant type)
+                                    [(format "Outer column reference is not an outer grouping column: %s %s"
+                                             (->src-str ag) (->line-info-str ag))]
+
+                                    (= :invalid-outer-within-group-varying type)
+                                    [(format "Within group varying column reference is an outer column: %s %s"
                                              (->src-str ag) (->line-info-str ag))]))
               :aggregate_function (check-aggregate-or-subquery "Aggregate functions" ag)
               :sort_specification (check-aggregate-or-subquery "Sort specifications" ag)

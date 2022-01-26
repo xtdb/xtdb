@@ -74,7 +74,7 @@ SELECT t1.d-t1.e, SUM(t1.a)
 
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE EXISTS (SELECT x.b FROM t1 AS x WHERE x.b < t1.b)")))))
 
-  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE EXISTS (SELECT t1.a, COUNT(x.a) FROM t1 AS x WHERE x.b < t1.b GROUP BY x.a HAVING t1.b = 1)")))))
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.a FROM t1 WHERE EXISTS (SELECT t1.a, COUNT(x.a) FROM t1 AS x WHERE x.b < t1.b GROUP BY x.a HAVING x.a = 1) GROUP BY t1.a")))))
 
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1, LATERAL (SELECT x.b FROM t1 AS x WHERE x.b < t1.b) AS t2")))))
   (t/is (re-find #"Table not in scope: t1"
@@ -113,7 +113,13 @@ SELECT t1.d-t1.e, SUM(t1.a)
                  (first (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 GROUP BY t1.b HAVING t1.a"))))))
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b, COUNT(t1.a) FROM t1 GROUP BY t1.b")))))
   (t/is (re-find #"Column reference is not a grouping column: t1.a"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.a, COUNT(t1.b) FROM t1")))))))
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.a, COUNT(t1.b) FROM t1"))))))
+
+  (t/is (re-find #"Outer column reference is not an outer grouping column: t1.b"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE 1 = (SELECT t1.b, COUNT(*) FROM t2)"))))))
+  (t/is (re-find #"Within group varying column reference is an outer column: t1.b"
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE 1 = (SELECT COUNT(t1.b) FROM t2)"))))))
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE 1 = (SELECT t1.b, COUNT(t2.a) FROM t2) GROUP BY t1.b"))))))
 
 (t/deftest test-clauses-not-allowed-to-contain-aggregates-or-queries
   (t/is (re-find #"Aggregate functions cannot contain aggregate functions"
