@@ -410,7 +410,7 @@
 
 ;; "Elapsed time: 12734.7558 msecs"
 (def q14
-  '{:find [promo_revenue]
+  '{:find [(* 100 (/ promo not_promo))]
     :where [[(q {:find [(sum ret_3)
                         (sum ret_2)]
                  :where [[l :l_partkey p]
@@ -424,22 +424,20 @@
                          [(* l_extendedprice ret_1) ret_2]
                          [(clojure.string/starts-with? p_type "PROMO") promo?]
                          [(hash-map true ret_2) promo_lookup]
-                         [(get promo_lookup promo? 0) ret_3]]}) [[promo not_promo]]]
-            [(/ promo not_promo) ret_1]
-            [(* 100 ret_1) promo_revenue]]})
+                         [(get promo_lookup promo? 0) ret_3]]})
+             [[promo not_promo]]]]})
 
 ;; "Elapsed time: 5651.664312 msecs"
 (def q15
   '{:find [s s_name s_address s_phone total_revenue]
-    :where [[(q {:find [s (sum ret_2)]
+    :where [[(q {:find [s (* l_extendedprice (- 1 l_discount))]
                  :where [[l :l_suppkey s]
                          [l :l_shipdate l_shipdate]
                          [l :l_extendedprice l_extendedprice]
                          [l :l_discount l_discount]
                          [(>= l_shipdate #inst "1996-01-01")]
-                         [(< l_shipdate #inst "1996-04-01")]
-                         [(- 1 l_discount) ret_1]
-                         [(* l_extendedprice ret_1) ret_2]]}) revenue]
+                         [(< l_shipdate #inst "1996-04-01")]]})
+             revenue]
             [(q {:find [(max total_revenue)]
                  :in [$ [[_ total_revenue]]]} revenue) [[total_revenue]]]
             [(identity revenue) [[s total_revenue]]]

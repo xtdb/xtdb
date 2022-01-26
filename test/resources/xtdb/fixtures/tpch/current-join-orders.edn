@@ -11,7 +11,7 @@
 [total-value ret_2 value ps_partkey]
 [#{"MAIL" "SHIP"} l l_receiptdate l_commitdate l_shipdate o o_orderpriority high_line_count low_line_count l_shipmode]
 [c c_count]
-[promo not_promo ret_1 promo_revenue]
+[promo not_promo]
 [revenue s total_revenue s_name s_address s_phone]
 [#{36 3 23 19 9 14 45 49} p p_brand p_type ps s p_size]
 [sum_extendedprice avg_yearly]

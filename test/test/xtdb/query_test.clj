@@ -2869,6 +2869,17 @@
                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
                #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
 
+(t/deftest test-projection-exprs
+  (t/is (= #{[0 0 0] [1 0 1] [1 1 3]
+             [2 0 2] [2 1 4] [2 2 6]
+             [3 0 3] [3 1 5] [3 2 7] [3 3 9]}
+           (xt/q (xt/db *api*)
+                 '{:find [?x ?y (+ ?x (* 2 ?y))]
+                   :in [[[?x ?y]]]}
+                 (for [x (range 4)
+                       y (range (inc x))]
+                   [x y])))))
+
 (t/deftest test-aggregate-exprs
   (t/is (= #{[0 0 1] [1 1 5] [2 3 14] [3 6 30]}
            (xt/q (xt/db *api*)

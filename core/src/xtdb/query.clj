@@ -143,11 +143,14 @@
          :form ::form))
 
 (s/def ::find-arg
+  ;; maybe don't need a separate `:logic-var` branch, but an easy way
+  ;; to get a fast path that doesn't require the form mechanics
   (s/or :logic-var logic-var?
         :pull (s/cat :pull #{'pull}
                      :logic-var logic-var?
                      :pull-spec ::eql/query)
-        :aggregate ::aggregate))
+        :aggregate ::aggregate
+        :form ::form))
 
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
 
@@ -1640,7 +1643,7 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- compile-aggregate-expr [form]
+(defn- compile-projection [form]
   (let [[form-type form-arg] form]
     (case form-type
       (:nil :number :string :boolean)
@@ -1653,13 +1656,14 @@
       :list (let [[f-form & arg-forms] form-arg
                   [f-type f-arg] f-form
                   f (or (when (= f-type :symbol)
-                          @(if (qualified-symbol? f-arg)
-                             (requiring-resolve f-arg)
-                             (ns-resolve 'user f-arg)))
+                          (some-> (if (qualified-symbol? f-arg)
+                                    (requiring-resolve f-arg)
+                                    (ns-resolve 'user f-arg))
+                                  deref))
                         (throw (err/illegal-arg :invalid-f-in-agg-expr
                                                 {::err/message "Invalid function in aggregate expr"
                                                  :f f-arg})))
-                  compiled-args (mapv compile-aggregate-expr arg-forms)
+                  compiled-args (mapv compile-projection arg-forms)
                   arg-fns (mapv :eval-expr compiled-args)]
               {:logic-vars (into #{} (mapcat :logic-vars) compiled-args)
                :eval-expr (fn [env]
@@ -1669,12 +1673,32 @@
   (letfn [(result-fn [logic-var]
             (let [var-binding (get var->bindings logic-var)]
               (fn [join-keys {:keys [value-serde]}]
-                (bound-result-for-var value-serde var-binding join-keys))))]
+                (bound-result-for-var value-serde var-binding join-keys))))
+
+          (projection-fn [form]
+            (let [{:keys [logic-vars eval-expr]} (cache/compute-if-absent find-cache [:projection form] identity
+                                                                          (fn [[_ form]]
+                                                                            (compile-projection form)))
+                  result-fns (mapv (fn [logic-var]
+                                     (let [->result (result-fn logic-var)]
+                                       (fn [join-keys db]
+                                         (MapEntry/create logic-var (->result join-keys db)))))
+                                   logic-vars)
+                  ->env (fn [join-keys db]
+                          (into {}
+                                (map (fn [->result] (->result join-keys db)))
+                                result-fns))]
+              {:logic-vars logic-vars
+               :->result (comp eval-expr ->env)}))]
+
     (for [[var-type arg] conformed-find]
       (case var-type
         :logic-var {:logic-vars #{arg}
                     :var-type :logic-var
                     :->result (result-fn arg)}
+
+        :form (-> (projection-fn arg)
+                  (assoc :var-type :form))
 
         :pull (let [{:keys [logic-var pull-spec]} arg]
                 {:logic-vars #{logic-var}
@@ -1687,24 +1711,11 @@
                                (-> (->result join-keys db)
                                    (pull-fn db))))})
 
-        :aggregate (let [{:keys [form args aggregate-fn]} arg
-                         {:keys [logic-vars eval-expr]} (cache/compute-if-absent find-cache [:agg form] identity
-                                                                                 (fn [[_ form]]
-                                                                                   (compile-aggregate-expr form)))
-                         result-fns (mapv (fn [logic-var]
-                                            (let [->result (result-fn logic-var)]
-                                              (fn [join-keys db]
-                                                (MapEntry/create logic-var (->result join-keys db)))))
-                                          logic-vars)
-                         ->env (fn [join-keys db]
-                                 (into {}
-                                       (map (fn [->result] (->result join-keys db)))
-                                       result-fns))]
+        :aggregate (let [{:keys [form args aggregate-fn]} arg]
                      (s/assert ::aggregate-args [aggregate-fn (vec args)])
-                     {:logic-vars logic-vars
-                      :var-type :aggregate
-                      :aggregate-fn (apply aggregate aggregate-fn args)
-                      :->result (comp eval-expr ->env)})))))
+                     (-> (projection-fn form)
+                         (assoc :var-type :aggregate
+                                :aggregate-fn (apply aggregate aggregate-fn args))))))))
 
 (defn- aggregate-result [compiled-find result]
   (let [indexed-compiled-find (map-indexed vector compiled-find)
