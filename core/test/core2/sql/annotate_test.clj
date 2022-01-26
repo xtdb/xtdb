@@ -47,8 +47,7 @@ SELECT t1.d-t1.e, SUM(t1.a)
                           {:identifiers ["t2" "b"] :table-id 10 :qualified? true :type :ordinary}}
                :nested-used-columns #{}
                :dependent-columns #{{:identifiers ["t1" "b"] :qualified? true :type :outer :table-id 5}}}]
-             (doto (:scopes (sql/analyze-query tree))
-               (clojure.pprint/pprint))))))
+             (:scopes (sql/analyze-query tree))))))
 
 (t/deftest test-scope-rules
   (t/is (re-find #"XTDB requires fully-qualified columns: a at line 1, column 8"
