@@ -50,6 +50,9 @@ SELECT t1.d-t1.e, SUM(t1.a)
                :dependent-columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}]
              (:scopes (sql/analyze-query tree))))))
 
+(t/deftest test-parsing-errors-are-reported
+  (t/is (re-find #"Parse error at line 1, column 1:\nSELEC\n" (first (:errs (sql/analyze-query (sql/parse "SELEC")))))))
+
 (t/deftest test-scope-rules
   (t/is (re-find #"XTDB requires fully-qualified columns: a at line 1, column 8"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT a FROM foo"))))))

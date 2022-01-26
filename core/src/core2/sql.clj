@@ -450,21 +450,23 @@
 ;; API
 
 (defn analyze-query [query]
-  (r/with-memoized-attributes [#'id
-                               #'ctei
-                               #'cteo
-                               #'cte-env
-                               #'dcli
-                               #'dclo
-                               #'env
-                               #'group-env
-                               #'order-env
-                               #'column-reference
-                               #'scope-id
-                               #'scope]
-    #(let [ag (z/vector-zip query)]
-       {:scopes (scopes ag)
-        :errs (errs ag)})))
+  (if-let [parse-failure (insta/get-failure query)]
+    {:errs [(prn-str parse-failure)]}
+    (r/with-memoized-attributes [#'id
+                                 #'ctei
+                                 #'cteo
+                                 #'cte-env
+                                 #'dcli
+                                 #'dclo
+                                 #'env
+                                 #'group-env
+                                 #'order-env
+                                 #'column-reference
+                                 #'scope-id
+                                 #'scope]
+      #(let [ag (z/vector-zip query)]
+         {:scopes (scopes ag)
+          :errs (errs ag)}))))
 
 ;; SQL:2011 official grammar:
 
