@@ -6,8 +6,8 @@
   (let [tree (sql/parse "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
 SELECT t1.d-t1.e, SUM(t1.a)
   FROM t1, foo AS baz
- WHERE EXISTS(SELECT 1 FROM t1 AS x WHERE x.b<t1.c)
-   AND t1.a>t1.b
+ WHERE EXISTS (SELECT 1 FROM t1 AS x WHERE x.b < t1.c AND x.b > (SELECT t1.b FROM t2 WHERE t1.b = t2.b))
+   AND t1.a > t1.b
  GROUP BY t1.d
  ORDER BY 1")]
     (t/is (= [{:id 1
@@ -20,7 +20,8 @@ SELECT t1.d-t1.e, SUM(t1.a)
                           {:identifiers ["t1" "a"] :table-id 5 :qualified? true :type :ordinary}
                           {:identifiers ["t1" "a"] :table-id 5 :qualified? true :type :within-group-varying}
                           {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :ordinary}}
-               :nested-used-columns #{{:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}
+               :nested-used-columns #{{:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :outer}
+                                      {:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}
                :dependent-columns #{}}
               {:id 3
                :parent-id 1
@@ -36,8 +37,18 @@ SELECT t1.d-t1.e, SUM(t1.a)
                :columns #{{:identifiers ["x" "b"] :table-id 8 :qualified? true :type :ordinary}
                           {:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}
                :nested-used-columns #{}
-               :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}}]
-             (:scopes (sql/analyze-query tree))))))
+               :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}
+                                    {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :outer}}}
+              {:id 9
+               :parent-id 7
+               :ctes {}
+               :tables {"t2" {:table-or-query-name "t2" :correlation-name "t2" :id 10 :projection #{["t2" "b"]}}}
+               :columns #{{:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :outer}
+                          {:identifiers ["t2" "b"] :table-id 10 :qualified? true :type :ordinary}}
+               :nested-used-columns #{}
+               :dependent-columns #{{:identifiers ["t1" "b"] :qualified? true :type :outer :table-id 5}}}]
+             (doto (:scopes (sql/analyze-query tree))
+               (clojure.pprint/pprint))))))
 
 (t/deftest test-scope-rules
   (t/is (re-find #"XTDB requires fully-qualified columns: a at line 1, column 8"
