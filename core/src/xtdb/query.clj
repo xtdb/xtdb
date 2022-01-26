@@ -1887,7 +1887,7 @@
                                  (bus/send bus {::xt/event-type ::completed-query
                                                 ::query safe-query
                                                 ::query-id query-id}))))))
-        (catch Exception e
+        (catch Throwable e
           (xio/try-close index-snapshot)
           (when bus
             (bus/send bus {::xt/event-type ::failed-query

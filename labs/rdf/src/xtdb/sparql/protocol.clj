@@ -90,7 +90,7 @@
                    accept)
           {:keys [find] :as query-map} (sparql/sparql->datalog query)
           db (xt/db xtdb-node)
-          results (xt/q db query-map (object-array 0))]
+          results (xt/q db query-map)]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)
       (cond
