@@ -2878,7 +2878,14 @@
                    :in [[[?x ?y]]]}
                  (for [x (range 4)
                        y (range (inc x))]
-                   [x y])))))
+                   [x y]))))
+
+  (t/is (= #{[0 0] [1 -1] [2 4] [3 -1] [4 8] [5 -1]}
+           (xt/q (xt/db *api*)
+                 '{:find [?x (if (even? ?x) (* 2 ?x) -1)]
+                   :in [[?x ...]]}
+                 (range 6)))
+        "if"))
 
 (t/deftest test-aggregate-exprs
   (t/is (= #{[0 0 1] [1 1 5] [2 3 14] [3 6 30]}
@@ -2887,7 +2894,14 @@
                    :in [[[?x ?y]]]}
                  (for [x (range 4)
                        y (range (inc x))]
-                   [x y])))))
+                   [x y]))))
+
+  (t/is (= #{[20]}
+           (xt/q (xt/db *api*)
+                 '{:find [(sum (if (even? ?x) ?x 0))]
+                   :in [[?x ...]]}
+                 (range 10)))
+        "if"))
 
 (t/deftest test-can-bind-function-returns-to-falsy
   ;; Datomic does allow binding falsy values, DataScript doesn't

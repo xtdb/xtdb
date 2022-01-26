@@ -1656,18 +1656,33 @@
       :list (let [[f-form & arg-forms] form-arg
                   [f-type f-arg] f-form
                   f (or (when (= f-type :symbol)
-                          (some-> (if (qualified-symbol? f-arg)
-                                    (requiring-resolve f-arg)
-                                    (ns-resolve 'user f-arg))
-                                  deref))
+                          (or (#{'if} f-arg)
+                              (some-> (if (qualified-symbol? f-arg)
+                                        (requiring-resolve f-arg)
+                                        (ns-resolve 'user f-arg))
+                                      deref)))
                         (throw (err/illegal-arg :invalid-f-in-agg-expr
                                                 {::err/message "Invalid function in aggregate expr"
                                                  :f f-arg})))
                   compiled-args (mapv compile-projection arg-forms)
                   arg-fns (mapv :eval-expr compiled-args)]
               {:logic-vars (into #{} (mapcat :logic-vars) compiled-args)
-               :eval-expr (fn [env]
-                            (apply f (mapv (fn [->arg] (->arg env)) arg-fns)))}))))
+               :eval-expr (case f-arg
+                            if (do
+                                 (when-not (<= 2 (count arg-fns) 3)
+                                   (throw (err/illegal-arg :invalid-if-arity
+                                                           {::err/message "Arity error to `if`"
+                                                            :form form-arg})))
+
+                                 (let [[compiled-pred compiled-then compiled-else] arg-fns]
+                                   (fn [env]
+                                     (if (compiled-pred env)
+                                       (compiled-then env)
+                                       (when compiled-else
+                                         (compiled-else env))))))
+
+                            (fn [env]
+                              (apply f (mapv (fn [->arg] (->arg env)) arg-fns))))}))))
 
 (defn- compile-find [conformed-find {:keys [var->bindings]} {:keys [find-cache]}]
   (letfn [(result-fn [logic-var]

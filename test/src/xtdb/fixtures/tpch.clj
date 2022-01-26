@@ -278,7 +278,7 @@
 (def q8
   '{:find [o_year mkt_share]
     :where [[(q {:find [o_year
-                        (sum brazil_volume)
+                        (sum (if (= "BRAZIL" nation) volume 0))
                         (sum volume)]
                  :where [[(q {:find [o_year (sum (* l_extendedprice (- 1 l_discount))) nation]
                               :where [[o :o_custkey c]
@@ -297,9 +297,8 @@
                                       [(<= o_orderdate #inst "1996-12-31")]
                                       [p :p_type "ECONOMY ANODIZED STEEL"]
                                       [(xtdb.fixtures.tpch/inst->year o_orderdate) o_year]]})
-                          [[o_year volume nation]]]
-                         [(hash-map "BRAZIL" volume) brazil_lookup]
-                         [(get brazil_lookup nation 0) brazil_volume]]}) [[o_year brazil_volume volume]]]
+                          [[o_year volume nation]]]]})
+             [[o_year brazil_volume volume]]]
             [(/ brazil_volume volume) mkt_share]]
     :order-by [[o_year :asc]]})
 
@@ -355,8 +354,7 @@
 
 ;; "Elapsed time: 190.177707 msecs"
 (def q11
-  '{:find [ps_partkey
-           value]
+  '{:find [ps_partkey value]
     :where [[(q {:find [(sum (* ps_supplycost ps_availqty))]
                  :where [[ps :ps_availqty ps_availqty]
                          [ps :ps_supplycost ps_supplycost]
@@ -375,11 +373,13 @@
             [(> value ret_2)]]
     :order-by [[value :desc]]})
 
+(def high-lines #{"1-URGENT" "2-HIGH"})
+
 ;; "Elapsed time: 4115.160435 msecs"
 (def q12
   '{:find [l_shipmode
-           (sum high_line_count)
-           (sum low_line_count)]
+           (sum (if (xtdb.fixtures.tpch/high-lines o_orderpriority) 1 0))
+           (sum (if (xtdb.fixtures.tpch/high-lines o_orderpriority) 0 1))]
     :where [[l :l_orderkey o]
             [l :l_receiptdate l_receiptdate]
             [l :l_commitdate l_commitdate]
@@ -390,10 +390,7 @@
             [(< l_shipdate l_commitdate)]
             [l :l_shipmode l_shipmode]
             [l :l_shipmode #{"MAIL" "SHIP"}]
-            [o :o_orderpriority o_orderpriority]
-            [(get {"1-URGENT" [1 0]
-                   "2-HIGH" [1 0]} o_orderpriority [0 1])
-             [high_line_count low_line_count]]]
+            [o :o_orderpriority o_orderpriority]]
     :order-by [[l_shipmode :asc]]})
 
 ;; "Elapsed time: 2187.862433 msecs"
@@ -408,24 +405,21 @@
                      [(identity 0) c_count]))]
     :order-by [[(count c_count) :desc] [c_count :desc]]})
 
-;; "Elapsed time: 12734.7558 msecs"
+;; "Elapsed time: 109.630847 msecs"
 (def q14
-  '{:find [(* 100 (/ promo not_promo))]
-    :where [[(q {:find [(sum ret_3)
-                        (sum ret_2)]
+  '{:find [(* 100 (/ promo total))]
+    :where [[(q {:find [(sum (if (clojure.string/starts-with? p_type "PROMO")
+                               (* l_extendedprice (- 1 l_discount))
+                               0))
+                        (sum (* l_extendedprice (- 1 l_discount)))]
                  :where [[l :l_partkey p]
                          [p :p_type p_type]
                          [l :l_shipdate l_shipdate]
                          [l :l_extendedprice l_extendedprice]
                          [l :l_discount l_discount]
                          [(>= l_shipdate #inst "1995-09-01")]
-                         [(< l_shipdate #inst "1995-10-01")]
-                         [(- 1 l_discount) ret_1]
-                         [(* l_extendedprice ret_1) ret_2]
-                         [(clojure.string/starts-with? p_type "PROMO") promo?]
-                         [(hash-map true ret_2) promo_lookup]
-                         [(get promo_lookup promo? 0) ret_3]]})
-             [[promo not_promo]]]]})
+                         [(< l_shipdate #inst "1995-10-01")]]})
+             [[promo total]]]]})
 
 ;; "Elapsed time: 5651.664312 msecs"
 (def q15
