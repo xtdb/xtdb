@@ -519,22 +519,16 @@
 
 ;; "Elapsed time: 13222.491411 msecs"
 (def q18
-  '{:find [c_name
-           c
-           o
-           o_orderdate
-           o_totalprice
-           (sum l_quantity)]
+  '{:find [c_name c o o_orderdate o_totalprice sum_quantity]
     :where [[(q {:find [o (sum l_quantity)]
                  :where [[l :l_orderkey o]
-                         [l :l_quantity l_quantity]]}) [[o sum_quantity]]]
+                         [l :l_quantity l_quantity]]})
+             [[o sum_quantity]]]
             [(> sum_quantity 300.0)]
             [o :o_custkey c]
             [c :c_name c_name]
             [o :o_orderdate o_orderdate]
-            [o :o_totalprice o_totalprice]
-            [l :l_orderkey o]
-            [l :l_quantity l_quantity]]
+            [o :o_totalprice o_totalprice]]
     :order-by [[o_totalprice :desc] [o_orderdate :asc]]
     :limit 100})
 
