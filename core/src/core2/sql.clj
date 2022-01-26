@@ -79,7 +79,7 @@
 
 ;; Attributes
 
-(declare cte-env env)
+(declare cte-env env scope-id)
 
 ;; Ids
 
@@ -179,7 +179,8 @@
                            cte-id (:id (find-decl (cte-env ag) table-name))]
                        (cond-> {:table-or-query-name (or table-name correlation-name)
                                 :correlation-name correlation-name
-                                :id (id ag)}
+                                :id (id ag)
+                                :scope-id (scope-id ag)}
                          cte-id (assoc :cte-id cte-id))))))
 
 (defn- local-tables [ag]
@@ -294,9 +295,11 @@
     :column_reference (let [identifiers (identifiers ag)
                             qualified? (> (count identifiers) 1)
                             env (env ag)
-                            table-id (when qualified?
-                                       (:id (find-decl env (first identifiers))))
-                            outer-reference? (and qualified? (not (find-local-decl env (first identifiers))))
+                            column-scope-id (scope-id ag)
+                            {table-id :id
+                             table-scope-id :scope-id} (when qualified?
+                                                         (find-decl env (first identifiers)))
+                            outer-reference? (and qualified? (not= table-scope-id column-scope-id))
                             {:keys [grouping-columns
                                     group-column-reference-type
                                     column-reference-type]} (group-env ag)
@@ -312,9 +315,10 @@
                             order-by-index (order-by-index ag)]
                         (cond-> {:identifiers identifiers
                                  :qualified? qualified?
-                                 :type column-reference-type}
+                                 :type column-reference-type
+                                 :scope-id column-scope-id}
                           order-by-index (assoc :inside-resolved-sort-key? true)
-                          table-id (assoc :table-id table-id)))))
+                          table-id (assoc :table-id table-id :table-scope-id table-scope-id)))))
 
 ;; Errors
 
@@ -397,31 +401,28 @@
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
-(defn- local-column-references [ag]
-  (letfn [(step [_ ag]
-            (case (r/ctor ag)
-              :column_reference [(column-reference ag)]
-              :subquery []
-              nil))]
-    ((r/stop-td-tu (r/mono-tuz step)) ag)))
+(defn- scope-id [ag]
+  (case (r/ctor ag)
+    :query_expression (id ag)
+    (r/inherit ag)))
 
 (defn- scope [ag]
   (case (r/ctor ag)
-    :query_expression (let [^long scope-id (id ag)
-                            parent-id (:id (scope (r/parent ag)))
+    :query_expression (let [id (scope-id ag)
+                            parent-id (scope-id (r/parent ag))
                             local-ctes (local-env-singleton-values (cteo ag))
                             local-tables (local-env-singleton-values (dclo ag))
                             local-table-ids (map :id (vals local-tables))
-                            local-columns (set (local-column-references ag))
                             all-columns (all-column-references ag)
                             table-id->all-columns (->> (group-by :table-id all-columns)
                                                        (into (sorted-map)))
+                            local-columns (set (get (group-by :scope-id all-columns) id))
                             all-used-columns (set (mapcat table-id->all-columns local-table-ids))
                             nested-used-columns (set/difference all-used-columns local-columns)
                             ;; NOTE: assumes that tables declared in
                             ;; outer scopes have lower ids than the
                             ;; current scope.
-                            dependent-columns (->> (subseq table-id->all-columns < scope-id)
+                            dependent-columns (->> (subseq table-id->all-columns < id)
                                                    (mapcat val)
                                                    (set))
                             local-tables (->> (for [[k {:keys [id] :as table}] local-tables
@@ -430,7 +431,7 @@
                                                                           (set))]]
                                                 [k (assoc table :projection projection)])
                                               (into {}))]
-                        (cond-> {:id scope-id
+                        (cond-> {:id id
                                  :ctes local-ctes
                                  :tables local-tables
                                  :columns local-columns
@@ -459,6 +460,7 @@
                                #'group-env
                                #'order-env
                                #'column-reference
+                               #'scope-id
                                #'scope]
     #(let [ag (z/vector-zip query)]
        {:scopes (scopes ag)

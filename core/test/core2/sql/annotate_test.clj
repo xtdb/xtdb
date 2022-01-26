@@ -12,41 +12,42 @@ SELECT t1.d-t1.e, SUM(t1.a)
  ORDER BY 1")]
     (t/is (= [{:id 1
                :ctes {"foo" {:query-name "foo" :id 2}}
-               :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 5 :projection #{["t1" "a"] ["t1" "b"] ["t1" "c"]  ["t1" "d"] ["t1" "e"]}}
-                        "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 6 :cte-id 2 :projection #{}}}
-               :columns #{{:identifiers ["t1" "d"] :table-id 5 :qualified? true :type :group-invariant}
-                          {:identifiers ["t1" "d"] :table-id 5 :qualified? true :type :ordinary}
-                          {:identifiers ["t1" "e"] :table-id 5 :qualified? true :type :invalid-group-invariant}
-                          {:identifiers ["t1" "a"] :table-id 5 :qualified? true :type :ordinary}
-                          {:identifiers ["t1" "a"] :table-id 5 :qualified? true :type :within-group-varying}
-                          {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :ordinary}}
-               :nested-used-columns #{{:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :outer}
-                                      {:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}
+               :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 5 :scope-id 1
+                              :projection #{["t1" "a"] ["t1" "b"] ["t1" "c"]  ["t1" "d"] ["t1" "e"]}}
+                        "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 6 :scope-id 1 :cte-id 2 :projection #{}}}
+               :columns #{{:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :group-invariant}
+                          {:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
+                          {:identifiers ["t1" "e"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :invalid-group-invariant}
+                          {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
+                          {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :within-group-varying}
+                          {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}}
+               :nested-used-columns #{{:identifiers ["t1" "b"]  :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}
+                                      {:identifiers ["t1" "c"]  :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}}
                :dependent-columns #{}}
               {:id 3
                :parent-id 1
                :ctes {}
-               :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :cte-id 2 :projection #{}}}
+               :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :scope-id 3 :cte-id 2 :projection #{}}}
                :columns #{}
                :nested-used-columns #{}
                :dependent-columns #{}}
               {:id 7
                :parent-id 1
                :ctes {}
-               :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 8 :projection #{["x" "b"]}}}
-               :columns #{{:identifiers ["x" "b"] :table-id 8 :qualified? true :type :ordinary}
-                          {:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}}
+               :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 8 :scope-id 7 :projection #{["x" "b"]}}}
+               :columns #{{:identifiers ["x" "b"] :table-id 8 :table-scope-id 7 :scope-id 7 :qualified? true :type :ordinary}
+                          {:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}}
                :nested-used-columns #{}
-               :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :qualified? true :type :outer}
-                                    {:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :outer}}}
+               :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}
+                                    {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}
               {:id 9
                :parent-id 7
                :ctes {}
-               :tables {"t2" {:table-or-query-name "t2" :correlation-name "t2" :id 10 :projection #{["t2" "b"]}}}
-               :columns #{{:identifiers ["t1" "b"] :table-id 5 :qualified? true :type :outer}
-                          {:identifiers ["t2" "b"] :table-id 10 :qualified? true :type :ordinary}}
+               :tables {"t2" {:table-or-query-name "t2" :correlation-name "t2" :id 10 :scope-id 9 :projection #{["t2" "b"]}}}
+               :columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}
+                          {:identifiers ["t2" "b"] :table-id 10 :table-scope-id 9 :scope-id 9 :qualified? true :type :ordinary}}
                :nested-used-columns #{}
-               :dependent-columns #{{:identifiers ["t1" "b"] :qualified? true :type :outer :table-id 5}}}]
+               :dependent-columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}]
              (:scopes (sql/analyze-query tree))))))
 
 (t/deftest test-scope-rules
