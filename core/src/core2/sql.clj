@@ -103,21 +103,14 @@
 
 (defn- identifier [ag]
   (case (r/ctor ag)
-    (:table_name
-     :query_name
-     :correlation_name
-     :column_name
-     :identifier) (identifier (r/$ ag 1))
     :as_clause (identifier (r/$ ag -1))
     :regular_identifier (r/lexeme ag 1)
     nil))
 
 (defn- identifiers [ag]
   (case (r/ctor ag)
-    (:grouping_column_reference
-     :column_reference
-     :basic_identifier_chain) (identifiers (r/$ ag 1))
     (:column_name_list
+     :column_reference
      :identifier_chain)
     (letfn [(step [_ ag]
               (case (r/ctor ag)
@@ -127,20 +120,17 @@
 
 (defn- table-or-query-name [ag]
   (case (r/ctor ag)
-    (:table_factor
-     :table_primary
+    (:table_primary
      :with_list_element) (table-or-query-name (r/$ ag 1))
-    (:table_name
-     :query_name) (identifier ag)
+    :regular_identifier (identifier ag)
     nil))
 
 (defn- correlation-name [ag]
   (case (r/ctor ag)
-    :table_factor (correlation-name (r/$ ag 1))
     :table_primary (or (correlation-name (r/$ ag -1))
                        (correlation-name (r/$ ag -2))
                        (table-or-query-name ag))
-    :correlation_name (identifier ag)
+    :regular_identifier (identifier ag)
     nil))
 
 ;; CTEs
@@ -204,7 +194,7 @@
 (defn- dcli [ag]
   (case (r/ctor ag)
     :query_expression (enter-env-scope (env (r/parent ag)))
-    (:table_factor
+    (:table_primary
      :cross_join
      :natural_join
      :qualified_join) (reduce (fn [acc {:keys [correlation-name] :as table}]
@@ -258,11 +248,10 @@
 (defn- order-by-index [ag]
   (case (r/ctor ag)
     :query_expression nil
-    :sort_specification (order-by-index (r/$ ag 1))
-    :sort_key (first (for [{:keys [normal-form index identifier]} (order-env ag)
-                           :when (or (= normal-form (r/lexeme ag 1))
-                                     (= identifier (->src-str ag)))]
-                       index))
+    :sort_specification (first (for [{:keys [normal-form index identifier]} (order-env ag)
+                                     :when (or (= normal-form (r/lexeme ag 1))
+                                               (= identifier (->src-str ag)))]
+                                 index))
     (r/inherit ag)))
 
 ;; Group by
@@ -270,7 +259,7 @@
 (defn- grouping-column-references [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)
-              :grouping_column_reference [(identifiers ag)]
+              :column_reference [(identifiers ag)]
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
@@ -353,14 +342,16 @@
               [:signed_numeric_literal
                [:exact_numeric_literal
                 [:unsigned_integer _]]] true
-              [:host_parameter_name _] true)
+              [:host_parameter_name _] true
+              "ROW" true
+              "ROWS" true)
     [(format (str label " must be an integer: %s %s")
              (->src-str ag) (->line-info-str ag))]))
 
 (defn- check-aggregate-or-subquery [label ag]
   (letfn [(step [_ inner-ag]
             (case (r/ctor inner-ag)
-              :set_function_specification
+              :aggregate_function
               [(format (str label " cannot contain aggregate functions: %s %s")
                        (->src-str ag) (->line-info-str ag))]
               :query_expression
@@ -401,18 +392,19 @@
                                     (= :invalid-outer-within-group-varying type)
                                     [(format "Within group varying column reference is an outer column: %s %s"
                                              (->src-str ag) (->line-info-str ag))]))
-              :aggregate_function (check-aggregate-or-subquery "Aggregate functions" ag)
+              (:general_set_function
+               :array_aggregate_function) (check-aggregate-or-subquery "Aggregate functions" ag)
               :sort_specification (check-aggregate-or-subquery "Sort specifications" ag)
               :where_clause (letfn [(step [_ ag]
                                       (case (r/ctor ag)
-                                        :set_function_specification
+                                        :aggregate_function
                                         [(format "WHERE clause cannot contain aggregate functions: %s %s"
                                                  (->src-str ag) (->line-info-str ag))]
                                         :subquery []
                                         nil))]
                               ((r/stop-td-tu (r/mono-tuz step)) ag))
-              :fetch_first_row_count (check-unsigned-integer "Fetch first row count" (r/$ ag 1))
-              :offset_row_count (check-unsigned-integer "Offset row count" (r/$ ag 1))
+              :fetch_first_clause (check-unsigned-integer "Fetch first row count" (r/$ ag 3))
+              :result_offset_clause (check-unsigned-integer "Offset row count" (r/$ ag 2))
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 

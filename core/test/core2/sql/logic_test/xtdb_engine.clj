@@ -92,34 +92,28 @@
        expr
        [:as_clause
         "AS"
-        [:column_name
-         [:identifier
-          [:regular_identifier (str "col" (r/child-idx z))]]]]]
+        [:regular_identifier (str "col" (r/child-idx z))]]]
 
       [:identifier_chain
-       [:identifier [:regular_identifier column]]]
+       [:regular_identifier column]]
       ;;=>
       (when-let [table (get column->table column)]
         [:identifier_chain
-         [:identifier
-          [:regular_identifier table]]
-         [:identifier
-          [:regular_identifier column]]])
+         [:regular_identifier table]
+         [:regular_identifier column]])
 
-      [:sort_key
+      [:sort_specification
        [:numeric_value_expression
         [:term
          [:factor [:exact_numeric_literal [:unsigned_integer ordinal]]]]]]
       ;;=>
-      [:sort_key
+      [:sort_specification
        [:numeric_value_expression
         [:term
          [:factor
           [:column_reference
-           [:basic_identifier_chain
-            [:identifier_chain
-             [:identifier
-              [:regular_identifier (str "col" ordinal)]]]]]]]]])))
+           [:identifier_chain
+            [:regular_identifier (str "col" ordinal)]]]]]]])))
 
 (defn normalize-query [tables query]
   (let [column->table (->> (for [[table columns] (reverse tables)
