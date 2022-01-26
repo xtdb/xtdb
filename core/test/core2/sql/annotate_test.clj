@@ -54,6 +54,8 @@ SELECT t1.d-t1.e, SUM(t1.a)
 
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE EXISTS (SELECT x.b FROM t1 AS x WHERE x.b < t1.b)")))))
 
+  (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE EXISTS (SELECT t1.a, COUNT(x.a) FROM t1 AS x WHERE x.b < t1.b GROUP BY x.a HAVING t1.b = 1)")))))
+
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1, LATERAL (SELECT x.b FROM t1 AS x WHERE x.b < t1.b) AS t2")))))
   (t/is (re-find #"Table not in scope: t1"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT * FROM t1, (SELECT x.b FROM t1 AS x WHERE x.b < t1.b) AS t2"))))))
