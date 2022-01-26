@@ -111,7 +111,7 @@ SELECT t1.d-t1.e, SUM(t1.a)
                  (first (:errs (sql/analyze-query (sql/parse "SELECT t1.a, COUNT(t1.b) FROM t1"))))))
 
   (t/is (re-find #"Outer column reference is not an outer grouping column: t1.b"
-                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE 1 = (SELECT t1.b, COUNT(*) FROM t2)"))))))
+                 (first (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE (1, 1) = (SELECT t1.b, COUNT(*) FROM t2)"))))))
   (t/is (re-find #"Within group varying column reference is an outer column: t1.b"
                  (first (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE 1 = (SELECT COUNT(t1.b) FROM t2)"))))))
   (t/is (empty? (:errs (sql/analyze-query (sql/parse "SELECT t1.b FROM t1 WHERE 1 = (SELECT t1.b, COUNT(t2.a) FROM t2) GROUP BY t1.b"))))))
