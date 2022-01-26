@@ -5,11 +5,11 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.fixtures :as fix :refer [*api*]]
-            [xtdb.db :as db])
+            [xtdb.db :as db]
+            [xtdb.fixtures :as fix :refer [*api*]])
   (:import (io.airlift.tpch GenerateUtils TpchColumn TpchColumnType$Base TpchEntity TpchTable)
            (java.lang AutoCloseable)
-           (java.util UUID)))
+           (java.util Date UUID)))
 
 (def tpch-column-types->xtdb-calcite-type
   {TpchColumnType$Base/INTEGER :bigint
@@ -255,6 +255,9 @@
             [(< l_quantity 24.0)]
             [(* l_extendedprice l_discount) ret_1]]})
 
+(defn inst->year [^Date d]
+  (+ 1900 (.getYear d)))
+
 ;; "Elapsed time: 58567.852989 msecs"
 (def q7
   '{:find [supp_nation
@@ -279,8 +282,7 @@
             [(<= l_shipdate #inst "1996-12-31")]
             [(- 1 l_discount) ret_1]
             [(* l_extendedprice ret_1) ret_2]
-            [(pr-str l_shipdate) ret_3]
-            [(subs ret_3 7 11) l_year]]
+            [(xtdb.fixtures.tpch/inst->year l_shipdate) l_year]]
     :order-by [[supp_nation :asc] [cust_nation :asc] [l_year :asc]]})
 
 ;; "Elapsed time: 22993.637183 msecs"
@@ -310,8 +312,7 @@
                                       [p :p_type "ECONOMY ANODIZED STEEL"]
                                       [(- 1 l_discount) ret_1]
                                       [(* l_extendedprice ret_1) ret_2]
-                                      [(pr-str o_orderdate) ret_3]
-                                      [(subs ret_3 7 11) o_year]]})
+                                      [(xtdb.fixtures.tpch/inst->year o_orderdate) o_year]]})
                           [[o_year volume nation]]]
                          [(hash-map "BRAZIL" volume) brazil_lookup]
                          [(get brazil_lookup nation 0) brazil_volume]]}) [[o_year brazil_volume volume]]]
@@ -341,8 +342,7 @@
             [(* l_extendedprice ret_1) ret_2]
             [(* ps_supplycost l_quantity) ret_3]
             [(- ret_2 ret_3) ret_4]
-            [(pr-str o_orderdate) ret_5]
-            [(subs ret_5 7 11) o_year]]
+            [(xtdb.fixtures.tpch/inst->year o_orderdate) o_year]]
     :order-by [[nation :asc] [o_year :desc]]})
 
 ;; "Elapsed time: 8893.984112 msecs"
