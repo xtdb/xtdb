@@ -3,7 +3,7 @@
       "dev-SNAPSHOT"))
 
 (defproject com.xtdb.labs/core2-dev core2-version
-  :url "https://github.com/xtdb/crux-rnd"
+  :url "https://github.com/xtdb/core2"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
 
