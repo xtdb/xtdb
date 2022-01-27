@@ -138,7 +138,8 @@
 (defn- cte [ag]
   (case (r/ctor ag)
     :with_list_element {:query-name (table-or-query-name ag)
-                        :id (id ag)}))
+                        :id (id ag)
+                        :scope-id (scope-id ag)}))
 
 ;; Inherited
 (defn- ctei [ag]
@@ -173,12 +174,12 @@
     :table_primary (when-not (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
                      (let [table-name (table-or-query-name ag)
                            correlation-name (correlation-name ag)
-                           cte-id (:id (find-decl (cte-env ag) table-name))]
+                           {cte-id :id cte-scope-id :scope-id} (find-decl (cte-env ag) table-name)]
                        (cond-> {:table-or-query-name (or table-name correlation-name)
                                 :correlation-name correlation-name
                                 :id (id ag)
                                 :scope-id (scope-id ag)}
-                         cte-id (assoc :cte-id cte-id))))))
+                         cte-id (assoc :cte-id cte-id :cte-scope-id cte-scope-id))))))
 
 (defn- local-tables [ag]
   (letfn [(step [_ ag]

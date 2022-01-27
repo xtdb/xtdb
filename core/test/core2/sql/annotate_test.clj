@@ -13,10 +13,10 @@ SELECT t1.d-t1.e, SUM(t1.a)
     (t/is (= {:errs []
               :scopes
               [{:id 1
-                :ctes {"foo" {:query-name "foo" :id 2}}
+                :ctes {"foo" {:query-name "foo" :id 2 :scope-id 1}}
                 :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 5 :scope-id 1
                                :projection #{["t1" "a"] ["t1" "b"] ["t1" "c"]  ["t1" "d"] ["t1" "e"]}}
-                         "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 6 :scope-id 1 :cte-id 2 :projection #{}}}
+                         "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 6 :scope-id 1 :cte-id 2 :cte-scope-id 1 :projection #{}}}
                 :columns #{{:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :group-invariant}
                            {:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
                            {:identifiers ["t1" "e"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :group-invariant}
@@ -28,7 +28,7 @@ SELECT t1.d-t1.e, SUM(t1.a)
                {:id 3
                 :parent-id 1
                 :ctes {}
-                :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :scope-id 3 :cte-id 2 :projection #{}}}
+                :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :scope-id 3 :cte-id 2 :cte-scope-id 1 :projection #{}}}
                 :columns #{}
                 :dependent-columns #{}}
                {:id 7
