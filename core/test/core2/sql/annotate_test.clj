@@ -8,42 +8,45 @@ SELECT t1.d-t1.e, SUM(t1.a)
   FROM t1, foo AS baz
  WHERE EXISTS (SELECT 1 FROM t1 AS x WHERE x.b < t1.c AND x.b > (SELECT t1.b FROM t2 WHERE t1.b = t2.b))
    AND t1.a > t1.b
- GROUP BY t1.d
+ GROUP BY t1.d, t1.e
  ORDER BY 1")]
-    (t/is (= [{:id 1
-               :ctes {"foo" {:query-name "foo" :id 2}}
-               :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 5 :scope-id 1
-                              :projection #{["t1" "a"] ["t1" "b"] ["t1" "c"]  ["t1" "d"] ["t1" "e"]}}
-                        "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 6 :scope-id 1 :cte-id 2 :projection #{}}}
-               :columns #{{:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :group-invariant}
-                          {:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
-                          {:identifiers ["t1" "e"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :invalid-group-invariant}
-                          {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
-                          {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :within-group-varying}
-                          {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}}
-               :dependent-columns #{}}
-              {:id 3
-               :parent-id 1
-               :ctes {}
-               :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :scope-id 3 :cte-id 2 :projection #{}}}
-               :columns #{}
-               :dependent-columns #{}}
-              {:id 7
-               :parent-id 1
-               :ctes {}
-               :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 8 :scope-id 7 :projection #{["x" "b"]}}}
-               :columns #{{:identifiers ["x" "b"] :table-id 8 :table-scope-id 7 :scope-id 7 :qualified? true :type :ordinary}
-                          {:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}}
-               :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}
-                                    {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}
-              {:id 9
-               :parent-id 7
-               :ctes {}
-               :tables {"t2" {:table-or-query-name "t2" :correlation-name "t2" :id 10 :scope-id 9 :projection #{["t2" "b"]}}}
-               :columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}
-                          {:identifiers ["t2" "b"] :table-id 10 :table-scope-id 9 :scope-id 9 :qualified? true :type :ordinary}}
-               :dependent-columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}]
-             (:scopes (sql/analyze-query tree))))))
+    (t/is (= {:errs []
+              :scopes
+              [{:id 1
+                :ctes {"foo" {:query-name "foo" :id 2}}
+                :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 5 :scope-id 1
+                               :projection #{["t1" "a"] ["t1" "b"] ["t1" "c"]  ["t1" "d"] ["t1" "e"]}}
+                         "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 6 :scope-id 1 :cte-id 2 :projection #{}}}
+                :columns #{{:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :group-invariant}
+                           {:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
+                           {:identifiers ["t1" "e"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :group-invariant}
+                           {:identifiers ["t1" "e"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
+                           {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
+                           {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :within-group-varying}
+                           {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}}
+                :dependent-columns #{}}
+               {:id 3
+                :parent-id 1
+                :ctes {}
+                :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :scope-id 3 :cte-id 2 :projection #{}}}
+                :columns #{}
+                :dependent-columns #{}}
+               {:id 7
+                :parent-id 1
+                :ctes {}
+                :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 8 :scope-id 7 :projection #{["x" "b"]}}}
+                :columns #{{:identifiers ["x" "b"] :table-id 8 :table-scope-id 7 :scope-id 7 :qualified? true :type :ordinary}
+                           {:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}}
+                :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}
+                                     {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}
+               {:id 9
+                :parent-id 7
+                :ctes {}
+                :tables {"t2" {:table-or-query-name "t2" :correlation-name "t2" :id 10 :scope-id 9 :projection #{["t2" "b"]}}}
+                :columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}
+                           {:identifiers ["t2" "b"] :table-id 10 :table-scope-id 9 :scope-id 9 :qualified? true :type :ordinary}}
+                :dependent-columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}]}
+             (sql/analyze-query tree)))))
 
 (t/deftest test-parsing-errors-are-reported
   (t/is (re-find #"Parse error at line 1, column 1:\nSELEC\n" (first (:errs (sql/analyze-query (sql/parse "SELEC")))))))

@@ -477,8 +477,10 @@
                                  #'scope-id
                                  #'scope]
       #(let [ag (z/vector-zip query)]
-         {:scopes (scopes ag)
-          :errs (errs ag)}))))
+         (if-let [errs (not-empty (errs ag))]
+           {:errs errs}
+           {:scopes (scopes ag)
+            :errs []})))))
 
 ;; SQL:2011 official grammar:
 
