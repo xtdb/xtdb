@@ -30,8 +30,7 @@
   [node]
   (bench/run-bench :ingest
     (bench/with-additional-index-metrics node
-      (let [{:keys [last-tx entity-count]} (with-open [in (io/input-stream watdiv/watdiv-input-file)]
-                                             (rdf/submit-ntriples node in 1000))]
+      (let [{:keys [last-tx entity-count]} (watdiv/submit-watdiv! node)]
         (xt/await-tx node last-tx)
         {:success? true
          :entity-count entity-count

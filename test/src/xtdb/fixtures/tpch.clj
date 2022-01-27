@@ -679,24 +679,6 @@
        (every? boolean)))
 
 (comment
-  ;; regen stats
-  (with-open [^AutoCloseable is (db/open-index-snapshot (:index-store (xt/db (dev/xtdb-node))))]
-    (->> (db/all-attrs is)
-         (map (fn [attr]
-                [attr {:doc-count (db/doc-count is attr)
-                       :eids (db/eid-cardinality is attr)
-                       :vals (db/value-cardinality is attr)}]))
-         (into {}))))
-
-(defn ->attr-stats []
-  (let [stats (read-string (slurp (io/resource "xtdb/fixtures/tpch/attr-stats.edn")))]
-    (reify db/AttributeStats
-      (all-attrs [_] (set (keys stats)))
-      (doc-count [_ attr] (get-in stats [attr :doc-count]))
-      (eid-cardinality [_ attr] (get-in stats [attr :eids]))
-      (value-cardinality [_ attr] (get-in stats [attr :vals])))))
-
-(comment
   (require '[xtdb.query :as q] 'dev)
 
   ;; SF 0.01

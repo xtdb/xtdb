@@ -2,12 +2,13 @@
   (:require [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
             [xtdb.api :as xt]
-            [xtdb.codec :as c]
+            [xtdb.db :as db]
             [xtdb.io :as xio])
-  (:import xtdb.api.IXtdb
-           java.nio.file.attribute.FileAttribute
-           java.nio.file.Files
-           [java.util ArrayList Date List UUID]))
+  (:import (java.lang AutoCloseable)
+           (java.nio.file Files)
+           (java.nio.file.attribute FileAttribute)
+           (java.util ArrayList Date List UUID)
+           (xtdb.api IXtdb)))
 
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
@@ -108,3 +109,22 @@
              (t/do-report {:type :pass, :message ~msg,
                            :expected '~form, :actual e#})
              e#))))))
+
+(comment
+  ;; regen stats
+  (with-open [^AutoCloseable is (db/open-index-snapshot (:index-store (xt/db (dev/xtdb-node))))]
+    (->> (db/all-attrs is)
+         (map (fn [attr]
+                [(str (symbol attr)) {:doc-count (db/doc-count is attr)
+                                      :eids (db/eid-cardinality is attr)
+                                      :vals (db/value-cardinality is attr)}]))
+         (into {}))))
+
+(defn ->attr-stats [file]
+  (let [stats (->> (read-string (slurp file))
+                   (into {} (map (juxt (comp keyword key) val))))]
+    (reify db/AttributeStats
+      (all-attrs [_] (set (keys stats)))
+      (doc-count [_ attr] (get-in stats [attr :doc-count]))
+      (eid-cardinality [_ attr] (get-in stats [attr :eids]))
+      (value-cardinality [_ attr] (get-in stats [attr :vals])))))

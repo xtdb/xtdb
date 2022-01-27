@@ -3927,29 +3927,66 @@
                             [start :next intermediate]
                             (pointsTo end intermediate)]]}))))
 
-#_{:clj-kondo/ignore #{:unused-private-var}}
-(defn- regen-join-order-file [join-orders file]
-  (with-open [w (io/writer file)]
-    (doseq [join-order join-orders]
-      (.write w (prn-str join-order)))))
+;; these aren't necessarily the best join orders, but just to give you a heads-up if something changes
+;; only does the top-level queries, but again, hopefully enough to spot an unexpected change.
 
-(t/deftest test-tpch-join-orders
-  ;; these aren't necessarily the best join orders, but just to give you a heads-up if something changes
-  ;; only does the top-level queries, but again, hopefully enough to spot an unexpected change.
+(defn- test-join-orders [queries
+                         {:keys [join-order-file
+                                 stats-file
+                                 regen-join-order-file?
+                                 ->query-plan]
+                          :or {->query-plan q/query-plan-for}}]
   (let [db (xt/db *api*)
-        tpch-stats (tpch/->attr-stats)
-        join-order-file (io/resource "xtdb/tpch-current-join-orders.edn")
+        attr-stats (fix/->attr-stats stats-file)
         expected-join-orders (mapv read-string (str/split-lines (slurp join-order-file)))]
-    (with-redefs [q/->stats (constantly tpch-stats)]
-      (let [actual-join-orders (doto (for [q tpch/tpch-queries]
-                                       (:vars-in-join-order (q/query-plan-for db q (::tpch/in-args (meta q)))))
-                                 #_(regen-join-order-file (io/as-file join-order-file)))]
+    (with-redefs [q/->stats (constantly attr-stats)]
+      (let [actual-join-orders (->> queries
+                                    (mapv (comp :vars-in-join-order #(->query-plan db %))))]
+        (when regen-join-order-file?
+          (with-open [w (io/writer join-order-file)]
+            (doseq [join-order actual-join-orders]
+              (.write w (prn-str join-order)))))
 
         (doall
          (->> (map vector expected-join-orders actual-join-orders)
               (map-indexed (fn [q-idx [expected-order actual-order]]
                              (t/is (= expected-order actual-order)
                                    (str "Q" (inc q-idx)))))))))))
+
+(t/deftest test-tpch-join-orders
+  (test-join-orders tpch/tpch-queries
+                    {;:regen-join-order-file? true
+                     :join-order-file (io/resource "xtdb/fixtures/tpch/current-join-orders.edn")
+                     :stats-file (io/resource "xtdb/fixtures/tpch/attr-stats.edn")
+                     :->query-plan (fn [db q]
+                                     (q/query-plan-for db q (::tpch/in-args (meta q))))}))
+
+(t/deftest test-watdiv-join-orders
+  (letfn [(sanitise-join-order-var [v]
+            (cond-> v
+              ;; watdiv keywords aren't valid keywords
+              (keyword? v) (-> symbol str)
+
+              ;; assuming only one self-join per variable in each query
+              (and (symbol? v) (re-find #"^self-join_" (str v)))
+              (-> str (str/replace #"_\d+$" "_<gensym>") symbol)))]
+
+    (test-join-orders (->> (slurp (io/resource "xtdb/fixtures/watdiv/100-queries.edn"))
+                           (str/split-lines)
+                           (map read-string)
+                           (mapv (partial w/postwalk
+                                          (fn [o]
+                                            (cond-> o
+                                              (and (string? o)
+                                                   (str/starts-with? (str (symbol o)) "http"))
+                                              keyword)))))
+                      {;:regen-join-order-file? true
+                       :join-order-file (io/resource "xtdb/fixtures/watdiv/current-join-orders.edn")
+                       :stats-file (io/resource "xtdb/fixtures/watdiv/attr-stats.edn")
+                       :->query-plan (fn [db q]
+                                       (-> (q/query-plan-for db q)
+                                           (update :vars-in-join-order
+                                                   #(mapv sanitise-join-order-var %))))})))
 
 (t/deftest test-same-literal-treated-as-separate-variables-1695
   (fix/submit+await-tx [[::xt/put {:xt/id :x
