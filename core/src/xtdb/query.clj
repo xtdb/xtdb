@@ -1363,6 +1363,8 @@
                                      (-> (->> e-clauses
                                               (sort-by (comp #(db/doc-count stats %) :a))
                                               (first))
+                                         ;; we put these last s.t. if the rest of the query doesn't yield any tuples,
+                                         ;; we don't need to project out the leaf vars
                                          (vary-meta assoc :ignore-v? true)))
                                    (into #{}))
 
