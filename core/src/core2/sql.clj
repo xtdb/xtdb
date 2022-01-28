@@ -183,7 +183,6 @@
                            correlation-name (or (correlation-name ag) table-name)
                            {cte-id :id cte-scope-id :scope-id} (find-decl (cte-env ag) table-name)
                            subquery-scope-id (when (nil? table-name)
-                                               (prn (z/node ag))
                                                (subquery-scope-id ag))]
                        (cond-> {:correlation-name correlation-name
                                 :id (id ag)
