@@ -9,7 +9,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
  WHERE EXISTS (SELECT 1 FROM t1 AS x WHERE x.b < t1.c AND x.b > (SELECT t1.b FROM (SELECT 1 FROM boz) AS t2 WHERE t1.b = t2.b))
    AND t1.a > t1.b
  GROUP BY t1.d, t1.e
- ORDER BY 1")]
+ ORDER BY b, t1.c")]
     (t/is (= {:errs []
               :scopes
               [{:id 1
@@ -17,46 +17,51 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                 :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 5 :scope-id 1
                                :used-columns #{["t1" "a"] ["t1" "b"] ["t1" "c"]  ["t1" "d"] ["t1" "e"]}}
                          "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 6 :scope-id 1 :cte-id 2 :cte-scope-id 1 :used-columns #{}}}
-                :columns #{{:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :group-invariant}
-                           {:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
-                           {:identifiers ["t1" "e"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :group-invariant}
-                           {:identifiers ["t1" "e"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
-                           {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
-                           {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :within-group-varying}
-                           {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}}
+                :columns #{{:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :type :group-invariant}
+                           {:identifiers ["t1" "d"] :table-id 5 :table-scope-id 1 :scope-id 1 :type :ordinary}
+                           {:identifiers ["t1" "e"] :table-id 5 :table-scope-id 1 :scope-id 1 :type :group-invariant}
+                           {:identifiers ["t1" "e"] :table-id 5 :table-scope-id 1 :scope-id 1 :type :ordinary}
+                           {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :type :ordinary}
+                           {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :type :within-group-varying}
+                           {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 1 :type :ordinary}
+                           {:identifiers ["b"] :scope-id 1 :type :resolved-in-sort-key}
+                           {:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 1 :type :ordinary}}
                 :dependent-columns #{}
-                :projected-columns ["a" "b"]}
+                :projected-columns [{:index 0 :identifier "a"}
+                                    {:index 1 :identifier "b"}]
+                :grouping-columns [["t1" "d"] ["t1" "e"]]
+                :order-by-indexes [1 nil]}
                {:id 3
                 :parent-id 1
                 :ctes {}
                 :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :scope-id 3 :cte-id 2 :cte-scope-id 1 :used-columns #{}}}
                 :columns #{}
                 :dependent-columns #{}
-                :projected-columns [0]}
+                :projected-columns [{:index 0}]}
                {:id 7
                 :parent-id 1
                 :ctes {}
                 :tables {"x" {:table-or-query-name "t1" :correlation-name "x" :id 8 :scope-id 7 :used-columns #{["x" "b"]}}}
-                :columns #{{:identifiers ["x" "b"] :table-id 8 :table-scope-id 7 :scope-id 7 :qualified? true :type :ordinary}
-                           {:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}}
-                :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}
-                                     {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}
-                :projected-columns [0]}
+                :columns #{{:identifiers ["x" "b"] :table-id 8 :table-scope-id 7 :scope-id 7 :type :ordinary}
+                           {:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :type :outer}}
+                :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :type :outer}
+                                     {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :type :outer}}
+                :projected-columns [{:index 0}]}
                {:id 9
                 :parent-id 7
                 :ctes {}
                 :tables {"t2" {:correlation-name "t2" :id 10 :scope-id 9 :subquery-scope-id 11 :used-columns #{["t2" "b"]}}}
-                :columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}
-                           {:identifiers ["t2" "b"] :table-id 10 :table-scope-id 9 :scope-id 9 :qualified? true :type :ordinary}}
-                :dependent-columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}
-                :projected-columns [0]}
+                :columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :type :outer}
+                           {:identifiers ["t2" "b"] :table-id 10 :table-scope-id 9 :scope-id 9 :type :ordinary}}
+                :dependent-columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :type :outer}}
+                :projected-columns [{:index 0 :identifier "b"}]}
                {:id 11,
                 :ctes {}
                 :tables {"boz" {:table-or-query-name "boz" :correlation-name "boz" :id 12 :scope-id 11 :used-columns #{}}},
                 :columns #{}
                 :dependent-columns #{}
                 :parent-id 9
-                :projected-columns [0]}]}
+                :projected-columns [{:index 0}]}]}
              (sql/analyze-query tree)))))
 
 (defn- invalid? [re q]

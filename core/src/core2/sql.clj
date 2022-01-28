@@ -101,12 +101,6 @@
 
 ;; Identifiers
 
-(defn- identifier [ag]
-  (case (r/ctor ag)
-    :as_clause (identifier (r/$ ag -1))
-    :regular_identifier (r/lexeme ag 1)
-    nil))
-
 (defn- identifiers [ag]
   (case (r/ctor ag)
     (:column_name_list
@@ -117,6 +111,20 @@
                 :regular_identifier [(r/lexeme ag 1)]
                 []))]
       ((r/full-td-tu (r/mono-tuz step)) ag))))
+
+(defn- identifier [ag]
+  (case (r/ctor ag)
+    :derived_column (r/zmatch ag
+                      [:derived_column _ [:as_clause _ [:regular_identifier as]]] as
+                      [:derived_column
+                       [:numeric_value_expression
+                        [:term
+                         [:factor
+                          [:column_reference
+                           [:identifier_chain _ [:regular_identifier column]]]]]]] column)
+    :as_clause (identifier (r/$ ag -1))
+    :regular_identifier (r/lexeme ag 1)
+    nil))
 
 (defn- table-or-query-name [ag]
   (case (r/ctor ag)
@@ -231,31 +239,45 @@
      :lateral_derived_table) (dcli (r/parent ag))
     (r/inherit ag)))
 
-;; Order by
+;; Select
 
-(defn- order-env [ag]
+(defn- projected-column [ag]
   (case (r/ctor ag)
-    :query_expression nil
-    :order_by_clause (letfn [(step [_ ag]
-                               (case (r/ctor ag)
-                                 :derived_column [{:normal-form (r/lexeme ag 1)
-                                                   :index (dec ^long (r/child-idx ag))
-                                                   :identifier (when (= :as_clause (r/ctor (r/$ ag -1)))
-                                                                 (identifier (r/$ ag -1)))}]
-                                 :subquery []
-                                 nil))]
-                       (->> (z/left ag)
-                            ((r/stop-td-tu (r/mono-tuz step)))
-                            (not-empty)))
+    :derived_column (let [identifier (identifier ag)]
+                      (cond-> {:index (dec ^long (r/child-idx ag))
+                               :normal-form (z/node ag)}
+                        identifier (assoc :identifier identifier)))
+    nil))
+
+(defn- projected-columns [ag]
+  (case (r/ctor ag)
+    :query_expression (letfn [(step [_ ag]
+                                (case (r/ctor ag)
+                                  :derived_column [(projected-column ag)]
+                                  :subquery []
+                                  nil))]
+                        ((r/stop-td-tu (r/mono-tuz step)) ag))
     (r/inherit ag)))
+
+;; Order by
 
 (defn- order-by-index [ag]
   (case (r/ctor ag)
     :query_expression nil
-    :sort_specification (first (for [{:keys [normal-form index identifier]} (order-env ag)
+    :sort_specification (first (for [{:keys [normal-form index identifier]} (projected-columns ag)
                                      :when (or (= normal-form (r/lexeme ag 1))
                                                (= identifier (->src-str ag)))]
                                  index))
+    (r/inherit ag)))
+
+(defn- order-by-indexes [ag]
+  (case (r/ctor ag)
+    :query_expression (letfn [(step [_ ag]
+                                (case (r/ctor ag)
+                                  :sort_specification [(order-by-index ag)]
+                                  :subquery []
+                                  nil))]
+                        ((r/stop-td-tu (r/mono-tuz step)) ag))
     (r/inherit ag)))
 
 ;; Group by
@@ -267,19 +289,22 @@
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
+(defn- grouping-columns [ag]
+  (letfn [(step [_ ag]
+            (case (r/ctor ag)
+              (:aggregate_function
+               :having_clause) [[]]
+              :group_by_clause [(grouping-column-references ag)]
+              :subquery []
+              nil))]
+    (last (sort-by count ((r/stop-td-tu (r/mono-tuz step)) ag)))))
+
 (defn- group-env [ag]
   (case (r/ctor ag)
-    :query_specification (letfn [(step [_ ag]
-                                   (case (r/ctor ag)
-                                     (:aggregate_function
-                                      :having_clause) [[]]
-                                     :group_by_clause [(grouping-column-references ag)]
-                                     :subquery []
-                                     nil))]
-                           (enter-env-scope (group-env (r/parent ag))
-                                            {:grouping-columns (last (sort-by count ((r/stop-td-tu (r/mono-tuz step)) ag)))
-                                             :group-column-reference-type :ordinary
-                                             :column-reference-type :ordinary}))
+    :query_specification (enter-env-scope (group-env (r/parent ag))
+                                          {:grouping-columns (grouping-columns ag)
+                                           :group-column-reference-type :ordinary
+                                           :column-reference-type :ordinary})
     (:select_list
      :having_clause) (let [group-env (group-env (r/parent ag))
                            {:keys [grouping-columns]} (local-env group-env)]
@@ -314,19 +339,25 @@
                                                        acc))
                                                    (get (local-env group-env) :column-reference-type :ordinary)
                                                    group-env)
-                            column-reference-type (if outer-reference?
+                            column-reference-type (cond
+                                                    outer-reference?
                                                     (case column-reference-type
                                                       :ordinary :outer
                                                       :group-invariant :outer-group-invariant
                                                       :within-group-varying :invalid-outer-within-group-varying
                                                       :invalid-group-invariant :invalid-outer-group-invariant)
-                                                    column-reference-type)
-                            order-by-index (order-by-index ag)]
+
+                                                    (order-by-index ag)
+                                                    :resolved-in-sort-key
+
+                                                    (not qualified?)
+                                                    :unqualified
+
+                                                    :else
+                                                    column-reference-type)]
                         (cond-> {:identifiers identifiers
-                                 :qualified? qualified?
                                  :type column-reference-type
                                  :scope-id column-scope-id}
-                          order-by-index (assoc :inside-resolved-sort-key? true)
                           table-id (assoc :table-id table-id :table-scope-id table-scope-id)))))
 
 ;; Errors
@@ -372,28 +403,34 @@
               :with_list (check-duplicates "CTE query name" ag
                                            (local-names (cteo ag) :query-name))
               :column_name_list (check-duplicates "Column name" ag (identifiers ag))
-              :column_reference (let [{:keys [identifiers qualified? inside-resolved-sort-key? table-id type] :as cr} (column-reference ag)]
-                                  (cond
-                                    inside-resolved-sort-key?
+              :column_reference (let [{:keys [identifiers table-id type] :as cr} (column-reference ag)]
+                                  (case type
+                                    (:ordinary
+                                     :group-invariant
+                                     :within-group-varying
+                                     :outer
+                                     :outer-group-invariant)
+                                    (if-not table-id
+                                      [(format "Table not in scope: %s %s"
+                                               (first identifiers) (->line-info-str ag))]
+                                      [])
+
+                                    :resolved-in-sort-key
                                     []
 
-                                    (not qualified?)
+                                    :unqualified
                                     [(format "XTDB requires fully-qualified columns: %s %s"
                                              (->src-str ag) (->line-info-str ag))]
 
-                                    (not table-id)
-                                    [(format "Table not in scope: %s %s"
-                                             (first identifiers) (->line-info-str ag))]
-
-                                    (= :invalid-group-invariant type)
+                                    :invalid-group-invariant
                                     [(format "Column reference is not a grouping column: %s %s"
                                              (->src-str ag) (->line-info-str ag))]
 
-                                    (= :invalid-outer-group-invariant type)
+                                    :invalid-outer-group-invariant
                                     [(format "Outer column reference is not an outer grouping column: %s %s"
                                              (->src-str ag) (->line-info-str ag))]
 
-                                    (= :invalid-outer-within-group-varying type)
+                                    :invalid-outer-within-group-varying
                                     [(format "Within group varying column reference is an outer column: %s %s"
                                              (->src-str ag) (->line-info-str ag))]))
               (:general_set_function
@@ -421,16 +458,6 @@
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
-(defn- projected-columns [ag]
-  (letfn [(step [_ ag]
-            (case (r/ctor ag)
-              :derived_column [(if (= :as_clause (r/ctor (r/$ ag -1)))
-                                 (identifier (r/$ ag -1))
-                                 (dec (count (z/lefts ag))))]
-              :subquery []
-              nil))]
-    ((r/stop-td-tu (r/mono-tuz step)) ag)))
-
 (defn- scope-id [ag]
   (case (r/ctor ag)
     :query_expression (id ag)
@@ -457,10 +484,13 @@
                             ;; NOTE: assumes that tables declared in
                             ;; outer scopes have lower ids than the
                             ;; current scope.
-                            dependent-columns (->> (subseq table-id->all-columns < id)
+                            dependent-columns (->> (subseq (dissoc table-id->all-columns nil) < id)
                                                    (mapcat val)
                                                    (set))
-                            projected-columns (projected-columns ag)
+                            projected-columns (->> (projected-columns ag)
+                                                   (mapv #(dissoc % :normal-form)))
+                            grouping-columns (grouping-columns ag)
+                            order-by-indexes (order-by-indexes ag)
                             local-tables (->> (for [[k {:keys [id] :as table}] local-tables
                                                     :let [used-columns (->> (get table-id->all-columns id)
                                                                             (map :identifiers)
@@ -473,7 +503,9 @@
                                  :columns local-columns
                                  :dependent-columns dependent-columns
                                  :projected-columns projected-columns}
-                          parent-id (assoc :parent-id parent-id)))
+                          parent-id (assoc :parent-id parent-id)
+                          grouping-columns (assoc :grouping-columns grouping-columns)
+                          (not-empty order-by-indexes) (assoc :order-by-indexes order-by-indexes)))
     (r/inherit ag)))
 
 (defn- scopes [ag]
@@ -496,7 +528,7 @@
                                  #'dclo
                                  #'env
                                  #'group-env
-                                 #'order-env
+                                 #'projected-columns
                                  #'column-reference
                                  #'scope-id
                                  #'scope]
