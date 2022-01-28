@@ -128,8 +128,7 @@
 (defn- correlation-name [ag]
   (case (r/ctor ag)
     :table_primary (or (correlation-name (r/$ ag -1))
-                       (correlation-name (r/$ ag -2))
-                       (table-or-query-name ag))
+                       (correlation-name (r/$ ag -2)))
     :regular_identifier (identifier ag)
     nil))
 
@@ -169,16 +168,28 @@
 
 ;; Tables
 
+(defn- subquery-scope-id [ag]
+  (case (r/ctor ag)
+    :query_expression (scope-id ag)
+    (:table_primary
+     :subquery) (subquery-scope-id (r/$ ag 1))
+    :lateral_derived_table (subquery-scope-id (r/$ ag 2))
+    nil))
+
 (defn- table [ag]
   (case (r/ctor ag)
     :table_primary (when-not (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
                      (let [table-name (table-or-query-name ag)
-                           correlation-name (correlation-name ag)
-                           {cte-id :id cte-scope-id :scope-id} (find-decl (cte-env ag) table-name)]
-                       (cond-> {:table-or-query-name (or table-name correlation-name)
-                                :correlation-name correlation-name
+                           correlation-name (or (correlation-name ag) table-name)
+                           {cte-id :id cte-scope-id :scope-id} (find-decl (cte-env ag) table-name)
+                           subquery-scope-id (when (nil? table-name)
+                                               (prn (z/node ag))
+                                               (subquery-scope-id ag))]
+                       (cond-> {:correlation-name correlation-name
                                 :id (id ag)
                                 :scope-id (scope-id ag)}
+                         table-name (assoc :table-or-query-name table-name)
+                         subquery-scope-id (assoc :subquery-scope-id subquery-scope-id)
                          cte-id (assoc :cte-id cte-id :cte-scope-id cte-scope-id))))))
 
 (defn- local-tables [ag]
@@ -440,10 +451,10 @@
                                                    (mapcat val)
                                                    (set))
                             local-tables (->> (for [[k {:keys [id] :as table}] local-tables
-                                                    :let [projection (->> (get table-id->all-columns id)
-                                                                          (map :identifiers)
-                                                                          (set))]]
-                                                [k (assoc table :projection projection)])
+                                                    :let [used-columns (->> (get table-id->all-columns id)
+                                                                            (map :identifiers)
+                                                                            (set))]]
+                                                [k (assoc table :used-columns used-columns)])
                                               (into {}))]
                         (cond-> {:id id
                                  :ctes local-ctes
