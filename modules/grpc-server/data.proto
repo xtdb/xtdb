@@ -1,0 +1,18 @@
+syntax = "proto3";
+package xtdb;
+
+message Empty { }
+
+message Status {
+    string version = 1;
+    optional string revision = 2;
+    int32 index_version = 3;
+    optional string consumer_state = 4;
+    string kv_store = 5;
+    int32 estimate_num_keys = 6;
+    int64 size = 7;
+}
+
+service grpc {
+  rpc status (Empty) returns (Status);
+}
