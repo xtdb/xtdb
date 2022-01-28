@@ -86,7 +86,7 @@
 
 ;; Attributes
 
-(declare cte-env env scope-id)
+(declare cte-env env scope-id subquery-scope-id)
 
 ;; Ids
 
@@ -138,7 +138,8 @@
   (case (r/ctor ag)
     :with_list_element {:query-name (table-or-query-name ag)
                         :id (id ag)
-                        :scope-id (scope-id ag)}))
+                        :scope-id (scope-id ag)
+                        :subquery-scope-id (subquery-scope-id (r/$ ag -1))}))
 
 ;; Inherited
 (defn- ctei [ag]
@@ -167,14 +168,6 @@
     (r/inherit ag)))
 
 ;; Tables
-
-(defn- subquery-scope-id [ag]
-  (case (r/ctor ag)
-    :query_expression (scope-id ag)
-    (:table_primary
-     :subquery) (subquery-scope-id (r/$ ag 1))
-    :lateral_derived_table (subquery-scope-id (r/$ ag 2))
-    nil))
 
 (defn- table [ag]
   (case (r/ctor ag)
@@ -428,10 +421,28 @@
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
+(defn- projected-columns [ag]
+  (letfn [(step [_ ag]
+            (case (r/ctor ag)
+              :derived_column [(if (= :as_clause (r/ctor (r/$ ag -1)))
+                                 (identifier (r/$ ag -1))
+                                 (dec (count (z/lefts ag))))]
+              :subquery []
+              nil))]
+    ((r/stop-td-tu (r/mono-tuz step)) ag)))
+
 (defn- scope-id [ag]
   (case (r/ctor ag)
     :query_expression (id ag)
     (r/inherit ag)))
+
+(defn- subquery-scope-id [ag]
+  (case (r/ctor ag)
+    :query_expression (scope-id ag)
+    (:table_primary
+     :subquery) (subquery-scope-id (r/$ ag 1))
+    :lateral_derived_table (subquery-scope-id (r/$ ag 2))
+    nil))
 
 (defn- scope [ag]
   (case (r/ctor ag)
@@ -449,6 +460,7 @@
                             dependent-columns (->> (subseq table-id->all-columns < id)
                                                    (mapcat val)
                                                    (set))
+                            projected-columns (projected-columns ag)
                             local-tables (->> (for [[k {:keys [id] :as table}] local-tables
                                                     :let [used-columns (->> (get table-id->all-columns id)
                                                                             (map :identifiers)
@@ -459,7 +471,8 @@
                                  :ctes local-ctes
                                  :tables local-tables
                                  :columns local-columns
-                                 :dependent-columns dependent-columns}
+                                 :dependent-columns dependent-columns
+                                 :projected-columns projected-columns}
                           parent-id (assoc :parent-id parent-id)))
     (r/inherit ag)))
 

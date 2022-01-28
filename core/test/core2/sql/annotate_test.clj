@@ -4,7 +4,7 @@
 
 (t/deftest test-annotate-query-scopes
   (let [tree (sql/parse "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
-SELECT t1.d-t1.e, SUM(t1.a)
+SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   FROM t1, foo AS baz
  WHERE EXISTS (SELECT 1 FROM t1 AS x WHERE x.b < t1.c AND x.b > (SELECT t1.b FROM (SELECT 1 FROM boz) AS t2 WHERE t1.b = t2.b))
    AND t1.a > t1.b
@@ -13,7 +13,7 @@ SELECT t1.d-t1.e, SUM(t1.a)
     (t/is (= {:errs []
               :scopes
               [{:id 1
-                :ctes {"foo" {:query-name "foo" :id 2 :scope-id 1}}
+                :ctes {"foo" {:query-name "foo" :id 2 :scope-id 1 :subquery-scope-id 3}}
                 :tables {"t1" {:table-or-query-name "t1" :correlation-name "t1" :id 5 :scope-id 1
                                :used-columns #{["t1" "a"] ["t1" "b"] ["t1" "c"]  ["t1" "d"] ["t1" "e"]}}
                          "baz" {:table-or-query-name "foo" :correlation-name "baz" :id 6 :scope-id 1 :cte-id 2 :cte-scope-id 1 :used-columns #{}}}
@@ -24,13 +24,15 @@ SELECT t1.d-t1.e, SUM(t1.a)
                            {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}
                            {:identifiers ["t1" "a"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :within-group-varying}
                            {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 1 :qualified? true :type :ordinary}}
-                :dependent-columns #{}}
+                :dependent-columns #{}
+                :projected-columns ["a" "b"]}
                {:id 3
                 :parent-id 1
                 :ctes {}
                 :tables {"bar" {:table-or-query-name "foo" :correlation-name "bar" :id 4 :scope-id 3 :cte-id 2 :cte-scope-id 1 :used-columns #{}}}
                 :columns #{}
-                :dependent-columns #{}}
+                :dependent-columns #{}
+                :projected-columns [0]}
                {:id 7
                 :parent-id 1
                 :ctes {}
@@ -38,20 +40,23 @@ SELECT t1.d-t1.e, SUM(t1.a)
                 :columns #{{:identifiers ["x" "b"] :table-id 8 :table-scope-id 7 :scope-id 7 :qualified? true :type :ordinary}
                            {:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}}
                 :dependent-columns #{{:identifiers ["t1" "c"] :table-id 5 :table-scope-id 1 :scope-id 7 :qualified? true :type :outer}
-                                     {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}
+                                     {:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}
+                :projected-columns [0]}
                {:id 9
                 :parent-id 7
                 :ctes {}
                 :tables {"t2" {:correlation-name "t2" :id 10 :scope-id 9 :subquery-scope-id 11 :used-columns #{["t2" "b"]}}}
                 :columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}
                            {:identifiers ["t2" "b"] :table-id 10 :table-scope-id 9 :scope-id 9 :qualified? true :type :ordinary}}
-                :dependent-columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}}
+                :dependent-columns #{{:identifiers ["t1" "b"] :table-id 5 :table-scope-id 1 :scope-id 9 :qualified? true :type :outer}}
+                :projected-columns [0]}
                {:id 11,
                 :ctes {}
                 :tables {"boz" {:table-or-query-name "boz" :correlation-name "boz" :id 12 :scope-id 11 :used-columns #{}}},
                 :columns #{}
                 :dependent-columns #{}
-                :parent-id 9}]}
+                :parent-id 9
+                :projected-columns [0]}]}
              (sql/analyze-query tree)))))
 
 (defn- invalid? [re q]
