@@ -1,4 +1,9 @@
 syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "xtdb.grpc.entity";
+option java_outer_classname = "XtdbEntityProto";
+
 package xtdb;
 
 import "google/protobuf/timestamp.proto";
@@ -12,8 +17,8 @@ message EntityRequest {
 }
 
 enum SortOrder {
-    ASC = 1;
-    DESC = 2;
+    ASC = 0;
+    DESC = 1;
 }
 
 message EntityHistoryRequest {

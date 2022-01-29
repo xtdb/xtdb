@@ -1,9 +1,14 @@
 syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "xtdb.grpc.service";
+option java_outer_classname = "XtdbServiceProto";
+
 package xtdb;
 
-import "google/protobuf/timestamp.proto";
-import "xtdb/transaction.proto";
-import "xtdb/entity.proto";
+import "google/protobuf/struct.proto";
+import "transaction.proto";
+import "entity.proto";
 
 message Empty { }
 
