@@ -3,6 +3,7 @@ package xtdb;
 
 import "google/protobuf/timestamp.proto";
 import "xtdb/transaction.proto";
+import "xtdb/entity.proto";
 
 message Empty { }
 
@@ -16,24 +17,9 @@ message StatusResponse {
     optional string consumer_state = 7;
 }
 
-message EntityRequest {
-    string eid = 1;
-    optional google.protobuf.Timestamp valid_time = 2;
-    optional google.protobuf.Timestamp tx_time = 3;
-    optional int64 tx_id = 4;
-}
-
-message SubmitRequest {
-    repeated xtdb.Transaction tx_ops = 1;
-} 
-
-message SubmitResponse {
-    google.protobuf.Timestamp tx_time = 1;
-    int64 tx_id = 2;
-}
-
 service grpc {
   rpc status (Empty) returns (StatusResponse);
-  rpc entity (EntityRequest) returns (google.protobuf.Value);
-  rpc submit_tx (SubmitRequest) returns (SubmitResponse);
+  rpc entity (xtdb.EntityRequest) returns (google.protobuf.Value);
+  rpc entity_history (xtdb.EntityHistoryRequest) returns (xtdb.EntityHistoryResponse);
+  rpc submit_tx (xtdb.SubmitRequest) returns (xtdb.SubmitResponse);
 }

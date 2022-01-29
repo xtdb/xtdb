@@ -42,3 +42,12 @@ message Function {
     string xt_id = 1;
     string xt_fn = 2;
 }
+
+message SubmitRequest {
+    repeated Transaction tx_ops = 1;
+} 
+
+message SubmitResponse {
+    google.protobuf.Timestamp tx_time = 1;
+    int64 tx_id = 2;
+}
