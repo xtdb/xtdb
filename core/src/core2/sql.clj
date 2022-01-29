@@ -96,6 +96,7 @@
                      (id (z/prev ag))
                      (inc ^long (id (z/prev ag))))
     (:query_expression
+     :query_specification
      :with_list_element) (inc ^long (id (z/prev ag)))
     (or (some-> (z/prev ag) (id)) 0)))
 
@@ -115,13 +116,18 @@
 (defn- identifier [ag]
   (case (r/ctor ag)
     :derived_column (r/zmatch ag
-                      [:derived_column _ [:as_clause _ [:regular_identifier as]]] as
+                      [:derived_column _ [:as_clause _ [:regular_identifier as]]]
+                      ;;=>
+                      as
+
                       [:derived_column
                        [:numeric_value_expression
                         [:term
                          [:factor
                           [:column_reference
-                           [:identifier_chain _ [:regular_identifier column]]]]]]] column)
+                           [:identifier_chain _ [:regular_identifier column]]]]]]]
+                      ;;=>
+                      column)
     :as_clause (identifier (r/$ ag -1))
     :regular_identifier (r/lexeme ag 1)
     nil))
@@ -205,7 +211,7 @@
 ;; Inherited
 (defn- dcli [ag]
   (case (r/ctor ag)
-    :query_expression (enter-env-scope (env (r/parent ag)))
+    :query_specification (enter-env-scope (env (r/parent ag)))
     (:table_primary
      :cross_join
      :natural_join
@@ -218,28 +224,47 @@
 ;; Synthesised
 (defn- dclo [ag]
   (case (r/ctor ag)
-    :query_expression (if (= :with_clause (r/ctor (r/$ ag 1)))
-                        (dclo (r/$ ag 2))
-                        (dclo (r/$ ag 1)))
-    (:query_expression_body
-     :query_term
-     :query_primary
-     :table_expression) (dclo (r/$ ag 1))
     :query_specification (dclo (r/$ ag -1))
+    :table_expression (dclo (r/$ ag 1))
     :from_clause (dclo (r/$ ag 2))
     :table_reference_list (dcli (r/$ ag -1))))
 
 (defn- env [ag]
   (case (r/ctor ag)
-    (:query_expression
-     :query_specification) (dclo ag)
+    :query_specification (dclo ag)
     :from_clause (parent-env (dclo ag))
     (:collection_derived_table
      :join_condition
      :lateral_derived_table) (dcli (r/parent ag))
+    :order_by_clause (letfn [(step [_ ag]
+                               (case (r/ctor ag)
+                                 :query_specification [(env ag)]
+                                 :subquery []
+                                 nil))]
+                       (first ((r/stop-td-tu (r/mono-tuz step)) (z/left ag))))
     (r/inherit ag)))
 
 ;; Select
+
+(defn- set-operator [ag]
+  (case (r/ctor ag)
+    :query_expression_body (case (r/lexeme ag 2)
+                             "UNION" "UNION"
+                             "EXCEPT" "EXCEPT"
+                             (set-operator (r/$ ag 1)))
+    :query_term (case (r/lexeme ag 2)
+                  "INTERSECT" "INTERSECT"
+                  nil)))
+
+(defn- corresponding [ag]
+  (case (r/ctor ag)
+    :query_expression_body (or (corresponding (r/$ ag -2))
+                               (corresponding (r/$ ag 2)))
+    :query_term (corresponding (r/$ ag -2))
+    :corresponding_spec (if (r/single-child? ag )
+                          {}
+                          {:identifiers (identifiers (r/$ ag -1))})
+    nil))
 
 (defn- projected-column [ag]
   (case (r/ctor ag)
@@ -251,12 +276,37 @@
 
 (defn- projected-columns [ag]
   (case (r/ctor ag)
-    :query_expression (letfn [(step [_ ag]
-                                (case (r/ctor ag)
-                                  :derived_column [(projected-column ag)]
-                                  :subquery []
-                                  nil))]
-                        ((r/stop-td-tu (r/mono-tuz step)) ag))
+    :query_specification (letfn [(step [_ ag]
+                                   (case (r/ctor ag)
+                                     :derived_column [(projected-column ag)]
+                                     :subquery []
+                                     nil))]
+                           [((r/stop-td-tu (r/mono-tuz step)) ag)])
+    :query_expression (if (= :with_clause (r/ctor (r/$ ag 1)))
+                        (projected-columns (r/$ ag 2))
+                        (projected-columns (r/$ ag 1)))
+    :query_expression_body (letfn [(step [_ ag]
+                                     (case (r/ctor ag)
+                                       :query_specification (projected-columns ag)
+                                       :subquery []
+                                       nil))]
+                             (let [candidates ((r/stop-td-tu (r/mono-tuz step)) ag)]
+                               (if (set-operator ag)
+                                 (if-let [{:keys [identifiers] :as corresponding} (corresponding ag)]
+                                   (let [common-identifiers (->> (for [projections candidates]
+                                                                   (set (for [{:keys [identifier]} projections]
+                                                                          identifier)))
+                                                                 (reduce set/intersection))
+                                         identifiers (if identifiers
+                                                       (if (set/subset? (set identifiers) common-identifiers)
+                                                         (set identifiers)
+                                                         #{})
+                                                       common-identifiers)]
+                                     [(vec (for [{:keys [identifier] :as projection} (first candidates)
+                                                 :when (contains? identifiers identifier)]
+                                             projection))])
+                                   candidates)
+                                 candidates)))
     (r/inherit ag)))
 
 ;; Order by
@@ -264,7 +314,7 @@
 (defn- order-by-index [ag]
   (case (r/ctor ag)
     :query_expression nil
-    :sort_specification (first (for [{:keys [normal-form index identifier]} (projected-columns ag)
+    :sort_specification (first (for [{:keys [normal-form index identifier]} (first (projected-columns ag))
                                      :when (or (= normal-form (r/lexeme ag 1))
                                                (= identifier (->src-str ag)))]
                                  index))
@@ -329,7 +379,7 @@
                             {table-id :id
                              table-scope-id :scope-id} (when qualified?
                                                          (find-decl env (first identifiers)))
-                            outer-reference? (and qualified? (not= table-scope-id column-scope-id))
+                            outer-reference? (and table-scope-id (< ^long table-scope-id ^long column-scope-id))
                             group-env (group-env ag)
                             column-reference-type (reduce
                                                    (fn [acc {:keys [grouping-columns
@@ -376,10 +426,21 @@
   (when-not (r/zmatch ag
               [:signed_numeric_literal
                [:exact_numeric_literal
-                [:unsigned_integer _]]] true
-              [:host_parameter_name _] true
-              "ROW" true
-              "ROWS" true)
+                [:unsigned_integer _]]]
+              ;;=>
+              true
+
+              [:host_parameter_name _]
+              ;;=>
+              true
+
+              "ROW"
+              ;;=>
+              true
+
+              "ROWS"
+              ;;=>
+              true)
     [(format (str label " must be an integer: %s %s")
              (->src-str ag) (->line-info-str ag))]))
 
@@ -402,6 +463,17 @@
                                                       (local-names (dclo ag) :correlation-name))
               :with_list (check-duplicates "CTE query name" ag
                                            (local-names (cteo ag) :query-name))
+              :query_expression_body (when-let [set-op (set-operator ag)]
+                                       (let [candidates (projected-columns ag)
+                                             degrees (mapv count candidates)]
+                                         (cond
+                                           (= [0] degrees)
+                                           [(format "%s does not have corresponding columns: %s"
+                                                    set-op (->line-info-str ag))]
+
+                                           (not (apply = degrees))
+                                           [(format "%s requires tables to have same degree: %s"
+                                                    set-op (->line-info-str ag))])))
               :column_name_list (check-duplicates "Column name" ag (identifiers ag))
               :column_reference (let [{:keys [identifiers table-id type] :as cr} (column-reference ag)]
                                   (case type
@@ -460,12 +532,14 @@
 
 (defn- scope-id [ag]
   (case (r/ctor ag)
-    :query_expression (id ag)
+    (:query_expression
+     :query_specification) (id ag)
     (r/inherit ag)))
 
 (defn- subquery-scope-id [ag]
   (case (r/ctor ag)
-    :query_expression (scope-id ag)
+    (:query_expression
+     :query_specification) (scope-id ag)
     (:table_primary
      :subquery) (subquery-scope-id (r/$ ag 1))
     :lateral_derived_table (subquery-scope-id (r/$ ag 2))
@@ -473,45 +547,54 @@
 
 (defn- scope [ag]
   (case (r/ctor ag)
-    :query_expression (let [id (scope-id ag)
-                            parent-id (scope-id (r/parent ag))
-                            local-ctes (local-env-singleton-values (cteo ag))
-                            local-tables (local-env-singleton-values (dclo ag))
-                            all-columns (all-column-references ag)
-                            local-columns (set (get (group-by :scope-id all-columns) id))
-                            table-id->all-columns (->> (group-by :table-id all-columns)
-                                                       (into (sorted-map)))
-                            ;; NOTE: assumes that tables declared in
-                            ;; outer scopes have lower ids than the
-                            ;; current scope.
-                            dependent-columns (->> (subseq (dissoc table-id->all-columns nil) < id)
-                                                   (mapcat val)
-                                                   (set))
-                            projected-columns (->> (projected-columns ag)
-                                                   (mapv #(dissoc % :normal-form)))
-                            grouping-columns (grouping-columns ag)
-                            order-by-indexes (order-by-indexes ag)
-                            local-tables (->> (for [[k {:keys [id] :as table}] local-tables
-                                                    :let [used-columns (->> (get table-id->all-columns id)
-                                                                            (map :identifiers)
-                                                                            (set))]]
-                                                [k (assoc table :used-columns used-columns)])
-                                              (into {}))]
-                        (cond-> {:id id
-                                 :ctes local-ctes
-                                 :tables local-tables
-                                 :columns local-columns
-                                 :dependent-columns dependent-columns
-                                 :projected-columns projected-columns}
-                          parent-id (assoc :parent-id parent-id)
-                          grouping-columns (assoc :grouping-columns grouping-columns)
-                          (not-empty order-by-indexes) (assoc :order-by-indexes order-by-indexes)))
+    (:query_expression
+     :query_specification) (let [id (scope-id ag)
+                                 parent-id (scope-id (r/parent ag))
+                                 all-columns (all-column-references ag)
+                                 table-id->all-columns (->> (group-by :table-id all-columns)
+                                                            (into (sorted-map)))
+                                 ;; NOTE: assumes that tables declared in
+                                 ;; outer scopes have lower ids than the
+                                 ;; current scope.
+                                 dependent-columns (->> (subseq (dissoc table-id->all-columns nil) < id)
+                                                        (mapcat val)
+                                                        (set))
+                                 projected-columns (->> (projected-columns ag)
+                                                        (first)
+                                                        (mapv #(dissoc % :normal-form)))
+                                 scope (cond-> {:id id
+                                                :type type
+                                                :dependent-columns dependent-columns
+                                                :projected-columns projected-columns}
+                                         parent-id (assoc :parent-id parent-id))]
+                             (case (r/ctor ag)
+                               :query_expression (let [local-ctes (local-env-singleton-values (cteo ag))
+                                                       order-by-indexes (order-by-indexes ag)]
+                                                   (cond-> (assoc scope
+                                                                  :type :query-expression
+                                                                  :ctes local-ctes)
+                                                     (not-empty order-by-indexes) (assoc :order-by-indexes order-by-indexes)))
+                               :query_specification (let [local-tables (local-tables ag)
+                                                          local-columns (set (get (group-by :scope-id all-columns) id))
+                                                          local-tables (->> (for [{:keys [id correlation-name] :as table} local-tables
+                                                                                  :let [used-columns (->> (get table-id->all-columns id)
+                                                                                                          (map :identifiers)
+                                                                                                          (set))]]
+                                                                              [correlation-name (assoc table :used-columns used-columns)])
+                                                                            (into {}))
+                                                          grouping-columns (grouping-columns ag)]
+                                                      (cond-> (assoc scope
+                                                                     :tables local-tables
+                                                                     :columns local-columns
+                                                                     :type :query-specification)
+                                                        grouping-columns (assoc :grouping-columns grouping-columns)))))
     (r/inherit ag)))
 
 (defn- scopes [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)
-              :query_expression [(scope ag)]
+              (:query_expression
+               :query_specification) [(scope ag)]
               []))]
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 

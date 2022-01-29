@@ -97,8 +97,10 @@
 
 (def parent z/up)
 (def $ z-nth)
-(def lexeme (comp z/node $))
 (def child-idx (comp count z/lefts))
+
+(defn lexeme [ag ^long n]
+  (some-> ($ ag n) (z/node)))
 
 (defn first-child? [ag]
   (= 1 (count (z/lefts ag))))
