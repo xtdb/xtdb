@@ -1,0 +1,38 @@
+syntax = "proto3";
+package xtdb;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+message EntityRequest {
+    string eid = 1;
+    optional google.protobuf.Timestamp valid_time = 2;
+    optional google.protobuf.Timestamp tx_time = 3;
+    optional int64 tx_id = 4;
+}
+
+enum SortOrder {
+    ASC = 1;
+    DESC = 2;
+}
+
+message EntityHistoryRequest {
+    string eid = 1;
+    SortOrder sort_order = 2;
+    optional bool with_corrections = 3;
+    optional bool with_docs = 4;
+    optional google.protobuf.Timestamp start_valid_time = 5;
+    optional google.protobuf.Timestamp start_tx_time = 6;
+    optional int64 start_tx_id = 7;
+    optional google.protobuf.Timestamp end_valid_time = 8;
+    optional google.protobuf.Timestamp end_tx_time = 9;
+    optional int64 end_tx_id = 10;
+}
+
+message EntityHistoryResponse {
+    string content_hash = 1;
+    google.protobuf.Timestamp valid_time = 2;
+    google.protobuf.Timestamp tx_time = 3;
+    int64 tx_id = 4;
+    optional google.protobuf.Value doc = 5;
+}
