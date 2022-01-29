@@ -43,13 +43,7 @@
         start-index (skip-whitespace sql start-index)]
     (subs sql start-index end-index)))
 
-;; Very rough draft attribute grammar for SQL semantics.
-
-;; TODO:
-;; - too complex threading logic.
-;; - unclear?
-;; - mutable ids, use references instead?
-;; - join tables should have proper env calculated and not use local-tables.
+;; Draft attribute grammar for SQL semantics.
 
 (defn- enter-env-scope
   ([env]
