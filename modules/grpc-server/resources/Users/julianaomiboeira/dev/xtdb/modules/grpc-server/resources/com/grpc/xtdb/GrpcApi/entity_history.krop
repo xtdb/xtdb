@@ -1,0 +1,12 @@
+{
+  "details": {
+    "methodFqn": "com.grpc.xtdb.GrpcApi.entity_history"
+  },
+  "requests": [
+    {
+      "location": "entity_history-request.json"
+    }
+  ],
+  "operationType": "unary",
+  "invokerName": "grpc"
+}

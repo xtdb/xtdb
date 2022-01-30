@@ -1,10 +1,12 @@
+.clj-kondo
+.lsp
+target/
 pom.xml
 pom.xml.asc
 *.jar
 *.class
 lib/
 classes/
-target/
 checkouts/
 .lein-deps-sum
 .lein-repl-history

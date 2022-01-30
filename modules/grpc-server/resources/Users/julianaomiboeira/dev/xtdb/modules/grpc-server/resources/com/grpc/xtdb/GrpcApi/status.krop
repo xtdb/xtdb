@@ -1,0 +1,13 @@
+{
+  "details": {
+    "endpoint": "http://localhost:50051",
+    "methodFqn": "com.grpc.xtdb.GrpcApi.status"
+  },
+  "requests": [
+    {
+      "location": "status-request.json"
+    }
+  ],
+  "operationType": "unary",
+  "invokerName": "grpc"
+}

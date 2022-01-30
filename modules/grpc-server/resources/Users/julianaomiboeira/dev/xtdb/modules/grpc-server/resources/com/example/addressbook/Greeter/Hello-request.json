@@ -1,0 +1,15 @@
+{
+  "name": "{{ faker.name.last_name }}",
+  "id": 123,
+  "email": "{{ faker.internet.example_email }}",
+  "phones": [
+    {
+      "number": "fooBar",
+      "type": "MOBILE"
+    },
+    {
+      "number": "fooBar",
+      "type": "MOBILE"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "eid": "fooBar",
+  "sortOrder": "ASC",
+  "withCorrections": {
+    "some": true
+  },
+  "withDocs": {
+    "some": true
+  },
+  "startValidTime": {
+    "some": "1970-01-01T00:02:03.000000123Z"
+  },
+  "startTxTime": {
+    "some": "1970-01-01T00:02:03.000000123Z"
+  },
+  "startTxId": {
+    "some": "123"
+  },
+  "endValidTime": {
+    "some": "1970-01-01T00:02:03.000000123Z"
+  },
+  "endTxTime": {
+    "some": "1970-01-01T00:02:03.000000123Z"
+  },
+  "endTxId": {
+    "some": "123"
+  }
+}

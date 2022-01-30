@@ -1,0 +1,12 @@
+{
+  "details": {
+    "methodFqn": "com.example.addressbook.Greeter.Hello"
+  },
+  "requests": [
+    {
+      "location": "Hello-request.json"
+    }
+  ],
+  "operationType": "unary",
+  "invokerName": "grpc"
+}

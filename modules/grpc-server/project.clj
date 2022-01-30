@@ -1,35 +1,32 @@
-(defproject com.xtdb/xtdb-grpc-server "<inherited>"
-  :description "XTDB HTTP Server"
-  
-  :plugins [[lein-parent "0.3.8"]]
-
-  :parent-project {:path "../../project.clj"
-                   :inherit [:version :repositories :deploy-repositories
-                             :managed-dependencies
-                             :pedantic? :global-vars
-                             :license :url :pom-addition]}
-  :scm {:dir "../.."}
-
-  :java-source-paths
-  ["target/generated-sources/protobuf"]
-                             
+(defproject grpc-server "0.0.1-SNAPSHOT"
+  :description "XTDB gRPC Server"
+  :url "http://example.com/FIXME"
+  :license {:name "Apache License 2.0"
+            :url "https://www.apache.org/licenses/LICENSE-2.0"
+            :year 2022
+            :key "apache-2.0"}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [com.xtdb/xtdb-core]
-                 [com.google.protobuf/protobuf-java "3.19.3"]
-                 [javax.annotation/javax.annotation-api "1.3.2"]
-                 [io.netty/netty-codec-http2 "4.1.73.Final"]
-                 [io.grpc/grpc-core "1.43.2" :exclusions [io.grpc/grpc-api]]
-                 [io.grpc/grpc-netty "1.43.2"
-                    :exclusions [io.grpc/grpc-core
-                                 io.netty/netty-codec-http2]]
-                 [io.grpc/grpc-protobuf "1.43.2"]
-                 [io.grpc/grpc-stub "1.43.2"]]
-  :main ^:skip-aot xtdb-grpc-server.core
-  :target-path "target/%s"
-  :profiles {:dev
-             {:jvm-opts ["-Dlogback.configurationFile=../../resources/logback-test.xml"]
-              :dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-             :test {:dependencies [[pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
-                                   [com.xtdb/xtdb-test]]}
-             :uberjar {:aot :all
-                       :jvm-opts ["-Dclojure.compiler.direct-linking=true"]}})
+                 [io.pedestal/pedestal.service "0.5.9"]
+
+                 ;; -- PROTOC-GEN-CLOJURE --
+                 [io.github.protojure/grpc-server "2.0.1"]
+                 [io.github.protojure/google.protobuf "2.0.0"]
+
+                 [ch.qos.logback/logback-classic "1.2.9"]
+                 [org.slf4j/jul-to-slf4j "1.7.32"]
+                 [org.slf4j/jcl-over-slf4j "1.7.32"]
+                 [org.slf4j/log4j-over-slf4j "1.7.32"]]
+  :min-lein-version "2.0.0"
+  :resource-paths ["config", "resources"]
+  :profiles {:dev {:aliases {"run-dev" ["trampoline" "run" "-m" "grpc-server.server/run-dev"]}
+                   :dependencies [[io.pedestal/pedestal.service-tools "0.5.9"]]}
+             :uberjar {:aot [grpc-server.server]}}
+  :main ^{:skip-aot true} grpc-server.server)
+
+
+  ;; :parent-project {:path "../../project.clj"
+  ;;                  :inherit [:version :repositories :deploy-repositories
+  ;;                            :managed-dependencies
+  ;;                            :pedantic? :global-vars
+  ;;                            :license :url :pom-addition]}
+  ;; :scm {:dir "../.."} 

@@ -1,0 +1,21 @@
+{
+  "details": {
+    "endpoint": "http://localhost:8080",
+    "methodFqn": "com.grpc.xtdb.GrpcApi.submit_tx",
+    "mode": "grpc",
+    "metadata": [
+      {
+        "key": "",
+        "value": ""
+      }
+    ],
+    "disableServerCertificateValidation": true
+  },
+  "requests": [
+    {
+      "location": "submit_tx-request.json"
+    }
+  ],
+  "operationType": "unary",
+  "invokerName": "grpc"
+}

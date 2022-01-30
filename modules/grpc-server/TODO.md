@@ -22,4 +22,6 @@
 * Current mapped solutions still need to be tested
 
 ## Building protos
-`protoc -I=protos/ --java_out=target/generated-sources/protobuf protos/entity.proto protos/service.proto protos/transaction.proto  protos/google/protobuf/any.proto protos/google/protobuf/duration.proto protos/google/protobuf/struct.proto protos/google/protobuf/api.proto protos/google/protobuf/empty.proto protos/google/protobuf/timestamp.proto protos/google/protobuf/field_mask.proto protos/google/protobuf/type.proto protos/google/protobuf/descriptor.proto protos/google/protobuf/source_context.proto protos/google/protobuf/wrappers.proto`
+1. Download protoc from https://grpc.io
+2. `make setup` to download protojure
+3. `make protoc` to generate clojure proto namespaces

@@ -1,3 +1,6 @@
+.clj-kondo
+.lsp
+target/
 pom.xml
 pom.xml.asc
 *.jar
@@ -15,3 +18,4 @@ pom.xml.asc
 **/.DS_Store
 .DS_Store
 ../.DS_Store
+protoc-gen-grpc-java-1.43.2-osx-x86_64.exe

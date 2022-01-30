@@ -1,0 +1,12 @@
+{
+  "details": {
+    "methodFqn": "com.grpc.xtdb.GrpcApi.entity"
+  },
+  "requests": [
+    {
+      "location": "entity-request.json"
+    }
+  ],
+  "operationType": "unary",
+  "invokerName": "grpc"
+}
