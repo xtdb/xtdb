@@ -47,11 +47,10 @@
 
 ;; TODO:
 ;; - postpone analysis of column usage, focus on tables?
+;; -- capture derived column list in table references?
 ;; -- qualify named columns join?
 ;; -- postpone degree analysis to later or runtime?
-;; -- capture derived column list in table references?
 ;; - expand asterisks?
-;; - VALUES analysis?
 
 (defn- enter-env-scope
   ([env]
@@ -287,28 +286,47 @@
     :query_expression (if (= :with_clause (r/ctor (r/$ ag 1)))
                         (projected-columns (r/$ ag 2))
                         (projected-columns (r/$ ag 1)))
-    :query_expression_body (letfn [(step [_ ag]
-                                     (case (r/ctor ag)
-                                       :query_specification (projected-columns ag)
-                                       :subquery []
-                                       nil))]
-                             (let [candidates ((r/stop-td-tu (r/mono-tuz step)) ag)]
-                               (if (set-operator ag)
-                                 (if-let [{:keys [identifiers] :as corresponding} (corresponding ag)]
-                                   (let [common-identifiers (->> (for [projections candidates]
-                                                                   (set (for [{:keys [identifier]} projections]
-                                                                          identifier)))
-                                                                 (reduce set/intersection))
-                                         identifiers (if identifiers
-                                                       (if (set/subset? (set identifiers) common-identifiers)
-                                                         (set identifiers)
-                                                         #{})
-                                                       common-identifiers)]
-                                     [(vec (for [{:keys [identifier] :as projection} (first candidates)
-                                                 :when (contains? identifiers identifier)]
-                                             projection))])
-                                   candidates)
-                                 candidates)))
+    :table_value_constructor  (projected-columns (r/$ ag 2))
+    :row_value_expression_list (letfn [(step [_ ag]
+                                         (case (r/ctor ag)
+                                           :row_value_expression_list nil
+                                           :explicit_row_value_constructor (letfn [(step [_ ag]
+                                                                                     (case (r/ctor ag)
+                                                                                       :row_value_constructor_element 1
+                                                                                       :subquery 0
+                                                                                       nil))]
+                                                                             (let [degree ((r/stop-td-tu (r/mono-tuz step))
+                                                                                           (r/with-tu-monoid ag +))]
+                                                                               [(vec (for [n (range degree)]
+                                                                                       {:index n}))]))
+                                           :subquery (projected-columns (r/$ ag 1))
+                                           (when (r/ctor ag)
+                                             [[{:index 0}]])))]
+                                 ((r/stop-td-tu (r/mono-tuz step)) ag))
+    (:query_expression_body
+     :query_term) (letfn [(step [_ ag]
+                            (case (r/ctor ag)
+                              (:query_specification
+                               :table_value_constructor) (projected-columns ag)
+                              :subquery []
+                              nil))]
+                    (let [candidates ((r/stop-td-tu (r/mono-tuz step)) ag)]
+                      (if (set-operator ag)
+                        (if-let [{:keys [identifiers] :as corresponding} (corresponding ag)]
+                          (let [common-identifiers (->> (for [projections candidates]
+                                                          (set (for [{:keys [identifier]} projections]
+                                                                 identifier)))
+                                                        (reduce set/intersection))
+                                identifiers (if identifiers
+                                              (if (set/subset? (set identifiers) common-identifiers)
+                                                (set identifiers)
+                                                #{})
+                                              common-identifiers)]
+                            [(vec (for [{:keys [identifier] :as projection} (first candidates)
+                                        :when (contains? identifiers identifier)]
+                                    projection))])
+                          candidates)
+                        candidates)))
     (r/inherit ag)))
 
 ;; Order by
@@ -465,17 +483,23 @@
                                                       (local-names (dclo ag) :correlation-name))
               :with_list (check-duplicates "CTE query name" ag
                                            (local-names (cteo ag) :query-name))
-              :query_expression_body (when-let [set-op (set-operator ag)]
-                                       (let [candidates (projected-columns ag)
-                                             degrees (mapv count candidates)]
-                                         (cond
-                                           (= [0] degrees)
-                                           [(format "%s does not have corresponding columns: %s"
-                                                    set-op (->line-info-str ag))]
+              (:query_expression_body
+               :query_term) (when-let [set-op (set-operator ag)]
+                              (let [candidates (projected-columns ag)
+                                    degrees (mapv count candidates)]
+                                (cond
+                                  (= [0] degrees)
+                                  [(format "%s does not have corresponding columns: %s"
+                                           set-op (->line-info-str ag))]
 
-                                           (not (apply = degrees))
-                                           [(format "%s requires tables to have same degree: %s"
-                                                    set-op (->line-info-str ag))])))
+                                  (not (apply = degrees))
+                                  [(format "%s requires tables to have same degree: %s"
+                                           set-op (->line-info-str ag))])))
+              :table_value_constructor (let [candidates (projected-columns ag)
+                                             degrees (mapv count candidates)]
+                                         (when (not (apply = degrees))
+                                           [(format "VALUES requires rows to have same degree: %s"
+                                                    (->line-info-str ag))]))
               :column_name_list (check-duplicates "Column name" ag (identifiers ag))
               :column_reference (let [{:keys [identifiers table-id type] :as cr} (column-reference ag)]
                                   (case type
@@ -543,10 +567,7 @@
     (:query_expression
      :query_specification) (scope-id ag)
     (:table_primary
-     :subquery
-     :scalar_subquery
-     :row_subquery
-     :table_subquery) (subquery-scope-id (r/$ ag 1))
+     :subquery) (subquery-scope-id (r/$ ag 1))
     :lateral_derived_table (subquery-scope-id (r/$ ag 2))
     nil))
 

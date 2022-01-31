@@ -217,8 +217,9 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
      (t/is (re-find ~re err#))))
 
 (defmacro ^:private valid? [q]
-  `(let [errs# (:errs (sql/analyze-query (sql/parse ~q)))]
-     (t/is (empty? errs#))))
+  `(let [{errs# :errs scopes# :scopes} (sql/analyze-query (sql/parse ~q))]
+     (t/is (empty? errs#))
+     scopes#))
 
 (t/deftest test-parsing-errors-are-reported
   (invalid? #"Parse error at line 1, column 1:\nSELEC\n"
@@ -317,3 +318,56 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             "SELECT * FROM t1 OFFSET 'foo' ROWS")
   (valid? "SELECT * FROM t1 OFFSET 1 ROWS")
   (valid? "SELECT * FROM t1 OFFSET :foo ROWS"))
+
+(t/deftest test-projection
+  (t/is (= [[{:index 0, :identifier "b"}]
+            [{:index 0, :identifier "b"}]
+            [{:index 0, :identifier "b"}]]
+           (->> (valid? "SELECT t1.b FROM t1 UNION SELECT t2.b FROM t2")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0, :identifier "b"}]
+            [{:index 0, :identifier "b"}]
+            [{:index 0, :identifier "a"}]]
+           (->> (valid? "SELECT t1.b FROM t1 EXCEPT SELECT t2.a FROM t2")
+                (map :projected-columns))))
+
+  (invalid? #"INTERSECT does not have corresponding columns"
+            "SELECT t1.b FROM t1 INTERSECT CORRESPONDING SELECT t2.a FROM t2")
+
+  (t/is (= [[{:index 0, :identifier "b"}]
+            [{:index 0, :identifier "b"}]
+            [{:index 0, :identifier "a"} {:index 1, :identifier "b"}]]
+           (->> (valid? "SELECT t1.b FROM t1 EXCEPT CORRESPONDING SELECT t2.a, t2.b FROM t2")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0, :identifier "b"}]
+            [{:index 0, :identifier "b"}]
+            [{:index 0, :identifier "a"} {:index 1, :identifier "b"}]]
+           (->> (valid? "SELECT t1.b FROM t1 EXCEPT CORRESPONDING BY (b) SELECT t2.a, t2.b FROM t2")
+                (map :projected-columns))))
+
+  (invalid? #"INTERSECT does not have corresponding columns"
+            "SELECT t1.b FROM t1 INTERSECT CORRESPONDING BY (c) SELECT t2.b FROM t2")
+
+  (t/is (= [[{:index 0} {:index 1} {:index 2}]]
+           (->> (valid? "VALUES (1, 2, 3), (4, 5, 6)")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0}]]
+           (->> (valid? "VALUES 1, 2")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0}]]
+           (->> (valid? "VALUES 1, (2)")
+                (map :projected-columns))))
+
+  (invalid? #"VALUES requires rows to have same degree"
+            "VALUES (1, 2), (3, 4, 5)")
+
+  (valid? "VALUES (1, 2), (SELECT t1.a, t1.b FROM t1)")
+  (valid? "VALUES 1, (SELECT t1.a FROM t1)")
+  (invalid? #"VALUES requires rows to have same degree"
+            "VALUES (1, 2), (SELECT t1.a FROM t1)")
+  (invalid? #"VALUES requires rows to have same degree"
+            "VALUES (1), (SELECT t1.a, t1.b FROM t1)"))
