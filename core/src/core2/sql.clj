@@ -26,7 +26,7 @@
        (let [fst (first x)]
          (if (and (keyword? fst)
                   (not (contains? #{:table_primary :query_expression} fst))
-                  (re-find #"(^|_)(term|factor|primary|expression)$" (name fst)))
+                  (re-find #"(^|_)(term|factor|primary|expression|query_expression_body)$" (name fst)))
            (second x)
            x))
        x))
@@ -106,7 +106,7 @@
 (defn- id [ag]
   (r/zcase ag
     :table_primary
-    (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
+    (if (= :qualified_join (r/ctor (r/$ ag 1)))
       (id (z/prev ag))
       (inc ^long (id (z/prev ag))))
 
@@ -241,7 +241,7 @@
 (defn- table [ag]
   (r/zcase ag
     :table_primary
-    (when-not (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
+    (when-not (= :qualified_join (r/ctor (r/$ ag 1)))
       (let [table-name (table-or-query-name ag)
             correlation-name (or (correlation-name ag) table-name)
             {cte-id :id cte-scope-id :scope-id} (find-decl (cte-env ag) table-name)
@@ -260,7 +260,7 @@
   (letfn [(step [ag]
             (r/zcase ag
               :table_primary
-              (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
+              (if (= :qualified_join (r/ctor (r/$ ag 1)))
                 (local-tables (r/$ ag 1))
                 [(table ag)])
 
@@ -334,7 +334,7 @@
     (case (r/lexeme ag 2)
       "UNION" "UNION"
       "EXCEPT" "EXCEPT"
-      (set-operator (r/$ ag 1)))
+      nil)
 
     :query_term
     (case (r/lexeme ag 2)
@@ -375,10 +375,12 @@
             (asterisk-step [ag]
               (r/zcase ag
                 :table_primary
-                (if-let [derived-columns (not-empty (derived-columns ag))]
-                  (for [identifier derived-columns]
-                    {:identifier identifier})
-                  (r/collect-stop asterisk-table-step ag))
+                (if (= :qualified_join (r/ctor (r/$ ag 1)))
+                  (r/collect-stop asterisk-step (r/$ ag 1))
+                  (if-let [derived-columns (not-empty (derived-columns ag))]
+                    (for [identifier derived-columns]
+                      {:identifier identifier})
+                    (r/collect-stop asterisk-table-step ag)))
 
                 :column_reference
                 [{:identifier (last (identifiers ag))}]
