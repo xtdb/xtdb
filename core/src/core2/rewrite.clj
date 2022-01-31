@@ -1,7 +1,8 @@
 (ns core2.rewrite
   (:require [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.zip :as z]))
+            [clojure.zip :as z])
+  (:import java.util.regex.Pattern))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -40,7 +41,9 @@
        (let [pattern-node (z/node pattern-loc)
              node (z/node loc)]
          (cond
-           (= pattern-node node)
+           (or (= pattern-node node)
+               (and (instance? Pattern pattern-node)
+                    (re-find pattern-node (str node))))
            (recur (zip-next-skip-subtree pattern-loc) (zip-next-skip-subtree loc) acc)
 
            (and (symbol? pattern-node)

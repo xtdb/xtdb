@@ -625,11 +625,7 @@
               ;;=>
               true
 
-              "ROW"
-              ;;=>
-              true
-
-              "ROWS"
+              #"^ROWS?$"
               ;;=>
               true)
     [(format (str label " must be an integer: %s %s")
