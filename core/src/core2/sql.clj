@@ -46,9 +46,6 @@
 ;; Draft attribute grammar for SQL semantics.
 
 ;; TODO:
-;; - postpone analysis of column usage, focus on tables?
-;; -- check named columns join?
-;; -- postpone degree analysis to later or runtime?
 ;; - expand asterisks?
 
 (defn- enter-env-scope
@@ -276,8 +273,7 @@
 (defn- projected-column [ag]
   (case (r/ctor ag)
     :derived_column (let [identifier (identifier ag)]
-                      (cond-> {:index (dec ^long (r/child-idx ag))
-                               :normal-form (z/node ag)}
+                      (cond-> {:normal-form (z/node ag)}
                         identifier (assoc :identifier identifier)))
     nil))
 
@@ -285,10 +281,30 @@
   (case (r/ctor ag)
     :query_specification (letfn [(step [_ ag]
                                    (case (r/ctor ag)
+                                     :asterisk (letfn [(table-step [_ ag]
+                                                         (case (r/ctor ag)
+                                                           :table_value_constructor (first (projected-columns ag))
+                                                           :subquery (first (projected-columns (r/$ ag 1)))
+                                                           nil))
+                                                       (step [_ ag]
+                                                         (case (r/ctor ag)
+                                                           :table_primary (if-let [derived-columns (not-empty (derived-columns ag))]
+                                                                            derived-columns
+                                                                            (map :identifier ((r/stop-td-tu (r/mono-tuz table-step)) ag)))
+                                                           :column_reference [(last (identifiers ag))]
+                                                           :subquery []
+                                                           nil))]
+                                                 (vec (for [identifier (->> (z/right (r/parent ag))
+                                                                            ((r/stop-td-tu (r/mono-tuz step)))
+                                                                            (distinct)
+                                                                            (sort))]
+                                                        {:identifier identifier})))
                                      :derived_column [(projected-column ag)]
                                      :subquery []
                                      nil))]
-                           [((r/stop-td-tu (r/mono-tuz step)) ag)])
+                           [(vec (for [[idx projection] (->> ((r/stop-td-tu (r/mono-tuz step)) ag)
+                                                             (map-indexed vector))]
+                                   (assoc projection :index idx)))])
     :query_expression (if (= :with_clause (r/ctor (r/$ ag 1)))
                         (projected-columns (r/$ ag 2))
                         (projected-columns (r/$ ag 1)))

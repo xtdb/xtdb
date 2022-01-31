@@ -393,4 +393,30 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Derived columns has to have same degree as table"
             "SELECT x.a FROM (VALUES (1, 2)) AS x (a)")
   (valid? "SELECT x.a FROM y AS x (a, b)")
-  (valid? "SELECT x.a FROM y, UNNEST(y.a) AS x (a)"))
+  (valid? "SELECT x.a FROM y, UNNEST(y.a) AS x (a)")
+
+  (t/is (= [[{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
+            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]]
+           (->> (valid? "SELECT * FROM x WHERE x.a = x.b")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
+            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
+            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
+            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]]
+           (->> (valid? "SELECT * FROM (SELECT y.a, y.b FROM y) AS x")
+                (map :projected-columns))))
+
+   (t/is (= [[{:index 0 :identifier "c"} {:index 1 :identifier "d"}]
+             [{:index 0 :identifier "c"} {:index 1 :identifier "d"}]
+             [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
+             [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]]
+           (->> (valid? "SELECT * FROM (SELECT y.a, y.b FROM y) AS x (c, d)")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
+            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
+            [{:index 0 :identifier "a"}]
+            [{:index 0 :identifier "a"}]]
+           (->> (valid? "SELECT * FROM (SELECT y.a FROM y WHERE y.z = FALSE) AS x, z WHERE z.b = TRUE")
+                (map :projected-columns)))))
