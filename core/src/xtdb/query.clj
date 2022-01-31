@@ -1304,15 +1304,37 @@
            [sub-clause]))
        (reduce into [])))
 
-(defn- build-pred-fns [clauses {:keys [allowed-ns allowed-fns] :as fn-allow-list}]
+(def default-allow-list
+  (->> (slurp (io/resource "query-allowlist.edn"))
+       (read-string)))
+
+(s/def ::fn-allow-list
+  (s/and
+   (s/coll-of (s/or :sym symbol? :str string?))
+   (s/conformer (fn [fal]
+                  (reduce
+                   (fn [allow-map [type pred]]
+                     (let [pred-symbol (cond-> pred
+                                         (= :str type) symbol)]
+                       (if (qualified-symbol? pred-symbol)
+                         (update allow-map :allowed-fns conj pred-symbol)
+                         (update allow-map :allowed-ns conj pred-symbol))))
+                   {:allowed-ns #{} :allowed-fns default-allow-list}
+                   fal)))))
+
+(defn- assert-allowed-fn [f-var fn-allow-list]
+  (when-let [{:keys [allowed-ns allowed-fns]} fn-allow-list]
+    (let [sym (symbol f-var)]
+      (when-not (or (contains? allowed-fns sym)
+                    (contains? allowed-ns (-> f-var (meta) ^clojure.lang.Namespace (:ns) (.getName))))
+        (throw (err/illegal-arg :fn-not-allowed {::err/message (str "Query used a function that was not in the allowlist: " sym)}))))))
+
+(defn- build-pred-fns [clauses fn-allow-list]
   (->> (for [[type clause :as sub-clause] clauses]
          (let [pred-var (get-in clause [:pred :pred-fn])]
            (if (and (= :pred type) (var? pred-var))
              (do
-               (when fn-allow-list
-                 (when-not (or (contains? allowed-fns (symbol pred-var))
-                               (contains? allowed-ns (-> pred-var (meta) ^clojure.lang.Namespace (:ns) (.getName))))
-                   (throw (err/illegal-arg :fn-not-allowed {::err/message (str "Query used a function that was not in the allowlist: " (symbol pred-var))}))))
+               (assert-allowed-fn pred-var fn-allow-list)
                (update-in sub-clause [1 :pred :pred-fn] var-get))
              sub-clause)))
        (into [])))
@@ -1642,10 +1664,9 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- compile-projection
-  ([form] (compile-projection form {}))
-
-  ([form {:keys [agg-allowed?], :or {agg-allowed? true} :as opts}]
+(defn- compile-projection [form {:keys [agg-allowed? fn-allow-list]
+                                 :or {agg-allowed? true}
+                                 :as opts}]
    (let [[form-type form-arg] form]
      (case form-type
        (:nil :number :string :boolean) {:logic-vars #{}
@@ -1662,7 +1683,7 @@
 
                     (let [{:keys [aggregate-fn args form]} form-arg
                           agg-sym (gensym aggregate-fn)
-                          {:keys [logic-vars eval-expr]} (compile-projection form {:agg-allowed? false})
+                          {:keys [logic-vars eval-expr]} (compile-projection form (-> opts (assoc :agg-allowed? false)))
                           agg-fn (apply aggregate aggregate-fn args)]
                       {:aggregates {agg-sym {:logic-vars logic-vars
                                              :aggregate-fn (fn
@@ -1680,6 +1701,7 @@
                                (some-> (if (qualified-symbol? f-arg)
                                          (requiring-resolve f-arg)
                                          (ns-resolve 'user f-arg))
+                                       (doto (assert-allowed-fn fn-allow-list))
                                        deref)))
                          (throw (err/illegal-arg :invalid-f-in-agg-expr
                                                  {::err/message "Invalid function in aggregate expr"
@@ -1705,12 +1727,12 @@
                                           (compiled-else env))))))
 
                              (fn [env]
-                               (apply f (mapv (fn [->arg] (->arg env)) arg-fns))))})))))
+                               (apply f (mapv (fn [->arg] (->arg env)) arg-fns))))}))))
 
-(defn- compile-find-args [conformed-find]
+(defn- compile-find-args [conformed-find {:keys [fn-allow-list]}]
   (for [[var-type arg] conformed-find]
     (case var-type
-      :form (let [{:keys [logic-vars aggregates eval-expr]} (compile-projection arg)]
+      :form (let [{:keys [logic-vars aggregates eval-expr]} (compile-projection arg {:fn-allow-list fn-allow-list})]
               {:find-arg-type :form
                :aggregates aggregates
                :logic-vars logic-vars
@@ -1738,8 +1760,8 @@
                 var-bindings)
            (into {})))))
 
-(defn- compile-find [conformed-find built-query {:keys [find-cache]}]
-  (let [find-args (cache/compute-if-absent find-cache conformed-find identity compile-find-args)
+(defn- compile-find [conformed-find built-query {:keys [find-cache fn-allow-list]}]
+  (let [find-args (cache/compute-if-absent find-cache conformed-find identity #(compile-find-args % {:fn-allow-list fn-allow-list}))
         find-arg-types (into #{} (map :find-arg-type) find-args)
         ->env (env-factory (into #{} (mapcat :logic-vars) find-args) built-query)]
     {:find-arg-types find-arg-types
@@ -2110,24 +2132,6 @@
       (doto interrupt-executor
         (.shutdownNow)
         (.awaitTermination 5000 TimeUnit/MILLISECONDS)))))
-
-(def default-allow-list
-  (->> (slurp (io/resource "query-allowlist.edn"))
-       (read-string)))
-
-(s/def ::fn-allow-list
-  (s/and
-   (s/coll-of (s/or :sym symbol? :str string?))
-   (s/conformer (fn [fal]
-                  (reduce
-                   (fn [allow-map [type pred]]
-                     (let [pred-symbol (cond-> pred
-                                         (= :str type) symbol)]
-                       (if (qualified-symbol? pred-symbol)
-                         (update allow-map :allowed-fns conj pred-symbol)
-                         (update allow-map :allowed-ns conj pred-symbol))))
-                   {:allowed-ns #{} :allowed-fns default-allow-list}
-                   fal)))))
 
 (defn ->query-engine {::sys/deps {:index-store :xtdb/index-store
                                   :bus :xtdb/bus

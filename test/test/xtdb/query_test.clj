@@ -2869,6 +2869,12 @@
                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
                #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
 
+#_{:clj-kondo/ignore #{:unused-private-var}}
+(defn- allowed-fn [e] e)
+
+#_{:clj-kondo/ignore #{:unused-private-var}}
+(defn- banned-fn [e] e)
+
 (t/deftest test-projection-exprs
   (t/is (= #{[0 0 0] [1 0 1] [1 1 3]
              [2 0 2] [2 1 4] [2 2 6]
@@ -2885,7 +2891,20 @@
                  '{:find [?x (if (even? ?x) (* 2 ?x) -1)]
                    :in [[?x ...]]}
                  (range 6)))
-        "if"))
+        "if")
+
+  (with-open [node (xt/start-node {:xtdb/query-engine {:fn-allow-list #{'xtdb.query-test/allowed-fn}}})]
+    (t/is (= #{[42]}
+             (xt/q (xt/db node)
+                   '{:find [(xtdb.query-test/allowed-fn ?e)]
+                     :in [?e]}
+                   42)))
+
+    (t/is (thrown? IllegalArgumentException
+                   (xt/q (xt/db node)
+                         '{:find [(xtdb.query-test/banned-fn ?e)]
+                           :in [?e]}
+                         42)))))
 
 (t/deftest test-aggregate-exprs
   (t/is (= #{[0 0 1] [1 1 5] [2 3 14] [3 6 30]}
