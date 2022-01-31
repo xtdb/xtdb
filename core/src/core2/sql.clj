@@ -276,8 +276,6 @@
     (enter-env-scope (env (r/parent ag)))
 
     (:table_primary
-     :cross_join
-     :natural_join
      :qualified_join)
     (reduce (fn [acc {:keys [correlation-name] :as table}]
               (extend-env acc correlation-name table))
