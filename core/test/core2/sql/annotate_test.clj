@@ -389,4 +389,8 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Derived columns has to have same degree as table"
             "SELECT x.a FROM (SELECT t1.a, t1.b FROM t1) AS x (a)")
   (invalid? #"Derived columns has to have same degree as table"
-            "SELECT x.a FROM (VALUES (1, 2)) AS x (a)"))
+            "SELECT x.a FROM LATERAL (SELECT t1.a FROM t1) AS x (a, b)")
+  (invalid? #"Derived columns has to have same degree as table"
+            "SELECT x.a FROM (VALUES (1, 2)) AS x (a)")
+  (valid? "SELECT x.a FROM y AS x (a, b)")
+  (valid? "SELECT x.a FROM y, UNNEST(y.a) AS x (a)"))
