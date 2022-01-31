@@ -279,26 +279,25 @@
 
 (defn- projected-columns [ag]
   (case (r/ctor ag)
-    :query_specification (letfn [(step [_ ag]
+    :query_specification (letfn [(asterisk-table-step [_ ag]
                                    (case (r/ctor ag)
-                                     :asterisk (letfn [(table-step [_ ag]
-                                                         (case (r/ctor ag)
-                                                           :table_value_constructor (first (projected-columns ag))
-                                                           :subquery (first (projected-columns (r/$ ag 1)))
-                                                           nil))
-                                                       (step [_ ag]
-                                                         (case (r/ctor ag)
-                                                           :table_primary (if-let [derived-columns (not-empty (derived-columns ag))]
-                                                                            derived-columns
-                                                                            (map :identifier ((r/stop-td-tu (r/mono-tuz table-step)) ag)))
-                                                           :column_reference [(last (identifiers ag))]
-                                                           :subquery []
-                                                           nil))]
-                                                 (vec (for [identifier (->> (z/right (r/parent ag))
-                                                                            ((r/stop-td-tu (r/mono-tuz step)))
-                                                                            (distinct)
-                                                                            (sort))]
-                                                        {:identifier identifier})))
+                                     :table_value_constructor (first (projected-columns ag))
+                                     :subquery (first (projected-columns (r/$ ag 1)))
+                                     nil))
+                                 (asterisk-step [_ ag]
+                                   (case (r/ctor ag)
+                                     :table_primary (if-let [derived-columns (not-empty (derived-columns ag))]
+                                                      derived-columns
+                                                      (map :identifier ((r/stop-td-tu (r/mono-tuz asterisk-table-step)) ag)))
+                                     :column_reference [(last (identifiers ag))]
+                                     :subquery []
+                                     nil))
+                                 (step [_ ag]
+                                   (case (r/ctor ag)
+                                     :asterisk (vec (for [identifier (->> (z/right (r/parent ag))
+                                                                          ((r/stop-td-tu (r/mono-tuz asterisk-step)))
+                                                                          (distinct))]
+                                                      {:identifier identifier}))
                                      :derived_column [(projected-column ag)]
                                      :subquery []
                                      nil))]
@@ -309,18 +308,18 @@
                         (projected-columns (r/$ ag 2))
                         (projected-columns (r/$ ag 1)))
     :table_value_constructor  (projected-columns (r/$ ag 2))
-    :row_value_expression_list (letfn [(step [_ ag]
+    :row_value_expression_list (letfn [(row-degree-step [_ ag]
+                                         (case (r/ctor ag)
+                                           :row_value_constructor_element 1
+                                           :subquery 0
+                                           nil))
+                                       (step [_ ag]
                                          (case (r/ctor ag)
                                            :row_value_expression_list nil
-                                           :explicit_row_value_constructor (letfn [(step [_ ag]
-                                                                                     (case (r/ctor ag)
-                                                                                       :row_value_constructor_element 1
-                                                                                       :subquery 0
-                                                                                       nil))]
-                                                                             (let [degree ((r/stop-td-tu (r/mono-tuz step))
-                                                                                           (r/with-tu-monoid ag +))]
-                                                                               [(vec (for [n (range degree)]
-                                                                                       {:index n}))]))
+                                           :explicit_row_value_constructor (let [degree ((r/stop-td-tu (r/mono-tuz row-degree-step))
+                                                                                         (r/with-tu-monoid ag +))]
+                                                                             [(vec (for [n (range degree)]
+                                                                                     {:index n}))])
                                            :subquery (projected-columns (r/$ ag 1))
                                            (when (r/ctor ag)
                                              [[{:index 0}]])))]
