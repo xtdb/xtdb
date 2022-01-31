@@ -85,7 +85,7 @@ Checkpoints aren't GC'd by XTDB - we recommend you set a lifecycle policy on you
 ;; under :xtdb/index-store -> :kv-store -> :checkpointer
 ;; see the Checkpointing guide for other parameters
 {:checkpointer {...
-                :store {:xtdb/module 'xtdb.s3.checkpoint-store/->checkpoint-store
+                :store {:xtdb/module 'xtdb.s3.checkpoint-store/->cp-store
                         :configurator ...
                         :bucket "..."
                         :prefix "..."}}
