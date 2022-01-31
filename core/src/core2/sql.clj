@@ -270,13 +270,6 @@
                           {:identifiers (identifiers (r/$ ag -1))})
     nil))
 
-(defn- projected-column [ag]
-  (case (r/ctor ag)
-    :derived_column (let [identifier (identifier ag)]
-                      (cond-> {:normal-form (z/node ag)}
-                        identifier (assoc :identifier identifier)))
-    nil))
-
 (defn- projected-columns [ag]
   (case (r/ctor ag)
     :query_specification (letfn [(asterisk-table-step [_ ag]
@@ -287,18 +280,21 @@
                                  (asterisk-step [_ ag]
                                    (case (r/ctor ag)
                                      :table_primary (if-let [derived-columns (not-empty (derived-columns ag))]
-                                                      derived-columns
-                                                      (map :identifier ((r/stop-td-tu (r/mono-tuz asterisk-table-step)) ag)))
-                                     :column_reference [(last (identifiers ag))]
+                                                      (for [identifier derived-columns]
+                                                        {:identifier identifier})
+                                                      ((r/stop-td-tu (r/mono-tuz asterisk-table-step)) ag))
+                                     :column_reference [{:identifier (last (identifiers ag))}]
                                      :subquery []
                                      nil))
                                  (step [_ ag]
                                    (case (r/ctor ag)
-                                     :asterisk (vec (for [identifier (->> (z/right (r/parent ag))
-                                                                          ((r/stop-td-tu (r/mono-tuz asterisk-step)))
-                                                                          (distinct))]
-                                                      {:identifier identifier}))
-                                     :derived_column [(projected-column ag)]
+                                     :asterisk (->> (z/right (r/parent ag))
+                                                    ((r/stop-td-tu (r/mono-tuz asterisk-step)))
+                                                    (distinct)
+                                                    (vec))
+                                     :derived_column [(let [identifier (identifier ag)]
+                                                        (cond-> {:normal-form (z/node ag)}
+                                                          identifier (assoc :identifier identifier)))]
                                      :subquery []
                                      nil))]
                            [(vec (for [[idx projection] (->> ((r/stop-td-tu (r/mono-tuz step)) ag)
