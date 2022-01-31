@@ -190,8 +190,6 @@
   (fn self [z]
     ((choice-tp (one-tp self) f) z)))
 
-(declare all-tp-down all-tp-right)
-
 (defn stop-td-tp [f]
   (fn self [z]
     ((choice-tp f (all-tp self)) z)))
