@@ -97,7 +97,7 @@ You can specify an aggregate function to apply to at most one logic variable.
 |`(sum ?lvar)`| Accumulates as a single value via the Clojure https://clojuredocs.org/clojure.core/+[`&#43;`] function
 |`(min ?lvar)` .2+| Return a single value via the Clojure https://clojuredocs.org/clojure.core/compare[`compare`] function which may operate on many types (integers, strings, collections etc.)
 |`(max ?lvar)`
-|`(count ?lvar)`| Return a single count of all values including any duplicates
+|`(count ?lvar)`| Return a single count of all values including any duplicates (note: this always performs a scan - no statistics or other stateful materializations are used)
 |`(avg ?lvar)`| Return a single value equivalent to `sum / count`
 |`(median ?lvar)` .3+| Return a single value corresponding to the statistical definition
 |`(variance ?lvar)`
