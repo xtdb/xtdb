@@ -140,8 +140,12 @@
         :number number?
         :string string?
         :symbol symbol?
+        :keyword keyword?
         :aggregate ::aggregate
-        :list (s/spec (s/* ::form))))
+        :set (s/coll-of ::form, :kind set?)
+        :vector (s/coll-of ::form, :kind vector?)
+        :list (s/coll-of ::form, :kind list?)
+        :map (s/map-of ::form ::form, :conform-keys true)))
 
 (s/def ::pull-arg
   (s/cat :pull #{'pull}
@@ -1669,8 +1673,8 @@
                                  :as opts}]
    (let [[form-type form-arg] form]
      (case form-type
-       (:nil :number :string :boolean) {:logic-vars #{}
-                                        :eval-expr (constantly form-arg)}
+       (:nil :number :string :boolean :keyword) {:logic-vars #{}
+                                                 :eval-expr (constantly form-arg)}
 
        :symbol {:logic-vars #{form-arg}
                 :eval-expr (fn [env]
@@ -1692,6 +1696,32 @@
                                                              ([acc] (agg-fn acc)))}}
 
                        :eval-expr (fn [env] (get env agg-sym))}))
+
+       (:set :vector) (let [compiled-els (mapv #(compile-projection % opts) form-arg)
+                            into-coll (empty form-arg)]
+                        {:logic-vars (into #{} (mapcat :logic-vars) compiled-els)
+                         :aggregates (into {} (mapcat :aggregates) compiled-els)
+                         :eval-expr (fn [env]
+                                      (into into-coll
+                                            (map (comp #(% env) :eval-expr))
+                                            compiled-els))})
+
+       :map (let [compiled-els (mapv (fn [[k v]]
+                                       (let [compiled-k (compile-projection k opts)
+                                             compiled-v (compile-projection v opts)
+                                             compiled-entry [compiled-k compiled-v]]
+                                         {:logic-vars (into #{} (mapcat :logic-vars) compiled-entry)
+                                          :aggregates (into #{} (mapcat :aggregates) compiled-entry)
+                                          :eval-expr (fn [env]
+                                                       (MapEntry/create ((:eval-expr compiled-k) env)
+                                                                        ((:eval-expr compiled-v) env)))}))
+                                     form-arg)]
+              {:logic-vars (into #{} (mapcat :logic-vars) compiled-els)
+               :aggregates (into {} (mapcat :aggregates) compiled-els)
+               :eval-expr (fn [env]
+                            (into {}
+                                  (map (comp #(% env) :eval-expr))
+                                  compiled-els))})
 
        :list (let [[f-form & arg-forms] form-arg
                    [f-type f-arg] f-form

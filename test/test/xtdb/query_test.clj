@@ -2893,6 +2893,15 @@
                  (range 6)))
         "if")
 
+  (t/is (= #{[{:a 1, :bs [2 3], :cs #{4 5}}]
+             [{:a 2, :bs [4 6], :cs #{8 10}}]}
+           (xt/q (xt/db *api*)
+                 '{:find [{:a ?a, :bs [?b1 ?b2], :cs #{?c1 ?c2}}]
+                   :in [[[?a ?b1 ?b2 ?c1 ?c2]]]}
+                 [[1 2 3 4 5]
+                  [2 4 6 8 10]]))
+        "different collections")
+
   (with-open [node (xt/start-node {:xtdb/query-engine {:fn-allow-list #{'xtdb.query-test/allowed-fn}}})]
     (t/is (= #{[42]}
              (xt/q (xt/db node)
