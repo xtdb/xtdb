@@ -174,25 +174,40 @@
           (when-some [r (z/right z)]
             (recur r)))))))
 
-(defn full-td-tp [f]
-  (fn self [z]
-    ((seq-tp f (all-tp self)) z)))
+(defn full-td-tp
+  ([f]
+   (fn self [z]
+     ((seq-tp f (all-tp self)) z)))
+  ([f z]
+   ((full-td-tp f) z)))
 
-(defn full-bu-tp [f]
-  (fn self [z]
-    ((seq-tp (all-tp self) f) z)))
+(defn full-bu-tp
+  ([f]
+   (fn self [z]
+     ((seq-tp (all-tp self) f) z)))
+  ([f z]
+   ((full-bu-tp f) z)))
 
-(defn once-td-tp [f]
-  (fn self [z]
-    ((choice-tp f (one-tp self)) z)))
+(defn once-td-tp
+  ([f]
+   (fn self [z]
+     ((choice-tp f (one-tp self)) z)))
+  ([f z]
+   ((once-td-tp) f) z))
 
-(defn once-bu-tp [f]
-  (fn self [z]
-    ((choice-tp (one-tp self) f) z)))
+(defn once-bu-tp
+  ([f]
+   (fn self [z]
+     ((choice-tp (one-tp self) f) z)))
+  ([f z]
+   ((once-bu-tp f) z)))
 
-(defn stop-td-tp [f]
-  (fn self [z]
-    ((choice-tp f (all-tp self)) z)))
+(defn stop-td-tp
+  ([f]
+   (fn self [z]
+     ((choice-tp f (all-tp self)) z)))
+  ([f z]
+   ((stop-td-tp f) z)))
 
 (defn z-try-apply-m [f]
   (fn [z]
@@ -211,18 +226,27 @@
 (defn try-tp [f]
   (choice-tp f id-tp))
 
-(defn repeat-tp [f]
-  (fn [z]
-    (if-some [z (f z)]
-      (recur z)
-      z)))
+(defn repeat-tp
+  ([f]
+   (fn [z]
+     (if-some [z (f z)]
+       (recur z)
+       z)))
+  ([f z]
+   ((repeat-tp f) z)))
 
-(defn innermost [f]
-  (fn self [z]
-    ((seq-tp (all-tp self) (try-tp (seq-tp f self))) z)))
+(defn innermost
+  ([f]
+   (fn self [z]
+     ((seq-tp (all-tp self) (try-tp (seq-tp f self))) z)))
+  ([f z]
+   ((innermost f) z)))
 
-(defn outermost [f]
-  (repeat-tp (once-td-tp f)))
+(defn outermost
+  ([f]
+   (repeat-tp (once-td-tp f)))
+  ([f z]
+   ((outermost f) z)))
 
 (def topdown full-td-tp)
 
@@ -265,32 +289,43 @@
             (when-some [r (z/right z)]
               (recur r acc))))))))
 
-(defn full-td-tu [f]
-  (fn self [z]
-    ((seq-tu f (all-tu self)) z)))
+(defn full-td-tu
+  ([f]
+   (fn self [z]
+     ((seq-tu f (all-tu self)) z)))
+  ([f z]
+   ((full-td-tu f) z)))
 
-(defn full-bu-tu [f]
-  (fn self [z]
-    ((seq-tu (all-tu self) f) z)))
+(defn full-bu-tu
+  ([f]
+   (fn self [z]
+     ((seq-tu (all-tu self) f) z)))
+  ([f z]
+   ((full-bu-tu f) z)))
 
-(defn once-td-tu [f]
-  (fn self [z]
-    ((choice-tu f (one-tu self)) z)))
+(defn once-td-tu
+  ([f]
+   (fn self [z]
+     ((choice-tu f (one-tu self)) z)))
+  ([f z]
+   ((once-td-tu f) z)))
 
-(defn once-bu-tu [f]
-  (fn self [z]
-    ((choice-tu (one-tu self) f) z)))
+(defn once-bu-tu
+  ([f]
+   (fn self [z]
+     ((choice-tu (one-tu self) f) z)))
+  ([f z]
+   ((once-bu-tu f) z)))
 
-(defn stop-td-tu [f]
-  (fn self [z]
-    ((choice-tu f (all-tu self)) z)))
-
-(defn z-try-reduce-m [f]
-  (fn [z]
-    (some-> z (f))))
+(defn stop-td-tu
+  ([f]
+   (fn self [z]
+     ((choice-tu f (all-tu self)) z)))
+  ([f z]
+   ((stop-td-tu f) z)))
 
 (defn adhoc-tu [f g]
-  (choice-tu (z-try-reduce-m g) f))
+  (choice-tu g f))
 
 (defn fail-tu [_])
 
@@ -302,7 +337,9 @@
 (defn with-tu-monoid [z f]
   (vary-meta z assoc :zip/monoid f))
 
-(def crush full-td-tu)
+(def collect full-td-tu)
+
+(def collect-stop stop-td-tu)
 
 (def select once-td-tu)
 
@@ -679,8 +716,8 @@
               [:for x M [:where L N]]))]
 
     (->> (z/vector-zip comprehension)
-         ((innermost (mono-tp stage-1-symbolic-reduction)))
-         ((innermost (mono-tp stage-2-adhoc-rules)))
+         (innermost (mono-tp stage-1-symbolic-reduction))
+         (innermost (mono-tp stage-2-adhoc-rules))
          (z/node))))
 
 (comment

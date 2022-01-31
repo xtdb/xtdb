@@ -116,7 +116,7 @@
                              [column table])
                            (into {}))]
     (->> (z/vector-zip query)
-         ((r/innermost (r/mono-tp (normalize-rewrite column->table))))
+         (r/innermost (r/mono-tp (normalize-rewrite column->table)))
          (z/node))))
 
 (defn parse-create-table [^String x]

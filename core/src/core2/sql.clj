@@ -130,7 +130,7 @@
                 [(r/lexeme ag 1)]
 
                 []))]
-      ((r/full-td-tu (r/mono-tu step)) ag))))
+      (r/collect step ag))))
 
 (defn- identifier [ag]
   (r/zcase ag
@@ -267,7 +267,7 @@
               :subquery []
 
               nil))]
-    ((r/stop-td-tu (r/mono-tu step)) ag)))
+    (r/collect-stop step ag)))
 
 ;; Inherited
 (defn- dcli [ag]
@@ -322,7 +322,7 @@
                 []
 
                 nil))]
-      (first ((r/stop-td-tu (r/mono-tu step)) (z/left ag))))
+      (first (r/collect-stop step (z/left ag))))
 
     (r/inherit ag)))
 
@@ -378,7 +378,7 @@
                 (if-let [derived-columns (not-empty (derived-columns ag))]
                   (for [identifier derived-columns]
                     {:identifier identifier})
-                  ((r/stop-td-tu (r/mono-tu asterisk-table-step)) ag))
+                  (r/collect-stop asterisk-table-step ag))
 
                 :column_reference
                 [{:identifier (last (identifiers ag))}]
@@ -392,7 +392,7 @@
               (r/zcase ag
                 :asterisk
                 (->> (z/right (r/parent ag))
-                     ((r/stop-td-tu (r/mono-tu asterisk-step)))
+                     (r/collect-stop asterisk-step)
                      (distinct)
                      (vec))
 
@@ -405,7 +405,7 @@
                 []
 
                 nil))]
-      [(vec (for [[idx projection] (->> ((r/stop-td-tu (r/mono-tu step)) ag)
+      [(vec (for [[idx projection] (->> (r/collect-stop step ag)
                                         (map-indexed vector))]
               (assoc projection :index idx)))])
 
@@ -433,8 +433,7 @@
                 nil
 
                 :explicit_row_value_constructor
-                (let [degree ((r/stop-td-tu (r/mono-tu row-degree-step))
-                              (r/with-tu-monoid ag +))]
+                (let [degree (r/collect-stop row-degree-step (r/with-tu-monoid ag +))]
                   [(vec (for [n (range degree)]
                           {:index n}))])
 
@@ -443,7 +442,7 @@
 
                 (when (r/ctor ag)
                   [[{:index 0}]])))]
-      ((r/stop-td-tu (r/mono-tu step)) ag))
+      (r/collect-stop step ag))
 
     (:query_expression_body
      :query_term)
@@ -457,7 +456,7 @@
                 []
 
                 nil))]
-      (let [candidates ((r/stop-td-tu (r/mono-tu step)) ag)]
+      (let [candidates (r/collect-stop step ag)]
         (if (set-operator ag)
           (if-let [{:keys [identifiers] :as corresponding} (corresponding ag)]
             (let [common-identifiers (->> (for [projections candidates]
@@ -486,7 +485,7 @@
               [(identifiers ag)]
 
               []))]
-    ((r/full-td-tu (r/mono-tu step)) ag)))
+    (r/collect step ag)))
 
 (defn- grouping-columns [ag]
   (letfn [(step [ag]
@@ -502,7 +501,7 @@
               []
 
               nil))]
-    (last (sort-by count ((r/stop-td-tu (r/mono-tu step)) ag)))))
+    (last (sort-by count (r/collect-stop step ag)))))
 
 (defn- group-env [ag]
   (r/zcase ag
@@ -555,7 +554,7 @@
                 []
 
                 nil))]
-      ((r/stop-td-tu (r/mono-tu step)) ag))
+      (r/collect-stop step ag))
 
     (r/inherit ag)))
 
@@ -646,7 +645,7 @@
               [(format (str label " cannot contain nested queries: %s %s")
                        (->src-str ag) (->line-info-str ag))]
               nil))]
-    ((r/stop-td-tu (r/mono-tu step)) ag)))
+    (r/collect-stop step ag)))
 
 (defn- check-set-operator [ag]
   (when-let [set-op (set-operator ag)]
@@ -679,7 +678,7 @@
                 (projected-columns (r/$ ag 1))
 
                 nil))]
-      (let [candidates ((r/stop-td-tu (r/mono-tu step)) ag)
+      (let [candidates (r/collect-stop step ag)
             degrees (mapv count candidates)]
         (when-not (apply = (count derived-columns) degrees)
           [(format "Derived columns has to have same degree as table: %s"
@@ -728,7 +727,7 @@
               []
 
               nil))]
-    ((r/stop-td-tu (r/mono-tu step)) ag)))
+    (r/collect-stop step ag)))
 
 (defn- errs [ag]
   (letfn [(step [ag]
@@ -774,7 +773,7 @@
               (check-unsigned-integer "Offset row count" (r/$ ag 2))
 
               []))]
-    ((r/full-td-tu (r/mono-tu step)) ag)))
+    (r/collect step ag)))
 
 ;; Scopes
 
@@ -785,7 +784,7 @@
               [(column-reference ag)]
 
               []))]
-    ((r/full-td-tu (r/mono-tu step)) ag)))
+    (r/collect step ag)))
 
 (defn- scope-id [ag]
   (r/zcase ag
@@ -868,7 +867,7 @@
               [(scope ag)]
 
               []))]
-    ((r/full-td-tu (r/mono-tu step)) ag)))
+    (r/collect step ag)))
 
 ;; API
 
