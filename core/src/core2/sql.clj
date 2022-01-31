@@ -88,7 +88,7 @@
 ;; Ids
 
 (defn- id [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :table_primary
     (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
       (id (z/prev ag))
@@ -104,12 +104,12 @@
 ;; Identifiers
 
 (defn- identifiers [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     (:column_name_list
      :column_reference
      :identifier_chain)
     (letfn [(step [_ ag]
-              (case (r/ctor ag)
+              (r/zcase ag
                 :regular_identifier
                 [(r/lexeme ag 1)]
 
@@ -117,7 +117,7 @@
       ((r/full-td-tu (r/mono-tuz step)) ag))))
 
 (defn- identifier [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :derived_column
     (r/zmatch ag
       [:derived_column _ [:as_clause _ [:regular_identifier as]]]
@@ -142,7 +142,7 @@
     nil))
 
 (defn- table-or-query-name [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     (:table_primary
      :with_list_element)
     (table-or-query-name (r/$ ag 1))
@@ -153,7 +153,7 @@
     nil))
 
 (defn- correlation-name [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :table_primary
     (or (correlation-name (r/$ ag -1))
         (correlation-name (r/$ ag -2)))
@@ -166,7 +166,7 @@
 ;; With
 
 (defn- cte [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :with_list_element
     {:query-name (table-or-query-name ag)
      :id (id ag)
@@ -175,7 +175,7 @@
 
 ;; Inherited
 (defn- ctei [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_expression
     (enter-env-scope (cte-env (r/parent ag)))
 
@@ -188,7 +188,7 @@
 
 ;; Synthesised
 (defn- cteo [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_expression
     (if (= :with_clause (r/ctor (r/$ ag 1)))
       (cteo (r/$ ag 1))
@@ -201,7 +201,7 @@
     (ctei (r/$ ag -1))))
 
 (defn- cte-env [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_expression
     (cteo ag)
 
@@ -215,13 +215,13 @@
 ;; From
 
 (defn- derived-columns [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :table_primary
     (when (= :column_name_list (r/ctor (r/$ ag -1)))
       (identifiers (r/$ ag -1)))))
 
 (defn- table [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :table_primary
     (when-not (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
       (let [table-name (table-or-query-name ag)
@@ -240,7 +240,7 @@
 
 (defn- local-tables [ag]
   (letfn [(step [_ ag]
-            (case (r/ctor ag)
+            (r/zcase ag
               :table_primary
               (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
                 (local-tables (r/$ ag 1))
@@ -253,7 +253,7 @@
 
 ;; Inherited
 (defn- dcli [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_specification
     (enter-env-scope (env (r/parent ag)))
 
@@ -270,7 +270,7 @@
 
 ;; Synthesised
 (defn- dclo [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_specification
     (dclo (r/$ ag -1))
 
@@ -284,7 +284,7 @@
     (dcli (r/$ ag -1))))
 
 (defn- env [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_specification
     (dclo ag)
 
@@ -298,7 +298,7 @@
 
     :order_by_clause
     (letfn [(step [_ ag]
-              (case (r/ctor ag)
+              (r/zcase ag
                 :query_specification
                 [(env ag)]
 
@@ -313,7 +313,7 @@
 ;; Select
 
 (defn- set-operator [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_expression_body
     (case (r/lexeme ag 2)
       "UNION" "UNION"
@@ -326,7 +326,7 @@
       nil)))
 
 (defn- corresponding [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_expression_body
     (or (corresponding (r/$ ag -2))
         (corresponding (r/$ ag 2)))
@@ -342,10 +342,10 @@
     nil))
 
 (defn- projected-columns [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_specification
     (letfn [(asterisk-table-step [_ ag]
-              (case (r/ctor ag)
+              (r/zcase ag
                 :table_value_constructor
                 (first (projected-columns ag))
 
@@ -355,7 +355,7 @@
                 nil))
 
             (asterisk-step [_ ag]
-              (case (r/ctor ag)
+              (r/zcase ag
                 :table_primary
                 (if-let [derived-columns (not-empty (derived-columns ag))]
                   (for [identifier derived-columns]
@@ -371,7 +371,7 @@
                 nil))
 
             (step [_ ag]
-              (case (r/ctor ag)
+              (r/zcase ag
                 :asterisk
                 (->> (z/right (r/parent ag))
                      ((r/stop-td-tu (r/mono-tuz asterisk-step)))
@@ -401,7 +401,7 @@
 
     :row_value_expression_list
     (letfn [(row-degree-step [_ ag]
-              (case (r/ctor ag)
+              (r/zcase ag
                 :row_value_constructor_element
                 1
 
@@ -410,7 +410,7 @@
 
                 nil))
             (step [_ ag]
-              (case (r/ctor ag)
+              (r/zcase ag
                 :row_value_expression_list
                 nil
 
@@ -426,10 +426,11 @@
                 (when (r/ctor ag)
                   [[{:index 0}]])))]
       ((r/stop-td-tu (r/mono-tuz step)) ag))
+
     (:query_expression_body
      :query_term)
     (letfn [(step [_ ag]
-              (case (r/ctor ag)
+              (r/zcase ag
                 (:query_specification
                  :table_value_constructor)
                 (projected-columns ag)
@@ -462,7 +463,7 @@
 
 (defn- grouping-column-references [ag]
   (letfn [(step [_ ag]
-            (case (r/ctor ag)
+            (r/zcase ag
               :column_reference
               [(identifiers ag)]
 
@@ -471,7 +472,7 @@
 
 (defn- grouping-columns [ag]
   (letfn [(step [_ ag]
-            (case (r/ctor ag)
+            (r/zcase ag
               (:aggregate_function
                :having_clause)
               [[]]
@@ -486,7 +487,7 @@
     (last (sort-by count ((r/stop-td-tu (r/mono-tuz step)) ag)))))
 
 (defn- group-env [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_specification
     (enter-env-scope (group-env (r/parent ag))
                      {:grouping-columns (grouping-columns ag)
@@ -512,7 +513,7 @@
 ;; Order by
 
 (defn- order-by-index [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_expression
     nil
 
@@ -525,10 +526,10 @@
     (r/inherit ag)))
 
 (defn- order-by-indexes [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :query_expression
     (letfn [(step [_ ag]
-              (case (r/ctor ag)
+              (r/zcase ag
                 :sort_specification
                 [(order-by-index ag)]
 
@@ -543,7 +544,7 @@
 ;; Column references
 
 (defn- column-reference [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     :column_reference
     (let [identifiers (identifiers ag)
           qualified? (> (count identifiers) 1)
@@ -619,7 +620,7 @@
 
 (defn- check-aggregate-or-subquery [label ag]
   (letfn [(step [_ inner-ag]
-            (case (r/ctor inner-ag)
+            (r/zcase inner-ag
               :aggregate_function
               [(format (str label " cannot contain aggregate functions: %s %s")
                        (->src-str ag) (->line-info-str ag))]
@@ -652,7 +653,7 @@
 (defn- check-derived-columns [ag]
   (when-let [derived-columns (derived-columns ag)]
     (letfn [(step [_ ag]
-              (case (r/ctor ag)
+              (r/zcase ag
                 :table_value_constructor
                 (projected-columns ag)
 
@@ -700,7 +701,7 @@
 
 (defn- check-where-clause [ag]
   (letfn [(step [_ ag]
-            (case (r/ctor ag)
+            (r/zcase ag
               :aggregate_function
               [(format "WHERE clause cannot contain aggregate functions: %s %s"
                        (->src-str ag) (->line-info-str ag))]
@@ -713,7 +714,7 @@
 
 (defn- errs [ag]
   (letfn [(step [_ ag]
-            (case (r/ctor ag)
+            (r/zcase ag
               :table_reference_list
               (check-duplicates "Table variable" ag
                                 (local-names (dclo ag) :correlation-name))
@@ -761,7 +762,7 @@
 
 (defn- all-column-references [ag]
   (letfn [(step [_ ag]
-            (case (r/ctor ag)
+            (r/zcase ag
               :column_reference
               [(column-reference ag)]
 
@@ -769,7 +770,7 @@
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
 (defn- scope-id [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     (:query_expression
      :query_specification)
     (id ag)
@@ -777,7 +778,7 @@
     (r/inherit ag)))
 
 (defn- subquery-scope-id [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     (:query_expression
      :query_specification)
     (scope-id ag)
@@ -792,7 +793,7 @@
     nil))
 
 (defn- scope [ag]
-  (case (r/ctor ag)
+  (r/zcase ag
     (:query_expression
      :query_specification)
     (let [id (scope-id ag)
@@ -814,7 +815,7 @@
                          :dependent-columns dependent-columns
                          :projected-columns projected-columns}
                   parent-id (assoc :parent-id parent-id))]
-      (case (r/ctor ag)
+      (r/zcase ag
         :query_expression
         (let [local-ctes (local-env-singleton-values (cteo ag))
               order-by-indexes (order-by-indexes ag)]
@@ -843,7 +844,7 @@
 
 (defn- scopes [ag]
   (letfn [(step [_ ag]
-            (case (r/ctor ag)
+            (r/zcase ag
               (:query_expression
                :query_specification)
               [(scope ag)]

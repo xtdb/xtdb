@@ -116,6 +116,9 @@
 (defmacro inherit [ag]
   `(some-> (parent ~ag) (recur)))
 
+(defmacro zcase {:style/indent 1} [ag & body]
+  `(case (ctor ~ag) ~@body))
+
 (defn with-memoized-attributes [attr-vars f]
   (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
     (with-redefs-fn attrs f)))
