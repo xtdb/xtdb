@@ -84,7 +84,7 @@
 ;; - does not take renamed tables into account, probably won't need to.
 
 (defn- normalize-rewrite [column->table]
-  (fn [_ z]
+  (fn [z]
     (r/zmatch z
       [:derived_column expr]
       ;;=>

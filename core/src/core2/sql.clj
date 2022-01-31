@@ -124,7 +124,7 @@
     (:column_name_list
      :column_reference
      :identifier_chain)
-    (letfn [(step [_ ag]
+    (letfn [(step [ag]
               (r/zcase ag
                 :regular_identifier
                 [(r/lexeme ag 1)]
@@ -257,7 +257,7 @@
           cte-id (assoc :cte-id cte-id :cte-scope-id cte-scope-id))))))
 
 (defn- local-tables [ag]
-  (letfn [(step [_ ag]
+  (letfn [(step [ag]
             (r/zcase ag
               :table_primary
               (if (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
@@ -315,7 +315,7 @@
     (dcli (r/parent ag))
 
     :order_by_clause
-    (letfn [(step [_ ag]
+    (letfn [(step [ag]
               (r/zcase ag
                 :query_specification
                 [(env ag)]
@@ -364,7 +364,7 @@
 (defn- projected-columns [ag]
   (r/zcase ag
     :query_specification
-    (letfn [(asterisk-table-step [_ ag]
+    (letfn [(asterisk-table-step [ag]
               (r/zcase ag
                 :table_value_constructor
                 (first (projected-columns ag))
@@ -374,7 +374,7 @@
 
                 nil))
 
-            (asterisk-step [_ ag]
+            (asterisk-step [ag]
               (r/zcase ag
                 :table_primary
                 (if-let [derived-columns (not-empty (derived-columns ag))]
@@ -390,7 +390,7 @@
 
                 nil))
 
-            (step [_ ag]
+            (step [ag]
               (r/zcase ag
                 :asterisk
                 (->> (z/right (r/parent ag))
@@ -420,7 +420,7 @@
     (projected-columns (r/$ ag 2))
 
     :row_value_expression_list
-    (letfn [(row-degree-step [_ ag]
+    (letfn [(row-degree-step [ag]
               (r/zcase ag
                 :row_value_constructor_element
                 1
@@ -429,7 +429,7 @@
                 0
 
                 nil))
-            (step [_ ag]
+            (step [ag]
               (r/zcase ag
                 :row_value_expression_list
                 nil
@@ -449,7 +449,7 @@
 
     (:query_expression_body
      :query_term)
-    (letfn [(step [_ ag]
+    (letfn [(step [ag]
               (r/zcase ag
                 (:query_specification
                  :table_value_constructor)
@@ -482,7 +482,7 @@
 ;; Group by
 
 (defn- grouping-column-references [ag]
-  (letfn [(step [_ ag]
+  (letfn [(step [ag]
             (r/zcase ag
               :column_reference
               [(identifiers ag)]
@@ -491,7 +491,7 @@
     ((r/full-td-tu (r/mono-tuz step)) ag)))
 
 (defn- grouping-columns [ag]
-  (letfn [(step [_ ag]
+  (letfn [(step [ag]
             (r/zcase ag
               (:aggregate_function
                :having_clause)
@@ -548,7 +548,7 @@
 (defn- order-by-indexes [ag]
   (r/zcase ag
     :query_expression
-    (letfn [(step [_ ag]
+    (letfn [(step [ag]
               (r/zcase ag
                 :sort_specification
                 [(order-by-index ag)]
@@ -639,7 +639,7 @@
              (->src-str ag) (->line-info-str ag))]))
 
 (defn- check-aggregate-or-subquery [label ag]
-  (letfn [(step [_ inner-ag]
+  (letfn [(step [inner-ag]
             (r/zcase inner-ag
               :aggregate_function
               [(format (str label " cannot contain aggregate functions: %s %s")
@@ -672,7 +672,7 @@
 
 (defn- check-derived-columns [ag]
   (when-let [derived-columns (derived-columns ag)]
-    (letfn [(step [_ ag]
+    (letfn [(step [ag]
               (r/zcase ag
                 :table_value_constructor
                 (projected-columns ag)
@@ -720,7 +720,7 @@
                (->src-str ag) (->line-info-str ag))])))
 
 (defn- check-where-clause [ag]
-  (letfn [(step [_ ag]
+  (letfn [(step [ag]
             (r/zcase ag
               :aggregate_function
               [(format "WHERE clause cannot contain aggregate functions: %s %s"
@@ -733,7 +733,7 @@
     ((r/stop-td-tu (r/mono-tuz step)) ag)))
 
 (defn- errs [ag]
-  (letfn [(step [_ ag]
+  (letfn [(step [ag]
             (r/zcase ag
               :table_reference_list
               (check-duplicates "Table variable" ag
@@ -781,7 +781,7 @@
 ;; Scopes
 
 (defn- all-column-references [ag]
-  (letfn [(step [_ ag]
+  (letfn [(step [ag]
             (r/zcase ag
               :column_reference
               [(column-reference ag)]
@@ -863,7 +863,7 @@
     (r/inherit ag)))
 
 (defn- scopes [ag]
-  (letfn [(step [_ ag]
+  (letfn [(step [ag]
             (r/zcase ag
               (:query_expression
                :query_specification)

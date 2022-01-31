@@ -214,7 +214,7 @@
 
 (defn z-try-apply-mz [f]
   (fn [z]
-    (some->> (f (z/node z) z)
+    (some->> (f z)
              (z/replace z))))
 
 (defn z-try-apply-m [f]
@@ -313,7 +313,7 @@
 
 (defn z-try-reduce-mz [f]
   (fn [z]
-    (some-> (z/node z) (f z))))
+    (some-> z (f))))
 
 (defn z-try-reduce-m [f]
   (fn [z]
@@ -622,11 +622,11 @@
 ;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.365.3145&rep=rep1&type=pdf
 
 (defn- normalize-comprehension [comprehension]
-  (letfn [(stage-1-symbolic-reduction [_ z]
+  (letfn [(stage-1-symbolic-reduction [z]
             (zmatch z
               [:get l [:record attrs]]
               ;;=> RecordBeta
-              (letfn [(step [n z]
+              (letfn [(step [z]
                         (case (ctor z)
                           :attr (when (= l (lexeme z 1))
                                   (lexeme z 2))
@@ -635,7 +635,7 @@
 
               [:for x [:yield M] N]
               ;;=> ForYield
-              (letfn [(step [n z]
+              (letfn [(step [[n :as z]]
                         (case (ctor z)
                           :for (when (= x (lexeme z 1))
                                  n)
@@ -667,7 +667,7 @@
               ;;=> WhereFalse
               []))
 
-          (stage-2-adhoc-rules [_ z]
+          (stage-2-adhoc-rules [z]
             (zmatch z
               [:for x L [:union-all M N]]
               ;;=> ForUnionAll2
