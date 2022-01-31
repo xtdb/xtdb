@@ -146,7 +146,7 @@
     :regular_identifier (identifier ag)
     nil))
 
-;; CTEs
+;; With
 
 (defn- cte [ag]
   (case (r/ctor ag)
@@ -181,7 +181,7 @@
                          (ctei (r/left-or-parent ag)))
     (r/inherit ag)))
 
-;; Tables
+;; From
 
 (defn- derived-columns [ag]
   (case (r/ctor ag)
@@ -335,27 +335,6 @@
                         candidates)))
     (r/inherit ag)))
 
-;; Order by
-
-(defn- order-by-index [ag]
-  (case (r/ctor ag)
-    :query_expression nil
-    :sort_specification (first (for [{:keys [normal-form index identifier]} (first (projected-columns ag))
-                                     :when (or (= normal-form (r/lexeme ag 1))
-                                               (= identifier (->src-str ag)))]
-                                 index))
-    (r/inherit ag)))
-
-(defn- order-by-indexes [ag]
-  (case (r/ctor ag)
-    :query_expression (letfn [(step [_ ag]
-                                (case (r/ctor ag)
-                                  :sort_specification [(order-by-index ag)]
-                                  :subquery []
-                                  nil))]
-                        ((r/stop-td-tu (r/mono-tuz step)) ag))
-    (r/inherit ag)))
-
 ;; Group by
 
 (defn- grouping-column-references [ag]
@@ -392,6 +371,27 @@
     :aggregate_function (update-env (group-env (r/parent ag))
                                     (fn [s]
                                       (assoc s :column-reference-type :within-group-varying)))
+    (r/inherit ag)))
+
+;; Order by
+
+(defn- order-by-index [ag]
+  (case (r/ctor ag)
+    :query_expression nil
+    :sort_specification (first (for [{:keys [normal-form index identifier]} (first (projected-columns ag))
+                                     :when (or (= normal-form (r/lexeme ag 1))
+                                               (= identifier (->src-str ag)))]
+                                 index))
+    (r/inherit ag)))
+
+(defn- order-by-indexes [ag]
+  (case (r/ctor ag)
+    :query_expression (letfn [(step [_ ag]
+                                (case (r/ctor ag)
+                                  :sort_specification [(order-by-index ag)]
+                                  :subquery []
+                                  nil))]
+                        ((r/stop-td-tu (r/mono-tuz step)) ag))
     (r/inherit ag)))
 
 ;; Column references
@@ -498,7 +498,7 @@
 (defn- check-values [ag]
   (let [candidates (projected-columns ag)
         degrees (mapv count candidates)]
-    (when (not (apply = degrees))
+    (when-not (apply = degrees)
       [(format "VALUES requires rows to have same degree: %s"
                (->line-info-str ag))])))
 
