@@ -196,18 +196,10 @@
   (fn self [z]
     ((choice-tp f (all-tp self)) z)))
 
-(defn z-try-apply-mz [f]
+(defn z-try-apply-m [f]
   (fn [z]
     (some->> (f z)
              (z/replace z))))
-
-(defn z-try-apply-m [f]
-  (fn [z]
-    (some->> (f (z/node z))
-             (z/replace z))))
-
-(defn adhoc-tpz [f g]
-  (choice-tp (z-try-apply-mz g) f))
 
 (defn adhoc-tp [f g]
   (choice-tp (z-try-apply-m g) f))
@@ -217,8 +209,6 @@
 (defn fail-tp [_])
 
 (def mono-tp (partial adhoc-tp fail-tp))
-
-(def mono-tpz (partial adhoc-tpz fail-tp))
 
 (defn try-tp [f]
   (choice-tp f id-tp))
@@ -235,6 +225,8 @@
 
 (defn outermost [f]
   (repeat-tp (once-td-tp f)))
+
+(def topdown full-td-tp)
 
 ;; Type Unifying
 
@@ -295,16 +287,9 @@
   (fn self [z]
     ((choice-tu f (all-tu self)) z)))
 
-(defn z-try-reduce-mz [f]
-  (fn [z]
-    (some-> z (f))))
-
 (defn z-try-reduce-m [f]
   (fn [z]
-    (some-> (z/node z) (f))))
-
-(defn adhoc-tuz [f g]
-  (choice-tu (z-try-reduce-mz g) f))
+    (some-> z (f))))
 
 (defn adhoc-tu [f g]
   (choice-tu (z-try-reduce-m g) f))
@@ -316,10 +301,12 @@
 
 (def mono-tu (partial adhoc-tu fail-tu))
 
-(def mono-tuz (partial adhoc-tuz fail-tu))
-
 (defn with-tu-monoid [z f]
   (vary-meta z assoc :zip/monoid f))
+
+(def crush full-td-tu)
+
+(def select once-td-tu)
 
 (comment
 
@@ -631,7 +618,7 @@
                           :attr (when (= l (lexeme z 1))
                                   (lexeme z 2))
                           nil))]
-                ((once-td-tu (mono-tuz step)) ($ z -1)))
+                ((once-td-tu (mono-tu step)) ($ z -1)))
 
               [:for x [:yield M] N]
               ;;=> ForYield
@@ -641,7 +628,7 @@
                                  n)
                           (when (= x n)
                             M)))]
-                (z/node ((stop-td-tp (mono-tpz step)) ($ z -1))))
+                (z/node ((stop-td-tp (mono-tp step)) ($ z -1))))
 
               [:for x [:for y L M] N]
               ;;=> ForFor
@@ -694,8 +681,8 @@
               [:for x M [:where L N]]))]
 
     (->> (z/vector-zip comprehension)
-         ((innermost (mono-tpz stage-1-symbolic-reduction)))
-         ((innermost (mono-tpz stage-2-adhoc-rules)))
+         ((innermost (mono-tp stage-1-symbolic-reduction)))
+         ((innermost (mono-tp stage-2-adhoc-rules)))
          (z/node))))
 
 (comment
