@@ -45,6 +45,14 @@
 
 ;; Draft attribute grammar for SQL semantics.
 
+;; TODO:
+;; - postpone analysis of column usage, focus on tables?
+;; -- qualify named columns join?
+;; -- postpone degree analysis to later or runtime?
+;; -- capture derived column list in table references?
+;; - expand asterisks?
+;; - VALUES analysis?
+
 (defn- enter-env-scope
   ([env]
    (enter-env-scope env {}))
@@ -449,10 +457,6 @@
                        (->src-str ag) (->line-info-str ag))]
               nil))]
     ((r/stop-td-tu (r/mono-tuz step)) ag)))
-
-;; TODO: capture derived column list in table references and check
-;; that it is the same degree as the projected columns of the source
-;; table. VALUES analysis? Postpone analysis of column usage?
 
 (defn- errs [ag]
   (letfn [(step [_ ag]
