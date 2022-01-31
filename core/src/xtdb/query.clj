@@ -129,27 +129,27 @@
         :rule ::rule
         :pred ::pred))
 
+(s/def ::aggregate
+  (s/cat :aggregate-fn aggregate?
+         :args (s/* literal?)
+         :form ::form))
+
 (s/def ::form
   (s/or :nil nil?
         :boolean boolean?
         :number number?
         :string string?
         :symbol symbol?
+        :aggregate ::aggregate
         :list (s/spec (s/* ::form))))
 
-(s/def ::aggregate
-  (s/cat :aggregate-fn aggregate?
-         :args (s/* literal?)
-         :form ::form))
+(s/def ::pull-arg
+  (s/cat :pull #{'pull}
+         :logic-var logic-var?
+         :pull-spec ::eql/query))
 
 (s/def ::find-arg
-  ;; maybe don't need a separate `:logic-var` branch, but an easy way
-  ;; to get a fast path that doesn't require the form mechanics
-  (s/or :logic-var logic-var?
-        :pull (s/cat :pull #{'pull}
-                     :logic-var logic-var?
-                     :pull-spec ::eql/query)
-        :aggregate ::aggregate
+  (s/or :pull ::pull-arg
         :form ::form))
 
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
@@ -180,8 +180,7 @@
 
 (s/def ::order-element
   (s/and vector?
-         (s/cat :find-arg (s/or :logic-var logic-var?
-                                :aggregate ::aggregate)
+         (s/cat :find-arg (s/or :form ::form)
                 :direction (s/? #{:asc :desc}))))
 
 (s/def ::order-by (s/coll-of ::order-element :kind vector?))
@@ -1643,127 +1642,143 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- compile-projection [form]
-  (let [[form-type form-arg] form]
-    (case form-type
-      (:nil :number :string :boolean)
-      {:logic-vars #{}
-       :eval-expr (constantly form-arg)}
+(defn- compile-projection
+  ([form] (compile-projection form {}))
 
-      :symbol {:logic-vars #{form-arg}
-               :eval-expr (fn [env]
-                            (get env form-arg))}
-      :list (let [[f-form & arg-forms] form-arg
-                  [f-type f-arg] f-form
-                  f (or (when (= f-type :symbol)
-                          (or (#{'if} f-arg)
-                              (some-> (if (qualified-symbol? f-arg)
-                                        (requiring-resolve f-arg)
-                                        (ns-resolve 'user f-arg))
-                                      deref)))
-                        (throw (err/illegal-arg :invalid-f-in-agg-expr
-                                                {::err/message "Invalid function in aggregate expr"
-                                                 :f f-arg})))
-                  compiled-args (mapv compile-projection arg-forms)
-                  arg-fns (mapv :eval-expr compiled-args)]
-              {:logic-vars (into #{} (mapcat :logic-vars) compiled-args)
-               :eval-expr (case f-arg
-                            if (do
-                                 (when-not (<= 2 (count arg-fns) 3)
-                                   (throw (err/illegal-arg :invalid-if-arity
-                                                           {::err/message "Arity error to `if`"
-                                                            :form form-arg})))
+  ([form {:keys [agg-allowed?], :or {agg-allowed? true} :as opts}]
+   (let [[form-type form-arg] form]
+     (case form-type
+       (:nil :number :string :boolean) {:logic-vars #{}
+                                        :eval-expr (constantly form-arg)}
 
-                                 (let [[compiled-pred compiled-then compiled-else] arg-fns]
-                                   (fn [env]
-                                     (if (compiled-pred env)
-                                       (compiled-then env)
-                                       (when compiled-else
-                                         (compiled-else env))))))
+       :symbol {:logic-vars #{form-arg}
+                :eval-expr (fn [env]
+                             (get env form-arg))}
 
-                            (fn [env]
-                              (apply f (mapv (fn [->arg] (->arg env)) arg-fns))))}))))
+       :aggregate (if-not agg-allowed?
+                    (throw (err/illegal-arg :nested-agg-in-projection
+                                            {::err/message "nested aggregates are disallowed"
+                                             :form form}))
 
-(defn- compile-find [conformed-find {:keys [var->bindings]} {:keys [find-cache]}]
-  (letfn [(result-fn [logic-var]
-            (let [var-binding (get var->bindings logic-var)]
-              (fn [join-keys {:keys [value-serde]}]
-                (bound-result-for-var value-serde var-binding join-keys))))
+                    (let [{:keys [aggregate-fn args form]} form-arg
+                          agg-sym (gensym aggregate-fn)
+                          {:keys [logic-vars eval-expr]} (compile-projection form {:agg-allowed? false})
+                          agg-fn (apply aggregate aggregate-fn args)]
+                      {:aggregates {agg-sym {:logic-vars logic-vars
+                                             :aggregate-fn (fn
+                                                             ([] (agg-fn))
+                                                             ([acc env] (agg-fn acc (eval-expr env)))
+                                                             ([acc] (agg-fn acc)))}}
 
-          (projection-fn [form]
-            (let [{:keys [logic-vars eval-expr]} (cache/compute-if-absent find-cache [:projection form] identity
-                                                                          (fn [[_ form]]
-                                                                            (compile-projection form)))
-                  result-fns (mapv (fn [logic-var]
-                                     (let [->result (result-fn logic-var)]
-                                       (fn [join-keys db]
-                                         (MapEntry/create logic-var (->result join-keys db)))))
-                                   logic-vars)
-                  ->env (fn [join-keys db]
-                          (into {}
-                                (map (fn [->result] (->result join-keys db)))
-                                result-fns))]
-              {:logic-vars logic-vars
-               :->result (comp eval-expr ->env)}))]
+                       :eval-expr (fn [env] (get env agg-sym))}))
 
-    (for [[var-type arg] conformed-find]
-      (case var-type
-        :logic-var {:logic-vars #{arg}
-                    :var-type :logic-var
-                    :->result (result-fn arg)}
+       :list (let [[f-form & arg-forms] form-arg
+                   [f-type f-arg] f-form
 
-        :form (-> (projection-fn arg)
-                  (assoc :var-type :form))
+                   f (or (when (= f-type :symbol)
+                           (or (#{'if} f-arg)
+                               (some-> (if (qualified-symbol? f-arg)
+                                         (requiring-resolve f-arg)
+                                         (ns-resolve 'user f-arg))
+                                       deref)))
+                         (throw (err/illegal-arg :invalid-f-in-agg-expr
+                                                 {::err/message "Invalid function in aggregate expr"
+                                                  :f f-arg})))
 
-        :pull (let [{:keys [logic-var pull-spec]} arg]
-                {:logic-vars #{logic-var}
-                 :var-type :pull
-                 :->result (let [->result (result-fn logic-var)
-                                 pull-fn (cache/compute-if-absent find-cache [:pull pull-spec] identity
-                                                                  (fn [[_ pull-spec]]
-                                                                    (pull/compile-pull-spec (s/unform ::eql/query pull-spec))))]
-                             (fn [join-keys db]
-                               (-> (->result join-keys db)
-                                   (pull-fn db))))})
+                   compiled-args (mapv #(compile-projection % opts) arg-forms)
+                   arg-fns (mapv :eval-expr compiled-args)]
 
-        :aggregate (let [{:keys [form args aggregate-fn]} arg]
-                     (s/assert ::aggregate-args [aggregate-fn (vec args)])
-                     (-> (projection-fn form)
-                         (assoc :var-type :aggregate
-                                :aggregate-fn (apply aggregate aggregate-fn args))))))))
+               {:logic-vars (into #{} (mapcat :logic-vars) compiled-args)
+                :aggregates (into {} (mapcat :aggregates) compiled-args)
+                :eval-expr (case f-arg
+                             if (do
+                                  (when-not (<= 2 (count arg-fns) 3)
+                                    (throw (err/illegal-arg :invalid-if-arity
+                                                            {::err/message "Arity error to `if`"
+                                                             :form form-arg})))
 
-(defn- aggregate-result [compiled-find result]
-  (let [indexed-compiled-find (map-indexed vector compiled-find)
-        grouping-var-idxs (vec (for [[n {:keys [var-type]}] indexed-compiled-find
-                                     :when (not= :aggregate var-type)]
-                                 n))
-        idx->aggregate (->> (for [[n {:keys [aggregate-fn]}] indexed-compiled-find
-                                  :when aggregate-fn]
-                              [n aggregate-fn])
-                            (into {}))
-        groups (persistent!
-                (reduce
-                 (fn [acc tuple]
-                   (let [group (mapv tuple grouping-var-idxs)
-                         group-acc (or (get acc group)
-                                       (reduce-kv
-                                        (fn [acc n aggregate-fn]
-                                          (assoc acc n (aggregate-fn)))
-                                        tuple
-                                        idx->aggregate))]
-                     (assoc! acc group (reduce-kv
-                                        (fn [acc n aggregate-fn]
-                                          (update acc n #(aggregate-fn % (get tuple n))))
-                                        group-acc
-                                        idx->aggregate))))
-                 (transient {})
-                 result))]
-    (for [[_ group-acc] groups]
-      (reduce-kv
-       (fn [acc n aggregate-fn]
-         (update acc n aggregate-fn))
-       group-acc
-       idx->aggregate))))
+                                  (let [[compiled-pred compiled-then compiled-else] arg-fns]
+                                    (fn [env]
+                                      (if (compiled-pred env)
+                                        (compiled-then env)
+                                        (when compiled-else
+                                          (compiled-else env))))))
+
+                             (fn [env]
+                               (apply f (mapv (fn [->arg] (->arg env)) arg-fns))))})))))
+
+(defn- compile-find-args [conformed-find]
+  (for [[var-type arg] conformed-find]
+    (case var-type
+      :form (let [{:keys [logic-vars aggregates eval-expr]} (compile-projection arg)]
+              {:find-arg-type :form
+               :aggregates aggregates
+               :logic-vars logic-vars
+               :row->result (fn [env _db] (eval-expr env))})
+
+      :pull (let [{:keys [logic-var pull-spec]} arg]
+              {:logic-vars #{logic-var}
+               :find-arg-type :pull
+               :row->result (let [pull-fn (pull/compile-pull-spec (s/unform ::eql/query pull-spec))]
+                              (fn [env db]
+                                (-> (get env logic-var)
+                                    (pull-fn db))))}))))
+
+(defn- env-factory [logic-vars {:keys [var->bindings]}]
+  (let [var-bindings (->> logic-vars
+                          (mapv (some-fn var->bindings
+                                         (fn [logic-var]
+                                           (throw (err/illegal-arg :find-unknown-var
+                                                                   {::err/message (str "Find refers to unknown variable: " logic-var)
+                                                                    :unknown-var logic-var}))))))]
+    (fn row->env [row {:keys [value-serde]}]
+      (->> (map (fn [logic-var var-binding]
+                  (MapEntry/create logic-var (bound-result-for-var value-serde var-binding row)))
+                logic-vars
+                var-bindings)
+           (into {})))))
+
+(defn- compile-find [conformed-find built-query {:keys [find-cache]}]
+  (let [find-args (cache/compute-if-absent find-cache conformed-find identity compile-find-args)
+        find-arg-types (into #{} (map :find-arg-type) find-args)
+        ->env (env-factory (into #{} (mapcat :logic-vars) find-args) built-query)]
+    {:find-arg-types find-arg-types
+     :find-fn (if-let [aggs (not-empty (into {} (mapcat :aggregates) find-args))]
+                (let [->agg-env (env-factory (into #{} (mapcat :logic-vars) (vals aggs)) built-query)]
+                  (letfn [(init-aggs []
+                            (->> aggs
+                                 (into {}
+                                       (map (fn [[agg-k {:keys [aggregate-fn]}]]
+                                              (MapEntry/create agg-k (aggregate-fn)))))))
+
+                          (step-aggs [db acc row]
+                            (let [group (->env row db)
+                                  group-acc (if (contains? acc group)
+                                              (get acc group)
+                                              (init-aggs))
+                                  agg-env (->agg-env row db)]
+                              (-> acc
+                                  (assoc group (->> (for [[agg-k agg-v] group-acc
+                                                          :let [{:keys [aggregate-fn]} (get aggs agg-k)]]
+                                                      (MapEntry/create agg-k (aggregate-fn agg-v agg-env)))
+                                                    (into {}))))))]
+
+                    (fn [rows db]
+                      (->> (reduce (partial step-aggs db) {} rows)
+                           (map (fn [[group-k group-acc]]
+                                  (let [env (into group-k
+                                                  (for [[agg-k agg-v] group-acc
+                                                        :let [{:keys [aggregate-fn]} (get aggs agg-k)]]
+                                                    (MapEntry/create agg-k (aggregate-fn agg-v))))]
+                                    (mapv (fn [{:keys [row->result]}]
+                                            (row->result env db))
+                                          find-args))))))))
+
+                (let [row->result-fns (mapv :row->result find-args)]
+                  (fn [rows db]
+                    (for [row rows]
+                      (let [env (->env row db)]
+                        (mapv #(% env db) row->result-fns))))))}))
 
 (defn- arg-for-var [arg var]
   (second
@@ -1828,18 +1843,9 @@
                     :value-serde value-serde
                     :entity-resolver-fn (or (:entity-resolver-fn db)
                                             (new-entity-resolver-fn db)))
-          {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query db where in in-args rule-name->rules)
-          compiled-find (compile-find find built-query db)
-          var-types (set (map :var-type compiled-find))
-          aggregate? (contains? var-types :aggregate)
-          pull? (contains? var-types :pull)
+          {:keys [n-ary-join] :as built-query} (build-sub-query db where in in-args rule-name->rules)
+          {:keys [find-arg-types find-fn]} (compile-find find built-query db)
           return-maps? (some q [:keys :syms :strs])]
-
-      (when-let [unknown-vars (not-empty
-                               (set/difference (into #{} (mapcat :logic-vars) compiled-find)
-                                               (set (keys var->bindings))))]
-        (throw (err/illegal-arg :find-unknown-var
-                                {::err/message (str "Find refers to unknown variables: " unknown-vars)})))
 
       (doseq [{:keys [find-arg]} order-by
               :when (not (some #{find-arg} find))]
@@ -1847,17 +1853,11 @@
                                 {::err/message (str "Order by requires an element from :find. unreturned element: " find-arg)})))
 
       (lazy-seq
-       (cond->> (let [result-fns (mapv :->result compiled-find)]
-                  (->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
-                         (mapv (fn [->result]
-                                 (->result join-keys db))
-                               result-fns))))
-
-         aggregate? (aggregate-result compiled-find)
+       (cond->> (find-fn (idx/layered-idx->seq n-ary-join) db)
          order-by (xio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
-         pull? (pull/->pull-result db q-conformed)
+         (contains? find-arg-types :pull) (pull/->pull-result db q-conformed)
          return-maps? (map (->return-maps q)))))))
 
 (defn entity-tx [{:keys [valid-time tx-id] :as _db} index-snapshot eid]

@@ -95,5 +95,5 @@
 (comment
   (time
    (xt/q (xt/db (xtdb-node))
-         (-> tpch/q19
+         (-> tpch/q14
              (assoc :timeout 120000)))))

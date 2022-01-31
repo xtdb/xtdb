@@ -382,7 +382,7 @@
   (t/testing "Unbound query variable"
     (t/is (thrown-with-msg?
            IllegalArgumentException
-           #"Find refers to unknown variables: #\{bah\}"
+           #"Find refers to unknown variable: bah"
            (xt/q (xt/db *api*) '{:find [bah]
                                  :where [[e :name]]})))
 
@@ -2901,7 +2901,43 @@
                  '{:find [(sum (if (even? ?x) ?x 0))]
                    :in [[?x ...]]}
                  (range 10)))
-        "if"))
+        "if")
+
+  (t/is (= #{[28.5]}
+           (xt/q (xt/db *api*)
+                 '{:find [(/ (double (sum (* ?x ?x)))
+                             (count ?x))]
+                   :in [[?x ...]]}
+                 (range 10)))
+        "aggregates can be included in exprs")
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"nested agg"
+                          (xt/q (xt/db *api*)
+                                '{:find [(sum (sum ?x))]
+                                  :in [[?x ...]]}
+                                (range 10)))
+        "aggregates can't be nested")
+
+  (t/testing "implicitly groups by variables present outside of aggregates"
+    (t/is (= #{[1 2] [2 3] [2 5]}
+             (xt/q (xt/db *api*)
+                   '{:find [(/ ?x ?y) (sum ?z)]
+                     :in [[[?x ?y ?z]]]}
+                   [[1 1 2]
+                    [2 1 3]
+                    [4 2 5]]))
+          "even though (/ x y) yields the same result in the latter two rows, we group by them individually")
+
+    (t/is (= #{[1 3] [1 7] [4 -1]}
+             (xt/q (xt/db *api*)
+                   '{:find [?x (- (sum ?z) ?y)]
+                     :in [[[?x ?y ?z]]]}
+                   [[1 1 4]
+                    [1 3 2]
+                    [1 3 8]
+                    [4 6 5]]))
+          "groups by x and y in this case")))
 
 (t/deftest test-can-bind-function-returns-to-falsy
   ;; Datomic does allow binding falsy values, DataScript doesn't
