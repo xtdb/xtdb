@@ -385,6 +385,10 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             [{:index 0}]]
            (->> (valid? "SELECT x.a FROM (VALUES (1)) AS x (a)")
                 (map :projected-columns))))
+  (t/is (= [[{:index 0 :identifier "a"}]
+            [{:index 0 :identifier "a"}]]
+           (->> (valid? "SELECT :a FROM x")
+                (map :projected-columns))))
 
   (invalid? #"Derived columns has to have same degree as table"
             "SELECT x.a FROM (SELECT t1.a, t1.b FROM t1) AS x (a)")

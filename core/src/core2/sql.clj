@@ -131,6 +131,14 @@
           [:column_reference
            [:identifier_chain _ [:regular_identifier column]]]]]]]
       ;;=>
+      column
+
+      [:derived_column
+       [:numeric_value_expression
+        [:term
+         [:factor
+          [:host_parameter_name column]]]]]
+      ;;=>
       column)
 
     :as_clause
