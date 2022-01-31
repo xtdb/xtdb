@@ -253,6 +253,26 @@
            ;; end::sub-query-example-3[]
            ))))
 
+(t/deftest test-projection-exprs
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo, :product-name "Foo", :stock-available 10, :net-price 10.00, :tax-rate 0.2}]
+                        [::xt/put {:xt/id :bar, :product-name "Bar", :stock-available 0, :net-price 3.75, :tax-rate 0.05}]])
+  (t/is (= #{["Foo" 12.00 "in stock"]
+             ["Bar" 3.9375 "out of stock"]}
+           (xt/q (xt/db *api*)
+                 (quote
+                  ;; tag::find-expr[]
+                  {:find [product-name
+                          (* net-price (+ 1.0 tax-rate))
+                          (if (> stock 0)
+                            "in stock"
+                            "out of stock")]
+                   :where [[p :product-name product-name]
+                           [p :net-price net-price]
+                           [p :tax-rate tax-rate]
+                           [p :stock-available stock]]})
+                 ;; end::find-expr[]
+                 ))))
+
 (t/deftest test-aggregates
   (let [node *api*]
     (t/is (=
@@ -261,18 +281,17 @@
            ;; end::query-aggregates-r[]
 
            ;; tag::query-aggregates[]
-           (xt/q
-            (xt/db node)
-            '{:find [(sum ?heads)
-                     (min ?heads)
-                     (max ?heads)
-                     (count ?heads)
-                     (count-distinct ?heads)]
-              :where [[(identity [["Cerberus" 3]
-                                  ["Medusa" 1]
-                                  ["Cyclops" 1]
-                                  ["Chimera" 1]])
-                       [[?monster ?heads]]]]})
+           (xt/q (xt/db node)
+                 '{:find [(sum ?heads)
+                          (min ?heads)
+                          (max ?heads)
+                          (count ?heads)
+                          (count-distinct ?heads)]
+                   :in [[[?monster ?heads]]]}
+                 [["Cerberus" 3]
+                  ["Medusa" 1]
+                  ["Cyclops" 1]
+                  ["Chimera" 1]])
            ;; end::query-aggregates[]
            ))))
 

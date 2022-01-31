@@ -72,7 +72,7 @@ The query map accepts the following Keywords
 [#find]
 == Find
 
-The find clause of a query specifies what values to be returned. These will be returned as a list.
+The find clause of a query specifies what values to be returned. These will be returned as a vector.
 
 [#find-logic-variable]
 === Logic Variable
@@ -80,10 +80,23 @@ The find clause of a query specifies what values to be returned. These will be r
 You can directly specify a logic variable from your query.
 The following will return all last names bound to the logic variable `n`.
 
-[source,clj]
+[source,clojure]
 ----
 include::example$test/xtdb/docs/examples/query_test.clj[tags=triple,indent=0]
 ----
+
+[#find-expressions]
+=== Expressions
+
+You can use basic Clojure-like expressions within a `:find` parameter.
+
+[source,clojure]
+----
+include::example$test/xtdb/docs/examples/query_test.clj[tags=find-expr,indent=0]
+----
+
+* `let`, and other macros are unsupported - you can create and call fully-qualified Clojure functions for more advanced use cases.
+* Function calls are guarded by xref:administration::configuring.adoc#fn-allowlist[`:fn-allow-list`], if it was specified in the node configuration.
 
 [#find-aggregate]
 === Aggregates
@@ -94,29 +107,37 @@ You can specify an aggregate function to apply to at most one logic variable.
 [cols="3,.^8"]
 |===
 |Usage|Description
-|`(sum ?lvar)`| Accumulates as a single value via the Clojure https://clojuredocs.org/clojure.core/+[`&#43;`] function
-|`(min ?lvar)` .2+| Return a single value via the Clojure https://clojuredocs.org/clojure.core/compare[`compare`] function which may operate on many types (integers, strings, collections etc.)
-|`(max ?lvar)`
-|`(count ?lvar)`| Return a single count of all values including any duplicates (note: this always performs a scan - no statistics or other stateful materializations are used)
-|`(avg ?lvar)`| Return a single value equivalent to `sum / count`
-|`(median ?lvar)` .3+| Return a single value corresponding to the statistical definition
-|`(variance ?lvar)`
-|`(stddev ?lvar)`
-|`(rand N ?lvar)`| Return a vector of exactly N values, where some values may be duplicates if N is larger than the range
-|`(sample N ?lvar)`| Return a vector of at-most N distinct values
-|`(distinct ?lvar)`| Return a set of distinct values
+|`(sum <expr>)`| Accumulates as a single value via the Clojure https://clojuredocs.org/clojure.core/+[`&#43;`] function
+|`(min <expr>)` .2+| Return a single value via the Clojure https://clojuredocs.org/clojure.core/compare[`compare`] function which may operate on many types (integers, strings, collections etc.)
+|`(max <expr>)`
+|`(count <expr>)`| Return a single count of all values including any duplicates (note: this always performs a scan - no statistics or other stateful materializations are used)
+|`(avg <expr>)`| Return a single value equivalent to `sum / count`
+|`(median <expr>)` .3+| Return a single value corresponding to the statistical definition
+|`(variance <expr>)`
+|`(stddev <expr>)`
+|`(rand N <expr>)`| Return a vector of exactly N values, where some values may be duplicates if N is larger than the range
+|`(sample N <expr>)`| Return a vector of at-most N distinct values
+|`(distinct <expr>)`| Return a set of distinct values
 |===
+
+* Aggregates cannot be nested within another - e.g. `(sum (count ?x))` is disallowed.
+* Results are implicitly grouped by all logic variables referred to outside of aggregations (even if the same variables are also referred to within aggregations).
+  For example, in the following example, the results are grouped by `?a` and `?b`:
++
+[source,clojure]
+----
+{:find [?a (/ ?b (sum (+ ?b ?c)))], ...}
+----
 
 ==== Example:
 
-[source,clj]
+[source,clojure]
 ----
 include::example$test/xtdb/docs/examples/query_test.clj[tags=query-aggregates,indent=0]
 
+;; =>
 include::example$test/xtdb/docs/examples/query_test.clj[tags=query-aggregates-r,indent=0]
 ----
-
-Note there is always implicit grouping across aggregates due to how XTDB performs the aggregation lazily _before_ turning the result tuples into a set.
 
 === Custom Aggregates
 
