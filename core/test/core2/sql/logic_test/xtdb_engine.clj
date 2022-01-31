@@ -103,17 +103,12 @@
          [:regular_identifier column]])
 
       [:sort_specification
-       [:numeric_value_expression
-        [:term
-         [:factor [:exact_numeric_literal [:unsigned_integer ordinal]]]]]]
+       [:exact_numeric_literal [:unsigned_integer ordinal]]]
       ;;=>
       [:sort_specification
-       [:numeric_value_expression
-        [:term
-         [:factor
-          [:column_reference
-           [:identifier_chain
-            [:regular_identifier (str "col" ordinal)]]]]]]])))
+       [:column_reference
+        [:identifier_chain
+         [:regular_identifier (str "col" ordinal)]]]])))
 
 (defn normalize-query [tables query]
   (let [column->table (->> (for [[table columns] (reverse tables)

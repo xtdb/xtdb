@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.string :as str]
+            [clojure.walk :as w]
             [clojure.zip :as z]
             [core2.rewrite :as r]
             [instaparse.core :as insta]
@@ -17,13 +18,28 @@
    :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*?([*]/\\s*|$)'")
    :string-ci true))
 
+(defn- prune-tree [tree]
+  (w/postwalk
+   (fn [x]
+     (if (and (vector? x)
+              (= 2 (count x)))
+       (let [fst (first x)]
+         (if (and (keyword? fst)
+                  (not (contains? #{:table_primary :query_expression} fst))
+                  (re-find #"(^|_)(term|factor|primary|expression)$" (name fst)))
+           (second x)
+           x))
+       x))
+   tree))
+
 (def parse
   (memoize
    (fn self
      ([s]
       (self s :directly_executable_statement))
      ([s start-rule]
-      (vary-meta (parse-sql2011 (str/trimr s) :start start-rule) assoc ::sql s)))))
+      (vary-meta
+       (prune-tree (parse-sql2011 (str/trimr s) :start start-rule)) assoc ::sql s)))))
 
 (defn- skip-whitespace ^long [^String s ^long n]
   (if (Character/isWhitespace (.charAt s n))
@@ -125,19 +141,13 @@
       as
 
       [:derived_column
-       [:numeric_value_expression
-        [:term
-         [:factor
-          [:column_reference
-           [:identifier_chain _ [:regular_identifier column]]]]]]]
+       [:column_reference
+        [:identifier_chain _ [:regular_identifier column]]]]
       ;;=>
       column
 
       [:derived_column
-       [:numeric_value_expression
-        [:term
-         [:factor
-          [:host_parameter_name column]]]]]
+       [:host_parameter_name column]]
       ;;=>
       column)
 
@@ -331,7 +341,9 @@
     :query_term
     (case (r/lexeme ag 2)
       "INTERSECT" "INTERSECT"
-      nil)))
+      nil)
+
+    nil))
 
 (defn- corresponding [ag]
   (r/zcase ag
