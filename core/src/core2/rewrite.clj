@@ -123,22 +123,6 @@
   (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
     (with-redefs-fn attrs f)))
 
-(defn ->attributed-tree [tree attr-vars]
-  (with-memoized-attributes attr-vars
-    #(loop [loc (z/vector-zip tree)]
-       (if (z/end? loc)
-         (z/node loc)
-         (recur (z/next (if (z/branch? loc)
-                          (if-let [acc (some->> (for [k attr-vars
-                                                      :let [v (k loc)]
-                                                      :when (some? v)]
-                                                  [(:name (meta k)) v])
-                                                (not-empty)
-                                                (into {}))]
-                            (z/edit loc vary-meta merge acc)
-                            loc)
-                          loc)))))))
-
 ;; Strategic Zippers based on Ztrategic
 
 ;; https://arxiv.org/pdf/2110.07902.pdf
@@ -222,11 +206,11 @@
     (some->> (f (z/node z))
              (z/replace z))))
 
-(defn adhoc-tp [f g]
-  (choice-tp (z-try-apply-m g) f))
-
 (defn adhoc-tpz [f g]
   (choice-tp (z-try-apply-mz g) f))
+
+(defn adhoc-tp [f g]
+  (choice-tp (z-try-apply-m g) f))
 
 (defn id-tp [x] x)
 
@@ -319,11 +303,11 @@
   (fn [z]
     (some-> (z/node z) (f))))
 
-(defn adhoc-tu [f g]
-  (choice-tu (z-try-reduce-m g) f))
-
 (defn adhoc-tuz [f g]
   (choice-tu (z-try-reduce-mz g) f))
+
+(defn adhoc-tu [f g]
+  (choice-tu (z-try-reduce-m g) f))
 
 (defn fail-tu [_])
 
@@ -581,6 +565,22 @@
             [:basechar "o"]]))))))
 
 (comment
+  (defn ->attributed-tree [tree attr-vars]
+    (with-memoized-attributes attr-vars
+      #(loop [loc (z/vector-zip tree)]
+         (if (z/end? loc)
+           (z/node loc)
+           (recur (z/next (if (z/branch? loc)
+                            (if-let [acc (some->> (for [k attr-vars
+                                                        :let [v (k loc)]
+                                                        :when (some? v)]
+                                                    [(:name (meta k)) v])
+                                                  (not-empty)
+                                                  (into {}))]
+                              (z/edit loc vary-meta merge acc)
+                              loc)
+                            loc)))))))
+
   (let [tree [:fork [:fork [:leaf 1] [:leaf 2]] [:fork [:leaf 3] [:leaf 4]]]
         tree (->attributed-tree tree [#'repmin #'locmin #'globmin])]
     (keep meta (tree-seq vector? seq tree)))
