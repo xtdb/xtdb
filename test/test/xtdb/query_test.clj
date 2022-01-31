@@ -3428,6 +3428,14 @@
                                          :where [[e :xt/id _]]
                                          :timeout 100})))))
 
+(defn long-running-pred [] (Thread/sleep 100) :ivan)
+
+(t/deftest test-query-with-predicate-with-timeout-1654
+  (t/is (thrown? TimeoutException
+                 (xt/q (xt/db *api*) '{:find [e]
+                                       :where [[(xtdb.query-test/long-running-pred) e]]
+                                       :timeout 10}))))
+
 (t/deftest test-nil-query-attribute-453
   (fix/transact! *api* [{:xt/id :id :this :that :these :those}])
   (t/is (thrown-with-msg? IllegalArgumentException
