@@ -47,8 +47,7 @@
 
 ;; TODO:
 ;; - postpone analysis of column usage, focus on tables?
-;; -- capture derived column list in table references?
-;; -- qualify named columns join?
+;; -- check named columns join?
 ;; -- postpone degree analysis to later or runtime?
 ;; - expand asterisks?
 
@@ -184,6 +183,11 @@
 
 ;; Tables
 
+(defn- derived-columns [ag]
+  (case (r/ctor ag)
+    :table_primary (when (= :column_name_list (r/ctor (r/$ ag -1)))
+                     (identifiers (r/$ ag -1)))))
+
 (defn- table [ag]
   (case (r/ctor ag)
     :table_primary (when-not (= :parenthesized_joined_table (r/ctor (r/$ ag 1)))
@@ -191,11 +195,13 @@
                            correlation-name (or (correlation-name ag) table-name)
                            {cte-id :id cte-scope-id :scope-id} (find-decl (cte-env ag) table-name)
                            subquery-scope-id (when (nil? table-name)
-                                               (subquery-scope-id ag))]
+                                               (subquery-scope-id ag))
+                           derived-columns (derived-columns ag)]
                        (cond-> {:correlation-name correlation-name
                                 :id (id ag)
                                 :scope-id (scope-id ag)}
                          table-name (assoc :table-or-query-name table-name)
+                         derived-columns (assoc :derived-columns derived-columns)
                          subquery-scope-id (assoc :subquery-scope-id subquery-scope-id)
                          cte-id (assoc :cte-id cte-id :cte-scope-id cte-scope-id))))))
 
@@ -476,6 +482,81 @@
               nil))]
     ((r/stop-td-tu (r/mono-tuz step)) ag)))
 
+(defn- check-set-operator [ag]
+  (when-let [set-op (set-operator ag)]
+    (let [candidates (projected-columns ag)
+          degrees (mapv count candidates)]
+      (cond
+        (= [0] degrees)
+        [(format "%s does not have corresponding columns: %s"
+                 set-op (->line-info-str ag))]
+
+        (not (apply = degrees))
+        [(format "%s requires tables to have same degree: %s"
+                 set-op (->line-info-str ag))]))))
+
+(defn- check-values [ag]
+  (let [candidates (projected-columns ag)
+        degrees (mapv count candidates)]
+    (when (not (apply = degrees))
+      [(format "VALUES requires rows to have same degree: %s"
+               (->line-info-str ag))])))
+
+(defn- check-derived-columns [ag]
+  (when-let [derived-columns (derived-columns ag)]
+    (letfn [(step [_ ag]
+              (case (r/ctor ag)
+                :table_value_constructor (projected-columns ag)
+                :subquery (projected-columns (r/$ ag 1))
+                nil))]
+      (let [candidates ((r/stop-td-tu (r/mono-tuz step)) ag)
+            degrees (mapv count candidates)]
+        (when-not (apply = (count derived-columns) degrees)
+          [(format "Derived columns has to have same degree as table: %s"
+                   (->line-info-str ag))])))))
+
+(defn- check-column-reference [ag]
+  (let [{:keys [identifiers table-id type] :as cr} (column-reference ag)]
+    (case type
+      (:ordinary
+       :group-invariant
+       :within-group-varying
+       :outer
+       :outer-group-invariant)
+      (if-not table-id
+        [(format "Table not in scope: %s %s"
+                 (first identifiers) (->line-info-str ag))]
+        [])
+
+      :resolved-in-sort-key
+      []
+
+      :unqualified
+      [(format "XTDB requires fully-qualified columns: %s %s"
+               (->src-str ag) (->line-info-str ag))]
+
+      :invalid-group-invariant
+      [(format "Column reference is not a grouping column: %s %s"
+               (->src-str ag) (->line-info-str ag))]
+
+      :invalid-outer-group-invariant
+      [(format "Outer column reference is not an outer grouping column: %s %s"
+               (->src-str ag) (->line-info-str ag))]
+
+      :invalid-outer-within-group-varying
+      [(format "Within group varying column reference is an outer column: %s %s"
+               (->src-str ag) (->line-info-str ag))])))
+
+(defn- check-where-clause [ag]
+  (letfn [(step [_ ag]
+            (case (r/ctor ag)
+              :aggregate_function
+              [(format "WHERE clause cannot contain aggregate functions: %s %s"
+                       (->src-str ag) (->line-info-str ag))]
+              :subquery []
+              nil))]
+    ((r/stop-td-tu (r/mono-tuz step)) ag)))
+
 (defn- errs [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)
@@ -484,64 +565,15 @@
               :with_list (check-duplicates "CTE query name" ag
                                            (local-names (cteo ag) :query-name))
               (:query_expression_body
-               :query_term) (when-let [set-op (set-operator ag)]
-                              (let [candidates (projected-columns ag)
-                                    degrees (mapv count candidates)]
-                                (cond
-                                  (= [0] degrees)
-                                  [(format "%s does not have corresponding columns: %s"
-                                           set-op (->line-info-str ag))]
-
-                                  (not (apply = degrees))
-                                  [(format "%s requires tables to have same degree: %s"
-                                           set-op (->line-info-str ag))])))
-              :table_value_constructor (let [candidates (projected-columns ag)
-                                             degrees (mapv count candidates)]
-                                         (when (not (apply = degrees))
-                                           [(format "VALUES requires rows to have same degree: %s"
-                                                    (->line-info-str ag))]))
+               :query_term) (check-set-operator ag)
+              :table_value_constructor (check-values ag)
+              :table_primary (check-derived-columns ag)
               :column_name_list (check-duplicates "Column name" ag (identifiers ag))
-              :column_reference (let [{:keys [identifiers table-id type] :as cr} (column-reference ag)]
-                                  (case type
-                                    (:ordinary
-                                     :group-invariant
-                                     :within-group-varying
-                                     :outer
-                                     :outer-group-invariant)
-                                    (if-not table-id
-                                      [(format "Table not in scope: %s %s"
-                                               (first identifiers) (->line-info-str ag))]
-                                      [])
-
-                                    :resolved-in-sort-key
-                                    []
-
-                                    :unqualified
-                                    [(format "XTDB requires fully-qualified columns: %s %s"
-                                             (->src-str ag) (->line-info-str ag))]
-
-                                    :invalid-group-invariant
-                                    [(format "Column reference is not a grouping column: %s %s"
-                                             (->src-str ag) (->line-info-str ag))]
-
-                                    :invalid-outer-group-invariant
-                                    [(format "Outer column reference is not an outer grouping column: %s %s"
-                                             (->src-str ag) (->line-info-str ag))]
-
-                                    :invalid-outer-within-group-varying
-                                    [(format "Within group varying column reference is an outer column: %s %s"
-                                             (->src-str ag) (->line-info-str ag))]))
+              :column_reference (check-column-reference ag)
               (:general_set_function
                :array_aggregate_function) (check-aggregate-or-subquery "Aggregate functions" ag)
               :sort_specification (check-aggregate-or-subquery "Sort specifications" ag)
-              :where_clause (letfn [(step [_ ag]
-                                      (case (r/ctor ag)
-                                        :aggregate_function
-                                        [(format "WHERE clause cannot contain aggregate functions: %s %s"
-                                                 (->src-str ag) (->line-info-str ag))]
-                                        :subquery []
-                                        nil))]
-                              ((r/stop-td-tu (r/mono-tuz step)) ag))
+              :where_clause (check-where-clause ag)
               :fetch_first_clause (check-unsigned-integer "Fetch first row count" (r/$ ag 3))
               :result_offset_clause (check-unsigned-integer "Offset row count" (r/$ ag 2))
               []))]

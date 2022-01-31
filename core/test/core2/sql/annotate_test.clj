@@ -349,6 +349,8 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
 
   (invalid? #"INTERSECT does not have corresponding columns"
             "SELECT t1.b FROM t1 INTERSECT CORRESPONDING BY (c) SELECT t2.b FROM t2")
+  (invalid? #"UNION requires tables to have same degree"
+            "SELECT t1.b FROM t1 UNION SELECT t2.b, t2.c FROM t2")
 
   (t/is (= [[{:index 0} {:index 1} {:index 2}]]
            (->> (valid? "VALUES (1, 2, 3), (4, 5, 6)")
@@ -370,4 +372,21 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"VALUES requires rows to have same degree"
             "VALUES (1, 2), (SELECT t1.a FROM t1)")
   (invalid? #"VALUES requires rows to have same degree"
-            "VALUES (1), (SELECT t1.a, t1.b FROM t1)"))
+            "VALUES (1), (SELECT t1.a, t1.b FROM t1)")
+
+  (t/is (= [[{:index 0 :identifier "a"}]
+            [{:index 0 :identifier "a"}]
+            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
+            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]]
+           (->> (valid? "SELECT x.a FROM (SELECT t1.a, t1.b FROM t1) AS x (a, b)")
+                (map :projected-columns))))
+  (t/is (= [[{:index 0 :identifier "a"}]
+            [{:index 0 :identifier "a"}]
+            [{:index 0}]]
+           (->> (valid? "SELECT x.a FROM (VALUES (1)) AS x (a)")
+                (map :projected-columns))))
+
+  (invalid? #"Derived columns has to have same degree as table"
+            "SELECT x.a FROM (SELECT t1.a, t1.b FROM t1) AS x (a)")
+  (invalid? #"Derived columns has to have same degree as table"
+            "SELECT x.a FROM (VALUES (1, 2)) AS x (a)"))
