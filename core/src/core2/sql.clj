@@ -450,6 +450,10 @@
               nil))]
     ((r/stop-td-tu (r/mono-tuz step)) ag)))
 
+;; TODO: capture derived column list in table references and check
+;; that it is the same degree as the projected columns of the source
+;; table. VALUES analysis? Postpone analysis of column usage?
+
 (defn- errs [ag]
   (letfn [(step [_ ag]
             (case (r/ctor ag)

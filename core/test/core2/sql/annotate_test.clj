@@ -258,7 +258,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (valid? "SELECT * FROM foo, LATERAL (SELECT t1.b FROM t1 JOIN t2 ON (t1.x = t2.y AND t1.x = foo.x)) AS t2")
   (valid? "SELECT * FROM foo WHERE foo.x = (SELECT t1.b FROM t1 JOIN t2 ON (t1.x = t2.y AND t1.x = foo.x))")
   (valid? "SELECT t1.b FROM foo, t1 JOIN t2 ON (t1.x = foo.y)")
-  (valid? "SELECT t1.b FROM bar, (t1 NATURAL JOIN t2) JOIN t3 ON (t1.x = t3.y)")
+  (valid? "SELECT t1.b FROM bar, (t1 INNER JOIN t2 USING (x)) JOIN t3 ON (t1.x = t3.y)")
 
   (invalid? #"Table not in scope: foo"
             "SELECT * FROM (SELECT t1.b FROM t1 JOIN t2 ON (t1.x = t2.y AND t1.x = foo.x)) AS t2")
