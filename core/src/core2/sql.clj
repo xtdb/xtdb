@@ -539,7 +539,10 @@
     (:query_expression
      :query_specification) (scope-id ag)
     (:table_primary
-     :subquery) (subquery-scope-id (r/$ ag 1))
+     :subquery
+     :scalar_subquery
+     :row_subquery
+     :table_subquery) (subquery-scope-id (r/$ ag 1))
     :lateral_derived_table (subquery-scope-id (r/$ ag 2))
     nil))
 
