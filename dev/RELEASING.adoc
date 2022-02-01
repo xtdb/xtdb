@@ -54,14 +54,17 @@ If you're building XTDB locally, run:
   * Deploy using `./bin/deploy-site.sh`
 
 ## Github release:
+. Create a new milestone and ensure that all issues in the "Awaiting Release" column are updated
 . Locate tag on https://github.com/xtdb/xtdb/releases[releases page], click 'Edit tag'
 . Copy release notes into release description
 . Await artifacts, upload artifacts to release
 . Await JARs deploying, and ensure 'docs' section is complete - people get notified at this point.
 . 'Publish release'
+. 'Archive all cards' for the "Awaiting Release" column
 
 ## Publicise:
 
 * Zulip
 * Clojurians' Slack
+* Discourse
 * Twitter, if appropriate
