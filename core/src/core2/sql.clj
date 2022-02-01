@@ -62,8 +62,7 @@
 ;; Draft attribute grammar for SQL semantics.
 
 ;; TODO:
-;; - prune duplicates caused by asterisk.
-;; - deal with actual duplicated names.
+;; - sanity check duplication handling from spec.
 ;; - calculate projection for referenced CTE.
 
 (defn- enter-env-scope
@@ -473,18 +472,33 @@
                     projection))
 
                 :derived_column
-                [(let [identifier (identifier ag)]
+                [(let [identifier (identifier ag)
+                       qualified-column (when (r/ctor? :column_reference (r/$ ag 1))
+                                          (identifiers (r/$ ag 1)))]
                    (cond-> {:normal-form (z/node ag)}
-                     identifier (assoc :identifier identifier)))]
+                     identifier (assoc :identifier identifier)
+                     qualified-column (assoc :qualified-column qualified-column)))]
 
                 :subquery
                 []
 
                 nil))]
-      [(vec (for [[idx projection] (->> (r/collect-stop calculate-select-list ag)
-                                        (distinct)
-                                        (map-indexed vector))]
-              (assoc projection :index idx)))])
+      [(first
+        (reduce
+         (fn [[acc seen] {:keys [normal-form] :as projection}]
+           (cond
+             normal-form
+             [(conj acc (assoc projection :index (count acc)))
+              (conj seen (dissoc projection :normal-form))]
+
+             (not (contains? seen projection))
+             [(conj acc (assoc projection :index (count acc)))
+              (conj seen projection)]
+
+             :else
+             [acc seen]))
+         [[] #{}]
+         (r/collect-stop calculate-select-list ag)))])
 
     :query_expression
     (if (r/ctor? :with_clause (r/$ ag 1))

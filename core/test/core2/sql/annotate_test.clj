@@ -157,7 +157,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                    :scope-id 13,
                    :table-id 7,
                    :table-scope-id 6}},
-                :projected-columns [{:index 0, :identifier "b"}],
+                :projected-columns [{:index 0, :identifier "b", :qualified-column ["t1" "b"]}],
                 :parent-id 10,
                 :ctes {}}
                {:id 13,
@@ -168,7 +168,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                    :scope-id 13,
                    :table-id 7,
                    :table-scope-id 6}},
-                :projected-columns [{:index 0, :identifier "b"}],
+                :projected-columns [{:index 0, :identifier "b", :qualified-column ["t1" "b"]}],
                 :parent-id 12,
                 :tables
                 {"t2"
@@ -276,7 +276,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"CTE query name duplicated: foo"
             "WITH foo AS (SELECT 1 FROM foo), foo AS (SELECT 1 FROM foo) SELECT 1 FROM foo")
   (invalid? #"Column name duplicated: foo"
-            "SELECT * FROM (SELECT 1, 2 FROM foo) AS bar (foo, foo)"))
+            "SELECT 1 FROM (SELECT 1, 2 FROM foo) AS bar (foo, foo)"))
 
 (t/deftest test-grouping-columns
   (invalid? #"Column reference is not a grouping column: t1.a"
@@ -320,30 +320,30 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (valid? "SELECT 1 FROM t1 OFFSET :foo ROWS"))
 
 (t/deftest test-projection
-  (t/is (= [[{:index 0, :identifier "b"}]
-            [{:index 0, :identifier "b"}]
-            [{:index 0, :identifier "b"}]]
+  (t/is (= [[{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]
+            [{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]
+            [{:index 0, :identifier "b", :qualified-column ["t2" "b"]}]]
            (->> (valid? "SELECT t1.b FROM t1 UNION SELECT t2.b FROM t2")
                 (map :projected-columns))))
 
-  (t/is (= [[{:index 0, :identifier "b"}]
-            [{:index 0, :identifier "b"}]
-            [{:index 0, :identifier "a"}]]
+  (t/is (= [[{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]
+            [{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]
+            [{:index 0, :identifier "a", :qualified-column ["t2" "a"]}]]
            (->> (valid? "SELECT t1.b FROM t1 EXCEPT SELECT t2.a FROM t2")
                 (map :projected-columns))))
 
   (invalid? #"INTERSECT does not have corresponding columns"
             "SELECT t1.b FROM t1 INTERSECT CORRESPONDING SELECT t2.a FROM t2")
 
-  (t/is (= [[{:index 0, :identifier "b"}]
-            [{:index 0, :identifier "b"}]
-            [{:index 0, :identifier "a"} {:index 1, :identifier "b"}]]
+  (t/is (= [[{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]
+            [{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]
+            [{:index 0, :identifier "a", :qualified-column ["t2" "a"]} {:index 1, :identifier "b", :qualified-column ["t2" "b"]}]]
            (->> (valid? "SELECT t1.b FROM t1 EXCEPT CORRESPONDING SELECT t2.a, t2.b FROM t2")
                 (map :projected-columns))))
 
-  (t/is (= [[{:index 0, :identifier "b"}]
-            [{:index 0, :identifier "b"}]
-            [{:index 0, :identifier "a"} {:index 1, :identifier "b"}]]
+  (t/is (= [[{:index 0, :identifier "b" :qualified-column ["t1" "b"]}]
+            [{:index 0, :identifier "b" :qualified-column ["t1" "b"]}]
+            [{:index 0, :identifier "a" :qualified-column ["t2" "a"]} {:index 1, :identifier "b"  :qualified-column ["t2" "b"]}]]
            (->> (valid? "SELECT t1.b FROM t1 EXCEPT CORRESPONDING BY (b) SELECT t2.a, t2.b FROM t2")
                 (map :projected-columns))))
 
@@ -374,14 +374,14 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"VALUES requires rows to have same degree"
             "VALUES (1), (SELECT t1.a, t1.b FROM t1)")
 
-  (t/is (= [[{:index 0 :identifier "a"}]
-            [{:index 0 :identifier "a"}]
-            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
-            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]]
+  (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["t1" "a"]} {:index 1 :identifier "b" :qualified-column ["t1" "b"]}]
+            [{:index 0 :identifier "a" :qualified-column ["t1" "a"]} {:index 1 :identifier "b" :qualified-column ["t1" "b"]}]]
            (->> (valid? "SELECT x.a FROM (SELECT t1.a, t1.b FROM t1) AS x (a, b)")
                 (map :projected-columns))))
-  (t/is (= [[{:index 0 :identifier "a"}]
-            [{:index 0 :identifier "a"}]
+  (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
             [{:index 0}]]
            (->> (valid? "SELECT x.a FROM (VALUES (1)) AS x (a)")
                 (map :projected-columns))))
@@ -406,40 +406,40 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
 
   (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]} {:index 1 :identifier "b" :qualified-column ["x" "b"]}]
             [{:index 0 :identifier "a" :qualified-column ["x" "a"]} {:index 1 :identifier "b" :qualified-column ["x" "b"]}]
-            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
-            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]]
+            [{:index 0 :identifier "a" :qualified-column ["y" "a"]} {:index 1 :identifier "b" :qualified-column ["y" "b"]}]
+            [{:index 0 :identifier "a" :qualified-column ["y" "a"]} {:index 1 :identifier "b" :qualified-column ["y" "b"]}]]
            (->> (valid? "SELECT * FROM (SELECT y.a, y.b FROM y) AS x")
                 (map :projected-columns))))
 
   (t/is (= [[{:index 0 :identifier "c" :qualified-column ["x" "c"]} {:index 1 :identifier "d" :qualified-column ["x" "d"]}]
             [{:index 0 :identifier "c" :qualified-column ["x" "c"]} {:index 1 :identifier "d" :qualified-column ["x" "d"]}]
-            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]
-            [{:index 0 :identifier "a"} {:index 1 :identifier "b"}]]
+            [{:index 0 :identifier "a" :qualified-column ["y" "a"]} {:index 1 :identifier "b" :qualified-column ["y" "b"]}]
+            [{:index 0 :identifier "a" :qualified-column ["y" "a"]} {:index 1 :identifier "b" :qualified-column ["y" "b"]}]]
            (->> (valid? "SELECT * FROM (SELECT y.a, y.b FROM y) AS x (c, d)")
                 (map :projected-columns))))
 
   (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]} {:index 1 :identifier "b" :qualified-column ["z" "b"]}]
             [{:index 0 :identifier "a" :qualified-column ["x" "a"]} {:index 1 :identifier "b" :qualified-column ["z" "b"]}]
-            [{:index 0 :identifier "a"}]
-            [{:index 0 :identifier "a"}]]
+            [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]]
            (->> (valid? "SELECT * FROM (SELECT y.a FROM y WHERE y.z = FALSE) AS x, z WHERE z.b = TRUE")
                 (map :projected-columns))))
 
   (t/is (= [[{:index 0 :identifier "b" :qualified-column ["x" "b"]} {:index 1 :identifier "b" :qualified-column ["z" "b"]}]
             [{:index 0 :identifier "b" :qualified-column ["x" "b"]} {:index 1 :identifier "b" :qualified-column ["z" "b"]}]
-            [{:index 0 :identifier "b"}]
-            [{:index 0 :identifier "b"}]
-            [{:index 0 :identifier "b"}]
-            [{:index 0 :identifier "b"}]]
+            [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
+            [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
+            [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
+            [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]]
            (->> (valid? "SELECT * FROM (SELECT y.b FROM y) AS x, (SELECT y.b FROM y) AS z")
                 (map :projected-columns))))
 
   (t/is (= [[{:index 0 :identifier "b" :qualified-column ["x" "b"]} {:index 1 :identifier "z" :qualified-column ["x" "z"]}]
             [{:index 0 :identifier "b" :qualified-column ["x" "b"]} {:index 1 :identifier "z" :qualified-column ["x" "z"]}]
-            [{:index 0 :identifier "b"}]
-            [{:index 0 :identifier "b"}]
-            [{:index 0 :identifier "a"}]
-            [{:index 0 :identifier "a"}]]
+            [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
+            [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
+            [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]]
            (->> (valid? "SELECT x.* FROM (SELECT y.b FROM y) AS x, (SELECT y.a FROM y) AS z WHERE x.z IS NULL")
                 (map :projected-columns))))
 
@@ -449,10 +449,10 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             [{:index 0 :identifier "b" :qualified-column ["x" "b"]}
              {:index 1 :identifier "z" :qualified-column ["x" "z"]}
              {:index 2 :identifier "a" :qualified-column ["z" "a"]}]
-            [{:index 0 :identifier "b"}]
-            [{:index 0 :identifier "b"}]
-            [{:index 0 :identifier "a"}]
-            [{:index 0 :identifier "a"}]]
+            [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
+            [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
+            [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]]
            (->> (valid? "SELECT x.*, z.* FROM (SELECT y.b FROM y) AS x, (SELECT y.a FROM y) AS z WHERE x.z IS NULL")
                 (map :projected-columns))))
 
@@ -473,4 +473,23 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Query does not select any columns"
             "SELECT * FROM foo")
   (invalid? #"Table not in scope: baz"
-            "SELECT foo.x, baz.* FROM foo"))
+            "SELECT foo.x, baz.* FROM foo")
+
+  (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}]]
+           (->> (valid? "SELECT x.a, x.* FROM x WHERE x.a IS NOT NULL")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "a" :qualified-column ["x" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "a" :qualified-column ["x" "a"]}]]
+           (->> (valid? "SELECT x.a, x.a FROM x WHERE x.a IS NOT NULL")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "a" :qualified-column ["y" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "a" :qualified-column ["y" "a"]}]]
+           (->> (valid? "SELECT * FROM x, y WHERE x.a = y.a")
+                (map :projected-columns)))))
