@@ -15,7 +15,7 @@
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
                  [com.xtdb/xtdb-core]
-                 [org.apache.kafka/kafka-clients "2.6.0" :exclusions [org.lz4/lz4-java]]
+                 [org.apache.kafka/kafka-clients "2.6.1" :exclusions [org.lz4/lz4-java]]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [com.cognitect/transit-clj "1.0.324" :exclusions [org.msgpack/msgpack]]]
 
