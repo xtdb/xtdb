@@ -40,7 +40,7 @@
              (xt/q (xt/db *api*) '{:find [e] :where [[e :xt/id _]]})))
     (t/is (thrown-with-msg?
            IllegalArgumentException
-           #"Find refers to unknown variables:"
+           #"Find refers to unknown variable:"
            (xt/q (xt/db *api*) '{:find [e] :where [[f :xt/id _]]})))
     (.close ^Closeable bus)
     (t/testing "post query timer values"

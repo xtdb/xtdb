@@ -26,6 +26,7 @@
            (java.io Closeable Writer)
            (java.util Collection Comparator Date HashMap List Map UUID)
            (java.util.concurrent Executors Future ScheduledExecutorService TimeoutException TimeUnit)
+           (java.util.function Function)
            (org.agrona DirectBuffer)
            (xtdb.codec EntityTx)))
 
@@ -132,14 +133,29 @@
 (s/def ::aggregate
   (s/cat :aggregate-fn aggregate?
          :args (s/* literal?)
-         :logic-var logic-var?))
+         :form ::form))
+
+(s/def ::form
+  (s/or :nil nil?
+        :boolean boolean?
+        :number number?
+        :string string?
+        :symbol symbol?
+        :keyword keyword?
+        :aggregate ::aggregate
+        :set (s/coll-of ::form, :kind set?)
+        :vector (s/coll-of ::form, :kind vector?)
+        :list (s/coll-of ::form, :kind list?)
+        :map (s/map-of ::form ::form, :conform-keys true)))
+
+(s/def ::pull-arg
+  (s/cat :pull #{'pull}
+         :logic-var logic-var?
+         :pull-spec ::eql/query))
 
 (s/def ::find-arg
-  (s/or :logic-var logic-var?
-        :pull (s/cat :pull #{'pull}
-                     :logic-var logic-var?
-                     :pull-spec ::eql/query)
-        :aggregate ::aggregate))
+  (s/or :pull ::pull-arg
+        :form ::form))
 
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
 
@@ -169,8 +185,7 @@
 
 (s/def ::order-element
   (s/and vector?
-         (s/cat :find-arg (s/or :logic-var logic-var?
-                                :aggregate ::aggregate)
+         (s/cat :find-arg (s/or :form ::form)
                 :direction (s/? #{:asc :desc}))))
 
 (s/def ::order-by (s/coll-of ::order-element :kind vector?))
@@ -1294,15 +1309,37 @@
            [sub-clause]))
        (reduce into [])))
 
-(defn- build-pred-fns [clauses {:keys [allowed-ns allowed-fns] :as fn-allow-list}]
+(def default-allow-list
+  (->> (slurp (io/resource "query-allowlist.edn"))
+       (read-string)))
+
+(s/def ::fn-allow-list
+  (s/and
+   (s/coll-of (s/or :sym symbol? :str string?))
+   (s/conformer (fn [fal]
+                  (reduce
+                   (fn [allow-map [type pred]]
+                     (let [pred-symbol (cond-> pred
+                                         (= :str type) symbol)]
+                       (if (qualified-symbol? pred-symbol)
+                         (update allow-map :allowed-fns conj pred-symbol)
+                         (update allow-map :allowed-ns conj pred-symbol))))
+                   {:allowed-ns #{} :allowed-fns default-allow-list}
+                   fal)))))
+
+(defn- assert-allowed-fn [f-var fn-allow-list]
+  (when-let [{:keys [allowed-ns allowed-fns]} fn-allow-list]
+    (let [sym (symbol f-var)]
+      (when-not (or (contains? allowed-fns sym)
+                    (contains? allowed-ns (-> f-var (meta) ^clojure.lang.Namespace (:ns) (.getName))))
+        (throw (err/illegal-arg :fn-not-allowed {::err/message (str "Query used a function that was not in the allowlist: " sym)}))))))
+
+(defn- build-pred-fns [clauses fn-allow-list]
   (->> (for [[type clause :as sub-clause] clauses]
          (let [pred-var (get-in clause [:pred :pred-fn])]
            (if (and (= :pred type) (var? pred-var))
              (do
-               (when fn-allow-list
-                 (when-not (or (contains? allowed-fns (symbol pred-var))
-                               (contains? allowed-ns (-> pred-var (meta) ^clojure.lang.Namespace (:ns) (.getName))))
-                   (throw (err/illegal-arg :fn-not-allowed {::err/message (str "Query used a function that was not in the allowlist: " (symbol pred-var))}))))
+               (assert-allowed-fn pred-var fn-allow-list)
                (update-in sub-clause [1 :pred :pred-fn] var-get))
              sub-clause)))
        (into [])))
@@ -1632,67 +1669,171 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- compile-find [conformed-find {:keys [var->bindings]} {:keys [pull-cache]}]
-  (letfn [(result-fn [logic-var]
-            (let [var-binding (get var->bindings logic-var)]
-              (fn [join-keys {:keys [value-serde]}]
-                (bound-result-for-var value-serde var-binding join-keys))))]
-    (for [[var-type arg] conformed-find]
-      (case var-type
-        :logic-var {:logic-var arg
-                    :var-type :logic-var
-                    :->result (result-fn arg)}
+(defn- compile-projection [form {:keys [agg-allowed? fn-allow-list]
+                                 :or {agg-allowed? true}
+                                 :as opts}]
+   (let [[form-type form-arg] form]
+     (case form-type
+       (:nil :number :string :boolean :keyword) {:logic-vars #{}
+                                                 :eval-expr (constantly form-arg)}
 
-        :pull (let [{:keys [logic-var pull-spec]} arg]
-                {:logic-var logic-var
-                 :var-type :pull
-                 :->result (let [->result (result-fn logic-var)
-                                 pull-fn (cache/compute-if-absent pull-cache pull-spec identity
-                                                                  (fn [pull-spec]
-                                                                    (pull/compile-pull-spec (s/unform ::eql/query pull-spec))))]
-                             (fn [join-keys db]
-                               (-> (->result join-keys db)
-                                   (pull-fn db))))})
+       :symbol {:logic-vars #{form-arg}
+                :eval-expr (fn [env]
+                             (get env form-arg))}
 
-        :aggregate (let [{:keys [logic-var args aggregate-fn]} arg]
-                     (s/assert ::aggregate-args [aggregate-fn (vec args)])
-                     {:logic-var logic-var
-                      :var-type :aggregate
-                      :aggregate-fn (apply aggregate aggregate-fn args)
-                      :->result (result-fn logic-var)})))))
+       :aggregate (if-not agg-allowed?
+                    (throw (err/illegal-arg :nested-agg-in-projection
+                                            {::err/message "nested aggregates are disallowed"
+                                             :form form}))
 
-(defn- aggregate-result [compiled-find result]
-  (let [indexed-compiled-find (map-indexed vector compiled-find)
-        grouping-var-idxs (vec (for [[n {:keys [var-type]}] indexed-compiled-find
-                                     :when (not= :aggregate var-type)]
-                                 n))
-        idx->aggregate (->> (for [[n {:keys [aggregate-fn]}] indexed-compiled-find
-                                  :when aggregate-fn]
-                              [n aggregate-fn])
-                            (into {}))
-        groups (persistent!
-                (reduce
-                 (fn [acc tuple]
-                   (let [group (mapv tuple grouping-var-idxs)
-                         group-acc (or (get acc group)
-                                       (reduce-kv
-                                        (fn [acc n aggregate-fn]
-                                          (assoc acc n (aggregate-fn)))
-                                        tuple
-                                        idx->aggregate))]
-                     (assoc! acc group (reduce-kv
-                                        (fn [acc n aggregate-fn]
-                                          (update acc n #(aggregate-fn % (get tuple n))))
-                                        group-acc
-                                        idx->aggregate))))
-                 (transient {})
-                 result))]
-    (for [[_ group-acc] groups]
-      (reduce-kv
-       (fn [acc n aggregate-fn]
-         (update acc n aggregate-fn))
-       group-acc
-       idx->aggregate))))
+                    (let [{:keys [aggregate-fn args form]} form-arg
+                          agg-sym (gensym aggregate-fn)
+                          {:keys [logic-vars eval-expr]} (compile-projection form (-> opts (assoc :agg-allowed? false)))
+                          agg-fn (apply aggregate aggregate-fn args)]
+                      {:aggregates {agg-sym {:logic-vars logic-vars
+                                             :aggregate-fn (fn
+                                                             ([] (agg-fn))
+                                                             ([acc env] (agg-fn acc (eval-expr env)))
+                                                             ([acc] (agg-fn acc)))}}
+
+                       :eval-expr (fn [env] (get env agg-sym))}))
+
+       (:set :vector) (let [compiled-els (mapv #(compile-projection % opts) form-arg)
+                            into-coll (empty form-arg)]
+                        {:logic-vars (into #{} (mapcat :logic-vars) compiled-els)
+                         :aggregates (into {} (mapcat :aggregates) compiled-els)
+                         :eval-expr (fn [env]
+                                      (into into-coll
+                                            (map (comp #(% env) :eval-expr))
+                                            compiled-els))})
+
+       :map (let [compiled-els (mapv (fn [[k v]]
+                                       (let [compiled-k (compile-projection k opts)
+                                             compiled-v (compile-projection v opts)
+                                             compiled-entry [compiled-k compiled-v]]
+                                         {:logic-vars (into #{} (mapcat :logic-vars) compiled-entry)
+                                          :aggregates (into #{} (mapcat :aggregates) compiled-entry)
+                                          :eval-expr (fn [env]
+                                                       (MapEntry/create ((:eval-expr compiled-k) env)
+                                                                        ((:eval-expr compiled-v) env)))}))
+                                     form-arg)]
+              {:logic-vars (into #{} (mapcat :logic-vars) compiled-els)
+               :aggregates (into {} (mapcat :aggregates) compiled-els)
+               :eval-expr (fn [env]
+                            (into {}
+                                  (map (comp #(% env) :eval-expr))
+                                  compiled-els))})
+
+       :list (let [[f-form & arg-forms] form-arg
+                   [f-type f-arg] f-form
+
+                   f (or (when (= f-type :symbol)
+                           (or (#{'if} f-arg)
+                               (some-> (if (qualified-symbol? f-arg)
+                                         (requiring-resolve f-arg)
+                                         (ns-resolve 'user f-arg))
+                                       (doto (assert-allowed-fn fn-allow-list))
+                                       deref)))
+                         (throw (err/illegal-arg :invalid-f-in-agg-expr
+                                                 {::err/message "Invalid function in aggregate expr"
+                                                  :f f-arg})))
+
+                   compiled-args (mapv #(compile-projection % opts) arg-forms)
+                   arg-fns (mapv :eval-expr compiled-args)]
+
+               {:logic-vars (into #{} (mapcat :logic-vars) compiled-args)
+                :aggregates (into {} (mapcat :aggregates) compiled-args)
+                :eval-expr (case f-arg
+                             if (do
+                                  (when-not (<= 2 (count arg-fns) 3)
+                                    (throw (err/illegal-arg :invalid-if-arity
+                                                            {::err/message "Arity error to `if`"
+                                                             :form form-arg})))
+
+                                  (let [[compiled-pred compiled-then compiled-else] arg-fns]
+                                    (fn [env]
+                                      (if (compiled-pred env)
+                                        (compiled-then env)
+                                        (when compiled-else
+                                          (compiled-else env))))))
+
+                             (fn [env]
+                               (apply f (mapv (fn [->arg] (->arg env)) arg-fns))))}))))
+
+(defn- compile-find-args [conformed-find {:keys [fn-allow-list]}]
+  (for [[var-type arg] conformed-find]
+    (case var-type
+      :form (let [{:keys [logic-vars aggregates eval-expr]} (compile-projection arg {:fn-allow-list fn-allow-list})]
+              {:find-arg-type :form
+               :aggregates aggregates
+               :logic-vars logic-vars
+               :row->result (fn [env _db] (eval-expr env))})
+
+      :pull (let [{:keys [logic-var pull-spec]} arg]
+              {:logic-vars #{logic-var}
+               :find-arg-type :pull
+               :row->result (let [pull-fn (pull/compile-pull-spec (s/unform ::eql/query pull-spec))]
+                              (fn [env db]
+                                (-> (get env logic-var)
+                                    (pull-fn db))))}))))
+
+(defn- env-factory [logic-vars {:keys [var->bindings]}]
+  (let [var-bindings (->> logic-vars
+                          (mapv (some-fn var->bindings
+                                         (fn [logic-var]
+                                           (throw (err/illegal-arg :find-unknown-var
+                                                                   {::err/message (str "Find refers to unknown variable: " logic-var)
+                                                                    :unknown-var logic-var}))))))]
+    (fn row->env [row {:keys [value-serde]}]
+      (->> (map (fn [logic-var var-binding]
+                  (MapEntry/create logic-var (bound-result-for-var value-serde var-binding row)))
+                logic-vars
+                var-bindings)
+           (into {})))))
+
+(defn- agg-find-fn [aggs find-args built-query]
+  (let [->env (env-factory (into #{} (mapcat :logic-vars) find-args) built-query)
+        ->agg-env (env-factory (into #{} (mapcat :logic-vars) (vals aggs)) built-query)]
+    (letfn [(init-aggs []
+              (mapv (fn [[agg-k {:keys [aggregate-fn]}]]
+                      [agg-k aggregate-fn (volatile! (aggregate-fn))])
+                    aggs))
+
+            (step-aggs [db ^Map acc row]
+              (let [agg-env (->agg-env row db)
+                    group-accs (.computeIfAbsent acc (->env row db)
+                                                 (reify Function
+                                                   (apply [_ _group]
+                                                     (init-aggs))))]
+                (doseq [[_agg-k agg-fn !agg-v] group-accs]
+                  (vswap! !agg-v agg-fn agg-env))))]
+
+      (fn [rows db]
+        (let [acc (HashMap.)]
+          (doseq [row rows]
+            (step-aggs db acc row))
+
+          (for [[group-k group-accs] acc]
+            (let [env (into group-k
+                            (for [[agg-k agg-fn !agg-v] group-accs]
+                              (MapEntry/create agg-k (agg-fn @!agg-v))))]
+              (mapv (fn [{:keys [row->result]}]
+                      (row->result env db))
+                    find-args))))))))
+
+(defn- compile-find [conformed-find built-query {:keys [find-cache fn-allow-list]}]
+  (let [find-args (cache/compute-if-absent find-cache conformed-find identity #(compile-find-args % {:fn-allow-list fn-allow-list}))
+        find-arg-types (into #{} (map :find-arg-type) find-args)]
+    {:find-arg-types find-arg-types
+     :find-fn (if-let [aggs (not-empty (into {} (mapcat :aggregates) find-args))]
+                (agg-find-fn aggs find-args built-query)
+
+                (let [->env (env-factory (into #{} (mapcat :logic-vars) find-args) built-query)
+                      row->result-fns (mapv :row->result find-args)]
+                  (fn [rows db]
+                    (for [row rows]
+                      (let [env (->env row db)]
+                        (mapv #(% env db) row->result-fns))))))}))
 
 (defn- arg-for-var [arg var]
   (second
@@ -1757,18 +1898,9 @@
                     :value-serde value-serde
                     :entity-resolver-fn (or (:entity-resolver-fn db)
                                             (new-entity-resolver-fn db)))
-          {:keys [n-ary-join var->bindings] :as built-query} (build-sub-query db where in in-args rule-name->rules)
-          compiled-find (compile-find find built-query db)
-          var-types (set (map :var-type compiled-find))
-          aggregate? (contains? var-types :aggregate)
-          pull? (contains? var-types :pull)
+          {:keys [n-ary-join] :as built-query} (build-sub-query db where in in-args rule-name->rules)
+          {:keys [find-arg-types find-fn]} (compile-find find built-query db)
           return-maps? (some q [:keys :syms :strs])]
-
-      (when-let [unknown-vars (not-empty
-                               (set/difference (into #{} (map :logic-var) compiled-find)
-                                               (set (keys var->bindings))))]
-        (throw (err/illegal-arg :find-unknown-var
-                                {::err/message (str "Find refers to unknown variables: " unknown-vars)})))
 
       (doseq [{:keys [find-arg]} order-by
               :when (not (some #{find-arg} find))]
@@ -1776,17 +1908,11 @@
                                 {::err/message (str "Order by requires an element from :find. unreturned element: " find-arg)})))
 
       (lazy-seq
-       (cond->> (let [result-fns (mapv :->result compiled-find)]
-                  (->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
-                         (mapv (fn [->result]
-                                 (->result join-keys db))
-                               result-fns))))
-
-         aggregate? (aggregate-result compiled-find)
+       (cond->> (find-fn (idx/layered-idx->seq n-ary-join) db)
          order-by (xio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
-         pull? (pull/->pull-result db q-conformed)
+         (contains? find-arg-types :pull) (pull/->pull-result db q-conformed)
          return-maps? (map (->return-maps q)))))))
 
 (defn entity-tx [{:keys [valid-time tx-id] :as _db} index-snapshot eid]
@@ -1825,7 +1951,7 @@
 (defrecord QueryDatasource [document-store index-store bus tx-indexer
                             ^Date valid-time ^Date tx-time ^Long tx-id
                             ^ScheduledExecutorService interrupt-executor
-                            conform-cache query-cache pull-cache
+                            conform-cache query-cache find-cache
                             index-snapshot
                             entity-resolver-fn
                             fn-allow-list]
@@ -1998,7 +2124,7 @@
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         index-store bus !pred-ctx
-                        query-cache conform-cache pull-cache]
+                        query-cache conform-cache find-cache]
   xt/DBProvider
   (db [this] (xt/db this nil))
   (db [this valid-time tx-time] (xt/db this {::xt/valid-time valid-time, ::xt/tx-time tx-time}))
@@ -2040,24 +2166,6 @@
         (.shutdownNow)
         (.awaitTermination 5000 TimeUnit/MILLISECONDS)))))
 
-(def default-allow-list
-  (->> (slurp (io/resource "query-allowlist.edn"))
-       (read-string)))
-
-(s/def ::fn-allow-list
-  (s/and
-   (s/coll-of (s/or :sym symbol? :str string?))
-   (s/conformer (fn [fal]
-                  (reduce
-                   (fn [allow-map [type pred]]
-                     (let [pred-symbol (cond-> pred
-                                         (= :str type) symbol)]
-                       (if (qualified-symbol? pred-symbol)
-                         (update allow-map :allowed-fns conj pred-symbol)
-                         (update allow-map :allowed-ns conj pred-symbol))))
-                   {:allowed-ns #{} :allowed-fns default-allow-list}
-                   fal)))))
-
 (defn ->query-engine {::sys/deps {:index-store :xtdb/index-store
                                   :bus :xtdb/bus
                                   :document-store :xtdb/document-store
@@ -2065,7 +2173,7 @@
                                                 :cache-size 10240}
                                   :conform-cache {:xtdb/module 'xtdb.cache/->cache
                                                   :cache-size 10240}
-                                  :pull-cache {:xtdb/module 'xtdb.cache/->cache
+                                  :find-cache {:xtdb/module 'xtdb.cache/->cache
                                                :cache-size 10240}}
                       ::sys/args {:entity-cache-size {:doc "Query Entity Cache Size"
                                                       :default (* 32 1024)

@@ -382,7 +382,7 @@
   (t/testing "Unbound query variable"
     (t/is (thrown-with-msg?
            IllegalArgumentException
-           #"Find refers to unknown variables: #\{bah\}"
+           #"Find refers to unknown variable: bah"
            (xt/q (xt/db *api*) '{:find [bah]
                                  :where [[e :name]]})))
 
@@ -2868,6 +2868,104 @@
                                :where [(identity [[:red 1]  [:red 2] [:red 3] [:red 4] [:red 5]
                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
                #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
+
+#_{:clj-kondo/ignore #{:unused-private-var}}
+(defn- allowed-fn [e] e)
+
+#_{:clj-kondo/ignore #{:unused-private-var}}
+(defn- banned-fn [e] e)
+
+(t/deftest test-projection-exprs
+  (t/is (= #{[0 0 0] [1 0 1] [1 1 3]
+             [2 0 2] [2 1 4] [2 2 6]
+             [3 0 3] [3 1 5] [3 2 7] [3 3 9]}
+           (xt/q (xt/db *api*)
+                 '{:find [?x ?y (+ ?x (* 2 ?y))]
+                   :in [[[?x ?y]]]}
+                 (for [x (range 4)
+                       y (range (inc x))]
+                   [x y]))))
+
+  (t/is (= #{[0 0] [1 -1] [2 4] [3 -1] [4 8] [5 -1]}
+           (xt/q (xt/db *api*)
+                 '{:find [?x (if (even? ?x) (* 2 ?x) -1)]
+                   :in [[?x ...]]}
+                 (range 6)))
+        "if")
+
+  (t/is (= #{[{:a 1, :bs [2 3], :cs #{4 5}}]
+             [{:a 2, :bs [4 6], :cs #{8 10}}]}
+           (xt/q (xt/db *api*)
+                 '{:find [{:a ?a, :bs [?b1 ?b2], :cs #{?c1 ?c2}}]
+                   :in [[[?a ?b1 ?b2 ?c1 ?c2]]]}
+                 [[1 2 3 4 5]
+                  [2 4 6 8 10]]))
+        "different collections")
+
+  (with-open [node (xt/start-node {:xtdb/query-engine {:fn-allow-list #{'xtdb.query-test/allowed-fn}}})]
+    (t/is (= #{[42]}
+             (xt/q (xt/db node)
+                   '{:find [(xtdb.query-test/allowed-fn ?e)]
+                     :in [?e]}
+                   42)))
+
+    (t/is (thrown? IllegalArgumentException
+                   (xt/q (xt/db node)
+                         '{:find [(xtdb.query-test/banned-fn ?e)]
+                           :in [?e]}
+                         42)))))
+
+(t/deftest test-aggregate-exprs
+  (t/is (= #{[0 0 1] [1 1 5] [2 3 14] [3 6 30]}
+           (xt/q (xt/db *api*)
+                 '{:find [?x (sum ?y) (sum (+ (* ?y ?y) ?x 1))]
+                   :in [[[?x ?y]]]}
+                 (for [x (range 4)
+                       y (range (inc x))]
+                   [x y]))))
+
+  (t/is (= #{[20]}
+           (xt/q (xt/db *api*)
+                 '{:find [(sum (if (even? ?x) ?x 0))]
+                   :in [[?x ...]]}
+                 (range 10)))
+        "if")
+
+  (t/is (= #{[28.5]}
+           (xt/q (xt/db *api*)
+                 '{:find [(/ (double (sum (* ?x ?x)))
+                             (count ?x))]
+                   :in [[?x ...]]}
+                 (range 10)))
+        "aggregates can be included in exprs")
+
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"nested agg"
+                          (xt/q (xt/db *api*)
+                                '{:find [(sum (sum ?x))]
+                                  :in [[?x ...]]}
+                                (range 10)))
+        "aggregates can't be nested")
+
+  (t/testing "implicitly groups by variables present outside of aggregates"
+    (t/is (= #{[1 2] [2 3] [2 5]}
+             (xt/q (xt/db *api*)
+                   '{:find [(/ ?x ?y) (sum ?z)]
+                     :in [[[?x ?y ?z]]]}
+                   [[1 1 2]
+                    [2 1 3]
+                    [4 2 5]]))
+          "even though (/ x y) yields the same result in the latter two rows, we group by them individually")
+
+    (t/is (= #{[1 3] [1 7] [4 -1]}
+             (xt/q (xt/db *api*)
+                   '{:find [?x (- (sum ?z) ?y)]
+                     :in [[[?x ?y ?z]]]}
+                   [[1 1 4]
+                    [1 3 2]
+                    [1 3 8]
+                    [4 6 5]]))
+          "groups by x and y in this case")))
 
 (t/deftest test-can-bind-function-returns-to-falsy
   ;; Datomic does allow binding falsy values, DataScript doesn't
