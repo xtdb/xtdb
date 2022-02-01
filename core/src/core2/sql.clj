@@ -62,14 +62,9 @@
 ;; Draft attribute grammar for SQL semantics.
 
 ;; TODO:
-;; - error on unresolved asterisked qualifier.
-;; - error if select expands to 0 degree.
 ;; - prune duplicates caused by asterisk.
 ;; - deal with actual duplicated names.
 ;; - calculate projection for referenced CTE.
-;; - add derived columns on base table when expanding asterisk.
-;; - sanity check base table used columns logic when expanding asterisk.
-;; - add or filter by potential grouping columns when expanding asterisk.
 
 (defn- enter-env-scope
   ([env]
@@ -394,9 +389,16 @@
                         correlation-name (assoc :qualified-column [correlation-name identifier])))))
 
                 :column_reference
-                (let [identifiers (identifiers ag)]
-                  [(cond-> {:identifier (last identifiers)}
-                     (qualified? identifiers) (assoc :qualified-column identifiers))])
+                (let [{:keys [identifiers type]} (column-reference ag)
+                      {:keys [grouping-columns]} (local-env (group-env ag))]
+                  (if (and (or (= :ordinary type)
+                               (= :group-invariant type))
+                           (if grouping-columns
+                             (contains? (set grouping-columns) identifiers)
+                             true))
+                    [(cond-> {:identifier (last identifiers)}
+                       (qualified? identifiers) (assoc :qualified-column identifiers))]
+                    []))
 
                 :subquery
                 []
@@ -753,6 +755,17 @@
        nil))
    ag))
 
+(defn- check-select-list [ag]
+  (when (= [[]] (projected-columns ag))
+    [(format "Query does not select any columns: %s"
+             (->line-info-str ag))]))
+
+(defn- check-asterisked-identifier-chain [ag]
+  (let [identifiers (identifiers ag)]
+    (when-not (find-local-decl (env ag) (first identifiers))
+      [(format "Table not in scope: %s %s"
+               (first identifiers) (->line-info-str ag))])))
+
 (defn- errs [ag]
   (r/collect
    (fn [ag]
@@ -768,6 +781,12 @@
        (:query_expression_body
         :query_term)
        (check-set-operator ag)
+
+       :select_list
+       (check-select-list ag)
+
+       :asterisked_identifier_chain
+       (check-asterisked-identifier-chain ag)
 
        :table_value_constructor
        (check-values ag)

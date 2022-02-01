@@ -268,13 +268,13 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Table not in scope: bar"
             "SELECT bar.a FROM foo WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)")
   (invalid? #"Table not in scope: foo"
-            "SELECT * FROM foo AS baz WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)"))
+            "SELECT 1 FROM foo AS baz WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)"))
 
 (t/deftest test-variable-duplication
   (invalid? #"Table variable duplicated: baz"
-            "SELECT * FROM foo AS baz, baz")
+            "SELECT 1 FROM foo AS baz, baz")
   (invalid? #"CTE query name duplicated: foo"
-            "WITH foo AS (SELECT 1 FROM foo), foo AS (SELECT 1 FROM foo) SELECT * FROM foo")
+            "WITH foo AS (SELECT 1 FROM foo), foo AS (SELECT 1 FROM foo) SELECT 1 FROM foo")
   (invalid? #"Column name duplicated: foo"
             "SELECT * FROM (SELECT 1, 2 FROM foo) AS bar (foo, foo)"))
 
@@ -300,24 +300,24 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             "SELECT COUNT((SELECT 1 FROM foo)) FROM t1")
 
   (invalid? #"Sort specifications cannot contain aggregate functions"
-            "SELECT * FROM t1 ORDER BY COUNT(t1.a)")
+            "SELECT 1 FROM t1 ORDER BY COUNT(t1.a)")
   (invalid? #"Sort specifications cannot contain nested queries"
-            "SELECT * FROM t1 ORDER BY (SELECT 1 FROM foo)")
+            "SELECT 1 FROM t1 ORDER BY (SELECT 1 FROM foo)")
 
   (invalid? #"WHERE clause cannot contain aggregate functions"
-            "SELECT * FROM t1 WHERE COUNT(t1.a)")
-  (valid? "SELECT * FROM t1 WHERE 1 = (SELECT COUNT(t1.a) FROM t1)"))
+            "SELECT 1 FROM t1 WHERE COUNT(t1.a)")
+  (valid? "SELECT 1 FROM t1 WHERE 1 = (SELECT COUNT(t1.a) FROM t1)"))
 
 (t/deftest test-fetch-and-offset-type
   (invalid? #"Fetch first row count must be an integer"
-            "SELECT * FROM t1 FETCH FIRST 'foo' ROWS ONLY")
-  (valid? "SELECT * FROM t1 FETCH FIRST 1 ROWS ONLY")
-  (valid? "SELECT * FROM t1 FETCH FIRST :foo ROWS ONLY")
+            "SELECT 1 FROM t1 FETCH FIRST 'foo' ROWS ONLY")
+  (valid? "SELECT 1 FROM t1 FETCH FIRST 1 ROWS ONLY")
+  (valid? "SELECT 1 FROM t1 FETCH FIRST :foo ROWS ONLY")
 
   (invalid? #"Offset row count must be an integer"
-            "SELECT * FROM t1 OFFSET 'foo' ROWS")
-  (valid? "SELECT * FROM t1 OFFSET 1 ROWS")
-  (valid? "SELECT * FROM t1 OFFSET :foo ROWS"))
+            "SELECT 1 FROM t1 OFFSET 'foo' ROWS")
+  (valid? "SELECT 1 FROM t1 OFFSET 1 ROWS")
+  (valid? "SELECT 1 FROM t1 OFFSET :foo ROWS"))
 
 (t/deftest test-projection
   (t/is (= [[{:index 0, :identifier "b"}]
@@ -454,4 +454,23 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             [{:index 0 :identifier "a"}]
             [{:index 0 :identifier "a"}]]
            (->> (valid? "SELECT x.*, z.* FROM (SELECT y.b FROM y) AS x, (SELECT y.a FROM y) AS z WHERE x.z IS NULL")
-                (map :projected-columns)))))
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}]]
+           (->> (valid? "SELECT * FROM x WHERE x.a = x.b GROUP BY x.a")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "c" :qualified-column ["x" "c"]}
+             {:index 2}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "c" :qualified-column ["x" "c"]}
+             {:index 2}]]
+           (->> (valid? "SELECT x.*, COUNT(x.b) FROM x WHERE x.a = x.b GROUP BY x.a, x.c")
+                (map :projected-columns))))
+
+  (invalid? #"Query does not select any columns"
+            "SELECT * FROM foo")
+  (invalid? #"Table not in scope: baz"
+            "SELECT foo.x, baz.* FROM foo"))
