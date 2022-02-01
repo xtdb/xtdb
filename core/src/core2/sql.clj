@@ -124,10 +124,11 @@
     (:column_name_list
      :column_reference
      :identifier_chain)
-    (letfn [(step [ag]
-              (when (r/ctor? :regular_identifier ag)
-                [(r/lexeme ag 1)]))]
-      (r/collect step ag))))
+    (r/collect
+     (fn [ag]
+       (when (r/ctor? :regular_identifier ag)
+         [(r/lexeme ag 1)]))
+     ag)))
 
 (defn- identifier [ag]
   (r/zcase ag
@@ -255,17 +256,18 @@
           cte-id (assoc :cte-id cte-id :cte-scope-id cte-scope-id))))))
 
 (defn- local-tables [ag]
-  (letfn [(step [ag]
-            (r/zcase ag
-              :table_primary
-              (if (r/ctor? :qualified_join (r/$ ag 1))
-                (local-tables (r/$ ag 1))
-                [(table ag)])
+  (r/collect-stop
+   (fn [ag]
+     (r/zcase ag
+       :table_primary
+       (if (r/ctor? :qualified_join (r/$ ag 1))
+         (local-tables (r/$ ag 1))
+         [(table ag)])
 
-              :subquery []
+       :subquery []
 
-              nil))]
-    (r/collect-stop step ag)))
+       nil))
+   ag))
 
 ;; Inherited
 (defn- dcli [ag]
@@ -311,11 +313,12 @@
     (dcli (r/parent ag))
 
     :order_by_clause
-    (letfn [(step [ag]
-              (when (r/ctor? :query_specification ag)
-                (env ag)))]
-      (let [query-expression-body (z/left ag)]
-        (r/select step query-expression-body)))
+    (let [query-expression-body (z/left ag)]
+      (r/select
+       (fn [ag]
+         (when (r/ctor? :query_specification ag)
+           (env ag)))
+       query-expression-body))
 
     (r/inherit ag)))
 
@@ -355,7 +358,7 @@
 (defn- projected-columns [ag]
   (r/zcase ag
     :query_specification
-    (letfn [(asterisk-table-step [ag]
+    (letfn [(expand-asterisk-table [ag]
               (r/zcase ag
                 :table_value_constructor
                 (first (projected-columns ag))
@@ -365,15 +368,15 @@
 
                 nil))
 
-            (asterisk-step [ag]
+            (expand-asterisk [ag]
               (r/zcase ag
                 :table_primary
                 (if (r/ctor? :qualified_join (r/$ ag 1))
-                  (r/collect-stop asterisk-step (r/$ ag 1))
+                  (r/collect-stop expand-asterisk (r/$ ag 1))
                   (if-let [derived-columns (not-empty (derived-columns ag))]
                     (for [identifier derived-columns]
                       {:identifier identifier})
-                    (r/collect-stop asterisk-table-step ag)))
+                    (r/collect-stop expand-asterisk-table ag)))
 
                 :column_reference
                 [{:identifier (last (identifiers ag))}]
@@ -383,11 +386,11 @@
 
                 nil))
 
-            (step [ag]
+            (calculate-select-list [ag]
               (r/zcase ag
                 :asterisk
                 (let [table-expression (z/right (r/parent ag))]
-                  (->> (r/collect-stop asterisk-step table-expression)
+                  (->> (r/collect-stop expand-asterisk table-expression)
                        (distinct)
                        (vec)))
 
@@ -400,7 +403,7 @@
                 []
 
                 nil))]
-      [(vec (for [[idx projection] (->> (r/collect-stop step ag)
+      [(vec (for [[idx projection] (->> (r/collect-stop calculate-select-list ag)
                                         (map-indexed vector))]
               (assoc projection :index idx)))])
 
@@ -413,87 +416,95 @@
     (projected-columns (r/$ ag 2))
 
     :row_value_expression_list
-    (letfn [(row-degree-step [ag]
-              (r/zcase ag
-                :row_value_constructor_element
-                1
+    (r/collect-stop
+     (fn [ag]
+       (r/zcase ag
+         :row_value_expression_list
+         nil
 
-                :subquery
-                0
+         :explicit_row_value_constructor
+         (let [degree (r/collect-stop
+                       (fn [ag]
+                         (r/zcase ag
+                           :row_value_constructor_element
+                           1
 
-                nil))
-            (step [ag]
-              (r/zcase ag
-                :row_value_expression_list
-                nil
+                           :subquery
+                           0
 
-                :explicit_row_value_constructor
-                (let [degree (r/collect-stop row-degree-step ag +)]
-                  [(vec (for [n (range degree)]
-                          {:index n}))])
+                           nil))
+                       +
+                       ag)]
+           [(vec (for [n (range degree)]
+                   {:index n}))])
 
-                :subquery
-                (projected-columns (r/$ ag 1))
+         :subquery
+         (projected-columns (r/$ ag 1))
 
-                (when (r/ctor ag)
-                  [[{:index 0}]])))]
-      (r/collect-stop step ag))
+         (when (r/ctor ag)
+           [[{:index 0}]])))
+     ag)
 
     (:query_expression_body
      :query_term)
-    (letfn [(step [ag]
-              (r/zcase ag
-                (:query_specification
-                 :table_value_constructor)
-                (projected-columns ag)
+    (let [candidates (r/collect-stop
+                      (fn [ag]
+                        (r/zcase ag
+                          (:query_specification
+                           :table_value_constructor)
+                          (projected-columns ag)
 
-                :subquery
-                []
+                          :subquery
+                          []
 
-                nil))]
-      (let [candidates (r/collect-stop step ag)]
-        (if (set-operator ag)
-          (if-let [{:keys [identifiers] :as corresponding} (corresponding ag)]
-            (let [common-identifiers (->> (for [projections candidates]
-                                            (set (for [{:keys [identifier]} projections]
-                                                   identifier)))
-                                          (reduce set/intersection))
-                  identifiers (if identifiers
-                                (if (set/subset? (set identifiers) common-identifiers)
-                                  (set identifiers)
-                                  #{})
-                                common-identifiers)]
-              [(vec (for [{:keys [identifier] :as projection} (first candidates)
-                          :when (contains? identifiers identifier)]
-                      projection))])
-            candidates)
-          candidates)))
+                          nil))
+                      ag)]
+      (if (set-operator ag)
+        (if-let [{:keys [identifiers] :as corresponding} (corresponding ag)]
+          (let [common-identifiers (->> (for [projections candidates]
+                                          (set (for [{:keys [identifier]} projections]
+                                                 identifier)))
+                                        (reduce set/intersection))
+                identifiers (if identifiers
+                              (if (set/subset? (set identifiers) common-identifiers)
+                                (set identifiers)
+                                #{})
+                              common-identifiers)]
+            [(vec (for [{:keys [identifier] :as projection} (first candidates)
+                        :when (contains? identifiers identifier)]
+                    projection))])
+          candidates)
+        candidates))
 
     (r/inherit ag)))
 
 ;; Group by
 
 (defn- grouping-column-references [ag]
-  (letfn [(step [ag]
-            (when (r/ctor? :column_reference ag)
-              [(identifiers ag)]))]
-    (r/collect step ag)))
+  (r/collect
+   (fn [ag]
+     (when (r/ctor? :column_reference ag)
+       [(identifiers ag)]))
+   ag))
 
 (defn- grouping-columns [ag]
-  (letfn [(step [ag]
-            (r/zcase ag
-              (:aggregate_function
-               :having_clause)
-              [[]]
+  (->> (r/collect-stop
+        (fn [ag]
+          (r/zcase ag
+            (:aggregate_function
+             :having_clause)
+            [[]]
 
-              :group_by_clause
-              [(grouping-column-references ag)]
+            :group_by_clause
+            [(grouping-column-references ag)]
 
-              :subquery
-              []
+            :subquery
+            []
 
-              nil))]
-    (last (sort-by count (r/collect-stop step ag)))))
+            nil))
+        ag)
+       (sort-by count)
+       (last)))
 
 (defn- group-env [ag]
   (r/zcase ag
@@ -537,16 +548,17 @@
 (defn- order-by-indexes [ag]
   (r/zcase ag
     :query_expression
-    (letfn [(step [ag]
-              (r/zcase ag
-                :sort_specification
-                [(order-by-index ag)]
+    (r/collect-stop
+     (fn [ag]
+       (r/zcase ag
+         :sort_specification
+         [(order-by-index ag)]
 
-                :subquery
-                []
+         :subquery
+         []
 
-                nil))]
-      (r/collect-stop step ag))
+         nil))
+     ag)
 
     (r/inherit ag)))
 
@@ -623,16 +635,17 @@
              (->src-str ag) (->line-info-str ag))]))
 
 (defn- check-aggregate-or-subquery [label ag]
-  (letfn [(step [inner-ag]
-            (r/zcase inner-ag
-              :aggregate_function
-              [(format (str label " cannot contain aggregate functions: %s %s")
-                       (->src-str ag) (->line-info-str ag))]
-              :query_expression
-              [(format (str label " cannot contain nested queries: %s %s")
-                       (->src-str ag) (->line-info-str ag))]
-              nil))]
-    (r/collect-stop step ag)))
+  (r/collect-stop
+   (fn [inner-ag]
+     (r/zcase inner-ag
+       :aggregate_function
+       [(format (str label " cannot contain aggregate functions: %s %s")
+                (->src-str ag) (->line-info-str ag))]
+       :query_expression
+       [(format (str label " cannot contain nested queries: %s %s")
+                (->src-str ag) (->line-info-str ag))]
+       nil))
+   ag))
 
 (defn- check-set-operator [ag]
   (when-let [set-op (set-operator ag)]
@@ -656,20 +669,21 @@
 
 (defn- check-derived-columns [ag]
   (when-let [derived-columns (derived-columns ag)]
-    (letfn [(step [ag]
-              (r/zcase ag
-                :table_value_constructor
-                (projected-columns ag)
+    (let [candidates (r/collect-stop
+                      (fn [ag]
+                        (r/zcase ag
+                          :table_value_constructor
+                          (projected-columns ag)
 
-                :subquery
-                (projected-columns (r/$ ag 1))
+                          :subquery
+                          (projected-columns (r/$ ag 1))
 
-                nil))]
-      (let [candidates (r/collect-stop step ag)
-            degrees (mapv count candidates)]
-        (when-not (apply = (count derived-columns) degrees)
-          [(format "Derived columns has to have same degree as table: %s"
-                   (->line-info-str ag))])))))
+                          nil))
+                      ag)
+          degrees (mapv count candidates)]
+      (when-not (apply = (count derived-columns) degrees)
+        [(format "Derived columns has to have same degree as table: %s"
+                 (->line-info-str ag))]))))
 
 (defn- check-column-reference [ag]
   (let [{:keys [identifiers table-id type] :as cr} (column-reference ag)]
@@ -704,71 +718,74 @@
                (->src-str ag) (->line-info-str ag))])))
 
 (defn- check-where-clause [ag]
-  (letfn [(step [ag]
-            (r/zcase ag
-              :aggregate_function
-              [(format "WHERE clause cannot contain aggregate functions: %s %s"
-                       (->src-str ag) (->line-info-str ag))]
+  (r/collect-stop
+   (fn [ag]
+     (r/zcase ag
+       :aggregate_function
+       [(format "WHERE clause cannot contain aggregate functions: %s %s"
+                (->src-str ag) (->line-info-str ag))]
 
-              :subquery
-              []
+       :subquery
+       []
 
-              nil))]
-    (r/collect-stop step ag)))
+       nil))
+   ag))
 
 (defn- errs [ag]
-  (letfn [(step [ag]
-            (r/zcase ag
-              :table_reference_list
-              (check-duplicates "Table variable" ag
-                                (local-names (dclo ag) :correlation-name))
+  (r/collect
+   (fn [ag]
+     (r/zcase ag
+       :table_reference_list
+       (check-duplicates "Table variable" ag
+                         (local-names (dclo ag) :correlation-name))
 
-              :with_list
-              (check-duplicates "CTE query name" ag
-                                (local-names (cteo ag) :query-name))
+       :with_list
+       (check-duplicates "CTE query name" ag
+                         (local-names (cteo ag) :query-name))
 
-              (:query_expression_body
-               :query_term)
-              (check-set-operator ag)
+       (:query_expression_body
+        :query_term)
+       (check-set-operator ag)
 
-              :table_value_constructor
-              (check-values ag)
+       :table_value_constructor
+       (check-values ag)
 
-              :table_primary
-              (check-derived-columns ag)
+       :table_primary
+       (check-derived-columns ag)
 
-              :column_name_list
-              (check-duplicates "Column name" ag (identifiers ag))
+       :column_name_list
+       (check-duplicates "Column name" ag (identifiers ag))
 
-              :column_reference
-              (check-column-reference ag)
+       :column_reference
+       (check-column-reference ag)
 
-              (:general_set_function
-               :array_aggregate_function)
-              (check-aggregate-or-subquery "Aggregate functions" ag)
+       (:general_set_function
+        :array_aggregate_function)
+       (check-aggregate-or-subquery "Aggregate functions" ag)
 
-              :sort_specification
-              (check-aggregate-or-subquery "Sort specifications" ag)
+       :sort_specification
+       (check-aggregate-or-subquery "Sort specifications" ag)
 
-              :where_clause
-              (check-where-clause ag)
+       :where_clause
+       (check-where-clause ag)
 
-              :fetch_first_clause
-              (check-unsigned-integer "Fetch first row count" (r/$ ag 3))
+       :fetch_first_clause
+       (check-unsigned-integer "Fetch first row count" (r/$ ag 3))
 
-              :result_offset_clause
-              (check-unsigned-integer "Offset row count" (r/$ ag 2))
+       :result_offset_clause
+       (check-unsigned-integer "Offset row count" (r/$ ag 2))
 
-              []))]
-    (r/collect step ag)))
+       []))
+   ag))
 
 ;; Scopes
 
 (defn- all-column-references [ag]
-  (letfn [(step [ag]
-            (when (r/ctor? :column_reference ag)
-              [(column-reference ag)]))]
-    (r/collect step ag)))
+  (r/collect
+   (fn [ag]
+     (when (r/ctor? :column_reference ag)
+       [(column-reference ag)]))
+   ag))
 
 (defn- scope-id [ag]
   (r/zcase ag
@@ -844,14 +861,15 @@
     (r/inherit ag)))
 
 (defn- scopes [ag]
-  (letfn [(step [ag]
-            (r/zcase ag
-              (:query_expression
-               :query_specification)
-              [(scope ag)]
+  (r/collect
+   (fn [ag]
+     (r/zcase ag
+       (:query_expression
+        :query_specification)
+       [(scope ag)]
 
-              []))]
-    (r/collect step ag)))
+       []))
+   ag))
 
 ;; API
 

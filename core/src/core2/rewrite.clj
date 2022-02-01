@@ -348,7 +348,7 @@
    (full-td-tu f))
   ([f z]
    (full-td-tu f z))
-  ([f z m]
+  ([f m z]
    (full-td-tu f (with-tu-monoid z m))))
 
 (defn collect-stop
@@ -356,7 +356,7 @@
    (stop-td-tu f))
   ([f z]
    (stop-td-tu f z))
-  ([f z m]
+  ([f m z]
    (stop-td-tu f (with-tu-monoid z m))))
 
 (def select once-td-tu)
