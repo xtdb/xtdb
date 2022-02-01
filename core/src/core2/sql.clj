@@ -418,6 +418,10 @@
 
 (declare column-reference)
 
+;; TODO: The table_primary here is convenient, but incorrect, should
+;; take derived columns and CTE into account here, but need to still
+;; detect degree error.
+
 (defn- projected-columns [ag]
   (r/zcase ag
     :table_primary
