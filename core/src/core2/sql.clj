@@ -63,7 +63,6 @@
 
 ;; TODO:
 ;; - sanity check duplication handling from spec.
-;; - calculate projection for referenced CTE.
 
 (defn- enter-env-scope
   ([env]
@@ -189,10 +188,12 @@
 (defn- cte [ag]
   (r/zcase ag
     :with_list_element
-    {:query-name (table-or-query-name ag)
-     :id (id ag)
-     :scope-id (scope-id ag)
-     :subquery-scope-id (subquery-scope-id (r/$ ag -1))}))
+    (with-meta
+      {:query-name (table-or-query-name ag)
+       :id (id ag)
+       :scope-id (scope-id ag)
+       :subquery-scope-id (subquery-scope-id (r/$ ag -1))}
+      {:ref ag})))
 
 ;; Inherited
 (defn- ctei [ag]
@@ -248,17 +249,20 @@
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
       (let [table-name (table-or-query-name ag)
             correlation-name (or (correlation-name ag) table-name)
-            {cte-id :id cte-scope-id :scope-id} (find-decl (cte-env ag) table-name)
+            {cte-id :id cte-scope-id :scope-id :as cte} (find-decl (cte-env ag) table-name)
             subquery-scope-id (when (nil? table-name)
                                 (subquery-scope-id ag))
             derived-columns (derived-columns ag)]
-        (cond-> {:correlation-name correlation-name
-                 :id (id ag)
-                 :scope-id (scope-id ag)}
-          table-name (assoc :table-or-query-name table-name)
-          derived-columns (assoc :derived-columns derived-columns)
-          subquery-scope-id (assoc :subquery-scope-id subquery-scope-id)
-          cte-id (assoc :cte-id cte-id :cte-scope-id cte-scope-id))))))
+        (with-meta
+          (cond-> {:correlation-name correlation-name
+                   :id (id ag)
+                   :scope-id (scope-id ag)}
+            table-name (assoc :table-or-query-name table-name)
+            derived-columns (assoc :derived-columns derived-columns)
+            subquery-scope-id (assoc :subquery-scope-id subquery-scope-id)
+            cte (assoc :cte-id cte-id :cte-scope-id cte-scope-id))
+          (cond-> {:ref ag}
+            cte (assoc :cte-ref (:ref (meta cte)))))))))
 
 (defn- local-tables [ag]
   (r/collect-stop
@@ -416,29 +420,35 @@
 
 (defn- projected-columns [ag]
   (r/zcase ag
+    :table_primary
+    (r/collect
+     (fn [ag]
+       (r/zcase ag
+         :table_value_constructor
+         (projected-columns ag)
+
+         :subquery
+         (projected-columns ag)
+
+         nil))
+     ag)
+
+    :with_list_element
+    (projected-columns (r/$ ag -1))
+
     :query_specification
-    (letfn [(expand-asterisk-table [ag]
-              (r/zcase ag
-                :table_value_constructor
-                (first (projected-columns ag))
-
-                :subquery
-                (first (projected-columns (r/$ ag 1)))
-
-                nil))
-
-            (expand-asterisk [ag]
+    (letfn [(expand-asterisk [ag]
               (r/zcase ag
                 :table_primary
                 (if (r/ctor? :qualified_join (r/$ ag 1))
                   (r/collect-stop expand-asterisk (r/$ ag 1))
-                  (let [correlation-name (or (correlation-name ag)
-                                             (table-or-query-name ag))]
-                    (for [{:keys [identifier] :as projection} (if-let [derived-columns (not-empty (derived-columns ag))]
-                                                                (for [identifier derived-columns]
-                                                                  {:identifier identifier})
-                                                                (r/collect-stop expand-asterisk-table ag))]
-                      (cond-> projection
+                  (let [{:keys [correlation-name
+                                derived-columns] :as table} (table ag)]
+                    (for [{:keys [identifier]} (if-let [derived-columns (not-empty derived-columns)]
+                                                 (for [identifier derived-columns]
+                                                   {:identifier identifier})
+                                                 (first (projected-columns (or (:cte-ref (meta table)) ag))))]
+                      (cond-> {:identifier identifier}
                         correlation-name (assoc :qualified-column [correlation-name identifier])))))
 
                 :column_reference
@@ -569,6 +579,9 @@
           candidates)
         candidates))
 
+    :subquery
+    (projected-columns (r/$ ag 1))
+
     (r/inherit ag)))
 
 ;; Order by
@@ -611,9 +624,9 @@
     (let [identifiers (identifiers ag)
           env (env ag)
           column-scope-id (scope-id ag)
-          {table-id :id table-scope-id :scope-id} (when qualified?
-                                                    (find-decl env (first identifiers)))
-          outer-reference? (and table-scope-id (< ^long table-scope-id ^long column-scope-id))
+          {table-id :id table-scope-id :scope-id :as table} (when qualified?
+                                                              (find-decl env (first identifiers)))
+          outer-reference? (and table (< ^long table-scope-id ^long column-scope-id))
           group-env (group-env ag)
           column-reference-type (reduce
                                  (fn [acc {:keys [grouping-columns
@@ -639,10 +652,13 @@
 
                                   :else
                                   column-reference-type)]
-      (cond-> {:identifiers identifiers
-               :type column-reference-type
-               :scope-id column-scope-id}
-        table-id (assoc :table-id table-id :table-scope-id table-scope-id)))))
+      (with-meta
+        (cond-> {:identifiers identifiers
+                 :type column-reference-type
+                 :scope-id column-scope-id}
+          table (assoc :table-id table-id :table-scope-id table-scope-id))
+        (cond-> {:ref ag}
+          table (assoc :table-ref (:ref (meta table))))))))
 
 ;; Errors
 
@@ -885,11 +901,13 @@
           projected-columns (->> (projected-columns ag)
                                  (first)
                                  (mapv #(dissoc % :normal-form)))
-          scope (cond-> {:id id
-                         :type type
-                         :dependent-columns dependent-columns
-                         :projected-columns projected-columns}
-                  parent-id (assoc :parent-id parent-id))]
+          scope (with-meta
+                  (cond-> {:id id
+                           :type type
+                           :dependent-columns dependent-columns
+                           :projected-columns projected-columns}
+                    parent-id (assoc :parent-id parent-id))
+                  {:ref ag})]
       (r/zcase ag
         :query_expression
         (let [local-ctes (local-env-singleton-values (cteo ag))

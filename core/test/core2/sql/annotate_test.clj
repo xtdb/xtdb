@@ -492,4 +492,15 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
              {:index 1 :identifier "a" :qualified-column ["y" "a"]}]]
            (->> (valid? "SELECT * FROM x, y WHERE x.a = y.a")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0 :identifier "a" :qualified-column ["foo" "a"]}
+             {:index 1 :identifier "b" :qualified-column ["foo" "b"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "b" :qualified-column ["x" "b"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "b" :qualified-column ["x" "b"]}]
+            [{:index 0 :identifier "a" :qualified-column ["foo" "a"]}
+             {:index 1 :identifier "b" :qualified-column ["foo" "b"]}]]
+           (->> (valid? "WITH foo AS (SELECT * FROM x WHERE x.a = x.b) SELECT * FROM foo")
                 (map :projected-columns)))))
