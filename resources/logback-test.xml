@@ -11,6 +11,7 @@
   <logger name="xtdb.node" level="WARN" />
   <logger name="xtdb.hash" level="WARN" />
   <logger name="xtdb.http-server" level="WARN" />
+  <logger name="xtdb.grpc-server" level="WARN" />
   <logger name="xtdb.kafka" level="WARN" />
   <logger name="xtdb.jdbc" level="WARN" />
   <logger name="xtdb.mem-kv" level="ERROR" />

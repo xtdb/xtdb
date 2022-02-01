@@ -1,24 +1,22 @@
 (ns xtdb.grpc-server.service
-  (:require [io.pedestal.http :as http]
-            [io.pedestal.http.route :as route]
+  (:require [xtdb.api :as xt]
+            [io.pedestal.http :as http]
             [io.pedestal.http.body-params :as body-params]
             [ring.util.response :as ring-resp]
+
+            [xtdb.grpc-server.controllers :as controllers]
 
             ;; -- PROTOC-GEN-CLOJURE --
             [protojure.pedestal.core :as protojure.pedestal]
             [protojure.pedestal.routes :as proutes]
-            [com.grpc.xtdb.GrpcApi.server :as grpc-api]
-            [com.grpc.xtdb :as grpc]))
+            [com.grpc.xtdb.GrpcApi.server :as grpc-api])
+  (:gen-class))
 
-(defn about-page
-  [_request]
-  (ring-resp/response (format "Clojure %s - served from %s"
-                              (clojure-version)
-                              (route/url-for ::about-page))))
+(def node (xt/start-node {}))
 
-(defn home-page
+(defn ping-page
   [_request]
-  (ring-resp/response "Hello from grpc-server, backed by Protojure Template!"))
+  (ring-resp/response "pong"))
 
 ;; -- PROTOC-GEN-CLOJURE --
 ;; Implement our "Greeter" service interface.  The compiler generates
@@ -35,28 +33,17 @@
 ;;
 ;; see http://pedestal.io/reference/request-map
 
-
-#_(deftype Greeter []
-  greeter/Service
-  (Hello
-    [this {{:keys [name]} :grpc-params :as request}]
-    {:status 200
-     :body {:message (str "Hello, " name)}}))
-
 (deftype XtdbGrpcAPI []
-    grpc-api/Service
-    (status
-     [this _request]
-     (println this)
-     {:status 200
-      :body 
-        {:version "version" 
-         :index-version 3 
-         :kv-store "kv store" 
-         :estimate-num-keys 3 
-         :size 5 
-         :revision { :option {:some "rev"}} 
-         :consumer-state {:option {:some "consumer-state"}}}}))
+  grpc-api/Service
+  (status [_this _request]
+    (println (str "\n\n\n" "status" "\n\n\n"))
+    {:status 200
+     :body (controllers/status node)})
+  (submit_tx [_this {{:keys [tx_ops]} :grpc-params :as _request}]
+    (println (str "\n\n\n" _this))
+    (println (str "\n\n\n" tx_ops "\n\n\n"))
+    {:status 200
+     :body {:tx_id 0}}))
 
 ;; Defines "/" and "/about" routes with their associated :get handlers.
 ;; The interceptors defined after the verb map (e.g., {:get home-page}
@@ -64,13 +51,13 @@
 (def common-interceptors [(body-params/body-params) http/html-body])
 
 ;; Tabular routes
-(def routes #{["/" :get (conj common-interceptors `home-page)]
-              ["/about" :get (conj common-interceptors `about-page)]})
+(def routes #{["/ping" :get (conj common-interceptors `ping-page)]})
 
 ;; -- PROTOC-GEN-CLOJURE --
 ;; Add the routes produced by Greeter->routes
 (def grpc-routes (reduce conj routes (proutes/->tablesyntax {:rpc-metadata grpc-api/rpc-metadata :interceptors common-interceptors :callback-context (XtdbGrpcAPI.)})))
 (def service {:env :prod
+              :node (xt/start-node {})
               ::http/routes grpc-routes
 
               ;; -- PROTOC-GEN-CLOJURE --

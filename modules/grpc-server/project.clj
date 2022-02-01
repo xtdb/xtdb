@@ -1,6 +1,7 @@
 (defproject com.xtdb/xtdb-grpc-server "<inherited>"
   :description "XTDB gRPC Server"
-  :plugins [[lein-parent "0.3.8"]]
+  :plugins [[lein-parent "0.3.8"]
+            [lein-cljfmt "0.8.0"]]
   :parent-project {:path "../../project.clj"
                    :inherit [:version :repositories :deploy-repositories
                              :managed-dependencies
@@ -9,8 +10,8 @@
   :scm {:dir "../.."} 
 
   :dependencies [[org.clojure/clojure "1.10.3"]
+                 [com.xtdb/xtdb-core "1.20.0"]
                  [io.pedestal/pedestal.service "0.5.9"]
-                 [com.xtdb/xtdb-core]
 
                  ;; -- PROTOC-GEN-CLOJURE --
                  [io.github.protojure/grpc-server "2.0.1"]

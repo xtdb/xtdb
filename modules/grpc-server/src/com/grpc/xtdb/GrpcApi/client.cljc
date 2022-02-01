@@ -19,52 +19,52 @@
 (defn status
   ([client params] (status client {} params))
   ([client metadata params]
-  (let [input (async/chan 1)
-        output (async/chan 1)
-        desc {:service "com.grpc.xtdb.GrpcApi"
-              :method  "status"
-              :input   {:f com.grpc.xtdb/new-Empty :ch input}
-              :output  {:f com.grpc.xtdb/pb->StatusResponse :ch output}
-              :metadata metadata}]
-    (-> (send-unary-params input params)
-        (p/then (fn [_] (invoke-unary client desc output)))))))
+   (let [input (async/chan 1)
+         output (async/chan 1)
+         desc {:service "com.grpc.xtdb.GrpcApi"
+               :method  "status"
+               :input   {:f com.grpc.xtdb/new-Empty :ch input}
+               :output  {:f com.grpc.xtdb/pb->StatusResponse :ch output}
+               :metadata metadata}]
+     (-> (send-unary-params input params)
+         (p/then (fn [_] (invoke-unary client desc output)))))))
 
 (defn entity
   ([client params] (entity client {} params))
   ([client metadata params]
-  (let [input (async/chan 1)
-        output (async/chan 1)
-        desc {:service "com.grpc.xtdb.GrpcApi"
-              :method  "entity"
-              :input   {:f com.grpc.xtdb/new-EntityRequest :ch input}
-              :output  {:f com.google.protobuf/pb->Value :ch output}
-              :metadata metadata}]
-    (-> (send-unary-params input params)
-        (p/then (fn [_] (invoke-unary client desc output)))))))
+   (let [input (async/chan 1)
+         output (async/chan 1)
+         desc {:service "com.grpc.xtdb.GrpcApi"
+               :method  "entity"
+               :input   {:f com.grpc.xtdb/new-EntityRequest :ch input}
+               :output  {:f com.google.protobuf/pb->Value :ch output}
+               :metadata metadata}]
+     (-> (send-unary-params input params)
+         (p/then (fn [_] (invoke-unary client desc output)))))))
 
 (defn entity_history
   ([client params] (entity_history client {} params))
   ([client metadata params]
-  (let [input (async/chan 1)
-        output (async/chan 1)
-        desc {:service "com.grpc.xtdb.GrpcApi"
-              :method  "entity_history"
-              :input   {:f com.grpc.xtdb/new-EntityHistoryRequest :ch input}
-              :output  {:f com.grpc.xtdb/pb->EntityHistoryResponse :ch output}
-              :metadata metadata}]
-    (-> (send-unary-params input params)
-        (p/then (fn [_] (invoke-unary client desc output)))))))
+   (let [input (async/chan 1)
+         output (async/chan 1)
+         desc {:service "com.grpc.xtdb.GrpcApi"
+               :method  "entity_history"
+               :input   {:f com.grpc.xtdb/new-EntityHistoryRequest :ch input}
+               :output  {:f com.grpc.xtdb/pb->EntityHistoryResponse :ch output}
+               :metadata metadata}]
+     (-> (send-unary-params input params)
+         (p/then (fn [_] (invoke-unary client desc output)))))))
 
 (defn submit_tx
   ([client params] (submit_tx client {} params))
   ([client metadata params]
-  (let [input (async/chan 1)
-        output (async/chan 1)
-        desc {:service "com.grpc.xtdb.GrpcApi"
-              :method  "submit_tx"
-              :input   {:f com.grpc.xtdb/new-SubmitRequest :ch input}
-              :output  {:f com.grpc.xtdb/pb->SubmitResponse :ch output}
-              :metadata metadata}]
-    (-> (send-unary-params input params)
-        (p/then (fn [_] (invoke-unary client desc output)))))))
+   (let [input (async/chan 1)
+         output (async/chan 1)
+         desc {:service "com.grpc.xtdb.GrpcApi"
+               :method  "submit_tx"
+               :input   {:f com.grpc.xtdb/new-SubmitRequest :ch input}
+               :output  {:f com.grpc.xtdb/pb->SubmitResponse :ch output}
+               :metadata metadata}]
+     (-> (send-unary-params input params)
+         (p/then (fn [_] (invoke-unary client desc output)))))))
 
