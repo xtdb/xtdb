@@ -421,17 +421,17 @@
 (defn- projected-columns [ag]
   (r/zcase ag
     :table_primary
-    (r/collect
-     (fn [ag]
-       (r/zcase ag
-         :table_value_constructor
-         (projected-columns ag)
+    (when-not (r/ctor? :qualified_join (r/$ ag 1))
+      (r/collect
+       (fn [ag]
+         (r/zcase ag
+           (:table_value_constructor
+            :collection_derived_table
+            :subquery)
+           (projected-columns ag)
 
-         :subquery
-         (projected-columns ag)
-
-         nil))
-     ag)
+           nil))
+       ag))
 
     :with_list_element
     (projected-columns (r/$ ag -1))
@@ -448,7 +448,8 @@
                                                  (for [identifier derived-columns]
                                                    {:identifier identifier})
                                                  (first (projected-columns (or (:cte-ref (meta table)) ag))))]
-                      (cond-> {:identifier identifier}
+                      (cond-> {}
+                        identifier (assoc :identifier identifier)
                         correlation-name (assoc :qualified-column [correlation-name identifier])))))
 
                 :column_reference
@@ -514,6 +515,11 @@
     (if (r/ctor? :with_clause (r/$ ag 1))
       (projected-columns (r/$ ag 2))
       (projected-columns (r/$ ag 1)))
+
+    :collection_derived_table
+    (if (= "ORDINALITY" (r/lexeme ag -1))
+      [[{:index 0} {:index 1}]]
+      [[{:index 0}]])
 
     :table_value_constructor
     (projected-columns (r/$ ag 2))
@@ -725,17 +731,7 @@
 
 (defn- check-derived-columns [ag]
   (when-let [derived-columns (derived-columns ag)]
-    (let [candidates (r/collect-stop
-                      (fn [ag]
-                        (r/zcase ag
-                          :table_value_constructor
-                          (projected-columns ag)
-
-                          :subquery
-                          (projected-columns (r/$ ag 1))
-
-                          nil))
-                      ag)
+    (let [candidates (projected-columns ag)
           degrees (mapv count candidates)]
       (when-not (apply = (count derived-columns) degrees)
         [(format "Derived columns has to have same degree as table: %s"

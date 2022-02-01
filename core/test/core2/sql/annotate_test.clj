@@ -431,7 +431,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
             [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
             [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]]
-           (->> (valid? "SELECT * FROM (SELECT y.b FROM y) AS x, (SELECT y.b FROM y) AS z")
+           (->> (valid? "SELECT * FROM (SELECT y.b FROM y) AS x, LATERAL (SELECT y.b FROM y) AS z")
                 (map :projected-columns))))
 
   (t/is (= [[{:index 0 :identifier "b" :qualified-column ["x" "b"]} {:index 1 :identifier "z" :qualified-column ["x" "z"]}]
@@ -503,4 +503,21 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             [{:index 0 :identifier "a" :qualified-column ["foo" "a"]}
              {:index 1 :identifier "b" :qualified-column ["foo" "b"]}]]
            (->> (valid? "WITH foo AS (SELECT * FROM x WHERE x.a = x.b) SELECT * FROM foo")
-                (map :projected-columns)))))
+                (map :projected-columns))))
+
+  (t/is (= [[{:identifier "a", :qualified-column ["foo" "a"], :index 0}]
+            [{:identifier "a", :qualified-column ["foo" "a"], :index 0}]]
+           (->> (valid? "SELECT * FROM x, UNNEST(x.a) AS foo (a)")
+                (map :projected-columns))))
+
+  (t/is (= [[{:identifier "a", :qualified-column ["foo" "a"], :index 0}
+             {:identifier "b", :qualified-column ["foo" "b"], :index 1}]
+            [{:identifier "a", :qualified-column ["foo" "a"], :index 0}
+             {:identifier "b", :qualified-column ["foo" "b"], :index 1}]]
+           (->> (valid? "SELECT foo.* FROM x, UNNEST(x.a) WITH ORDINALITY AS foo (a, b)")
+                (map :projected-columns))))
+
+  (invalid? #"Derived columns has to have same degree as table"
+            "SELECT * FROM x, UNNEST(x.a) WITH ORDINALITY AS foo (a)")
+  (invalid? #"Derived columns has to have same degree as table"
+            "SELECT * FROM x, UNNEST(x.a) AS foo (a, b)"))
