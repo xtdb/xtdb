@@ -26,6 +26,7 @@
            (java.io Closeable Writer)
            (java.util Collection Comparator Date HashMap List Map UUID)
            (java.util.concurrent Executors Future ScheduledExecutorService TimeoutException TimeUnit)
+           (java.util.function Function)
            (org.agrona DirectBuffer)
            (xtdb.codec EntityTx)))
 
@@ -1790,43 +1791,45 @@
                 var-bindings)
            (into {})))))
 
+(defn- agg-find-fn [aggs find-args built-query]
+  (let [->env (env-factory (into #{} (mapcat :logic-vars) find-args) built-query)
+        ->agg-env (env-factory (into #{} (mapcat :logic-vars) (vals aggs)) built-query)]
+    (letfn [(init-aggs []
+              (mapv (fn [[agg-k {:keys [aggregate-fn]}]]
+                      [agg-k aggregate-fn (volatile! (aggregate-fn))])
+                    aggs))
+
+            (step-aggs [db ^Map acc row]
+              (let [agg-env (->agg-env row db)
+                    group-accs (.computeIfAbsent acc (->env row db)
+                                                 (reify Function
+                                                   (apply [_ _group]
+                                                     (init-aggs))))]
+                (doseq [[_agg-k agg-fn !agg-v] group-accs]
+                  (vswap! !agg-v agg-fn agg-env))))]
+
+      (fn [rows db]
+        (let [acc (HashMap.)]
+          (doseq [row rows]
+            (step-aggs db acc row))
+
+          (for [[group-k group-accs] acc]
+            (let [env (into group-k
+                            (for [[agg-k agg-fn !agg-v] group-accs]
+                              (MapEntry/create agg-k (agg-fn @!agg-v))))]
+              (mapv (fn [{:keys [row->result]}]
+                      (row->result env db))
+                    find-args))))))))
+
 (defn- compile-find [conformed-find built-query {:keys [find-cache fn-allow-list]}]
   (let [find-args (cache/compute-if-absent find-cache conformed-find identity #(compile-find-args % {:fn-allow-list fn-allow-list}))
-        find-arg-types (into #{} (map :find-arg-type) find-args)
-        ->env (env-factory (into #{} (mapcat :logic-vars) find-args) built-query)]
+        find-arg-types (into #{} (map :find-arg-type) find-args)]
     {:find-arg-types find-arg-types
      :find-fn (if-let [aggs (not-empty (into {} (mapcat :aggregates) find-args))]
-                (let [->agg-env (env-factory (into #{} (mapcat :logic-vars) (vals aggs)) built-query)]
-                  (letfn [(init-aggs []
-                            (->> aggs
-                                 (into {}
-                                       (map (fn [[agg-k {:keys [aggregate-fn]}]]
-                                              (MapEntry/create agg-k (aggregate-fn)))))))
+                (agg-find-fn aggs find-args built-query)
 
-                          (step-aggs [db acc row]
-                            (let [group (->env row db)
-                                  group-acc (if (contains? acc group)
-                                              (get acc group)
-                                              (init-aggs))
-                                  agg-env (->agg-env row db)]
-                              (-> acc
-                                  (assoc group (->> (for [[agg-k agg-v] group-acc
-                                                          :let [{:keys [aggregate-fn]} (get aggs agg-k)]]
-                                                      (MapEntry/create agg-k (aggregate-fn agg-v agg-env)))
-                                                    (into {}))))))]
-
-                    (fn [rows db]
-                      (->> (reduce (partial step-aggs db) {} rows)
-                           (map (fn [[group-k group-acc]]
-                                  (let [env (into group-k
-                                                  (for [[agg-k agg-v] group-acc
-                                                        :let [{:keys [aggregate-fn]} (get aggs agg-k)]]
-                                                    (MapEntry/create agg-k (aggregate-fn agg-v))))]
-                                    (mapv (fn [{:keys [row->result]}]
-                                            (row->result env db))
-                                          find-args))))))))
-
-                (let [row->result-fns (mapv :row->result find-args)]
+                (let [->env (env-factory (into #{} (mapcat :logic-vars) find-args) built-query)
+                      row->result-fns (mapv :row->result find-args)]
                   (fn [rows db]
                     (for [row rows]
                       (let [env (->env row db)]
@@ -1948,7 +1951,7 @@
 (defrecord QueryDatasource [document-store index-store bus tx-indexer
                             ^Date valid-time ^Date tx-time ^Long tx-id
                             ^ScheduledExecutorService interrupt-executor
-                            conform-cache query-cache pull-cache
+                            conform-cache query-cache find-cache
                             index-snapshot
                             entity-resolver-fn
                             fn-allow-list]
