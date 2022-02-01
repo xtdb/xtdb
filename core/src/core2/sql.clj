@@ -61,9 +61,6 @@
 
 ;; Draft attribute grammar for SQL semantics.
 
-;; TODO:
-;; - expand asterisks?
-
 (defn- enter-env-scope
   ([env]
    (enter-env-scope env {}))
@@ -97,6 +94,9 @@
     (or (find-local-decl env k)
         (recur ss k))))
 
+(defn- qualified? [ids]
+  (> (count ids) 1))
+
 ;; Attributes
 
 (declare cte-env env scope-id subquery-scope-id)
@@ -123,6 +123,7 @@
   (r/zcase ag
     (:column_name_list
      :column_reference
+     :asterisked_identifier_chain
      :identifier_chain)
     (r/collect
      (fn [ag]
@@ -373,13 +374,19 @@
                 :table_primary
                 (if (r/ctor? :qualified_join (r/$ ag 1))
                   (r/collect-stop expand-asterisk (r/$ ag 1))
-                  (if-let [derived-columns (not-empty (derived-columns ag))]
-                    (for [identifier derived-columns]
-                      {:identifier identifier})
-                    (r/collect-stop expand-asterisk-table ag)))
+                  (let [correlation-name (or (correlation-name ag)
+                                             (table-or-query-name ag))]
+                    (for [{:keys [identifier] :as projection} (if-let [derived-columns (not-empty (derived-columns ag))]
+                                                                (for [identifier derived-columns]
+                                                                  {:identifier identifier})
+                                                                (r/collect-stop expand-asterisk-table ag))]
+                      (cond-> projection
+                        correlation-name (assoc :qualified-column [correlation-name identifier])))))
 
                 :column_reference
-                [{:identifier (last (identifiers ag))}]
+                (let [identifiers (identifiers ag)]
+                  [(cond-> {:identifier (last identifiers)}
+                     (qualified? identifiers) (assoc :qualified-column identifiers))])
 
                 :subquery
                 []
@@ -390,9 +397,14 @@
               (r/zcase ag
                 :asterisk
                 (let [table-expression (z/right (r/parent ag))]
-                  (->> (r/collect-stop expand-asterisk table-expression)
-                       (distinct)
-                       (vec)))
+                  (r/collect-stop expand-asterisk table-expression))
+
+                :qualified_asterisk
+                (let [identifiers (identifiers (r/$ ag 1))
+                      table-expression (z/right (r/parent ag))]
+                  (for [{:keys [qualified-column] :as projection} (r/collect-stop expand-asterisk table-expression)
+                        :when (= identifiers (butlast qualified-column))]
+                    projection))
 
                 :derived_column
                 [(let [identifier (identifier ag)]
@@ -404,6 +416,7 @@
 
                 nil))]
       [(vec (for [[idx projection] (->> (r/collect-stop calculate-select-list ag)
+                                        (distinct)
                                         (map-indexed vector))]
               (assoc projection :index idx)))])
 
@@ -568,7 +581,6 @@
   (r/zcase ag
     :column_reference
     (let [identifiers (identifiers ag)
-          qualified? (> (count identifiers) 1)
           env (env ag)
           column-scope-id (scope-id ag)
           {table-id :id table-scope-id :scope-id} (when qualified?
@@ -594,7 +606,7 @@
                                   (order-by-index ag)
                                   :resolved-in-sort-key
 
-                                  (not qualified?)
+                                  (not (qualified? identifiers))
                                   :unqualified
 
                                   :else
