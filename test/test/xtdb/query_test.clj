@@ -2869,11 +2869,8 @@
                                                   [:blue 7] [:blue 8]]) [[?color ?x]]]]))
                #{[:red [5 4 3 2 1]] [:blue [8 7]]})))))
 
-#_{:clj-kondo/ignore #{:unused-private-var}}
-(defn- allowed-fn [e] e)
-
-#_{:clj-kondo/ignore #{:unused-private-var}}
-(defn- banned-fn [e] e)
+(defn allowed-fn [e] e)
+(defn banned-fn [e] e)
 
 (t/deftest test-projection-exprs
   (t/is (= #{[0 0 0] [1 0 1] [1 1 3]
