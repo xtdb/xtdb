@@ -94,6 +94,13 @@
 
 (comment
   (time
-   (xt/q (xt/db (xtdb-node))
-         (-> tpch/q14
-             (assoc :timeout 120000)))))
+   (count (xt/q (xt/db (xtdb-node))
+                (-> tpch/q1
+                    (assoc :timeout 120000)))))
+
+  (time
+   (doseq [q tpch/tpch-queries]
+     (time
+      (xt/q (xt/db (xtdb-node))
+            (-> q
+                (assoc :timeout 120000)))))))
