@@ -63,6 +63,7 @@
 
 ;; TODO:
 ;; - sanity check duplication handling from spec.
+;; - try replace ids with refs.
 
 (defn- enter-env-scope
   ([env]
@@ -243,15 +244,33 @@
     (when (r/ctor? :column_name_list (r/$ ag -1))
       (identifiers (r/$ ag -1)))))
 
+(defn- table-ref [ag]
+  (r/zcase ag
+    (:table_primary
+     :subquery)
+    (table-ref (r/$ ag 1))
+
+    :lateral_derived_table
+    (table-ref (r/$ ag 2))
+
+    (:query_expression
+     :collection_derived_table)
+    ag
+
+    nil))
+
 (defn- table [ag]
   (r/zcase ag
     :table_primary
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
       (let [table-name (table-or-query-name ag)
             correlation-name (or (correlation-name ag) table-name)
-            {cte-id :id cte-scope-id :scope-id :as cte} (find-decl (cte-env ag) table-name)
-            subquery-scope-id (when (nil? table-name)
+            {cte-id :id cte-scope-id :scope-id :as cte} (when table-name
+                                                          (find-decl (cte-env ag) table-name))
+            subquery-scope-id (when (nil? cte)
                                 (subquery-scope-id ag))
+            table-ref (when (nil? cte)
+                        (table-ref ag))
             derived-columns (derived-columns ag)]
         (with-meta
           (cond-> {:correlation-name correlation-name
@@ -262,7 +281,9 @@
             subquery-scope-id (assoc :subquery-scope-id subquery-scope-id)
             cte (assoc :cte-id cte-id :cte-scope-id cte-scope-id))
           (cond-> {:ref ag}
-            cte (assoc :cte-ref (:ref (meta cte)))))))))
+            table-ref (assoc :table-ref table-ref)
+            cte (assoc :cte-ref (:ref (meta cte))
+                       :table-ref (r/$ (:ref (meta cte)) -1))))))))
 
 (defn- local-tables [ag]
   (r/collect-stop
@@ -418,26 +439,21 @@
 
 (declare column-reference)
 
-;; TODO: The table_primary here is convenient, but incorrect, should
-;; take derived columns and CTE into account here, but need to still
-;; detect degree error.
-
 (defn- projected-columns [ag]
   (r/zcase ag
     :table_primary
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
-      (r/collect
-       (fn [ag]
-         (r/zcase ag
-           (:collection_derived_table
-            :subquery)
-           (projected-columns ag)
-
-           nil))
-       ag))
-
-    :with_list_element
-    (projected-columns (r/$ ag -1))
+      (let [{:keys [correlation-name
+                    derived-columns] :as table} (table ag)]
+        (for [{:keys [identifier]} (if-let [derived-columns (not-empty derived-columns)]
+                                     (for [identifier derived-columns]
+                                       {:identifier identifier})
+                                     (some->> (:table-ref (meta table))
+                                              (projected-columns)
+                                              (first)))]
+          (cond-> {}
+            identifier (assoc :identifier identifier)
+            correlation-name (assoc :qualified-column [correlation-name identifier])))))
 
     :query_specification
     (letfn [(expand-asterisk [ag]
@@ -445,15 +461,7 @@
                 :table_primary
                 (if (r/ctor? :qualified_join (r/$ ag 1))
                   (r/collect-stop expand-asterisk (r/$ ag 1))
-                  (let [{:keys [correlation-name
-                                derived-columns] :as table} (table ag)]
-                    (for [{:keys [identifier]} (if-let [derived-columns (not-empty derived-columns)]
-                                                 (for [identifier derived-columns]
-                                                   {:identifier identifier})
-                                                 (first (projected-columns (or (:cte-ref (meta table)) ag))))]
-                      (cond-> {}
-                        identifier (assoc :identifier identifier)
-                        correlation-name (assoc :qualified-column [correlation-name identifier])))))
+                  (projected-columns ag))
 
                 :column_reference
                 (let [{:keys [identifiers type]} (column-reference ag)
@@ -733,12 +741,14 @@
                (->line-info-str ag))])))
 
 (defn- check-derived-columns [ag]
-  (when-let [derived-columns (derived-columns ag)]
-    (let [candidates (projected-columns ag)
-          degrees (mapv count candidates)]
-      (when-not (apply = (count derived-columns) degrees)
-        [(format "Derived columns has to have same degree as table: %s"
-                 (->line-info-str ag))]))))
+  (let [{:keys [derived-columns] :as table} (table ag)]
+    (when derived-columns
+      (when-let [candidates (some->> (:table-ref (meta table))
+                                     (projected-columns))]
+        (let [degrees (mapv count candidates)]
+          (when-not (apply = (count derived-columns) degrees)
+            [(format "Derived columns has to have same degree as table: %s"
+                     (->line-info-str ag))]))))))
 
 (defn- check-column-reference [ag]
   (let [{:keys [identifiers table-id type] :as cr} (column-reference ag)]
