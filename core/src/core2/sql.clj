@@ -425,8 +425,7 @@
       (r/collect
        (fn [ag]
          (r/zcase ag
-           (:table_value_constructor
-            :collection_derived_table
+           (:collection_derived_table
             :subquery)
            (projected-columns ag)
 
