@@ -70,7 +70,7 @@ Follow the GCS https://github.com/googleapis/google-cloud-java#authentication[Au
 == Parameters
 
 * `root-path` (string/`Path`, required): path where documents will be stored, `gs://bucket/prefix`
-* `cache-size` (int): size of in-memory document cache
+* `cache-size` (int): size of in-memory document cache (number of entries, not bytes)
 * `pool-size` (int, default 4): size of thread-pool for GCS operations
 
 
