@@ -282,7 +282,7 @@
             cte (assoc :cte-id cte-id :cte-scope-id cte-scope-id))
           (cond-> {:ref ag}
             table-ref (assoc :table-ref table-ref)
-            cte (assoc :cte-ref (:ref (meta cte))
+            cte (assoc :cte cte
                        :table-ref (r/$ (:ref (meta cte)) -1))))))))
 
 (defn- local-tables [ag]
@@ -675,7 +675,7 @@
                  :scope-id column-scope-id}
           table (assoc :table-id table-id :table-scope-id table-scope-id))
         (cond-> {:ref ag}
-          table (assoc :table-ref (:ref (meta table))))))))
+          table (assoc :table table))))))
 
 ;; Errors
 
