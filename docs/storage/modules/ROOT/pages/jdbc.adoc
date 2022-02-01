@@ -250,4 +250,4 @@ EDN::
 === Document store (`+xtdb.jdbc/->document-store+`)
 
 * `connection-pool`
-* `cache-size` (int): size of in-memory document cache
+* `cache-size` (int): size of in-memory document cache (number of entries, not bytes)

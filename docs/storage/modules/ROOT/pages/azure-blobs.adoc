@@ -87,4 +87,4 @@ Then you need to create a SAS token for the Storage Account via the https://port
 * `sas-token` (string, required): 'shared access signature' for your chosen container.
 * `storage-account` (string, required)
 * `container` (string, required)
-* `cache-size` (int): size of in-memory document cache
+* `cache-size` (int): size of in-memory document cache (number of entries, not bytes)

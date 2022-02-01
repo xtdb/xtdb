@@ -337,7 +337,7 @@ EDN::
 
 === Parameters
 
-* `entity-cache-size` (int, default 32768): query entity cache size.
+* `entity-cache-size` (int, default 32768): query entity cache size (number of entries, not bytes).
 * `query-timeout` (int, default 30000): query timeout in milliseconds.
 * `batch-size` (int, default 100): batch size of results.
 * `fn-allow-list` (xref:#fn-allowlist[`Predicate Allowlist`], default nil): list of allowed namespaces/functions in predicate functions.
