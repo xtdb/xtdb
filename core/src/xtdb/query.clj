@@ -1773,12 +1773,7 @@
                              (pull-fn logic-var db)))}))))
 
 (defn- ->value-fn [{:keys [inputs ->result]} {:keys [var->bindings]} {:keys [value-serde] :as db}]
-  (let [var-bindings (mapv (some-fn var->bindings
-                                    (fn [logic-var]
-                                      (throw (err/illegal-arg :find-unknown-var
-                                                              {::err/message (str "Find refers to unknown variable: " logic-var)
-                                                               :unknown-var logic-var}))))
-                           inputs)]
+  (let [var-bindings (mapv var->bindings inputs)]
     (fn [row]
       (apply ->result db (for [var-binding var-bindings]
                            (bound-result-for-var value-serde var-binding row))))))
@@ -1824,9 +1819,17 @@
                       (apply ->result db (map env inputs)))
                     find-args))))))))
 
-(defn- compile-find [conformed-find built-query {:keys [find-cache fn-allow-list]}]
+(defn- compile-find [conformed-find {:keys [var->bindings] :as built-query} {:keys [find-cache fn-allow-list]}]
   (let [find-args (cache/compute-if-absent find-cache conformed-find identity #(compile-find-args % {:fn-allow-list fn-allow-list}))
         find-arg-types (into #{} (map :find-arg-type) find-args)]
+
+    (when-let [unknown-vars (not-empty (->> find-args
+                                            (into #{} (comp (mapcat :logic-vars)
+                                                            (remove var->bindings)))))]
+      (throw (err/illegal-arg :find-unknown-vars
+                              {::err/message (str "Find refers to unknown variables: " (pr-str unknown-vars))
+                               :unknown-vars unknown-vars})))
+
     {:find-arg-types find-arg-types
      :find-fn (if-not (every? (comp empty? :aggregates) find-args)
                 (agg-find-fn find-args built-query)
