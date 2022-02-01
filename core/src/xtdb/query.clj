@@ -1077,9 +1077,9 @@
                                         (binding [*recursion-table* (if cache-key
                                                                       (assoc *recursion-table* cache-key [])
                                                                       *recursion-table*)]
-                                          (let [{:keys [n-ary-join var->bindings]} (build-sub-query db where or-in-bindings in-args rule-name->rules)
+                                          (let [{:keys [var->bindings results]} (build-sub-query db where or-in-bindings in-args rule-name->rules)
                                                 free-vars-in-join-order-bindings (map var->bindings free-vars-in-join-order)]
-                                            (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
+                                            (when-let [idx-seq (seq results)]
                                               (if has-free-vars?
                                                 (vec (for [^List join-keys idx-seq]
                                                        (vec (for [^VarBinding var-binding free-vars-in-join-order-bindings]
@@ -1114,8 +1114,8 @@
                    in-args (when (seq not-vars)
                              [(vec (for [^VarBinding var-binding not-var-bindings]
                                      (.get join-keys (.result-index var-binding))))])
-                   {:keys [n-ary-join]} (build-sub-query db not-clause not-in-bindings in-args rule-name->rules)]
-               (empty? (idx/layered-idx->seq n-ary-join)))))})))
+                   {:keys [results]} (build-sub-query db not-clause not-in-bindings in-args rule-name->rules)]
+               (empty? results))))})))
 
 (defn- triple-join-order [{triple-clauses :triple, range-clauses :range, pred-clauses :pred, :as type->clauses} in-var-cardinalities stats]
   ;; TODO make more use of in-var-cardinalities
@@ -1612,13 +1612,15 @@
     (log/debug :vars-in-join-order vars-in-join-order)
     (log/debug :var->bindings (xio/pr-edn-str var->bindings))
 
-    (binding [nippy/*freeze-fallback* :write-unfreezable]
-      (doseq [[{:keys [idx-id bind-type tuple-idxs-in-join-order]} in-arg] (map vector in-bindings in-args)]
-        (bind-binding bind-type value-serde tuple-idxs-in-join-order (get idx-id->idx idx-id) in-arg)))
+    {:var->bindings var->bindings
+     :results (lazy-seq
+               (binding [nippy/*freeze-fallback* :write-unfreezable]
+                 (doseq [[{:keys [idx-id bind-type tuple-idxs-in-join-order]} in-arg] (map vector in-bindings in-args)]
+                   (bind-binding bind-type value-serde tuple-idxs-in-join-order (get idx-id->idx idx-id) in-arg)))
 
-    {:n-ary-join (when (constrain-result-fn [] 0)
-                   (idx/new-n-ary-join-layered-virtual-index unary-join-indexes constrain-result-fn))
-     :var->bindings var->bindings}))
+               (when (constrain-result-fn [] 0)
+                 (idx/layered-idx->seq
+                  (idx/new-n-ary-join-layered-virtual-index unary-join-indexes constrain-result-fn))))}))
 
 (defn- open-index-snapshot ^java.io.Closeable [{:keys [index-store index-snapshot] :as _db}]
   (if index-snapshot
@@ -1898,7 +1900,7 @@
                     :value-serde value-serde
                     :entity-resolver-fn (or (:entity-resolver-fn db)
                                             (new-entity-resolver-fn db)))
-          {:keys [n-ary-join] :as built-query} (build-sub-query db where in in-args rule-name->rules)
+          {:keys [results] :as built-query} (build-sub-query db where in in-args rule-name->rules)
           {:keys [find-arg-types find-fn]} (compile-find find built-query db)
           return-maps? (some q [:keys :syms :strs])]
 
@@ -1908,7 +1910,7 @@
                                 {::err/message (str "Order by requires an element from :find. unreturned element: " find-arg)})))
 
       (lazy-seq
-       (cond->> (find-fn (idx/layered-idx->seq n-ary-join) db)
+       (cond->> (find-fn results db)
          order-by (xio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
