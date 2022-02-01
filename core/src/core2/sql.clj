@@ -61,6 +61,16 @@
 
 ;; Draft attribute grammar for SQL semantics.
 
+;; TODO:
+;; - error on unresolved asterisked qualifier.
+;; - error if select expands to 0 degree.
+;; - prune duplicates caused by asterisk.
+;; - deal with actual duplicated names.
+;; - calculate projection for referenced CTE.
+;; - add derived columns on base table when expanding asterisk.
+;; - sanity check base table used columns logic when expanding asterisk.
+;; - add or filter by potential grouping columns when expanding asterisk.
+
 (defn- enter-env-scope
   ([env]
    (enter-env-scope env {}))
