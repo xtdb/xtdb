@@ -88,6 +88,9 @@
       (when (vector? node)
         (first node)))))
 
+(defn ctor? [kw ag]
+  (= kw (ctor ag)))
+
 (defn- z-nth [ag ^long n]
   (reduce
    (fn [ag f]
@@ -337,12 +340,24 @@
 
 (def mono-tu (partial adhoc-tu fail-tu))
 
-(defn with-tu-monoid [z f]
-  (vary-meta z assoc :zip/monoid f))
+(defn with-tu-monoid [z m]
+  (vary-meta z assoc :zip/monoid m))
 
-(def collect full-td-tu)
+(defn collect
+  ([f]
+   (full-td-tu f))
+  ([f z]
+   (full-td-tu f z))
+  ([f z m]
+   (full-td-tu f (with-tu-monoid z m))))
 
-(def collect-stop stop-td-tu)
+(defn collect-stop
+  ([f]
+   (stop-td-tu f))
+  ([f z]
+   (stop-td-tu f z))
+  ([f z m]
+   (stop-td-tu f (with-tu-monoid z m))))
 
 (def select once-td-tu)
 

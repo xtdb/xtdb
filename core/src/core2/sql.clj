@@ -106,7 +106,7 @@
 (defn- id [ag]
   (r/zcase ag
     :table_primary
-    (if (= :qualified_join (r/ctor (r/$ ag 1)))
+    (if (r/ctor? :qualified_join ag)
       (id (z/prev ag))
       (inc ^long (id (z/prev ag))))
 
@@ -125,11 +125,8 @@
      :column_reference
      :identifier_chain)
     (letfn [(step [ag]
-              (r/zcase ag
-                :regular_identifier
-                [(r/lexeme ag 1)]
-
-                []))]
+              (when (r/ctor? :regular_identifier ag)
+                [(r/lexeme ag 1)]))]
       (r/collect step ag))))
 
 (defn- identifier [ag]
@@ -208,7 +205,7 @@
 (defn- cteo [ag]
   (r/zcase ag
     :query_expression
-    (if (= :with_clause (r/ctor (r/$ ag 1)))
+    (if (r/ctor? :with_clause (r/$ ag 1))
       (cteo (r/$ ag 1))
       (ctei ag))
 
@@ -224,9 +221,10 @@
     (cteo ag)
 
     :with_list_element
-    (if (= "RECURSIVE" (r/lexeme (r/parent (r/parent ag)) 2))
-      (cteo (r/parent ag))
-      (ctei (r/left-or-parent ag)))
+    (let [with-clause (r/parent (r/parent ag))]
+      (if (= "RECURSIVE" (r/lexeme with-clause 2))
+        (cteo (r/parent ag))
+        (ctei (r/left-or-parent ag))))
 
     (r/inherit ag)))
 
@@ -235,13 +233,13 @@
 (defn- derived-columns [ag]
   (r/zcase ag
     :table_primary
-    (when (= :column_name_list (r/ctor (r/$ ag -1)))
+    (when (r/ctor? :column_name_list (r/$ ag -1))
       (identifiers (r/$ ag -1)))))
 
 (defn- table [ag]
   (r/zcase ag
     :table_primary
-    (when-not (= :qualified_join (r/ctor (r/$ ag 1)))
+    (when-not (r/ctor? :qualified_join (r/$ ag 1))
       (let [table-name (table-or-query-name ag)
             correlation-name (or (correlation-name ag) table-name)
             {cte-id :id cte-scope-id :scope-id} (find-decl (cte-env ag) table-name)
@@ -260,7 +258,7 @@
   (letfn [(step [ag]
             (r/zcase ag
               :table_primary
-              (if (= :qualified_join (r/ctor (r/$ ag 1)))
+              (if (r/ctor? :qualified_join (r/$ ag 1))
                 (local-tables (r/$ ag 1))
                 [(table ag)])
 
@@ -314,15 +312,10 @@
 
     :order_by_clause
     (letfn [(step [ag]
-              (r/zcase ag
-                :query_specification
-                [(env ag)]
-
-                :subquery
-                []
-
-                nil))]
-      (first (r/collect-stop step (z/left ag))))
+              (when (r/ctor? :query_specification ag)
+                (env ag)))]
+      (let [query-expression-body (z/left ag)]
+        (r/select step query-expression-body)))
 
     (r/inherit ag)))
 
@@ -375,7 +368,7 @@
             (asterisk-step [ag]
               (r/zcase ag
                 :table_primary
-                (if (= :qualified_join (r/ctor (r/$ ag 1)))
+                (if (r/ctor? :qualified_join (r/$ ag 1))
                   (r/collect-stop asterisk-step (r/$ ag 1))
                   (if-let [derived-columns (not-empty (derived-columns ag))]
                     (for [identifier derived-columns]
@@ -393,10 +386,10 @@
             (step [ag]
               (r/zcase ag
                 :asterisk
-                (->> (z/right (r/parent ag))
-                     (r/collect-stop asterisk-step)
-                     (distinct)
-                     (vec))
+                (let [table-expression (z/right (r/parent ag))]
+                  (->> (r/collect-stop asterisk-step table-expression)
+                       (distinct)
+                       (vec)))
 
                 :derived_column
                 [(let [identifier (identifier ag)]
@@ -412,7 +405,7 @@
               (assoc projection :index idx)))])
 
     :query_expression
-    (if (= :with_clause (r/ctor (r/$ ag 1)))
+    (if (r/ctor? :with_clause (r/$ ag 1))
       (projected-columns (r/$ ag 2))
       (projected-columns (r/$ ag 1)))
 
@@ -435,7 +428,7 @@
                 nil
 
                 :explicit_row_value_constructor
-                (let [degree (r/collect-stop row-degree-step (r/with-tu-monoid ag +))]
+                (let [degree (r/collect-stop row-degree-step ag +)]
                   [(vec (for [n (range degree)]
                           {:index n}))])
 
@@ -482,11 +475,8 @@
 
 (defn- grouping-column-references [ag]
   (letfn [(step [ag]
-            (r/zcase ag
-              :column_reference
-              [(identifiers ag)]
-
-              []))]
+            (when (r/ctor? :column_reference ag)
+              [(identifiers ag)]))]
     (r/collect step ag)))
 
 (defn- grouping-columns [ag]
@@ -569,9 +559,8 @@
           qualified? (> (count identifiers) 1)
           env (env ag)
           column-scope-id (scope-id ag)
-          {table-id :id
-           table-scope-id :scope-id} (when qualified?
-           (find-decl env (first identifiers)))
+          {table-id :id table-scope-id :scope-id} (when qualified?
+                                                    (find-decl env (first identifiers)))
           outer-reference? (and table-scope-id (< ^long table-scope-id ^long column-scope-id))
           group-env (group-env ag)
           column-reference-type (reduce
@@ -777,11 +766,8 @@
 
 (defn- all-column-references [ag]
   (letfn [(step [ag]
-            (r/zcase ag
-              :column_reference
-              [(column-reference ag)]
-
-              []))]
+            (when (r/ctor? :column_reference ag)
+              [(column-reference ag)]))]
     (r/collect step ag)))
 
 (defn- scope-id [ag]
