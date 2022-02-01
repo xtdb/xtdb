@@ -445,15 +445,15 @@
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
       (let [{:keys [correlation-name
                     derived-columns] :as table} (table ag)]
-        (for [{:keys [identifier]} (if-let [derived-columns (not-empty derived-columns)]
-                                     (for [identifier derived-columns]
-                                       {:identifier identifier})
-                                     (some->> (:table-ref (meta table))
-                                              (projected-columns)
-                                              (first)))]
-          (cond-> {}
-            identifier (assoc :identifier identifier)
-            correlation-name (assoc :qualified-column [correlation-name identifier])))))
+        [(for [{:keys [identifier]} (if-let [derived-columns (not-empty derived-columns)]
+                                      (for [identifier derived-columns]
+                                        {:identifier identifier})
+                                      (some->> (:table-ref (meta table))
+                                               (projected-columns)
+                                               (first)))]
+           (cond-> {}
+             identifier (assoc :identifier identifier)
+             correlation-name (assoc :qualified-column [correlation-name identifier])))]))
 
     :query_specification
     (letfn [(expand-asterisk [ag]
@@ -461,7 +461,7 @@
                 :table_primary
                 (if (r/ctor? :qualified_join (r/$ ag 1))
                   (r/collect-stop expand-asterisk (r/$ ag 1))
-                  (projected-columns ag))
+                  (first (projected-columns ag)))
 
                 :column_reference
                 (let [{:keys [identifiers type]} (column-reference ag)
