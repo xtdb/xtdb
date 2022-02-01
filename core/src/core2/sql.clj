@@ -328,6 +328,58 @@
 
     (r/inherit ag)))
 
+;; Group by
+
+(defn- grouping-column-references [ag]
+  (r/collect
+   (fn [ag]
+     (when (r/ctor? :column_reference ag)
+       [(identifiers ag)]))
+   ag))
+
+(defn- grouping-columns [ag]
+  (->> (r/collect-stop
+        (fn [ag]
+          (r/zcase ag
+            (:aggregate_function
+             :having_clause)
+            [[]]
+
+            :group_by_clause
+            [(grouping-column-references ag)]
+
+            :subquery
+            []
+
+            nil))
+        ag)
+       (sort-by count)
+       (last)))
+
+(defn- group-env [ag]
+  (r/zcase ag
+    :query_specification
+    (enter-env-scope (group-env (r/parent ag))
+                     {:grouping-columns (grouping-columns ag)
+                      :group-column-reference-type :ordinary
+                      :column-reference-type :ordinary})
+    (:select_list
+     :having_clause)
+    (let [group-env (group-env (r/parent ag))
+          {:keys [grouping-columns]} (local-env group-env)]
+      (cond-> group-env
+        grouping-columns (update-env (fn [s]
+                                       (assoc s
+                                              :group-column-reference-type :group-invariant
+                                              :column-reference-type :invalid-group-invariant)))))
+
+    :aggregate_function
+    (update-env (group-env (r/parent ag))
+                (fn [s]
+                  (assoc s :column-reference-type :within-group-varying)))
+
+    (r/inherit ag)))
+
 ;; Select
 
 (defn- set-operator [ag]
@@ -360,6 +412,8 @@
       {:identifiers (identifiers (r/$ ag -1))})
 
     nil))
+
+(declare column-reference)
 
 (defn- projected-columns [ag]
   (r/zcase ag
@@ -500,58 +554,6 @@
                     projection))])
           candidates)
         candidates))
-
-    (r/inherit ag)))
-
-;; Group by
-
-(defn- grouping-column-references [ag]
-  (r/collect
-   (fn [ag]
-     (when (r/ctor? :column_reference ag)
-       [(identifiers ag)]))
-   ag))
-
-(defn- grouping-columns [ag]
-  (->> (r/collect-stop
-        (fn [ag]
-          (r/zcase ag
-            (:aggregate_function
-             :having_clause)
-            [[]]
-
-            :group_by_clause
-            [(grouping-column-references ag)]
-
-            :subquery
-            []
-
-            nil))
-        ag)
-       (sort-by count)
-       (last)))
-
-(defn- group-env [ag]
-  (r/zcase ag
-    :query_specification
-    (enter-env-scope (group-env (r/parent ag))
-                     {:grouping-columns (grouping-columns ag)
-                      :group-column-reference-type :ordinary
-                      :column-reference-type :ordinary})
-    (:select_list
-     :having_clause)
-    (let [group-env (group-env (r/parent ag))
-          {:keys [grouping-columns]} (local-env group-env)]
-      (cond-> group-env
-        grouping-columns (update-env (fn [s]
-                                       (assoc s
-                                              :group-column-reference-type :group-invariant
-                                              :column-reference-type :invalid-group-invariant)))))
-
-    :aggregate_function
-    (update-env (group-env (r/parent ag))
-                (fn [s]
-                  (assoc s :column-reference-type :within-group-varying)))
 
     (r/inherit ag)))
 
