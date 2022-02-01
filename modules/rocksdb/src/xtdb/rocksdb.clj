@@ -59,9 +59,6 @@
     (.close read-options)
     (.releaseSnapshot db snapshot)))
 
-(def ^:private default-block-cache-size (* 128 1024 1024))
-(def ^:private default-block-size (* 16 1024))
-
 (defrecord RocksKv [^RocksDB db, ^WriteOptions write-options, ^Options options, ^Closeable metrics, ^Closeable cp-job, db-dir]
   kv/KvStore
   (new-snapshot [_]
