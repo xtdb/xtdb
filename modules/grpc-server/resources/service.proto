@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package com.grpc.xtdb;
+
+import "google/protobuf/struct.proto";
+import "transaction.proto";
+import "entity.proto";
+import "utils.proto";
+
+message Empty { }
+
+message StatusResponse {
+    string version = 1;
+    int32 index_version = 2;
+    string kv_store = 3;
+    int32 estimate_num_keys = 4;
+    int64 size = 5;
+    com.grpc.xtdb.OptionalString revision = 6;
+    com.grpc.xtdb.OptionalString consumer_state = 7;
+}
+
+service GrpcApi {
+  rpc status (Empty) returns (StatusResponse);
+  rpc entity (com.grpc.xtdb.EntityRequest) returns (google.protobuf.Value);
+  rpc entity_history (com.grpc.xtdb.EntityHistoryRequest) returns (com.grpc.xtdb.EntityHistoryResponse);
+  rpc submit_tx (com.grpc.xtdb.SubmitRequest) returns (com.grpc.xtdb.SubmitResponse);
+}

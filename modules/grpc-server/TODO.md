@@ -20,3 +20,8 @@
 - [ ] Slowest Queries
 
 * Current mapped solutions still need to be tested
+
+## Building protos
+1. Download protoc from https://grpc.io
+2. `make setup` to download protojure
+3. `make protoc` to generate clojure proto namespaces

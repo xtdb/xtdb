@@ -1,8 +1,10 @@
 syntax = "proto3";
-package xtdb;
+
+package com.grpc.xtdb;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
+import "utils.proto";
 
 message Transaction {
     oneof transaction_type {
@@ -16,22 +18,22 @@ message Transaction {
 
 message Put {
     google.protobuf.Value document = 1;
-    optional google.protobuf.Timestamp valid_time = 2;
-    optional google.protobuf.Timestamp tx_time = 3;
+    com.grpc.xtdb.OptionalTimestamp valid_time = 2;
+    com.grpc.xtdb.OptionalTimestamp tx_time = 3;
 }
 
 message Delete {
     string document_id = 1;
-    optional google.protobuf.Timestamp valid_time = 2;
-    optional google.protobuf.Timestamp tx_time = 3;
+    com.grpc.xtdb.OptionalTimestamp valid_time = 2;
+    com.grpc.xtdb.OptionalTimestamp tx_time = 3;
 }
 
 message Match {
     string document_id = 1;
     Transaction transaction = 2;
-    optional google.protobuf.Value document_revision = 3;
-    optional google.protobuf.Timestamp valid_time = 4;
-    optional google.protobuf.Timestamp tx_time = 5;
+    com.grpc.xtdb.OptionalJson document_revision = 3;
+    com.grpc.xtdb.OptionalTimestamp valid_time = 4;
+    com.grpc.xtdb.OptionalTimestamp tx_time = 5;
 }
 
 message Evict {
