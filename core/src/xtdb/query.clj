@@ -1087,7 +1087,6 @@
         :let [not-vars (or args
                            (->> (collect-vars {:not [{:terms terms}]})
                                 :not-vars))
-              _ (assert (seq not-vars) (str "sup" (pr-str args terms)))
               not-vars (vec (remove blank-var? not-vars))
               not-in-bindings {:bindings [[:tuple not-vars]]}
               not-var-bindings (mapv var->bindings not-vars)
