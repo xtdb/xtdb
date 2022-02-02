@@ -1573,10 +1573,6 @@
                                         (f db idx-id->idx join-keys))
                                       (.get ^List depth->constraints depth)))]
 
-    (log/debug :where (xio/pr-edn-str where))
-    (log/debug :vars-in-join-order vars-in-join-order)
-    (log/debug :var->bindings (xio/pr-edn-str var->bindings))
-
     {:var->bindings var->bindings
      :results (lazy-seq
                (binding [nippy/*freeze-fallback* :write-unfreezable]
