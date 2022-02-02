@@ -62,7 +62,10 @@
 ;; Draft attribute grammar for SQL semantics.
 
 ;; TODO:
-;; - sanity check duplication handling from spec.
+;; - move dynamic projection of references out of asterisk expansion to table primary.
+;; - remove dedupe logic in asterisk expansion.
+;; - check derived column list vs dynamic projection?
+;; - remove corresponding spec, it's optional and PostgreSQL doesn't support it?
 ;; - try replace ids with refs.
 
 (defn- enter-env-scope
