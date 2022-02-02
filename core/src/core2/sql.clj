@@ -62,9 +62,10 @@
 ;; Draft attribute grammar for SQL semantics.
 
 ;; TODO:
-;; - fix grouping column check for asterisks, should really expand and then fail.
-;; - check derived column list vs dynamic projection?
 ;; - try replace ids with refs.
+;; - align names and language with spec, add references?
+;; - check for columns in scope, derived column list vs dynamic projection?
+;; - grouping column check for asterisks should really expand and then fail.
 
 (defn- enter-env-scope
   ([env]
