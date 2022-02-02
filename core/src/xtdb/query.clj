@@ -30,6 +30,8 @@
            (org.agrona DirectBuffer)
            (xtdb.codec EntityTx)))
 
+(defrecord VarBinding [result-index])
+
 (defn logic-var? [x]
   (and (symbol? x)
        (not (contains? '#{... . $ %} x))))
@@ -801,49 +803,6 @@
                             free-vars)]))
                [[] var->joins])))
 
-(defrecord VarBinding [e-var var attr result-index result-name type value?])
-
-(defn- build-var-bindings [var->attr v-var->e var->values-result-index vars]
-  (->> (for [var vars
-             :let [e-var (get v-var->e var var)]]
-         [var (map->VarBinding
-               {:e-var e-var
-                :var var
-                :attr (get var->attr var)
-                :result-index (get var->values-result-index var)
-                :result-name e-var
-                :type :entity
-                :value? false})])
-       (into {})))
-
-(defn- value-var-binding [var result-index type]
-  (map->VarBinding
-   {:var var
-    :result-name (symbol "xtdb.query.value" (name var))
-    :result-index result-index
-    :type type
-    :value? true}))
-
-(defn- build-in-var-bindings [var->values-result-index in-vars]
-  (->> (for [var in-vars
-             :let [result-index (get var->values-result-index var)]]
-         [var (value-var-binding var result-index :in-var)])
-       (into {})))
-
-(defn- build-pred-return-var-bindings [var->values-result-index pred-clauses]
-  (->> (for [{:keys [return]} pred-clauses
-             return-var (find-binding-vars return)
-             :let [result-index (get var->values-result-index return-var)]]
-         [return-var (value-var-binding return-var result-index :pred)])
-       (into {})))
-
-(defn- build-or-free-var-bindings [var->values-result-index or-clauses]
-  (->> (for [{:keys [free-vars]} or-clauses
-             var free-vars
-             :let [result-index (get var->values-result-index var)]]
-         [var (value-var-binding var result-index :or)])
-       (into {})))
-
 (defn- calculate-constraint-join-depth [var->bindings vars]
   (->> (for [var vars]
          (get-in var->bindings [var :result-index] -1))
@@ -1391,13 +1350,6 @@
       new-known-vars
       (recur new-known-vars pred-clauses))))
 
-(defn- build-v-var->e [triple-clauses var->values-result-index]
-  (->> (for [{:keys [e v]} triple-clauses
-             :when (logic-var? v)]
-         [v e])
-       (sort-by (comp var->values-result-index second))
-       (into {})))
-
 (defn- sort-triple-clauses [triple-clauses stats]
   (->> triple-clauses
        (sort-by (fn [{:keys [a]}]
@@ -1493,21 +1445,10 @@
           known-vars (add-pred-returns-bound-at-top-level known-vars pred-clauses)
           [or-clauses _known-vars] (analyze-or-vars (concat or-clauses or-join-clauses) known-vars)
           [or-clauses var->joins] (or-joins or-clauses var->joins)
-          join-depth (count var->joins)
           vars-in-join-order (calculate-join-order (keys var->joins) type->clauses or-clauses stats in-var-cardinalities project-only-leaf-vars)
-          var->values-result-index (zipmap vars-in-join-order (range))
-          v-var->e (build-v-var->e triple-clauses var->values-result-index)
-          v-var->attr (->> (for [{:keys [e a v]} triple-clauses
-                                 :when (and (logic-var? v)
-                                            (= e (get v-var->e v)))]
-                             [v a])
-                           (into {}))
-          e-var->attr (zipmap e-vars (repeat :crux.db/id))
-          var->attr (merge e-var->attr v-var->attr)
-          var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clauses)
-                               (build-pred-return-var-bindings var->values-result-index pred-clauses)
-                               (build-in-var-bindings var->values-result-index in-vars)
-                               (build-var-bindings var->attr v-var->e var->values-result-index (keys var->attr)))
+          var->bindings (->> vars-in-join-order
+                             (into {} (map-indexed (fn [idx var]
+                                                     [var (->VarBinding idx)]))))
           var->range-constraints (build-var-range-constraints value-serde range-clauses var->bindings)
           var->logic-var-range-constraint-fns (build-logic-var-range-constraint-fns range-clauses var->bindings)
           not-constraints (build-not-constraints (concat not-clauses not-join-clauses) rule-name->rules var->bindings)
@@ -1521,7 +1462,7 @@
           depth->constraints (->> (concat pred-constraints
                                           not-constraints
                                           or-constraints)
-                                  (update-depth->constraints (vec (repeat (inc join-depth) nil))))
+                                  (update-depth->constraints (vec (repeat (inc (count vars-in-join-order)) nil))))
           in-bindings (vec (for [[idx-id [bind-type binding]] (map vector in-idx-ids (:bindings in))
                                  :let [bind-vars (find-binding-vars binding)]]
                              {:idx-id idx-id
