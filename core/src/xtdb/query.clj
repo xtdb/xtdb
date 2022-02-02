@@ -102,11 +102,15 @@
   (s/cat :bound-args (s/? ::args-list)
          :free-args (s/* logic-var?)))
 
-(s/def ::not (expression-spec 'not (s/+ ::term)))
+(s/def ::not
+  (s/and (expression-spec 'not (s/+ ::term))
+         (s/conformer (fn [terms]
+                        {:terms terms})
+                      :terms)))
 
 (s/def ::not-join
   (expression-spec 'not-join (s/cat :args ::args-list
-                                    :body (s/+ ::term))))
+                                    :terms (s/+ ::term))))
 
 (s/def ::and (expression-spec 'and (s/+ ::term)))
 
@@ -572,8 +576,8 @@
         not-join-vars (set (for [not-join-clause not-join-clauses
                                  arg (:args not-join-clause)]
                              arg))
-        not-vars (->> (for [not-clause not-clauses]
-                        (->> (normalize-clauses not-clause)
+        not-vars (->> (for [{:keys [terms]} not-clauses]
+                        (->> (normalize-clauses terms)
                              (group-clauses-by-type)
                              (collect-vars)))
                       (apply merge-with set/union))
@@ -1117,21 +1121,16 @@
                    (idx/update-relation-virtual-index! (get idx-id->idx idx-id) free-results)))
                true)))})))
 
-(defn- build-not-constraints [rule-name->rules not-type not-clauses var->bindings]
-  (for [not-clause not-clauses
-        :let [[not-vars not-clause] (case not-type
-                                      :not [(->> (normalize-clauses [[:not not-clause]])
-                                                 (group-clauses-by-type)
-                                                 (collect-vars)
-                                                 :not-vars)
-                                            not-clause]
-                                      :not-join [(:args not-clause)
-                                                 (:body not-clause)])
+(defn- build-not-constraints [not-clauses rule-name->rules var->bindings]
+  (for [{:keys [args terms]} not-clauses
+        :let [not-vars (or args
+                           (->> (collect-vars {:not [{:terms terms}]})
+                                :not-vars))
               not-vars (vec (remove blank-var? not-vars))
               not-in-bindings {:bindings [[:tuple not-vars]]}
               not-var-bindings (mapv var->bindings not-vars)
               not-join-depth (calculate-constraint-join-depth var->bindings not-vars)]]
-    (do (validate-existing-vars var->bindings not-clause not-vars)
+    (do (validate-existing-vars var->bindings terms not-vars)
         {:join-depth not-join-depth
          :constraint-fn
          (fn not-constraint [db _idx-id->idx ^List join-keys]
@@ -1140,7 +1139,7 @@
                    in-args (when (seq not-vars)
                              [(vec (for [^VarBinding var-binding not-var-bindings]
                                      (.get join-keys (.result-index var-binding))))])
-                   {:keys [results]} (build-sub-query db not-clause not-in-bindings in-args rule-name->rules)]
+                   {:keys [results]} (build-sub-query db terms not-in-bindings in-args rule-name->rules)]
                (empty? results))))})))
 
 (defn- triple-join-order [{triple-clauses :triple, range-clauses :range, pred-clauses :pred, :as type->clauses} in-var-cardinalities stats]
@@ -1513,8 +1512,7 @@
                                (build-var-bindings var->attr v-var->e var->values-result-index (keys var->attr)))
           var->range-constraints (build-var-range-constraints value-serde range-clauses var->bindings)
           var->logic-var-range-constraint-fns (build-logic-var-range-constraint-fns range-clauses var->bindings)
-          not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings)
-          not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings)
+          not-constraints (build-not-constraints (concat not-clauses not-join-clauses) rule-name->rules var->bindings)
           pred-constraints (build-pred-constraints (assoc pred-ctx
                                                           :rule-name->rules rule-name->rules
                                                           :value-serde value-serde
@@ -1524,7 +1522,6 @@
           or-constraints (build-or-constraints rule-name->rules or-clauses var->bindings vars-in-join-order)
           depth->constraints (->> (concat pred-constraints
                                           not-constraints
-                                          not-join-constraints
                                           or-constraints)
                                   (update-depth->constraints (vec (repeat (inc join-depth) nil))))
           in-bindings (vec (for [[idx-id [bind-type binding]] (map vector in-idx-ids (:bindings in))
