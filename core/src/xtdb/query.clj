@@ -498,52 +498,57 @@
 
 (defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
   (let [v-var (gensym (str "self-join_" v "_"))]
-    {:triple [(-> (assoc triple :v v-var)
+    [[:triple (-> (assoc triple :v v-var)
                   (with-meta {:self-join? true}))]
-     :pred [{:pred {:pred-fn '==, :args [v-var e]}}]}))
+     [:pred {:pred {:pred-fn '==, :args [v-var e]}}]]))
 
 (defn- normalize-clauses [clauses]
-  (->> (for [[type clause] clauses]
-         (case type
-           :triple (let [{:keys [e v] :as clause} (normalize-triple-clause clause)]
-                     (if (and (logic-var? e) (= e v))
-                       (rewrite-self-join-triple-clause clause)
-                       {:triple [clause]}))
+  (->> clauses
+       (mapcat (fn [[type clause]]
+                 (case type
+                   :triple (let [{:keys [e v] :as clause} (normalize-triple-clause clause)]
+                             (if (and (logic-var? e) (= e v))
+                               (rewrite-self-join-triple-clause clause)
+                               [[:triple clause]]))
 
-           :pred {:pred [(let [{:keys [pred return]} clause
-                               {:keys [pred-fn args]} pred
-                               range-pred (and (= 2 (count args))
-                                               (every? logic-var? args)
-                                               (get pred->built-in-range-pred pred-fn))]
-                           (cond-> clause
-                             range-pred (assoc-in [:pred :pred-fn] range-pred)
-                             return (assoc :return (w/postwalk #(if (blank-var? %)
-                                                                  (gensym "_")
-                                                                  %)
-                                                               return))))]}
+                   :pred [[:pred (let [{:keys [pred return]} clause
+                                       {:keys [pred-fn args]} pred
+                                       range-pred (and (= 2 (count args))
+                                                       (every? logic-var? args)
+                                                       (get pred->built-in-range-pred pred-fn))]
+                                   (cond-> clause
+                                     range-pred (assoc-in [:pred :pred-fn] range-pred)
+                                     return (assoc :return (w/postwalk #(if (blank-var? %)
+                                                                          (gensym "_")
+                                                                          %)
+                                                                       return))))]]
 
-           :range (let [[order clause] (first clause)
-                        [order clause] (if (= :sym-sym order) ;; NOTE: to deal with rule expansion
-                                         (let [{:keys [op sym-a sym-b]} clause]
-                                           (cond
-                                             (literal? sym-a)
-                                             [:val-sym {:op op :val sym-a :sym sym-b}]
-                                             (literal? sym-b)
-                                             [:sym-val {:op op :val sym-b :sym sym-a}]
-                                             :else
-                                             [order clause]))
-                                         [order clause])
-                        {:keys [op sym val] :as clause} (cond-> clause
-                                                          (= :val-sym order) (update :op range->inverse-range))]
-                    (if (and (not= :sym-sym order)
-                             (not (logic-var? sym)))
-                      {:pred [{:pred {:pred-fn (get pred->built-in-range-pred (var-get (resolve op)))
-                                      :args [sym val]}}]}
-                      {:range [clause]}))
+                   :range (let [[order clause] (first clause)
+                                [order clause] (if (= :sym-sym order) ;; NOTE: to deal with rule expansion
+                                                 (let [{:keys [op sym-a sym-b]} clause]
+                                                   (cond
+                                                     (literal? sym-a)
+                                                     [:val-sym {:op op :val sym-a :sym sym-b}]
+                                                     (literal? sym-b)
+                                                     [:sym-val {:op op :val sym-b :sym sym-a}]
+                                                     :else
+                                                     [order clause]))
+                                                 [order clause])
+                                {:keys [op sym val] :as clause} (cond-> clause
+                                                                  (= :val-sym order) (update :op range->inverse-range))]
+                            (if (and (not= :sym-sym order)
+                                     (not (logic-var? sym)))
+                              [[:pred {:pred {:pred-fn (get pred->built-in-range-pred (var-get (resolve op)))
+                                              :args [sym val]}}]]
 
-           {type [clause]}))
+                              [[:range clause]]))
 
-       (apply merge-with into)))
+                   [[type clause]])))))
+
+(defn- group-clauses-by-type [clauses]
+  (->> clauses
+       (group-by first)
+       (into {} (map (juxt key (comp #(map second %) val))))))
 
 (defn- find-binding-vars [binding]
   (some->> binding (vector) (flatten) (filter logic-var?)))
@@ -558,15 +563,19 @@
                       rule-clauses :rule}]
   (let [or-vars (->> (for [or-clause or-clauses
                            [type sub-clauses] or-clause]
-                       (collect-vars (normalize-clauses (case type
-                                                          :term [sub-clauses]
-                                                          :and sub-clauses))))
+                       (->> (normalize-clauses (case type
+                                                 :term [sub-clauses]
+                                                 :and sub-clauses))
+                            (group-clauses-by-type)
+                            (collect-vars)))
                      (apply merge-with set/union))
         not-join-vars (set (for [not-join-clause not-join-clauses
                                  arg (:args not-join-clause)]
                              arg))
         not-vars (->> (for [not-clause not-clauses]
-                        (collect-vars (normalize-clauses not-clause)))
+                        (->> (normalize-clauses not-clause)
+                             (group-clauses-by-type)
+                             (collect-vars)))
                       (apply merge-with set/union))
         or-join-vars (set (for [or-join-clause or-join-clauses
                                 :let [{:keys [bound-args free-args]} (:args or-join-clause)]
@@ -731,7 +740,9 @@
                                                  where (case type
                                                          :term [sub-clauses]
                                                          :and sub-clauses)
-                                                 body-vars (->> (collect-vars (normalize-clauses where))
+                                                 body-vars (->> (normalize-clauses where)
+                                                                (group-clauses-by-type)
+                                                                (collect-vars)
                                                                 (vals)
                                                                 (reduce into #{}))
                                                  body-vars (set (remove blank-var? body-vars))
@@ -1109,7 +1120,10 @@
 (defn- build-not-constraints [rule-name->rules not-type not-clauses var->bindings]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
-                                      :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
+                                      :not [(->> (normalize-clauses [[:not not-clause]])
+                                                 (group-clauses-by-type)
+                                                 (collect-vars)
+                                                 :not-vars)
                                             not-clause]
                                       :not-join [(:args not-clause)
                                                  (:body not-clause)])
@@ -1260,7 +1274,9 @@
 
 (defn- expand-rules [where rule-name->rules recursion-cache]
   (->> (for [[type clause :as sub-clause] where]
-         (if (= :rule type)
+         (if-not (= :rule type)
+           [sub-clause]
+
            (let [rule-name (:name clause)
                  rules (get rule-name->rules rule-name)]
              (when-not rules
@@ -1287,19 +1303,19 @@
                (when-not (= arity (count (:args clause)))
                  (throw (err/illegal-arg :rule-invocation-wrong-arity
                                          {::err/message (str "Rule invocation has wrong arity, expected: " arity " " (xio/pr-edn-str sub-clause))})))
-               ;; TODO: the caches and expansion here needs
-               ;; revisiting.
+               ;; TODO: the caches and expansion here needs revisiting.
                (let [expanded-rules (for [[args _ body] rule-args+num-bound-args+body
                                           :let [rule-arg->query-arg (zipmap args (:args clause))
-                                                body-vars (->> (collect-vars (normalize-clauses body))
+                                                body-vars (->> (normalize-clauses body)
+                                                               (group-clauses-by-type)
+                                                               (collect-vars)
                                                                (vals)
                                                                (reduce into #{}))
                                                 body-var->hidden-var (zipmap body-vars
                                                                              (map gensym body-vars))]]
                                       (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body))
                      cache-key [:seen-rules rule-name]
-                     ;; TODO: Understand this, does this really work
-                     ;; in the general case?
+                     ;; TODO: Understand this, does this really work in the general case?
                      expanded-rules (if (zero? (long (get-in recursion-cache cache-key 0)))
                                       (for [expanded-rule expanded-rules
                                             :let [expanded-rule (expand-rules expanded-rule rule-name->rules
@@ -1317,8 +1333,7 @@
                                    :free-args (vec (filter logic-var? free-args))}
                             :body (vec (for [expanded-rule expanded-rules]
                                          [:and expanded-rule]))}
-                           {:rule-name rule-name})]]))))))
-           [sub-clause]))
+                           {:rule-name rule-name})]]))))))))
        (reduce into [])))
 
 (def default-allow-list
@@ -1457,11 +1472,12 @@
                           stats where in in-var-cardinalities
                           rule-name->rules]
   (try
-    (let [where (-> (expand-rules where rule-name->rules {})
-                    (build-pred-fns fn-allow-list)
-                    (normalize-clauses))
+    (let [type->clauses (-> (expand-rules where rule-name->rules {})
+                            (build-pred-fns fn-allow-list)
+                            (normalize-clauses)
+                            (->> (group-clauses-by-type)))
           in-vars (set (keys in-var-cardinalities))
-          [type->clauses project-only-leaf-vars] (expand-leaf-preds where in-vars stats)
+          [type->clauses project-only-leaf-vars] (expand-leaf-preds type->clauses in-vars stats)
           {triple-clauses :triple
            range-clauses :range
            pred-clauses :pred
