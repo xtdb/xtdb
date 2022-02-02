@@ -315,6 +315,9 @@
     :qualified_join
     (named-columns-join-env (r/$ ag -1))
 
+    :join_condition
+    nil
+
     :named_columns_join
     (let [join-columns (identifiers (r/$ ag -1))
           qualified-join (r/parent ag)
