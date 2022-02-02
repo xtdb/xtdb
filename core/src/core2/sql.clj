@@ -64,7 +64,6 @@
 ;; TODO:
 ;; - try replace ids with refs.
 ;; - align names and language with spec, add references?
-;; - check for columns in scope, derived column list vs dynamic projection?
 ;; - grouping column check for asterisks should really expand and then fail.
 
 (defn- enter-env-scope
@@ -437,14 +436,16 @@
                             {:identifier identifier})
                           (if-let [table-ref (:table-ref (meta table))]
                             (first (projected-columns table-ref))
-                            (->> (scope-element ag)
-                                 (r/collect
-                                  (fn [ag]
-                                    (when (r/ctor? :column_reference ag)
-                                      (let [{:keys [identifiers] column-table-id :table-id} (column-reference ag)]
-                                        (when (= table-id column-table-id)
-                                          [{:identifier (last identifiers)}])))))
-                                 (distinct))))]
+                            (let [query-specification (scope-element ag)
+                                  query-expression (scope-element (r/parent query-specification))]
+                                (->> (r/collect
+                                      (fn [ag]
+                                        (when (r/ctor? :column_reference ag)
+                                          (let [{:keys [identifiers] column-table-id :table-id} (column-reference ag)]
+                                            (when (= table-id column-table-id)
+                                              [{:identifier (last identifiers)}]))))
+                                      query-expression)
+                                     (distinct)))))]
         [(for [{:keys [identifier]} projections]
            (cond-> {}
              identifier (assoc :identifier identifier)
@@ -709,16 +710,26 @@
                      (->line-info-str ag))]))))))
 
 (defn- check-column-reference [ag]
-  (let [{:keys [identifiers table-id type] :as cr} (column-reference ag)]
+  (let [{:keys [identifiers table-id type] :as column-reference} (column-reference ag)]
     (case type
       (:ordinary
        :group-invariant
        :within-group-varying
        :outer
        :outer-group-invariant)
-      (if-not table-id
+      (cond
+        (not table-id)
         [(format "Table not in scope: %s %s"
                  (first identifiers) (->line-info-str ag))]
+
+        (->> (projected-columns (:ref (meta (:table (meta column-reference)))))
+             (first)
+             (map :qualified-column)
+             (not-any? #{identifiers}))
+        [(format "Column not in scope: %s %s"
+                 (str/join "." identifiers) (->line-info-str ag))]
+
+        :else
         [])
 
       :resolved-in-sort-key

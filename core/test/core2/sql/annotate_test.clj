@@ -6,7 +6,7 @@
   (let [tree (sql/parse "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
 SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   FROM t1, foo AS baz
- WHERE EXISTS (SELECT 1 FROM t1 AS x WHERE x.b < t1.c AND x.b > (SELECT t1.b FROM (SELECT 1 FROM boz) AS t2 WHERE t1.b = t2.b))
+ WHERE EXISTS (SELECT 1 FROM t1 AS x WHERE x.b < t1.c AND x.b > (SELECT t1.b FROM (SELECT 1 AS b FROM boz) AS t2 WHERE t1.b = t2.b))
    AND t1.a > t1.b
  GROUP BY t1.d, t1.e
  ORDER BY b, t1.c")]
@@ -191,13 +191,13 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                {:id 15,
                 :type :query-expression,
                 :dependent-columns #{},
-                :projected-columns [{:index 0}],
+                :projected-columns [{:index 0, :identifier "b"}],
                 :parent-id 13,
                 :ctes {}}
                {:id 16,
                 :type :query-specification,
                 :dependent-columns #{},
-                :projected-columns [{:index 0}],
+                :projected-columns [{:index 0, :identifier "b"}],
                 :parent-id 15,
                 :tables
                 {"boz"
@@ -268,7 +268,21 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Table not in scope: bar"
             "SELECT bar.a FROM foo WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)")
   (invalid? #"Table not in scope: foo"
-            "SELECT 1 FROM foo AS baz WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)"))
+            "SELECT 1 FROM foo AS baz WHERE EXISTS (SELECT bar.b FROM bar WHERE foo.a < bar.b)")
+
+  (valid? "SELECT foo.a FROM bar AS foo")
+  (valid? "SELECT foo.a FROM bar AS foo (a)")
+  (valid? "SELECT 1 FROM bar AS foo ORDER BY (foo.a)")
+  (valid? "SELECT foo.a FROM bar AS foo ORDER BY a")
+  (valid? "SELECT foo.a FROM (SELECT x.b FROM x) AS foo (a)")
+  (valid? "SELECT foo.b FROM (SELECT x.b FROM x UNION SELECT y.a FROM y) AS foo")
+  (valid? "SELECT foo.a FROM (SELECT x.b FROM x UNION SELECT y.a FROM y) AS foo (a)")
+  (invalid? #"Column not in scope: foo.a"
+            "SELECT foo.a FROM (SELECT x.b FROM x UNION SELECT y.a FROM y) AS foo")
+  (invalid? #"Column not in scope: foo.a"
+            "SELECT foo.a FROM bar AS foo (b)")
+  (invalid? #"Column not in scope: foo.a"
+            "SELECT foo.a FROM (SELECT x.b FROM x) AS foo"))
 
 (t/deftest test-variable-duplication
   (invalid? #"Table variable duplicated: baz"
