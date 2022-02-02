@@ -104,7 +104,7 @@
 
 ;; Attributes
 
-(declare cte-env env projected-columns scope-element scope-id subquery-scope-id)
+(declare cte-env env projected-columns scope-element table-ref)
 
 ;; Ids
 
@@ -193,8 +193,8 @@
     (with-meta
       {:query-name (table-or-query-name ag)
        :id (id ag)
-       :scope-id (scope-id ag)
-       :subquery-scope-id (subquery-scope-id (r/$ ag -1))}
+       :scope-id (id (scope-element ag))
+       :subquery-scope-id (id (table-ref (r/$ ag -1)))}
       {:ref ag})))
 
 ;; Inherited
@@ -268,15 +268,15 @@
             correlation-name (or (correlation-name ag) table-name)
             {cte-id :id cte-scope-id :scope-id :as cte} (when table-name
                                                           (find-decl (cte-env ag) table-name))
-            subquery-scope-id (when (nil? cte)
-                                (subquery-scope-id ag))
             table-ref (when (nil? cte)
                         (table-ref ag))
+            subquery-scope-id (when (and table-ref (not= :collection_derived_table (r/ctor table-ref)))
+                                (id table-ref))
             derived-columns (derived-columns ag)]
         (with-meta
           (cond-> {:correlation-name correlation-name
                    :id (id ag)
-                   :scope-id (scope-id ag)}
+                   :scope-id (id (scope-element ag))}
             table-name (assoc :table-or-query-name table-name)
             derived-columns (assoc :derived-columns derived-columns)
             subquery-scope-id (assoc :subquery-scope-id subquery-scope-id)
@@ -643,8 +643,8 @@
     :column_reference
     (let [identifiers (identifiers ag)
           env (env ag)
-          column-scope-id (scope-id ag)
-          {table-id :id table-scope-id :scope-id :as table} (when qualified?
+          column-scope-id (id (scope-element ag))
+          {table-id :id table-scope-id :scope-id :as table} (when (qualified? identifiers)
                                                               (find-decl env (first identifiers)))
           outer-reference? (and table (< ^long table-scope-id ^long column-scope-id))
           group-env (group-env ag)
@@ -934,45 +934,26 @@
 
     (r/inherit ag)))
 
-(defn- scope-id [ag]
-  (some-> (scope-element ag) (id)))
-
-(defn- subquery-scope-id [ag]
-  (r/zcase ag
-    (:query_expression
-     :query_specification)
-    (scope-id ag)
-
-    (:table_primary
-     :subquery)
-    (subquery-scope-id (r/$ ag 1))
-
-    :lateral_derived_table
-    (subquery-scope-id (r/$ ag 2))
-
-    nil))
-
 (defn- scope [ag]
   (r/zcase ag
     (:query_expression
      :query_specification)
-    (let [id (scope-id ag)
-          parent-id (scope-id (r/parent ag))
+    (let [scope-id (id ag)
+          parent-id (some-> (scope-element (r/parent ag)) (id))
           all-columns (all-column-references ag)
           table-id->all-columns (->> (group-by :table-id all-columns)
                                      (into (sorted-map)))
           ;; NOTE: assumes that tables declared in
           ;; outer scopes have lower ids than the
           ;; current scope.
-          dependent-columns (->> (subseq (dissoc table-id->all-columns nil) < id)
+          dependent-columns (->> (subseq (dissoc table-id->all-columns nil) < scope-id)
                                  (mapcat val)
                                  (set))
           projected-columns (->> (projected-columns ag)
                                  (first)
                                  (mapv #(dissoc % :normal-form)))
           scope (with-meta
-                  (cond-> {:id id
-                           :type type
+                  (cond-> {:id scope-id
                            :dependent-columns dependent-columns
                            :projected-columns projected-columns}
                     parent-id (assoc :parent-id parent-id))
@@ -988,7 +969,7 @@
 
         :query_specification
         (let [local-tables (local-tables ag)
-              local-columns (set (get (group-by :scope-id all-columns) id))
+              local-columns (set (get (group-by :scope-id all-columns) scope-id))
               local-tables (->> (for [{:keys [id correlation-name] :as table} local-tables
                                       :let [used-columns (->> (get table-id->all-columns id)
                                                               (map :identifiers)
@@ -1030,7 +1011,7 @@
                                  #'group-env
                                  #'projected-columns
                                  #'column-reference
-                                 #'scope-id
+                                 #'scope-element
                                  #'scope]
       #(let [ag (z/vector-zip query)]
          (if-let [errs (not-empty (errs ag))]
