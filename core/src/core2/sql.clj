@@ -63,7 +63,6 @@
 
 ;; TODO:
 ;; - qualify and check named columns join.
-;; - check subquery context and degree, at least for scalar subqueries.
 ;; - try replace ids with refs.
 ;; - align names and language with spec, add references?
 ;; - grouping column check for asterisks should really expand and then fail.
@@ -767,6 +766,35 @@
        nil))
    ag))
 
+(defn- subquery-type [ag]
+  (r/zcase ag
+    (:query_expression
+     :in_value_list)
+    {:type :scalar_subquery :single? true}
+
+    :array_value_constructor_by_query
+    {:type :table_subquery :single? true}
+
+    (:with_list_element
+     :table_primary
+     :in_predicate_value
+     :quantified_comparison_predicate_part_2
+     :exists_predicate)
+    {:type :table_subquery}
+
+    (:table_value_constructor
+     :row_value_constructor
+     :explicit_row_value_constructor)
+    {:type :row_subquery}
+
+    (r/inherit ag)))
+
+(defn- check-subquery [ag]
+  (let [{:keys [single?]} (subquery-type (r/parent ag))]
+    (when (and single? (not= 1 (count (first (projected-columns ag)))))
+      [(format "Subquery does not select single column: %s"
+               (->src-str ag) (->line-info-str ag))])))
+
 (defn- check-select-list [ag]
   (when (= [[]] (projected-columns ag))
     [(format "Query does not select any columns: %s"
@@ -827,6 +855,9 @@
 
        :result_offset_clause
        (check-unsigned-integer "Offset row count" (r/$ ag 2))
+
+       :subquery
+       (check-subquery ag)
 
        []))
    ag))

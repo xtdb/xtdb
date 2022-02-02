@@ -302,10 +302,10 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             "SELECT t1.a, COUNT(t1.b) FROM t1")
 
   (invalid? #"Outer column reference is not an outer grouping column: t1.b"
-            "SELECT t1.b FROM t1 WHERE (1, 1) = (SELECT t1.b, COUNT(*) FROM t2)")
+            "SELECT t1.b FROM t1 WHERE EXISTS (SELECT t1.b, COUNT(*) FROM t2)")
   (invalid? #"Within group varying column reference is an outer column: t1.b"
             "SELECT t1.b FROM t1 WHERE 1 = (SELECT COUNT(t1.b) FROM t2)")
-  (valid? "SELECT t1.b FROM t1 WHERE 1 = (SELECT t1.b, COUNT(t2.a) FROM t2) GROUP BY t1.b"))
+  (valid? "SELECT t1.b FROM t1 WHERE 1 = (SELECT COUNT(t2.a) FROM t2) GROUP BY t1.b"))
 
 (t/deftest test-clauses-not-allowed-to-contain-aggregates-or-queries
   (invalid? #"Aggregate functions cannot contain aggregate functions"
@@ -530,4 +530,8 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Derived columns has to have same degree as table"
             "SELECT * FROM x, UNNEST(x.a) WITH ORDINALITY AS foo (a)")
   (invalid? #"Derived columns has to have same degree as table"
-            "SELECT * FROM x, UNNEST(x.a) AS foo (a, b)"))
+            "SELECT * FROM x, UNNEST(x.a) AS foo (a, b)")
+
+  (invalid? #"Subquery does not select single column:"
+            "SELECT t1.b FROM t1 WHERE (1, 1) = (SELECT t1.b, t1.c FROM t2)")
+  (valid? "SELECT t1.b FROM t1 WHERE (1, 1) IN (SELECT t1.b, t1.c FROM t2)"))
