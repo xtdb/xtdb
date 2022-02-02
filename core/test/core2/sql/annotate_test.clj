@@ -332,25 +332,19 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
            (->> (valid? "SELECT t1.b FROM t1 EXCEPT SELECT t2.a FROM t2")
                 (map :projected-columns))))
 
-  (invalid? #"INTERSECT does not have corresponding columns"
-            "SELECT t1.b FROM t1 INTERSECT CORRESPONDING SELECT t2.a FROM t2")
-
   (t/is (= [[{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]
             [{:index 0, :identifier "b", :qualified-column ["t1" "b"]}]
-            [{:index 0, :identifier "a", :qualified-column ["t2" "a"]} {:index 1, :identifier "b", :qualified-column ["t2" "b"]}]]
-           (->> (valid? "SELECT t1.b FROM t1 EXCEPT CORRESPONDING SELECT t2.a, t2.b FROM t2")
+            [{:index 0, :identifier "b", :qualified-column ["t2" "b"]}]
+            [{:index 0, :identifier "c", :qualified-column ["t3" "c"]}]]
+           (->> (valid? "SELECT t1.b FROM t1 INTERSECT SELECT t2.b FROM t2 UNION SELECT t3.c FROM t3")
                 (map :projected-columns))))
 
-  (t/is (= [[{:index 0, :identifier "b" :qualified-column ["t1" "b"]}]
-            [{:index 0, :identifier "b" :qualified-column ["t1" "b"]}]
-            [{:index 0, :identifier "a" :qualified-column ["t2" "a"]} {:index 1, :identifier "b"  :qualified-column ["t2" "b"]}]]
-           (->> (valid? "SELECT t1.b FROM t1 EXCEPT CORRESPONDING BY (b) SELECT t2.a, t2.b FROM t2")
-                (map :projected-columns))))
-
-  (invalid? #"INTERSECT does not have corresponding columns"
-            "SELECT t1.b FROM t1 INTERSECT CORRESPONDING BY (c) SELECT t2.b FROM t2")
+  (invalid? #"EXCEPT requires tables to have same degree"
+            "SELECT t1.b FROM t1 EXCEPT SELECT t2.a, t2.b FROM t2")
   (invalid? #"UNION requires tables to have same degree"
             "SELECT t1.b FROM t1 UNION SELECT t2.b, t2.c FROM t2")
+  (invalid? #"EXCEPT requires tables to have same degree"
+            "SELECT t1.b FROM t1 UNION SELECT t2.b FROM t2 EXCEPT SELECT t3.c, t3.d FROM t3")
 
   (t/is (= [[{:index 0} {:index 1} {:index 2}]]
            (->> (valid? "VALUES (1, 2, 3), (4, 5, 6)")

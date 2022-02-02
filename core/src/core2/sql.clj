@@ -62,8 +62,8 @@
 ;; Draft attribute grammar for SQL semantics.
 
 ;; TODO:
+;; - fix grouping column check for asterisks, should really expand and then fail.
 ;; - check derived column list vs dynamic projection?
-;; - remove corresponding spec, it's optional and PostgreSQL doesn't support it?
 ;; - try replace ids with refs.
 
 (defn- enter-env-scope
@@ -422,22 +422,6 @@
 
     nil))
 
-(defn- corresponding [ag]
-  (r/zcase ag
-    :query_expression_body
-    (or (corresponding (r/$ ag -2))
-        (corresponding (r/$ ag 2)))
-
-    :query_term
-    (corresponding (r/$ ag -2))
-
-    :corresponding_spec
-    (if (r/single-child? ag )
-      {}
-      {:identifiers (identifiers (r/$ ag -1))})
-
-    nil))
-
 (declare column-reference)
 
 (defn- projected-columns [ag]
@@ -561,34 +545,18 @@
 
     (:query_expression_body
      :query_term)
-    (let [candidates (r/collect-stop
-                      (fn [ag]
-                        (r/zcase ag
-                          (:query_specification
-                           :table_value_constructor)
-                          (projected-columns ag)
+    (r/collect-stop
+     (fn [ag]
+       (r/zcase ag
+         (:query_specification
+          :table_value_constructor)
+         (projected-columns ag)
 
-                          :subquery
-                          []
+         :subquery
+         []
 
-                          nil))
-                      ag)]
-      (if (set-operator ag)
-        (if-let [{:keys [identifiers] :as corresponding} (corresponding ag)]
-          (let [common-identifiers (->> (for [projections candidates]
-                                          (set (for [{:keys [identifier]} projections]
-                                                 identifier)))
-                                        (reduce set/intersection))
-                identifiers (if identifiers
-                              (if (set/subset? (set identifiers) common-identifiers)
-                                (set identifiers)
-                                #{})
-                              common-identifiers)]
-            [(vec (for [{:keys [identifier] :as projection} (first candidates)
-                        :when (contains? identifiers identifier)]
-                    projection))])
-          candidates)
-        candidates))
+         nil))
+     ag)
 
     :subquery
     (projected-columns (r/$ ag 1))
@@ -718,12 +686,7 @@
   (when-let [set-op (set-operator ag)]
     (let [candidates (projected-columns ag)
           degrees (mapv count candidates)]
-      (cond
-        (= [0] degrees)
-        [(format "%s does not have corresponding columns: %s"
-                 set-op (->line-info-str ag))]
-
-        (not (apply = degrees))
+      (when-not (apply = degrees)
         [(format "%s requires tables to have same degree: %s"
                  set-op (->line-info-str ag))]))))
 
