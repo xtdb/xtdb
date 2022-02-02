@@ -811,6 +811,9 @@
        (long)
        (inc)))
 
+;; TODO: Get rid of assumption that value-buffer-type-id is always one
+;; byte. Or better, move construction or handling of ranges to the
+;; IndexSnapshot and remove the need for the type-prefix completely.
 (defn- new-range-constraint-wrapper-fn [op ^Box val]
   (case op
     = #(idx/new-equals-virtual-index % val)
@@ -823,9 +826,6 @@
     >= #(-> (idx/new-greater-than-equal-virtual-index % val)
             (idx/new-prefix-equal-virtual-index val c/value-type-id-size))))
 
-;; TODO: Get rid of assumption that value-buffer-type-id is always one
-;; byte. Or better, move construction or handling of ranges to the
-;; IndexSnapshot and remove the need for the type-prefix completely.
 (defn- build-var-range-constraints [value-serde range-clauses var->bindings]
   (doseq [{:keys [sym sym-a sym-b] :as clause} range-clauses
           var [sym sym-a sym-b]
@@ -1009,6 +1009,7 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
+
 (defn- or-single-e-var-triple-fast-path [{:keys [entity-resolver-fn index-snapshot] :as _db} {:keys [a v]} eid]
   (let [v (db/encode-value index-snapshot v)
         found-v (first (db/aev index-snapshot a eid v entity-resolver-fn))]
