@@ -532,7 +532,7 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Derived columns has to have same degree as table"
             "SELECT * FROM x, UNNEST(x.a) AS foo (a, b)")
 
-  (invalid? #"Subquery does not select single column:"
+  (invalid? #"Subquery does not select single column"
             "SELECT t1.b FROM t1 WHERE (1, 1) = (SELECT t1.b, t1.c FROM t2)")
   (valid? "SELECT t1.b FROM t1 WHERE (1, 1) IN (SELECT t1.b, t1.c FROM t2)")
 

@@ -827,7 +827,7 @@
 (defn- check-subquery [ag]
   (let [{:keys [single?]} (subquery-type (r/parent ag))]
     (when (and single? (not= 1 (count (first (projected-columns ag)))))
-      [(format "Subquery does not select single column: %s"
+      [(format "Subquery does not select single column: %s %s"
                (->src-str ag) (->line-info-str ag))])))
 
 (defn- check-select-list [ag]
