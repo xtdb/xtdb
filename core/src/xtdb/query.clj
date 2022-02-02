@@ -785,7 +785,8 @@
                                            (with-meta (meta clause))))
                       (into known-vars free-vars)])))
 
-               [[] known-vars])))
+               [[] known-vars])
+       first))
 
 (defn- or-joins [or-clauses var->joins]
   (->> or-clauses
@@ -1438,43 +1439,44 @@
            or-join-clauses :or-join
            :as type->clauses} type->clauses
           {:keys [e-vars v-vars]} (collect-vars type->clauses)
+
+          or-clauses (analyze-or-vars (concat or-clauses or-join-clauses)
+                                      (-> (set/union e-vars v-vars in-vars)
+                                          (add-pred-returns-bound-at-top-level pred-clauses)))
+
           var->joins (triple-joins triple-clauses value-serde {})
           [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
           [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
-          known-vars (set/union e-vars v-vars in-vars)
-          known-vars (add-pred-returns-bound-at-top-level known-vars pred-clauses)
-          [or-clauses _known-vars] (analyze-or-vars (concat or-clauses or-join-clauses) known-vars)
           [or-clauses var->joins] (or-joins or-clauses var->joins)
+
           vars-in-join-order (calculate-join-order (keys var->joins) type->clauses or-clauses stats in-var-cardinalities project-only-leaf-vars)
+
           var->bindings (->> vars-in-join-order
                              (into {} (map-indexed (fn [idx var]
-                                                     [var (->VarBinding idx)]))))
-          var->range-constraints (build-var-range-constraints value-serde range-clauses var->bindings)
-          var->logic-var-range-constraint-fns (build-logic-var-range-constraint-fns range-clauses var->bindings)
-          not-constraints (build-not-constraints (concat not-clauses not-join-clauses) rule-name->rules var->bindings)
-          pred-constraints (build-pred-constraints (assoc pred-ctx
-                                                          :rule-name->rules rule-name->rules
-                                                          :value-serde value-serde
-                                                          :pred-clause+idx-ids pred-clause+idx-ids
-                                                          :var->bindings var->bindings
-                                                          :vars-in-join-order vars-in-join-order))
-          or-constraints (build-or-constraints or-clauses rule-name->rules var->bindings vars-in-join-order)
-          depth->constraints (->> (concat pred-constraints
-                                          not-constraints
-                                          or-constraints)
-                                  (update-depth->constraints (vec (repeat (inc (count vars-in-join-order)) nil))))
-          in-bindings (vec (for [[idx-id [bind-type binding]] (map vector in-idx-ids (:bindings in))
-                                 :let [bind-vars (find-binding-vars binding)]]
-                             {:idx-id idx-id
-                              :bind-type bind-type
-                              :tuple-idxs-in-join-order (build-tuple-idxs-in-join-order bind-vars vars-in-join-order)}))]
-      {:depth->constraints depth->constraints
-       :var->range-constraints var->range-constraints
-       :var->logic-var-range-constraint-fns var->logic-var-range-constraint-fns
+                                                     [var (->VarBinding idx)]))))]
+
+      {:depth->constraints (->> (concat (build-pred-constraints (assoc pred-ctx
+                                                                       :rule-name->rules rule-name->rules
+                                                                       :value-serde value-serde
+                                                                       :pred-clause+idx-ids pred-clause+idx-ids
+                                                                       :var->bindings var->bindings
+                                                                       :vars-in-join-order vars-in-join-order))
+                                        (build-not-constraints (concat not-clauses not-join-clauses) rule-name->rules var->bindings)
+                                        (build-or-constraints or-clauses rule-name->rules var->bindings vars-in-join-order))
+                                (update-depth->constraints (vec (repeat (inc (count vars-in-join-order)) nil))))
+
+       :var->range-constraints (build-var-range-constraints value-serde range-clauses var->bindings)
+       :var->logic-var-range-constraint-fns (build-logic-var-range-constraint-fns range-clauses var->bindings)
        :vars-in-join-order vars-in-join-order
        :var->joins var->joins
        :var->bindings var->bindings
-       :in-bindings in-bindings})
+
+       :in-bindings (vec (for [[idx-id [bind-type binding]] (map vector in-idx-ids (:bindings in))
+                               :let [bind-vars (find-binding-vars binding)]]
+                           {:idx-id idx-id
+                            :bind-type bind-type
+                            :tuple-idxs-in-join-order (build-tuple-idxs-in-join-order bind-vars vars-in-join-order)}))})
+
     (catch ExceptionInfo e
       (let [{:keys [reason] :as cycle} (ex-data e)]
         (if (and (= ::dep/circular-dependency reason)
