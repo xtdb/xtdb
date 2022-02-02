@@ -534,4 +534,15 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
 
   (invalid? #"Subquery does not select single column:"
             "SELECT t1.b FROM t1 WHERE (1, 1) = (SELECT t1.b, t1.c FROM t2)")
-  (valid? "SELECT t1.b FROM t1 WHERE (1, 1) IN (SELECT t1.b, t1.c FROM t2)"))
+  (valid? "SELECT t1.b FROM t1 WHERE (1, 1) IN (SELECT t1.b, t1.c FROM t2)")
+
+  (invalid? #"Left side does not contain all join columns"
+            "SELECT y.x FROM (SELECT x.y FROM x) AS x INNER JOIN y USING(x)")
+  (invalid? #"Right side does not contain all join columns"
+            "SELECT x.x FROM x INNER JOIN (SELECT y.y FROM y) AS y USING(x)")
+  (valid? "SELECT x.x, y.x FROM x INNER JOIN y USING(x)")
+  (invalid? #"Left side contains ambiguous join columns"
+            "SELECT y.x FROM (SELECT t1.x, t1.x FROM t1) AS x INNER JOIN y USING(x)")
+  (invalid? #"Right side contains ambiguous join columns"
+            "SELECT x.x FROM x INNER JOIN (SELECT t1.x, t1.x FROM t1) AS y USING(x)")
+  (valid? "SELECT x.x, y.x, x.y, y.y FROM (SELECT t1.x, t1.y FROM t1) AS x INNER JOIN (SELECT t1.x, t1.y FROM t1) AS y USING(x, y)"))

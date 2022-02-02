@@ -62,7 +62,6 @@
 ;; Draft attribute grammar for SQL semantics.
 
 ;; TODO:
-;; - qualify and check named columns join.
 ;; - try replace ids with refs.
 ;; - align names and language with spec, add references?
 ;; - grouping column check for asterisks should really expand and then fail.
@@ -105,7 +104,7 @@
 
 ;; Attributes
 
-(declare cte-env env scope-element scope-id subquery-scope-id)
+(declare cte-env env projected-columns scope-element scope-id subquery-scope-id)
 
 ;; Ids
 
@@ -301,6 +300,39 @@
        nil))
    ag))
 
+(defn- named-columns-join-columns [ag]
+  (r/zcase ag
+    :qualified_join
+    (named-columns-join-columns (r/$ ag -1))
+
+    :named_columns_join
+    (identifiers (r/$ ag -1))
+
+    nil))
+
+(defn- named-columns-join-env [ag]
+  (r/zcase ag
+    :qualified_join
+    (named-columns-join-env (r/$ ag -1))
+
+    :named_columns_join
+    (let [join-columns (identifiers (r/$ ag -1))
+          qualified-join (r/parent ag)
+          lhs (r/$ qualified-join 1)
+          rhs (r/$ qualified-join -2)
+          [lhs rhs] (for [side [lhs rhs]]
+                      (select-keys
+                       (->> (for [table (local-tables side)
+                                  projection (first (projected-columns (:ref (meta table))))]
+                              projection)
+                            (group-by :identifier))
+                       join-columns))]
+      {:join-columns join-columns
+       :lhs lhs
+       :rhs rhs})
+
+    (r/inherit ag)))
+
 ;; Inherited
 (defn- dcli [ag]
   (r/zcase ag
@@ -438,15 +470,18 @@
                           (if-let [table-ref (:table-ref (meta table))]
                             (first (projected-columns table-ref))
                             (let [query-specification (scope-element ag)
-                                  query-expression (scope-element (r/parent query-specification))]
-                                (->> (r/collect
-                                      (fn [ag]
-                                        (when (r/ctor? :column_reference ag)
-                                          (let [{:keys [identifiers] column-table-id :table-id} (column-reference ag)]
-                                            (when (= table-id column-table-id)
-                                              [{:identifier (last identifiers)}]))))
-                                      query-expression)
-                                     (distinct)))))]
+                                  query-expression (scope-element (r/parent query-specification))
+                                  named-join-columns (for [identifier (named-columns-join-columns (r/parent ag))]
+                                                       {:identifier identifier})]
+                              (->> (r/collect
+                                    (fn [ag]
+                                      (when (r/ctor? :column_reference ag)
+                                        (let [{:keys [identifiers] column-table-id :table-id} (column-reference ag)]
+                                          (when (= table-id column-table-id)
+                                            [{:identifier (last identifiers)}]))))
+                                    query-expression)
+                                   (concat named-join-columns)
+                                   (distinct)))))]
         [(for [{:keys [identifier]} projections]
            (cond-> {}
              identifier (assoc :identifier identifier)
@@ -806,6 +841,20 @@
       [(format "Table not in scope: %s %s"
                (first identifiers) (->line-info-str ag))])))
 
+(defn- check-named-columns-join [ag]
+  (let [{:keys [join-columns lhs rhs]} (named-columns-join-env ag)
+        join-columns (set join-columns)]
+    (->> (for [[label side] [["Left" lhs] ["Right" rhs]]]
+           (cond-> []
+             (not= join-columns (set (keys side)))
+             (conj (format "%s side does not contain all join columns: %s %s"
+                           label (->src-str ag) (->line-info-str ag)))
+
+             (not (apply = 1 (map count (vals side))))
+             (conj (format "%s side contains ambiguous join columns: %s %s"
+                           label (->src-str ag) (->line-info-str ag)))))
+         (reduce into))))
+
 (defn- errs [ag]
   (r/collect
    (fn [ag]
@@ -858,6 +907,9 @@
 
        :subquery
        (check-subquery ag)
+
+       :named_columns_join
+       (check-named-columns-join ag)
 
        []))
    ag))
