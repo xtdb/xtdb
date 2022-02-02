@@ -62,7 +62,6 @@
 ;; Draft attribute grammar for SQL semantics.
 
 ;; TODO:
-;; - remove dedupe logic in asterisk expansion.
 ;; - check derived column list vs dynamic projection?
 ;; - remove corresponding spec, it's optional and PostgreSQL doesn't support it?
 ;; - try replace ids with refs.
@@ -447,19 +446,21 @@
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
       (let [{:keys [correlation-name
                     derived-columns] :as table
-             table-id :id} (table ag)]
-        [(for [{:keys [identifier]} (if-let [derived-columns (not-empty derived-columns)]
-                                      (for [identifier derived-columns]
-                                        {:identifier identifier})
-                                      (if-let [table-ref (:table-ref (meta table))]
-                                        (first (projected-columns table-ref))
-                                        (r/collect
-                                         (fn [ag]
-                                           (when (r/ctor? :column_reference ag)
-                                             (let [{:keys [identifiers] column-table-id :table-id} (column-reference ag)]
-                                               (when (= table-id column-table-id)
-                                                 [{:identifier (last identifiers)}]))))
-                                         (scope-element ag))))]
+             table-id :id} (table ag)
+            projections (if-let [derived-columns (not-empty derived-columns)]
+                          (for [identifier derived-columns]
+                            {:identifier identifier})
+                          (if-let [table-ref (:table-ref (meta table))]
+                            (first (projected-columns table-ref))
+                            (->> (scope-element ag)
+                                 (r/collect
+                                  (fn [ag]
+                                    (when (r/ctor? :column_reference ag)
+                                      (let [{:keys [identifiers] column-table-id :table-id} (column-reference ag)]
+                                        (when (= table-id column-table-id)
+                                          [{:identifier (last identifiers)}])))))
+                                 (distinct))))]
+        [(for [{:keys [identifier]} projections]
            (cond-> {}
              identifier (assoc :identifier identifier)
              correlation-name (assoc :qualified-column [correlation-name identifier])))]))
@@ -509,22 +510,11 @@
                 []
 
                 nil))]
-      [(first
-        (reduce
-         (fn [[acc seen] {:keys [normal-form] :as projection}]
-           (cond
-             normal-form
-             [(conj acc (assoc projection :index (count acc)))
-              (conj seen (dissoc projection :normal-form))]
-
-             (not (contains? seen projection))
-             [(conj acc (assoc projection :index (count acc)))
-              (conj seen projection)]
-
-             :else
-             [acc seen]))
-         [[] #{}]
-         (r/collect-stop calculate-select-list ag)))])
+      [(reduce
+        (fn [acc projection]
+          (conj acc (assoc projection :index (count acc))))
+        []
+        (r/collect-stop calculate-select-list ag))])
 
     :query_expression
     (if (r/ctor? :with_clause (r/$ ag 1))

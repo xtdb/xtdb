@@ -473,8 +473,10 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Table not in scope: baz"
             "SELECT foo.x, baz.* FROM foo")
 
-  (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
-            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}]]
+  (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "a" :qualified-column ["x" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "a" :qualified-column ["x" "a"]}]]
            (->> (valid? "SELECT x.a, x.* FROM x WHERE x.a IS NOT NULL")
                 (map :projected-columns))))
 
