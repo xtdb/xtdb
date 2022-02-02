@@ -62,6 +62,8 @@
 ;; Draft attribute grammar for SQL semantics.
 
 ;; TODO:
+;; - qualify and check named columns join.
+;; - check subquery context and degree, at least for scalar subqueries.
 ;; - try replace ids with refs.
 ;; - align names and language with spec, add references?
 ;; - grouping column check for asterisks should really expand and then fail.
