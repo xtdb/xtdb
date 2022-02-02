@@ -62,7 +62,6 @@
 ;; Draft attribute grammar for SQL semantics.
 
 ;; TODO:
-;; - move dynamic projection of references out of asterisk expansion to table primary.
 ;; - remove dedupe logic in asterisk expansion.
 ;; - check derived column list vs dynamic projection?
 ;; - remove corresponding spec, it's optional and PostgreSQL doesn't support it?
@@ -106,7 +105,7 @@
 
 ;; Attributes
 
-(declare cte-env env scope-id subquery-scope-id)
+(declare cte-env env scope-element scope-id subquery-scope-id)
 
 ;; Ids
 
@@ -447,13 +446,20 @@
     :table_primary
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
       (let [{:keys [correlation-name
-                    derived-columns] :as table} (table ag)]
+                    derived-columns] :as table
+             table-id :id} (table ag)]
         [(for [{:keys [identifier]} (if-let [derived-columns (not-empty derived-columns)]
                                       (for [identifier derived-columns]
                                         {:identifier identifier})
-                                      (some->> (:table-ref (meta table))
-                                               (projected-columns)
-                                               (first)))]
+                                      (if-let [table-ref (:table-ref (meta table))]
+                                        (first (projected-columns table-ref))
+                                        (r/collect
+                                         (fn [ag]
+                                           (when (r/ctor? :column_reference ag)
+                                             (let [{:keys [identifiers] column-table-id :table-id} (column-reference ag)]
+                                               (when (= table-id column-table-id)
+                                                 [{:identifier (last identifiers)}]))))
+                                         (scope-element ag))))]
            (cond-> {}
              identifier (assoc :identifier identifier)
              correlation-name (assoc :qualified-column [correlation-name identifier])))]))
@@ -462,21 +468,16 @@
     (letfn [(expand-asterisk [ag]
               (r/zcase ag
                 :table_primary
-                (if (r/ctor? :qualified_join (r/$ ag 1))
-                  (r/collect-stop expand-asterisk (r/$ ag 1))
-                  (first (projected-columns ag)))
-
-                :column_reference
-                (let [{:keys [identifiers type]} (column-reference ag)
+                (let [projections (if (r/ctor? :qualified_join (r/$ ag 1))
+                                    (r/collect-stop expand-asterisk (r/$ ag 1))
+                                    (first (projected-columns ag)))
                       {:keys [grouping-columns]} (local-env (group-env ag))]
-                  (if (and (or (= :ordinary type)
-                               (= :group-invariant type))
-                           (if grouping-columns
-                             (contains? (set grouping-columns) identifiers)
-                             true))
-                    [(cond-> {:identifier (last identifiers)}
-                       (qualified? identifiers) (assoc :qualified-column identifiers))]
-                    []))
+                  (if grouping-columns
+                    (let [grouping-columns (set grouping-columns)]
+                      (for [{:keys [qualified-column] :as projection} projections
+                            :when (contains? grouping-columns qualified-column)]
+                        projection))
+                    projections))
 
                 :subquery
                 []
@@ -872,13 +873,16 @@
        [(column-reference ag)]))
    ag))
 
-(defn- scope-id [ag]
+(defn- scope-element [ag]
   (r/zcase ag
     (:query_expression
      :query_specification)
-    (id ag)
+    ag
 
     (r/inherit ag)))
+
+(defn- scope-id [ag]
+  (some-> (scope-element ag) (id)))
 
 (defn- subquery-scope-id [ag]
   (r/zcase ag

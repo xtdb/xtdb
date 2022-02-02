@@ -434,26 +434,24 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
            (->> (valid? "SELECT * FROM (SELECT y.b FROM y) AS x, LATERAL (SELECT y.b FROM y) AS z")
                 (map :projected-columns))))
 
-  (t/is (= [[{:index 0 :identifier "b" :qualified-column ["x" "b"]} {:index 1 :identifier "z" :qualified-column ["x" "z"]}]
-            [{:index 0 :identifier "b" :qualified-column ["x" "b"]} {:index 1 :identifier "z" :qualified-column ["x" "z"]}]
+  (t/is (= [[{:index 0 :identifier "b" :qualified-column ["x" "b"]}]
+            [{:index 0 :identifier "b" :qualified-column ["x" "b"]}]
             [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
             [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
             [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]
             [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]]
-           (->> (valid? "SELECT x.* FROM (SELECT y.b FROM y) AS x, (SELECT y.a FROM y) AS z WHERE x.z IS NULL")
+           (->> (valid? "SELECT x.* FROM (SELECT y.b FROM y) AS x, (SELECT y.a FROM y) AS z")
                 (map :projected-columns))))
 
   (t/is (= [[{:index 0 :identifier "b" :qualified-column ["x" "b"]}
-             {:index 1 :identifier "z" :qualified-column ["x" "z"]}
-             {:index 2 :identifier "a" :qualified-column ["z" "a"]}]
+             {:index 1 :identifier "a" :qualified-column ["z" "a"]}]
             [{:index 0 :identifier "b" :qualified-column ["x" "b"]}
-             {:index 1 :identifier "z" :qualified-column ["x" "z"]}
-             {:index 2 :identifier "a" :qualified-column ["z" "a"]}]
+             {:index 1 :identifier "a" :qualified-column ["z" "a"]}]
             [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
             [{:index 0 :identifier "b" :qualified-column ["y" "b"]}]
             [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]
             [{:index 0 :identifier "a" :qualified-column ["y" "a"]}]]
-           (->> (valid? "SELECT x.*, z.* FROM (SELECT y.b FROM y) AS x, (SELECT y.a FROM y) AS z WHERE x.z IS NULL")
+           (->> (valid? "SELECT x.*, z.* FROM (SELECT y.b FROM y) AS x, (SELECT y.a FROM y) AS z")
                 (map :projected-columns))))
 
   (t/is (= [[{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
@@ -505,8 +503,10 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
            (->> (valid? "WITH foo AS (SELECT * FROM x WHERE x.a = x.b) SELECT * FROM foo")
                 (map :projected-columns))))
 
-  (t/is (= [[{:identifier "a", :qualified-column ["foo" "a"], :index 0}]
-            [{:identifier "a", :qualified-column ["foo" "a"], :index 0}]]
+  (t/is (= [[{:identifier "a", :qualified-column ["x" "a"], :index 0}
+             {:identifier "a", :qualified-column ["foo" "a"], :index 1}]
+            [{:identifier "a", :qualified-column ["x" "a"], :index 0}
+             {:identifier "a", :qualified-column ["foo" "a"], :index 1}]]
            (->> (valid? "SELECT * FROM x, UNNEST(x.a) AS foo (a)")
                 (map :projected-columns))))
 
