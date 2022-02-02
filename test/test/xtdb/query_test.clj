@@ -536,7 +536,7 @@
   ;; Here for dev reasons, delete when appropiate
   (t/is (= '[[:triple {:e e :a :name :v name}]
              [:triple {:e e :a :name :v "Ivan"}]
-             [:or [[:term [:triple {:e e :a :last-name :v "Ivanov"}]]]]]
+             [:or {:branches [[[:triple {:e e :a :last-name :v "Ivanov"}]]]}]]
            (s/conform :xtdb.query/where '[[e :name name]
                                           [e :name "Ivan"]
                                           (or [e :last-name "Ivanov"])])))
