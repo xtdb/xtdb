@@ -106,10 +106,7 @@
          :just-args (s/* logic-var?)))
 
 (s/def ::not
-  (s/and (expression-spec 'not (s/+ ::term))
-         (s/conformer (fn [terms]
-                        {:terms terms})
-                      :terms)))
+  (expression-spec 'not (s/+ ::term)))
 
 (s/def ::not-join
   (expression-spec 'not-join (s/cat :args ::args-list
@@ -493,6 +490,64 @@
                  (-> acc (update type (fnil conj []) clause)))
                {})))
 
+(defn- find-binding-vars [binding]
+  (some->> binding (vector) (flatten) (filter logic-var?)))
+
+(defn- collect-vars [{triple-clauses :triple
+                      not-clauses :not
+                      not-join-clauses :not-join
+                      or-clauses :or
+                      or-join-clauses :or-join
+                      pred-clauses :pred
+                      range-clauses :range
+                      rule-clauses :rule}]
+  (let [or-vars (->> (for [{:keys [branches]} or-clauses
+                           branch branches]
+                       (->> (normalize-clauses branch)
+                            (group-clauses-by-type)
+                            (collect-vars)))
+                     (apply merge-with set/union))
+        not-join-vars (set (for [not-join-clause not-join-clauses
+                                 arg (:args not-join-clause)]
+                             arg))
+        not-vars (->> (for [{:keys [terms]} not-clauses]
+                        (->> (normalize-clauses terms)
+                             (group-clauses-by-type)
+                             (collect-vars)))
+                      (apply merge-with set/union))
+        or-join-vars (set (for [or-join-clause or-join-clauses
+                                :let [[args-type args-val] (:args or-join-clause)]
+                                arg (case args-type
+                                      :explicit-bound-args (mapcat args-val [:bound-args :free-args])
+                                      :just-args args-val)]
+                            arg))]
+    {:e-vars (set (for [{:keys [e]} triple-clauses
+                        :when (logic-var? e)]
+                    e))
+     :v-vars (set (for [{:keys [v]} triple-clauses
+                        :when (logic-var? v)]
+                    v))
+     :not-vars (->> (vals not-vars)
+                    (reduce into not-join-vars))
+     :pred-arg-vars (set (for [{:keys [pred]} pred-clauses
+                               var (cond->> (:args pred)
+                                     (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred)))
+                               :when (logic-var? var)]
+                       var))
+     :pred-return-vars (set (for [{:keys [return]} pred-clauses
+                                  return-var (find-binding-vars return)]
+                              return-var))
+     :range-vars (set (for [{:keys [sym sym-a sym-b]} range-clauses
+                            sym [sym sym-a sym-b]
+                            :when (logic-var? sym)]
+                        sym))
+     :or-vars (apply set/union (vals or-vars))
+     :rule-vars (set/union (set (for [{:keys [args]} rule-clauses
+                                      arg args
+                                      :when (logic-var? arg)]
+                                  arg))
+                           or-join-vars)}))
+
 (defn- blank-var? [v]
   (and (logic-var? v)
        (re-find #"^_\d*$" (name v))))
@@ -565,63 +620,12 @@
 
       [[:range clause]])))
 
-(defn- find-binding-vars [binding]
-  (some->> binding (vector) (flatten) (filter logic-var?)))
-
-(defn- collect-vars [{triple-clauses :triple
-                      not-clauses :not
-                      not-join-clauses :not-join
-                      or-clauses :or
-                      or-join-clauses :or-join
-                      pred-clauses :pred
-                      range-clauses :range
-                      rule-clauses :rule}]
-  (let [or-vars (->> (for [{:keys [branches]} or-clauses
-                           branch branches]
-                       (->> (normalize-clauses branch)
-                            (group-clauses-by-type)
-                            (collect-vars)))
-                     (apply merge-with set/union))
-        not-join-vars (set (for [not-join-clause not-join-clauses
-                                 arg (:args not-join-clause)]
-                             arg))
-        not-vars (->> (for [{:keys [terms]} not-clauses]
-                        (->> (normalize-clauses terms)
-                             (group-clauses-by-type)
-                             (collect-vars)))
-                      (apply merge-with set/union))
-        or-join-vars (set (for [or-join-clause or-join-clauses
-                                :let [[args-type args-val] (:args or-join-clause)]
-                                arg (case args-type
-                                      :explicit-bound-args (mapcat args-val [:bound-args :free-args])
-                                      :just-args args-val)]
-                            arg))]
-    {:e-vars (set (for [{:keys [e]} triple-clauses
-                        :when (logic-var? e)]
-                    e))
-     :v-vars (set (for [{:keys [v]} triple-clauses
-                        :when (logic-var? v)]
-                    v))
-     :not-vars (->> (vals not-vars)
-                    (reduce into not-join-vars))
-     :pred-arg-vars (set (for [{:keys [pred]} pred-clauses
-                               var (cond->> (:args pred)
-                                     (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred)))
-                               :when (logic-var? var)]
-                       var))
-     :pred-return-vars (set (for [{:keys [return]} pred-clauses
-                                  return-var (find-binding-vars return)]
-                              return-var))
-     :range-vars (set (for [{:keys [sym sym-a sym-b]} range-clauses
-                            sym [sym sym-a sym-b]
-                            :when (logic-var? sym)]
-                        sym))
-     :or-vars (apply set/union (vals or-vars))
-     :rule-vars (set/union (set (for [{:keys [args]} rule-clauses
-                                      arg args
-                                      :when (logic-var? arg)]
-                                  arg))
-                           or-join-vars)}))
+(defmethod normalize-clause :not [_ terms]
+  [[:not-join {:args (->> (normalize-clauses terms)
+                          (group-clauses-by-type)
+                          (collect-vars)
+                          (into #{} (mapcat val)))
+               :terms terms}]])
 
 (defn- ->approx-in-var-cardinalities [{in-bindings :bindings} in-args]
   (assert (= (count in-bindings) (count in-args))
@@ -1100,10 +1104,7 @@
 
 (defn- build-not-constraints [not-clauses rule-name->rules var->bindings]
   (for [{:keys [args terms]} not-clauses
-        :let [not-vars (or args
-                           (->> (collect-vars {:not [{:terms terms}]})
-                                :not-vars))
-              not-vars (vec (remove blank-var? not-vars))
+        :let [not-vars (vec (remove blank-var? args))
               not-in-bindings {:bindings [[:tuple not-vars]]}
               not-var-bindings (mapv var->bindings not-vars)
               not-join-depth (calculate-constraint-join-depth var->bindings not-vars)]]
@@ -1460,7 +1461,6 @@
           {triple-clauses :triple
            range-clauses :range
            pred-clauses :pred
-           not-clauses :not
            not-join-clauses :not-join
            or-clauses :or
            or-join-clauses :or-join
@@ -1488,7 +1488,7 @@
                                                                        :pred-clause+idx-ids pred-clause+idx-ids
                                                                        :var->bindings var->bindings
                                                                        :vars-in-join-order vars-in-join-order))
-                                        (build-not-constraints (concat not-clauses not-join-clauses) rule-name->rules var->bindings)
+                                        (build-not-constraints not-join-clauses rule-name->rules var->bindings)
                                         (build-or-constraints or-clauses rule-name->rules var->bindings vars-in-join-order))
                                 (update-depth->constraints (vec (repeat (inc (count vars-in-join-order)) nil))))
 
