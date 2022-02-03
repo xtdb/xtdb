@@ -38,10 +38,9 @@
   (status [_this _request]
     {:status 200
      :body (controllers/status node)})
-  (submit_tx [_this {{:keys [tx-ops]} :grpc-params :as _request}]
-    (controllers/submit-tx node tx-ops)
+  (submit_tx [_this {{:keys [tx-ops]} :grpc-params :as _request}] 
     {:status 200
-     :body {:tx_id 0}}))
+     :body (controllers/submit-tx node tx-ops)}))
 
 ;; Defines "/" and "/about" routes with their associated :get handlers.
 ;; The interceptors defined after the verb map (e.g., {:get home-page}

@@ -8,11 +8,8 @@
   (-> (xt/status node)
       (adapters.status/edn->grpc)))
 
-(defmacro dbg [x] `(let [x# ~x] (println "\n\n\n" '~x "=\n" x# "\n\n\n") x#))
-
 (defn submit-tx [node tx-ops]
-  (-> tx-ops
+  (->> tx-ops
        (adapters.submit/grpc->edn)
        (xt/submit-tx node)
-       (dbg)
-       #_(adapters.submit/edn->grpc)))
+       (adapters.submit/edn->grpc)))

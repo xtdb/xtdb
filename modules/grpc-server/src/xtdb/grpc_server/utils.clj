@@ -1,6 +1,8 @@
 (ns xtdb.grpc-server.utils
   (:require [clojure.instant :refer [read-instant-date]]))
 
+(defmacro dbg [x] `(let [x# ~x] (println "\n\n\n" '~x "=\n" x# "\n\n\n") x#))
+
 (defn assoc-some
   "Associates a key with a value in a map, if and only if the value is not nil."
   ([m k v]
