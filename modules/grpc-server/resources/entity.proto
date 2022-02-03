@@ -2,13 +2,13 @@ syntax = "proto3";
 
 package com.grpc.xtdb;
 
-import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
 import "utils.proto";
 
 message EntityRequest {
     string eid = 1;
-    com.grpc.xtdb.OptionalTimestamp valid_time = 2;
-    com.grpc.xtdb.OptionalTimestamp tx_time = 3;
+    string valid_time = 2;
+    string tx_time = 3;
     com.grpc.xtdb.OptionalInt64 tx_id = 4;
 }
 
@@ -22,18 +22,18 @@ message EntityHistoryRequest {
     SortOrder sort_order = 2;
     com.grpc.xtdb.OptionalBool with_corrections = 3;
     com.grpc.xtdb.OptionalBool with_docs = 4;
-    com.grpc.xtdb.OptionalTimestamp start_valid_time = 5;
-    com.grpc.xtdb.OptionalTimestamp start_tx_time = 6;
+    string start_valid_time = 5;
+    string start_tx_time = 6;
     com.grpc.xtdb.OptionalInt64 start_tx_id = 7;
-    com.grpc.xtdb.OptionalTimestamp end_valid_time = 8;
-    com.grpc.xtdb.OptionalTimestamp end_tx_time = 9;
+    string end_valid_time = 8;
+    string end_tx_time = 9;
     com.grpc.xtdb.OptionalInt64 end_tx_id = 10;
 }
 
 message EntityHistoryResponse {
     string content_hash = 1;
-    google.protobuf.Timestamp valid_time = 2;
-    google.protobuf.Timestamp tx_time = 3;
+    string valid_time = 2;
+    string tx_time = 3;
     int64 tx_id = 4;
-    com.grpc.xtdb.OptionalJson doc = 5;
+    google.protobuf.Value doc = 5;
 }

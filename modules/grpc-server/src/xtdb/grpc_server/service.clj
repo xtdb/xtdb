@@ -36,12 +36,10 @@
 (deftype XtdbGrpcAPI []
   grpc-api/Service
   (status [_this _request]
-    (println (str "\n\n\n" "status" "\n\n\n"))
     {:status 200
      :body (controllers/status node)})
-  (submit_tx [_this {{:keys [tx_ops]} :grpc-params :as _request}]
-    (println (str "\n\n\n" _this))
-    (println (str "\n\n\n" tx_ops "\n\n\n"))
+  (submit_tx [_this {{:keys [tx-ops]} :grpc-params :as _request}]
+    (controllers/submit-tx node tx-ops)
     {:status 200
      :body {:tx_id 0}}))
 

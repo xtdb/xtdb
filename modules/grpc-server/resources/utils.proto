@@ -2,24 +2,9 @@ syntax = "proto3";
 
 package com.grpc.xtdb;
 
-import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 
 message None { }
-
-message OptionalTimestamp {
-    oneof option {
-        google.protobuf.Timestamp some = 1;
-        None none = 2;
-    }
-}
-
-message OptionalJson {
-    oneof option {
-        google.protobuf.Value some = 1;
-        None none = 2;
-    }
-}
 
 message OptionalString {
     oneof option {

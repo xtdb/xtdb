@@ -1,9 +1,9 @@
 (ns xtdb.grpc-server.adapters.status
   (:require [xtdb.grpc-server.utils :as utils]
-            [com.grpc.xtdb :refer [new-StatusResponse]]))
+            [com.grpc.xtdb :refer [new-StatusResponse]])
+  (:gen-class))
 
 (defn edn->grpc [edn]
-  (println (str "\n\n\n" edn "\n\n\n"))
   (->
    {:version (:xtdb.version/version  edn)
     :kv-store (:xtdb.kv/kv-store edn)
