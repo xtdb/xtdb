@@ -627,7 +627,7 @@
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
-         #"Or join free variable never used: x"
+         #"`or` free variable never specified: x"
          (xt/q (xt/db *api*) '{:find [x]
                                :where [(or-join [x]
                                                 [e1 :last-name "Ivanov"])]})))
@@ -1544,9 +1544,9 @@
            (s/conform :xtdb.query/where '[[i :age age]
                                           (over-twenty-one? age)])))
 
-  (t/is (= [{:head '{:name over-twenty-one?, :args {:free-args [age]}},
+  (t/is (= [{:head '{:name over-twenty-one?, :args [:just-args [age]]},
              :body '[[:range [[:sym-val {:op >=, :sym age, :val 21}]]]]}
-            '{:head {:name over-twenty-one?, :args {:free-args [age]}},
+            '{:head {:name over-twenty-one?, :args [:just-args [age]]},
               :body [[:not {:terms [[:range [[:sym-val {:op <, :sym age, :val 21}]]]]}]]}]
            (s/conform :xtdb.query/rules '[[(over-twenty-one? age)
                                            [(>= age 21)]]
@@ -3678,37 +3678,40 @@
   (let [parent-id 50
         expected (set (for [[id child-id] (partition 2 1 (range (inc parent-id) 101))]
                         [(str id "-" child-id)]))
-        expected-speedup-factor 2.5] ;; speedup also benefits from warm-up (i.e. test could be cleaner)
-    (let [free-vars-ns-start (System/nanoTime)
-          result (xt/q (xt/db *api*)
-                       {:find '[child-name]
-                        :where '[[parent :xt/id]
-                                 (child-of parent child)
-                                 [child :name child-name]]
-                        :rules '[[(child-of p c)
-                                  [p :child c]]
-                                 [(child-of p c)
-                                  [p :child c1]
-                                  (child-of c1 c)]]
-                        :args [{:parent parent-id}]})
-          free-vars-ns (- (System/nanoTime) free-vars-ns-start)]
-      (t/is (= expected result))
-      (let [bound-vars-ns-start (System/nanoTime)
-            result (xt/q (xt/db *api*)
-                         {:find '[child-name]
-                          :where '[[parent :xt/id]
-                                   (child-of parent child)
-                                   [child :name child-name]]
-                          :rules '[[(child-of [p] c)
-                                    [p :child c]]
-                                   [(child-of [p] c)
-                                    [p :child c1]
-                                    (child-of c1 c)]]
-                          :args [{:parent parent-id}]})
-            bound-vars-ns (- (System/nanoTime) bound-vars-ns-start)]
-        (t/is (= expected result))
-        (t/is (> (double (/ free-vars-ns bound-vars-ns)) expected-speedup-factor)
-              (pr-str free-vars-ns " " bound-vars-ns))))))
+        expected-speedup-factor 2.5 ;; speedup also benefits from warm-up (i.e. test could be cleaner)
+        free-vars-ns (let [free-vars-ns-start (System/nanoTime)
+                           result (xt/q (xt/db *api*)
+                                        {:find '[child-name]
+                                         :where '[[parent :xt/id]
+                                                  (child-of parent child)
+                                                  [child :name child-name]]
+                                         :rules '[[(child-of p c)
+                                                   [p :child c]]
+                                                  [(child-of p c)
+                                                   [p :child c1]
+                                                   (child-of c1 c)]]
+                                         :args [{:parent parent-id}]})
+                           free-vars-ns (- (System/nanoTime) free-vars-ns-start)]
+                       (t/is (= expected result))
+                       free-vars-ns)
+
+        bound-vars-ns (let [bound-vars-ns-start (System/nanoTime)
+                            result (xt/q (xt/db *api*)
+                                         {:find '[child-name]
+                                          :where '[[parent :xt/id]
+                                                   (child-of parent child)
+                                                   [child :name child-name]]
+                                          :rules '[[(child-of [p] c)
+                                                    [p :child c]]
+                                                   [(child-of [p] c)
+                                                    [p :child c1]
+                                                    (child-of c1 c)]]
+                                          :args [{:parent parent-id}]})
+                            bound-vars-ns (- (System/nanoTime) bound-vars-ns-start)]
+                        (t/is (= expected result))
+                        bound-vars-ns)]
+    (t/is (> (double (/ free-vars-ns bound-vars-ns)) expected-speedup-factor)
+          (pr-str free-vars-ns " " bound-vars-ns))))
 
 (t/deftest test-cardinality-join-order-avoids-cross-product
   (fix/transact! *api* (fix/people

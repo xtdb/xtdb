@@ -101,8 +101,9 @@
                                         :sym-b logic-var?)))))
 
 (s/def ::rule-args
-  (s/cat :bound-args (s/? ::args-list)
-         :free-args (s/* logic-var?)))
+  (s/alt :explicit-bound-args (s/cat :bound-args ::args-list
+                                     :free-args (s/* logic-var?))
+         :just-args (s/* logic-var?)))
 
 (s/def ::not
   (s/and (expression-spec 'not (s/+ ::term))
@@ -589,8 +590,10 @@
                              (collect-vars)))
                       (apply merge-with set/union))
         or-join-vars (set (for [or-join-clause or-join-clauses
-                                :let [{:keys [bound-args free-args]} (:args or-join-clause)]
-                                arg (concat bound-args free-args)]
+                                :let [[args-type args-val] (:args or-join-clause)]
+                                arg (case args-type
+                                      :explicit-bound-args (mapcat args-val [:bound-args :free-args])
+                                      :just-args args-val)]
                             arg))]
     {:e-vars (set (for [{:keys [e]} triple-clauses
                         :when (logic-var? e)]
@@ -743,36 +746,45 @@
 (defn- analyze-or-vars [or-clauses known-vars]
   (->> (sort-by clause-complexity or-clauses)
        (reduce (fn [[or-clauses known-vars] {:keys [args branches] :as clause}]
-                 (let [or-join? (boolean args)
-                       {:keys [bound-args free-args]} args
+                 (let [[args-type args-val] args
                        branches (for [branch-clauses branches
                                       :let [branch-vars (->> (normalize-clauses branch-clauses)
                                                              (group-clauses-by-type)
                                                              (collect-vars)
                                                              (vals)
-                                                             (reduce into #{}))
-                                            branch-vars (set (remove blank-var? branch-vars))
-                                            or-vars (if or-join?
-                                                      (set (concat bound-args free-args))
-                                                      branch-vars)
-                                            [free-vars bound-vars] (if (and or-join? (seq bound-args))
-                                                                     [free-args bound-args]
-                                                                     [(set/difference or-vars known-vars)
-                                                                      (set/intersection or-vars known-vars)])]]
-                                  (do (when or-join?
-                                        (when-not (= (count free-args)
-                                                     (count (set free-args)))
-                                          (throw (err/illegal-arg :indistinct-or-join-vars
-                                                                  {::err/message (str "Or join free variables not distinct: " (xio/pr-edn-str clause))})))
-                                        (doseq [var free-vars
-                                                :when (not (contains? branch-vars var))]
-                                          (throw (err/illegal-arg :unused-or-join-var
-                                                                  {::err/message (str "Or join free variable never used: " var " " (xio/pr-edn-str clause))}))))
-                                      {:or-vars or-vars
-                                       :free-vars free-vars
-                                       :bound-vars bound-vars
-                                       :where branch-clauses
-                                       :single-e-var-triple? (single-e-var-triple? bound-vars branch-clauses)}))]
+                                                             (reduce into #{})
+                                                             (into #{} (remove blank-var?)))]]
+                                  (let [{:keys [bound-vars free-vars] :as branch}
+                                        (case args-type
+                                          :explicit-bound-args
+                                          (let [{:keys [bound-args free-args]} args-val
+                                                _ (when-not (= (count free-args)
+                                                               (count (set free-args)))
+                                                    (throw (err/illegal-arg :indistinct-or-join-vars
+                                                                            {::err/message (str "Or join free variables not distinct: " (xio/pr-edn-str clause))})))
+                                                or-vars (set (concat bound-args free-args))]
+                                            {:or-vars or-vars
+                                             :free-vars free-args
+                                             :bound-vars bound-args})
+
+                                          (nil :just-args)
+                                          (let [or-vars (or (some-> args-val set)
+                                                            branch-vars)]
+                                            {:or-vars or-vars
+                                             :free-vars (set/difference or-vars known-vars)
+                                             :bound-vars (set/intersection or-vars known-vars)}))]
+
+                                    (doseq [var free-vars
+                                            :when (not (contains? branch-vars var))]
+                                      (throw (err/illegal-arg :unused-or-join-var
+                                                              {::err/message (str "`or` free variable never specified: " var)
+                                                               :branch-vars branch-vars
+                                                               :var var
+                                                               :clause clause})))
+
+                                    (into branch
+                                          {:where branch-clauses
+                                           :single-e-var-triple? (single-e-var-triple? bound-vars branch-clauses)})))]
 
                    (when (not (apply = (map :free-vars branches)))
                      (throw (err/illegal-arg :or-requires-same-logic-vars
@@ -1242,11 +1254,16 @@
              (when-not rules
                (throw (err/illegal-arg :unknown-rule
                                        {::err/message (str "Unknown rule: " (xio/pr-edn-str sub-clause))})))
-             (let [rule-args+num-bound-args+body (for [{:keys [head body]} rules
-                                                       :let [{:keys [bound-args free-args]} (:args head)]]
-                                                   [(vec (concat bound-args free-args))
-                                                    (count bound-args)
-                                                    body])
+             (let [rule-args+num-bound-args+body
+                   (for [{:keys [head body]} rules
+                         :let [[args-type args-val] (:args head)]]
+                     (case args-type
+                       :explicit-bound-args (let [{:keys [bound-args free-args]} args-val]
+                                              [(vec (concat bound-args free-args))
+                                               (count bound-args)
+                                               body])
+                       :just-args [(vec args-val) nil body]))
+
                    [arity :as arities] (->> rule-args+num-bound-args+body
                                             (map (comp count first))
                                             (distinct))
@@ -1254,15 +1271,19 @@
                    [num-bound-args :as num-bound-args-groups] (->> rule-args+num-bound-args+body
                                                                    (map second)
                                                                    (distinct))]
+
                (when-not (= 1 (count arities))
                  (throw (err/illegal-arg :rule-definition-require-same-arity
                                          {::err/message (str "Rule definitions require same arity: " (xio/pr-edn-str rules))})))
+
                (when-not (= 1 (count num-bound-args-groups))
                  (throw (err/illegal-arg :rule-definition-require-same-num-bound-args
                                          {::err/message (str "Rule definitions require same number of bound args: " (xio/pr-edn-str rules))})))
+
                (when-not (= arity (count (:args clause)))
                  (throw (err/illegal-arg :rule-invocation-wrong-arity
                                          {::err/message (str "Rule invocation has wrong arity, expected: " arity " " (xio/pr-edn-str sub-clause))})))
+
                ;; TODO: the caches and expansion here needs revisiting.
                (let [expanded-rules (for [[args _ body] rule-args+num-bound-args+body
                                           :let [rule-arg->query-arg (zipmap args (:args clause))
@@ -1283,16 +1304,18 @@
                                             :when (seq expanded-rule)]
                                         expanded-rule)
                                       expanded-rules)]
+
                  (if (= 1 (count expanded-rules))
                    (first expanded-rules)
                    (when (seq expanded-rules)
-                     (let [[bound-args free-args] (split-at num-bound-args (:args clause))]
-                       [[:or-join
-                         (with-meta
-                           {:args {:bound-args (vec (filter logic-var? bound-args))
-                                   :free-args (vec (filter logic-var? free-args))}
+                     [[:or-join
+                       (-> {:args (if num-bound-args
+                                    (let [[bound-args free-args] (split-at (or num-bound-args 0) (:args clause))]
+                                      [:explicit-bound-args {:bound-args (filterv logic-var? bound-args)
+                                                             :free-args (filterv logic-var? free-args)}])
+                                    [:just-args (filter logic-var? (:args clause))])
                             :branches (vec expanded-rules)}
-                           {:rule-name rule-name})]]))))))))
+                           (vary-meta assoc :rule-name rule-name))]])))))))
        (reduce into [])))
 
 (def default-allow-list
