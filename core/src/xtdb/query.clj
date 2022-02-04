@@ -494,59 +494,42 @@
   (some->> binding (vector) (flatten) (filter logic-var?)))
 
 (defn- collect-vars [{triple-clauses :triple
-                      not-clauses :not
                       not-join-clauses :not-join
-                      or-clauses :or
                       or-join-clauses :or-join
                       pred-clauses :pred
                       range-clauses :range
                       rule-clauses :rule}]
-  (let [or-vars (->> (for [{:keys [branches]} or-clauses
-                           branch branches]
-                       (->> (normalize-clauses branch)
-                            (group-clauses-by-type)
-                            (collect-vars)))
-                     (apply merge-with set/union))
-        not-join-vars (set (for [not-join-clause not-join-clauses
-                                 arg (:args not-join-clause)]
-                             arg))
-        not-vars (->> (for [{:keys [terms]} not-clauses]
-                        (->> (normalize-clauses terms)
-                             (group-clauses-by-type)
-                             (collect-vars)))
-                      (apply merge-with set/union))
-        or-join-vars (set (for [or-join-clause or-join-clauses
-                                :let [[args-type args-val] (:args or-join-clause)]
-                                arg (case args-type
-                                      :explicit-bound-args (mapcat args-val [:bound-args :free-args])
-                                      :just-args args-val)]
-                            arg))]
-    {:e-vars (set (for [{:keys [e]} triple-clauses
-                        :when (logic-var? e)]
-                    e))
-     :v-vars (set (for [{:keys [v]} triple-clauses
-                        :when (logic-var? v)]
-                    v))
-     :not-vars (->> (vals not-vars)
-                    (reduce into not-join-vars))
-     :pred-arg-vars (set (for [{:keys [pred]} pred-clauses
-                               var (cond->> (:args pred)
-                                     (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred)))
-                               :when (logic-var? var)]
-                       var))
-     :pred-return-vars (set (for [{:keys [return]} pred-clauses
-                                  return-var (find-binding-vars return)]
-                              return-var))
-     :range-vars (set (for [{:keys [sym sym-a sym-b]} range-clauses
-                            sym [sym sym-a sym-b]
-                            :when (logic-var? sym)]
-                        sym))
-     :or-vars (apply set/union (vals or-vars))
-     :rule-vars (set/union (set (for [{:keys [args]} rule-clauses
-                                      arg args
-                                      :when (logic-var? arg)]
-                                  arg))
-                           or-join-vars)}))
+  {:e-vars (set (for [{:keys [e]} triple-clauses
+                      :when (logic-var? e)]
+                  e))
+   :v-vars (set (for [{:keys [v]} triple-clauses
+                      :when (logic-var? v)]
+                  v))
+   :not-vars (set (for [not-join-clause not-join-clauses
+                        arg (:args not-join-clause)]
+                    arg))
+   :pred-arg-vars (set (for [{:keys [pred]} pred-clauses
+                             var (cond->> (:args pred)
+                                   (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred)))
+                             :when (logic-var? var)]
+                         var))
+   :pred-return-vars (set (for [{:keys [return]} pred-clauses
+                                return-var (find-binding-vars return)]
+                            return-var))
+   :range-vars (set (for [{:keys [sym sym-a sym-b]} range-clauses
+                          sym [sym sym-a sym-b]
+                          :when (logic-var? sym)]
+                      sym))
+   :or-vars (set (for [or-join-clause or-join-clauses
+                       :let [[args-type args-val] (:args or-join-clause)]
+                       arg (case args-type
+                             :explicit-bound-args (mapcat args-val [:bound-args :free-args])
+                             :just-args args-val)]
+                   arg))
+   :rule-vars (set (for [{:keys [args]} rule-clauses
+                         arg args
+                         :when (logic-var? arg)]
+                     arg))})
 
 (defn- blank-var? [v]
   (and (logic-var? v)
