@@ -20,3 +20,13 @@
   (try
     (read-instant-date value)
     (catch Exception _e nil)))
+
+(defn value->edn [proto-json]
+  (let [kind (:kind proto-json)]
+    (case (-> kind keys first)
+      :struct-value (->> kind :struct-value :fields (reduce (fn [coll [k v]] (assoc coll (keyword k) (value->edn v))) {}))
+      :string-value (->> kind :string-value str)
+      :list-value (->> kind :list-value :values (reduce (fn [coll v] (conj coll (value->edn v))) []))
+      :null-value nil
+      :bool-value (->> kind :bool-value boolean)
+      :number-value (->> kind :number-value num))))

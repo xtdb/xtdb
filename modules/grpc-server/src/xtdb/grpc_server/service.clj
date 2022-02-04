@@ -38,7 +38,7 @@
   (status [_this _request]
     {:status 200
      :body (controllers/status node)})
-  (submit_tx [_this {{:keys [tx-ops]} :grpc-params :as _request}] 
+  (submit_tx [_this {{:keys [tx-ops]} :grpc-params :as _request}]
     {:status 200
      :body (controllers/submit-tx node tx-ops)}))
 

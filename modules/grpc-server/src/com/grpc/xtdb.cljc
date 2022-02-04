@@ -83,9 +83,8 @@
 ;-----------------------------------------------------------------------------
 (def SortOrder-default :asc)
 
-(def SortOrder-val2label {
-  0 :asc
-  1 :desc})
+(def SortOrder-val2label {0 :asc
+                          1 :desc})
 
 (def SortOrder-label2val (set/map-invert SortOrder-val2label))
 
@@ -102,7 +101,6 @@
   ([tag options value os]
    (serdes.core/write-Enum tag options (get-SortOrder value) os)))
 
-
 ;;----------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------
 ;; OptionalString-option's oneof Implementations
@@ -111,19 +109,18 @@
 
 (defn convert-OptionalString-option [origkeyval]
   (cond
-     (get-in origkeyval [:option :some]) origkeyval
-     (get-in origkeyval [:option :none]) (update-in origkeyval [:option :none] new-None)
-     :default origkeyval))
+    (get-in origkeyval [:option :some]) origkeyval
+    (get-in origkeyval [:option :none]) (update-in origkeyval [:option :none] new-None)
+    :default origkeyval))
 
 (defn write-OptionalString-option [option os]
   (let [field (first option)
         k (when-not (nil? field) (key field))
         v (when-not (nil? field) (val field))]
-     (case k
-         :some (serdes.core/write-String 1  {:optimize false} v os)
-         :none (serdes.core/write-embedded 2 v os)
-         nil)))
-
+    (case k
+      :some (serdes.core/write-String 1  {:optimize false} v os)
+      :none (serdes.core/write-embedded 2 v os)
+      nil)))
 
 ;;----------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------
@@ -133,19 +130,18 @@
 
 (defn convert-OptionalBool-option [origkeyval]
   (cond
-     (get-in origkeyval [:option :some]) origkeyval
-     (get-in origkeyval [:option :none]) (update-in origkeyval [:option :none] new-None)
-     :default origkeyval))
+    (get-in origkeyval [:option :some]) origkeyval
+    (get-in origkeyval [:option :none]) (update-in origkeyval [:option :none] new-None)
+    :default origkeyval))
 
 (defn write-OptionalBool-option [option os]
   (let [field (first option)
         k (when-not (nil? field) (key field))
         v (when-not (nil? field) (val field))]
-     (case k
-         :some (serdes.core/write-Bool 1  {:optimize false} v os)
-         :none (serdes.core/write-embedded 2 v os)
-         nil)))
-
+    (case k
+      :some (serdes.core/write-Bool 1  {:optimize false} v os)
+      :none (serdes.core/write-embedded 2 v os)
+      nil)))
 
 ;;----------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------
@@ -155,25 +151,24 @@
 
 (defn convert-Transaction-transaction-type [origkeyval]
   (cond
-     (get-in origkeyval [:transaction-type :put]) (update-in origkeyval [:transaction-type :put] new-Put)
-     (get-in origkeyval [:transaction-type :delete]) (update-in origkeyval [:transaction-type :delete] new-Delete)
-     (get-in origkeyval [:transaction-type :match]) (update-in origkeyval [:transaction-type :match] new-Match)
-     (get-in origkeyval [:transaction-type :evict]) (update-in origkeyval [:transaction-type :evict] new-Evict)
-     (get-in origkeyval [:transaction-type :function]) (update-in origkeyval [:transaction-type :function] new-Function)
-     :default origkeyval))
+    (get-in origkeyval [:transaction-type :put]) (update-in origkeyval [:transaction-type :put] new-Put)
+    (get-in origkeyval [:transaction-type :delete]) (update-in origkeyval [:transaction-type :delete] new-Delete)
+    (get-in origkeyval [:transaction-type :match]) (update-in origkeyval [:transaction-type :match] new-Match)
+    (get-in origkeyval [:transaction-type :evict]) (update-in origkeyval [:transaction-type :evict] new-Evict)
+    (get-in origkeyval [:transaction-type :function]) (update-in origkeyval [:transaction-type :function] new-Function)
+    :default origkeyval))
 
 (defn write-Transaction-transaction-type [transaction-type os]
   (let [field (first transaction-type)
         k (when-not (nil? field) (key field))
         v (when-not (nil? field) (val field))]
-     (case k
-         :put (serdes.core/write-embedded 1 v os)
-         :delete (serdes.core/write-embedded 2 v os)
-         :match (serdes.core/write-embedded 3 v os)
-         :evict (serdes.core/write-embedded 4 v os)
-         :function (serdes.core/write-embedded 5 v os)
-         nil)))
-
+    (case k
+      :put (serdes.core/write-embedded 1 v os)
+      :delete (serdes.core/write-embedded 2 v os)
+      :match (serdes.core/write-embedded 3 v os)
+      :evict (serdes.core/write-embedded 4 v os)
+      :function (serdes.core/write-embedded 5 v os)
+      nil)))
 
 ;;----------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------
@@ -183,20 +178,18 @@
 
 (defn convert-OptionalInt64-option [origkeyval]
   (cond
-     (get-in origkeyval [:option :some]) origkeyval
-     (get-in origkeyval [:option :none]) (update-in origkeyval [:option :none] new-None)
-     :default origkeyval))
+    (get-in origkeyval [:option :some]) origkeyval
+    (get-in origkeyval [:option :none]) (update-in origkeyval [:option :none] new-None)
+    :default origkeyval))
 
 (defn write-OptionalInt64-option [option os]
   (let [field (first option)
         k (when-not (nil? field) (key field))
         v (when-not (nil? field) (val field))]
-     (case k
-         :some (serdes.core/write-Int64 1  {:optimize false} v os)
-         :none (serdes.core/write-embedded 2 v os)
-         nil)))
-
-
+    (case k
+      :some (serdes.core/write-Int64 1  {:optimize false} v os)
+      :none (serdes.core/write-embedded 2 v os)
+      nil)))
 
 ;;----------------------------------------------------------------------------------
 ;;----------------------------------------------------------------------------------
@@ -209,8 +202,7 @@
 ;-----------------------------------------------------------------------------
 (defrecord Empty-record []
   pb/Writer
-  (serialize [this os]
-)
+  (serialize [this os])
   pb/TypeReflection
   (gettype [this]
     "com.grpc.xtdb.Empty"))
@@ -222,11 +214,11 @@
   "CodedInputStream to Empty"
   [is]
   (->> (tag-map Empty-defaults
-         (fn [tag index]
-             (case index
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->Empty-record)))
+                (fn [tag index]
+                  (case index
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->Empty-record)))
 
 (defn ecis->Empty
   "Embedded CodedInputStream to Empty"
@@ -272,27 +264,26 @@
 (s/def :com.grpc.xtdb.StatusResponse/estimate-num-keys int?)
 (s/def :com.grpc.xtdb.StatusResponse/size int?)
 
-
-(s/def ::StatusResponse-spec (s/keys :opt-un [:com.grpc.xtdb.StatusResponse/version :com.grpc.xtdb.StatusResponse/index-version :com.grpc.xtdb.StatusResponse/kv-store :com.grpc.xtdb.StatusResponse/estimate-num-keys :com.grpc.xtdb.StatusResponse/size ]))
-(def StatusResponse-defaults {:version "" :index-version 0 :kv-store "" :estimate-num-keys 0 :size 0 })
+(s/def ::StatusResponse-spec (s/keys :opt-un [:com.grpc.xtdb.StatusResponse/version :com.grpc.xtdb.StatusResponse/index-version :com.grpc.xtdb.StatusResponse/kv-store :com.grpc.xtdb.StatusResponse/estimate-num-keys :com.grpc.xtdb.StatusResponse/size]))
+(def StatusResponse-defaults {:version "" :index-version 0 :kv-store "" :estimate-num-keys 0 :size 0})
 
 (defn cis->StatusResponse
   "CodedInputStream to StatusResponse"
   [is]
   (->> (tag-map StatusResponse-defaults
-         (fn [tag index]
-             (case index
-               1 [:version (serdes.core/cis->String is)]
-               2 [:index-version (serdes.core/cis->Int32 is)]
-               3 [:kv-store (serdes.core/cis->String is)]
-               4 [:estimate-num-keys (serdes.core/cis->Int32 is)]
-               5 [:size (serdes.core/cis->Int64 is)]
-               6 [:revision (ecis->OptionalString is)]
-               7 [:consumer-state (ecis->OptionalString is)]
+                (fn [tag index]
+                  (case index
+                    1 [:version (serdes.core/cis->String is)]
+                    2 [:index-version (serdes.core/cis->Int32 is)]
+                    3 [:kv-store (serdes.core/cis->String is)]
+                    4 [:estimate-num-keys (serdes.core/cis->Int32 is)]
+                    5 [:size (serdes.core/cis->Int64 is)]
+                    6 [:revision (ecis->OptionalString is)]
+                    7 [:consumer-state (ecis->OptionalString is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->StatusResponse-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->StatusResponse-record)))
 
 (defn ecis->StatusResponse
   "Embedded CodedInputStream to StatusResponse"
@@ -329,20 +320,20 @@
     "com.grpc.xtdb.Evict"))
 
 (s/def :com.grpc.xtdb.Evict/document-id string?)
-(s/def ::Evict-spec (s/keys :opt-un [:com.grpc.xtdb.Evict/document-id ]))
-(def Evict-defaults {:document-id "" })
+(s/def ::Evict-spec (s/keys :opt-un [:com.grpc.xtdb.Evict/document-id]))
+(def Evict-defaults {:document-id ""})
 
 (defn cis->Evict
   "CodedInputStream to Evict"
   [is]
   (->> (tag-map Evict-defaults
-         (fn [tag index]
-             (case index
-               1 [:document-id (serdes.core/cis->String is)]
+                (fn [tag index]
+                  (case index
+                    1 [:document-id (serdes.core/cis->String is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->Evict-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->Evict-record)))
 
 (defn ecis->Evict
   "Embedded CodedInputStream to Evict"
@@ -385,24 +376,24 @@
 (s/def :com.grpc.xtdb.EntityHistoryResponse/tx-time string?)
 (s/def :com.grpc.xtdb.EntityHistoryResponse/tx-id int?)
 
-(s/def ::EntityHistoryResponse-spec (s/keys :opt-un [:com.grpc.xtdb.EntityHistoryResponse/content-hash :com.grpc.xtdb.EntityHistoryResponse/valid-time :com.grpc.xtdb.EntityHistoryResponse/tx-time :com.grpc.xtdb.EntityHistoryResponse/tx-id ]))
-(def EntityHistoryResponse-defaults {:content-hash "" :valid-time "" :tx-time "" :tx-id 0 })
+(s/def ::EntityHistoryResponse-spec (s/keys :opt-un [:com.grpc.xtdb.EntityHistoryResponse/content-hash :com.grpc.xtdb.EntityHistoryResponse/valid-time :com.grpc.xtdb.EntityHistoryResponse/tx-time :com.grpc.xtdb.EntityHistoryResponse/tx-id]))
+(def EntityHistoryResponse-defaults {:content-hash "" :valid-time "" :tx-time "" :tx-id 0})
 
 (defn cis->EntityHistoryResponse
   "CodedInputStream to EntityHistoryResponse"
   [is]
   (->> (tag-map EntityHistoryResponse-defaults
-         (fn [tag index]
-             (case index
-               1 [:content-hash (serdes.core/cis->String is)]
-               2 [:valid-time (serdes.core/cis->String is)]
-               3 [:tx-time (serdes.core/cis->String is)]
-               4 [:tx-id (serdes.core/cis->Int64 is)]
-               5 [:doc (com.google.protobuf/ecis->Value is)]
+                (fn [tag index]
+                  (case index
+                    1 [:content-hash (serdes.core/cis->String is)]
+                    2 [:valid-time (serdes.core/cis->String is)]
+                    3 [:tx-time (serdes.core/cis->String is)]
+                    4 [:tx-id (serdes.core/cis->Int64 is)]
+                    5 [:doc (com.google.protobuf/ecis->Value is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->EntityHistoryResponse-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->EntityHistoryResponse-record)))
 
 (defn ecis->EntityHistoryResponse
   "Embedded CodedInputStream to EntityHistoryResponse"
@@ -441,22 +432,22 @@
 
 (s/def :com.grpc.xtdb.Put/valid-time string?)
 (s/def :com.grpc.xtdb.Put/end-valid-time string?)
-(s/def ::Put-spec (s/keys :opt-un [:com.grpc.xtdb.Put/valid-time :com.grpc.xtdb.Put/end-valid-time ]))
-(def Put-defaults {:valid-time "" :end-valid-time "" })
+(s/def ::Put-spec (s/keys :opt-un [:com.grpc.xtdb.Put/valid-time :com.grpc.xtdb.Put/end-valid-time]))
+(def Put-defaults {:valid-time "" :end-valid-time ""})
 
 (defn cis->Put
   "CodedInputStream to Put"
   [is]
   (->> (tag-map Put-defaults
-         (fn [tag index]
-             (case index
-               1 [:document (com.google.protobuf/ecis->Value is)]
-               2 [:valid-time (serdes.core/cis->String is)]
-               3 [:end-valid-time (serdes.core/cis->String is)]
+                (fn [tag index]
+                  (case index
+                    1 [:document (com.google.protobuf/ecis->Value is)]
+                    2 [:valid-time (serdes.core/cis->String is)]
+                    3 [:end-valid-time (serdes.core/cis->String is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->Put-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->Put-record)))
 
 (defn ecis->Put
   "Embedded CodedInputStream to Put"
@@ -498,23 +489,23 @@
 (s/def :com.grpc.xtdb.EntityRequest/valid-time string?)
 (s/def :com.grpc.xtdb.EntityRequest/tx-time string?)
 
-(s/def ::EntityRequest-spec (s/keys :opt-un [:com.grpc.xtdb.EntityRequest/eid :com.grpc.xtdb.EntityRequest/valid-time :com.grpc.xtdb.EntityRequest/tx-time ]))
-(def EntityRequest-defaults {:eid "" :valid-time "" :tx-time "" })
+(s/def ::EntityRequest-spec (s/keys :opt-un [:com.grpc.xtdb.EntityRequest/eid :com.grpc.xtdb.EntityRequest/valid-time :com.grpc.xtdb.EntityRequest/tx-time]))
+(def EntityRequest-defaults {:eid "" :valid-time "" :tx-time ""})
 
 (defn cis->EntityRequest
   "CodedInputStream to EntityRequest"
   [is]
   (->> (tag-map EntityRequest-defaults
-         (fn [tag index]
-             (case index
-               1 [:eid (serdes.core/cis->String is)]
-               2 [:valid-time (serdes.core/cis->String is)]
-               3 [:tx-time (serdes.core/cis->String is)]
-               4 [:tx-id (ecis->OptionalInt64 is)]
+                (fn [tag index]
+                  (case index
+                    1 [:eid (serdes.core/cis->String is)]
+                    2 [:valid-time (serdes.core/cis->String is)]
+                    3 [:tx-time (serdes.core/cis->String is)]
+                    4 [:tx-id (ecis->OptionalInt64 is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->EntityRequest-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->EntityRequest-record)))
 
 (defn ecis->EntityRequest
   "Embedded CodedInputStream to EntityRequest"
@@ -543,8 +534,7 @@
 ;-----------------------------------------------------------------------------
 (defrecord None-record []
   pb/Writer
-  (serialize [this os]
-)
+  (serialize [this os])
   pb/TypeReflection
   (gettype [this]
     "com.grpc.xtdb.None"))
@@ -556,11 +546,11 @@
   "CodedInputStream to None"
   [is]
   (->> (tag-map None-defaults
-         (fn [tag index]
-             (case index
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->None-record)))
+                (fn [tag index]
+                  (case index
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->None-record)))
 
 (defn ecis->None
   "Embedded CodedInputStream to None"
@@ -599,22 +589,22 @@
 (s/def :com.grpc.xtdb.Delete/document-id string?)
 (s/def :com.grpc.xtdb.Delete/valid-time string?)
 (s/def :com.grpc.xtdb.Delete/end-valid-time string?)
-(s/def ::Delete-spec (s/keys :opt-un [:com.grpc.xtdb.Delete/document-id :com.grpc.xtdb.Delete/valid-time :com.grpc.xtdb.Delete/end-valid-time ]))
-(def Delete-defaults {:document-id "" :valid-time "" :end-valid-time "" })
+(s/def ::Delete-spec (s/keys :opt-un [:com.grpc.xtdb.Delete/document-id :com.grpc.xtdb.Delete/valid-time :com.grpc.xtdb.Delete/end-valid-time]))
+(def Delete-defaults {:document-id "" :valid-time "" :end-valid-time ""})
 
 (defn cis->Delete
   "CodedInputStream to Delete"
   [is]
   (->> (tag-map Delete-defaults
-         (fn [tag index]
-             (case index
-               1 [:document-id (serdes.core/cis->String is)]
-               2 [:valid-time (serdes.core/cis->String is)]
-               3 [:end-valid-time (serdes.core/cis->String is)]
+                (fn [tag index]
+                  (case index
+                    1 [:document-id (serdes.core/cis->String is)]
+                    2 [:valid-time (serdes.core/cis->String is)]
+                    3 [:end-valid-time (serdes.core/cis->String is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->Delete-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->Delete-record)))
 
 (defn ecis->Delete
   "Embedded CodedInputStream to Delete"
@@ -649,19 +639,19 @@
     "com.grpc.xtdb.SubmitRequest"))
 
 (s/def ::SubmitRequest-spec (s/keys :opt-un []))
-(def SubmitRequest-defaults {:tx-ops [] })
+(def SubmitRequest-defaults {:tx-ops []})
 
 (defn cis->SubmitRequest
   "CodedInputStream to SubmitRequest"
   [is]
   (->> (tag-map SubmitRequest-defaults
-         (fn [tag index]
-             (case index
-               1 [:tx-ops (serdes.complex/cis->repeated ecis->Transaction is)]
+                (fn [tag index]
+                  (case index
+                    1 [:tx-ops (serdes.complex/cis->repeated ecis->Transaction is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->SubmitRequest-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->SubmitRequest-record)))
 
 (defn ecis->SubmitRequest
   "Embedded CodedInputStream to SubmitRequest"
@@ -703,14 +693,14 @@
   "CodedInputStream to OptionalString"
   [is]
   (->> (tag-map OptionalString-defaults
-         (fn [tag index]
-             (case index
-               1 [:option {:some (serdes.core/cis->String is)}]
-               2 [:option {:none (ecis->None is)}]
+                (fn [tag index]
+                  (case index
+                    1 [:option {:some (serdes.core/cis->String is)}]
+                    2 [:option {:none (ecis->None is)}]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->OptionalString-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->OptionalString-record)))
 
 (defn ecis->OptionalString
   "Embedded CodedInputStream to OptionalString"
@@ -748,21 +738,21 @@
 
 (s/def :com.grpc.xtdb.SubmitResponse/tx-time string?)
 (s/def :com.grpc.xtdb.SubmitResponse/tx-id int?)
-(s/def ::SubmitResponse-spec (s/keys :opt-un [:com.grpc.xtdb.SubmitResponse/tx-time :com.grpc.xtdb.SubmitResponse/tx-id ]))
-(def SubmitResponse-defaults {:tx-time "" :tx-id 0 })
+(s/def ::SubmitResponse-spec (s/keys :opt-un [:com.grpc.xtdb.SubmitResponse/tx-time :com.grpc.xtdb.SubmitResponse/tx-id]))
+(def SubmitResponse-defaults {:tx-time "" :tx-id 0})
 
 (defn cis->SubmitResponse
   "CodedInputStream to SubmitResponse"
   [is]
   (->> (tag-map SubmitResponse-defaults
-         (fn [tag index]
-             (case index
-               1 [:tx-time (serdes.core/cis->String is)]
-               2 [:tx-id (serdes.core/cis->Int64 is)]
+                (fn [tag index]
+                  (case index
+                    1 [:tx-time (serdes.core/cis->String is)]
+                    2 [:tx-id (serdes.core/cis->Int64 is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->SubmitResponse-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->SubmitResponse-record)))
 
 (defn ecis->SubmitResponse
   "Embedded CodedInputStream to SubmitResponse"
@@ -807,37 +797,35 @@
 
 (s/def :com.grpc.xtdb.EntityHistoryRequest/sort-order (s/or :keyword keyword? :int int?))
 
-
-
 (s/def :com.grpc.xtdb.EntityHistoryRequest/start-tx-time string?)
 (s/def :com.grpc.xtdb.EntityHistoryRequest/start-valid-time string?)
 (s/def :com.grpc.xtdb.EntityHistoryRequest/end-tx-time string?)
 
 (s/def :com.grpc.xtdb.EntityHistoryRequest/eid string?)
 (s/def :com.grpc.xtdb.EntityHistoryRequest/end-valid-time string?)
-(s/def ::EntityHistoryRequest-spec (s/keys :opt-un [:com.grpc.xtdb.EntityHistoryRequest/sort-order :com.grpc.xtdb.EntityHistoryRequest/start-tx-time :com.grpc.xtdb.EntityHistoryRequest/start-valid-time :com.grpc.xtdb.EntityHistoryRequest/end-tx-time :com.grpc.xtdb.EntityHistoryRequest/eid :com.grpc.xtdb.EntityHistoryRequest/end-valid-time ]))
-(def EntityHistoryRequest-defaults {:sort-order SortOrder-default :start-tx-time "" :start-valid-time "" :end-tx-time "" :eid "" :end-valid-time "" })
+(s/def ::EntityHistoryRequest-spec (s/keys :opt-un [:com.grpc.xtdb.EntityHistoryRequest/sort-order :com.grpc.xtdb.EntityHistoryRequest/start-tx-time :com.grpc.xtdb.EntityHistoryRequest/start-valid-time :com.grpc.xtdb.EntityHistoryRequest/end-tx-time :com.grpc.xtdb.EntityHistoryRequest/eid :com.grpc.xtdb.EntityHistoryRequest/end-valid-time]))
+(def EntityHistoryRequest-defaults {:sort-order SortOrder-default :start-tx-time "" :start-valid-time "" :end-tx-time "" :eid "" :end-valid-time ""})
 
 (defn cis->EntityHistoryRequest
   "CodedInputStream to EntityHistoryRequest"
   [is]
   (->> (tag-map EntityHistoryRequest-defaults
-         (fn [tag index]
-             (case index
-               2 [:sort-order (cis->SortOrder is)]
-               7 [:start-tx-id (ecis->OptionalInt64 is)]
-               10 [:end-tx-id (ecis->OptionalInt64 is)]
-               3 [:with-corrections (ecis->OptionalBool is)]
-               6 [:start-tx-time (serdes.core/cis->String is)]
-               5 [:start-valid-time (serdes.core/cis->String is)]
-               9 [:end-tx-time (serdes.core/cis->String is)]
-               4 [:with-docs (ecis->OptionalBool is)]
-               1 [:eid (serdes.core/cis->String is)]
-               8 [:end-valid-time (serdes.core/cis->String is)]
+                (fn [tag index]
+                  (case index
+                    2 [:sort-order (cis->SortOrder is)]
+                    7 [:start-tx-id (ecis->OptionalInt64 is)]
+                    10 [:end-tx-id (ecis->OptionalInt64 is)]
+                    3 [:with-corrections (ecis->OptionalBool is)]
+                    6 [:start-tx-time (serdes.core/cis->String is)]
+                    5 [:start-valid-time (serdes.core/cis->String is)]
+                    9 [:end-tx-time (serdes.core/cis->String is)]
+                    4 [:with-docs (ecis->OptionalBool is)]
+                    1 [:eid (serdes.core/cis->String is)]
+                    8 [:end-valid-time (serdes.core/cis->String is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->EntityHistoryRequest-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->EntityHistoryRequest-record)))
 
 (defn ecis->EntityHistoryRequest
   "Embedded CodedInputStream to EntityHistoryRequest"
@@ -882,14 +870,14 @@
   "CodedInputStream to OptionalBool"
   [is]
   (->> (tag-map OptionalBool-defaults
-         (fn [tag index]
-             (case index
-               1 [:option {:some (serdes.core/cis->Bool is)}]
-               2 [:option {:none (ecis->None is)}]
+                (fn [tag index]
+                  (case index
+                    1 [:option {:some (serdes.core/cis->Bool is)}]
+                    2 [:option {:none (ecis->None is)}]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->OptionalBool-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->OptionalBool-record)))
 
 (defn ecis->OptionalBool
   "Embedded CodedInputStream to OptionalBool"
@@ -927,21 +915,21 @@
 
 (s/def :com.grpc.xtdb.Function/xt-id string?)
 (s/def :com.grpc.xtdb.Function/xt-fn string?)
-(s/def ::Function-spec (s/keys :opt-un [:com.grpc.xtdb.Function/xt-id :com.grpc.xtdb.Function/xt-fn ]))
-(def Function-defaults {:xt-id "" :xt-fn "" })
+(s/def ::Function-spec (s/keys :opt-un [:com.grpc.xtdb.Function/xt-id :com.grpc.xtdb.Function/xt-fn]))
+(def Function-defaults {:xt-id "" :xt-fn ""})
 
 (defn cis->Function
   "CodedInputStream to Function"
   [is]
   (->> (tag-map Function-defaults
-         (fn [tag index]
-             (case index
-               1 [:xt-id (serdes.core/cis->String is)]
-               2 [:xt-fn (serdes.core/cis->String is)]
+                (fn [tag index]
+                  (case index
+                    1 [:xt-id (serdes.core/cis->String is)]
+                    2 [:xt-fn (serdes.core/cis->String is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->Function-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->Function-record)))
 
 (defn ecis->Function
   "Embedded CodedInputStream to Function"
@@ -982,17 +970,17 @@
   "CodedInputStream to Transaction"
   [is]
   (->> (tag-map Transaction-defaults
-         (fn [tag index]
-             (case index
-               1 [:transaction-type {:put (ecis->Put is)}]
-               2 [:transaction-type {:delete (ecis->Delete is)}]
-               3 [:transaction-type {:match (ecis->Match is)}]
-               4 [:transaction-type {:evict (ecis->Evict is)}]
-               5 [:transaction-type {:function (ecis->Function is)}]
+                (fn [tag index]
+                  (case index
+                    1 [:transaction-type {:put (ecis->Put is)}]
+                    2 [:transaction-type {:delete (ecis->Delete is)}]
+                    3 [:transaction-type {:match (ecis->Match is)}]
+                    4 [:transaction-type {:evict (ecis->Evict is)}]
+                    5 [:transaction-type {:function (ecis->Function is)}]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->Transaction-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->Transaction-record)))
 
 (defn ecis->Transaction
   "Embedded CodedInputStream to Transaction"
@@ -1034,14 +1022,14 @@
   "CodedInputStream to OptionalInt64"
   [is]
   (->> (tag-map OptionalInt64-defaults
-         (fn [tag index]
-             (case index
-               1 [:option {:some (serdes.core/cis->Int64 is)}]
-               2 [:option {:none (ecis->None is)}]
+                (fn [tag index]
+                  (case index
+                    1 [:option {:some (serdes.core/cis->Int64 is)}]
+                    2 [:option {:none (ecis->None is)}]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->OptionalInt64-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->OptionalInt64-record)))
 
 (defn ecis->OptionalInt64
   "Embedded CodedInputStream to OptionalInt64"
@@ -1081,25 +1069,24 @@
 
 (s/def :com.grpc.xtdb.Match/document-id string?)
 
-
 (s/def :com.grpc.xtdb.Match/valid-time string?)
-(s/def ::Match-spec (s/keys :opt-un [:com.grpc.xtdb.Match/document-id :com.grpc.xtdb.Match/valid-time ]))
-(def Match-defaults {:document-id "" :valid-time "" })
+(s/def ::Match-spec (s/keys :opt-un [:com.grpc.xtdb.Match/document-id :com.grpc.xtdb.Match/valid-time]))
+(def Match-defaults {:document-id "" :valid-time ""})
 
 (defn cis->Match
   "CodedInputStream to Match"
   [is]
   (->> (tag-map Match-defaults
-         (fn [tag index]
-             (case index
-               1 [:document-id (serdes.core/cis->String is)]
-               2 [:transaction (ecis->Transaction is)]
-               3 [:document-revision (com.google.protobuf/ecis->Value is)]
-               4 [:valid-time (serdes.core/cis->String is)]
+                (fn [tag index]
+                  (case index
+                    1 [:document-id (serdes.core/cis->String is)]
+                    2 [:transaction (ecis->Transaction is)]
+                    3 [:document-revision (com.google.protobuf/ecis->Value is)]
+                    4 [:valid-time (serdes.core/cis->String is)]
 
-               [index (serdes.core/cis->undefined tag is)]))
-         is)
-        (map->Match-record)))
+                    [index (serdes.core/cis->undefined tag is)]))
+                is)
+       (map->Match-record)))
 
 (defn ecis->Match
   "Embedded CodedInputStream to Match"
