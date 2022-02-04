@@ -12,6 +12,11 @@
 - [ ] Await TX Time (Stream?)
 - [ ] TX log
 - [x] Submit TX
+    - [x] Put
+    - [x] Delete
+    - [ ] Match
+    - [x] Evict
+    - [ ] Function
 - [ ] TX Committed
 - [ ] Last Completed TX
 - [ ] Last Submitted TX
@@ -20,6 +25,40 @@
 - [ ] Slowest Queries
 
 * Current mapped solutions still need to be tested
+
+## Example requests:
+### Status
+`{}`
+
+### Submit-tx
+```json
+{
+  "txOps": [
+    {
+      "put": {
+        "document": {
+          "xt/id": "foofoo",
+          "hello": "world"
+        },
+        "validTime": "1970-01-01T00:02:03.000000123Z"
+      }
+    },
+    {
+      "delete": {
+        "documentId": "foofoo",
+        "validTime":"1970-01-01T00:02:03.000000123Z",
+        "endValidTime":"1970-02-01T00:02:03.000000123Z"
+        
+      }, 
+    },
+    {
+      "evict": {
+        "documentId": "foofoo",
+      },
+    }
+  ]
+}
+```
 
 ## Building protos
 1. Download protoc from https://grpc.io
