@@ -897,6 +897,7 @@
 (defmethod pred-constraint 'get-attr [_ {:keys [idx-id arg-bindings return-type tuple-idxs-in-join-order]}]
   (let [arg-bindings (rest arg-bindings)
         [e-var attr not-found] arg-bindings
+        attr (c/->id-buffer attr)
         not-found? (= 3 (count arg-bindings))
         e-result-index (.result-index ^VarBinding e-var)]
     (fn pred-get-attr-constraint [{:keys [entity-resolver-fn value-serde index-snapshot]} idx-id->idx ^List join-keys]
