@@ -116,7 +116,14 @@
 (defn load-docs! [node & args]
   (xt/await-tx node (apply submit-docs! node args)))
 
-;; "Elapsed time: 21994.835831 msecs"
+;; NOTE: timings below are hot/cold, on my machine (Ryzen 7 5800X, 16GB RAM)
+;; SF 0.05, against commit `d4437676`, 2022-02-04
+;; they're not particularly scientifically measured, so worth not paying too much attention
+;; to the exact times - they're more intended to show the relative times of each of the queries,
+;; to spot queries that might benefit from future optimisation
+
+;; "Elapsed time: 15839.21097 msecs"
+;; "Elapsed time: 6047.218633 msecs"
 (def q1
   '{:find [l_returnflag
            l_linestatus
@@ -140,7 +147,8 @@
     :order-by [[l_returnflag :asc]
                [l_linestatus :asc]]})
 
-;; "Elapsed time: 1304.42464 msecs"
+;; "Elapsed time: 291.474365 msecs"
+;; "Elapsed time: 98.729042 msecs"
 (def q2
   '{:find [s_acctbal
            s_name
@@ -180,7 +188,8 @@
                [p :asc]]
     :limit 100})
 
-;; "Elapsed time: 5786.047011 msecs"
+;; "Elapsed time: 1355.255634 msecs"
+;; "Elapsed time: 764.763165 msecs"
 (def q3
   '{:find [o
            (sum (* l_extendedprice (- 1 l_discount)))
@@ -200,7 +209,8 @@
                [o_orderdate :asc]]
     :limit 10})
 
-;; "Elapsed time: 1292.874285 msecs"
+;; "Elapsed time: 621.653381 msecs"
+;; "Elapsed time: 262.517773 msecs"
 (def q4
   '{:find [o_orderpriority
            (count o)]
@@ -215,7 +225,8 @@
                           [(< l_commitdate l_receiptdate)]))]
     :order-by [[o_orderpriority :asc]]})
 
-;; "Elapsed time: 5319.179341 msecs"
+;; "Elapsed time: 3365.050276 msecs"
+;; "Elapsed time: 1927.300129 msecs"
 (def q5
   '{:find [n_name (sum (* l_extendedprice (- 1 l_discount)))]
     :where [[o :o_custkey c]
@@ -233,7 +244,8 @@
             [(< o_orderdate #inst "1995-01-01")]]
     :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]})
 
-;; "Elapsed time: 1773.63273 msecs"
+;; "Elapsed time: 995.197119 msecs"
+;; "Elapsed time: 963.57298 msecs"
 (def q6
   '{:find [(sum (* l_extendedprice l_discount))]
     :where [[l :l_shipdate l_shipdate]
@@ -249,7 +261,8 @@
 (defn inst->year [^Date d]
   (+ 1900 (.getYear d)))
 
-;; "Elapsed time: 58567.852989 msecs"
+;; "Elapsed time: 7929.95054 msecs"
+;; "Elapsed time: 6435.124485 msecs"
 (def q7
   '{:find [supp_nation
            cust_nation
@@ -274,7 +287,8 @@
             [(xtdb.fixtures.tpch/inst->year l_shipdate) l_year]]
     :order-by [[supp_nation :asc] [cust_nation :asc] [l_year :asc]]})
 
-;; "Elapsed time: 22993.637183 msecs"
+;; "Elapsed time: 163.938006 msecs"
+;; "Elapsed time: 100.011933 msecs"
 (def q8
   '{:find [o_year mkt_share]
     :where [[(q {:find [o_year
@@ -302,7 +316,8 @@
             [(/ brazil_volume volume) mkt_share]]
     :order-by [[o_year :asc]]})
 
-;; "Elapsed time: 10066.352268 msecs"
+;; "Elapsed time: 2580.94159 msecs"
+;; "Elapsed time: 1639.428899 msecs"
 (def q9
   '{:find [nation o_year
            (sum (- (* l_extendedprice (- 1 l_discount))
@@ -324,7 +339,8 @@
             [(xtdb.fixtures.tpch/inst->year o_orderdate) o_year]]
     :order-by [[nation :asc] [o_year :desc]]})
 
-;; "Elapsed time: 8893.984112 msecs"
+;; "Elapsed time: 2301.101635 msecs"
+;; "Elapsed time: 1779.136327 msecs"
 (def q10
   '{:find [c
            c_name
@@ -352,7 +368,8 @@
     :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]
     :limit 20})
 
-;; "Elapsed time: 190.177707 msecs"
+;; "Elapsed time: 144.718281 msecs"
+;; "Elapsed time: 58.429466 msecs"
 (def q11
   '{:find [ps_partkey value]
     :where [[(q {:find [(sum (* ps_supplycost ps_availqty))]
@@ -375,7 +392,8 @@
 
 (def high-lines #{"1-URGENT" "2-HIGH"})
 
-;; "Elapsed time: 4115.160435 msecs"
+;; "Elapsed time: 2657.564311 msecs"
+;; "Elapsed time: 1269.297801 msecs"
 (def q12
   '{:find [l_shipmode
            (sum (if (xtdb.fixtures.tpch/high-lines o_orderpriority) 1 0))
@@ -393,7 +411,8 @@
             [o :o_orderpriority o_orderpriority]]
     :order-by [[l_shipmode :asc]]})
 
-;; "Elapsed time: 2187.862433 msecs"
+;; "Elapsed time: 5378.248722 msecs"
+;; "Elapsed time: 3508.629098 msecs"
 (def q13
   '{:find [c_count (count c_count)]
     :where [(or [(q {:find [c (count o)]
@@ -405,7 +424,8 @@
                      [(identity 0) c_count]))]
     :order-by [[(count c_count) :desc] [c_count :desc]]})
 
-;; "Elapsed time: 109.630847 msecs"
+;; "Elapsed time: 254.603495 msecs"
+;; "Elapsed time: 99.009169 msecs"
 (def q14
   '{:find [(* 100 (/ promo total))]
     :where [[(q {:find [(sum (if (clojure.string/starts-with? p_type "PROMO")
@@ -421,7 +441,8 @@
                          [(< l_shipdate #inst "1995-10-01")]]})
              [[promo total]]]]})
 
-;; "Elapsed time: 5651.664312 msecs"
+;; "Elapsed time: 274.478701 msecs"
+;; "Elapsed time: 199.634724 msecs"
 (def q15
   '{:find [s s_name s_address s_phone total_revenue]
     :where [[(q {:find [s (* l_extendedprice (- 1 l_discount))]
@@ -439,7 +460,8 @@
             [s :s_address s_address]
             [s :s_phone s_phone]]})
 
-;; "Elapsed time: 357.971209 msecs"
+;; "Elapsed time: 607.135035 msecs"
+;; "Elapsed time: 426.025221 msecs"
 (def q16
   '{:find [p_brand
            p_type
@@ -461,7 +483,8 @@
                [p_type :asc]
                [p_size :asc]]})
 
-;; "Elapsed time: 7.41559 msecs" -- unclear if this works, as it returns nothing.
+;; "Elapsed time: 26.988817 msecs"
+;; "Elapsed time: 9.406796 msecs"
 (def q17
   '{:find [avg_yearly]
     :where [[(q {:find [(sum l_extendedprice)]
@@ -478,7 +501,8 @@
                          [l :l_extendedprice l_extendedprice]]}) [[sum_extendedprice]]]
             [(/ sum_extendedprice 7.0) avg_yearly]]})
 
-;; "Elapsed time: 13222.491411 msecs"
+;; "Elapsed time: 5612.090612 msecs"
+;; "Elapsed time: 3852.92785 msecs"
 (def q18
   '{:find [c_name c o o_orderdate o_totalprice sum_quantity]
     :where [[(q {:find [o (sum l_quantity)]
@@ -493,7 +517,8 @@
     :order-by [[o_totalprice :desc] [o_orderdate :asc]]
     :limit 100})
 
-;; "Elapsed time: 4693.23977 msecs"
+;; "Elapsed time: 3669.359824 msecs"
+;; "Elapsed time: 2275.890159 msecs"
 (def q19
   '{:find [(sum (* l_extendedprice (- 1 l_discount)))]
     :where [[l :l_shipmode #{"AIR" "AIR REG"}]
@@ -522,7 +547,8 @@
                      [(>= p_size 1)]
                      [(<= p_size 15)]))]})
 
-;; "Elapsed time: 1607.843909 msecs"
+;; "Elapsed time: 1814.036551 msecs"
+;; "Elapsed time: 1200.295518 msecs"
 (def q20
   '{:find [s_name
            s_address]
@@ -548,7 +574,8 @@
             [n :n_name "CANADA"]]
     :order-by [[s_name :asc]]})
 
-;; "Elapsed time: 6805.455401 msecs"
+;; "Elapsed time: 1562.348211 msecs"
+;; "Elapsed time: 1150.334476 msecs"
 (def q21
   '{:find [s_name
            (count l1)]
@@ -573,7 +600,8 @@
     :order-by  [[(count l1) :desc] [s_name :asc]]
     :limit 100})
 
-;; "Elapsed time: 270.855812 msecs"
+;; "Elapsed time: 673.423196 msecs"
+;; "Elapsed time: 570.884153 msecs"
 (def q22
   '{:find [cntrycode
            (count c)
