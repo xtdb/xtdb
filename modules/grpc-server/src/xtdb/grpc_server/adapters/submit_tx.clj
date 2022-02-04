@@ -29,7 +29,7 @@
     [::xt/evict document-id]))
 
 (defn transaction-type [transaction]
-  (condp #(get  %2 %1) transaction
+  (condp #(get %2 %1) transaction
     :put      (->put transaction)
     :match    transaction
     :delete   (->delete transaction)
@@ -45,6 +45,4 @@
    :tx-time (str (:xtdb.api/tx-time edn))})
 
 (defn grpc->edn [grpc]
-  (->> grpc
-       (map (fn [x] (get x :transaction-type)))
-       (mapv #(transaction-type %))))
+  (mapv (comp transaction-type :transaction-type) grpc))
