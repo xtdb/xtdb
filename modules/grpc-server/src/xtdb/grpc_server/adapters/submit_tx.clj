@@ -14,12 +14,26 @@
     #_{:clj-kondo/ignore [:unresolved-namespace]}
     (filterv utils/not-nil? [::xt/put document valid-time end-valid-time])))
 
+(defn ->delete [transaction]
+  (let [record         (get transaction :delete)
+        document-id       (:document-id record)
+        valid-time     (-> record :valid-time  utils/->inst)
+        end-valid-time (when (utils/not-nil? valid-time) (-> record :end-valid-time  utils/->inst))]
+    #_{:clj-kondo/ignore [:unresolved-namespace]}
+    (filterv utils/not-nil? [::xt/delete document-id valid-time end-valid-time])))
+
+(defn ->evict [transaction]
+  (let [record         (get transaction :evict)
+        document-id       (:document-id record)]
+    #_{:clj-kondo/ignore [:unresolved-namespace]}
+    [::xt/evict document-id]))
+
 (defn transaction-type [transaction]
   (condp #(get  %2 %1) transaction
     :put      (->put transaction)
     :match    transaction
-    :delete   transaction
-    :evict    transaction
+    :delete   (->delete transaction)
+    :evict    (->evict transaction)
     :function transaction
     :else     (throw
                (ex-info "Unknown transaction type"
