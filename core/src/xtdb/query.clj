@@ -106,10 +106,7 @@
          :just-args (s/* logic-var?)))
 
 (s/def ::not
-  (s/and (expression-spec 'not (s/+ ::term))
-         (s/conformer (fn [terms]
-                        {:terms terms})
-                      :terms)))
+  (expression-spec 'not (s/+ ::term)))
 
 (s/def ::not-join
   (expression-spec 'not-join (s/cat :args ::args-list
@@ -474,22 +471,91 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+;; NOTE: important that `normalize-clause` is idempotent - in sub queries,
+;; we pass the sub-query back to `normalize-clauses` again
+
+#_{:clj-kondo/ignore #{:unused-binding}}
+(defmulti normalize-clause (fn [type clause] type), :default ::default)
+(alter-meta! #'normalize-clause assoc :private true)
+
+(defmethod normalize-clause ::default [type clause] [[type clause]])
+
+(defn- normalize-clauses [clauses]
+  (->> clauses
+       (mapcat #(apply normalize-clause %))))
+
+(defn- group-clauses-by-type [clauses]
+  (->> clauses
+       (reduce (fn group-by-type [acc [type clause]]
+                 (-> acc (update type (fnil conj []) clause)))
+               {})))
+
+(defn- find-binding-vars [binding]
+  (some->> binding (vector) (flatten) (filter logic-var?)))
+
+(defn- collect-vars [{triple-clauses :triple
+                      not-join-clauses :not-join
+                      or-join-clauses :or-join
+                      pred-clauses :pred
+                      range-clauses :range
+                      rule-clauses :rule}]
+  {:e-vars (set (for [{:keys [e]} triple-clauses
+                      :when (logic-var? e)]
+                  e))
+   :v-vars (set (for [{:keys [v]} triple-clauses
+                      :when (logic-var? v)]
+                  v))
+   :not-vars (set (for [not-join-clause not-join-clauses
+                        arg (:args not-join-clause)]
+                    arg))
+   :pred-arg-vars (set (for [{:keys [pred]} pred-clauses
+                             var (cond->> (:args pred)
+                                   (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred)))
+                             :when (logic-var? var)]
+                         var))
+   :pred-return-vars (set (for [{:keys [return]} pred-clauses
+                                return-var (find-binding-vars return)]
+                            return-var))
+   :range-vars (set (for [{:keys [sym sym-a sym-b]} range-clauses
+                          sym [sym sym-a sym-b]
+                          :when (logic-var? sym)]
+                      sym))
+   :or-vars (set (for [or-join-clause or-join-clauses
+                       :let [[args-type args-val] (:args or-join-clause)]
+                       arg (case args-type
+                             :explicit-bound-args (mapcat args-val [:bound-args :free-args])
+                             :just-args args-val)]
+                   arg))
+   :rule-vars (set (for [{:keys [args]} rule-clauses
+                         arg args
+                         :when (logic-var? arg)]
+                     arg))})
+
 (defn- blank-var? [v]
   (and (logic-var? v)
        (re-find #"^_\d*$" (name v))))
 
-(defn- normalize-triple-clause [{:keys [e a v] :as clause}]
-  (cond-> clause
-    (or (blank-var? v)
-        (not (contains? clause :v)))
-    (-> (assoc :v (gensym "_"))
-        (with-meta {:ignore-v? true}))
+(defmethod normalize-clause :triple [_ clause]
+  (as-> clause {:keys [e a v] :as clause}
+    (cond-> clause
+      (or (blank-var? v)
+          (not (contains? clause :v)))
+      (-> (assoc :v (gensym (or v "_")))
+          (with-meta {:ignore-v? true}))
 
-    (blank-var? e)
-    (assoc :e (gensym "_"))
+      (blank-var? e)
+      (assoc :e (gensym e))
 
-    (or (nil? a) (= a :xt/id))
-    (assoc :a :crux.db/id)))
+      (or (nil? a) (= a :xt/id))
+      (assoc :a :crux.db/id))
+
+    ;; self join
+    (if (and (logic-var? e) (= e v))
+      (let [v-var (gensym (str "self-join_" v "_"))]
+        [[:triple (-> (assoc clause :v v-var)
+                      (with-meta {:self-join? true}))]
+         [:pred {:pred {:pred-fn '==, :args [v-var e]}}]])
+      [[:triple clause]])))
 
 (def ^:private pred->built-in-range-pred
   {< (comp neg? compare)
@@ -498,6 +564,16 @@
    >= (comp not neg? compare)
    = =})
 
+(defmethod normalize-clause :pred [_ {:keys [pred return] :as clause}]
+  [[:pred (let [{:keys [pred-fn args]} pred
+                range-pred (and (= 2 (count args))
+                                (every? logic-var? args)
+                                (get pred->built-in-range-pred pred-fn))]
+            (cond-> clause
+              range-pred (assoc-in [:pred :pred-fn] range-pred)
+              return (assoc :return (w/postwalk #(cond-> % (blank-var? %) gensym)
+                                                return))))]])
+
 (def ^:private range->inverse-range
   '{< >
     <= >=
@@ -505,124 +581,39 @@
     >= <=
     = =})
 
-(defn- maybe-unquote [x]
-  (if (and (seq? x) (= 'quote (first x)) (= 2 (count x)))
-    (recur (second x))
-    x))
+(defmethod normalize-clause :range [_ [[order clause]]]
+  (let [[order clause] (if (= :sym-sym order) ;; NOTE: to deal with rule expansion
+                         (let [{:keys [op sym-a sym-b]} clause]
+                           (cond
+                             (literal? sym-a)
+                             [:val-sym {:op op :val sym-a :sym sym-b}]
+                             (literal? sym-b)
+                             [:sym-val {:op op :val sym-b :sym sym-a}]
+                             :else
+                             [order clause]))
+                         [order clause])
+        {:keys [op sym val] :as clause} (cond-> clause
+                                          (= :val-sym order) (update :op range->inverse-range))]
+    (if (and (not= :sym-sym order)
+             (not (logic-var? sym)))
+      [[:pred {:pred {:pred-fn (get pred->built-in-range-pred (var-get (resolve op)))
+                      :args [sym val]}}]]
 
-(defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
-  (let [v-var (gensym (str "self-join_" v "_"))]
-    [[:triple (-> (assoc triple :v v-var)
-                  (with-meta {:self-join? true}))]
-     [:pred {:pred {:pred-fn '==, :args [v-var e]}}]]))
+      [[:range clause]])))
 
-(defn- normalize-clauses [clauses]
-  (->> clauses
-       (mapcat (fn [[type clause]]
-                 (case type
-                   :triple (let [{:keys [e v] :as clause} (normalize-triple-clause clause)]
-                             (if (and (logic-var? e) (= e v))
-                               (rewrite-self-join-triple-clause clause)
-                               [[:triple clause]]))
+(defmethod normalize-clause :or [_ {:keys [branches]}]
+  [[:or-join {:args [:just-args (->> (mapcat normalize-clauses branches)
+                                     (group-clauses-by-type)
+                                     (collect-vars)
+                                     (into #{} (comp (mapcat val) (remove blank-var?))))]
+              :branches branches}]])
 
-                   :pred [[:pred (let [{:keys [pred return]} clause
-                                       {:keys [pred-fn args]} pred
-                                       range-pred (and (= 2 (count args))
-                                                       (every? logic-var? args)
-                                                       (get pred->built-in-range-pred pred-fn))]
-                                   (cond-> clause
-                                     range-pred (assoc-in [:pred :pred-fn] range-pred)
-                                     return (assoc :return (w/postwalk #(if (blank-var? %)
-                                                                          (gensym "_")
-                                                                          %)
-                                                                       return))))]]
-
-                   :range (let [[order clause] (first clause)
-                                [order clause] (if (= :sym-sym order) ;; NOTE: to deal with rule expansion
-                                                 (let [{:keys [op sym-a sym-b]} clause]
-                                                   (cond
-                                                     (literal? sym-a)
-                                                     [:val-sym {:op op :val sym-a :sym sym-b}]
-                                                     (literal? sym-b)
-                                                     [:sym-val {:op op :val sym-b :sym sym-a}]
-                                                     :else
-                                                     [order clause]))
-                                                 [order clause])
-                                {:keys [op sym val] :as clause} (cond-> clause
-                                                                  (= :val-sym order) (update :op range->inverse-range))]
-                            (if (and (not= :sym-sym order)
-                                     (not (logic-var? sym)))
-                              [[:pred {:pred {:pred-fn (get pred->built-in-range-pred (var-get (resolve op)))
-                                              :args [sym val]}}]]
-
-                              [[:range clause]]))
-
-                   [[type clause]])))))
-
-(defn- group-clauses-by-type [clauses]
-  (->> clauses
-       (group-by first)
-       (into {} (map (juxt key (comp #(map second %) val))))))
-
-(defn- find-binding-vars [binding]
-  (some->> binding (vector) (flatten) (filter logic-var?)))
-
-(defn- collect-vars [{triple-clauses :triple
-                      not-clauses :not
-                      not-join-clauses :not-join
-                      or-clauses :or
-                      or-join-clauses :or-join
-                      pred-clauses :pred
-                      range-clauses :range
-                      rule-clauses :rule}]
-  (let [or-vars (->> (for [{:keys [branches]} or-clauses
-                           branch branches]
-                       (->> (normalize-clauses branch)
-                            (group-clauses-by-type)
-                            (collect-vars)))
-                     (apply merge-with set/union))
-        not-join-vars (set (for [not-join-clause not-join-clauses
-                                 arg (:args not-join-clause)]
-                             arg))
-        not-vars (->> (for [{:keys [terms]} not-clauses]
-                        (->> (normalize-clauses terms)
-                             (group-clauses-by-type)
-                             (collect-vars)))
-                      (apply merge-with set/union))
-        or-join-vars (set (for [or-join-clause or-join-clauses
-                                :let [[args-type args-val] (:args or-join-clause)]
-                                arg (case args-type
-                                      :explicit-bound-args (mapcat args-val [:bound-args :free-args])
-                                      :just-args args-val)]
-                            arg))]
-    {:e-vars (set (for [{:keys [e]} triple-clauses
-                        :when (logic-var? e)]
-                    e))
-     :v-vars (set (for [{:keys [v]} triple-clauses
-                        :when (logic-var? v)]
-                    v))
-     :not-vars (->> (vals not-vars)
-                    (reduce into not-join-vars))
-     :pred-vars (set (for [{:keys [pred return]} pred-clauses
-                           :let [return-vars (find-binding-vars return)]
-                           var (concat return-vars
-                                       (cond->> (:args pred)
-                                         (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred))))
-                           :when (logic-var? var)]
-                       var))
-     :pred-return-vars (set (for [{:keys [return]} pred-clauses
-                                  return-var (find-binding-vars return)]
-                              return-var))
-     :range-vars (set (for [{:keys [sym sym-a sym-b]} range-clauses
-                            sym [sym sym-a sym-b]
-                            :when (logic-var? sym)]
-                        sym))
-     :or-vars (apply set/union (vals or-vars))
-     :rule-vars (set/union (set (for [{:keys [args]} rule-clauses
-                                      arg args
-                                      :when (logic-var? arg)]
-                                  arg))
-                           or-join-vars)}))
+(defmethod normalize-clause :not [_ terms]
+  [[:not-join {:args (->> (normalize-clauses terms)
+                          (group-clauses-by-type)
+                          (collect-vars)
+                          (into #{} (mapcat val)))
+               :terms terms}]])
 
 (defn- ->approx-in-var-cardinalities [{in-bindings :bindings} in-args]
   (assert (= (count in-bindings) (count in-args))
@@ -746,56 +737,51 @@
 (defn- analyze-or-vars [or-clauses known-vars]
   (->> (sort-by clause-complexity or-clauses)
        (reduce (fn [[or-clauses known-vars] {:keys [args branches] :as clause}]
-                 (let [[args-type args-val] args
-                       branches (for [branch-clauses branches
-                                      :let [branch-vars (->> (normalize-clauses branch-clauses)
-                                                             (group-clauses-by-type)
-                                                             (collect-vars)
-                                                             (vals)
-                                                             (reduce into #{})
-                                                             (into #{} (remove blank-var?)))]]
-                                  (let [{:keys [bound-vars free-vars] :as branch}
-                                        (case args-type
-                                          :explicit-bound-args
-                                          (let [{:keys [bound-args free-args]} args-val
-                                                _ (when-not (= (count free-args)
-                                                               (count (set free-args)))
-                                                    (throw (err/illegal-arg :indistinct-or-join-vars
-                                                                            {::err/message (str "Or join free variables not distinct: " (xio/pr-edn-str clause))})))
-                                                or-vars (set (concat bound-args free-args))]
-                                            {:or-vars or-vars
-                                             :free-vars free-args
-                                             :bound-vars bound-args})
+                 (letfn [(assert-distinct-or-join-vars [{:keys [free-args]}]
+                           (when-not (= (count free-args)
+                                        (count (set free-args)))
+                             (throw (err/illegal-arg :indistinct-or-join-vars
+                                                     {::err/message "Or join free variables not distinct"
+                                                      :clause clause
+                                                      :free-args free-args}))))
 
-                                          (nil :just-args)
-                                          (let [or-vars (or (some-> args-val set)
-                                                            branch-vars)]
-                                            {:or-vars or-vars
-                                             :free-vars (set/difference or-vars known-vars)
-                                             :bound-vars (set/intersection or-vars known-vars)}))]
+                         (assert-branches-have-same-free-vars [branch-vars free-args]
+                           (when-let [missing-free-vars (not-empty (set/difference (set free-args) branch-vars))]
+                             (throw (err/illegal-arg :missing-vars-in-or-branch
+                                                     {::err/message "`or` branches must have the same free variables"
+                                                      :free-vars free-args
+                                                      :branch-vars branch-vars
+                                                      :missing missing-free-vars
+                                                      :clause clause}))))]
 
-                                    (doseq [var free-vars
-                                            :when (not (contains? branch-vars var))]
-                                      (throw (err/illegal-arg :unused-or-join-var
-                                                              {::err/message (str "`or` free variable never specified: " var)
-                                                               :branch-vars branch-vars
-                                                               :var var
-                                                               :clause clause})))
+                   (let [[args-type args-val] args
+                         {:keys [bound-args free-args]} (case args-type
+                                                          :explicit-bound-args (doto args-val (assert-distinct-or-join-vars))
+                                                          :just-args (let [args (set args-val)]
+                                                                       {:bound-args (set/intersection args known-vars)
+                                                                        :free-args (set/difference args known-vars)}))
 
-                                    (into branch
-                                          {:where branch-clauses
-                                           :single-e-var-triple? (single-e-var-triple? bound-vars branch-clauses)})))]
+                         branches (for [branch-clauses branches]
+                                    (let [branch-vars (->> (normalize-clauses branch-clauses)
+                                                           (group-clauses-by-type)
+                                                           (collect-vars)
+                                                           (vals)
+                                                           (reduce into #{})
+                                                           (into #{} (remove blank-var?)))
+                                          bound-vars (set/intersection branch-vars bound-args)]
+                                      (assert-branches-have-same-free-vars branch-vars free-args)
 
-                   (when (not (apply = (map :free-vars branches)))
-                     (throw (err/illegal-arg :or-requires-same-logic-vars
-                                             {::err/message (str "Or branches require same free-variables: " (pr-str (mapv :free-vars branches)))})))
+                                      {:branch-vars branch-vars
+                                       :where branch-clauses
+                                       :bound-vars bound-vars
+                                       :free-vars free-args
+                                       :single-e-var-triple? (single-e-var-triple? bound-vars branch-clauses)}))]
 
-                   (let [free-vars (:free-vars (first branches))]
                      [(conj or-clauses (-> {:branches branches
-                                            :free-vars free-vars
-                                            :bound-vars (into #{} (mapcat :bound-vars) branches)}
+                                            :free-vars free-args
+                                            :bound-vars bound-args}
                                            (with-meta (meta clause))))
-                      (into known-vars free-vars)])))
+                      (into known-vars free-args)])))
 
                [[] known-vars])
        first))
@@ -980,6 +966,11 @@
                :when idx]
            idx))))
 
+(defn- maybe-unquote [x]
+  (if (and (seq? x) (= 'quote (first x)) (= 2 (count x)))
+    (recur (second x))
+    x))
+
 (defn- build-pred-constraints [{:keys [pred-clause+idx-ids var->bindings vars-in-join-order] :as pred-ctx}]
   (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
         :let [{:keys [pred-fn args]} pred
@@ -1096,10 +1087,7 @@
 
 (defn- build-not-constraints [not-clauses rule-name->rules var->bindings]
   (for [{:keys [args terms]} not-clauses
-        :let [not-vars (or args
-                           (->> (collect-vars {:not [{:terms terms}]})
-                                :not-vars))
-              not-vars (vec (remove blank-var? not-vars))
+        :let [not-vars (vec (remove blank-var? args))
               not-in-bindings {:bindings [[:tuple not-vars]]}
               not-var-bindings (mapv var->bindings not-vars)
               not-join-depth (calculate-constraint-join-depth var->bindings not-vars)]]
@@ -1456,23 +1444,21 @@
           {triple-clauses :triple
            range-clauses :range
            pred-clauses :pred
-           not-clauses :not
            not-join-clauses :not-join
-           or-clauses :or
            or-join-clauses :or-join
            :as type->clauses} type->clauses
           {:keys [e-vars v-vars]} (collect-vars type->clauses)
 
-          or-clauses (analyze-or-vars (concat or-clauses or-join-clauses)
-                                      (-> (set/union e-vars v-vars in-vars)
-                                          (add-pred-returns-bound-at-top-level pred-clauses)))
+          or-join-clauses (analyze-or-vars or-join-clauses
+                                           (-> (set/union e-vars v-vars in-vars)
+                                               (add-pred-returns-bound-at-top-level pred-clauses)))
 
           var->joins (triple-joins triple-clauses value-serde {})
           [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
           [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
-          [or-clauses var->joins] (or-joins or-clauses var->joins)
+          [or-join-clauses var->joins] (or-joins or-join-clauses var->joins)
 
-          vars-in-join-order (calculate-join-order (keys var->joins) type->clauses or-clauses stats in-var-cardinalities project-only-leaf-vars)
+          vars-in-join-order (calculate-join-order (keys var->joins) type->clauses or-join-clauses stats in-var-cardinalities project-only-leaf-vars)
 
           var->bindings (->> vars-in-join-order
                              (into {} (map-indexed (fn [idx var]
@@ -1484,8 +1470,8 @@
                                                                        :pred-clause+idx-ids pred-clause+idx-ids
                                                                        :var->bindings var->bindings
                                                                        :vars-in-join-order vars-in-join-order))
-                                        (build-not-constraints (concat not-clauses not-join-clauses) rule-name->rules var->bindings)
-                                        (build-or-constraints or-clauses rule-name->rules var->bindings vars-in-join-order))
+                                        (build-not-constraints not-join-clauses rule-name->rules var->bindings)
+                                        (build-or-constraints or-join-clauses rule-name->rules var->bindings vars-in-join-order))
                                 (update-depth->constraints (vec (repeat (inc (count vars-in-join-order)) nil))))
 
        :var->range-constraints (build-var-range-constraints value-serde range-clauses var->bindings)

@@ -449,7 +449,7 @@
 (t/deftest test-not-query
   (t/is (= '[[:triple {:e e :a :name :v name}]
              [:triple {:e e :a :name :v "Ivan"}]
-             [:not {:terms [[:triple {:e e :a :last-name :v "Ivannotov"}]]}]]
+             [:not [[:triple {:e e :a :last-name :v "Ivannotov"}]]]]
 
            (s/conform :xtdb.query/where '[[e :name name]
                                           [e :name "Ivan"]
@@ -619,7 +619,7 @@
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
-         #"Or branches require same free-variables: .*"
+         #"`or` branches must have the same free variables"
          (xt/q (xt/db *api*) '{:find [e]
                                :where [[e :name name]
                                        (or [e1 :last-name "Ivanov"]
@@ -627,7 +627,7 @@
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
-         #"`or` free variable never specified: x"
+         #"`or` branches must have the same free variables"
          (xt/q (xt/db *api*) '{:find [x]
                                :where [(or-join [x]
                                                 [e1 :last-name "Ivanov"])]})))
@@ -1547,7 +1547,7 @@
   (t/is (= [{:head '{:name over-twenty-one?, :args [:just-args [age]]},
              :body '[[:range [[:sym-val {:op >=, :sym age, :val 21}]]]]}
             '{:head {:name over-twenty-one?, :args [:just-args [age]]},
-              :body [[:not {:terms [[:range [[:sym-val {:op <, :sym age, :val 21}]]]]}]]}]
+              :body [[:not [[:range [[:sym-val {:op <, :sym age, :val 21}]]]]]]}]
            (s/conform :xtdb.query/rules '[[(over-twenty-one? age)
                                            [(>= age 21)]]
                                           [(over-twenty-one? age)
