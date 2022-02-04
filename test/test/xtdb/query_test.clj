@@ -619,7 +619,7 @@
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
-         #"Or branches require same free-variables: .*"
+         #"`or` branches must have the same free variables"
          (xt/q (xt/db *api*) '{:find [e]
                                :where [[e :name name]
                                        (or [e1 :last-name "Ivanov"]
@@ -627,7 +627,7 @@
 
   (t/is (thrown-with-msg?
          IllegalArgumentException
-         #"`or` free variable never specified: x"
+         #"`or` branches must have the same free variables"
          (xt/q (xt/db *api*) '{:find [x]
                                :where [(or-join [x]
                                                 [e1 :last-name "Ivanov"])]})))
