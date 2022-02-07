@@ -85,7 +85,7 @@
                   (- (.getTime started-at) (.getTime finished-at))))
        (take slow-queries-max-count)))
 
-(defrecord XtdbNode [kv-store tx-log document-store index-store tx-ingester bus query-engine
+(defrecord XtdbNode [tx-log document-store index-store tx-ingester bus query-engine
                      !running-queries close-fn !system closed? ^StampedLock lock]
   Closeable
   (close [_]
@@ -247,7 +247,7 @@
                             (.close tx-log-iterator))
                           tx-log)))))))
 
-(defmethod print-method XtdbNode [node ^Writer w] (.write w "#<XtdbNode>"))
+(defmethod print-method XtdbNode [_node ^Writer w] (.write w "#<XtdbNode>"))
 (defmethod pp/simple-dispatch XtdbNode [it] (print-method it *out*))
 
 (defn- swap-finished-query! [!running-queries {:keys [query-id] :as query} {:keys [bus] :as  node-opts}]
