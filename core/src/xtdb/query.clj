@@ -1140,6 +1140,46 @@
                {:keys [results]} (build-sub-query db terms not-in-bindings in-args rule-name->rules)]
            (empty? results))))}))
 
+(defn- sort-triple-clauses [triple-clauses stats]
+  (->> triple-clauses
+       (sort-by (fn [{:keys [a]}]
+                  (db/doc-count stats a)))))
+
+(defn- expand-leaf-preds [{triple-clauses :triple
+                           pred-clauses :pred
+                           :as type->clauses}
+                          in-vars
+                          stats]
+  (let [collected-vars (collect-vars type->clauses)
+        invalid-leaf-vars (set/union in-vars
+                                     (into #{} (mapcat collected-vars)
+                                           [:e-vars :range-vars :not-vars :or-vars :pred-arg-vars]))
+        non-leaf-v-vars (set (for [[v-var non-leaf-group] (group-by :v triple-clauses)
+                                   :when (> (count non-leaf-group) 1)]
+                               v-var))
+        potential-leaf-v-vars (set/difference (:v-vars collected-vars) invalid-leaf-vars non-leaf-v-vars)
+        leaf-groups (->> (for [[e-var leaf-group] (group-by :e (filter (comp potential-leaf-v-vars :v) triple-clauses))
+                               :when (logic-var? e-var)]
+                           [e-var (sort-triple-clauses leaf-group stats)])
+                         (into {}))
+        leaf-triple-clauses (->> (for [[_e-var leaf-group] leaf-groups]
+                                   leaf-group)
+                                 (reduce into #{}))
+        triple-clauses (remove leaf-triple-clauses triple-clauses)
+        new-triple-clauses (for [[_e-var leaf-group] leaf-groups]
+                             ;; we put these last s.t. if the rest of the query doesn't yield any tuples,
+                             ;; we don't need to project out the leaf vars
+                             (with-meta (first leaf-group) {:ignore-v? true}))
+        leaf-preds (for [[_e-var leaf-group] leaf-groups
+                         {:keys [e a v]} (next leaf-group)]
+                     {:pred {:pred-fn 'get-attr :args [e a]}
+                      :return [:collection v]})]
+    [(assoc type->clauses
+            :triple (vec (concat triple-clauses new-triple-clauses))
+            :pred (vec (concat pred-clauses leaf-preds)))
+     (set/difference (set (map :v leaf-triple-clauses))
+                     (reduce set/union (vals (dissoc collected-vars :v-vars))))]))
+
 (defn- triple-join-order [{triple-clauses :triple, range-clauses :range, pred-clauses :pred, :as type->clauses} in-var-cardinalities stats]
   ;; TODO make more use of in-var-cardinalities
   (let [collected-vars (collect-vars type->clauses)
@@ -1222,8 +1262,9 @@
                        (cons (set/difference new-reachable-vars (set new-vars-to-add)) reachable-var-groups)))))
       (->> (log/debug :triple-joins-join-order)))))
 
-(defn- calculate-join-order [type->clauses stats in-var-cardinalities project-only-leaf-vars]
-  (let [query-vars (set/union (set (keys in-var-cardinalities))
+(defn- calculate-join-order [type->clauses stats in-var-cardinalities]
+  (let [[type->clauses project-only-leaf-vars] (expand-leaf-preds type->clauses (set (keys in-var-cardinalities)) stats)
+        query-vars (set/union (set (keys in-var-cardinalities))
                               (->> (map (collect-vars type->clauses) [:e-vars :v-vars :pred-return-vars :or-vars])
                                    (into #{} (mapcat seq)))
                               (->> (:triple type->clauses)
@@ -1267,9 +1308,10 @@
                   g
                   (:or-join type->clauses))]
 
-    (vec (concat (->> (dep/topo-sort g)
-                      (remove (conj project-only-leaf-vars ::root)))
-                 project-only-leaf-vars))))
+    [type->clauses
+     (vec (concat (->> (dep/topo-sort g)
+                       (remove (conj project-only-leaf-vars ::root)))
+                  project-only-leaf-vars))]))
 
 (defn- rule-name->rules [rules]
   (group-by (comp :name :head) rules))
@@ -1383,46 +1425,6 @@
              sub-clause)))
        (into [])))
 
-(defn- sort-triple-clauses [triple-clauses stats]
-  (->> triple-clauses
-       (sort-by (fn [{:keys [a]}]
-                  (db/doc-count stats a)))))
-
-(defn- expand-leaf-preds [{triple-clauses :triple
-                           pred-clauses :pred
-                           :as type->clauses}
-                          in-vars
-                          stats]
-  (let [collected-vars (collect-vars type->clauses)
-        invalid-leaf-vars (set/union in-vars
-                                     (into #{} (mapcat collected-vars)
-                                           [:e-vars :range-vars :not-vars :or-vars :pred-arg-vars]))
-        non-leaf-v-vars (set (for [[v-var non-leaf-group] (group-by :v triple-clauses)
-                                   :when (> (count non-leaf-group) 1)]
-                               v-var))
-        potential-leaf-v-vars (set/difference (:v-vars collected-vars) invalid-leaf-vars non-leaf-v-vars)
-        leaf-groups (->> (for [[e-var leaf-group] (group-by :e (filter (comp potential-leaf-v-vars :v) triple-clauses))
-                               :when (logic-var? e-var)]
-                           [e-var (sort-triple-clauses leaf-group stats)])
-                         (into {}))
-        leaf-triple-clauses (->> (for [[_e-var leaf-group] leaf-groups]
-                                   leaf-group)
-                                 (reduce into #{}))
-        triple-clauses (remove leaf-triple-clauses triple-clauses)
-        new-triple-clauses (for [[_e-var leaf-group] leaf-groups]
-                             ;; we put these last s.t. if the rest of the query doesn't yield any tuples,
-                             ;; we don't need to project out the leaf vars
-                             (with-meta (first leaf-group) {:ignore-v? true}))
-        leaf-preds (for [[_e-var leaf-group] leaf-groups
-                         {:keys [e a v]} (next leaf-group)]
-                     {:pred {:pred-fn 'get-attr :args [e a]}
-                      :return [:collection v]})]
-    [(assoc type->clauses
-            :triple (vec (concat triple-clauses new-triple-clauses))
-            :pred (vec (concat pred-clauses leaf-preds)))
-     (set/difference (set (map :v leaf-triple-clauses))
-                     (reduce set/union (vals (dissoc collected-vars :v-vars))))]))
-
 (defn- update-depth->constraints [depth->join-depth constraints]
   (reduce
    (fn [acc {:keys [join-depth constraint-fn]}]
@@ -1469,9 +1471,7 @@
 
           _ (validate-existing-vars type->clauses known-vars)
 
-          [type->clauses project-only-leaf-vars] (expand-leaf-preds type->clauses in-vars stats)
-
-          vars-in-join-order (calculate-join-order type->clauses stats in-var-cardinalities project-only-leaf-vars)
+          [type->clauses vars-in-join-order] (calculate-join-order type->clauses stats in-var-cardinalities)
 
           var->bindings (->> vars-in-join-order
                              (into {} (map-indexed (fn [idx var]
