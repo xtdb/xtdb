@@ -937,23 +937,24 @@
 
           (for [[content-hash doc] docs
                 :let [id (:crux.db/id doc)
+                      eid-id-buffer (c/->id-buffer id)
                       eid-value-buffer (c/->value-buffer id)
                       content-hash (c/->id-buffer content-hash)]]
             (into [(MapEntry/create (encode-hash-cache-key-to nil (c/->id-buffer id) eid-value-buffer)
                                     (mem/->nippy-buffer id))]
                   (mapcat seq)
                   (for [[a v] doc
-                        :let [a (get attr-bufs a)]
+                        :let [a-buf (get attr-bufs a)]
                         [v idxs] (val-idxs v)
                         :let [value-buffer (c/->value-buffer v)]
                         :when (pos? (.capacity value-buffer))]
-                    (cond-> [(MapEntry/create (encode-av-key-to nil a value-buffer) mem/empty-buffer)
-                             (MapEntry/create (encode-ave-key-to nil a value-buffer eid-value-buffer) mem/empty-buffer)
-                             (MapEntry/create (encode-ae-key-to nil a eid-value-buffer) mem/empty-buffer)
-                             (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer)
+                    (cond-> [(MapEntry/create (encode-av-key-to nil a-buf value-buffer) mem/empty-buffer)
+                             (MapEntry/create (encode-ave-key-to nil a-buf value-buffer eid-value-buffer) mem/empty-buffer)
+                             (MapEntry/create (encode-ae-key-to nil a-buf eid-value-buffer) mem/empty-buffer)
+                             (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash a-buf value-buffer)
                                               (encode-ecav-value idxs))]
                       (not (c/can-decode-value-buffer? value-buffer))
-                      (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer)
+                      (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-id-buffer)
                                              (mem/->nippy-buffer v))))))))))
 
 (defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache]
@@ -1003,7 +1004,7 @@
                                                 (MapEntry/create ch
                                                                  {:crux.db/id (c/new-id eid)
                                                                   ::xt/evicted? true})))))
-                content-ks (->> (for [[_ eid-buf ecav-key ^Quad quad] ecav-ks
+                content-ks (->> (for [[eid eid-buf ecav-key ^Quad quad] ecav-ks
                                       :let [attr-buf (c/->id-buffer (.attr quad))
                                             value-buf ^DirectBuffer (.value quad)
                                             sole-av? (empty? (->> (merge-idxs (encode-ave-key-to nil attr-buf value-buf))
@@ -1016,7 +1017,7 @@
                                           sole-av? (conj (encode-av-key-to nil attr-buf value-buf))
 
                                           (c/can-decode-value-buffer? value-buf)
-                                          (conj (encode-hash-cache-key-to nil value-buf eid-buf)))]
+                                          (conj (encode-hash-cache-key-to nil value-buf (c/->id-buffer eid))))]
                                   k)
                                 (into #{}))]
 
