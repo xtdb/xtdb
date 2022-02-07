@@ -7,17 +7,18 @@
             [xtdb.cache.nop :as nop-cache]
             [xtdb.codec :as c]
             [xtdb.db :as db]
-            [xtdb.fixtures :as f]
+            [xtdb.fixtures :as fix]
             [xtdb.fixtures.kv :as fkv]
+            [xtdb.kv :as kv]
             [xtdb.kv.index-store :as kvi])
-  (:import clojure.lang.MapEntry
-           xtdb.api.NodeOutOfSyncException
-           xtdb.codec.EntityTx
-           java.util.Date))
+  (:import (clojure.lang MapEntry)
+           (java.util Date)
+           (xtdb.api NodeOutOfSyncException)
+           (xtdb.codec EntityTx)))
 
 (def ^:dynamic *index-store*)
 
-(t/use-fixtures :each fkv/with-each-kv-store* f/with-silent-test-check)
+(t/use-fixtures :each fkv/with-each-kv-store* fix/with-silent-test-check)
 
 (defmacro with-fresh-index-store [& body]
   `(fkv/with-kv-store [kv-store#]
@@ -341,3 +342,16 @@
 
         (t/is (< (bench-index-store large-vec-doc-id)
                  (bench-doc-store large-vec-doc-id)))))))
+
+(t/deftest evicts-id-from-hash-cache
+  (with-open [node (xt/start-node {})]
+    (let [kv-store (get-in node [:index-store :kv-store])]
+      (letfn [(hash-cache-key-count []
+                (with-open [snap (kv/new-snapshot kv-store)
+                            i (kv/new-iterator snap)]
+                  (count (#'kvi/all-keys-in-prefix i (#'kvi/encode-hash-cache-key-to nil (c/->value-buffer :bernie))))))]
+        (fix/submit+await-tx node [[::xt/put {:xt/id :bernie}]])
+        (t/is (pos? (hash-cache-key-count)))
+
+        (fix/submit+await-tx node [[::xt/evict :bernie]])
+        (t/is (zero? (hash-cache-key-count)))))))

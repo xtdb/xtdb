@@ -216,6 +216,19 @@
            (.putBytes (+ c/index-id-size (.capacity value)) entity 0 (.capacity entity)))
          (mem/limit-buffer (+ c/index-id-size (.capacity value) (.capacity entity)))))))
 
+(defn- advance-iterator-to-hash-cache-value ^org.agrona.DirectBuffer [i value-buffer]
+  (let [hash-cache-prefix-key (encode-hash-cache-key-to (.get seek-buffer-tl) value-buffer)
+        found-k (kv/seek i hash-cache-prefix-key)]
+    (when (and found-k
+               (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key)))
+      found-k)))
+
+(defn- eid-value->id-buf [i value-buffer]
+  (when-let [hash-cache-k (advance-iterator-to-hash-cache-value i value-buffer)]
+    (let [len (.capacity hash-cache-k)]
+      (-> hash-cache-k
+          (mem/slice-buffer (- len c/id-size) c/id-size)))))
+
 ;;;; Bitemp indices
 
 (defn- encode-bitemp-key-to
@@ -558,12 +571,6 @@
 
 (declare new-kv-index-snapshot)
 
-(defn- advance-iterator-to-hash-cache-value [i value-buffer]
-  (let [hash-cache-prefix-key (encode-hash-cache-key-to (.get seek-buffer-tl) value-buffer)
-        found-k (kv/seek i hash-cache-prefix-key)]
-    (and found-k
-         (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key)))))
-
 (defn- canonical-buffer-lookup ^org.agrona.DirectBuffer [canonical-buffer-cache ^DirectBuffer buffer]
   (cache/compute-if-absent canonical-buffer-cache
                            buffer
@@ -743,16 +750,15 @@
                                                (mapv #(.v ^ECAVEntry %))))]
                             (MapEntry/create a v)))))))))
 
-  (entity-as-of-resolver [this eid valid-time tx-id]
+  (entity-as-of-resolver [_ eid valid-time tx-id]
     (assert tx-id)
     (let [i @entity-as-of-iterator-delay
           prefix-size (+ c/index-id-size c/id-size)
-          eid (if (instance? DirectBuffer eid)
-                (if (c/id-buffer? eid)
-                  eid
-                  (db/decode-value this eid))
-                eid)
-          eid-buffer (c/->id-buffer eid)
+          eid-buffer (if (instance? DirectBuffer eid)
+                       (if (c/id-buffer? eid)
+                         eid
+                         (eid-value->id-buf @entity-as-of-iterator-delay eid))
+                       (c/->id-buffer eid))
           seek-k (encode-bitemp-key-to (.get seek-buffer-tl)
                                        eid-buffer
                                        valid-time
@@ -953,7 +959,8 @@
                              (MapEntry/create (encode-ae-key-to nil a-buf eid-value-buffer) mem/empty-buffer)
                              (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash a-buf value-buffer)
                                               (encode-ecav-value idxs))]
-                      (not (c/can-decode-value-buffer? value-buffer))
+                      (or (not (c/can-decode-value-buffer? value-buffer))
+                          (= :crux.db/id a))
                       (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-id-buffer)
                                              (mem/->nippy-buffer v))))))))))
 
