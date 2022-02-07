@@ -270,13 +270,13 @@
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
       (let [table-name (table-or-query-name ag)
             correlation-name (or (correlation-name ag) table-name)
-            {cte-columns :columns cte-id :id cte-scope-id :scope-id :as cte} (when table-name
-                                                                               (find-decl (cte-env ag) table-name))
+            cte (when table-name
+                  (find-decl (cte-env ag) table-name))
             table-ref (when (nil? cte)
                         (table-ref ag))
             subquery-scope-id (when (and table-ref (not= :collection_derived_table (r/ctor table-ref)))
                                 (id table-ref))
-            derived-columns (or (derived-columns ag) cte-columns)]
+            derived-columns (or (derived-columns ag) (:columns cte))]
         (with-meta
           (cond-> {:correlation-name correlation-name
                    :id (id ag)
@@ -284,7 +284,7 @@
             table-name (assoc :table-or-query-name table-name)
             derived-columns (assoc :derived-columns derived-columns)
             subquery-scope-id (assoc :subquery-scope-id subquery-scope-id)
-            cte (assoc :cte-id cte-id :cte-scope-id cte-scope-id))
+            cte (assoc :cte-id (:id cte) :cte-scope-id (:scope-id cte)))
           (cond-> {:ref ag}
             table-ref (assoc :table-ref table-ref)
             cte (assoc :cte cte
