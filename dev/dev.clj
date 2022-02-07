@@ -93,9 +93,11 @@
   (::xtdb system))
 
 (comment
+  (tpch/load-docs! (dev/xtdb-node) 0.05)
+
   (time
    (count (xt/q (xt/db (xtdb-node))
-                (-> tpch/q1
+                (-> tpch/q5
                     (assoc :timeout 120000)))))
 
   (time

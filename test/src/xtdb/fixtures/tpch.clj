@@ -5,16 +5,14 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.db :as db]
             [xtdb.fixtures :as fix :refer [*api*]])
   (:import (io.airlift.tpch GenerateUtils TpchColumn TpchColumnType$Base TpchEntity TpchTable)
-           (java.lang AutoCloseable)
-           (java.util Date UUID)))
+           (java.util Date)))
 
 (def tpch-column-types->xtdb-calcite-type
   {TpchColumnType$Base/INTEGER :bigint
    TpchColumnType$Base/VARCHAR :varchar
-   TpchColumnType$Base/IDENTIFIER :bigint
+   TpchColumnType$Base/IDENTIFIER :varchar
    TpchColumnType$Base/DOUBLE :double
    TpchColumnType$Base/DATE :timestamp})
 
@@ -25,8 +23,9 @@
                                        (symbol (.getColumnName c))))
                           :where (vec (for [^TpchColumn c (.getColumns t)]
                                         ['e (keyword (.getColumnName c)) (symbol (.getColumnName c))]))}
-   :xtdb.sql/table-columns (into {} (for [^TpchColumn c (.getColumns t)]
-                                      [(symbol (.getColumnName c)) (tpch-column-types->xtdb-calcite-type (.getBase (.getType c)))]))})
+   :xtdb.sql/table-columns (->> (for [^TpchColumn c (.getColumns t)]
+                                  [(symbol (.getColumnName c)) (tpch-column-types->xtdb-calcite-type (.getBase (.getType c)))])
+                                (into {}))})
 
 (defn tpch-tables->xtdb-sql-schemas []
   (map tpch-table->xtdb-sql-schema (TpchTable/getTables)))
@@ -42,22 +41,6 @@
    "region" [:r_regionkey]})
 
 (defn tpch-entity->doc [^TpchTable t ^TpchEntity b]
-  (into {:xt/id (UUID/randomUUID)}
-        (for [^TpchColumn c (.getColumns t)]
-          [(keyword (.getColumnName c))
-           (condp = (.getBase (.getType c))
-             TpchColumnType$Base/IDENTIFIER
-             (.getIdentifier c b)
-             TpchColumnType$Base/INTEGER
-             (.getInteger c b)
-             TpchColumnType$Base/VARCHAR
-             (.getString c b)
-             TpchColumnType$Base/DOUBLE
-             (.getDouble c b)
-             TpchColumnType$Base/DATE
-             (.getDate c b))])))
-
-(defn tpch-entity->pkey-doc [^TpchTable t ^TpchEntity b]
   (let [doc (->> (for [^TpchColumn c (.getColumns t)]
                    [(keyword (.getColumnName c))
                     (condp = (.getBase (.getType c))
@@ -83,10 +66,9 @@
   ([^TpchTable t]
    (tpch-table->docs t default-scale-factor))
   ([^TpchTable t sf]
-   (tpch-table->docs t sf tpch-entity->doc))
-  ([^TpchTable t sf doc-fn]
    ;; first happens to be customers (;; 150000 for sf 0.05)
-   (map (partial doc-fn t) (seq (.createGenerator ^TpchTable t sf 1 1)))))
+   (->> (seq (.createGenerator ^TpchTable t sf 1 1))
+        (map (partial tpch-entity->doc t)))))
 
 (defn with-tpch-schema [f]
   (fix/transact! *api* (tpch-tables->xtdb-sql-schemas))
@@ -96,22 +78,18 @@
   ([node]
    (submit-docs! node default-scale-factor))
   ([node sf]
-   (submit-docs! node sf tpch-entity->doc))
-  ([node sf doc-fn]
    (println "Transacting TPC-H tables...")
-   (reduce
-    (fn [last-tx ^TpchTable t]
-      (let [[last-tx doc-count] (->> (tpch-table->docs t sf doc-fn)
-                                     (partition-all 1000)
-                                     (reduce (fn [[last-tx last-doc-count] chunk]
-                                               [(xt/submit-tx node (vec (for [doc chunk]
-                                                                            [::xt/put doc])))
-                                                (+ last-doc-count (count chunk))])
-                                             [nil 0]))]
-        (println "Transacted" doc-count (.getTableName t))
-        last-tx))
-    nil
-    (TpchTable/getTables))))
+   (->> (for [^TpchTable t (TpchTable/getTables)]
+          (let [[last-tx doc-count] (->> (tpch-table->docs t sf)
+                                         (partition-all 1000)
+                                         (reduce (fn [[_last-tx last-doc-count] chunk]
+                                                   [(xt/submit-tx node (vec (for [doc chunk]
+                                                                              [::xt/put doc])))
+                                                    (+ last-doc-count (count chunk))])
+                                                 [nil 0]))]
+            (println "Transacted" doc-count (.getTableName t))
+            last-tx))
+        last)))
 
 (defn load-docs! [node & args]
   (xt/await-tx node (apply submit-docs! node args)))
@@ -625,7 +603,7 @@
 
 (defn parse-tpch-result [n]
   (let [result-csv (slurp (io/resource (format "io/airlift/tpch/queries/q%d.result" n)))
-        [head & lines] (str/split-lines result-csv)]
+        [_head & lines] (str/split-lines result-csv)]
     (vec (for [l lines]
            (vec (for [x (str/split l #"\|")
                       :let [x (try
@@ -636,7 +614,7 @@
                                   (i/read-instant-date x)
                                   :else
                                   (edn/read-string x))
-                                (catch Exception e
+                                (catch Exception _
                                   x))]]
                   (cond-> x
                     (symbol? x) (str))))))))
@@ -670,7 +648,7 @@
 
   ;; SF 0.01
   (let [node (dev/xtdb-node)]
-    (time (load-docs! node 0.01 tpch-entity->pkey-doc))
+    (time (load-docs! node 0.01))
     (prn (xt/attribute-stats node)))
 
   ;; SQL:
