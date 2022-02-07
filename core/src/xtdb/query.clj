@@ -1374,11 +1374,9 @@
                           in-vars
                           stats]
   (let [collected-vars (collect-vars type->clauses)
-        pred-vars (set (for [{:keys [pred]} pred-clauses
-                             arg (:args pred)
-                             :when (logic-var? arg)]
-                         arg))
-        invalid-leaf-vars (set (concat in-vars (:e-vars collected-vars) (:range-vars collected-vars) (:not-vars collected-vars) pred-vars))
+        invalid-leaf-vars (set/union in-vars
+                                     (into #{} (mapcat collected-vars)
+                                           [:e-vars :range-vars :not-vars :or-vars :pred-arg-vars]))
         non-leaf-v-vars (set (for [[v-var non-leaf-group] (group-by :v triple-clauses)
                                    :when (> (count non-leaf-group) 1)]
                                v-var))
