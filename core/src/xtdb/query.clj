@@ -1263,50 +1263,51 @@
       (->> (log/debug :triple-joins-join-order)))))
 
 (defn- calculate-join-order [type->clauses stats in-var-cardinalities]
-  (let [[type->clauses project-only-leaf-vars] (expand-leaf-preds type->clauses (set (keys in-var-cardinalities)) stats)
-        query-vars (set/union (set (keys in-var-cardinalities))
-                              (->> (map (collect-vars type->clauses) [:e-vars :v-vars :pred-return-vars :or-vars])
-                                   (into #{} (mapcat seq)))
-                              (->> (:triple type->clauses)
-                                   (into #{} (comp (mapcat (juxt :e :v))
-                                                   (filter literal?)))))
+  (let [in-vars (set (keys in-var-cardinalities))
+        [type->clauses project-only-leaf-vars] (expand-leaf-preds type->clauses in-vars stats)
 
-        g (reduce (fn [g v]
-                    (dep/depend g v ::root))
-                  (dep/graph)
-                  query-vars)
+        g (as-> (dep/graph) g
+            (reduce (fn [g [a b]]
+                      (dep/depend g b a))
+                    g
+                    (->> (triple-join-order type->clauses in-var-cardinalities stats)
+                         (partition 2 1)))
 
-        g (reduce (fn [g [a b]]
-                    (dep/depend g b a))
-                  g
-                  (->> (triple-join-order type->clauses in-var-cardinalities stats)
-                       (partition 2 1)))
+            (reduce (fn [g {:keys [pred return]}]
+                      (let [pred-vars (cond->> (:args pred)
+                                        (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred)))]
+                        (->> (for [pred-var (filter logic-var? pred-vars)
+                                   :when return
+                                   return-var (find-binding-vars return)]
+                               [return-var pred-var])
+                             (reduce
+                              (fn [g [r a]]
+                                (dep/depend g r a))
+                              g))))
+                    g
+                    (:pred type->clauses))
 
-        g (reduce (fn [g {:keys [pred return]}]
-                    (let [pred-vars (cond->> (:args pred)
-                                      (not (pred-constraint? (:pred-fn pred))) (cons (:pred-fn pred)))]
-                      (->> (for [pred-var (filter logic-var? pred-vars)
-                                 :when return
-                                 return-var (find-binding-vars return)]
-                             [return-var pred-var])
-                           (reduce
-                            (fn [g [r a]]
-                              (dep/depend g r a))
-                            g))))
-                  g
-                  (:pred type->clauses))
+            (reduce (fn [g {:keys [args] :as _or-clause}]
+                      (let [{:keys [bound-args free-args]} (second args)]
+                        (->> (for [bound-arg bound-args
+                                   free-arg free-args]
+                               [free-arg bound-arg])
+                             (reduce
+                              (fn [g [f b]]
+                                (dep/depend g f b))
+                              g))))
+                    g
+                    (:or-join type->clauses))
 
-        g (reduce (fn [g {:keys [args] :as _or-clause}]
-                    (let [{:keys [bound-args free-args]} (second args)]
-                      (->> (for [bound-arg bound-args
-                                 free-arg free-args]
-                             [free-arg bound-arg])
-                           (reduce
-                            (fn [g [f b]]
-                              (dep/depend g f b))
-                            g))))
-                  g
-                  (:or-join type->clauses))]
+            (reduce (fn [g v]
+                      (dep/depend g v ::root))
+                    g
+                    (set/union (dep/nodes g)
+
+                               ;; other vars that might not be bound anywhere else
+                               in-vars
+                               (->> (map (collect-vars type->clauses) [:pred-return-vars :or-vars])
+                                    (into #{} (mapcat seq))))))]
 
     [type->clauses
      (vec (concat (->> (dep/topo-sort g)
