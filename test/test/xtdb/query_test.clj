@@ -395,7 +395,7 @@
 
     (t/is (thrown-with-msg?
            IllegalArgumentException
-           #"Range constraint refers to unknown variable: x"
+           #"Clause refers to unknown variable: x"
            (xt/q (xt/db *api*) '{:find [e]
                                  :where [[e :name v]
                                          [(> 2 x)]]})))))
