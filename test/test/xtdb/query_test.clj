@@ -3625,6 +3625,23 @@
                   :vars-in-join-order
                   (filter #{'m 'e}))))))
 
+(t/deftest test-binds-selective-in-args-before-unselective-literals-1556
+  (fix/submit+await-tx (->> (for [x (range 1000)]
+                              [[::xt/put {:xt/id (str "thing-" x), :type :thing, :v x}]
+                               [::xt/put {:xt/id (str "other-thing-" x), :type :other-thing, :v x}]])
+                            (apply concat)))
+
+  (let [db (xt/db *api*)]
+    (t/is (= '[v e]
+             (->> (q/query-plan-for db
+                                    '{:find [e]
+                                      :in [v]
+                                      :where [[e :type :thing]
+                                              [e :v v]]}
+                                    [590])
+                  :vars-in-join-order
+                  (filter #{'e 'v}))))))
+
 (t/deftest test-binds-against-false-arg-885
   (fix/submit+await-tx [[::xt/put {:xt/id :foo, :name "foo", :flag? false}]
                         [::xt/put {:xt/id :bar, :name "bar", :flag? true}]
