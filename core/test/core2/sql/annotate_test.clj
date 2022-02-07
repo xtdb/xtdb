@@ -289,6 +289,8 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             "SELECT 1 FROM foo AS baz, baz")
   (invalid? #"CTE query name duplicated: foo"
             "WITH foo AS (SELECT 1 FROM foo), foo AS (SELECT 1 FROM foo) SELECT 1 FROM foo")
+  (invalid? #"Column name duplicated: bar"
+            "WITH foo (bar, bar) AS (SELECT 1, 2 FROM foo) SELECT * FROM foo")
   (invalid? #"Column name duplicated: foo"
             "SELECT 1 FROM (SELECT 1, 2 FROM foo) AS bar (foo, foo)"))
 
@@ -511,6 +513,24 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
             [{:index 0 :identifier "a" :qualified-column ["foo" "a"]}
              {:index 1 :identifier "b" :qualified-column ["foo" "b"]}]]
            (->> (valid? "WITH foo AS (SELECT * FROM x WHERE x.a = x.b) SELECT * FROM foo")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0 :identifier "c" :qualified-column ["foo" "c"]}
+             {:index 1 :identifier "d" :qualified-column ["foo" "d"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "b" :qualified-column ["x" "b"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}
+             {:index 1 :identifier "b" :qualified-column ["x" "b"]}]
+            [{:index 0 :identifier "c" :qualified-column ["foo" "c"]}
+             {:index 1 :identifier "d" :qualified-column ["foo" "d"]}]]
+           (->> (valid? "WITH foo (c, d) AS (SELECT * FROM x WHERE x.a = x.b) SELECT * FROM foo")
+                (map :projected-columns))))
+
+  (t/is (= [[{:index 0 :identifier "b" :qualified-column ["foo" "b"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
+            [{:index 0 :identifier "a" :qualified-column ["x" "a"]}]
+            [{:index 0 :identifier "b" :qualified-column ["foo" "b"]}]]
+           (->> (valid? "WITH foo (c) AS (SELECT * FROM x AS x (a)) SELECT * FROM foo AS foo (b)")
                 (map :projected-columns))))
 
   (t/is (= [[{:identifier "a", :qualified-column ["x" "a"], :index 0}

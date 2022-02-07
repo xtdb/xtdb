@@ -64,7 +64,6 @@
 ;; TODO:
 ;; - try replace ids with refs.
 ;; - align names and language with spec, add references?
-;; - deal with with column lists.
 ;; - grouping column check for asterisks should really expand and then fail.
 ;; - named columns join should only output single named columns: COALESCE(lhs.x, rhs.x) AS x
 
@@ -192,12 +191,15 @@
 (defn- cte [ag]
   (r/zcase ag
     :with_list_element
-    (with-meta
-      {:query-name (table-or-query-name ag)
-       :id (id ag)
-       :scope-id (id (scope-element ag))
-       :subquery-scope-id (id (table-ref (r/$ ag -1)))}
-      {:ref ag})))
+    (let [columns (when (r/ctor? :column_name_list (r/$ ag 2))
+                    (identifiers (r/$ ag 2)))]
+      (with-meta
+        (cond-> {:query-name (table-or-query-name ag)
+                 :id (id ag)
+                 :scope-id (id (scope-element ag))
+                 :subquery-scope-id (id (table-ref (r/$ ag -1)))}
+          columns (assoc :columns columns))
+        {:ref ag}))))
 
 ;; Inherited
 (defn- ctei [ag]
@@ -268,13 +270,13 @@
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
       (let [table-name (table-or-query-name ag)
             correlation-name (or (correlation-name ag) table-name)
-            {cte-id :id cte-scope-id :scope-id :as cte} (when table-name
-                                                          (find-decl (cte-env ag) table-name))
+            {cte-columns :columns cte-id :id cte-scope-id :scope-id :as cte} (when table-name
+                                                                               (find-decl (cte-env ag) table-name))
             table-ref (when (nil? cte)
                         (table-ref ag))
             subquery-scope-id (when (and table-ref (not= :collection_derived_table (r/ctor table-ref)))
                                 (id table-ref))
-            derived-columns (derived-columns ag)]
+            derived-columns (or (derived-columns ag) cte-columns)]
         (with-meta
           (cond-> {:correlation-name correlation-name
                    :id (id ag)
