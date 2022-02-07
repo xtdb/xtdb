@@ -1222,11 +1222,15 @@
                        (cons (set/difference new-reachable-vars (set new-vars-to-add)) reachable-var-groups)))))
       (->> (log/debug :triple-joins-join-order)))))
 
-(defn- calculate-join-order [query-vars
-                             {pred-clauses :pred, :as type->clauses}
-                             or-clauses
-                             stats in-var-cardinalities project-only-leaf-vars]
-  (let [g (reduce (fn [g v]
+(defn- calculate-join-order [type->clauses stats in-var-cardinalities project-only-leaf-vars]
+  (let [query-vars (set/union (set (keys in-var-cardinalities))
+                              (->> (map (collect-vars type->clauses) [:e-vars :v-vars :pred-return-vars :or-vars])
+                                   (into #{} (mapcat seq)))
+                              (->> (:triple type->clauses)
+                                   (into #{} (comp (mapcat (juxt :e :v))
+                                                   (filter literal?)))))
+
+        g (reduce (fn [g v]
                     (dep/depend g v ::root))
                   (dep/graph)
                   query-vars)
@@ -1249,7 +1253,7 @@
                               (dep/depend g r a))
                             g))))
                   g
-                  pred-clauses)
+                  (:pred type->clauses))
 
         g (reduce (fn [g {:keys [args] :as _or-clause}]
                     (let [{:keys [bound-args free-args]} (second args)]
@@ -1261,7 +1265,7 @@
                               (dep/depend g f b))
                             g))))
                   g
-                  or-clauses)]
+                  (:or-join type->clauses))]
 
     (vec (concat (->> (dep/topo-sort g)
                       (remove (conj project-only-leaf-vars ::root)))
@@ -1466,23 +1470,23 @@
           _ (validate-existing-vars type->clauses known-vars)
 
           [type->clauses project-only-leaf-vars] (expand-leaf-preds type->clauses in-vars stats)
+
+          vars-in-join-order (calculate-join-order type->clauses stats in-var-cardinalities project-only-leaf-vars)
+
+          var->bindings (->> vars-in-join-order
+                             (into {} (map-indexed (fn [idx var]
+                                                     [var (->VarBinding idx)]))))
+
           {triple-clauses :triple
            range-clauses :range
            pred-clauses :pred
            not-join-clauses :not-join
-           or-join-clauses :or-join
-           :as type->clauses} type->clauses
+           or-join-clauses :or-join} type->clauses
 
           var->joins (triple-joins triple-clauses value-serde {})
           [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
           [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
-          [or-join-clauses var->joins] (or-joins or-join-clauses var->joins)
-
-          vars-in-join-order (calculate-join-order (keys var->joins) type->clauses or-join-clauses stats in-var-cardinalities project-only-leaf-vars)
-
-          var->bindings (->> vars-in-join-order
-                             (into {} (map-indexed (fn [idx var]
-                                                     [var (->VarBinding idx)]))))]
+          [or-join-clauses var->joins] (or-joins or-join-clauses var->joins)]
 
       {:depth->constraints (->> (concat (build-pred-constraints (assoc pred-ctx
                                                                        :rule-name->rules rule-name->rules
