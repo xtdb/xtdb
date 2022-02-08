@@ -11,7 +11,8 @@
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
             [xtdb.lucene]
-            [xtdb.rocksdb :as rocks])
+            [xtdb.rocksdb :as rocks]
+            [xtdb.query :as q])
   (:import (ch.qos.logback.classic Level Logger)
            (java.io Closeable File)
            (org.slf4j LoggerFactory)
@@ -96,10 +97,17 @@
   (tpch/load-docs! (dev/xtdb-node) 0.05)
 
   (time
-   (count
-    (tpch/run-query (xt/db (xtdb-node))
-                    (-> tpch/q5
-                        (assoc :timeout 120000)))))
+   ;; original ["ASIA" r n s l o o_orderdate c n_name l_extendedprice l_discount]
+   ;; current [o_orderdate o c l s n ?region r l_extendedprice l_discount n_name]
+   ;; ideal [?region r o_orderdate o c n l s l_extendedprice l_discount n_name]
+   ;; ideal [o_orderdate o c n ?region r l s l_extendedprice l_discount n_name]
+   #_(with-redefs [q/triple-join-order (fn [type->clauses _ _]
+                                       [type->clauses
+                                        '[?region r o_orderdate o c n l s l_extendedprice l_discount n_name]
+                                        #{}])])
+   (tpch/run-query (xt/db (xtdb-node))
+                   (-> tpch/q5
+                       (assoc :timeout 1000))))
 
   (time
    (doseq [q tpch/tpch-queries]
