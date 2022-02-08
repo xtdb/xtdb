@@ -1192,14 +1192,24 @@
      ;;=>
      (plan x))))
 
+;; TODO: should these really use attributes properly?
+
+(defn- projected-symbols [op]
+  (let [projections (projected-columns (:ref (meta op)))]
+    (set (for [{:keys [qualified-column] :as projection} (first projections)
+               :let [{table-id :id} (:table (meta projection))]]
+           (id-symbol (first qualified-column) table-id (second qualified-column))))))
+
+(defn- expr-symbols [expr]
+  (set (for [x (flatten expr)
+             :when (r/ctor? :column_reference (:ref (meta x)))]
+         x)))
+
 (defn- build-join-map [sc lhs rhs]
   (when (= '= (first sc))
     (let [[_ x y] sc
-          [lhs-columns rhs-columns] (for [side [lhs rhs]
-                                          :let [projections (projected-columns (:ref (meta side)))]]
-                                      (set (for [{:keys [qualified-column] :as projection} (first projections)
-                                                 :let [{table-id :id} (:table (meta projection))]]
-                                             (id-symbol (first qualified-column) table-id (second qualified-column)))))
+          [lhs-columns rhs-columns] (for [side [lhs rhs]]
+                                      (projected-symbols side))
           [lhs-v rhs-v] (for [side-columns [lhs-columns rhs-columns]]
                           (cond
                             (contains? side-columns x)
@@ -1218,16 +1228,25 @@
       [:join join-map lhs rhs])
 
     [:select sc
-     [:join {} lhs rhs]]
+     [join-type {} lhs rhs]]
     ;;=>
     (when-let [join-map (build-join-map sc lhs rhs)]
-      [:join join-map lhs rhs])
+      [join-type join-map lhs rhs])
 
     [:select sc
-     [:left-outer-join {} lhs rhs]]
+     [join-type join-map lhs rhs]]
     ;;=>
-    (when-let [join-map (build-join-map sc lhs rhs)]
-      [:left-outer-join join-map lhs rhs])))
+    (let [expr-symbols (expr-symbols sc)
+          lhs-columns (projected-symbols lhs)
+          rhs-columns (projected-symbols rhs)
+          on-lhs? (set/subset? expr-symbols lhs-columns)
+          on-rhs? (set/subset? expr-symbols rhs-columns)]
+      (cond
+        (and on-rhs? (not on-lhs?))
+        [join-type join-map lhs [:select sc rhs]]
+
+        (and on-lhs? (not on-rhs?))
+        [join-type join-map [:select sc lhs] rhs]))))
 
 (defn plan-query [query]
   (if-let [parse-failure (insta/get-failure query)]

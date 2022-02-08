@@ -15,10 +15,9 @@
            {si__3_movieTitle movieTitle}
            [:project
             [si__3_movieTitle]
-            [:select
-             (= ms__4_birthdate 1960)
-             [:join {si__3_starName ms__4_name}
-              [:rename si__3 [:scan [movieTitle starName]]]
+            [:join {si__3_starName ms__4_name}
+             [:rename si__3 [:scan [movieTitle starName]]]
+             [:select (= ms__4_birthdate 1960)
               [:rename ms__4 [:scan [name birthdate]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name"
