@@ -1090,7 +1090,18 @@
 
     [:table_expression ^:z fc ^:z wc]
     ;;=>
-    [:select (expr (r/$ wc 2)) (plan fc)]
+    (let [search-condition-expr (expr (r/$ wc 2))]
+      (reduce
+       (fn [acc predicate]
+         [:select predicate acc])
+       (plan fc)
+       ((fn step [search-condition-expr]
+          (if (and (list? search-condition-expr)
+                   (= 'and (first search-condition-expr)))
+            (concat (step (nth search-condition-expr 1))
+                    (step (nth search-condition-expr 2)))
+            [search-condition-expr]))
+        search-condition-expr)))
 
     [:from_clause _ ^:z trl]
     ;;=>
@@ -1123,10 +1134,12 @@ WHERE si.starName = ms.name AND ms.birthdate = 1960"))
        [:project
         [si__3_movieTitle]
         [:select
-         (and (= si__3_starName ms__4_name) (= ms__4_birthdate 1960))
-         [:cross-join
-          [:rename si__3 [:scan [movieTitle starName]]]
-          [:rename ms__4 [:scan [name birthdate]]]]]]]))
+         (= ms__4_birthdate 1960)
+         [:select
+          (= si__3_starName ms__4_name)
+          [:cross-join
+           [:rename si__3 [:scan [movieTitle starName]]]
+           [:rename ms__4 [:scan [name birthdate]]]]]]]]))
 
 ;; SQL:2011 official grammar:
 
