@@ -11,7 +11,6 @@
             [xtdb.api :as xt]
             [xtdb.bus :as bus]
             [xtdb.cache :as cache]
-            [xtdb.cache.lru :as lru]
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.error :as err]
@@ -1635,7 +1634,7 @@
     (db/open-index-snapshot index-store)))
 
 (defn- with-entity-resolver-cache [entity-resolver-fn {:keys [entity-cache-size]}]
-  (let [entity-cache (lru/->lru-cache {:cache-size entity-cache-size})]
+  (let [entity-cache (cache/->cache {:cache-size entity-cache-size})]
     (fn [k]
       (cache/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 
