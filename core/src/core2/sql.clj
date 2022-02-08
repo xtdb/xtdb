@@ -1023,6 +1023,123 @@
            {:scopes (scopes ag)
             :errs []})))))
 
+;; Transformation into logical plan. Highly speculative spike to get
+;; going, doesn't take many things captured in analysis into account
+;; properly.
+
+;; See https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf
+
+;; Should this really be an attribute instead of destructive rewrite?
+(defn- rewrite-expression [z]
+  (z/node
+   (r/full-bu-tp
+    (r/adhoc-tp
+     r/id-tp
+     (fn [z]
+       (r/zmatch z
+         [:regular_identifier x]
+         ;;=>
+         (symbol x)
+
+         [:identifier_chain x y]
+         ;;=>
+         (symbol (str x "." y))
+
+         [:boolean_value_expression x op y]
+         ;;=>
+         (list op x y)
+
+         [:boolean_term x op y]
+         ;;=>
+         (list op x y)
+
+         [:boolean_factor _ x]
+         ;;=>
+         (list 'not x)
+
+         [:comparison_predicate x [:comparison_predicate_part_2 op y]]
+         ;;=>
+         (list op x y)
+
+         [:unsigned_integer x]
+         ;;=>
+         (Long/parseLong x)
+
+         "="
+         ;;=>
+         '=
+
+         "AND"
+         ;;=>
+         'and
+
+         [_ x]
+         ;;=>
+         x
+
+         nil)))
+    z)))
+
+(defn- scope->logical-plan [{:keys [projected-columns tables type] :as scope}]
+  (assert (= :query-specification type))
+  (let [query-specification (:ref (meta scope))
+        unqualified-rename (->> (for [{:keys [identifier qualified-column]} projected-columns]
+                                  [(symbol (str/join "." qualified-column)) (symbol identifier)])
+                                (into {}))
+        qualified-projection (vec (for [{:keys [qualified-column]} projected-columns]
+                                    (symbol (str/join "." qualified-column))))
+        select-list (r/select
+                     (fn [z]
+                       (when (r/ctor? :select_list z)
+                         z))
+                     query-specification)
+        from-clause (r/select
+                     (fn [z]
+                       (when (r/ctor? :from_clause z)
+                         z))
+                     query-specification)
+        where-clause (r/select
+                      (fn [z]
+                        (when (r/ctor? :where_clause z)
+                          z))
+                      query-specification)
+        cross-join (with-meta
+                     (reduce
+                      (fn [acc {:keys [correlation-name used-columns] :as table}]
+                        (let [scan (with-meta
+                                     [:rename (symbol correlation-name)
+                                      [:scan (mapv (comp symbol last) used-columns)]]
+                                     {:ref (:ref (meta table))})]
+                          (if acc
+                            [:cross-join acc scan]
+                            scan)))
+                      nil
+                      (vals tables))
+                     {:ref from-clause})]
+    (with-meta
+      [:rename
+       unqualified-rename
+       (with-meta
+         [:project
+          qualified-projection
+          (if where-clause
+            (with-meta
+              [:select (rewrite-expression (r/$ where-clause -1))
+               cross-join]
+              {:ref where-clause})
+            cross-join)]
+         {:ref select-list})]
+      {:ref query-specification})))
+
+(comment
+  (->> (parse "SELECT si.movieTitle
+FROM StarsIn AS si, MovieStar AS ms
+WHERE si.starName = ms.name AND ms.birthdate = 1960")
+       (analyze-query)
+       (:scopes)
+       (second)
+       (scope->logical-plan)))
+
 ;; SQL:2011 official grammar:
 
 ;; https://jakewheat.github.io/sql-overview/sql-2011-foundation-grammar.html

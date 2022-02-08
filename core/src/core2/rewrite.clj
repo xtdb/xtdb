@@ -286,14 +286,12 @@
 
 (defn one-tu [f]
   (fn [z]
-    (let [m (monoid z)]
-      (when-some [d (z/down z)]
-        (loop [z d
-               acc (m)]
-          (if-some [x (f z)]
-            (m acc x)
-            (when-some [r (z/right z)]
-              (recur r acc))))))))
+    (when-some [d (z/down z)]
+      (loop [z d]
+        (if-some [x (f z)]
+          x
+          (when-some [r (z/right z)]
+            (recur r)))))))
 
 (defn full-td-tu
   ([f]
