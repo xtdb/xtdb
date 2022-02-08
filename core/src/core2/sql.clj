@@ -531,9 +531,11 @@
                 [(let [identifier (identifier ag)
                        qualified-column (when (r/ctor? :column_reference (r/$ ag 1))
                                           (identifiers (r/$ ag 1)))]
-                   (cond-> {:normal-form (z/node ag)}
-                     identifier (assoc :identifier identifier)
-                     qualified-column (assoc :qualified-column qualified-column)))]
+                   (with-meta
+                     (cond-> {:normal-form (z/node ag)}
+                       identifier (assoc :identifier identifier)
+                       qualified-column (assoc :qualified-column qualified-column))
+                     {:ref ag}))]
 
                 :subquery
                 []
@@ -1032,12 +1034,13 @@
 (def ^:private ^:const ^String relation-id-delimiter "__")
 (def ^:private ^:const ^String relation-prefix-delimiter "_")
 
-;; Should really use column reference attributes.
+;; TODO: Should really use column reference attributes.
 (defn- symbol-with-id [env x y]
   (let [id (get-in env [(str x) :id])]
     (symbol (str x relation-id-delimiter id relation-prefix-delimiter y))))
 
-;; Should this really be an attribute instead of destructive rewrite?
+;; TODO: Should this really be an attribute instead of destructive
+;; rewrite?
 (defn- rewrite-expression [env z]
   (z/node
    (r/full-bu-tp
@@ -1088,20 +1091,22 @@
          nil)))
     z)))
 
+;; TODO: This should also be an attribute I think, using other
+;; attributes (like scope if needed).
 (defn- scope->logical-plan [{:keys [projected-columns tables type] :as scope}]
   (assert (= :query-specification type))
   (let [query-specification (:ref (meta scope))
-        env (local-env-singleton-values (env query-specification))
-        projection (for [{:keys [identifier qualified-column]} projected-columns]
-                     [(symbol-with-id env (first qualified-column) (second qualified-column))
-                      (symbol identifier)])
-        unqualified-rename (into {} projection)
-        qualified-projection (mapv first projection)
         select-list (r/$ query-specification -2)
         table-expression (r/$ query-specification -1)
         from-clause (r/$ table-expression 1)
         where-clause (when (r/ctor? :where_clause (r/$ table-expression 2))
                        (r/$ table-expression 2))
+        select-list-env (local-env-singleton-values (env query-specification))
+        projection (for [{:keys [identifier qualified-column]} projected-columns]
+                     [(symbol-with-id select-list-env (first qualified-column) (second qualified-column))
+                      (symbol identifier)])
+        unqualified-rename (into {} projection)
+        qualified-projection (mapv first projection)
         cross-join (with-meta
                      (reduce
                       (fn [acc {:keys [id correlation-name used-columns] :as table}]
@@ -1123,7 +1128,8 @@
           qualified-projection
           (if where-clause
             (with-meta
-              [:select (rewrite-expression env (r/$ where-clause -1))
+              [:select (rewrite-expression (local-env-singleton-values (env where-clause))
+                                           (r/$ where-clause -1))
                cross-join]
               {:ref where-clause})
             cross-join)]
