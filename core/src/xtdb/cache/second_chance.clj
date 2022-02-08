@@ -12,6 +12,11 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(deftype KeyWrapper [k]
+  Object
+  (equals [_ o] (.equals k (.k ^KeyWrapper o)))
+  (hashCode [_] (unchecked-multiply-int 31 (Integer/rotateLeft (.hashCode k) 1))))
+
 (defn- random-entry ^java.util.Map$Entry [^ConcurrentHashMap m]
   (when-not (.isEmpty m)
     (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
@@ -53,12 +58,13 @@
 
   ICache
   (computeIfAbsent [this k stored-key-fn f]
-    (let [^ValuePointer vp (or (.get hot k)
-                               (let [k (stored-key-fn k)
-                                     v (if-some [v (.valAt cold k)]
+    (let [^ValuePointer vp (or (.get hot (KeyWrapper. k))
+                               (let [stored-key (stored-key-fn k)
+                                     wrapped-key (KeyWrapper. stored-key)
+                                     v (if-some [v (.valAt cold wrapped-key)]
                                          v
-                                         (f k))
-                                     vp (.computeIfAbsent hot k (reify Function
+                                         (f stored-key))
+                                     vp (.computeIfAbsent hot wrapped-key (reify Function
                                                                   (apply [_ k]
                                                                     (ValuePointer. v))))]
                                  (resize-cache this)
@@ -67,17 +73,18 @@
       v))
 
   (evict [this k]
-    (.evict cold k)
-    (when-let [vp ^ValuePointer (.remove hot k)]
-      (.swizzle vp))
+    (let [k (KeyWrapper. k)]
+      (.evict cold k)
+      (when-let [vp ^ValuePointer (.remove hot k)]
+        (.swizzle vp)))
     (resize-cache this))
 
   (valAt [_ k]
-    (when-let [vp ^ValuePointer (.get hot k)]
+    (when-let [vp ^ValuePointer (.get hot (KeyWrapper. k))]
       (.swizzle vp)))
 
   (valAt [_ k default]
-    (if-let [vp (.get hot k)]
+    (if-let [vp (.get hot (KeyWrapper. k))]
       (.swizzle ^ValuePointer vp)
       default))
 
