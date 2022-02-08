@@ -18,7 +18,7 @@
             [:join {si__3_starName ms__4_name}
              [:rename si__3 [:scan [movieTitle starName]]]
              [:select (= ms__4_birthdate 1960)
-              [:rename ms__4 [:scan [name birthdate]]]]]]])
+              [:rename ms__4 [:scan [name {birthdate (= birthdate 1960)}]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name"
           [:rename {si__3_movieTitle movieTitle}
@@ -29,7 +29,7 @@
               [:rename {ms__7_name name}
                [:project [ms__7_name]
                 [:select (= ms__7_birthdate 1960)
-                 [:rename ms__7 [:scan [name birthdate]]]]]]]]]])
+                 [:rename ms__7 [:scan [name {birthdate (= birthdate 1960)}]]]]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM Movie AS m JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear"
           [:rename {si__4_movieTitle movieTitle}

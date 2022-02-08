@@ -1222,6 +1222,21 @@
 (defn- optimize-plan [z]
   (r/zmatch z
     [:select sc
+     [:rename v [:scan columns]]]
+    ;;=>
+    (let [expr-symbols (expr-symbols sc)]
+      (when-let [sym (when (= 1 (count expr-symbols))
+                       (first expr-symbols))]
+        (let [new-columns (vec (for [column columns]
+                                 (if (and (symbol? column)
+                                          (= sym (symbol (str v relation-prefix-delimiter column))))
+                                   {column (w/postwalk-replace {sym column} sc)}
+                                   column)))]
+          (when-not (= columns new-columns)
+            [:select sc
+             [:rename v [:scan new-columns]]]))))
+
+    [:select sc
      [:cross-join lhs rhs]]
     ;;=>
     (when-let [join-map (build-join-map sc lhs rhs)]
