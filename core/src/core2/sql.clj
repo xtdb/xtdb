@@ -1088,21 +1088,11 @@
                                 (into {}))
         qualified-projection (vec (for [{:keys [qualified-column]} projected-columns]
                                     (symbol (str/join "." qualified-column))))
-        select-list (r/select
-                     (fn [z]
-                       (when (r/ctor? :select_list z)
-                         z))
-                     query-specification)
-        from-clause (r/select
-                     (fn [z]
-                       (when (r/ctor? :from_clause z)
-                         z))
-                     query-specification)
-        where-clause (r/select
-                      (fn [z]
-                        (when (r/ctor? :where_clause z)
-                          z))
-                      query-specification)
+        select-list (r/$ query-specification -2)
+        table-expression (r/$ query-specification -1)
+        from-clause (r/$ table-expression 1)
+        where-clause (when (r/ctor? :where_clause (r/$ table-expression 2))
+                       (r/$ table-expression 2))
         cross-join (with-meta
                      (reduce
                       (fn [acc {:keys [correlation-name used-columns] :as table}]
@@ -1132,13 +1122,23 @@
       {:ref query-specification})))
 
 (comment
-  (->> (parse "SELECT si.movieTitle
+  (= (->> (parse "SELECT si.movieTitle
 FROM StarsIn AS si, MovieStar AS ms
 WHERE si.starName = ms.name AND ms.birthdate = 1960")
-       (analyze-query)
-       (:scopes)
-       (second)
-       (scope->logical-plan)))
+          (analyze-query)
+          (:scopes)
+          (second)
+          (scope->logical-plan))
+
+     '[:rename
+       {si.movieTitle movieTitle}
+       [:project
+        [si.movieTitle]
+        [:select
+         (and (= si.starName ms.name) (= ms.birthdate 1960))
+         [:cross-join
+          [:rename si [:scan [starName movieTitle]]]
+          [:rename ms [:scan [birthdate name]]]]]]]))
 
 ;; SQL:2011 official grammar:
 
