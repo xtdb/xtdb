@@ -1029,8 +1029,16 @@
 
 ;; See https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf
 
+(def ^:private ^:const ^String relation-id-delimiter "__")
+(def ^:private ^:const ^String relation-prefix-delimiter "_")
+
+;; Should really use column reference attributes.
+(defn- symbol-with-id [env x y]
+  (let [id (get-in env [(str x) :id])]
+    (symbol (str x relation-id-delimiter id relation-prefix-delimiter y))))
+
 ;; Should this really be an attribute instead of destructive rewrite?
-(defn- rewrite-expression [z]
+(defn- rewrite-expression [env z]
   (z/node
    (r/full-bu-tp
     (r/adhoc-tp
@@ -1043,7 +1051,7 @@
 
          [:identifier_chain x y]
          ;;=>
-         (symbol (str x "." y))
+         (symbol-with-id env x y)
 
          [:boolean_value_expression x op y]
          ;;=>
@@ -1083,11 +1091,12 @@
 (defn- scope->logical-plan [{:keys [projected-columns tables type] :as scope}]
   (assert (= :query-specification type))
   (let [query-specification (:ref (meta scope))
-        unqualified-rename (->> (for [{:keys [identifier qualified-column]} projected-columns]
-                                  [(symbol (str/join "." qualified-column)) (symbol identifier)])
-                                (into {}))
-        qualified-projection (vec (for [{:keys [qualified-column]} projected-columns]
-                                    (symbol (str/join "." qualified-column))))
+        env (local-env-singleton-values (env query-specification))
+        projection (for [{:keys [identifier qualified-column]} projected-columns]
+                     [(symbol-with-id env (first qualified-column) (second qualified-column))
+                      (symbol identifier)])
+        unqualified-rename (into {} projection)
+        qualified-projection (mapv first projection)
         select-list (r/$ query-specification -2)
         table-expression (r/$ query-specification -1)
         from-clause (r/$ table-expression 1)
@@ -1095,9 +1104,9 @@
                        (r/$ table-expression 2))
         cross-join (with-meta
                      (reduce
-                      (fn [acc {:keys [correlation-name used-columns] :as table}]
+                      (fn [acc {:keys [id correlation-name used-columns] :as table}]
                         (let [scan (with-meta
-                                     [:rename (symbol correlation-name)
+                                     [:rename (symbol (str correlation-name relation-id-delimiter id))
                                       [:scan (mapv (comp symbol last) used-columns)]]
                                      {:ref (:ref (meta table))})]
                           (if acc
@@ -1114,7 +1123,7 @@
           qualified-projection
           (if where-clause
             (with-meta
-              [:select (rewrite-expression (r/$ where-clause -1))
+              [:select (rewrite-expression env (r/$ where-clause -1))
                cross-join]
               {:ref where-clause})
             cross-join)]
@@ -1131,14 +1140,14 @@ WHERE si.starName = ms.name AND ms.birthdate = 1960")
           (scope->logical-plan))
 
      '[:rename
-       {si.movieTitle movieTitle}
+       {si__3_movieTitle movieTitle}
        [:project
-        [si.movieTitle]
+        [si__3_movieTitle]
         [:select
-         (and (= si.starName ms.name) (= ms.birthdate 1960))
+         (and (= si__3_starName ms__4_name) (= ms__4_birthdate 1960))
          [:cross-join
-          [:rename si [:scan [starName movieTitle]]]
-          [:rename ms [:scan [birthdate name]]]]]]]))
+          [:rename si__3 [:scan [starName movieTitle]]]
+          [:rename ms__4 [:scan [birthdate name]]]]]]]))
 
 ;; SQL:2011 official grammar:
 
