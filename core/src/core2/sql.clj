@@ -1034,62 +1034,41 @@
 (def ^:private ^:const ^String relation-id-delimiter "__")
 (def ^:private ^:const ^String relation-prefix-delimiter "_")
 
+(defn- expr [z]
+  (r/zmatch z
+    [:column_reference _]
+    (let [{:keys [table-id identifiers]} (column-reference z)
+          [table column] identifiers]
+      (symbol (str table relation-id-delimiter table-id relation-prefix-delimiter column)))
+
+    [:boolean_value_expression ^:z x _ ^:z y]
+    ;;=>
+    (list 'or (expr x) (expr y))
+
+    [:boolean_term ^:z x _ ^:z y]
+    ;;=>
+    (list 'and (expr x) (expr y))
+
+    [:boolean_factor _ ^:z x]
+    ;;=>
+    (list 'not (expr x))
+
+    [:comparison_predicate ^:z x [:comparison_predicate_part_2 [_ op] ^:z y]]
+    ;;=>
+    (list (symbol op) (expr x) (expr y))
+
+    [:unsigned_integer x]
+    ;;=>
+    (Long/parseLong x)
+
+    [_ ^:z x]
+    ;;=>
+    (expr x)))
+
 ;; TODO: Should really use column reference attributes.
 (defn- symbol-with-id [env x y]
   (let [id (get-in env [(str x) :id])]
     (symbol (str x relation-id-delimiter id relation-prefix-delimiter y))))
-
-;; TODO: Should this really be an attribute instead of destructive
-;; rewrite?
-(defn- rewrite-expression [env z]
-  (z/node
-   (r/full-bu-tp
-    (r/adhoc-tp
-     r/id-tp
-     (fn [z]
-       (r/zmatch z
-         [:regular_identifier x]
-         ;;=>
-         (symbol x)
-
-         [:identifier_chain x y]
-         ;;=>
-         (symbol-with-id env x y)
-
-         [:boolean_value_expression x op y]
-         ;;=>
-         (list op x y)
-
-         [:boolean_term x op y]
-         ;;=>
-         (list op x y)
-
-         [:boolean_factor _ x]
-         ;;=>
-         (list 'not x)
-
-         [:comparison_predicate x [:comparison_predicate_part_2 op y]]
-         ;;=>
-         (list op x y)
-
-         [:unsigned_integer x]
-         ;;=>
-         (Long/parseLong x)
-
-         "="
-         ;;=>
-         '=
-
-         "AND"
-         ;;=>
-         'and
-
-         [_ x]
-         ;;=>
-         x
-
-         nil)))
-    z)))
 
 ;; TODO: This should also be an attribute I think, using other
 ;; attributes (like scope if needed).
@@ -1128,8 +1107,7 @@
           qualified-projection
           (if where-clause
             (with-meta
-              [:select (rewrite-expression (local-env-singleton-values (env where-clause))
-                                           (r/$ where-clause -1))
+              [:select (expr (r/$ where-clause -1))
                cross-join]
               {:ref where-clause})
             cross-join)]
