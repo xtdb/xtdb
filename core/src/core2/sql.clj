@@ -344,7 +344,7 @@
                       (select-keys
                        (->> (for [{:keys [id] :as table} (local-tables side)
                                   projection (first (projected-columns (:ref (meta table))))]
-                              (assoc projection :table-id id))
+                              projection)
                             (group-by :identifier))
                        join-columns))]
       {:join-columns join-columns
@@ -503,7 +503,7 @@
                                    (concat named-join-columns)
                                    (distinct)))))]
         [(for [{:keys [identifier]} projections]
-           (cond-> {}
+           (cond-> (with-meta {} {:table table})
              identifier (assoc :identifier identifier)
              correlation-name (assoc :qualified-column [correlation-name identifier])))]))
 
@@ -1091,7 +1091,8 @@
       (let [{:keys [join-columns] :as env} (named-columns-join-env z)]
         (for [column join-columns]
           (->> (for [side [:lhs :rhs]
-                     :let [{:keys [qualified-column table-id]} (first (get-in env [side column]))]]
+                     :let [{:keys [qualified-column] :as projection} (first (get-in env [side column]))
+                           {table-id :id} (:table (meta projection))]]
                  (id-symbol (first qualified-column) table-id column))
                (apply list '=)))))
 
@@ -1191,6 +1192,43 @@
      ;;=>
      (plan x))))
 
+(defn- build-join-map [sc lhs rhs]
+  (when (= '= (first sc))
+    (let [[_ x y] sc
+          [lhs-columns rhs-columns] (for [side [lhs rhs]
+                                          :let [projections (projected-columns (:ref (meta side)))]]
+                                      (set (for [{:keys [qualified-column] :as projection} (first projections)
+                                                 :let [{table-id :id} (:table (meta projection))]]
+                                             (id-symbol (first qualified-column) table-id (second qualified-column)))))
+          [lhs-v rhs-v] (for [side-columns [lhs-columns rhs-columns]]
+                          (cond
+                            (contains? side-columns x)
+                            x
+                            (contains? side-columns y)
+                            y))]
+      (when (and lhs-v rhs-v)
+        {lhs-v rhs-v}))))
+
+(defn- optimize-plan [z]
+  (r/zmatch z
+    [:select sc
+     [:cross-join lhs rhs]]
+    ;;=>
+    (when-let [join-map (build-join-map sc lhs rhs)]
+      [:join join-map lhs rhs])
+
+    [:select sc
+     [:join {} lhs rhs]]
+    ;;=>
+    (when-let [join-map (build-join-map sc lhs rhs)]
+      [:join join-map lhs rhs])
+
+    [:select sc
+     [:left-outer-join {} lhs rhs]]
+    ;;=>
+    (when-let [join-map (build-join-map sc lhs rhs)]
+      [:left-outer-join join-map lhs rhs])))
+
 (defn plan-query [query]
   (if-let [parse-failure (insta/get-failure query)]
     {:errs [(prn-str parse-failure)]}
@@ -1207,7 +1245,9 @@
       #(let [ag (z/vector-zip query)]
          (if-let [errs (not-empty (errs ag))]
            {:errs errs}
-           {:plan (plan ag)})))))
+           {:plan (->> (z/vector-zip (plan ag))
+                       (r/innermost (r/mono-tp optimize-plan))
+                       (z/node))})))))
 
 ;; SQL:2011 official grammar:
 
