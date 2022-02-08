@@ -1474,7 +1474,7 @@
           type->clauses (-> (expand-rules where rule-name->rules {})
                             (build-pred-fns fn-allow-list)
                             (normalize-clauses)
-                            (->> (group-clauses-by-type)))
+                            (group-clauses-by-type))
 
           known-vars (-> (set/union in-vars
                                     (into #{} (mapcat (collect-vars type->clauses)) [:e-vars :v-vars]))
