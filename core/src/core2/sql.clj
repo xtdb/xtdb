@@ -1065,63 +1065,58 @@
     ;;=>
     (expr x)))
 
-;; TODO: Should really use column reference attributes.
-(defn- symbol-with-id [env x y]
-  (let [id (get-in env [(str x) :id])]
-    (symbol (str x relation-id-delimiter id relation-prefix-delimiter y))))
+(defn- plan [z]
+  (r/zmatch z
+    [:query_specification _ ^:z sl ^:z te]
+    ;;=>
+    (let [projection (first (projected-columns sl))
+          unqualified-rename-map (->> (for [{:keys [identifier qualified-column] :as projection} projection
+                                            :when qualified-column
+                                            :let [derived-column (:ref (meta projection))]]
+                                        [(expr (r/$ derived-column 1))
+                                         (symbol identifier)])
+                                      (into {}))
+          qualified-project [:project
+                             (vec (for [{:keys [identifier qualified-column index] :as projection} projection
+                                        :let [derived-column (:ref (meta projection))]]
+                                    (if qualified-column
+                                      (expr (r/$ derived-column 1))
+                                      {(expr (r/$ derived-column 1))
+                                       (symbol (or identifier (format "$column%d$" index)))})))
+                             (plan te)]]
+      (if (not-empty unqualified-rename-map)
+        [:rename unqualified-rename-map qualified-project]
+        qualified-project))
 
-;; TODO: This should also be an attribute I think, using other
-;; attributes (like scope if needed).
-(defn- scope->logical-plan [{:keys [projected-columns tables type] :as scope}]
-  (assert (= :query-specification type))
-  (let [query-specification (:ref (meta scope))
-        select-list (r/$ query-specification -2)
-        table-expression (r/$ query-specification -1)
-        from-clause (r/$ table-expression 1)
-        where-clause (when (r/ctor? :where_clause (r/$ table-expression 2))
-                       (r/$ table-expression 2))
-        select-list-env (local-env-singleton-values (env query-specification))
-        projection (for [{:keys [identifier qualified-column]} projected-columns]
-                     [(symbol-with-id select-list-env (first qualified-column) (second qualified-column))
-                      (symbol identifier)])
-        unqualified-rename (into {} projection)
-        qualified-projection (mapv first projection)
-        cross-join (with-meta
-                     (reduce
-                      (fn [acc {:keys [id correlation-name used-columns] :as table}]
-                        (let [scan (with-meta
-                                     [:rename (symbol (str correlation-name relation-id-delimiter id))
-                                      [:scan (mapv (comp symbol last) used-columns)]]
-                                     {:ref (:ref (meta table))})]
-                          (if acc
-                            [:cross-join acc scan]
-                            scan)))
-                      nil
-                      (vals tables))
-                     {:ref from-clause})]
-    (with-meta
-      [:rename
-       unqualified-rename
-       (with-meta
-         [:project
-          qualified-projection
-          (if where-clause
-            (with-meta
-              [:select (expr (r/$ where-clause -1))
-               cross-join]
-              {:ref where-clause})
-            cross-join)]
-         {:ref select-list})]
-      {:ref query-specification})))
+    [:table_expression ^:z fc ^:z wc]
+    ;;=>
+    [:select (expr (r/$ wc 2)) (plan fc)]
+
+    [:from_clause _ ^:z trl]
+    ;;=>
+    (reduce
+     (fn [acc table]
+       [:cross-join acc table])
+     (r/collect-stop
+      (fn [z]
+        (r/zcase z
+          :table_primary [(let [{:keys [id correlation-name]} (table z)
+                                projection (first (projected-columns z))]
+                            [:rename (symbol (str correlation-name relation-id-delimiter id))
+                             [:scan (vec (for [{:keys [identifier]} projection]
+                                           (symbol identifier)))]])]
+          :subquery []
+          nil))
+      trl))
+
+    [_ ^:z x]
+    ;;=>
+    (plan x)))
 
 (comment
-  (= (->> (parse "SELECT si.movieTitle
+  (= (plan (parse "SELECT si.movieTitle
 FROM StarsIn AS si, MovieStar AS ms
-WHERE si.starName = ms.name AND ms.birthdate = 1960")
-          (analyze-query)
-          (:scopes)
-          (second)
-          (scope->logical-plan))
+WHERE si.starName = ms.name AND ms.birthdate = 1960"))
 
      '[:rename
        {si__3_movieTitle movieTitle}
@@ -1130,8 +1125,8 @@ WHERE si.starName = ms.name AND ms.birthdate = 1960")
         [:select
          (and (= si__3_starName ms__4_name) (= ms__4_birthdate 1960))
          [:cross-join
-          [:rename si__3 [:scan [starName movieTitle]]]
-          [:rename ms__4 [:scan [birthdate name]]]]]]]))
+          [:rename si__3 [:scan [movieTitle starName]]]
+          [:rename ms__4 [:scan [name birthdate]]]]]]]))
 
 ;; SQL:2011 official grammar:
 
