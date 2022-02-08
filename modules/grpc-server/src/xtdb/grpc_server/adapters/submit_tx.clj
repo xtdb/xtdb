@@ -28,13 +28,20 @@
     #_{:clj-kondo/ignore [:unresolved-namespace]}
     [::xt/evict document-id]))
 
+(defn ->call-fn [transaction]
+  (let [record         (get transaction :function)
+        xt-id       (:xt-id record)
+        args       (mapv utils/value->edn (:arguments record))]
+    #_{:clj-kondo/ignore [:unresolved-namespace]}
+    (apply conj [::xt/fn xt-id] args)))
+
 (defn transaction-type [transaction]
   (condp #(get %2 %1) transaction
     :put      (->put transaction)
     :match    transaction
     :delete   (->delete transaction)
     :evict    (->evict transaction)
-    :function transaction
+    :function (->call-fn transaction)
     :else     (throw
                (ex-info "Unknown transaction type"
                         {:execution-id        :unknown-transaction-type

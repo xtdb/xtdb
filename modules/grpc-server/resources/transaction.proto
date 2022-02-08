@@ -3,7 +3,6 @@ syntax = "proto3";
 package com.grpc.xtdb;
 
 import "google/protobuf/struct.proto";
-import "utils.proto";
 
 message Transaction {
     oneof transaction_type {
@@ -40,7 +39,7 @@ message Evict {
 
 message Function {
     string xt_id = 1;
-    string xt_fn = 2;
+    repeated google.protobuf.Value arguments = 2;
 }
 
 message SubmitRequest {

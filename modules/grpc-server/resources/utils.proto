@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package com.grpc.xtdb;
 
-import "google/protobuf/struct.proto";
-
 message None { }
 
 message OptionalString {
