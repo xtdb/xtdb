@@ -305,6 +305,18 @@
        nil))
    ag))
 
+(defn- join-type [ag]
+  (if (r/ctor? :qualified_join ag)
+    (join-type (r/$ ag 2))
+    (r/zmatch ag
+      [:join_type [:outer_join_type "LEFT"]] :left
+      [:join_type [:outer_join_type "LEFT"] "OUTER"] :left
+      [:join_type [:outer_join_type "RIGHT"]] :right
+      [:join_type [:outer_join_type "RIGHT"] "OUTER"] :right
+      [:join_type "INNER"] :inner
+      "JOIN" :inner
+      nil)))
+
 (defn- named-columns-join-columns [ag]
   (r/zcase ag
     :qualified_join
@@ -330,9 +342,9 @@
           rhs (r/$ qualified-join -2)
           [lhs rhs] (for [side [lhs rhs]]
                       (select-keys
-                       (->> (for [table (local-tables side)
+                       (->> (for [{:keys [id] :as table} (local-tables side)
                                   projection (first (projected-columns (:ref (meta table))))]
-                              projection)
+                              (assoc projection :table-id id))
                             (group-by :identifier))
                        join-columns))]
       {:join-columns join-columns
@@ -1040,6 +1052,9 @@
     (vary-meta x assoc :ref z)
     x))
 
+(defn- id-symbol [table table-id column]
+  (symbol (str table relation-id-delimiter table-id relation-prefix-delimiter column)))
+
 (defn- expr [z]
   (maybe-add-ref
    z
@@ -1047,7 +1062,7 @@
      [:column_reference _]
      (let [{:keys [table-id identifiers]} (column-reference z)
            [table column] identifiers]
-       (symbol (str table relation-id-delimiter table-id relation-prefix-delimiter column)))
+       (id-symbol table table-id column))
 
      [:boolean_value_expression ^:z x _ ^:z y]
      ;;=>
@@ -1069,9 +1084,33 @@
      ;;=>
      (Long/parseLong x)
 
+     [:named_columns_join _ _]
+     (reduce
+      (fn [acc expr]
+        (list 'and acc expr))
+      (let [{:keys [join-columns] :as env} (named-columns-join-env z)]
+        (for [column join-columns]
+          (->> (for [side [:lhs :rhs]
+                     :let [{:keys [qualified-column table-id]} (first (get-in env [side column]))]]
+                 (id-symbol (first qualified-column) table-id column))
+               (apply list '=)))))
+
      [_ ^:z x]
      ;;=>
      (expr x))))
+
+(defn- wrap-with-select [sc-expr relation]
+  (reduce
+   (fn [acc predicate]
+     [:select predicate acc])
+   relation
+   ((fn step [sc-expr]
+      (if (and (list? sc-expr)
+               (= 'and (first sc-expr)))
+        (concat (step (nth sc-expr 1))
+                (step (nth sc-expr 2)))
+        [sc-expr]))
+    sc-expr)))
 
 (defn- plan [z]
   (maybe-add-ref
@@ -1098,20 +1137,41 @@
          [:rename unqualified-rename-map qualified-project]
          qualified-project))
 
-     [:table_expression ^:z fc ^:z wc]
+     [:table_expression ^:z fc [:where_clause _ ^:z sc]]
      ;;=>
-     (let [search-condition-expr (expr (r/$ wc 2))]
-       (reduce
-        (fn [acc predicate]
-          [:select predicate acc])
-        (plan fc)
-        ((fn step [search-condition-expr]
-           (if (and (list? search-condition-expr)
-                    (= 'and (first search-condition-expr)))
-             (concat (step (nth search-condition-expr 1))
-                     (step (nth search-condition-expr 2)))
-             [search-condition-expr]))
-         search-condition-expr)))
+     (wrap-with-select (expr sc) (plan fc))
+
+     [:table_primary _ _ _]
+     ;;=>
+     (let [{:keys [id correlation-name] :as table} (table z)
+           projection (first (projected-columns z))]
+       [:rename (symbol (str correlation-name relation-id-delimiter id))
+        (if-let [table-ref (:table-ref (meta table))]
+          (plan table-ref)
+          [:scan (vec (for [{:keys [identifier]} projection]
+                        (symbol identifier)))])])
+
+     [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
+     ;;=>
+     (wrap-with-select (expr sc) [:join {} (plan lhs) (plan rhs)])
+
+     [:qualified_join ^:z lhs ^:z jt _ ^:z rhs [:join_condition _ ^:z sc]]
+     ;;=>
+     (wrap-with-select (expr sc) (case (join-type jt)
+                                   :left [:left-outer-join {} (plan lhs) (plan rhs)]
+                                   :right [:left-outer-join {} (plan rhs) (plan lhs)]
+                                   :inner [:join {} (plan lhs) (plan rhs)]))
+
+     [:qualified_join ^:z lhs _ ^:z rhs ^:z ncj]
+     ;;=>
+     (wrap-with-select (expr ncj) [:join {} (plan lhs) (plan rhs)])
+
+     [:qualified_join ^:z lhs ^:z jt _ ^:z rhs ^:z ncj]
+     ;;=>
+     (wrap-with-select (expr ncj) (case (join-type jt)
+                                    :left [:left-outer-join {} (plan lhs) (plan rhs)]
+                                    :right [:left-outer-join {} (plan rhs) (plan lhs)]
+                                    :inner [:join {} (plan lhs) (plan rhs)]))
 
      [:from_clause _ ^:z trl]
      ;;=>
@@ -1121,11 +1181,8 @@
       (r/collect-stop
        (fn [z]
          (r/zcase z
-           :table_primary [(let [{:keys [id correlation-name]} (table z)
-                                 projection (first (projected-columns z))]
-                             [:rename (symbol (str correlation-name relation-id-delimiter id))
-                              [:scan (vec (for [{:keys [identifier]} projection]
-                                            (symbol identifier)))]])]
+           (:table_primary
+            :qualified_join) [(plan z)]
            :subquery []
            nil))
        trl))
@@ -1151,23 +1208,6 @@
          (if-let [errs (not-empty (errs ag))]
            {:errs errs}
            {:plan (plan ag)})))))
-
-(comment
-  (= (plan-query (parse "SELECT si.movieTitle
-FROM StarsIn AS si, MovieStar AS ms
-WHERE si.starName = ms.name AND ms.birthdate = 1960"))
-
-     '{:plan [:rename
-              {si__3_movieTitle movieTitle}
-              [:project
-               [si__3_movieTitle]
-               [:select
-                (= ms__4_birthdate 1960)
-                [:select
-                 (= si__3_starName ms__4_name)
-                 [:cross-join
-                  [:rename si__3 [:scan [movieTitle starName]]]
-                  [:rename ms__4 [:scan [name birthdate]]]]]]]]}))
 
 ;; SQL:2011 official grammar:
 

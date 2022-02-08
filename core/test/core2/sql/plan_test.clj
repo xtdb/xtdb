@@ -1,0 +1,70 @@
+(ns core2.sql.plan-test
+  (:require [clojure.test :as t]
+            [core2.sql :as sql]))
+
+(defmacro valid? [sql expected]
+  `(let [tree# (sql/parse ~sql)
+         {errs# :errs plan# :plan} (sql/plan-query tree#)]
+     (t/is (empty? errs#))
+     (t/is (= '~expected plan#))
+     {:tree tree# :plan plan#}))
+
+(t/deftest test-basic-queries
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate = 1960"
+          [:rename
+           {si__3_movieTitle movieTitle}
+           [:project
+            [si__3_movieTitle]
+            [:select
+             (= ms__4_birthdate 1960)
+             [:select
+              (= si__3_starName ms__4_name)
+              [:cross-join
+               [:rename si__3 [:scan [movieTitle starName]]]
+               [:rename ms__4 [:scan [name birthdate]]]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name"
+          [:rename {si__3_movieTitle movieTitle}
+           [:project [si__3_movieTitle]
+            [:select (= si__3_starName m__4_name)
+             [:cross-join
+              [:rename si__3 [:scan [movieTitle starName]]]
+              [:rename m__4
+               [:rename {ms__7_name name}
+                [:project [ms__7_name]
+                 [:select (= ms__7_birthdate 1960)
+                  [:rename ms__7 [:scan [name birthdate]]]]]]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM Movie AS m JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear"
+          [:rename {si__4_movieTitle movieTitle}
+           [:project [si__4_movieTitle]
+            [:select (= si__4_year m__3_movieYear)
+             [:select (= m__3_title si__4_movieTitle)
+              [:join {}
+               [:rename m__3 [:scan [title movieYear]]]
+               [:rename si__4 [:scan [movieTitle year]]]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM Movie AS m LEFT JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear"
+          [:rename {si__4_movieTitle movieTitle}
+           [:project [si__4_movieTitle]
+            [:select (= si__4_year m__3_movieYear)
+             [:select (= m__3_title si__4_movieTitle)
+              [:left-outer-join {}
+               [:rename m__3 [:scan [title movieYear]]]
+               [:rename si__4 [:scan [movieTitle year]]]]]]]])
+
+  (valid? "SELECT si.title FROM Movie AS m JOIN StarsIn AS si USING (title)"
+          [:rename {si__4_title title}
+           [:project [si__4_title]
+            [:select (= m__3_title si__4_title)
+             [:join {}
+              [:rename m__3 [:scan [title]]]
+              [:rename si__4 [:scan [title]]]]]]])
+
+  (valid? "SELECT si.title FROM Movie AS m RIGHT OUTER JOIN StarsIn AS si USING (title)"
+          [:rename {si__4_title title}
+           [:project [si__4_title]
+            [:select (= m__3_title si__4_title)
+             [:left-outer-join {}
+              [:rename si__4 [:scan [title]]]
+              [:rename m__3 [:scan [title]]]]]]]))
