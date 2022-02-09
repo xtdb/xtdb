@@ -1200,8 +1200,13 @@
 ;; current op.
 
 (defn- projected-symbols [op]
-  (let [projections (projected-columns (:ref (meta op)))]
-    (set (for [{:keys [qualified-column] :as projection} (first projections)
+  (let [projections (r/collect-stop
+                     (fn [z]
+                       (let [{:keys [ref]} (meta (z/node z))]
+                         (when (r/ctor? :table_primary ref)
+                           (first (projected-columns ref)))))
+                     (z/vector-zip op))]
+    (set (for [{:keys [qualified-column] :as projection} projections
                :let [{table-id :id} (:table (meta projection))]]
            (id-symbol (first qualified-column) table-id (second qualified-column))))))
 
@@ -1211,7 +1216,8 @@
          x)))
 
 (defn- build-join-map [predicate lhs rhs]
-  (when (= '= (first predicate))
+  (when (and (= '= (first predicate))
+             (= 3 (count predicate)))
     (let [[_ x y] predicate
           [lhs-columns rhs-columns] (for [side [lhs rhs]]
                                       (projected-symbols side))
@@ -1224,43 +1230,35 @@
       (when (and lhs-v rhs-v)
         {lhs-v rhs-v}))))
 
-(defn- optimize-plan [z]
-  (r/zmatch z
-    [:select predicate
-     [:rename prefix [:scan columns]]]
-    ;;=>
-    (let [expr-symbols (expr-symbols predicate)]
-      (when-let [single-symbol (when (= 1 (count expr-symbols))
-                                 (first expr-symbols))]
-        (let [new-columns (vec (for [column-or-select columns
-                                     :let [column (if (map? column-or-select)
-                                                    (key (first column-or-select))
-                                                    column-or-select)]]
-                                 (if (= single-symbol (symbol (str prefix relation-prefix-delimiter column)))
-                                   (let [predicate (w/postwalk-replace {single-symbol column} predicate)]
-                                     (if (map? column-or-select)
-                                       (update column-or-select column (fn [existing-predicate]
-                                                                         (if (= predicate existing-predicate)
-                                                                           existing-predicate
-                                                                           (list 'and predicate existing-predicate))))
-                                       {column predicate}))
-                                   column)))]
-          (when-not (= columns new-columns)
-            [:select predicate
-             [:rename prefix [:scan new-columns]]]))))
+(defn- conjunction-clauses [predicate]
+  (if (= 'and (first predicate))
+    (rest predicate)
+    [predicate]))
 
+(defn- merge-conjunctions [predicate-1 predicate-2]
+  (let [predicates (distinct (concat (conjunction-clauses predicate-1) (conjunction-clauses predicate-2)))]
+    (if (= 1 (count predicates))
+      (first predicates)
+      (apply list 'and predicates))))
+
+(defn- promote-selection-cross-join-to-join [z]
+  (r/zmatch z
     [:select predicate
      [:cross-join lhs rhs]]
     ;;=>
     (when-let [join-map (build-join-map predicate lhs rhs)]
-      [:join join-map lhs rhs])
+      [:join join-map lhs rhs])))
 
-    [:select predicate
-     [join-type {} lhs rhs]]
-    ;;=>
-    (when-let [join-map (build-join-map predicate lhs rhs)]
-      [join-type join-map lhs rhs])
+(defn- promote-selection-to-join [z]
+  (r/zmatch z
+     [:select predicate
+      [join-type {} lhs rhs]]
+     ;;=>
+     (when-let [join-map (build-join-map predicate lhs rhs)]
+       [join-type join-map lhs rhs])))
 
+(defn- push-selection-down-past-join [z]
+  (r/zmatch z
     [:select predicate
      [join-type join-map lhs rhs]]
     ;;=>
@@ -1275,6 +1273,46 @@
 
         (and on-lhs? (not on-rhs?))
         [join-type join-map [:select predicate lhs] rhs]))))
+
+(defn- merge-selections-with-same-variables [z]
+  (r/zmatch z
+    [:select predicate-1
+     [:select predicate-2
+      relation]]
+    ;;=>
+    (when (= (expr-symbols predicate-1) (expr-symbols predicate-2))
+      [:select (merge-conjunctions predicate-1 predicate-2) relation])))
+
+(defn- add-selection-to-scan-predicate [z]
+  (r/zmatch z
+    [:select predicate
+     [:rename prefix [:scan columns]]]
+    ;;=>
+    (let [expr-symbols (expr-symbols predicate)]
+      (when-let [single-symbol (when (= 1 (count expr-symbols))
+                                 (first expr-symbols))]
+        (let [new-columns (vec (for [column-or-select columns
+                                     :let [column (if (map? column-or-select)
+                                                    (key (first column-or-select))
+                                                    column-or-select)]]
+                                 (if (= single-symbol (symbol (str prefix relation-prefix-delimiter column)))
+                                   (let [predicate (w/postwalk-replace {single-symbol column} predicate)]
+                                     (if (map? column-or-select)
+                                       (update column-or-select column (partial merge-conjunctions predicate))
+                                       {column predicate}))
+                                   column)))]
+          (when-not (= columns new-columns)
+            [:select predicate
+             (with-meta
+               [:rename prefix [:scan new-columns]]
+               (meta (last (z/node z))))]))))))
+
+(def ^:private optimize-plan
+  (some-fn promote-selection-cross-join-to-join
+           promote-selection-to-join
+           push-selection-down-past-join
+           merge-selections-with-same-variables
+           add-selection-to-scan-predicate))
 
 (defn plan-query [query]
   (if-let [parse-failure (insta/get-failure query)]

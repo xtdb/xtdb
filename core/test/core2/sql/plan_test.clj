@@ -20,6 +20,16 @@
              [:select (= ms__4_birthdate 1960)
               [:rename ms__4 [:scan [name {birthdate (= birthdate 1960)}]]]]]]])
 
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950"
+          [:rename
+           {si__3_movieTitle movieTitle}
+           [:project
+            [si__3_movieTitle]
+            [:join {si__3_starName ms__4_name}
+             [:rename si__3 [:scan [movieTitle starName]]]
+             [:select (and (> ms__4_birthdate 1950) (< ms__4_birthdate 1960))
+              [:rename ms__4 [:scan [name {birthdate (and (> birthdate 1950) (< birthdate 1960))}]]]]]]])
+
   (valid? "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name"
           [:rename {si__3_movieTitle movieTitle}
            [:project [si__3_movieTitle]
