@@ -22,15 +22,17 @@
     (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
       (let [len (alength table)
             start (.nextInt (ThreadLocalRandom/current) len)]
-        (loop [i start]
+        (loop [i start
+               wrapped-around false]
           (if-let [^Map$Entry e (aget table i)]
             e
             (let [next (inc i)
-                  next (if (= next len)
+                  last (= next len)
+                  next (if last
                          0
                          next)]
-              (when-not (= next start)
-                (recur next)))))))))
+              (when-not (and (= next start) wrapped-around)
+                (recur next (if last true wrapped-around))))))))))
 
 (declare resize-cache)
 
