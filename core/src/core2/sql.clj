@@ -1150,6 +1150,15 @@
   (maybe-add-ref
    z
    (r/zmatch z
+     [:query_expression ^:z qeb [:result_offset_clause _ rorc _]]
+     [:top {:skip (expr rorc)} (plan qeb)]
+
+     [:query_expression ^:z qeb [:fetch_first_clause _ _ ffrc _ _]]
+     [:top {:limit (expr ffrc)} (plan qeb)]
+
+     [:query_expression ^:z qeb [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
+     [:top {:skip (expr rorc) :limit (expr ffrc)} (plan qeb)]
+
      [:query_specification _ ^:z sl ^:z te]
      ;;=>
      (let [projection (first (projected-columns sl))

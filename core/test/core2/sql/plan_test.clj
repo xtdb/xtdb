@@ -89,4 +89,28 @@
               [:project [me__3_name {$agg_in__2_1$ m__4_length} {$agg_in__2_2$ m__4_year}]
                [:join {me__3_cert m__4_producer}
                 [:rename me__3 [:scan [name cert]]]
-                [:rename m__4 [:scan [length producer year]]]]]]]]]))
+                [:rename m__4 [:scan [length producer year]]]]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY"
+          [:top {:limit 10}
+           [:rename
+            {si__3_movieTitle movieTitle}
+            [:project
+             [si__3_movieTitle]
+             [:rename si__3 [:scan [movieTitle]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS"
+          [:top {:skip 5}
+           [:rename
+            {si__3_movieTitle movieTitle}
+            [:project
+             [si__3_movieTitle]
+             [:rename si__3 [:scan [movieTitle]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS FETCH FIRST 10 ROWS ONLY"
+          [:top {:skip 5 :limit 10}
+           [:rename
+            {si__3_movieTitle movieTitle}
+            [:project
+             [si__3_movieTitle]
+             [:rename si__3 [:scan [movieTitle]]]]]]))
