@@ -1205,9 +1205,9 @@
              :when (r/ctor? :column_reference (:ref (meta x)))]
          x)))
 
-(defn- build-join-map [sc lhs rhs]
-  (when (= '= (first sc))
-    (let [[_ x y] sc
+(defn- build-join-map [predicate lhs rhs]
+  (when (= '= (first predicate))
+    (let [[_ x y] predicate
           [lhs-columns rhs-columns] (for [side [lhs rhs]]
                                       (projected-symbols side))
           [lhs-v rhs-v] (for [side-columns [lhs-columns rhs-columns]]
@@ -1221,47 +1221,47 @@
 
 (defn- optimize-plan [z]
   (r/zmatch z
-    [:select sc
-     [:rename v [:scan columns]]]
+    [:select predicate
+     [:rename prefix [:scan columns]]]
     ;;=>
-    (let [expr-symbols (expr-symbols sc)]
+    (let [expr-symbols (expr-symbols predicate)]
       (when-let [sym (when (= 1 (count expr-symbols))
                        (first expr-symbols))]
         (let [new-columns (vec (for [column columns]
                                  (if (and (symbol? column)
-                                          (= sym (symbol (str v relation-prefix-delimiter column))))
-                                   {column (w/postwalk-replace {sym column} sc)}
+                                          (= sym (symbol (str prefix relation-prefix-delimiter column))))
+                                   {column (w/postwalk-replace {sym column} predicate)}
                                    column)))]
           (when-not (= columns new-columns)
-            [:select sc
-             [:rename v [:scan new-columns]]]))))
+            [:select predicate
+             [:rename prefix [:scan new-columns]]]))))
 
-    [:select sc
+    [:select predicate
      [:cross-join lhs rhs]]
     ;;=>
-    (when-let [join-map (build-join-map sc lhs rhs)]
+    (when-let [join-map (build-join-map predicate lhs rhs)]
       [:join join-map lhs rhs])
 
-    [:select sc
+    [:select predicate
      [join-type {} lhs rhs]]
     ;;=>
-    (when-let [join-map (build-join-map sc lhs rhs)]
+    (when-let [join-map (build-join-map predicate lhs rhs)]
       [join-type join-map lhs rhs])
 
-    [:select sc
+    [:select predicate
      [join-type join-map lhs rhs]]
     ;;=>
-    (let [expr-symbols (expr-symbols sc)
+    (let [expr-symbols (expr-symbols predicate)
           lhs-columns (projected-symbols lhs)
           rhs-columns (projected-symbols rhs)
           on-lhs? (set/subset? expr-symbols lhs-columns)
           on-rhs? (set/subset? expr-symbols rhs-columns)]
       (cond
         (and on-rhs? (not on-lhs?))
-        [join-type join-map lhs [:select sc rhs]]
+        [join-type join-map lhs [:select predicate rhs]]
 
         (and on-lhs? (not on-rhs?))
-        [join-type join-map [:select sc lhs] rhs]))))
+        [join-type join-map [:select predicate lhs] rhs]))))
 
 (defn plan-query [query]
   (if-let [parse-failure (insta/get-failure query)]
