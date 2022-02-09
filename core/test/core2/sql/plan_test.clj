@@ -79,4 +79,14 @@
            [:project [si__4_title]
             [:left-outer-join {si__4_title m__3_title}
              [:rename si__4 [:scan [title]]]
-             [:rename m__3 [:scan [title]]]]]]))
+             [:rename m__3 [:scan [title]]]]]])
+
+  (valid? "SELECT me.name, SUM(m.length) FROM MovieExec AS me, Movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.year) < 1930"
+          [:rename {me__3_name name}
+           [:project [me__3_name {$column_1$ $agg_out_1$}]
+            [:select (< $agg_out_2$ 1930)
+             [:group-by [me__3_name {$agg_out_1$ (sum $agg_in_1$)} {$agg_out_2$ (min $agg_in_2$)}]
+              [:project [me__3_name {$agg_in_1$ m__4_length} {$agg_in_2$ m__4_year}]
+               [:join {me__3_cert m__4_producer}
+                [:rename me__3 [:scan [name cert]]]
+                [:rename m__4 [:scan [length producer year]]]]]]]]]))

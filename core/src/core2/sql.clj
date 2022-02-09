@@ -1059,6 +1059,8 @@
                         :correlation-name table
                         :column column}}))
 
+(def ^:private ^:dynamic *aggregate->id* {})
+
 (defn- expr [z]
   (maybe-add-ref
    z
@@ -1103,6 +1105,9 @@
                  (id-symbol (first qualified-column) table-id column))
                (apply list '=)))))
 
+     [:aggregate_function _]
+     (symbol (format "$agg_out_%d$" (get *aggregate->id* z)))
+
      [_ ^:z x]
      ;;=>
      (expr x))))
@@ -1120,6 +1125,27 @@
         [sc-expr]))
     sc-expr)))
 
+(defn- wrap-with-group-by [z relation]
+  (let [projection (first (projected-columns z))
+        {:keys [grouping-columns]} (local-env (group-env z))
+        grouping-columns (set grouping-columns)
+        grouping-columns (vec (for [{:keys [qualified-column] :as projection} projection
+                                    :when (contains? grouping-columns qualified-column)
+                                    :let [derived-column (:ref (meta projection))]]
+                                (expr (r/$ derived-column 1))))]
+    [:group-by (->> (for [[aggregate id] *aggregate->id*]
+                      (r/zmatch aggregate
+                        [:aggregate_function [:general_set_function [:computational_operation sf] _]]
+                        {(symbol (format "$agg_out_%d$" id))
+                         (list (symbol (str/lower-case sf)) (symbol (format "$agg_in_%d$" id)))}))
+                    (into grouping-columns ))
+     [:project (->> (for [[aggregate id] *aggregate->id*]
+                      (r/zmatch aggregate
+                        [:aggregate_function [:general_set_function _ ^:z ve]]
+                        {(symbol (format "$agg_in_%d$" id)) (expr ve)}))
+                    (into grouping-columns ))
+      relation]]))
+
 (defn- plan [z]
   (maybe-add-ref
    z
@@ -1133,14 +1159,23 @@
                                          [(expr (r/$ derived-column 1))
                                           (symbol identifier)])
                                        (into {}))
-           qualified-project [:project
-                              (vec (for [{:keys [identifier qualified-column index] :as projection} projection
-                                         :let [derived-column (:ref (meta projection))]]
-                                     (if qualified-column
-                                       (expr (r/$ derived-column 1))
-                                       {(expr (r/$ derived-column 1))
-                                        (symbol (or identifier (format "$column%d$" index)))})))
-                              (plan te)]]
+           aggregate->id (zipmap (r/collect-stop
+                                  (fn [z]
+                                    (r/zcase z
+                                      :aggregate_function [z]
+                                      :subquery []
+                                      nil))
+                                  z)
+                                 (map inc (range)))
+           qualified-project (binding [*aggregate->id* aggregate->id]
+                               [:project
+                                (vec (for [{:keys [identifier qualified-column index] :as projection} projection
+                                           :let [derived-column (:ref (meta projection))]]
+                                       (if qualified-column
+                                         (expr (r/$ derived-column 1))
+                                         {(symbol (or identifier (format "$column_%d$" index)))
+                                          (expr (r/$ derived-column 1))})))
+                                (plan te)])]
        (if (not-empty unqualified-rename-map)
          [:rename unqualified-rename-map qualified-project]
          qualified-project))
@@ -1148,6 +1183,17 @@
      [:table_expression ^:z fc [:where_clause _ ^:z sc]]
      ;;=>
      (wrap-with-select (expr sc) (plan fc))
+
+     [:table_expression ^:z fc [:where_clause _ ^:z sc] [:group_by_clause _ _ _]]
+     ;;=>
+     (->> (wrap-with-select (expr sc) (plan fc))
+          (wrap-with-group-by z))
+
+     [:table_expression ^:z fc [:where_clause _ ^:z sc] [:group_by_clause _ _ _] [:having_clause _ ^:z hsc]]
+     ;;=>
+     (->> (wrap-with-select (expr sc) (plan fc))
+          (wrap-with-group-by z)
+          (wrap-with-select (expr hsc)))
 
      [:table_primary _ _ _]
      ;;=>
