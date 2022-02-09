@@ -1256,8 +1256,10 @@
     [predicate]))
 
 (defn- merge-conjunctions [predicate-1 predicate-2]
-  (let [predicates (distinct (concat (conjunction-clauses predicate-1)
-                                     (conjunction-clauses predicate-2)))]
+  (let [predicates (->> (concat (conjunction-clauses predicate-1)
+                                (conjunction-clauses predicate-2))
+                        (distinct)
+                        (sort-by str))]
     (if (= 1 (count predicates))
       (first predicates)
       (apply list 'and predicates))))
