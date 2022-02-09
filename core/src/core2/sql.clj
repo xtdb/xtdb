@@ -1106,7 +1106,7 @@
                (apply list '=)))))
 
      [:aggregate_function _]
-     (symbol (format "$agg_out_%d$" (get *aggregate->id* z)))
+     (symbol (format "$agg_out%s$" (get *aggregate->id* z)))
 
      [_ ^:z x]
      ;;=>
@@ -1136,13 +1136,13 @@
     [:group-by (->> (for [[aggregate id] *aggregate->id*]
                       (r/zmatch aggregate
                         [:aggregate_function [:general_set_function [:computational_operation sf] _]]
-                        {(symbol (format "$agg_out_%d$" id))
-                         (list (symbol (str/lower-case sf)) (symbol (format "$agg_in_%d$" id)))}))
+                        {(symbol (format "$agg_out%s$" id))
+                         (list (symbol (str/lower-case sf)) (symbol (format "$agg_in%s$" id)))}))
                     (into grouping-columns ))
      [:project (->> (for [[aggregate id] *aggregate->id*]
                       (r/zmatch aggregate
                         [:aggregate_function [:general_set_function _ ^:z ve]]
-                        {(symbol (format "$agg_in_%d$" id)) (expr ve)}))
+                        {(symbol (format "$agg_in%s$" id)) (expr ve)}))
                     (into grouping-columns ))
       relation]]))
 
@@ -1159,6 +1159,7 @@
                                          [(expr (r/$ derived-column 1))
                                           (symbol identifier)])
                                        (into {}))
+           query-id (id z)
            aggregate->id (zipmap (r/collect-stop
                                   (fn [z]
                                     (r/zcase z
@@ -1166,7 +1167,8 @@
                                       :subquery []
                                       nil))
                                   z)
-                                 (map inc (range)))
+                                 (for [^long n (range)]
+                                   (str "__" query-id "_" (inc n))))
            qualified-project (binding [*aggregate->id* aggregate->id]
                                [:project
                                 (vec (for [{:keys [identifier qualified-column index] :as projection} projection
