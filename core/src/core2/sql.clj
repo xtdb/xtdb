@@ -1153,14 +1153,14 @@
      ;;=>
      (let [{:keys [id correlation-name] :as table} (table z)
            projection (first (projected-columns z))]
-       (with-meta
-         [:rename (symbol (str correlation-name relation-id-delimiter id))
-          (if-let [table-ref (:table-ref (meta table))]
-            (plan table-ref)
-            [:scan (vec (for [{:keys [identifier]} projection]
-                          (symbol identifier)))])]
-         {:table-reference {:table-id id
-                            :correlation-name correlation-name}}))
+       [:rename (with-meta
+                  (symbol (str correlation-name relation-id-delimiter id))
+                  {:table-reference {:table-id id
+                                     :correlation-name correlation-name}})
+        (if-let [table-ref (:table-ref (meta table))]
+          (plan table-ref)
+          [:scan (vec (for [{:keys [identifier]} projection]
+                        (symbol identifier)))])])
 
      [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
      ;;=>
@@ -1205,9 +1205,10 @@
 (defn- table-references-in-subtree [op]
   (set (r/collect-stop
         (fn [z]
-          (when (and (r/ctor? :rename z)
-                     (:table-reference (meta (z/node z))))
-            [(:table-reference (meta (z/node z)))]))
+          (r/zmatch z
+            [:rename prefix _]
+            (when-let [table-reference (:table-reference (meta prefix))]
+              [table-reference])))
         (z/vector-zip op))))
 
 (defn- table-ids-in-subtree [op]
@@ -1352,9 +1353,7 @@
                        (conjunction-clauses predicate))]
       (when-not (= columns new-columns)
         [:select predicate
-         (with-meta
-           [:rename prefix [:scan new-columns]]
-           (meta (last (z/node z))))]))))
+         [:rename prefix [:scan new-columns]]]))))
 
 (def ^:private optimize-plan
   (some-fn promote-selection-cross-join-to-join
