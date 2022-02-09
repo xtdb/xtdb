@@ -1053,7 +1053,11 @@
     x))
 
 (defn- id-symbol [table table-id column]
-  (symbol (str table relation-id-delimiter table-id relation-prefix-delimiter column)))
+  (with-meta
+    (symbol (str table relation-id-delimiter table-id relation-prefix-delimiter column))
+    {:column-reference {:table-id table-id
+                        :correlation-name table
+                        :column column}}))
 
 (defn- expr [z]
   (maybe-add-ref
@@ -1149,11 +1153,14 @@
      ;;=>
      (let [{:keys [id correlation-name] :as table} (table z)
            projection (first (projected-columns z))]
-       [:rename (symbol (str correlation-name relation-id-delimiter id))
-        (if-let [table-ref (:table-ref (meta table))]
-          (plan table-ref)
-          [:scan (vec (for [{:keys [identifier]} projection]
-                        (symbol identifier)))])])
+       (with-meta
+         [:rename (symbol (str correlation-name relation-id-delimiter id))
+          (if-let [table-ref (:table-ref (meta table))]
+            (plan table-ref)
+            [:scan (vec (for [{:keys [identifier]} projection]
+                          (symbol identifier)))])]
+         {:table-reference {:table-id id
+                            :correlation-name correlation-name}}))
 
      [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
      ;;=>
@@ -1195,37 +1202,46 @@
      ;;=>
      (plan x))))
 
-;; TODO: should these really use attributes properly? Try finding all
-;; tables in table_primary meta here instead of relying on ref of
-;; current op.
+(defn- table-references-in-subtree [op]
+  (set (r/collect-stop
+        (fn [z]
+          (when (and (r/ctor? :rename z)
+                     (:table-reference (meta (z/node z))))
+            [(:table-reference (meta (z/node z)))]))
+        (z/vector-zip op))))
 
-(defn- projected-symbols [op]
-  (let [projections (r/collect-stop
-                     (fn [z]
-                       (let [{:keys [ref]} (meta (z/node z))]
-                         (when (r/ctor? :table_primary ref)
-                           (first (projected-columns ref)))))
-                     (z/vector-zip op))]
-    (set (for [{:keys [qualified-column] :as projection} projections
-               :let [{table-id :id} (:table (meta projection))]]
-           (id-symbol (first qualified-column) table-id (second qualified-column))))))
+(defn- table-ids-in-subtree [op]
+  (->> (table-references-in-subtree op)
+       (map :table-id)
+       (set)))
 
 (defn- expr-symbols [expr]
   (set (for [x (flatten expr)
-             :when (r/ctor? :column_reference (:ref (meta x)))]
+             :when (:column-reference (meta x))]
          x)))
+
+(defn- expr-column-references [expr]
+  (->> (expr-symbols expr)
+       (map (comp :column-reference meta))
+       (set)))
+
+(defn- expr-table-ids [expr]
+  (->> (expr-column-references expr)
+       (map :table-id)
+       (set)))
 
 (defn- build-join-map [predicate lhs rhs]
   (when (and (= '= (first predicate))
              (= 3 (count predicate)))
     (let [[_ x y] predicate
-          [lhs-columns rhs-columns] (for [side [lhs rhs]]
-                                      (projected-symbols side))
-          [lhs-v rhs-v] (for [side-columns [lhs-columns rhs-columns]]
+          {x-table-id :table-id} (:column-reference (meta x))
+          {y-table-id :table-id} (:column-reference (meta y))
+          [lhs-v rhs-v] (for [side [lhs rhs]
+                              :let [table-ids (table-ids-in-subtree side)]]
                           (cond
-                            (contains? side-columns x)
+                            (contains? table-ids x-table-id)
                             x
-                            (contains? side-columns y)
+                            (contains? table-ids y-table-id)
                             y))]
       (when (and lhs-v rhs-v)
         {lhs-v rhs-v}))))
@@ -1236,7 +1252,8 @@
     [predicate]))
 
 (defn- merge-conjunctions [predicate-1 predicate-2]
-  (let [predicates (distinct (concat (conjunction-clauses predicate-1) (conjunction-clauses predicate-2)))]
+  (let [predicates (distinct (concat (conjunction-clauses predicate-1)
+                                     (conjunction-clauses predicate-2)))]
     (if (= 1 (count predicates))
       (first predicates)
       (apply list 'and predicates))))
@@ -1262,11 +1279,11 @@
     [:select predicate
      [join-type join-map lhs rhs]]
     ;;=>
-    (let [expr-symbols (expr-symbols predicate)
-          lhs-columns (projected-symbols lhs)
-          rhs-columns (projected-symbols rhs)
-          on-lhs? (set/subset? expr-symbols lhs-columns)
-          on-rhs? (set/subset? expr-symbols rhs-columns)]
+    (let [expr-table-ids (expr-table-ids predicate)
+          lhs-table-ids (table-ids-in-subtree lhs)
+          rhs-table-ids (table-ids-in-subtree rhs)
+          on-lhs? (set/subset? expr-table-ids lhs-table-ids)
+          on-rhs? (set/subset? expr-table-ids rhs-table-ids)]
       (cond
         (and on-rhs? (not on-lhs?))
         [join-type join-map lhs [:select predicate rhs]]
@@ -1280,7 +1297,7 @@
      [:select predicate-2
       relation]]
     ;;=>
-    (when (= (expr-symbols predicate-1) (expr-symbols predicate-2))
+    (when (= (expr-table-ids predicate-1) (expr-table-ids predicate-2))
       [:select (merge-conjunctions predicate-1 predicate-2) relation])))
 
 (defn- add-selection-to-scan-predicate [z]
