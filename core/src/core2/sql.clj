@@ -1230,9 +1230,12 @@
        (map :table-id)
        (set)))
 
+(defn- equals-predicate? [predicate]
+  (and (= '= (first predicate))
+       (= 3 (count predicate))))
+
 (defn- build-join-map [predicate lhs rhs]
-  (when (and (= '= (first predicate))
-             (= 3 (count predicate)))
+  (when (equals-predicate? predicate)
     (let [[_ x y] predicate
           {x-table-id :table-id} (:column-reference (meta x))
           {y-table-id :table-id} (:column-reference (meta y))
@@ -1291,6 +1294,30 @@
         (and on-lhs? (not on-rhs?))
         [join-type join-map [:select predicate lhs] rhs]))))
 
+(defn- push-selections-with-fewer-variables-down [z]
+  (r/zmatch z
+    [:select predicate-1
+     [:select predicate-2
+      relation]]
+    ;;=>
+    (when (< (count (expr-table-ids predicate-1))
+             (count (expr-table-ids predicate-2)))
+      [:select predicate-2
+       [:select predicate-1
+        relation]])))
+
+(defn- push-selections-with-equals-down [z]
+  (r/zmatch z
+    [:select predicate-1
+     [:select predicate-2
+      relation]]
+    ;;=>
+    (when (and (equals-predicate? predicate-1)
+               (not (equals-predicate? predicate-2)))
+      [:select predicate-2
+       [:select predicate-1
+        relation]])))
+
 (defn- merge-selections-with-same-variables [z]
   (r/zmatch z
     [:select predicate-1
@@ -1305,29 +1332,36 @@
     [:select predicate
      [:rename prefix [:scan columns]]]
     ;;=>
-    (let [expr-symbols (expr-symbols predicate)]
-      (when-let [single-symbol (when (= 1 (count expr-symbols))
-                                 (first expr-symbols))]
-        (let [new-columns (vec (for [column-or-select columns
-                                     :let [column (if (map? column-or-select)
-                                                    (key (first column-or-select))
-                                                    column-or-select)]]
-                                 (if (= single-symbol (symbol (str prefix relation-prefix-delimiter column)))
-                                   (let [predicate (w/postwalk-replace {single-symbol column} predicate)]
-                                     (if (map? column-or-select)
-                                       (update column-or-select column (partial merge-conjunctions predicate))
-                                       {column predicate}))
-                                   column)))]
-          (when-not (= columns new-columns)
-            [:select predicate
-             (with-meta
-               [:rename prefix [:scan new-columns]]
-               (meta (last (z/node z))))]))))))
+    (let [new-columns (reduce
+                       (fn [acc predicate]
+                         (let [expr-symbols (expr-symbols predicate)]
+                           (if-let [single-symbol (when (= 1 (count expr-symbols))
+                                                    (first expr-symbols))]
+                             (vec (for [column-or-select acc
+                                        :let [column (if (map? column-or-select)
+                                                       (key (first column-or-select))
+                                                       column-or-select)]]
+                                    (if (= single-symbol (symbol (str prefix relation-prefix-delimiter column)))
+                                      (let [predicate (w/postwalk-replace {single-symbol column} predicate)]
+                                        (if (map? column-or-select)
+                                          (update column-or-select column (partial merge-conjunctions predicate))
+                                          {column predicate}))
+                                      column-or-select)))
+                             acc)))
+                       columns
+                       (conjunction-clauses predicate))]
+      (when-not (= columns new-columns)
+        [:select predicate
+         (with-meta
+           [:rename prefix [:scan new-columns]]
+           (meta (last (z/node z))))]))))
 
 (def ^:private optimize-plan
   (some-fn promote-selection-cross-join-to-join
            promote-selection-to-join
            push-selection-down-past-join
+           push-selections-with-fewer-variables-down
+           push-selections-with-equals-down
            merge-selections-with-same-variables
            add-selection-to-scan-predicate))
 
