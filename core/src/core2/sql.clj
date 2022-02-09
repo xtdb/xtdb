@@ -1084,6 +1084,9 @@
      ;;=>
      (Long/parseLong x)
 
+     [:character_string_literal x]
+     (subs x 1 (dec (count x)))
+
      [:named_columns_join _ _]
      (reduce
       (fn [acc expr]
@@ -1192,7 +1195,9 @@
      ;;=>
      (plan x))))
 
-;; TODO: should these really use attributes properly?
+;; TODO: should these really use attributes properly? Try finding all
+;; tables in table_primary meta here instead of relying on ref of
+;; current op.
 
 (defn- projected-symbols [op]
   (let [projections (projected-columns (:ref (meta op)))]
@@ -1225,12 +1230,20 @@
      [:rename prefix [:scan columns]]]
     ;;=>
     (let [expr-symbols (expr-symbols predicate)]
-      (when-let [sym (when (= 1 (count expr-symbols))
-                       (first expr-symbols))]
-        (let [new-columns (vec (for [column columns]
-                                 (if (and (symbol? column)
-                                          (= sym (symbol (str prefix relation-prefix-delimiter column))))
-                                   {column (w/postwalk-replace {sym column} predicate)}
+      (when-let [single-symbol (when (= 1 (count expr-symbols))
+                                 (first expr-symbols))]
+        (let [new-columns (vec (for [column-or-select columns
+                                     :let [column (if (map? column-or-select)
+                                                    (key (first column-or-select))
+                                                    column-or-select)]]
+                                 (if (= single-symbol (symbol (str prefix relation-prefix-delimiter column)))
+                                   (let [predicate (w/postwalk-replace {single-symbol column} predicate)]
+                                     (if (map? column-or-select)
+                                       (update column-or-select column (fn [existing-predicate]
+                                                                         (if (= predicate existing-predicate)
+                                                                           existing-predicate
+                                                                           (list 'and predicate existing-predicate))))
+                                       {column predicate}))
                                    column)))]
           (when-not (= columns new-columns)
             [:select predicate
