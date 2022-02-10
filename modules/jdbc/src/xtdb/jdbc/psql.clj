@@ -35,4 +35,9 @@ CREATE TABLE IF NOT EXISTS tx_events (
 
         (jdbc/execute! ["DROP INDEX IF EXISTS tx_events_event_key_idx"])
         (jdbc/execute! ["CREATE INDEX IF NOT EXISTS tx_events_event_key_idx_2 ON tx_events(event_key)"])
-        (check-tx-time-col)))))
+        (check-tx-time-col)))
+
+    (ensure-serializable-identity-seq! [_ tx table-name]
+      ;; we have to take a table write lock in Postgres, because auto-increments aren't guaranteed to be increasing, even between transactions with 'serializable' isolation level
+      ;; `table-name` is trusted
+      (jdbc/execute! tx [(format "LOCK TABLE %s IN SHARE ROW EXCLUSIVE MODE" table-name)]))))

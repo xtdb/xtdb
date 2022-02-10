@@ -39,7 +39,11 @@ DROP INDEX tx_events.tx_events_event_key_idx"])
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = object_id('dbo.tx_events') AND NAME ='tx_events_event_key_idx_2')
 CREATE INDEX tx_events_event_key_idx_2 ON tx_events(event_key)"])
 
-        (check-tx-time-col)))))
+        (check-tx-time-col)))
+
+    (ensure-serializable-identity-seq! [_ _tx _table-name]
+      ;; not required
+      )))
 
 (defmethod j/->date :mssql [^DateTimeOffset d _]
   (Date/from (.toInstant (.getOffsetDateTime d))))
