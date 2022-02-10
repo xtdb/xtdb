@@ -97,6 +97,21 @@
             [:project [{$agg_in__2_3$ m__4_length}]
              [:rename m__4 [:scan [length]]]]]])
 
+  (valid? "SELECT * FROM StarsIn AS si(name)"
+          [:rename
+           {si__3_name name}
+           [:project
+            [si__3_name]
+            [:rename si__3 [:scan [name]]]]])
+
+  (valid? "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname"
+          [:rename
+           {si__3_name name si__3_lastname lastname}
+           [:project
+            [si__3_name si__3_lastname]
+            [:select (= si__3_name si__3_lastname)
+             [:rename si__3 [:scan [name lastname]]]]]])
+
   (valid? "SELECT DISTINCT si.movieTitle FROM StarsIn AS si"
           [:distinct
            [:rename

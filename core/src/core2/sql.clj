@@ -1062,6 +1062,8 @@
 (def ^:private ^:const ^String relation-id-delimiter "__")
 (def ^:private ^:const ^String relation-prefix-delimiter "_")
 
+(declare expr)
+
 (defn- maybe-add-ref [z x]
   (if (instance? IObj x)
     (vary-meta x assoc :ref z)
@@ -1073,6 +1075,15 @@
     {:column-reference {:table-id table-id
                         :correlation-name table
                         :column column}}))
+
+(defn- unqualifed-projection-symbol [{:keys [identifier ^long index] :as projection}]
+  (symbol (or identifier (format "$column_%d$" (inc index)))))
+
+(defn- qualified-projection-symbol [{:keys [qualified-column] :as projection}]
+  (let [{derived-column :ref table :table} (meta projection)]
+    (if derived-column
+      (expr (r/$ derived-column 1))
+      (id-symbol (first qualified-column) (:id table) (second qualified-column)))))
 
 (defn- aggregate-symbol [prefix z]
   (let [query-id (id (scope-element z))]
@@ -1116,10 +1127,8 @@
         (list 'and acc expr))
       (let [{:keys [join-columns] :as env} (named-columns-join-env z)]
         (for [column join-columns]
-          (->> (for [side [:lhs :rhs]
-                     :let [{:keys [qualified-column] :as projection} (first (get-in env [side column]))
-                           {table-id :id} (:table (meta projection))]]
-                 (id-symbol (first qualified-column) table-id column))
+          (->> (for [side [:lhs :rhs]]
+                 (qualified-projection-symbol (first (get-in env [side column]))))
                (apply list '=)))))
 
      [:aggregate_function _]
@@ -1128,9 +1137,6 @@
      [_ ^:z x]
      ;;=>
      (expr x))))
-
-(defn- unqualifed-projection-symbol [{:keys [identifier ^long index] :as projection}]
-  (symbol (or identifier (format "$column_%d$" (inc index)))))
 
 (defn- wrap-with-select [sc-expr relation]
   (reduce
@@ -1217,18 +1223,17 @@
 
 (defn- build-query-specification [sl te]
   (let [projection (first (projected-columns sl))
-        unqualified-rename-map (->> (for [{:keys [identifier qualified-column] :as projection} projection
-                                          :when qualified-column
-                                          :let [derived-column (:ref (meta projection))]]
-                                      [(expr (r/$ derived-column 1))
-                                       (symbol identifier)])
+        unqualified-rename-map (->> (for [{:keys [qualified-column] :as projection} projection
+                                          :when qualified-column]
+                                      [(qualified-projection-symbol projection)
+                                       (unqualifed-projection-symbol projection)])
                                     (into {}))
         qualified-project [:project
                            (vec (concat
                                  (for [{:keys [qualified-column] :as projection} projection
                                        :let [derived-column (:ref (meta projection))]]
                                    (if qualified-column
-                                     (expr (r/$ derived-column 1))
+                                     (qualified-projection-symbol projection)
                                      {(unqualifed-projection-symbol projection)
                                       (expr (r/$ derived-column 1))}))
                                  *order-by-extra-projection*))
@@ -1245,6 +1250,18 @@
        (plan rhs)
        [:rename (zipmap rhs-unqualified-project lhs-unqualified-project)
         (plan rhs)])]))
+
+(defn- build-table-primary [tp]
+  (let [{:keys [id correlation-name] :as table} (table tp)
+        projection (first (projected-columns tp))]
+    [:rename (with-meta
+               (symbol (str correlation-name relation-id-delimiter id))
+               {:table-reference {:table-id id
+                                  :correlation-name correlation-name}})
+     (if-let [table-ref (:table-ref (meta table))]
+       (plan table-ref)
+       [:scan (vec (for [{:keys [identifier]} projection]
+                     (symbol identifier)))])]))
 
 (defn- plan [z]
   (maybe-add-ref
@@ -1338,16 +1355,11 @@
 
      [:table_primary _ _ _]
      ;;=>
-     (let [{:keys [id correlation-name] :as table} (table z)
-           projection (first (projected-columns z))]
-       [:rename (with-meta
-                  (symbol (str correlation-name relation-id-delimiter id))
-                  {:table-reference {:table-id id
-                                     :correlation-name correlation-name}})
-        (if-let [table-ref (:table-ref (meta table))]
-          (plan table-ref)
-          [:scan (vec (for [{:keys [identifier]} projection]
-                        (symbol identifier)))])])
+     (build-table-primary z)
+
+     [:table_primary _ _ _ _]
+     ;;=>
+     (build-table-primary z)
 
      [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
      ;;=>
