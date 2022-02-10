@@ -1077,7 +1077,7 @@
                         :column column}}))
 
 (defn- unqualifed-projection-symbol [{:keys [identifier ^long index] :as projection}]
-  (symbol (or identifier (format "$column_%d$" (inc index)))))
+  (symbol (or identifier (str "$column_" (inc index) "$"))))
 
 (defn- qualified-projection-symbol [{:keys [qualified-column] :as projection}]
   (let [{derived-column :ref table :table} (meta projection)]
@@ -1191,25 +1191,22 @@
 
 (declare expr-symbols plan)
 
-(def ^:private ^:dynamic *order-by-extra-projection* [])
-
-(defn- wrap-with-order-by [ssl qeb]
-  (let [projection (first (projected-columns qeb))
+(defn- wrap-with-order-by [ssl relation]
+  (let [projection (first (projected-columns ssl))
         query-id (id (scope-element ssl))
         order-by-specs (r/collect-stop
-                        (fn [ag]
-                          (r/zcase ag
+                        (fn [z]
+                          (r/zcase z
                             :sort_specification
-                            (let [direction (case (ordering-specification ag)
+                            (let [direction (case (ordering-specification z)
                                               "ASC" :asc
                                               "DESC" :desc
                                               :asc)]
-                              [(if-let [idx (order-by-index ag)]
+                              [(if-let [idx (order-by-index z)]
                                  {:spec {(unqualifed-projection-symbol (nth projection idx)) direction}}
-                                 (let [id (str "__" query-id  "_" (r/child-idx ag))
-                                       column (symbol (format "$order_by%s$" id))]
+                                 (let [column (symbol (str "$order_by__" query-id  "_" (r/child-idx z) "$"))]
                                    {:spec {column direction}
-                                    :projection {column (expr (r/$ ag 1))}}))])
+                                    :projection {column (expr (r/$ z 1))}}))])
 
                             :subquery
                             []
@@ -1219,11 +1216,21 @@
         order-by-projection (keep :projection order-by-specs)
         extra-projection (distinct (mapcat (comp expr-symbols vals) order-by-projection))
         base-projection (mapv unqualifed-projection-symbol projection)
-        order-by (binding [*order-by-extra-projection* extra-projection]
-                   [:order-by (mapv :spec order-by-specs)
-                    (if (not-empty order-by-projection)
-                      [:project (vec (concat base-projection order-by-projection)) (plan qeb)]
-                      (plan qeb))])]
+        relation (if (not-empty extra-projection)
+                   (z/node
+                    (r/once-td-tp
+                     (r/mono-tp
+                      (fn [z]
+                        (r/zmatch z
+                          [:project projection relation]
+                          ;;=>
+                          [:project (vec (concat projection extra-projection)) relation])))
+                     (z/vector-zip relation)))
+                   relation)
+        order-by [:order-by (mapv :spec order-by-specs)
+                  (if (not-empty order-by-projection)
+                    [:project (vec (concat base-projection order-by-projection)) relation]
+                    relation)]]
     (if (not-empty order-by-projection)
       [:project base-projection order-by]
       order-by)))
@@ -1235,16 +1242,13 @@
                                       [(qualified-projection-symbol projection)
                                        (unqualifed-projection-symbol projection)])
                                     (into {}))
-        qualified-project [:project
-                           (vec (concat
-                                 (for [{:keys [qualified-column] :as projection} projection
-                                       :let [derived-column (:ref (meta projection))]]
-                                   (if qualified-column
-                                     (qualified-projection-symbol projection)
-                                     {(unqualifed-projection-symbol projection)
-                                      (expr (r/$ derived-column 1))}))
-                                 *order-by-extra-projection*))
-                           (plan te)]]
+        qualified-projection (for [{:keys [qualified-column] :as projection} projection
+                                   :let [derived-column (:ref (meta projection))]]
+                               (if qualified-column
+                                 (qualified-projection-symbol projection)
+                                 {(unqualifed-projection-symbol projection)
+                                  (expr (r/$ derived-column 1))}))
+        qualified-project [:project qualified-projection (plan te)]]
     (if (not-empty unqualified-rename-map)
       [:rename unqualified-rename-map qualified-project]
       qualified-project)))
@@ -1270,6 +1274,19 @@
        [:scan (vec (for [{:keys [identifier]} projection]
                      (symbol identifier)))])]))
 
+(defn- build-table-reference-list [trl]
+  (reduce
+   (fn [acc table]
+     [:cross-join acc table])
+   (r/collect-stop
+    (fn [z]
+      (r/zcase z
+        (:table_primary
+         :qualified_join) [(plan z)]
+        :subquery []
+        nil))
+    trl)))
+
 (defn- plan [z]
   (maybe-add-ref
    z
@@ -1281,25 +1298,25 @@
      (plan qeb)
 
      [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl]]
-     (wrap-with-order-by ssl qeb)
+     (wrap-with-order-by ssl (plan qeb))
 
      [:query_expression ^:z qeb [:result_offset_clause _ rorc _]]
      [:top {:skip (expr rorc)} (plan qeb)]
 
      [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _]]
-     [:top {:skip (expr rorc)} (wrap-with-order-by ssl qeb)]
+     [:top {:skip (expr rorc)} (wrap-with-order-by ssl (plan qeb))]
 
      [:query_expression ^:z qeb [:fetch_first_clause _ _ ffrc _ _]]
      [:top {:limit (expr ffrc)} (plan qeb)]
 
      [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:fetch_first_clause _ _ ffrc _ _]]
-     [:top {:limit (expr ffrc)} (wrap-with-order-by ssl qeb)]
+     [:top {:limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
 
      [:query_expression ^:z qeb [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
      [:top {:skip (expr rorc) :limit (expr ffrc)} (plan qeb)]
 
      [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
-     [:top {:skip (expr rorc) :limit (expr ffrc)} (wrap-with-order-by ssl qeb)]
+     [:top {:skip (expr rorc) :limit (expr ffrc)} (wrap-with-order-by ssl (plan qeb))]
 
      [:query_specification _ ^:z sl ^:z te]
      ;;=>
@@ -1398,17 +1415,7 @@
 
      [:from_clause _ ^:z trl]
      ;;=>
-     (reduce
-      (fn [acc table]
-        [:cross-join acc table])
-      (r/collect-stop
-       (fn [z]
-         (r/zcase z
-           (:table_primary
-            :qualified_join) [(plan z)]
-           :subquery []
-           nil))
-       trl))
+     (build-table-reference-list trl)
 
      (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (z/node z))))))))
 

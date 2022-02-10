@@ -199,7 +199,7 @@
    (fn self [z]
      ((choice-tp f (one-tp self)) z)))
   ([f z]
-   ((once-td-tp) f) z))
+   ((once-td-tp f) z)))
 
 (defn once-bu-tp
   ([f]
