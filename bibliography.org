@@ -186,3 +186,8 @@ The 'original' record typing papers (as far as I'm aware) are by Mitchell Wand, 
 - [[https://partiql.org/assets/PartiQL-Specification.pdf][PartiQL Specification]]
 - [[https://github.com/partiql/partiql-lang-kotlin][A implementation of PartiQL written in Kotlin]]
 - [[https://www.researchgate.net/publication/330174364_Parametric_schema_inference_for_massive_JSON_datasets][Parametric schema inference for massive JSON datasets]]
+- [[https://arxiv.org/pdf/2110.07902.pdf][Zipping Strategies and Attribute Grammars]]
+- [[https://www.di.uminho.pt/~joost/publications/AStrafunskiApplicationLetter.pdf][A Strafunski Application Letter]]
+- [[https://www.sciencedirect.com/science/article/pii/S0167642316000812][Embedding attribute grammars and their extensions using functional zippers]]
+- [[https://lists.w3.org/Archives/Public/public-rif-wg/2008Oct/att-0054/p457-fegaras.pdf][Optimizing Object Queries Using an Effective Calculus]]
+- [[https://db.inf.uni-tuebingen.de/staticfiles/publications/Comprehensions.pdf][Take Everything From Me, But Leave Me The Comprehension]]
