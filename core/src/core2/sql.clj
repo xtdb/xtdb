@@ -1098,28 +1098,37 @@
            [table column] identifiers]
        (id-symbol table table-id column))
 
-     [:boolean_value_expression ^:z x _ ^:z y]
+     [:boolean_value_expression ^:z bve _ ^:z bt]
      ;;=>
-     (list 'or (expr x) (expr y))
+     (list 'or (expr bve) (expr bt))
 
-     [:boolean_term ^:z x _ ^:z y]
+     [:boolean_term ^:z bt _ ^:z bf]
      ;;=>
-     (list 'and (expr x) (expr y))
+     (list 'and (expr bt) (expr bf))
 
-     [:boolean_factor _ ^:z x]
+     [:boolean_factor _ ^:z bt]
      ;;=>
-     (list 'not (expr x))
+     (list 'not (expr bt))
 
-     [:comparison_predicate ^:z x [:comparison_predicate_part_2 [_ op] ^:z y]]
+     [:boolean_test ^:z bp]
+     (expr bp)
+
+     [:comparison_predicate ^:z rvp-1 [:comparison_predicate_part_2 [_ co] ^:z rvp-2]]
      ;;=>
-     (list (symbol op) (expr x) (expr y))
+     (list (symbol co) (expr rvp-1) (expr rvp-2))
 
-     [:unsigned_integer x]
+     [:signed_numeric_literal ^:z unl]
+     (expr unl)
+
+     [:exact_numeric_literal ^:z ui]
+     (expr ui)
+
+     [:unsigned_integer lexeme]
      ;;=>
-     (Long/parseLong x)
+     (Long/parseLong lexeme)
 
-     [:character_string_literal x]
-     (subs x 1 (dec (count x)))
+     [:character_string_literal lexeme]
+     (subs lexeme 1 (dec (count lexeme)))
 
      [:named_columns_join _ _]
      (reduce
@@ -1134,9 +1143,7 @@
      [:aggregate_function _]
      (aggregate-symbol "agg_out" z)
 
-     [_ ^:z x]
-     ;;=>
-     (expr x))))
+     (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (z/node z))))))))
 
 (defn- wrap-with-select [sc-expr relation]
   (reduce
@@ -1267,6 +1274,12 @@
   (maybe-add-ref
    z
    (r/zmatch z
+     [:directly_executable_statement ^:z dsds]
+     (plan dsds)
+
+     [:query_expression ^:z qeb]
+     (plan qeb)
+
      [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl]]
      (wrap-with-order-by ssl qeb)
 
@@ -1397,9 +1410,7 @@
            nil))
        trl))
 
-     [_ ^:z x]
-     ;;=>
-     (plan x))))
+     (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (z/node z))))))))
 
 (defn- table-references-in-subtree [op]
   (set (r/collect-stop
