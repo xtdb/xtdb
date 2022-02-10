@@ -43,4 +43,10 @@ CREATE TABLE IF NOT EXISTS tx_events (
       (when-not (idx-exists? ds "tx_events_event_key_idx_2")
         (jdbc/execute! ds ["CREATE INDEX tx_events_event_key_idx_2 ON tx_events(event_key)"]))
 
-      (check-tx-time-col ds))))
+      (check-tx-time-col ds))
+
+    (ensure-serializable-identity-seq! [_ tx table-name]
+      ;; `table-name` is trusted
+      ;; HACK: this fails if the table happens to be empty, but this isn't likely,
+      ;; even if there's no transactions yet - the docs are submitted first
+      (jdbc/execute! tx [(format "SELECT * FROM %s ORDER BY event_offset LIMIT 1 FOR UPDATE" table-name)]))))

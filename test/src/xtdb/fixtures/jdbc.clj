@@ -7,9 +7,15 @@
   (:import com.opentable.db.postgres.embedded.EmbeddedPostgres))
 
 (def ^:dynamic *jdbc-opts*)
+(def ^:dynamic *db-type*)
 
 (defn with-opts [opts f]
   (binding [*jdbc-opts* opts]
+    (f)))
+
+(defn with-db-type [f]
+  (binding [*db-type* (j/db-type (-> @(:!system fix/*api*)
+                                     (get-in [::j/connection-pool :dialect])))]
     (f)))
 
 (defn with-h2-opts [f]

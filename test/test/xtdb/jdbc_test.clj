@@ -8,9 +8,10 @@
             [xtdb.fixtures.lubm :as fl]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
-            [xtdb.jdbc :as j]))
+            [xtdb.jdbc :as j]
+            [clojure.java.data :as jd]))
 
-(t/use-fixtures :each fj/with-each-jdbc-dialect fj/with-jdbc-node fix/with-node)
+(t/use-fixtures :each fj/with-each-jdbc-dialect fj/with-jdbc-node fix/with-node fj/with-db-type)
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:xt/id :origin-man :name "Adam"}
@@ -106,10 +107,7 @@
   ;; SQLite doesn't support writing from multiple threads
   ;; TODO fix :h2 and :mssql - better than they were but still fail this test.
 
-  (when-not (#{:sqlite :h2 :mssql}
-             (-> @(:!system *api*)
-                 (get-in [::j/connection-pool :dialect])
-                 j/db-type))
+  (when-not (#{:sqlite :h2 :mssql} fj/*db-type*)
     (let [eids #{:foo :bar :baz :quux}]
       (->> (for [_ (range 100)]
              (future
@@ -118,3 +116,44 @@
            doall
            (run! deref))
       (t/is true))))
+
+(t/deftest test-identity-race-condition-1603
+  ;; SQLite doesn't support writing from multiple threads
+  (when-not (#{:sqlite} fj/*db-type*)
+    ;; order:
+    ;; submit 1, submit 2, commit 1, await both, check both docs present
+
+    ;; bug was that because tx2 committed first, the node thinks latest-completed-tx = 2,
+    ;; so never plays tx1
+
+    (let [!tx1-submitted (promise)
+
+          !latch (promise)
+          !fut1 (future
+                  (let [this-thread (Thread/currentThread)
+                        orig-f @#'j/insert-event!]
+                    (with-redefs [j/insert-event! (fn [pool event-key v topic]
+                                                    (let [res (orig-f pool event-key v topic)]
+                                                      (when (and (= topic "txs")
+                                                                 (= this-thread (Thread/currentThread)))
+                                                        (deliver !tx1-submitted nil)
+                                                        @!latch)
+                                                      res))]
+                      (xt/submit-tx *api* [[::xt/put {:xt/id :foo}]]))))
+
+          _ @!tx1-submitted
+
+          !fut2 (future
+                  (fix/submit+await-tx [[::xt/put {:xt/id :bar}]]))]
+
+      ;; gives the node enough time to spot tx2 without tx1 having committed
+      (t/is (= ::timeout (deref !fut2 150 ::timeout)))
+
+      (deliver !latch nil)
+
+      @!fut1 @!fut2
+      (xt/sync *api*)
+
+      (let [db (xt/db *api*)]
+        (t/is (= {:xt/id :foo} (xt/entity db :foo)))
+        (t/is (= {:xt/id :bar} (xt/entity db :bar)))))))

@@ -2,28 +2,31 @@
   (:require [clojure.java.data :as jd]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.document-store :as ds]
             [xtdb.io :as xio]
             [xtdb.system :as sys]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [xtdb.tx.event :as txe]
             [xtdb.tx.subscribe :as tx-sub])
-  (:import clojure.lang.MapEntry
-           [com.zaxxer.hikari HikariConfig HikariDataSource]
-           java.io.Closeable
-           java.sql.Timestamp
-           java.time.Duration
-           java.util.Date))
+  (:import (clojure.lang MapEntry)
+           (com.zaxxer.hikari HikariConfig HikariDataSource)
+           (java.io Closeable)
+           (java.sql Timestamp)
+           (java.time Duration)
+           (java.util Date)))
 
 (defprotocol Dialect
-  (setup-schema! [_ pool])
-  (db-type [_]))
+  (setup-schema! [dialect pool])
+  (db-type [dialect])
+
+  ;; see #1603/#1707
+  (ensure-serializable-identity-seq! [dialect tx table-name]))
 
 (defmulti ->date (fn [d dialect] (db-type dialect)) :default ::default)
 
@@ -139,9 +142,11 @@
 (defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
   db/TxLog
   (submit-tx [_ tx-events]
-    (let [tx (-> (insert-event! pool nil tx-events "txs")
-                 (tx-result->tx-data pool dialect))]
-      (delay tx)))
+    (jdbc/with-transaction [tx pool]
+      (ensure-serializable-identity-seq! dialect tx "tx_events")
+      (let [tx-data (-> (insert-event! tx nil tx-events "txs")
+                        (tx-result->tx-data tx dialect))]
+        (delay tx-data))))
 
   (open-tx-log [_ after-tx-id]
     (let [conn (jdbc/get-connection pool)
