@@ -4,6 +4,8 @@
             [clojure.string :as str]
             [clojure.walk :as w]
             [clojure.zip :as z]
+            [clojure.spec.alpha :as s]
+            [core2.logical-plan :as lp]
             [core2.rewrite :as r]
             [instaparse.core :as insta]
             [instaparse.failure])
@@ -1611,7 +1613,8 @@
            {:errs errs}
            {:plan (->> (z/vector-zip (plan ag))
                        (r/innermost (r/mono-tp optimize-plan))
-                       (z/node))})))))
+                       (z/node)
+                       (s/assert ::lp/logical-plan))})))))
 
 ;; SQL:2011 official grammar:
 
