@@ -1215,6 +1215,37 @@
       [:project base-projection order-by]
       order-by)))
 
+(defn- build-query-specification [sl te]
+  (let [projection (first (projected-columns sl))
+        unqualified-rename-map (->> (for [{:keys [identifier qualified-column] :as projection} projection
+                                          :when qualified-column
+                                          :let [derived-column (:ref (meta projection))]]
+                                      [(expr (r/$ derived-column 1))
+                                       (symbol identifier)])
+                                    (into {}))
+        qualified-project [:project
+                           (vec (concat
+                                 (for [{:keys [qualified-column] :as projection} projection
+                                       :let [derived-column (:ref (meta projection))]]
+                                   (if qualified-column
+                                     (expr (r/$ derived-column 1))
+                                     {(unqualifed-projection-symbol projection)
+                                      (expr (r/$ derived-column 1))}))
+                                 *order-by-extra-projection*))
+                           (plan te)]]
+    (if (not-empty unqualified-rename-map)
+      [:rename unqualified-rename-map qualified-project]
+      qualified-project)))
+
+(defn- build-set-op [set-op lhs rhs]
+  (let [lhs-unqualified-project (mapv unqualifed-projection-symbol (first (projected-columns lhs)))
+        rhs-unqualified-project (mapv unqualifed-projection-symbol (first (projected-columns rhs)))]
+    [set-op (plan lhs)
+     (if (= lhs-unqualified-project rhs-unqualified-project)
+       (plan rhs)
+       [:rename (zipmap rhs-unqualified-project lhs-unqualified-project)
+        (plan rhs)])]))
+
 (defn- plan [z]
   (maybe-add-ref
    z
@@ -1242,26 +1273,27 @@
 
      [:query_specification _ ^:z sl ^:z te]
      ;;=>
-     (let [projection (first (projected-columns sl))
-           unqualified-rename-map (->> (for [{:keys [identifier qualified-column] :as projection} projection
-                                             :when qualified-column
-                                             :let [derived-column (:ref (meta projection))]]
-                                         [(expr (r/$ derived-column 1))
-                                          (symbol identifier)])
-                                       (into {}))
-           qualified-project [:project
-                              (vec (concat
-                                    (for [{:keys [qualified-column] :as projection} projection
-                                          :let [derived-column (:ref (meta projection))]]
-                                      (if qualified-column
-                                        (expr (r/$ derived-column 1))
-                                        {(unqualifed-projection-symbol projection)
-                                         (expr (r/$ derived-column 1))}))
-                                    *order-by-extra-projection*))
-                              (plan te)]]
-       (if (not-empty unqualified-rename-map)
-         [:rename unqualified-rename-map qualified-project]
-         qualified-project))
+     (build-query-specification sl te)
+
+     [:query_specification _ [:set_quantifier "ALL"] ^:z sl ^:z te]
+     ;;=>
+     (build-query-specification sl te)
+
+     [:query_specification _ [:set_quantifier "DISTINCT"] ^:z sl ^:z te]
+     ;;=>
+     [:distinct (build-query-specification sl te)]
+
+     [:query_expression_body ^:z qeb "UNION" ^:z qt]
+     [:distinct (build-set-op :union-all qeb qt)]
+
+     [:query_expression_body ^:z qeb "UNION" "ALL" ^:z qt]
+     (build-set-op :union-all qeb qt)
+
+     [:query_expression_body ^:z qeb "EXCEPT" ^:z qt]
+     (build-set-op :difference qeb qt)
+
+     [:query_term ^:z qt "INTERSECT" ^:z qp]
+     (build-set-op :intersect qt qp)
 
      [:table_expression ^:z fc]
      ;;=>

@@ -97,6 +97,69 @@
             [:project [{$agg_in__2_3$ m__4_length}]
              [:rename m__4 [:scan [length]]]]]])
 
+  (valid? "SELECT DISTINCT si.movieTitle FROM StarsIn AS si"
+          [:distinct
+           [:rename
+            {si__3_movieTitle movieTitle}
+            [:project
+             [si__3_movieTitle]
+             [:rename si__3 [:scan [movieTitle]]]]]])
+
+  (valid? "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si "
+          [:difference
+           [:rename
+            {si__3_name name}
+            [:project
+             [si__3_name]
+             [:rename si__3 [:scan [name]]]]]
+           [:rename
+            {si__5_name name}
+            [:project
+             [si__5_name]
+             [:rename si__5 [:scan [name]]]]]])
+
+    (valid? "SELECT si.name FROM StarsIn AS si UNION ALL SELECT si.name FROM StarsIn AS si "
+          [:union-all
+           [:rename
+            {si__3_name name}
+            [:project
+             [si__3_name]
+             [:rename si__3 [:scan [name]]]]]
+           [:rename
+            {si__5_name name}
+            [:project
+             [si__5_name]
+             [:rename si__5 [:scan [name]]]]]])
+
+  (valid? "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si "
+          [:intersect
+           [:rename
+            {si__3_name name}
+            [:project
+             [si__3_name]
+             [:rename si__3 [:scan [name]]]]]
+           [:rename
+            {si__5_name name}
+            [:project
+             [si__5_name]
+             [:rename si__5 [:scan [name]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si "
+          [:distinct
+           [:union-all
+            [:rename
+             {si__3_movieTitle movieTitle}
+             [:project
+              [si__3_movieTitle]
+              [:rename si__3 [:scan [movieTitle]]]]]
+            [:rename
+             {name movieTitle}
+             [:rename
+              {si__5_name name}
+              [:project
+               [si__5_name]
+               [:rename si__5 [:scan [name]]]]]]]])
+
   (valid? "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY"
           [:top {:limit 10}
            [:rename
