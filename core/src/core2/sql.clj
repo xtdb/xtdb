@@ -60,7 +60,7 @@
         start-index (skip-whitespace sql start-index)]
     (subs sql start-index end-index)))
 
-;; Draft attribute grammar for SQL semantics.
+;; Attribute grammar for SQL semantics.
 
 ;; TODO:
 ;; - try replace ids with refs.
@@ -1030,7 +1030,7 @@
        []))
    ag))
 
-;; API
+;; Analysis API, might be deprecated.
 
 (defn analyze-query [query]
   (if-let [parse-failure (insta/get-failure query)]
@@ -1053,9 +1053,7 @@
            {:scopes (scopes ag)
             :errs []})))))
 
-;; Transformation into logical plan. Highly speculative spike to get
-;; going, doesn't take many things captured in analysis into account
-;; properly.
+;; Attribute grammar for transformation into logical plan.
 
 ;; See https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf
 
@@ -1088,6 +1086,8 @@
 (defn- aggregate-symbol [prefix z]
   (let [query-id (id (scope-element z))]
     (symbol (str "$" prefix "__" query-id "_" (id z) "$"))))
+
+;; Expressions.
 
 (defn- expr [z]
   (maybe-add-ref
@@ -1145,6 +1145,8 @@
 
      (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (z/node z))))))))
 
+;; Logical plan.
+
 (defn- wrap-with-select [sc-expr relation]
   (reduce
    (fn [acc predicate]
@@ -1189,7 +1191,7 @@
                     (into grouping-columns))
       relation]]))
 
-(declare expr-symbols plan)
+(declare expr-symbols)
 
 (defn- wrap-with-order-by [ssl relation]
   (let [projection (first (projected-columns ssl))
@@ -1217,15 +1219,15 @@
         extra-projection (distinct (mapcat (comp expr-symbols vals) order-by-projection))
         base-projection (mapv unqualifed-projection-symbol projection)
         relation (if (not-empty extra-projection)
-                   (z/node
-                    (r/once-td-tp
-                     (r/mono-tp
-                      (fn [z]
-                        (r/zmatch z
-                          [:project projection relation]
-                          ;;=>
-                          [:project (vec (concat projection extra-projection)) relation])))
-                     (z/vector-zip relation)))
+                   (->> (z/vector-zip relation)
+                        (r/once-td-tp
+                         (r/mono-tp
+                          (fn [z]
+                            (r/zmatch z
+                              [:project projection relation]
+                              ;;=>
+                              [:project (vec (concat projection extra-projection)) relation]))))
+                        (z/node))
                    relation)
         order-by [:order-by (mapv :spec order-by-specs)
                   (if (not-empty order-by-projection)
@@ -1234,6 +1236,8 @@
     (if (not-empty order-by-projection)
       [:project base-projection order-by]
       order-by)))
+
+(declare plan)
 
 (defn- build-query-specification [sl te]
   (let [projection (first (projected-columns sl))
@@ -1419,6 +1423,8 @@
 
      (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (z/node z))))))))
 
+;; Rewriting of logical plan.
+
 (defn- table-references-in-subtree [op]
   (set (r/collect-stop
         (fn [z]
@@ -1480,6 +1486,8 @@
     (if (= 1 (count predicates))
       (first predicates)
       (apply list 'and predicates))))
+
+;; Rewrite rules.
 
 (defn- promote-selection-cross-join-to-join [z]
   (r/zmatch z
@@ -1582,6 +1590,8 @@
            push-selections-with-equals-down
            merge-selections-with-same-variables
            add-selection-to-scan-predicate))
+
+;; Logical plan API
 
 (defn plan-query [query]
   (if-let [parse-failure (insta/get-failure query)]
