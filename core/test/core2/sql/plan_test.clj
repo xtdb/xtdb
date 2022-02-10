@@ -82,20 +82,20 @@
              [:rename m__3 [:scan [title]]]]]])
 
   (valid? "SELECT me.name, SUM(m.length) FROM MovieExec AS me, Movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.year) < 1930"
-          [:rename {me__3_name name}
-           [:project [me__3_name {$column_2$ $agg_out__2_1$}]
-            [:select (< $agg_out__2_2$ 1930)
-             [:group-by [me__3_name {$agg_out__2_1$ (sum $agg_in__2_1$)} {$agg_out__2_2$ (min $agg_in__2_2$)}]
-              [:project [me__3_name {$agg_in__2_1$ m__4_length} {$agg_in__2_2$ m__4_year}]
-               [:join {me__3_cert m__4_producer}
-                [:rename me__3 [:scan [name cert]]]
-                [:rename m__4 [:scan [length producer year]]]]]]]]])
+          [:rename {me__4_name name}
+           [:project [me__4_name {$column_2$ $agg_out__2_3$}]
+            [:select (< $agg_out__2_6$ 1930)
+             [:group-by [me__4_name {$agg_out__2_3$ (sum $agg_in__2_3$)} {$agg_out__2_6$ (min $agg_in__2_6$)}]
+              [:project [me__4_name {$agg_in__2_3$ m__5_length} {$agg_in__2_6$ m__5_year}]
+               [:join {me__4_cert m__5_producer}
+                [:rename me__4 [:scan [name cert]]]
+                [:rename m__5 [:scan [length producer year]]]]]]]]])
 
   (valid? "SELECT SUM(m.length) FROM Movie AS m"
-          [:project [{$column_1$ $agg_out__2_1$}]
-           [:group-by [{$agg_out__2_1$ (sum $agg_in__2_1$)}]
-            [:project [{$agg_in__2_1$ m__3_length}]
-             [:rename m__3 [:scan [length]]]]]])
+          [:project [{$column_1$ $agg_out__2_3$}]
+           [:group-by [{$agg_out__2_3$ (sum $agg_in__2_3$)}]
+            [:project [{$agg_in__2_3$ m__4_length}]
+             [:rename m__4 [:scan [length]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY"
           [:top {:limit 10}
