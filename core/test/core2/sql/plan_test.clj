@@ -5,7 +5,7 @@
 (defmacro valid? [sql expected]
   `(let [tree# (sql/parse ~sql)
          {errs# :errs plan# :plan} (sql/plan-query tree#)]
-     (t/is (empty? errs#))
+     (t/is (= [] (vec errs#)))
      (t/is (= '~expected plan#))
      {:tree tree# :plan plan#}))
 
@@ -83,13 +83,19 @@
 
   (valid? "SELECT me.name, SUM(m.length) FROM MovieExec AS me, Movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.year) < 1930"
           [:rename {me__3_name name}
-           [:project [me__3_name {$column_1$ $agg_out__2_1$}]
+           [:project [me__3_name {$column_2$ $agg_out__2_1$}]
             [:select (< $agg_out__2_2$ 1930)
              [:group-by [me__3_name {$agg_out__2_1$ (sum $agg_in__2_1$)} {$agg_out__2_2$ (min $agg_in__2_2$)}]
               [:project [me__3_name {$agg_in__2_1$ m__4_length} {$agg_in__2_2$ m__4_year}]
                [:join {me__3_cert m__4_producer}
                 [:rename me__3 [:scan [name cert]]]
                 [:rename m__4 [:scan [length producer year]]]]]]]]])
+
+  (valid? "SELECT SUM(m.length) FROM Movie AS m"
+          [:project [{$column_1$ $agg_out__2_1$}]
+           [:group-by [{$agg_out__2_1$ (sum $agg_in__2_1$)}]
+            [:project [{$agg_in__2_1$ m__3_length}]
+             [:rename m__3 [:scan [length]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY"
           [:top {:limit 10}
@@ -113,4 +119,54 @@
             {si__3_movieTitle movieTitle}
             [:project
              [si__3_movieTitle]
-             [:rename si__3 [:scan [movieTitle]]]]]]))
+             [:rename si__3 [:scan [movieTitle]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle"
+          [:order-by [{movieTitle :asc}]
+           [:rename
+            {si__3_movieTitle movieTitle}
+            [:project
+             [si__3_movieTitle]
+             [:rename si__3 [:scan [movieTitle]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle OFFSET 100 ROWS"
+          [:top {:skip 100}
+           [:order-by [{movieTitle :asc}]
+            [:rename
+             {si__3_movieTitle movieTitle}
+             [:project
+              [si__3_movieTitle]
+              [:rename si__3 [:scan [movieTitle]]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY movieTitle DESC"
+          [:order-by [{movieTitle :desc}]
+           [:rename
+            {si__3_movieTitle movieTitle}
+            [:project
+             [si__3_movieTitle]
+             [:rename si__3 [:scan [movieTitle]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle"
+          [:project [movieTitle]
+           [:order-by [{$order_by__1_1$ :desc} {movieTitle :asc}]
+            [:project [movieTitle {$order_by__1_1$ (= si__3_year "foo")}]
+             [:rename
+              {si__3_movieTitle movieTitle}
+              [:project
+               [si__3_movieTitle si__3_year]
+               [:rename si__3 [:scan [movieTitle year]]]]]]]])
+
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year"
+          [:project [movieTitle]
+           [:order-by [{$order_by__1_1$ :asc}]
+            [:project [movieTitle {$order_by__1_1$ si__3_year}]
+             [:rename
+              {si__3_movieTitle movieTitle}
+              [:project
+               [si__3_movieTitle si__3_year]
+               [:rename si__3 [:scan [movieTitle year]]]]]]]])
+
+  (valid? "SELECT si.year = 'foo' FROM StarsIn AS si ORDER BY si.year = 'foo'"
+          [:order-by [{$column_1$ :asc}]
+           [:project [{$column_1$ (= si__3_year "foo")}]
+            [:rename si__3 [:scan [year]]]]]))
