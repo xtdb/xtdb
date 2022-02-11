@@ -792,20 +792,25 @@
        :within-group-varying
        :outer
        :outer-group-invariant)
-      (cond
-        (not table-id)
+      (if-not table-id
         [(format "Table not in scope: %s %s"
                  (first identifiers) (->line-info-str ag))]
 
-        (->> (projected-columns (:ref (meta (:table (meta column-reference)))))
-             (first)
-             (map :qualified-column)
-             (not-any? #{identifiers}))
-        [(format "Column not in scope: %s %s"
-                 (str/join "." identifiers) (->line-info-str ag))]
+        (let [projection (first (projected-columns (:ref (meta (:table (meta column-reference))))))]
+          (cond
+            (->> (map :qualified-column projection)
+                 (not-any? #{identifiers}))
+            [(format "Column not in scope: %s %s"
+                     (str/join "." identifiers) (->line-info-str ag))]
 
-        :else
-        [])
+            (< 1 (->> (map :identifier projection)
+                      (filter #{(last identifiers)})
+                      (count)))
+            [(format "Column name ambiguous: %s %s"
+                     (str/join "." identifiers) (->line-info-str ag))]
+
+            :else
+            [])))
 
       :resolved-in-sort-key
       []
