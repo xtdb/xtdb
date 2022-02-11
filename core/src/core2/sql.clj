@@ -108,7 +108,7 @@
 
 ;; Attributes
 
-(declare cte-env env projected-columns scope-element table-ref)
+(declare cte-env env projected-columns scope-element subquery-element)
 
 ;; Ids
 
@@ -201,7 +201,7 @@
         (cond-> {:query-name (table-or-query-name ag)
                  :id (id ag)
                  :scope-id (id (scope-element ag))
-                 :subquery-scope-id (id (table-ref (r/$ ag -1)))}
+                 :subquery-scope-id (id (subquery-element (r/$ ag -1)))}
           columns (assoc :columns columns))
         {:ref ag}))))
 
@@ -253,14 +253,14 @@
     (when (r/ctor? :column_name_list (r/$ ag -1))
       (identifiers (r/$ ag -1)))))
 
-(defn- table-ref [ag]
+(defn- subquery-element [ag]
   (r/zcase ag
     (:table_primary
      :subquery)
-    (table-ref (r/$ ag 1))
+    (subquery-element (r/$ ag 1))
 
     :lateral_derived_table
-    (table-ref (r/$ ag 2))
+    (subquery-element (r/$ ag 2))
 
     (:query_expression
      :collection_derived_table)
@@ -276,10 +276,10 @@
             correlation-name (or (correlation-name ag) table-name)
             cte (when table-name
                   (find-decl (cte-env ag) table-name))
-            table-ref (when (nil? cte)
-                        (table-ref ag))
-            subquery-scope-id (when (and table-ref (not= :collection_derived_table (r/ctor table-ref)))
-                                (id table-ref))
+            subquery-element (when (nil? cte)
+                        (subquery-element ag))
+            subquery-scope-id (when (and subquery-element (not= :collection_derived_table (r/ctor subquery-element)))
+                                (id subquery-element))
             derived-columns (or (derived-columns ag) (:columns cte))]
         (with-meta
           (cond-> {:correlation-name correlation-name
@@ -290,9 +290,9 @@
             subquery-scope-id (assoc :subquery-scope-id subquery-scope-id)
             cte (assoc :cte-id (:id cte) :cte-scope-id (:scope-id cte)))
           (cond-> {:ref ag}
-            table-ref (assoc :table-ref table-ref)
+            subquery-element (assoc :subquery-ref subquery-element)
             cte (assoc :cte cte
-                       :table-ref (r/$ (:ref (meta cte)) -1))))))))
+                       :subquery-ref (r/$ (:ref (meta cte)) -1))))))))
 
 (defn- local-tables [ag]
   (r/collect-stop
@@ -490,8 +490,8 @@
             projections (if-let [derived-columns (not-empty derived-columns)]
                           (for [identifier derived-columns]
                             {:identifier identifier})
-                          (if-let [table-ref (:table-ref (meta table))]
-                            (first (projected-columns table-ref))
+                          (if-let [subquery-ref (:subquery-ref (meta table))]
+                            (first (projected-columns subquery-ref))
                             (let [query-specification (scope-element ag)
                                   query-expression (scope-element (r/parent query-specification))
                                   named-join-columns (for [identifier (named-columns-join-columns (r/parent ag))]
@@ -777,7 +777,7 @@
 (defn- check-derived-columns [ag]
   (let [{:keys [derived-columns] :as table} (table ag)]
     (when derived-columns
-      (when-let [candidates (some->> (:table-ref (meta table))
+      (when-let [candidates (some->> (:subquery-ref (meta table))
                                      (projected-columns))]
         (let [degrees (mapv count candidates)]
           (when-not (apply = (count derived-columns) degrees)
@@ -1280,8 +1280,8 @@
                (symbol (str correlation-name relation-id-delimiter id))
                {:table-reference {:table-id id
                                   :correlation-name correlation-name}})
-     (if-let [table-ref (:table-ref (meta table))]
-       (plan table-ref)
+     (if-let [subquery-ref (:subquery-ref (meta table))]
+       (plan subquery-ref)
        [:scan (vec (for [{:keys [identifier]} projection]
                      (symbol identifier)))])]))
 
