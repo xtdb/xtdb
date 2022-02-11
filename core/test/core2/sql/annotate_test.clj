@@ -296,7 +296,8 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (invalid? #"Column name duplicated: foo"
             "SELECT 1 FROM (SELECT 1, 2 FROM foo) AS bar (foo, foo)")
   (invalid? #"Column name ambiguous: x.a"
-            "SELECT x.a FROM (SELECT * FROM t1 AS t1(a), t2 AS t2(a)) AS x"))
+            "SELECT x.a FROM (SELECT * FROM t1 AS t1(a), t2 AS t2(a)) AS x")
+  (valid? "SELECT x.a FROM (SELECT * FROM t1 AS t1(a), t2 AS t2(a)) AS x(a, b)"))
 
 (t/deftest test-grouping-columns
   (invalid? #"Column reference is not a grouping column: t1.a"
