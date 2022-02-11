@@ -277,7 +277,7 @@
             cte (when table-name
                   (find-decl (cte-env ag) table-name))
             subquery-element (when (nil? cte)
-                        (subquery-element ag))
+                               (subquery-element ag))
             subquery-scope-id (when (and subquery-element (not= :collection_derived_table (r/ctor subquery-element)))
                                 (id subquery-element))
             derived-columns (or (derived-columns ag) (:columns cte))]
