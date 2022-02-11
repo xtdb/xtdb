@@ -1293,6 +1293,7 @@
     (fn [z]
       (r/zcase z
         (:table_primary
+
          :qualified_join) [(plan z)]
         :subquery []
         nil))
@@ -1393,6 +1394,14 @@
      ;;=>
      (->> (wrap-with-group-by z)
           (wrap-with-select (expr hsc)))
+
+     [:table_primary _]
+     ;;=>
+     (build-table-primary z)
+
+     [:table_primary _ _]
+     ;;=>
+     (build-table-primary z)
 
      [:table_primary _ _ _]
      ;;=>
