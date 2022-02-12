@@ -1253,12 +1253,12 @@
                                       [(qualified-projection-symbol projection)
                                        (unqualifed-projection-symbol projection)])
                                     (into {}))
-        qualified-projection (for [{:keys [qualified-column] :as projection} projection
-                                   :let [derived-column (:ref (meta projection))]]
-                               (if qualified-column
-                                 (qualified-projection-symbol projection)
-                                 {(unqualifed-projection-symbol projection)
-                                  (expr (r/$ derived-column 1))}))
+        qualified-projection (vec (for [{:keys [qualified-column] :as projection} projection
+                                        :let [derived-column (:ref (meta projection))]]
+                                    (if qualified-column
+                                      (qualified-projection-symbol projection)
+                                      {(unqualifed-projection-symbol projection)
+                                       (expr (r/$ derived-column 1))})))
         qualified-project [:project qualified-projection (plan te)]]
     (if (not-empty unqualified-rename-map)
       [:rename unqualified-rename-map qualified-project]
