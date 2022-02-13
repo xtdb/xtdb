@@ -69,6 +69,7 @@
 ;; - align names and language with spec, add references?
 ;; - grouping column check for asterisks should really expand and then fail.
 ;; - named columns join should only output single named columns: COALESCE(lhs.x, rhs.x) AS x
+;; - add sanity check tests for UNION and ORDER BY.
 
 (defn- enter-env-scope
   ([env]
@@ -312,12 +313,10 @@
   (if (r/ctor? :qualified_join ag)
     (join-type (r/$ ag 2))
     (r/zmatch ag
-      [:join_type [:outer_join_type "LEFT"]] :left
-      [:join_type [:outer_join_type "LEFT"] "OUTER"] :left
-      [:join_type [:outer_join_type "RIGHT"]] :right
-      [:join_type [:outer_join_type "RIGHT"] "OUTER"] :right
-      [:join_type "INNER"] :inner
-      "JOIN" :inner
+      [:join_type [:outer_join_type ojt]] ojt
+      [:join_type [:outer_join_type ojt] "OUTER"] ojt
+      [:join_type "INNER"] "INNER"
+      "JOIN" "INNER"
       nil)))
 
 (defn- named-columns-join-columns [ag]
@@ -1418,9 +1417,9 @@
      [:qualified_join ^:z lhs ^:z jt _ ^:z rhs [:join_condition _ ^:z sc]]
      ;;=>
      (wrap-with-select (expr sc) (case (join-type jt)
-                                   :left [:left-outer-join {} (plan lhs) (plan rhs)]
-                                   :right [:left-outer-join {} (plan rhs) (plan lhs)]
-                                   :inner [:join {} (plan lhs) (plan rhs)]))
+                                   "LEFT" [:left-outer-join {} (plan lhs) (plan rhs)]
+                                   "RIGHT" [:left-outer-join {} (plan rhs) (plan lhs)]
+                                   "INNER" [:join {} (plan lhs) (plan rhs)]))
 
      [:qualified_join ^:z lhs _ ^:z rhs ^:z ncj]
      ;;=>
@@ -1429,9 +1428,9 @@
      [:qualified_join ^:z lhs ^:z jt _ ^:z rhs ^:z ncj]
      ;;=>
      (wrap-with-select (expr ncj) (case (join-type jt)
-                                    :left [:left-outer-join {} (plan lhs) (plan rhs)]
-                                    :right [:left-outer-join {} (plan rhs) (plan lhs)]
-                                    :inner [:join {} (plan lhs) (plan rhs)]))
+                                    "LEFT" [:left-outer-join {} (plan lhs) (plan rhs)]
+                                    "RIGHT" [:left-outer-join {} (plan rhs) (plan lhs)]
+                                    "INNER" [:join {} (plan lhs) (plan rhs)]))
 
      [:from_clause _ ^:z trl]
      ;;=>
@@ -1516,15 +1515,15 @@
 (defn- promote-selection-to-join [z]
   (r/zmatch z
      [:select predicate
-      [join-type {} lhs rhs]]
+      [join-op {} lhs rhs]]
      ;;=>
      (when-let [join-map (build-join-map predicate lhs rhs)]
-       [join-type join-map lhs rhs])))
+       [join-op join-map lhs rhs])))
 
 (defn- push-selection-down-past-join [z]
   (r/zmatch z
     [:select predicate
-     [join-type join-map lhs rhs]]
+     [join-op join-map lhs rhs]]
     ;;=>
     (let [expr-table-ids (expr-table-ids predicate)
           lhs-table-ids (table-ids-in-subtree lhs)
@@ -1533,10 +1532,10 @@
           on-rhs? (set/subset? expr-table-ids rhs-table-ids)]
       (cond
         (and on-rhs? (not on-lhs?))
-        [join-type join-map lhs [:select predicate rhs]]
+        [join-op join-map lhs [:select predicate rhs]]
 
         (and on-lhs? (not on-rhs?))
-        [join-type join-map [:select predicate lhs] rhs]))))
+        [join-op join-map [:select predicate lhs] rhs]))))
 
 (defn- push-selections-with-fewer-variables-down [z]
   (r/zmatch z
