@@ -499,10 +499,13 @@
                                     query-expression)
                                    (concat named-join-columns)
                                    (distinct)))))]
-        [(for [{:keys [identifier]} projections]
-           (cond-> (with-meta {} {:table table})
-             identifier (assoc :identifier identifier)
-             correlation-name (assoc :qualified-column [correlation-name identifier])))]))
+        [(reduce
+          (fn [acc {:keys [identifier] :as projection}]
+            (conj acc (cond-> (with-meta {:index (count acc)} {:table table})
+                        identifier (assoc :identifier identifier)
+                        correlation-name (assoc :qualified-column [correlation-name identifier]))))
+          []
+          projections)]))
 
     :query_specification
     (letfn [(expand-asterisk [ag]
