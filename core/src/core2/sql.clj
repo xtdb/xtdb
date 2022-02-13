@@ -69,7 +69,6 @@
 ;; - align names and language with spec, add references?
 ;; - grouping column check for asterisks should really expand and then fail.
 ;; - named columns join should only output single named columns: COALESCE(lhs.x, rhs.x) AS x
-;; - add sanity check tests for UNION and ORDER BY.
 
 (defn- enter-env-scope
   ([env]
@@ -400,11 +399,7 @@
 
     :order_by_clause
     (let [query-expression-body (z/left ag)]
-      (r/select
-       (fn [ag]
-         (when (r/ctor? :query_specification ag)
-           (env ag)))
-       query-expression-body))
+      (env query-expression-body))
 
     (r/inherit ag)))
 
@@ -563,11 +558,15 @@
         (r/collect-stop calculate-select-list ag))])
 
     :query_expression
-    (vec (for [projections (if (r/ctor? :with_clause (r/$ ag 1))
-                             (projected-columns (r/$ ag 2))
-                             (projected-columns (r/$ ag 1)))]
-           (vec (for [projection projections]
-                  (select-keys projection [:identifier :index :normal-form])))))
+    (let [query-expression-body (if (r/ctor? :with_clause (r/$ ag 1))
+                                  (r/$ ag 2)
+                                  (r/$ ag 1))
+          keys-to-keep (if (r/ctor? :query_specification query-expression-body)
+                         [:identifier :index :normal-form]
+                         [:identifier :index])]
+      (vec (for [projections (projected-columns query-expression-body)]
+             (vec (for [projection projections]
+                    (select-keys projection keys-to-keep))))))
 
     :collection_derived_table
     (if (= "ORDINALITY" (r/lexeme ag -1))

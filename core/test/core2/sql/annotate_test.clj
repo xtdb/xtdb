@@ -279,6 +279,17 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (valid? "SELECT foo.a FROM (SELECT x.b FROM x) AS foo (a)")
   (valid? "SELECT foo.b FROM (SELECT x.b FROM x UNION SELECT y.a FROM y) AS foo")
   (valid? "SELECT foo.a FROM (SELECT x.b FROM x UNION SELECT y.a FROM y) AS foo (a)")
+
+  (valid? "SELECT x.a FROM x UNION SELECT y.a FROM y ORDER BY a")
+  (invalid? #"XTDB requires fully-qualified columns: b"
+            "SELECT x.a FROM x UNION SELECT y.a FROM y ORDER BY b")
+  (invalid? #"Table not in scope: x"
+            "SELECT x.a FROM x UNION SELECT y.a FROM y ORDER BY x.a")
+  (invalid? #"Table not in scope: y"
+            "SELECT x.a FROM x EXCEPT SELECT y.a FROM y ORDER BY y.a")
+  (invalid? #"Table not in scope: x"
+            "SELECT x.a FROM x INTERSECT SELECT y.a FROM y ORDER BY x.a")
+
   (invalid? #"Column not in scope: foo.a"
             "SELECT foo.a FROM (SELECT x.b FROM x UNION SELECT y.a FROM y) AS foo")
   (invalid? #"Column not in scope: foo.a"

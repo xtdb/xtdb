@@ -120,7 +120,7 @@
              [si__3_movieTitle]
              [:rename si__3 [:scan [movieTitle]]]]]])
 
-  (valid? "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si "
+  (valid? "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si"
           [:difference
            [:rename
             {si__3_name name}
@@ -133,7 +133,8 @@
              [si__5_name]
              [:rename si__5 [:scan [name]]]]]])
 
-    (valid? "SELECT si.name FROM StarsIn AS si UNION ALL SELECT si.name FROM StarsIn AS si "
+
+  (valid? "SELECT si.name FROM StarsIn AS si UNION ALL SELECT si.name FROM StarsIn AS si"
           [:union-all
            [:rename
             {si__3_name name}
@@ -146,7 +147,7 @@
              [si__5_name]
              [:rename si__5 [:scan [name]]]]]])
 
-  (valid? "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si "
+  (valid? "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si"
           [:intersect
            [:rename
             {si__3_name name}
@@ -159,7 +160,7 @@
              [si__5_name]
              [:rename si__5 [:scan [name]]]]]])
 
-  (valid? "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si "
+  (valid? "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si"
           [:distinct
            [:union-all
             [:rename
@@ -169,6 +170,21 @@
               [:rename si__3 [:scan [movieTitle]]]]]
             [:rename
              {name movieTitle}
+             [:rename
+              {si__5_name name}
+              [:project
+               [si__5_name]
+               [:rename si__5 [:scan [name]]]]]]]])
+
+  (valid? "SELECT si.name FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si ORDER BY name"
+          [:order-by [{name :asc}]
+           [:distinct
+            [:union-all
+             [:rename
+              {si__3_name name}
+              [:project
+               [si__3_name]
+               [:rename si__3 [:scan [name]]]]]
              [:rename
               {si__5_name name}
               [:project
