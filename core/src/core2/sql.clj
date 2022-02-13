@@ -563,9 +563,11 @@
         (r/collect-stop calculate-select-list ag))])
 
     :query_expression
-    (if (r/ctor? :with_clause (r/$ ag 1))
-      (projected-columns (r/$ ag 2))
-      (projected-columns (r/$ ag 1)))
+    (vec (for [projections (if (r/ctor? :with_clause (r/$ ag 1))
+                             (projected-columns (r/$ ag 2))
+                             (projected-columns (r/$ ag 1)))]
+           (vec (for [projection projections]
+                  (select-keys projection [:identifier :index :normal-form])))))
 
     :collection_derived_table
     (if (= "ORDINALITY" (r/lexeme ag -1))
