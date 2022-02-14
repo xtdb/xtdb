@@ -1284,19 +1284,32 @@
                {:table-reference {:table-id id
                                   :correlation-name correlation-name}})
      (if-let [subquery-ref (:subquery-ref (meta table))]
-       (plan subquery-ref)
+       (if-let [derived-columns (derived-columns tp)]
+         [:rename (zipmap (map unqualifed-projection-symbol (first (projected-columns subquery-ref)))
+                          (map symbol derived-columns))
+          (plan subquery-ref)]
+         (plan subquery-ref))
        [:scan (vec (for [{:keys [identifier]} projection]
                      (symbol identifier)))])]))
 
 (defn- build-table-reference-list [trl]
   (reduce
    (fn [acc table]
-     [:cross-join acc table])
+     ;; TODO: Simplistic, should really project out everything in acc
+     ;; and also duplicate cve under new unwound column name, or
+     ;; change physical operator so it simply can unwind into a new
+     ;; name. Ordinality also needs to be supported.
+     (r/zmatch (z/vector-zip table)
+       [:rename prefix [:rename rename-map [:unwind cve nil]]]
+       ;;=>
+       [:rename {cve (symbol (str prefix relation-prefix-delimiter (first (vals rename-map))))}
+        [:unwind cve acc]]
+
+       [:cross-join acc table]))
    (r/collect-stop
     (fn [z]
       (r/zcase z
         (:table_primary
-
          :qualified_join) [(plan z)]
         :subquery []
         nil))
@@ -1413,6 +1426,9 @@
      [:table_primary _ _ _ _]
      ;;=>
      (build-table-primary z)
+
+     [:collection_derived_table _ ^:z cve]
+     [:unwind (expr cve) nil]
 
      [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
      ;;=>

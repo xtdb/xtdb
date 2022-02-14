@@ -104,6 +104,15 @@
             [si__3_name]
             [:rename si__3 [:scan [name]]]]])
 
+  (valid? "SELECT * FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)"
+          [:rename {foo__3_bar bar}
+           [:project [foo__3_bar]
+            [:rename foo__3
+             [:rename {name bar}
+              [:rename {si__6_name name}
+               [:project [si__6_name]
+                [:rename si__6 [:scan [name]]]]]]]]])
+
   (valid? "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname"
           [:rename
            {si__3_name name si__3_lastname lastname}
@@ -263,4 +272,13 @@
   (valid? "SELECT si.year = 'foo' FROM StarsIn AS si ORDER BY si.year = 'foo'"
           [:order-by [{$column_1$ :asc}]
            [:project [{$column_1$ (= si__3_year "foo")}]
-            [:rename si__3 [:scan [year]]]]]))
+            [:rename si__3 [:scan [year]]]]])
+
+  (valid? "SELECT film.name FROM StarsIn AS si, UNNEST(si.films) AS film(name)"
+          [:rename
+           {film__4_name name}
+           [:project
+            [film__4_name]
+            [:rename
+             {si__3_films film__4_name}
+             [:unwind si__3_films [:rename si__3 [:scan [films]]]]]]]))
