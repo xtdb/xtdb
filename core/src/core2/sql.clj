@@ -500,9 +500,10 @@
                                    (concat named-join-columns)
                                    (distinct)))))]
         [(reduce
-          (fn [acc {:keys [identifier] :as projection}]
+          (fn [acc {:keys [identifier index] :as projection}]
             (conj acc (cond-> (with-meta {:index (count acc)} {:table table})
                         identifier (assoc :identifier identifier)
+                        (and index (nil? identifier)) (assoc :original-index index)
                         correlation-name (assoc :qualified-column [correlation-name identifier]))))
           []
           projections)]))
@@ -1087,11 +1088,15 @@
 (defn- unqualifed-projection-symbol [{:keys [identifier ^long index] :as projection}]
   (symbol (or identifier (str "$column_" (inc index) "$"))))
 
-(defn- qualified-projection-symbol [{:keys [qualified-column] :as projection}]
+(defn- qualified-projection-symbol [{:keys [qualified-column original-index] :as projection}]
   (let [{derived-column :ref table :table} (meta projection)]
     (if derived-column
       (expr (r/$ derived-column 1))
-      (id-symbol (first qualified-column) (:id table) (second qualified-column)))))
+      (id-symbol (first qualified-column)
+                 (:id table)
+                 (unqualifed-projection-symbol
+                  (cond-> projection
+                    original-index (assoc :index original-index)))))))
 
 (defn- aggregate-symbol [prefix z]
   (let [query-id (id (scope-element z))]
@@ -1276,6 +1281,18 @@
        [:rename (zipmap rhs-unqualified-project lhs-unqualified-project)
         (plan rhs)])]))
 
+(defn- build-collection-derived-table [tp]
+  (let [cdt (r/$ tp 1)
+        unwind-column (qualified-projection-symbol (ffirst (projected-columns tp)))
+        qualified-projection (vec (for [table (vals (local-env-singleton-values (env cdt)))
+                                        :let [{:keys [ref]} (meta table)]
+                                        projection (first (projected-columns ref))
+                                        :let [column (qualified-projection-symbol projection)]]
+                                    (if (= unwind-column column)
+                                      {unwind-column (expr (r/$ cdt 2))}
+                                      column)))]
+    [:unwind unwind-column [:project qualified-projection nil]]))
+
 (defn- build-table-primary [tp]
   (let [{:keys [id correlation-name] :as table} (table tp)
         projection (first (projected-columns tp))]
@@ -1295,15 +1312,10 @@
 (defn- build-table-reference-list [trl]
   (reduce
    (fn [acc table]
-     ;; TODO: Simplistic, should really project out everything in acc
-     ;; and also duplicate cve under new unwound column name, or
-     ;; change physical operator so it simply can unwind into a new
-     ;; name. Ordinality also needs to be supported.
-     (r/zmatch (z/vector-zip table)
-       [:rename prefix [:rename rename-map [:unwind cve nil]]]
+     (r/zmatch table
+       [:unwind cve [:project projection nil]]
        ;;=>
-       [:rename {cve (symbol (str prefix relation-prefix-delimiter (first (vals rename-map))))}
-        [:unwind cve acc]]
+       [:unwind cve [:project projection acc]]
 
        [:cross-join acc table]))
    (r/collect-stop
@@ -1411,6 +1423,13 @@
      (->> (wrap-with-group-by z)
           (wrap-with-select (expr hsc)))
 
+     [:table_primary [:collection_derived_table _ _] _ _]
+     ;;=>
+     (build-collection-derived-table z)
+
+     [:table_primary [:collection_derived_table _ _] _ _ _]
+     (build-collection-derived-table z)
+
      [:table_primary _]
      ;;=>
      (build-table-primary z)
@@ -1426,9 +1445,6 @@
      [:table_primary _ _ _ _]
      ;;=>
      (build-table-primary z)
-
-     [:collection_derived_table _ ^:z cve]
-     [:unwind (expr cve) nil]
 
      [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
      ;;=>

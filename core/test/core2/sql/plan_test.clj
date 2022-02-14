@@ -279,6 +279,15 @@
            {film__4_name name}
            [:project
             [film__4_name]
-            [:rename
-             {si__3_films film__4_name}
-             [:unwind si__3_films [:rename si__3 [:scan [films]]]]]]]))
+            [:unwind film__4_name
+             [:project [si__3_films {film__4_name si__3_films}]
+              [:rename si__3 [:scan [films]]]]]]])
+
+  (valid? "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film"
+          [:rename
+           {si__3_films films film__4_$column_1$ $column_2$}
+           [:project
+            [si__3_films film__4_$column_1$]
+            [:unwind film__4_$column_1$
+             [:project [si__3_films {film__4_$column_1$ si__3_films}]
+              [:rename si__3 [:scan [films]]]]]]]))
