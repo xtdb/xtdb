@@ -1751,3 +1751,58 @@
 ;; https://download.oracle.com/otndocs/products/spatial/pdf/AnD2020/AD_Develop_Graph_Apps_SQL_PGQ.pdf
 
 ;; Dependent join symbols:  ⧑ ⧔ ⯈
+
+;; Query Graph Model example as entities:
+;; http://projectsweb.cs.washington.edu/research/projects/db/weld/pirahesh-starburst-92.pdf
+
+(comment
+  '[{:db/id b1
+     :qgm.box/type :qgm.box.type/base-table
+     :qgm.box.base-table/name inventory}
+    {:db/id b2
+     :qgm.box/type :qgm.box.type/base-table
+     :qgm.box.base-table/name quotations}
+    {:db/id b3
+     :qgm.box/type :qgm.box.type/select
+     :qgm.box.head/distinct? true
+     :qgm.box.head/columns [partno descr suppno]
+     :qgm.box.body/columns [q1.partno q1.descr q2.suppno]
+     :qgm.box.body/distinct :qgm.box.body.distinct/enforce
+     :qgm.box.body/quantifiers #{q1 q2 q4}}
+    {:db/id b4
+     :qgm.box/type :qgm.box.type/select
+     :qgm.box.head/distinct? false
+     :qgm.box.head/columns [price]
+     :qgm.box.body/columns [q3.price]
+     :qgm.box.body/distinct :qgm.box.body.distinct/permit
+     :qgm.box.body/quantifiers #{q3}}
+
+    {:db/id q1
+     :qgm.quantifier/type :qgm.quantifier.type/foreach
+     :qgm.quantifier/columns [partno descr]
+     :qgm.quantifier/ranges-over box1}
+    {:db/id q2
+     :qgm.quantifier/type :qgm.quantifier.type/foreach
+     :qgm.quantifier/columns [partno price]
+     :qgm.quantifier/ranges-over box2}
+    {:db/id q3
+     :qgm.quantifier/type :qgm.quantifier.type/foreach
+     :qgm.quantifier/columns [partno price]
+     :qgm.quantifier/ranges-over box2}
+    {:db/id q4
+     :qgm.quantifier/type :qgm.quantifier.type/all
+     :qgm.quantifier/columns [price]
+     :qgm.quantifier/ranges-over box4}
+
+    {:db/id p1
+     :qgm.predicate/expression (= q1.descr "engine")
+     :qgm.predicate/quantifiers #{q1}}
+    {:db/id p2
+     :qgm.predicate/expression (= q1.partno q2.partno)
+     :qgm.predicate/quantifiers #{q1 q2}}
+    {:db/id p3
+     :qgm.predicate/expression (<= q2.partno q4.partno)
+     :qgm.predicate/quantifiers #{q2 q4}}
+    {:db/id p4
+     :qgm.predicate/expression (= q2.partno q3.partno)
+     :qgm.predicate/quantifiers #{q2 q3}}])
