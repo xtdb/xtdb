@@ -3684,10 +3684,12 @@
 (t/deftest test-leaf-vars-and-ors
   (fix/submit+await-tx [[::xt/put {:xt/id :foo, :field1 1 :field2 2}]])
   (t/is (= #{[:foo]}
-           (xt/q (xt/db *api*)'{:find [?id], :where [[?id :field1 ?field1]
-                                                     [?id :field2 ?field2]
-                                                     (or (and [(boolean ?field2)]))]
-                                :args []}))))
+           (xt/q (xt/db *api*)
+                 '{:find [?id],
+                   :where [[?id :field1 ?field1]
+                           [?id :field2 ?field2]
+                           (or (and [(boolean ?field2)]))]
+                   :args []}))))
 
 (t/deftest test-bound-rule-vars-946
   (fix/submit+await-tx (for [[id child-id] (partition 2 1 (range 101))]
