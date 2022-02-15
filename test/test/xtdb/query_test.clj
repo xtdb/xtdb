@@ -3613,7 +3613,8 @@
                           {f nil, g true}]}))))
 
 (t/deftest test-binds-args-before-entities
-  (fix/submit+await-tx [[::xt/put {:xt/id :foo, :foo/type "type", :foo/id 1}]])
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo, :foo/type "type", :foo/id 1}]
+                        [::xt/put {:xt/id :foo, :foo/type "type", :foo/id 2}]])
 
   (let [db (xt/db *api*)]
     (t/is (= ['m 'e]
@@ -3744,14 +3745,15 @@
                                    :my-number n}]))))
 
   (t/testing "join order avoids cross product"
-    (t/is (= '["Oleg" "Ivan" e1 n e2]
-             (:vars-in-join-order
-              (q/query-plan-for (xt/db *api*)
-                                '{:find [e1]
-                                  :where [[e1 :my-name "Ivan"]
-                                          [e2 :my-name "Oleg"]
-                                          [e1 :my-number n]
-                                          [e2 :my-number n]]}))))))
+    (t/is (= '[e1 n e2]
+             (->> (q/query-plan-for (xt/db *api*)
+                                    '{:find [e1]
+                                      :where [[e1 :my-name "Ivan"]
+                                              [e2 :my-name "Oleg"]
+                                              [e1 :my-number n]
+                                              [e2 :my-number n]]})
+                  :vars-in-join-order
+                  (filter '#{e1 n e2}))))))
 
 (comment
   ;; repro for https://github.com/xtdb/xtdb/issues/443, don't have a solution yet though
@@ -3901,20 +3903,22 @@
                                [::xt/put {:xt/id (UUID/randomUUID)
                                           :type "extra type"}]))
 
-    (t/is (= '[?name ?e ?type]
-             (-> (q/query-plan-for (xt/db *api*) query
-                                   ["person-104" :person])
-                 :vars-in-join-order)))
+    (t/is (= '[?name ?e]
+             (->> (q/query-plan-for (xt/db *api*) query
+                                    ["person-104" :person])
+                  :vars-in-join-order
+                  (filter '#{?name ?e}))))
 
     (fix/submit+await-tx [[::xt/put {:xt/id (UUID/randomUUID)
                                      :name "extra name"}]
                           [::xt/put {:xt/id (UUID/randomUUID)
                                      :name "another extra name"}]])
 
-    (t/is (= '[?name ?e ?type]
-             (-> (q/query-plan-for (xt/db *api*) query
-                                   ["person-104" :person])
-                 :vars-in-join-order)))))
+    (t/is (= '[?name ?e]
+             (->> (q/query-plan-for (xt/db *api*) query
+                                    ["person-104" :person])
+                  :vars-in-join-order
+                  (filter '#{?name ?e}))))))
 
 (defn- date->inverted-long [^Date d]
   (* -1 (.getTime d)))
