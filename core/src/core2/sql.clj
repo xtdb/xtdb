@@ -1282,8 +1282,9 @@
         (plan rhs)])]))
 
 (defn- build-collection-derived-table [tp]
-  (let [cdt (r/$ tp 1)
+  (let [{:keys [id correlation-name] :as table} (table tp)
         unwind-column (qualified-projection-symbol (ffirst (projected-columns tp)))
+        cdt (r/$ tp 1)
         qualified-projection (vec (for [table (vals (local-env-singleton-values (env cdt)))
                                         :let [{:keys [ref]} (meta table)]
                                         projection (first (projected-columns ref))
@@ -1291,7 +1292,11 @@
                                     (if (= unwind-column column)
                                       {unwind-column (expr (r/$ cdt 2))}
                                       column)))]
-    [:unwind unwind-column [:project qualified-projection nil]]))
+    [:unwind (with-meta
+               unwind-column
+               {:table-reference {:table-id id
+                                  :correlation-name correlation-name}})
+     [:project qualified-projection nil]]))
 
 (defn- build-table-primary [tp]
   (let [{:keys [id correlation-name] :as table} (table tp)
@@ -1482,6 +1487,9 @@
           (r/zmatch z
             [:rename prefix _]
             (when-let [table-reference (:table-reference (meta prefix))]
+              [table-reference])
+            [:unwind cve _]
+            (when-let [table-reference (:table-reference (meta cve))]
               [table-reference])))
         (z/vector-zip op))))
 
