@@ -1203,12 +1203,22 @@
 
         join-vars (->join-vars triple-clauses)
 
+        start-vars (->> triple-clauses
+                        (into #{} (comp (mapcat (juxt :e :v))
+                                        (remove #(contains? join-vars %))
+                                        (filter (fn [var]
+                                                  (or (and (literal? var)
+                                                           (or (not (coll? var))
+                                                               (= 1 (count var))))
+                                                      (= 1.0 (get in-var-cardinalities var))))))))
+
         join-vars (into join-vars
 
                         ;; include both vars in otherwise unjoined clauses
                         (comp (remove (some-fn (comp #(contains? join-vars %) :e)
                                                (comp #(contains? join-vars %) :v)))
-                              (mapcat (juxt :e :v)))
+                              (mapcat (juxt :e :v))
+                              (remove #(contains? start-vars %)))
 
                         triple-clauses)
 
@@ -1216,9 +1226,10 @@
                                   (into [] (mapcat (fn [clause]
                                                      (let [clause-stats (triple-clause-stats clause stats in-var-cardinalities filtered-vars)]
                                                        (split-triple-clause clause clause-stats))))))
-
         end-vars (->> clause-cardinalities
-                      (into #{} (comp (remove (comp #(contains? join-vars %) :this-var))
+                      (into #{} (comp (remove (comp (some-fn #(contains? join-vars %)
+                                                             #(contains? start-vars %))
+                                                    :this-var))
                                       (filter (comp #(> (double %) 0.95) :this-selectivity))
                                       (map :this-var))))
 
@@ -1229,7 +1240,8 @@
                                       [join-var
                                        (into #{join-var}
                                              (comp (map :other-var)
-                                                   (remove (some-fn #(contains? end-vars %)
+                                                   (remove (some-fn #(contains? start-vars %)
+                                                                    #(contains? end-vars %)
                                                                     #(contains? join-vars %))))
                                              clauses)])
                                     (into {}))
@@ -1258,11 +1270,11 @@
                        (sort-by :score)
                        first))]
 
-          (->> (for [join-var-order (permutations join-vars)]
+          (->> (for [join-var-order (or (seq (permutations join-vars)) [[]])]
                  (->> join-var-order
                       (reduce step-join-var
-                              {:bound-vars #{}
-                               :join-order []
+                              {:bound-vars start-vars
+                               :join-order (vec start-vars)
                                :score 0.0
                                :cardinality 1.0})))
 

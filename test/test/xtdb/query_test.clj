@@ -2134,8 +2134,8 @@
 (t/deftest datascript-test-not
   (populate-datascript-test-db)
   (let [db (xt/db *api*)]
-    (t/are [q res] (= (xt/q db {:find '[?e] :where (quote q)})
-                      (into #{} (map vector) res))
+    (t/are [q res] (= (into #{} (map vector) res)
+                      (xt/q db {:find '[?e] :where (quote q)}))
       [[?e :name]
        (not [?e :name "Ivan"])]
       #{3 4}
@@ -3745,15 +3745,14 @@
                                    :my-number n}]))))
 
   (t/testing "join order avoids cross product"
-    (t/is (= '[e1 n e2]
+    (t/is (= '["Oleg" "Ivan" e1 n e2]
              (->> (q/query-plan-for (xt/db *api*)
                                     '{:find [e1]
                                       :where [[e1 :my-name "Ivan"]
                                               [e2 :my-name "Oleg"]
                                               [e1 :my-number n]
                                               [e2 :my-number n]]})
-                  :vars-in-join-order
-                  (filter '#{e1 n e2}))))))
+                  :vars-in-join-order)))))
 
 (comment
   ;; repro for https://github.com/xtdb/xtdb/issues/443, don't have a solution yet though
