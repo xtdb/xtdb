@@ -1139,6 +1139,14 @@
                {:keys [results]} (build-sub-query db terms not-in-bindings in-args rule-name->rules)]
            (empty? results))))}))
 
+(defn- ->join-vars [triple-clauses]
+  (->> triple-clauses
+       (mapcat (juxt :e :v))
+       frequencies
+       (into #{} (comp (filter (every-pred (comp logic-var? key)
+                                           (comp #(>= (long %) 2) val)))
+                       (map key)))))
+
 (defn- ->filtered-vars [{pred-clauses :pred, range-clauses :range, :as type->clauses}]
   (set/union (into #{} (mapcat (collect-vars type->clauses) [:not-vars :pred-return-vars]))
 
@@ -1153,31 +1161,25 @@
                         :when (logic-var? sym)]
                     sym))))
 
-(defn- ->join-vars [triple-clauses]
-  (->> triple-clauses
-       (mapcat (juxt :e :v))
-       frequencies
-       (into #{} (comp (filter (every-pred (comp logic-var? key)
-                                           (comp #(>= (long %) 2) val)))
-                       (map key)))))
-
-(defn- triple-clause-stats [{:keys [e a v]} stats in-var-cardinalities filtered-vars]
-  (letfn [(var-selectivity [var ^double cardinality]
-            (/ (min (if (literal? var) 1.0 Double/MAX_VALUE)
-                    (double (get in-var-cardinalities var Double/MAX_VALUE))
-                    (if (contains? filtered-vars var) (Math/sqrt cardinality) Double/MAX_VALUE)
-                    cardinality)
-               cardinality))]
-    (let [es (double (db/eid-cardinality stats a))
-          vs (double (db/value-cardinality stats a))
-          e-selectivity (double (var-selectivity e es))
-          v-selectivity (double (var-selectivity v vs))]
-      {:e-selectivity e-selectivity
-       :v-selectivity v-selectivity
-       :es (* es e-selectivity)
-       :vs (* vs v-selectivity)
-       :vs-per-e (* v-selectivity 1.0) ; TODO 1.0 for now, until we know better
-       :es-per-v (* e-selectivity (/ es vs))})))
+(defn- triple-clause-stats-fn [type->clauses stats in-var-cardinalities]
+  (let [filtered-vars (->filtered-vars type->clauses)]
+    (fn [{:keys [e a v]}]
+      (letfn [(var-selectivity [var ^double cardinality]
+                (/ (min (if (literal? var) 1.0 Double/MAX_VALUE)
+                        (double (get in-var-cardinalities var Double/MAX_VALUE))
+                        (if (contains? filtered-vars var) (Math/sqrt cardinality) Double/MAX_VALUE)
+                        cardinality)
+                   cardinality))]
+        (let [es (double (db/eid-cardinality stats a))
+              vs (double (db/value-cardinality stats a))
+              e-selectivity (double (var-selectivity e es))
+              v-selectivity (double (var-selectivity v vs))]
+          {:e-selectivity e-selectivity
+           :v-selectivity v-selectivity
+           :es (* es e-selectivity)
+           :vs (* vs v-selectivity)
+           :vs-per-e (* v-selectivity 1.0) ; TODO 1.0 for now, until we know better
+           :es-per-v (* e-selectivity (/ es vs))})))))
 
 (defn- split-triple-clause [clause {:keys [e-selectivity v-selectivity
                                            es vs-per-e vs es-per-v]}]
@@ -1199,9 +1201,7 @@
         (cons head tail)))))
 
 (defn- triple-join-order [{triple-clauses :triple, :as type->clauses} in-var-cardinalities stats]
-  (let [filtered-vars (->filtered-vars type->clauses)
-
-        join-vars (->join-vars triple-clauses)
+  (let [join-vars (->join-vars triple-clauses)
 
         start-vars (->> triple-clauses
                         (into #{} (comp (mapcat (juxt :e :v))
@@ -1223,9 +1223,9 @@
                         triple-clauses)
 
         clause-cardinalities (->> triple-clauses
-                                  (into [] (mapcat (fn [clause]
-                                                     (let [clause-stats (triple-clause-stats clause stats in-var-cardinalities filtered-vars)]
-                                                       (split-triple-clause clause clause-stats))))))
+                                  (into [] (mapcat (let [stats-fn (triple-clause-stats-fn type->clauses stats in-var-cardinalities)]
+                                                     (fn [clause]
+                                                       (split-triple-clause clause (stats-fn clause)))))))
         end-vars (->> clause-cardinalities
                       (into #{} (comp (remove (comp (some-fn #(contains? join-vars %)
                                                              #(contains? start-vars %))
