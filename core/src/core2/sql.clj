@@ -1626,18 +1626,18 @@
                           (assoc acc k (get columns-1 v v)))
                         (apply dissoc columns-1 (vals columns-2))
                         columns-2)]
-        [:rename rename-map relation]))))
+        [:rename (with-meta rename-map (meta columns-2)) relation]))))
 
 (defn- remove-superseded-projects [z]
   (r/zmatch z
     [:project projections-1
-     [:rename rename
+     [:rename prefix-or-columns
       [:project projections-2
        relation]]]
     ;;=>
     (when (every? symbol? projections-2)
       [:project projections-1
-       [:rename rename
+       [:rename prefix-or-columns
         relation]])
 
     [:project projections
