@@ -100,18 +100,14 @@
   (valid? "SELECT * FROM StarsIn AS si(name)"
           [:rename
            {si__3_name name}
-           [:project
-            [si__3_name]
-            [:rename si__3 [:scan [name]]]]])
+           [:rename si__3 [:scan [name]]]])
 
   (valid? "SELECT * FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)"
           [:rename {foo__3_bar bar}
            [:project [foo__3_bar]
             [:rename foo__3
-             [:rename {name bar}
-              [:rename {si__6_name name}
-               [:project [si__6_name]
-                [:rename si__6 [:scan [name]]]]]]]]])
+             [:rename {si__6_name bar}
+              [:rename si__6 [:scan [name]]]]]]])
 
   (valid? "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname"
           [:rename
@@ -125,65 +121,45 @@
           [:distinct
            [:rename
             {si__3_movieTitle movieTitle}
-            [:project
-             [si__3_movieTitle]
-             [:rename si__3 [:scan [movieTitle]]]]]])
+            [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si"
           [:difference
            [:rename
             {si__3_name name}
-            [:project
-             [si__3_name]
-             [:rename si__3 [:scan [name]]]]]
+            [:rename si__3 [:scan [name]]]]
            [:rename
             {si__5_name name}
-            [:project
-             [si__5_name]
-             [:rename si__5 [:scan [name]]]]]])
+            [:rename si__5 [:scan [name]]]]])
 
 
   (valid? "SELECT si.name FROM StarsIn AS si UNION ALL SELECT si.name FROM StarsIn AS si"
           [:union-all
            [:rename
             {si__3_name name}
-            [:project
-             [si__3_name]
-             [:rename si__3 [:scan [name]]]]]
+            [:rename si__3 [:scan [name]]]]
            [:rename
             {si__5_name name}
-            [:project
-             [si__5_name]
-             [:rename si__5 [:scan [name]]]]]])
+            [:rename si__5 [:scan [name]]]]])
 
   (valid? "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si"
           [:intersect
            [:rename
             {si__3_name name}
-            [:project
-             [si__3_name]
-             [:rename si__3 [:scan [name]]]]]
+            [:rename si__3 [:scan [name]]]]
            [:rename
             {si__5_name name}
-            [:project
-             [si__5_name]
-             [:rename si__5 [:scan [name]]]]]])
+            [:rename si__5 [:scan [name]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si"
           [:distinct
            [:union-all
             [:rename
              {si__3_movieTitle movieTitle}
-             [:project
-              [si__3_movieTitle]
-              [:rename si__3 [:scan [movieTitle]]]]]
+             [:rename si__3 [:scan [movieTitle]]]]
             [:rename
-             {name movieTitle}
-             [:rename
-              {si__5_name name}
-              [:project
-               [si__5_name]
-               [:rename si__5 [:scan [name]]]]]]]])
+             {si__5_name movieTitle}
+             [:rename si__5 [:scan [name]]]]]])
 
   (valid? "SELECT si.name FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si ORDER BY name"
           [:order-by [{name :asc}]
@@ -191,63 +167,47 @@
             [:union-all
              [:rename
               {si__3_name name}
-              [:project
-               [si__3_name]
-               [:rename si__3 [:scan [name]]]]]
+              [:rename si__3 [:scan [name]]]]
              [:rename
               {si__5_name name}
-              [:project
-               [si__5_name]
-               [:rename si__5 [:scan [name]]]]]]]])
+              [:rename si__5 [:scan [name]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY"
           [:top {:limit 10}
            [:rename
             {si__3_movieTitle movieTitle}
-            [:project
-             [si__3_movieTitle]
-             [:rename si__3 [:scan [movieTitle]]]]]])
+            [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS"
           [:top {:skip 5}
            [:rename
             {si__3_movieTitle movieTitle}
-            [:project
-             [si__3_movieTitle]
-             [:rename si__3 [:scan [movieTitle]]]]]])
+            [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS FETCH FIRST 10 ROWS ONLY"
           [:top {:skip 5 :limit 10}
            [:rename
             {si__3_movieTitle movieTitle}
-            [:project
-             [si__3_movieTitle]
-             [:rename si__3 [:scan [movieTitle]]]]]])
+            [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle"
           [:order-by [{movieTitle :asc}]
            [:rename
             {si__3_movieTitle movieTitle}
-            [:project
-             [si__3_movieTitle]
-             [:rename si__3 [:scan [movieTitle]]]]]])
+            [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle OFFSET 100 ROWS"
           [:top {:skip 100}
            [:order-by [{movieTitle :asc}]
             [:rename
              {si__3_movieTitle movieTitle}
-             [:project
-              [si__3_movieTitle]
-              [:rename si__3 [:scan [movieTitle]]]]]]])
+             [:rename si__3 [:scan [movieTitle]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY movieTitle DESC"
           [:order-by [{movieTitle :desc}]
            [:rename
             {si__3_movieTitle movieTitle}
-            [:project
-             [si__3_movieTitle]
-             [:rename si__3 [:scan [movieTitle]]]]]])
+            [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle"
           [:project [movieTitle]
@@ -255,9 +215,7 @@
             [:project [movieTitle {$order_by__1_1$ (= si__3_year "foo")}]
              [:rename
               {si__3_movieTitle movieTitle}
-              [:project
-               [si__3_movieTitle si__3_year]
-               [:rename si__3 [:scan [movieTitle year]]]]]]]])
+              [:rename si__3 [:scan [movieTitle year]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year"
           [:project [movieTitle]
@@ -265,9 +223,7 @@
             [:project [movieTitle {$order_by__1_1$ si__3_year}]
              [:rename
               {si__3_movieTitle movieTitle}
-              [:project
-               [si__3_movieTitle si__3_year]
-               [:rename si__3 [:scan [movieTitle year]]]]]]]])
+              [:rename si__3 [:scan [movieTitle year]]]]]]])
 
   (valid? "SELECT si.year = 'foo' FROM StarsIn AS si ORDER BY si.year = 'foo'"
           [:order-by [{$column_1$ :asc}]

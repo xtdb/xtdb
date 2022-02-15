@@ -1614,6 +1614,42 @@
     (when (= (expr-table-ids predicate-1) (expr-table-ids predicate-2))
       [:select (merge-conjunctions predicate-1 predicate-2) relation])))
 
+(defn- merge-renames [z]
+  (r/zmatch z
+    [:rename columns-1
+     [:rename columns-2
+      relation]]
+    ;;=>
+    (when (and (map? columns-1) (map? columns-2))
+      (let [rename-map (reduce-kv
+                        (fn [acc k v]
+                          (assoc acc k (get columns-1 v v)))
+                        (apply dissoc columns-1 (vals columns-2))
+                        columns-2)]
+        [:rename rename-map relation]))))
+
+(defn- remove-superseded-projects [z]
+  (r/zmatch z
+    [:project projections-1
+     [:rename rename
+      [:project projections-2
+       relation]]]
+    ;;=>
+    (when (every? symbol? projections-2)
+      [:project projections-1
+       [:rename rename
+        relation]])
+
+    [:project projections
+     [:rename prefix
+      [:scan columns]]]
+    ;;=>
+    (when (and (every? symbol? projections)
+               (symbol? prefix)
+               (= (count projections) (count columns)))
+      [:rename prefix
+       [:scan columns]])))
+
 (defn- add-selection-to-scan-predicate [z]
   (r/zmatch z
     [:select predicate
@@ -1648,6 +1684,8 @@
            push-selections-with-fewer-variables-down
            push-selections-with-equals-down
            merge-selections-with-same-variables
+           merge-renames
+           remove-superseded-projects
            add-selection-to-scan-predicate))
 
 ;; Logical plan API
