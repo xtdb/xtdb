@@ -1317,6 +1317,7 @@
 
                                ;; other vars that might not be bound anywhere else
                                in-vars
+                               (set triple-clause-var-order)
                                (->> (map (collect-vars type->clauses) [:pred-return-vars :or-vars])
                                     (into #{} (mapcat seq))))))]
 
