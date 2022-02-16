@@ -1775,7 +1775,7 @@
         (update-in [:aev a e] disj v)
         (update-in [:ave a v] disj e)))
 
-  (defn entitiy-triples [{:keys [aev] :as db} eid]
+  (defn entity-triples [{:keys [aev] :as db} eid]
     (for [a (keys aev)
           :let [vs (get-in aev [a eid])]
           v vs]
@@ -1795,7 +1795,7 @@
                          :else
                          v))))
      {}
-     (entitiy-triples db eid)))
+     (entity-triples db eid)))
 
   (defn remove-entity [{:keys [aev] :as db} eid]
     (reduce
