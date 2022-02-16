@@ -1565,21 +1565,30 @@
        [join-op join-map lhs rhs])))
 
 (defn- push-selection-down-past-join [z]
-  (r/zmatch z
-    [:select predicate
-     [join-op join-map lhs rhs]]
-    ;;=>
-    (let [expr-table-ids (expr-table-ids predicate)
-          lhs-table-ids (table-ids-in-subtree lhs)
-          rhs-table-ids (table-ids-in-subtree rhs)
-          on-lhs? (set/subset? expr-table-ids lhs-table-ids)
-          on-rhs? (set/subset? expr-table-ids rhs-table-ids)]
-      (cond
-        (and on-rhs? (not on-lhs?))
-        [join-op join-map lhs [:select predicate rhs]]
+  (letfn [(push-selection-down [predicate lhs rhs]
+            (let [expr-table-ids (expr-table-ids predicate)
+                  lhs-table-ids (table-ids-in-subtree lhs)
+                  rhs-table-ids (table-ids-in-subtree rhs)
+                  on-lhs? (set/subset? expr-table-ids lhs-table-ids)
+                  on-rhs? (set/subset? expr-table-ids rhs-table-ids)]
+              (cond
+                (and on-rhs? (not on-lhs?))
+                [lhs [:select predicate rhs]]
 
-        (and on-lhs? (not on-rhs?))
-        [join-op join-map [:select predicate lhs] rhs]))))
+                (and on-lhs? (not on-rhs?))
+                [[:select predicate lhs] rhs])))]
+    (r/zmatch z
+      [:select predicate
+       [join-op join-map lhs rhs]]
+      ;;=>
+      (when-let [[lhs rhs] (push-selection-down predicate lhs rhs)]
+        [join-op join-map lhs rhs])
+
+      [:select predicate
+       [:cross-join lhs rhs]]
+      ;;=>
+      (when-let [[lhs rhs] (push-selection-down predicate lhs rhs)]
+        [:cross-join lhs rhs]))))
 
 (defn- push-selections-with-fewer-variables-down [z]
   (r/zmatch z
