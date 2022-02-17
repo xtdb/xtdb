@@ -67,14 +67,23 @@
                        :retract-entity (s/cat :op #{:db/retractEntity} :e :db/id)))
 
 (s/def :db.query/find (s/coll-of :db/logic-var :kind vector? :min-count 1))
+(s/def :db.query.where.clause/rule (s/cat :rule-name symbol? :args (s/* logic-var?)))
 (s/def :db.query.where.clause/triple (s/cat :e any? :a (some-fn keyword? logic-var?) :v any?))
-(s/def :db.query.where/clause (s/or :triple :db.query.where.clause/triple))
+(s/def :db.query.where/clause (s/or :triple :db.query.where.clause/triple
+                                    :rule :db.query.where.clause/rule))
 (s/def :db.query/where (s/coll-of :db.query.where/clause :kind vector? :min-count 1))
 (s/def :db.query/in (s/coll-of :db/logic-var :kind vector?))
 (s/def :db.query/keys (s/coll-of symbol? :kind vector? :min-count 1))
 
 (s/def :db/query (s/keys :req-un [:db.query/where :db.query/find]
                          :opt-un [:db.query/in :db.query/keys]))
+
+(s/def :db.query.rule/head (s/spec (s/cat :rule-name symbol?
+                                          :bound-vars (s/? (s/coll-of logic-var? :kind vector?))
+                                          :free-vars (s/* logic-var?))))
+(s/def :db.query/rule (s/cat :rule-head :db.query.rule/head
+                             :rule-body (s/+ :db.query.where/clause)))
+(s/def :db.query/rules (s/coll-of :db.query/rule :kind vector? :min-count 1))
 
 (defn- add-triple [db [e a v]]
   (let [conj' (fnil conj #{})]
@@ -142,11 +151,14 @@
   (let [query (->> (normalize-query query)
                    (s/assert :db/query)
                    (s/conform :db/query))
-        {:keys [find keys in keys where] :or {in '[$]}} query
+        {tuple-keys :keys :keys [find in where] :or {in '[$]}} query
         keys (when keys
                (map (comp keyword name) keys))
-        env (zipmap in inputs)]
-    (letfn [(datom-step [env triple clauses datom]
+        {db '$ rules '% :as env} (zipmap in inputs)
+        name->rules (some->> rules
+                             (s/conform :db.query/rules)
+                             (group-by (comp :rule-name :rule-head)))]
+    (letfn [(datom-step [env [[_ triple] & next-clauses] datom]
               (some-> (reduce-kv
                        (fn unify [acc component x]
                          (if (logic-var? x)
@@ -157,23 +169,24 @@
                            acc))
                        env
                        triple)
-                      (clause-step clauses)))
-            (clause-step [{:syms [$] :as env} [clause & clauses]]
-              (if clause
-                (case (first clause)
-                  :triple (let [triple (second clause)
-                                component+pattern (->> (replace env triple)
-                                                       (sort-by (comp logic-var? second)))
-                                index (->> component+pattern
-                                           (map (comp name first))
-                                           (str/join)
-                                           (keyword))
-                                pattern (->> (map second component+pattern)
-                                             (take-while (complement logic-var?)))]
-                            (some->> (not-empty (apply datoms $ index pattern))
-                                     (mapcat (partial datom-step env triple clauses)))))
+                      (clause-step next-clauses)))
+            (triple-step [env [[_ triple] :as clauses]]
+              (let [component+pattern (->> (replace env triple)
+                                           (sort-by (comp logic-var? second)))
+                    index (->> component+pattern
+                               (map (comp name first))
+                               (str/join)
+                               (keyword))
+                    pattern (->> (map second component+pattern)
+                                 (take-while (complement logic-var?)))]
+                (some->> (not-empty (apply datoms db index pattern))
+                         (mapcat (partial datom-step env clauses)))))
+            (clause-step [env [[clause-type] :as clauses]]
+              (if clause-type
+                (case clause-type
+                  :triple (triple-step env clauses))
                 [(cond->> (mapv env find)
-                   keys (zipmap keys))]))]
+                   tuple-keys (zipmap tuple-keys))]))]
       (clause-step env where))))
 
 (defn entity [db eid]
