@@ -115,11 +115,11 @@
   (with-open [^AutoCloseable is (db/open-index-snapshot (:index-store (xt/db (dev/xtdb-node))))]
     (->> (db/all-attrs is)
          (map (fn [attr]
-                [(str (symbol attr)) {:doc-count (db/doc-count is attr)
-                                      :doc-value-count (db/doc-value-count is attr)
-                                      :eids (db/eid-cardinality is attr)
-                                      :vals (db/value-cardinality is attr)}]))
-         (into {}))))
+                [attr {:doc-count (db/doc-count is attr)
+                       :doc-value-count (db/doc-value-count is attr)
+                       :eids (Math/rint (db/eid-cardinality is attr))
+                       :vals (Math/rint (db/value-cardinality is attr))}]))
+         (into (sorted-map)))))
 
 (defn ->attr-stats [file]
   (let [stats (->> (read-string (slurp file))
