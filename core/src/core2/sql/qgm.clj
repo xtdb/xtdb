@@ -67,7 +67,8 @@
                        :retract-entity (s/cat :op #{:db/retractEntity} :e :db/id)))
 
 (s/def :db.query/find (s/coll-of :db/logic-var :kind vector? :min-count 1))
-(s/def :db.query.where/clause (s/tuple any? (some-fn :db/logic-var keyword?) any?))
+(s/def :db.query.where.clause/triple (s/cat :e any? :a (some-fn keyword? logic-var?) :v any?))
+(s/def :db.query.where/clause (s/or :triple :db.query.where.clause/triple))
 (s/def :db.query/where (s/coll-of :db.query.where/clause :kind vector? :min-count 1))
 (s/def :db.query/in (s/coll-of :db/logic-var :kind vector?))
 (s/def :db.query/keys (s/coll-of symbol? :kind vector? :min-count 1))
@@ -138,14 +139,16 @@
     query))
 
 (defn q [query & inputs]
-  (let [query (s/assert :db/query (normalize-query query))
+  (let [query (->> (normalize-query query)
+                   (s/assert :db/query)
+                   (s/conform :db/query))
         {:keys [find keys in keys where] :or {in '[$]}} query
         keys (when keys
                (map (comp keyword name) keys))
         env (zipmap in inputs)]
-    (letfn [(datom-step [env clause-map clauses datom]
+    (letfn [(datom-step [env triple clauses datom]
               (some-> (reduce-kv
-                       (fn [acc component x]
+                       (fn unify [acc component x]
                          (if (logic-var? x)
                            (let [y (get datom component)]
                              (if (and (contains? acc x) (not= (get acc x) y))
@@ -153,22 +156,22 @@
                                (assoc acc x y)))
                            acc))
                        env
-                       clause-map)
+                       triple)
                       (clause-step clauses)))
             (clause-step [{:syms [$] :as env} [clause & clauses]]
               (if clause
-                (let [component+pattern (->> (replace env clause)
-                                             (map vector [:e :a :v])
-                                             (sort-by (comp logic-var? second)))
-                      index (->> component+pattern
-                                 (map (comp name first))
-                                 (str/join)
-                                 (keyword))
-                      pattern (->> (map second component+pattern)
-                                   (take-while (complement logic-var?)))
-                      clause-map (zipmap [:e :a :v] clause)]
-                  (->> (not-empty (apply datoms $ index pattern))
-                       (mapcat (partial datom-step env clause-map clauses))))
+                (case (first clause)
+                  :triple (let [triple (second clause)
+                                component+pattern (->> (replace env triple)
+                                                       (sort-by (comp logic-var? second)))
+                                index (->> component+pattern
+                                           (map (comp name first))
+                                           (str/join)
+                                           (keyword))
+                                pattern (->> (map second component+pattern)
+                                             (take-while (complement logic-var?)))]
+                            (some->> (not-empty (apply datoms $ index pattern))
+                                     (mapcat (partial datom-step env triple clauses)))))
                 [(cond->> (mapv env find)
                    keys (zipmap keys))]))]
       (clause-step env where))))
