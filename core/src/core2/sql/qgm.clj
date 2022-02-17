@@ -96,9 +96,26 @@
 (defn- add-entity [db entity]
   (reduce add-triple db (entity->triples entity)))
 
-(defn entity [{:keys [aev] :as db} eid]
+(defn datoms [db index & [x y z :as components]]
+  (if-let [idx (get db index)]
+    (let [ks (map (comp keyword str) (seq (name index)))]
+      (case (count components)
+        0 (for [[x ys] idx
+                [y zs] ys
+                z zs]
+            (zipmap ks [x y z]))
+        1 (for [[y zs] (get-in idx components)
+                z zs]
+            (zipmap ks [x y z]))
+        2 (for [z (get-in idx components)]
+            (zipmap ks [x y z]))
+        3 (when (get-in idx components)
+            [(zipmap ks (vec components))])))
+    (throw (IllegalArgumentException. "unknown index: " index))))
+
+(defn entity [db eid]
   (reduce
-   (fn [acc [e a v]]
+   (fn [acc {:keys [e a v]}]
      (update acc a (fn [x]
                      (cond
                        (set? x)
@@ -110,7 +127,7 @@
                        :else
                        v))))
    {}
-   (entity-triples db eid)))
+   (datoms db :eav eid)))
 
 (defn transact [db tx-ops]
   (reduce
@@ -180,4 +197,5 @@
                 (map #(s/assert :qgm/node %))
                 (transact {}))]
 
-    (entity db 'b3)))
+    (entity db 'b3)
+    (datoms db :aev :qgm.box.body/quantifiers 'b3)))
