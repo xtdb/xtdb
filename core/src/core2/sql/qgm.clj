@@ -8,6 +8,7 @@
 ;; TODO: try constructing this by adding the triples local for each
 ;; node during a collect somehow?
 
+(s/def :db/id symbol?)
 (s/def :qgm/id :db/id)
 
 (s/def :qgm.box/type #{:qgm.box.type/base-table :qgm.box.type/select})
@@ -52,7 +53,6 @@
 
 ;; Internal triple store.
 
-(s/def :db/id symbol?)
 (s/def :db/tx-op (s/or :entity (s/and (s/map-of keyword? any?)
                                       (s/keys :req [:db/id]))
                        :add (s/cat :op #{:db/add} :e :db/id :a keyword? :v any?)
