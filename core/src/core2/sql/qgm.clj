@@ -53,17 +53,23 @@
 
 ;; Internal triple store.
 
+(defn- logic-var? [x]
+  (or (and (symbol? x) (str/starts-with? (name x) "?"))
+      (= '$ x)
+      (= '% x)))
+
 (s/def :db/id some?)
+(s/def :db/logic-var logic-var?)
 (s/def :db/tx-op (s/or :entity (s/and (s/map-of keyword? any?)
                                       (s/keys :req [:db/id]))
                        :add (s/cat :op #{:db/add} :e :db/id :a keyword? :v any?)
                        :retract (s/cat :op #{:db/retract} :e :db/id :a keyword? :v any?)
                        :retract-entity (s/cat :op #{:db/retractEntity} :e :db/id)))
 
-(s/def :db.query/find (s/coll-of symbol? :kind vector? :min-count 1))
-(s/def :db.query.where/clause (s/tuple any? (some-fn symbol? keyword?) any?))
+(s/def :db.query/find (s/coll-of :db/logic-var :kind vector? :min-count 1))
+(s/def :db.query.where/clause (s/tuple any? (some-fn :db/logic-var keyword?) any?))
 (s/def :db.query/where (s/coll-of :db.query.where/clause :kind vector? :min-count 1))
-(s/def :db.query/in (s/coll-of symbol? :kind vector?))
+(s/def :db.query/in (s/coll-of :db/logic-var :kind vector?))
 (s/def :db.query/keys (s/coll-of symbol? :kind vector? :min-count 1))
 
 (s/def :db/query (s/keys :req-un [:db.query/where :db.query/find]
@@ -140,7 +146,7 @@
     (letfn [(datom-step [env clause-map clauses datom]
               (some-> (reduce-kv
                        (fn [acc component x]
-                         (if (symbol? x)
+                         (if (logic-var? x)
                            (let [y (get datom component)]
                              (if (and (contains? acc x) (not= (get acc x) y))
                                (reduced nil)
@@ -153,13 +159,13 @@
               (if clause
                 (let [component+pattern (->> (replace env clause)
                                              (map vector [:e :a :v])
-                                             (sort-by (comp symbol? second)))
+                                             (sort-by (comp logic-var? second)))
                       index (->> component+pattern
                                  (map (comp name first))
                                  (str/join)
                                  (keyword))
                       pattern (->> (map second component+pattern)
-                                   (take-while (complement symbol?)))
+                                   (take-while (complement logic-var?)))
                       clause-map (zipmap [:e :a :v] clause)]
                   (->> (not-empty (apply datoms $ index pattern))
                        (mapcat (partial datom-step env clause-map clauses))))
@@ -254,9 +260,9 @@
     (entity db 'b3)
     (datoms db :aev :qgm.box.body/quantifiers 'b3)
 
-    (q '[:find b q t
-         :in $ b
+    (q '[:find ?b ?q ?t
+         :in $ ?b
          :where
-         [b :qgm.box.body/quantifiers q]
-         [q :qgm.quantifier/type t]]
+         [?b :qgm.box.body/quantifiers ?q]
+         [?q :qgm.quantifier/type ?t]]
        db 'b3)))
