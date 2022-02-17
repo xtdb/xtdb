@@ -61,7 +61,7 @@
       (t/is (empty? (xt/entity-history empty-db :foo :asc))))))
 
 (t/deftest test-status
-  (t/is (= (merge {:xtdb.index/index-version 19}
+  (t/is (= (merge {:xtdb.index/index-version 20}
                   (when (instance? xtdb.kafka.KafkaTxLog (:tx-log *api*))
                     {:xtdb.zk/zk-active? true}))
            (select-keys (xt/status *api*) [:xtdb.index/index-version :xtdb.zk/zk-active?])))

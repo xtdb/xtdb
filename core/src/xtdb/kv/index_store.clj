@@ -432,9 +432,10 @@
   (mem/slice-buffer k c/index-id-size))
 
 (defn- new-stats-value ^org.agrona.MutableDirectBuffer []
-  (doto ^MutableDirectBuffer (mem/allocate-buffer (+ Long/BYTES hll/default-buffer-size hll/default-buffer-size))
+  (doto ^MutableDirectBuffer (mem/allocate-buffer (+ Long/BYTES Long/BYTES hll/default-buffer-size hll/default-buffer-size))
     (.putByte 0 c/stats-index-id)
-    (.putLong c/index-id-size 0)))
+    (.putLong c/index-id-size 0)
+    (.putLong (+ c/index-id-size Long/BYTES) 0)))
 
 (defn- decode-stats-value->doc-count-from ^long [^DirectBuffer b]
   (.getLong b c/index-id-size))
@@ -443,13 +444,21 @@
   (doto b
     (.putLong c/index-id-size (inc (decode-stats-value->doc-count-from b)))))
 
+(defn- decode-stats-value->doc-value-count-from ^long [^DirectBuffer b]
+  (.getLong b (+ c/index-id-size Long/BYTES)))
+
+(defn- inc-stats-value-doc-value-count ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+  (doto b
+    (.putLong (+ c/index-id-size Long/BYTES)
+              (inc (decode-stats-value->doc-value-count-from b)))))
+
 (defn decode-stats-value->eid-hll-buffer-from ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-  (let [hll-size (/ (- (.capacity b) Long/BYTES) 2)]
-    (mem/slice-buffer b Long/BYTES hll-size)))
+  (let [hll-size (/ (- (.capacity b) Long/BYTES Long/BYTES) 2)]
+    (mem/slice-buffer b (+ Long/BYTES Long/BYTES) hll-size)))
 
 (defn decode-stats-value->value-hll-buffer-from ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-  (let [^long hll-size (/ (- (.capacity b) Long/BYTES) 2)]
-    (mem/slice-buffer b (+ Long/BYTES hll-size) hll-size)))
+  (let [^long hll-size (/ (- (.capacity b) Long/BYTES Long/BYTES) 2)]
+    (mem/slice-buffer b (+ Long/BYTES Long/BYTES hll-size) hll-size)))
 
 (defn stats-kvs [transient-kv-snapshot persistent-kv-snapshot docs]
   (let [attr-key-bufs (->> docs
@@ -459,19 +468,23 @@
     (->> docs
          (reduce (fn [acc doc]
                    (let [e (:crux.db/id doc)]
-                     (->> (for [[k v] doc
-                                v (c/vectorize-value v)]
-                            (MapEntry/create k v))
-                          (reduce (fn [acc [k v]]
-                                    (let [k-buf (get attr-key-bufs k)]
-                                      (assoc! acc k-buf (doto (or (get acc k-buf)
-                                                                  (kv/get-value transient-kv-snapshot k-buf)
-                                                                  (some-> (kv/get-value persistent-kv-snapshot k-buf) mem/copy-buffer)
-                                                                  (new-stats-value))
-                                                          (inc-stats-value-doc-count)
-                                                          (-> decode-stats-value->eid-hll-buffer-from (hll/add e))
-                                                          (-> decode-stats-value->value-hll-buffer-from (hll/add v))))))
-                                  acc))))
+                     (reduce-kv (fn [acc k v]
+                                  (let [k-buf (get attr-key-bufs k)
+                                        stats-buf (or (get acc k-buf)
+                                                      (kv/get-value transient-kv-snapshot k-buf)
+                                                      (some-> (kv/get-value persistent-kv-snapshot k-buf) mem/copy-buffer)
+                                                      (new-stats-value))]
+                                    (doto stats-buf
+                                      (inc-stats-value-doc-count)
+                                      (-> decode-stats-value->eid-hll-buffer-from (hll/add e)))
+
+                                    (doseq [v (c/vectorize-value v)]
+                                      (doto stats-buf
+                                        (inc-stats-value-doc-value-count)
+                                        (-> decode-stats-value->value-hll-buffer-from (hll/add v))))
+                                    (assoc! acc k-buf stats-buf)))
+                                acc
+                                doc)))
                  (transient {}))
          persistent!)))
 
@@ -866,6 +879,11 @@
   (doc-count [_ attr]
     (or (some-> (kv/get-value snapshot (encode-stats-key-to nil (c/->value-buffer attr)))
                 decode-stats-value->doc-count-from)
+        0))
+
+  (doc-value-count [_ attr]
+    (or (some-> (kv/get-value snapshot (encode-stats-key-to nil (c/->value-buffer attr)))
+                decode-stats-value->doc-value-count-from)
         0))
 
   (value-cardinality [_ attr]

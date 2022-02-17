@@ -4070,22 +4070,13 @@
 (t/deftest test-watdiv-join-orders
   (letfn [(sanitise-join-order-var [v]
             (cond-> v
-              ;; watdiv keywords aren't valid keywords
-              (keyword? v) (-> symbol str)
-
               ;; assuming only one self-join per variable in each query
               (and (symbol? v) (re-find #"^self-join_" (str v)))
               (-> str (str/replace #"_\d+$" "_<gensym>") symbol)))]
 
     (test-join-orders (->> (slurp (io/resource "xtdb/fixtures/watdiv/100-queries.edn"))
                            (str/split-lines)
-                           (map read-string)
-                           (mapv (partial w/postwalk
-                                          (fn [o]
-                                            (cond-> o
-                                              (and (string? o)
-                                                   (str/starts-with? (str (symbol o)) "http"))
-                                              keyword)))))
+                           (map read-string))
                       {;:regen-join-order-file? true
                        :join-order-file (io/resource "xtdb/fixtures/watdiv/current-join-orders.edn")
                        :stats-file (io/resource "xtdb/fixtures/watdiv/attr-stats.edn")

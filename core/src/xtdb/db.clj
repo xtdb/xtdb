@@ -37,6 +37,7 @@
 (defprotocol AttributeStats
   (all-attrs [this])
   (doc-count [this attr])
+  (doc-value-count [this attr])
   (^double value-cardinality [this attr])
   (^double eid-cardinality [this attr]))
 

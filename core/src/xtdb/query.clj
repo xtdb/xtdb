@@ -1462,6 +1462,7 @@
   (reify db/AttributeStats
     (all-attrs [_] (db/all-attrs index-snapshot))
     (doc-count [_ a] (db/doc-count index-snapshot a))
+    (doc-value-count [_ a] (db/doc-value-count index-snapshot a))
     (eid-cardinality [_ a] (db/eid-cardinality index-snapshot a))
     (value-cardinality [_ a] (db/value-cardinality index-snapshot a))))
 
