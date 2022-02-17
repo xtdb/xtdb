@@ -8,7 +8,6 @@
 ;; TODO: try constructing this by adding the triples local for each
 ;; node during a collect somehow?
 
-(s/def :db/id symbol?)
 (s/def :qgm/id :db/id)
 
 (s/def :qgm.box/type #{:qgm.box.type/base-table :qgm.box.type/select})
@@ -52,6 +51,13 @@
 (s/def :qgm/graph (s/coll-of :qgm/node :kind set?))
 
 ;; Internal triple store.
+
+(s/def :db/id symbol?)
+(s/def :db/tx-op (s/or :entity (s/and (s/map-of keyword? any?)
+                                      (s/keys :req [:db/id]))
+                       :add (s/cat :op #{:db/add} :e :db/id :a keyword? :v any?)
+                       :retract (s/cat :op #{:db/retract} :e :db/id :a keyword? :v any?)
+                       :retract-entity (s/cat :op #{:db/retractEntity} :e :db/id)))
 
 (defn- add-triple [db [e a v]]
   (let [conj' (fnil conj #{})]
@@ -109,13 +115,13 @@
 (defn transact [db tx-ops]
   (reduce
    (fn [db tx-op]
-     (if (map? tx-op)
-       (add-entity db tx-op)
-       (when (vector? tx-op)
-         (case (first tx-op)
-           :db/retractEntity (retract-entity db (second tx-op))
-           :db/add (add-triple db (rest tx-op))
-           :db/retract (retract-triple db (rest tx-op))))))
+     (s/assert :db/tx-op tx-op)
+     (let [[op-type {:keys [e a v] :as tx-op}] (s/conform :db/tx-op tx-op)]
+       (case op-type
+         :entity (add-entity db tx-op)
+         :db/retractEntity (retract-entity db e)
+         :db/add (add-triple db [e a v])
+         :db/retract (retract-triple db [e a v]))))
    db
    tx-ops))
 
