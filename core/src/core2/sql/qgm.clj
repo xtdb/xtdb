@@ -1,5 +1,6 @@
 (ns core2.sql.qgm
   (:require [clojure.set :as set]
+            [clojure.string :as str]
             [clojure.spec.alpha :as s]))
 
 ;; Query Graph Model using internal triple store.
@@ -8,8 +9,7 @@
 ;; TODO: try constructing this by adding the triples local for each
 ;; node during a collect somehow?
 
-(s/def :db/id symbol?)
-(s/def :qgm/id :db/id)
+(s/def :qgm/id symbol?)
 
 (s/def :qgm.box/type #{:qgm.box.type/base-table :qgm.box.type/select})
 
@@ -53,11 +53,21 @@
 
 ;; Internal triple store.
 
+(s/def :db/id some?)
 (s/def :db/tx-op (s/or :entity (s/and (s/map-of keyword? any?)
                                       (s/keys :req [:db/id]))
                        :add (s/cat :op #{:db/add} :e :db/id :a keyword? :v any?)
                        :retract (s/cat :op #{:db/retract} :e :db/id :a keyword? :v any?)
                        :retract-entity (s/cat :op #{:db/retractEntity} :e :db/id)))
+
+(s/def :db.query/find (s/coll-of symbol? :kind vector? :min-count 1))
+(s/def :db.query.where/clause (s/tuple any? (some-fn symbol? keyword?) any?))
+(s/def :db.query/where (s/coll-of :db.query.where/clause :kind vector? :min-count 1))
+(s/def :db.query/in (s/coll-of symbol? :kind vector?))
+(s/def :db.query/keys (s/coll-of symbol? :kind vector? :min-count 1))
+
+(s/def :db/query (s/keys :req-un [:db.query/where :db.query/find]
+                         :opt-un [:db.query/in :db.query/keys]))
 
 (defn- add-triple [db [e a v]]
   (let [conj' (fnil conj #{})]
@@ -111,7 +121,51 @@
             (zipmap ks [x y z]))
         3 (when (get-in idx components)
             [(zipmap ks (vec components))])))
-    (throw (IllegalArgumentException. "unknown index: " index))))
+    (throw (IllegalArgumentException. (str "unknown index: " index)))))
+
+(defn- normalize-query [query]
+  (if (vector? query)
+    (->> (for [[[k] v] (->> (partition-by keyword? query)
+                            (partition-all 2))]
+           [k (vec v)])
+         (into {}))
+    query))
+
+(defn q [query & inputs]
+  (let [query (s/assert :db/query (normalize-query query))
+        {:keys [find keys in keys where] :or {in '[$]}} query
+        keys (when keys
+               (map (comp keyword name) keys))
+        env (zipmap in inputs)]
+    (letfn [(datom-step [env clause-map clauses datom]
+              (some-> (reduce-kv
+                       (fn [acc component x]
+                         (if (symbol? x)
+                           (let [y (get datom component)]
+                             (if (and (contains? acc x) (not= (get acc x) y))
+                               (reduced nil)
+                               (assoc acc x y)))
+                           acc))
+                       env
+                       clause-map)
+                      (clause-step clauses)))
+            (clause-step [{:syms [$] :as env} [clause & clauses]]
+              (if clause
+                (let [component+pattern (->> (replace env clause)
+                                             (map vector [:e :a :v])
+                                             (sort-by (comp symbol? second)))
+                      index (->> component+pattern
+                                 (map (comp name first))
+                                 (str/join)
+                                 (keyword))
+                      pattern (->> (map second component+pattern)
+                                   (take-while (complement symbol?)))
+                      clause-map (zipmap [:e :a :v] clause)]
+                  (->> (not-empty (apply datoms $ index pattern))
+                       (mapcat (partial datom-step env clause-map clauses))))
+                [(cond->> (mapv env find)
+                   keys (zipmap keys))]))]
+      (clause-step env where))))
 
 (defn entity [db eid]
   (reduce
@@ -198,4 +252,11 @@
                 (transact {}))]
 
     (entity db 'b3)
-    (datoms db :aev :qgm.box.body/quantifiers 'b3)))
+    (datoms db :aev :qgm.box.body/quantifiers 'b3)
+
+    (q '[:find b q t
+         :in $ b
+         :where
+         [b :qgm.box.body/quantifiers q]
+         [q :qgm.quantifier/type t]]
+       db 'b3)))
