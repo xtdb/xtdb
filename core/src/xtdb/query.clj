@@ -1163,35 +1163,33 @@
 
 (defn- triple-clause-stats-fn [type->clauses stats in-var-cardinalities]
   (let [filtered-vars (->filtered-vars type->clauses)]
-    (fn [{:keys [e a v]}]
-      (letfn [(var-selectivity [var ^double cardinality]
-                (/ (min (if (literal? var) 1.0 Double/MAX_VALUE)
-                        (double (get in-var-cardinalities var Double/MAX_VALUE))
-                        (if (contains? filtered-vars var) (Math/sqrt cardinality) Double/MAX_VALUE)
-                        cardinality)
-                   cardinality))]
+    (letfn [(var-selectivity [var ^double cardinality]
+              (/ (min (if (literal? var) 1.0 Double/MAX_VALUE)
+                      (double (get in-var-cardinalities var Double/MAX_VALUE))
+                      (if (contains? filtered-vars var) (Math/sqrt cardinality) Double/MAX_VALUE)
+                      cardinality)
+                 cardinality))]
+      (fn [{:keys [e a v]}]
         (let [es (double (db/eid-cardinality stats a))
               vs (double (db/value-cardinality stats a))
-              e-selectivity (double (var-selectivity e es))
-              v-selectivity (double (var-selectivity v vs))]
-          {:e-selectivity e-selectivity
-           :v-selectivity v-selectivity
-           :es (* es e-selectivity)
-           :vs (* vs v-selectivity)
-           :vs-per-e (* v-selectivity 1.0) ; TODO 1.0 for now, until we know better
-           :es-per-v (* e-selectivity (/ es vs))})))))
+              docs (double (db/doc-count stats a))
+              dvc (double (db/doc-value-count stats a))]
+          ;; you'd think 'this-per-other' should be symmetrical - IIUC, it isn't,
+          ;; because in the vs-per-e case we've already done the entity temporal resolution
+          ;; whereas, in the es-per-v case, we haven't - it's done after we pick an `e`
+          [(let [^double selectivity (var-selectivity e es)]
+             {:this-k :e, :this-var e, :other-var v
+              :selectivity selectivity
+              :cardinality (* selectivity es)
+              :this-per-other (* selectivity
+                                 (/ (/ dvc vs)
+                                    (/ es docs)))})
 
-(defn- split-triple-clause [clause {:keys [e-selectivity v-selectivity
-                                           es vs-per-e vs es-per-v]}]
-  (for [[this-k other-k, this-selectivity, cardinality this-per-other]
-        [[:e :v, e-selectivity, es es-per-v]
-         [:v :e, v-selectivity, vs vs-per-e]]]
-    {:this-k this-k
-     :this-var (get clause this-k)
-     :other-var (get clause other-k)
-     :this-selectivity this-selectivity
-     :cardinality cardinality
-     :this-per-other this-per-other}))
+           (let [^double selectivity (var-selectivity v vs)]
+             {:this-k :v :this-var v :other-var e
+              :selectivity selectivity
+              :cardinality (* selectivity vs)
+              :this-per-other (* selectivity (/ dvc docs))})])))))
 
 (defn permutations [coll]
   (if (= 1 (count coll))
@@ -1214,7 +1212,7 @@
 (defn- triple-clause-leaf-vars [clauses-stats type->clauses join-vars in-var-cardinalities]
   (set/difference (->> clauses-stats
                        (into #{} (comp (filter (comp #{:v} :this-k))
-                                       (filter (comp #(> (double %) 0.95) :this-selectivity))
+                                       (filter (comp #(> (double %) 0.95) :selectivity))
                                        (filter (comp logic-var? :other-var))
                                        (map :this-var)
                                        (filter logic-var?))))
@@ -1239,15 +1237,14 @@
 
         clauses-stats (->> triple-clauses
                            (into []
-                                 (mapcat (let [stats-fn (triple-clause-stats-fn type->clauses stats in-var-cardinalities)]
-                                           (fn [clause]
-                                             (split-triple-clause clause (stats-fn clause)))))))
+                                 (mapcat (triple-clause-stats-fn type->clauses stats in-var-cardinalities))))
 
         project-only-leaf-vars (triple-clause-leaf-vars clauses-stats type->clauses join-vars in-var-cardinalities)
 
         var->clauses (group-by :this-var clauses-stats)
 
-        join-var->vars-to-bind (->> (for [[join-var clauses] (-> var->clauses (select-keys join-vars))]
+        join-var->vars-to-bind (->> (for [[join-var clauses] (-> var->clauses
+                                                                 (select-keys join-vars))]
                                       [join-var
                                        (into #{join-var}
                                              (comp (map :other-var)
