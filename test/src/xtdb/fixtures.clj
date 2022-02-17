@@ -116,6 +116,7 @@
     (->> (db/all-attrs is)
          (map (fn [attr]
                 [(str (symbol attr)) {:doc-count (db/doc-count is attr)
+                                      :doc-value-count (db/doc-value-count is attr)
                                       :eids (db/eid-cardinality is attr)
                                       :vals (db/value-cardinality is attr)}]))
          (into {}))))
@@ -126,5 +127,6 @@
     (reify db/AttributeStats
       (all-attrs [_] (set (keys stats)))
       (doc-count [_ attr] (get-in stats [attr :doc-count]))
+      (doc-value-count [_ attr] (get-in stats [attr :doc-value-count]))
       (eid-cardinality [_ attr] (get-in stats [attr :eids]))
       (value-cardinality [_ attr] (get-in stats [attr :vals])))))

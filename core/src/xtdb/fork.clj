@@ -83,6 +83,7 @@
   db/AttributeStats
   (all-attrs [_] (db/all-attrs index-snapshot))
   (doc-count [_ attr] (db/doc-count index-snapshot attr))
+  (doc-value-count [_ attr] (db/doc-value-count index-snapshot attr))
   (value-cardinality [_ attr] (db/value-cardinality index-snapshot attr))
   (eid-cardinality [_ attr] (db/eid-cardinality index-snapshot attr))
 
@@ -172,6 +173,10 @@
   (doc-count [_ attr]
     (or (db/doc-count transient-index-snapshot attr)
         (db/doc-count persistent-index-snapshot attr)))
+
+  (doc-value-count [_ attr]
+    (or (db/doc-value-count transient-index-snapshot attr)
+        (db/doc-value-count persistent-index-snapshot attr)))
 
   (value-cardinality [_ attr]
     (or (db/value-cardinality transient-index-snapshot attr)
