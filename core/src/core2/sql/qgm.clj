@@ -190,24 +190,28 @@
               (if (logic-var? x)
                 x
                 '_))
-            (make-lvar [x]
+            (lvar-ref [x]
               (list 'lvar x))
             (clauses->clj [clauses]
               (->> (for [[clause-type clause] clauses]
                      (case clause-type
-                       :triple (let [{:keys [e a v]} clause
-                                     triple [e a v]]
-                                 `[~(mapv logic-var-or-blank triple) (triple ~'$ ~@(map make-lvar triple))])
+                       :triple (let [{:keys [e a v]} clause]
+                                 `[~(mapv logic-var-or-blank [e a v])
+                                   (triple ~'$ ~@(map lvar-ref [e a v]))])
                        :rule (let [{:keys [rule-name args] :as rule} clause]
-                               `[~(vec args) (~rule-name ~rule-ctx-sym ~@(map make-lvar args))])))
+                               `[~(vec args)
+                                 (~rule-name ~rule-ctx-sym ~@(map lvar-ref args))])))
                    (reduce into [])))
+            (rule-leg-name [rule-name idx]
+              (symbol (str rule-name "-" idx)))
             (rules->clj [name->rules]
               (->> (for [[rule-name rule-legs] name->rules
                          :let [idx->rule-leg (zipmap (range (count rule-legs)) rule-legs)
-                               rule-leg-refs (mapv #(symbol (str rule-name "-" %)) (keys idx->rule-leg))]]
-                     (->> (for [[idx {{:keys [bound-vars free-vars]} :rule-head :keys [rule-body]}] idx->rule-leg
+                               rule-leg-refs (mapv #(rule-leg-name rule-name %) (keys idx->rule-leg))]]
+                     (->> (for [[idx {:keys [rule-body]
+                                      {:keys [bound-vars free-vars]} :rule-head}] idx->rule-leg
                                 :let [arg-vars (concat bound-vars free-vars)]]
-                            `(~(symbol (str rule-name "-" idx)) [~rule-ctx-sym ~@arg-vars]
+                            `(~(rule-leg-name rule-name idx) [~rule-ctx-sym ~@arg-vars]
                               (for ~(clauses->clj rule-body)
                                 ~(vec arg-vars))))
                           (cons `(~rule-name [rule-ctx# & args#]
