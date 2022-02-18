@@ -103,17 +103,23 @@
 
 (defn triple [$ e a v]
   (for [{:keys [e a v]}
-        (case [(= ::unbound e) (= ::unbound a) (= ::unbound v)]
-          [true true true] (datoms $ :aev)
-          [true true false] (datoms $ :vae v)
-          [true false true] (datoms $ :aev a)
-          [true false false] (datoms $ :ave a v)
-          [false true true] (datoms $ :eav e)
-          [false true false] (for [datom (datoms $ :eav e)
-                                   :when (= v (:v datom))]
-                               datom)
-          [false false true] (datoms $ :eav e a)
-          [false false false] (datoms $ :eav e a v))]
+        (if (= ::unbound e)
+          (if (= ::unbound a)
+            (if (= ::unbound v)
+              (datoms $ :aev)
+              (datoms $ :vae v))
+            (if (= ::unbound v)
+              (datoms $ :aev a)
+              (datoms $ :ave a v)))
+          (if (= ::unbound a)
+            (if (= ::unbound v)
+              (datoms $ :eav e)
+              (for [datom (datoms $ :eav e)
+                    :when (= v (:v datom))]
+                datom))
+            (if (= ::unbound v)
+              (datoms $ :eav e a)
+              (datoms $ :eav e a v))))]
     [e a v]))
 
 (defn rule [rule-ctx leg-fns args]
