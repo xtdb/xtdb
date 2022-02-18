@@ -31,8 +31,8 @@
                          :opt-un [:db.query/in :db.query/keys]))
 
 (s/def :db.query.rule/head (s/spec (s/cat :rule-name symbol?
-                                          :bound-vars (s/? (s/coll-of logic-var? :kind vector?))
-                                          :free-vars (s/* logic-var?))))
+                                          :bound-vars (s/? (s/coll-of :db/logic-var :kind vector?))
+                                          :free-vars (s/* :db/logic-var))))
 (s/def :db.query/rule (s/cat :rule-head :db.query.rule/head
                              :rule-body (s/+ :db.query.where/clause)))
 (s/def :db.query/rules (s/coll-of :db.query/rule :kind vector? :min-count 1))
