@@ -108,7 +108,7 @@
           [true true false] (datoms $ :vae v)
           [true false true] (datoms $ :aev a)
           [true false false] (datoms $ :ave a v)
-          [false true true] (datoms $ :aev e)
+          [false true true] (datoms $ :eav e)
           [false true false] (for [datom (datoms $ :eav e)
                                    :when (= v (:v datom))]
                                datom)
