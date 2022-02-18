@@ -118,15 +118,16 @@
       (ingest-xtdb node)
       (bench/compact-node node)
 
-      (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
-        (fn [queries]
-          (-> queries
-              (cond->> test-count (take test-count))
-              (->> (bench/with-thread-pool opts
-                     (fn [{:keys [idx q]}]
-                       (bench/with-dimensions (merge {:query-idx idx} (get-db-results-at-idx idx))
-                         (bench/run-bench (format "query-%d" idx)
-                                          {:result-count (count (xt/q (xt/db node) (sparql/sparql->datalog q)))})))))))))))
+      (with-redefs [rdf/iri->kw watdiv/iri->kw]
+        (watdiv/with-watdiv-queries watdiv/watdiv-stress-100-1-sparql
+          (fn [queries]
+            (-> queries
+                (cond->> test-count (take test-count))
+                (->> (bench/with-thread-pool opts
+                       (fn [{:keys [idx q]}]
+                         (bench/with-dimensions (merge {:query-idx idx} (get-db-results-at-idx idx))
+                           (bench/run-bench (format "query-%d" idx)
+                                            {:result-count (count (xt/q (xt/db node) (sparql/sparql->datalog q)))}))))))))))))
 
 (comment
   (def foo-raw-watdiv-results
