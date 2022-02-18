@@ -228,9 +228,9 @@
      (let [[op-type {:keys [e a v] :as tx-op}] (s/conform :db/tx-op tx-op)]
        (case op-type
          :entity (add-entity db tx-op)
-         :db/retractEntity (retract-entity db e)
-         :db/add (add-triple db [e a v])
-         :db/retract (retract-triple db [e a v]))))
+         :retract-entity (retract-entity db e)
+         :add (add-triple db [e a v])
+         :retract (retract-triple db [e a v]))))
    db
    tx-ops))
 
