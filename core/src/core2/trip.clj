@@ -19,7 +19,7 @@
                        :retract-entity (s/cat :op #{:db/retractEntity} :e :db/id)))
 
 (s/def :db.query/find (s/coll-of :db/logic-var :kind vector? :min-count 1))
-(s/def :db.query.where.clause/rule (s/and list? (s/cat :rule-name symbol? :args (s/* logic-var?))))
+(s/def :db.query.where.clause/rule (s/and list? (s/cat :rule-name symbol? :args (s/* any?))))
 (s/def :db.query.where.clause/triple (s/and vector? (s/cat :e any? :a (some-fn keyword? logic-var?) :v any?)))
 (s/def :db.query.where/clause (s/or :triple :db.query.where.clause/triple
                                     :rule :db.query.where.clause/rule))
