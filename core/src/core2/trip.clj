@@ -6,9 +6,13 @@
 ;; Internal triple store.
 
 (defn logic-var? [x]
-  (or (and (symbol? x) (str/starts-with? (name x) "?"))
-      (= '$ x)
-      (= '% x)))
+  (and (symbol? x) (str/starts-with? (name x) "?")))
+
+(defn source-var? [x]
+  (= '$ x))
+
+(defn rules-var? [x]
+  (= '% x))
 
 (s/def :db/id some?)
 (s/def :db/logic-var logic-var?)
@@ -24,7 +28,7 @@
 (s/def :db.query.where/clause (s/or :triple :db.query.where.clause/triple
                                     :rule :db.query.where.clause/rule))
 (s/def :db.query/where (s/coll-of :db.query.where/clause :kind vector? :min-count 1))
-(s/def :db.query/in (s/coll-of :db/logic-var :kind vector?))
+(s/def :db.query/in (s/coll-of (some-fn logic-var? source-var? rules-var?) :kind vector?))
 (s/def :db.query/keys (s/coll-of symbol? :kind vector? :min-count 1))
 
 (s/def :db/query (s/keys :req-un [:db.query/where :db.query/find]
