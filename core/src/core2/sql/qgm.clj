@@ -139,14 +139,6 @@
             [(zipmap ks (vec components))])))
     (throw (IllegalArgumentException. (str "unknown index: " index)))))
 
-(defn- normalize-query [query]
-  (if (vector? query)
-    (->> (for [[[k] v] (->> (partition-by keyword? query)
-                            (partition-all 2))]
-           [k (vec v)])
-         (into {}))
-    query))
-
 (defmacro lvar [x]
   (if (or (not (logic-var? x))
           (contains? &env x))
@@ -177,53 +169,66 @@
 
 (def ^:private rule-ctx-sym (gensym 'rule-ctx))
 
+(defn- logic-var-or-blank [x]
+  (if (logic-var? x)
+    x
+    '_))
+
+(defn- lvar-ref [x]
+  (list 'lvar x))
+
+(defn- clauses->clj [clauses]
+  (->> (for [[clause-type clause] clauses]
+         (case clause-type
+           :triple (let [{:keys [e a v]} clause]
+                     `[~(mapv logic-var-or-blank [e a v])
+                       (triple ~'$ ~@(map lvar-ref [e a v]))])
+           :rule (let [{:keys [rule-name args] :as rule} clause]
+                   `[~(vec args)
+                     (~rule-name ~rule-ctx-sym ~@(map lvar-ref args))])))
+       (reduce into [])))
+
+(defn- rule-leg-name [rule-name idx]
+  (symbol (str rule-name "-" idx)))
+
+(defn- rules->clj [rules]
+  (let [name->rules (some->> rules
+                             (s/assert :db.query/rules)
+                             (s/conform :db.query/rules)
+                             (group-by (comp :rule-name :rule-head)))]
+    (->> (for [[rule-name rule-legs] name->rules
+               :let [idx->rule-leg (zipmap (range (count rule-legs)) rule-legs)
+                     rule-leg-refs (mapv #(rule-leg-name rule-name %) (keys idx->rule-leg))]]
+           (->> (for [[idx {:keys [rule-body]
+                            {:keys [bound-vars free-vars]} :rule-head}] idx->rule-leg
+                      :let [arg-vars (concat bound-vars free-vars)]]
+                  `(~(rule-leg-name rule-name idx) [~rule-ctx-sym ~@arg-vars]
+                    (for ~(clauses->clj rule-body)
+                      ~(vec arg-vars))))
+                (cons `(~rule-name [rule-ctx# & args#]
+                        (rule rule-ctx# ~rule-leg-refs args#)))))
+         (reduce into []))))
+
+(defn- normalize-query [query]
+  (if (vector? query)
+    (->> (for [[[k] v] (->> (partition-by keyword? query)
+                            (partition-all 2))]
+           [k (vec v)])
+         (into {}))
+    query))
+
 (defn- query->clj [query rules]
   (let [query (->> (normalize-query query)
                    (s/assert :db/query)
                    (s/conform :db/query))
-        {:keys [find in where] tuple-keys :keys} query
-        name->rules (some->> rules
-                             (s/assert :db.query/rules)
-                             (s/conform :db.query/rules)
-                             (group-by (comp :rule-name :rule-head)))]
-    (letfn [(logic-var-or-blank [x]
-              (if (logic-var? x)
-                x
-                '_))
-            (lvar-ref [x]
-              (list 'lvar x))
-            (clauses->clj [clauses]
-              (->> (for [[clause-type clause] clauses]
-                     (case clause-type
-                       :triple (let [{:keys [e a v]} clause]
-                                 `[~(mapv logic-var-or-blank [e a v])
-                                   (triple ~'$ ~@(map lvar-ref [e a v]))])
-                       :rule (let [{:keys [rule-name args] :as rule} clause]
-                               `[~(vec args)
-                                 (~rule-name ~rule-ctx-sym ~@(map lvar-ref args))])))
-                   (reduce into [])))
-            (rule-leg-name [rule-name idx]
-              (symbol (str rule-name "-" idx)))
-            (rules->clj [name->rules]
-              (->> (for [[rule-name rule-legs] name->rules
-                         :let [idx->rule-leg (zipmap (range (count rule-legs)) rule-legs)
-                               rule-leg-refs (mapv #(rule-leg-name rule-name %) (keys idx->rule-leg))]]
-                     (->> (for [[idx {:keys [rule-body]
-                                      {:keys [bound-vars free-vars]} :rule-head}] idx->rule-leg
-                                :let [arg-vars (concat bound-vars free-vars)]]
-                            `(~(rule-leg-name rule-name idx) [~rule-ctx-sym ~@arg-vars]
-                              (for ~(clauses->clj rule-body)
-                                ~(vec arg-vars))))
-                          (cons `(~rule-name [rule-ctx# & args#]
-                                  (rule rule-ctx# ~rule-leg-refs args#)))))
-                   (reduce into [])))]
-      `(fn ~(or in ['$])
-         (let [~rule-ctx-sym #{}]
-           (letfn ~(rules->clj name->rules)
-             (for ~(clauses->clj where)
-               ~(if tuple-keys
-                  `(zipmap '~tuple-keys ~find)
-                  find))))))))
+        {:keys [find in where] tuple-keys :keys} query]
+    `(fn ~(or in ['$])
+       (let [~rule-ctx-sym #{}]
+         (letfn ~(rules->clj rules)
+           (for ~(clauses->clj where)
+             ~(if tuple-keys
+                `(zipmap '~tuple-keys ~find)
+                find)))))))
 
 (def ^:private memo-compile-query
   (memoize
