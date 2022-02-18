@@ -53,7 +53,7 @@
 
 ;; Internal triple store.
 
-(defn- logic-var? [x]
+(defn logic-var? [x]
   (or (and (symbol? x) (str/starts-with? (name x) "?"))
       (= '$ x)
       (= '% x)))
@@ -147,68 +147,92 @@
          (into {}))
     query))
 
-(defn q [query & inputs]
+(defmacro lvar [x]
+  (if (or (not (logic-var? x))
+          (contains? &env x))
+    x
+    ::unbound))
+
+(defn triple [$ e a v]
+  (for [{:keys [e a v]}
+        (case [(= ::unbound e) (= ::unbound a) (= ::unbound v)]
+          [true true true] (datoms $ :aev)
+          [true true false] (datoms $ :vae v)
+          [true false true] (datoms $ :aev a)
+          [true false false] (datoms $ :ave a v)
+          [false true true] (datoms $ :aev e)
+          [false true false] (for [datom (datoms $ :eav e)
+                                   :when (= v (:v datom))]
+                               datom)
+          [false false true] (datoms $ :eav e a)
+          [false false false] (datoms $ :eav e a v))]
+    [e a v]))
+
+(defn rule [rule-ctx leg-fns args]
+  (for [leg-fn leg-fns
+        :let [rule-leg-key [leg-fn args]]
+        :when (not (contains? rule-ctx rule-leg-key))
+        x (apply leg-fn (conj rule-ctx rule-leg-key) args)]
+    x))
+
+(def ^:private rule-ctx-sym (gensym 'rule-ctx))
+
+(defn- query->clj [query rules]
   (let [query (->> (normalize-query query)
                    (s/assert :db/query)
                    (s/conform :db/query))
-        {tuple-keys :keys :keys [find in where] :or {in '[$]}} query
-        tuple-keys (when tuple-keys
-                     (map (comp keyword name) tuple-keys))
-        {db '$ rules '% :as env} (zipmap in inputs)
+        {:keys [find in where] tuple-keys :keys} query
         name->rules (some->> rules
+                             (s/assert :db.query/rules)
                              (s/conform :db.query/rules)
                              (group-by (comp :rule-name :rule-head)))]
-    (letfn [(datom-step [env [[_ triple] & next-clauses] datom]
-              (some-> (reduce-kv
-                       (fn unify [acc component x]
-                         (if (logic-var? x)
-                           (let [y (get datom component)]
-                             (if (and (contains? acc x) (not= (get acc x) y))
-                               (reduced nil)
-                               (assoc acc x y)))
-                           acc))
-                       env
-                       triple)
-                      (clause-step next-clauses)))
-            (triple-step [env [[_ triple] :as clauses]]
-              (let [component+pattern (->> (replace env triple)
-                                           (sort-by (comp logic-var? second)))
-                    index (->> component+pattern
-                               (map (comp name first))
-                               (str/join)
-                               (keyword))
-                    pattern (->> (map second component+pattern)
-                                 (take-while (complement logic-var?)))]
-                (some->> (not-empty (apply datoms db index pattern))
-                         (mapcat (partial datom-step env clauses)))))
-            (rule-step [env [[_ {:keys [rule-name args] :as rule}] & next-clauses :as clauses]]
-              (when-let [rule (get name->rules rule-name)]
-                (let [active-env (select-keys env (conj args '$ '%))
-                      rule-key (mapv env args)
-                      rule-table (::rule-table (meta env))]
-                  (mapcat
-                   (fn [{{:keys [bound-vars free-vars]} :rule-head :keys [rule-body] :as rule-leg}]
-                     (let [rule-leg-key [(System/identityHashCode rule-leg) rule-key]]
-                       (if (contains? rule-table rule-leg-key)
-                         []
-                         (let [vars (concat bound-vars free-vars)
-                               rename-map (zipmap args vars)
-                               rename-map-inv (set/map-invert rename-map)
-                               active-env (vary-meta
-                                           (set/rename-keys active-env rename-map)
-                                           update ::rule-table (fnil conj #{}) rule-leg-key)]
-                           (some->> (not-empty (clause-step active-env rule-body))
-                                    (mapcat #(clause-step (merge env (set/rename-keys (select-keys % vars) rename-map-inv)) next-clauses)))))))
-                   rule))))
-            (clause-step [env [[clause-type] :as clauses]]
-              (if clause-type
-                (case clause-type
-                  :triple (triple-step env clauses)
-                  :rule (rule-step env clauses))
-                [env]))]
-      (for [env (clause-step env where)]
-        (cond->> (mapv env find)
-          tuple-keys (zipmap tuple-keys))))))
+    (letfn [(logic-var-or-blank [x]
+              (if (logic-var? x)
+                x
+                '_))
+            (make-lvar [x]
+              (list 'lvar x))
+            (clauses->clj [clauses]
+              (->> (for [[clause-type clause] clauses]
+                     (case clause-type
+                       :triple (let [{:keys [e a v]} clause
+                                     triple [e a v]]
+                                 `[~(mapv logic-var-or-blank triple) (triple ~'$ ~@(map make-lvar triple))])
+                       :rule (let [{:keys [rule-name args] :as rule} clause]
+                               `[~(vec args) (~rule-name ~rule-ctx-sym ~@(map make-lvar args))])))
+                   (reduce into [])))
+            (rules->clj [name->rules]
+              (->> (for [[rule-name rule-legs] name->rules
+                         :let [idx->rule-leg (zipmap (range (count rule-legs)) rule-legs)
+                               rule-leg-refs (mapv #(symbol (str rule-name "-" %)) (keys idx->rule-leg))]]
+                     (->> (for [[idx {{:keys [bound-vars free-vars]} :rule-head :keys [rule-body]}] idx->rule-leg
+                                :let [arg-vars (concat bound-vars free-vars)]]
+                            `(~(symbol (str rule-name "-" idx)) [~rule-ctx-sym ~@arg-vars]
+                              (for ~(clauses->clj rule-body)
+                                ~(vec arg-vars))))
+                          (cons `(~rule-name [rule-ctx# & args#]
+                                  (rule rule-ctx# ~rule-leg-refs args#)))))
+                   (reduce into [])))]
+      `(fn ~(or in ['$])
+         (let [~rule-ctx-sym #{}]
+           (letfn ~(rules->clj name->rules)
+             (for ~(clauses->clj where)
+               ~(if tuple-keys
+                  `(zipmap '~tuple-keys ~find)
+                  find))))))))
+
+(def ^:private memo-compile-query
+  (memoize
+   (fn [query rules]
+     (eval (query->clj query rules)))))
+
+(defn qseq [{:keys [query args]}]
+  (let [{:keys [in]} (s/conform :db/query (normalize-query query))
+        {rules '%} (zipmap in args)]
+    (apply (memo-compile-query query rules) args)))
+
+(defn q [query & inputs]
+  (set (qseq {:query query :args inputs})))
 
 (defn entity [db eid]
   (reduce
@@ -317,15 +341,15 @@
          [:ebbon :john]
          [:ebbon :douglas]}
 
-       (set (q '{:find [?a ?b]
-                 :in [$ %]
-                 :where [(ancestor ?a ?b)]}
-               db
-               '[[(ancestor ?a ?b)
-                  [?a :parent ?b]]
-                 [(ancestor ?a ?b)
-                  [?a :parent ?c]
-                  (ancestor ?c ?b)]]))))
+       (q '{:find [?a ?b]
+            :in [$ %]
+            :where [(ancestor ?a ?b)]}
+          db
+          '[[(ancestor ?a ?b)
+             [?a :parent ?b]]
+            [(ancestor ?a ?b)
+             [?a :parent ?c]
+             (ancestor ?c ?b)]])))
 
   (let [db (transact {}
                      '[{:db/id :a :edge :b}
@@ -349,12 +373,12 @@
          [:d :d]
          [:d :a]}
 
-       (set (q '{:find [?x ?y]
-                 :in [$ %]
-                 :where [(path ?x ?y)]}
-               db
-               '[[(path ?x ?y)
-                  [?x :edge ?y]]
-                 [(path ?x ?y)
-                  [?x :edge ?z]
-                  (path ?z ?y)]])))))
+       (q '{:find [?x ?y]
+            :in [$ %]
+            :where [(path ?x ?y)]}
+          db
+          '[[(path ?x ?y)
+             [?x :edge ?y]]
+            [(path ?x ?y)
+             [?x :edge ?z]
+             (path ?z ?y)]]))))
