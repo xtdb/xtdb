@@ -1,6 +1,7 @@
 (ns core2.trip
   (:require [clojure.set :as set]
             [clojure.string :as str]
+            [clojure.walk :as w]
             [clojure.spec.alpha :as s]))
 
 ;; Internal triple store.
@@ -23,10 +24,14 @@
                        :retract-entity (s/cat :op #{:db/retractEntity} :e :db/id)))
 
 (s/def :db.query/find (s/coll-of :db/logic-var :kind vector? :min-count 1))
-(s/def :db.query.where.clause/rule (s/and list? (s/cat :rule-name symbol? :args (s/* any?))))
 (s/def :db.query.where.clause/triple (s/and vector? (s/cat :e any? :a (some-fn keyword? logic-var?) :v any?)))
+(s/def :db.query.where.clause/rule (s/and list? (s/cat :rule-name symbol? :args (s/* any?))))
+(s/def :db.query.where.clause/pred (s/tuple (s/coll-of any? :kind list? :min-count 1)))
+(s/def :db.query.where.clause/fn (s/tuple (s/coll-of any? :kind list? :min-count 1) :db/logic-var))
 (s/def :db.query.where/clause (s/or :triple :db.query.where.clause/triple
-                                    :rule :db.query.where.clause/rule))
+                                    :rule :db.query.where.clause/rule
+                                    :pred :db.query.where.clause/pred
+                                    :fn :db.query.where.clause/fn))
 (s/def :db.query/where (s/coll-of :db.query.where/clause :kind vector? :min-count 1))
 (s/def :db.query/in (s/coll-of (some-fn logic-var? source-var? rules-var?) :kind vector?))
 (s/def :db.query/keys (s/coll-of symbol? :kind vector? :min-count 1))
@@ -139,6 +144,12 @@
 (defn- lvar-ref [x]
   (list 'lvar x))
 
+(defn- expr-with-lvar-refs [x]
+  (w/postwalk (fn [x]
+                (if (logic-var? x)
+                  (lvar-ref x)
+                  x)) x))
+
 (defn- clauses->clj [clauses]
   (->> (for [[clause-type clause] clauses]
          (case clause-type
@@ -147,7 +158,11 @@
                        (triple ~'$ ~@(map lvar-ref [e a v]))])
            :rule (let [{:keys [rule-name args] :as rule} clause]
                    `[~(vec args)
-                     (~rule-name ~rule-ctx-sym ~@(map lvar-ref args))])))
+                     (~rule-name ~rule-ctx-sym ~@(map lvar-ref args))])
+           :pred (let [[expr] clause]
+                   [:when (expr-with-lvar-refs expr)])
+           :fn (let [[expr binding] clause]
+                 [binding [(expr-with-lvar-refs expr)]])))
        (reduce into [])))
 
 (defn- rule-leg-name [rule-name idx]
