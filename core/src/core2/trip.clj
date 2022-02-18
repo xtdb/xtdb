@@ -162,7 +162,7 @@
            :pred (let [[expr] clause]
                    [:when (expr-with-lvar-refs expr)])
            :fn (let [[expr binding] clause]
-                 [binding [(expr-with-lvar-refs expr)]])))
+                 [:let [binding (expr-with-lvar-refs expr)]])))
        (reduce into [])))
 
 (defn- rule-leg-name [rule-name idx]
