@@ -1,10 +1,11 @@
 (ns core2.sql.plan-test
   (:require [clojure.test :as t]
-            [core2.sql :as sql]))
+            [core2.sql :as sql]
+            [core2.sql.plan :as plan]))
 
 (defmacro valid? [sql expected]
   `(let [tree# (sql/parse ~sql)
-         {errs# :errs plan# :plan} (sql/plan-query tree#)]
+         {errs# :errs plan# :plan} (plan/plan-query tree#)]
      (t/is (= [] (vec errs#)))
      (t/is (= '~expected plan#))
      {:tree tree# :plan plan#}))

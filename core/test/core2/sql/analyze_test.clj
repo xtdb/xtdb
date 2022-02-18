@@ -1,6 +1,7 @@
-(ns core2.sql.annotate-test
+(ns core2.sql.analyze-test
   (:require [clojure.test :as t]
-            [core2.sql :as sql]))
+            [core2.sql :as sql]
+            [core2.sql.analyze :as sem]))
 
 (t/deftest test-annotate-query-scopes
   (let [tree (sql/parse "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
@@ -210,16 +211,16 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
                 :columns #{},
                 :type :query-specification}],
               :errs []}
-             (sql/analyze-query tree)))))
+             (sem/analyze-query tree)))))
 
 (defmacro ^:private invalid? [re q]
-  `(let [[err# :as errs#] (:errs (sql/analyze-query (sql/parse ~q)))
+  `(let [[err# :as errs#] (:errs (sem/analyze-query (sql/parse ~q)))
          err# (or err# "")]
      (t/is (= 1 (count errs#)) (pr-str errs#))
      (t/is (re-find ~re err#))))
 
 (defmacro ^:private valid? [q]
-  `(let [{errs# :errs scopes# :scopes} (sql/analyze-query (sql/parse ~q))]
+  `(let [{errs# :errs scopes# :scopes} (sem/analyze-query (sql/parse ~q))]
      (t/is (empty? errs#))
      scopes#))
 
