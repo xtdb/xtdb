@@ -1,6 +1,5 @@
 (ns core2.trip
-  (:require [clojure.set :as set]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [clojure.walk :as w]
             [clojure.spec.alpha :as s]))
 
@@ -21,7 +20,9 @@
                                       (s/keys :req [:db/id]))
                        :add (s/cat :op #{:db/add} :e :db/id :a keyword? :v any?)
                        :retract (s/cat :op #{:db/retract} :e :db/id :a keyword? :v any?)
-                       :retract-entity (s/cat :op #{:db/retractEntity} :e :db/id)))
+                       :retract-entity (s/cat :op #{:db/retractEntity} :e :db/id)
+                       :cas (s/cat :op #{:db/cas} :e :db/id :a keyword? :old-v any? :new-v any?)
+                       :fn (s/cat :fn symbol? :args (s/* any?))))
 
 (s/def :db.query/find (s/coll-of :db/logic-var :kind vector? :min-count 1))
 (s/def :db.query.where.clause/triple (s/and vector? (s/cat :e any? :a (some-fn keyword? logic-var?) :v any?)))
@@ -83,9 +84,15 @@
 (defn- add-entity [db entity]
   (reduce add-triple db (entity->triples entity)))
 
+(def ^:private index->keys
+  {:eav [:e :a :v]
+   :aev [:a :e :v]
+   :ave [:a :v :e]
+   :vae [:v :a :e]})
+
 (defn datoms [db index & [x y z :as components]]
   (if-let [idx (get db index)]
-    (let [ks (map (comp keyword str) (seq (name index)))]
+    (let [ks (index->keys index)]
       (case (count components)
         0 (for [[x ys] idx
                 [y zs] ys
@@ -245,7 +252,14 @@
          :entity (add-entity db tx-op)
          :retract-entity (retract-entity db e)
          :add (add-triple db [e a v])
-         :retract (retract-triple db [e a v]))))
+         :retract (retract-triple db [e a v])
+         :cas (let [{:keys [old-v new-v]} tx-op]
+                (if (seq (datoms db :eav e a old-v))
+                  (reduce transact db [[:db/retract e a old-v]
+                                       [:db/add e a new-v]])
+                  db))
+         :fn (let [{:keys [fn args]} tx-op]
+               (reduce transact db (apply fn db args))))))
    db
    tx-ops))
 
