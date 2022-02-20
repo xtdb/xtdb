@@ -1,7 +1,8 @@
 (ns core2.trip
   (:require [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.spec.alpha :as s]))
+            [clojure.spec.alpha :as s])
+  (:import clojure.lang.IPersistentMap))
 
 ;; Internal triple store.
 
@@ -16,9 +17,9 @@
 
 (s/def :db/id some?)
 (s/def :db/logic-var logic-var?)
-(s/def :db/tx-op (s/or :entity (s/and (s/map-of keyword? any?)
-                                      (s/keys :req [:db/id]))
-                       :add (s/cat :op #{:db/add} :e :db/id :a keyword? :v any?)
+(s/def :db/tx-op (s/or :add (s/cat :op #{:db/add} :e :db/id :a keyword? :v any?)
+                       :add-entity (s/and (s/map-of keyword? any?)
+                                          (s/keys :req [:db/id]))
                        :retract (s/cat :op #{:db/retract} :e :db/id :a keyword? :v any?)
                        :retract-entity (s/cat :op #{:db/retractEntity} :e :db/id)
                        :cas (s/cat :op #{:db/cas} :e :db/id :a keyword? :old-v any? :new-v any?)
@@ -47,42 +48,13 @@
                              :rule-body (s/+ :db.query.where/clause)))
 (s/def :db.query/rules (s/coll-of :db.query/rule :kind vector? :min-count 1))
 
-(defn- add-triple [db [e a v]]
-  (let [conj' (fnil conj #{})]
-    (-> db
-        (update-in [:eav e a] conj' v)
-        (update-in [:aev a e] conj' v)
-        (update-in [:ave a v] conj' e)
-        (update-in [:vae v a] conj' e))))
+(defprotocol Db
+  (-transact [this tx-ops])
+  (-datoms [this index components]))
 
-(defn- retract-triple [db [e a v]]
-  (-> db
-      (update-in [:eav e a] disj v)
-      (update-in [:aev a e] disj v)
-      (update-in [:ave a v] disj e)
-      (update-in [:vae v a] disj e)))
-
-(defn- entity-triples [{:keys [eav] :as db} eid]
-   (for [[a vs] (get eav eid)
-         v vs]
-     [eid a v]))
-
-(defn- retract-entity [db eid]
-  (reduce
-   retract-triple
-   db
-   (entity-triples db eid)))
-
-(defn- entity->triples [entity]
-  (let [e (:db/id entity)]
-    (for [[a v] entity
-          v (if (set? v)
-              v
-              #{v})]
-      [e a v])))
-
-(defn- add-entity [db entity]
-  (reduce add-triple db (entity->triples entity)))
+(def ^:private tx-op->fn
+  {:db/add (fnil conj #{})
+   :db/retract disj})
 
 (def ^:private index->keys
   {:eav [:e :a :v]
@@ -90,22 +62,39 @@
    :ave [:a :v :e]
    :vae [:v :a :e]})
 
-(defn datoms [db index & [x y z :as components]]
-  (if-let [idx (get db index)]
-    (let [ks (index->keys index)]
-      (case (count components)
-        0 (for [[x ys] idx
-                [y zs] ys
-                z zs]
-            (zipmap ks [x y z]))
-        1 (for [[y zs] (get-in idx components)
-                z zs]
-            (zipmap ks [x y z]))
-        2 (for [z (get-in idx components)]
-            (zipmap ks [x y z]))
-        3 (when (get-in idx components)
-            [(zipmap ks (vec components))])))
-    (throw (IllegalArgumentException. (str "unknown index: " index)))))
+(extend-protocol Db
+  IPersistentMap
+  (-transact [db tx-ops]
+    (reduce
+     (fn [db [op-type e a v]]
+       (let [f (get tx-op->fn op-type)]
+         (-> db
+             (update-in [:eav e a] f v)
+             (update-in [:aev a e] f v)
+             (update-in [:ave a v] f e)
+             (update-in [:vae v a] f e))))
+     db
+     tx-ops))
+
+  (-datoms [db index [x y z :as components]]
+    (if-let [idx (get db index)]
+      (let [ks (index->keys index)]
+        (case (count components)
+          0 (for [[x ys] idx
+                  [y zs] ys
+                  z zs]
+              (zipmap ks [x y z]))
+          1 (for [[y zs] (get-in idx components)
+                  z zs]
+              (zipmap ks [x y z]))
+          2 (for [z (get-in idx components)]
+              (zipmap ks [x y z]))
+          3 (when (get-in idx components)
+              [(zipmap ks (vec components))])))
+      (throw (IllegalArgumentException. (str "unknown index: " index))))))
+
+(defn datoms [db index & components]
+  (-datoms db index components))
 
 (defmacro lvar [x]
   (if (or (not (logic-var? x))
@@ -243,25 +232,41 @@
    {}
    (datoms db :eav eid)))
 
+(defn- add-entity-ops [entity]
+  (let [e (:db/id entity)]
+    (for [[a v] entity
+          v (if (set? v)
+              v
+              #{v})]
+      [:db/add e a v])))
+
+(defn- retract-entity-ops [db e]
+  (for [{:keys [e a v]} (datoms db :eav e)]
+    [:db/retract e a v]))
+
+(defn- cas-ops [db e a old-v new-v]
+  (if (seq (datoms db :eav e a old-v))
+    [[:db/retract e a old-v]
+     [:db/add e a new-v]]
+    []))
+
+(defn- flatten-tx-ops [db tx-ops]
+  (vec (for [tx-op tx-ops
+             :let [_ (s/assert :db/tx-op tx-op)
+                   [op-type {:keys [e a v] :as conformed-tx-op}] (s/conform :db/tx-op tx-op)]
+             tx-op (case op-type
+                     :add [tx-op]
+                     :add-entity (add-entity-ops tx-op)
+                     :retract [tx-op]
+                     :retract-entity (retract-entity-ops db e)
+                     :cas (let [{:keys [e a old-v new-v]} conformed-tx-op]
+                            (cas-ops db e a old-v new-v))
+                     :fn (let [{:keys [fn args]} conformed-tx-op]
+                           (flatten-tx-ops db (apply fn db args))))]
+         tx-op)))
+
 (defn transact [db tx-ops]
-  (reduce
-   (fn [db tx-op]
-     (s/assert :db/tx-op tx-op)
-     (let [[op-type {:keys [e a v] :as tx-op}] (s/conform :db/tx-op tx-op)]
-       (case op-type
-         :entity (add-entity db tx-op)
-         :retract-entity (retract-entity db e)
-         :add (add-triple db [e a v])
-         :retract (retract-triple db [e a v])
-         :cas (let [{:keys [old-v new-v]} tx-op]
-                (if (seq (datoms db :eav e a old-v))
-                  (reduce transact db [[:db/retract e a old-v]
-                                       [:db/add e a new-v]])
-                  db))
-         :fn (let [{:keys [fn args]} tx-op]
-               (reduce transact db (apply fn db args))))))
-   db
-   tx-ops))
+  (-transact db (flatten-tx-ops db tx-ops)))
 
 (comment
 
