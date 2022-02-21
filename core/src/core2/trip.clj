@@ -589,19 +589,19 @@
                   {:db/id q1
                    :qgm.quantifier/type :qgm.quantifier.type/foreach
                    :qgm.quantifier/columns [partno descr]
-                   :qgm.quantifier/ranges-over box1}
+                   :qgm.quantifier/ranges-over b1}
                   {:db/id q2
                    :qgm.quantifier/type :qgm.quantifier.type/foreach
                    :qgm.quantifier/columns [partno price]
-                   :qgm.quantifier/ranges-over box2}
+                   :qgm.quantifier/ranges-over b2}
                   {:db/id q3
                    :qgm.quantifier/type :qgm.quantifier.type/foreach
                    :qgm.quantifier/columns [partno price]
-                   :qgm.quantifier/ranges-over box2}
+                   :qgm.quantifier/ranges-over b2}
                   {:db/id q4
                    :qgm.quantifier/type :qgm.quantifier.type/all
                    :qgm.quantifier/columns [price]
-                   :qgm.quantifier/ranges-over box4}
+                   :qgm.quantifier/ranges-over b4}
 
                   {:db/id p1
                    :qgm.predicate/expression (= q1.descr "engine")
