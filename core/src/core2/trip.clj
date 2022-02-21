@@ -1,10 +1,13 @@
 (ns core2.trip
   (:require [clojure.string :as str]
-            [clojure.walk :as w]
             [clojure.spec.alpha :as s])
   (:import clojure.lang.IPersistentMap))
 
 ;; Internal triple store.
+
+(defprotocol Db
+  (-transact [this tx-ops])
+  (-datoms [this index components]))
 
 (defn logic-var? [x]
   (and (symbol? x) (str/starts-with? (name x) "?")))
@@ -15,8 +18,413 @@
 (defn rules-var? [x]
   (= '% x))
 
+(defn blank-var? [x]
+  (= '_ x))
+
+(s/def ::query (s/and (s/conformer identity vec)
+                      (s/cat :find-spec ::find-spec
+                             :return-map (s/? ::return-map)
+                             :with-clause (s/? ::with-clause)
+                             :inputs (s/? ::inputs)
+                             :where-clauses (s/? ::where-clauses))))
+
+(s/conform ::query '[:find ?b ?q ?t
+                     :in $ ?b
+                     :where
+                     [?b :qgm.box.body/quantifiers ?q]
+                     [?q :qgm.quantifier/type ?t]])
+
+(s/def ::find-spec (s/cat :find #{:find}
+                          :find-spec (s/alt :find-rel ::find-rel
+                                            :find-coll ::find-coll
+                                            :find-tuple ::find-tuple
+                                            :find-scalar ::find-scalar)))
+
+(s/def ::return-map (s/alt :return-keys ::return-keys
+                           :return-syms ::return-syms
+                           :return-strs ::return-strs))
+
+(s/def ::find-rel (s/+ ::find-elem))
+(s/def ::find-coll (s/tuple ::find-elem '#{...}))
+(s/def ::find-scalar (s/cat :find-elem ::find-elem :period '#{.}))
+(s/def ::find-tuple (s/coll-of ::find-elem :min-count 1))
+
+(s/def ::find-elem (s/or :variable ::variable :aggregate ::aggregate))
+
+(s/def ::return-keys (s/cat :keys #{:keys} :symbols (s/+ symbol?)))
+(s/def ::return-syms (s/cat :syms #{:syms} :symbols (s/+ symbol?)))
+(s/def ::return-strs (s/cat :strs #{:strs} :symbols (s/+ symbol?)))
+
+(s/def ::aggregate (s/cat :aggregate-fn-name ::plain-symbol :fn-args (s/+ ::fn-arg)))
+(s/def ::fn-arg (s/or :variable ::variable :constant ::constant :src-var ::src-var))
+
+(s/def ::with-clause (s/cat :with #{:with} :variables (s/+ ::variable)))
+(s/def ::where-clauses (s/cat :where #{:where} :clauses (s/+ ::clause)))
+
+(s/def ::inputs (s/cat :in #{:in} :inputs (s/+ (s/or :src-var ::src-var :binding ::binding :rules-var ::rules-var))))
+(s/def ::src-var source-var?)
+(s/def ::variable logic-var?)
+(s/def ::rules-var rules-var?)
+(s/def ::blank-var blank-var?)
+
+(s/def ::plain-symbol (s/and symbol? (complement (some-fn source-var? logic-var?))))
+
+(s/def ::and-clause (s/cat :and '#{and} :clauses (s/+ ::clause)))
+(s/def ::expression-clause (s/or :data-pattern ::data-pattern
+                                 :pred-expr ::pred-expr
+                                 :fn-expr ::fn-expr
+                                 :rule-expr ::rule-expr))
+
+(s/def ::rule-expr (s/cat :src-var (s/? ::src-var)
+                          :rule-name ::rule-name
+                          :args (s/+ (s/or :variable ::variable
+                                           :constant ::constant
+                                           :blank-var ::blank-var))))
+
+(s/def ::not-clause (s/cat :src-var (s/? ::src-var)
+                           :not '#{not}
+                           :clauses (s/+ ::clause)))
+
+(s/def ::not-join-clause (s/cat :src-var (s/? ::src-var)
+                                :not-join '#{not-join}
+                                :args (s/coll-of ::variable :kind vector? :min-count 1)
+                                :clauses (s/+ ::clause)))
+
+(s/def ::or-clause (s/cat :src-var (s/? ::src-var)
+                          :or '#{or}
+                          :clauses (s/+ (s/or :clause ::clause
+                                              :and-clause ::and-clause))))
+
+(s/def ::or-join-clause (s/cat :src-var (s/? ::src-var)
+                               :or-join '#{or-join}
+                               :args (s/tuple ::rule-vars)
+                               :clauses (s/+ (s/or :clause ::clause
+                                                   :and-clause ::and-clause))))
+
+(s/def ::rule-vars  (s/cat :bound-vars (s/? (s/coll-of ::variable :kind vector? :min-count 1))
+                           :free-vars (s/* ::variable)))
+
+(s/def ::clause (s/or :not-clause ::not-clause
+                      :not-join-clause ::not-join-clause
+                      :or-clause ::or-clause
+                      :or-join-clause ::or-join-clause
+                      :expression-clause ::expression-clause))
+
+(s/def ::data-pattern (s/and (s/conformer identity vec)
+                             (s/cat :src-var (s/? ::src-var)
+                                    :pattern (s/+ (s/or :variable ::variable
+                                                        :constant ::constant
+                                                        :blank-var ::blank-var)))))
+
+(s/def ::constant (s/and any? #(not (or (symbol? %) (list? %)))))
+
+(s/def ::pred-expr (s/tuple (s/cat :pred ::pred
+                                   :args (s/* ::fn-arg))))
+(s/def ::pred ::plain-symbol)
+
+(s/def ::fn-expr (s/tuple (s/cat :fn ::fn
+                                 :args (s/* ::fn-arg))
+                          ::binding))
+(s/def ::fn ::plain-symbol)
+
+(s/def ::binding (s/or :bind-scalar ::bind-scalar
+                       :bind-tuple ::bind-tuple
+                       :bind-coll ::bind-coll
+                       :bind-rel ::bind-rel))
+
+(s/def ::bind-scalar ::variable)
+(s/def ::bind-tuple (s/coll-of (s/or :variable ::variable
+                                     :blank-var ::blank-var)
+                               :kind vector? :min-count 1))
+(s/def ::bind-coll (s/tuple ::variable '#{...}))
+(s/def ::bind-rel (s/tuple (s/coll-of (s/or :variable ::variable
+                                            :blank-var '#{_})
+                                      :kind vector? :min-count 1)))
+
+(s/def ::rule (s/coll-of
+               (s/and (s/conformer identity vec)
+                      (s/cat :rule-head ::rule-head
+                             :clauses (s/+ ::clause)))
+               :kind vector?
+               :min-count 1))
+(s/def ::rule-head (s/and list? (s/cat :rule-name ::rule-name
+                                       :rule-vars ::rule-vars)))
+(s/def ::unqualified-plain-symbol (s/and ::plain-symbol #(and (not= 'and %)
+                                                              (nil? (namespace %)))))
+(s/def ::rule-name ::unqualified-plain-symbol)
+
+;; Query runtime
+
+(declare datoms)
+
+(defn data-pattern [$ e a v]
+  (for [{:keys [e a v]}
+        (if (= ::unbound e)
+          (if (= ::unbound a)
+            (if (= ::unbound v)
+              (datoms $ :aev)
+              (datoms $ :vae v))
+            (if (= ::unbound v)
+              (datoms $ :aev a)
+              (datoms $ :ave a v)))
+          (if (= ::unbound a)
+            (if (= ::unbound v)
+              (datoms $ :eav e)
+              (for [datom (datoms $ :eav e)
+                    :when (= v (:v datom))]
+                datom))
+            (if (= ::unbound v)
+              (datoms $ :eav e a)
+              (datoms $ :eav e a v))))]
+    [e a v]))
+
+(defn rule [$ rule-ctx leg-fns args]
+  (for [leg-fn leg-fns
+        :let [rule-leg-key [leg-fn args]]
+        :when (not (contains? rule-ctx rule-leg-key))
+        x (apply leg-fn $ (conj rule-ctx rule-leg-key) args)]
+    x))
+
+(defn can-unify? [x y]
+  (cond
+    (or (= ::unbound x) (= ::unbound y))
+    true
+
+    (and (vector? x) (vector? y))
+    (every? true? (map can-unify? x y))
+
+    :else
+    (= x y)))
+
+;; Query compiler
+
+(def ^:private rule-ctx-sym (gensym 'rule-ctx))
+(def ^:private inputs-sym (gensym 'inputs))
+(def ^:private group-sym (gensym 'group))
+
+(def ^:private ^:dynamic *allow-unbound?* true)
+
+(defmacro ^:private lvar [x]
+  (if (or (not (logic-var? x))
+          (contains? &env x)
+          (not *allow-unbound?*))
+    x
+    ::unbound))
+
+(defmacro ^:private lvars-in-scope []
+  (filterv logic-var? (keys &env)))
+
+(defmacro ^:private with-lvar-scope {:style/indent 1} [parent-lvars & body]
+  (let [parent-lvars (set parent-lvars)]
+    `(let [~@(->> (for [k (keys &env)
+                        :when (and (logic-var? k)
+                                   (not (contains? parent-lvars k)))]
+                    [k ::unbound])
+                  (reduce into))]
+       ~@body)))
+
+(defn- logic-var-or-blank [x]
+  (if (logic-var? x)
+    x
+    '_))
+
+(defn- lvar-ref [x]
+  (list 'lvar x))
+
+(defn- tuple-binding-pattern [binding]
+  (vec (for [[tuple-binding-type tuple-binding] binding]
+         (case tuple-binding-type
+           :variable (lvar-ref tuple-binding)
+           :blank-var ::unbound))))
+
+(defn- binding->clj [[binding-type binding] form]
+  (case binding-type
+    :bind-scalar `[:let [binding# ~form]
+                   :when (can-unify? binding# ~(lvar-ref binding))
+                   :let [~binding binding#]]
+    :bind-tuple `[:let [binding# ~form]
+                  :when (can-unify? binding# ~(tuple-binding-pattern binding))
+                  :let [~binding binding#]]
+    :bind-coll (let [binding (first binding)]
+                 `[binding# ~form
+                   :when (can-unify? binding# ~(lvar-ref binding))
+                   :let [~(mapv (comp logic-var-or-blank second) binding) binding#]])
+    :bind-rel (let [binding (first binding)]
+                `[binding# ~form
+                  :when (can-unify? binding# ~(tuple-binding-pattern binding))
+                  :let [~(mapv (comp logic-var-or-blank second) binding) binding#]])))
+
+(defn- clauses->clj [clauses]
+  (->> (for [[clause-type clause] clauses]
+         (case clause-type
+           :expression-clause
+           (let [[clause-type clause] clause]
+             (case clause-type
+               :data-pattern
+               (let [{:keys [src-var pattern]} clause
+                     [e a v] (map second pattern)]
+                 `[~(mapv logic-var-or-blank [e a v])
+                   (data-pattern ~(or src-var '$) ~@(map lvar-ref [e a v]))])
+
+               :rule-expr
+               (let [{:keys [src-var rule-name args] :as rule} clause
+                     args (map second args)]
+                 `[~(mapv logic-var-or-blank args)
+                   (~rule-name ~(or src-var '$) ~rule-ctx-sym ~@(map lvar-ref args))])
+
+               :pred-expr
+               (let [[{:keys [pred args]}] clause]
+                 [:when (cons pred (map second args))])
+
+               :fn-expr
+               (let [[{:keys [fn args]} binding] clause]
+                 (binding->clj binding (cons fn (map second args))))))
+
+           :not-clause
+           (let [{:keys [src-var clauses]} clause]
+             `[:when (let [~src-var ~(or src-var '$)]
+                       (empty? (for ~(binding [*allow-unbound?* false]
+                                       (clauses->clj clauses))
+                                 true)))])
+
+           :not-join-clause
+           (let [{:keys [src-var clauses args]} clause]
+             `[:when (let [~src-var ~(or src-var '$)]
+                       (do @~args)
+                       (with-lvar-scope ~(vec args)
+                         (empty? (for ~(clauses->clj clauses)
+                                   true))))])
+
+           :or-clause
+           (let [{:keys [src-var clauses]} clause]
+             `[(lvars-in-scope)
+               (let [~src-var ~(or src-var '$)]
+                 (concat ~@(for [[clause-type clause] clauses]
+                             `(for ~(case clause-type
+                                      :clause (clauses->clj [clause])
+                                      :and (clauses->clj (:clauses clause)))
+                                (lvars-in-scope)))))])
+
+           :or-join-clause
+           (let [{:keys [src-var clauses] {:keys [bound-vars free-vars]} :args} clause
+                 args (vec (concat bound-vars free-vars))]
+             `[~args
+               (let [~src-var ~(or src-var '$)]
+                 (do ~@bound-vars)
+                 (binding [*allow-unbound?* true]
+                   (with-lvar-scope ~args
+                     (concat ~@(for [[clause-type clause] clauses]
+                                 `(for ~(case clause-type
+                                          :clause (clauses->clj [clause])
+                                          :and (clauses->clj (:clauses clause)))
+                                    ~args))))))])))
+       (reduce into [])))
+
+(defn- rule-leg-name [rule-name idx]
+  (symbol (str rule-name "-" idx)))
+
+(defn- rules->clj [rules]
+  (let [name->rules (some->> rules
+                             (s/assert ::rule)
+                             (s/conform ::rule)
+                             (group-by (comp :rule-name :rule-head)))]
+    (->> (for [[rule-name rule-legs] name->rules
+               :let [idx->rule-leg (zipmap (range (count rule-legs)) rule-legs)
+                     rule-leg-refs (mapv #(rule-leg-name rule-name %) (keys idx->rule-leg))]]
+           (->> (for [[idx {:keys [clauses]
+                            {{:keys [bound-vars free-vars]} :rule-vars} :rule-head}] idx->rule-leg
+                      :let [arg-vars (concat bound-vars free-vars)]]
+                  `(~(rule-leg-name rule-name idx) [~'$ ~rule-ctx-sym ~@arg-vars]
+                    (do (assert (not-any? #{::unbound} [~@bound-vars]))
+                        (for [_# [nil]
+                              ~@(clauses->clj clauses)]
+                          ~(vec arg-vars)))))
+                (cons `(~rule-name [~'$ rule-ctx# & args#]
+                        (rule ~'$ rule-ctx# ~rule-leg-refs args#)))))
+         (reduce into []))))
+
+(defn- normalize-query [query]
+  (if (vector? query)
+    query
+    (vec (for [k [:find :keys :syms :strs :with :in :where]
+               :when (contains? query k)
+               x (cons k (get query k))]
+           x))))
+
+(defn- aggregates->clj [find-spec]
+  (for [[idx [find-elem-type find-elem]] (map-indexed vector find-spec)]
+    (case find-elem-type
+      :variable find-elem
+      :aggregate (case (:aggregate-fn-name find-elem)
+                   sum `(reduce + (map #(nth % ~idx) ~group-sym))
+                   avg  `(/ (reduce + (map #(nth % ~idx) ~group-sym))
+                            (count ~group-sym))
+                   min `(reduce min (map #(nth % ~idx) ~group-sym))
+                   max `(reduce max (map #(nth % ~idx) ~group-sym))
+                   count-distinct `(count (distinct (map #(nth % ~idx) ~group-sym)))
+                   count `(count ~group-sym)))))
+
+(defn- query->clj [query rules]
+  (let [query (->> (normalize-query query)
+                   (s/assert ::query)
+                   (s/conform ::query))
+        {:keys [find-spec return-map with-clause inputs where-clauses] tuple-keys :keys} query
+        [find-type find-spec] (:find-spec find-spec)
+        find-spec (case find-type
+                    (:find-rel :find-tuple) find-spec
+                    :find-coll [(first find-spec)]
+                    :find-scalar [(:find-elem find-spec)])
+        group-idxs (vec (for [[idx [find-elem-type _]] (map-indexed vector find-spec)
+                              :when (= :variable find-elem-type)]
+                          idx))
+        aggregates? (boolean (some #{:aggregate} (map first find-spec)))
+        projected-vars (vec (for [[find-elem-type find-elem] find-spec]
+                              (case find-elem-type
+                                :variable find-elem
+                                :aggregate (second (last (:fn-args find-elem))))))
+        src-vars (if-let [inputs (:inputs inputs)]
+                   (->> (for [[idx [in-type in]] (map-indexed vector inputs)
+                              :when (= :src-var in-type)]
+                          `[~in (nth ~inputs-sym ~idx)])
+                        (reduce into []))
+                   `[~'$ (nth ~inputs-sym 0)])
+        inputs (if-let [inputs (:inputs inputs)]
+                 (->> (for [[idx [in-type in]] (map-indexed vector inputs)
+                            :when (= :binding in-type)]
+                        (binding->clj in `(nth ~inputs-sym ~idx)))
+                      (reduce into []))
+                 `[:let [~'$ (nth ~inputs-sym 0)]])
+        [return-map-type return-map] return-map
+        tuple-keys (when-let [symbols (:symbols return-map)]
+                     (not-empty (map (case return-map-type
+                                       :return-keys (comp keyword name)
+                                       :return-syms identity
+                                       :return-strs name)
+                                     symbols)))
+        where-clauses (:clauses where-clauses)]
+    `(fn [& ~inputs-sym]
+       (let [~@src-vars
+             ~rule-ctx-sym #{}]
+         (letfn ~(rules->clj rules)
+           (->> (for [_# [nil]
+                      ~@inputs
+                      ~@(clauses->clj where-clauses)]
+                  ~projected-vars)
+                ~@(when aggregates?
+                    `[(group-by #(mapv % ~group-idxs))
+                      (map (fn [[~projected-vars ~group-sym]]
+                             [~@(aggregates->clj find-spec)]))])
+                ~@(when tuple-keys
+                    `[(map (partial zipmap '~tuple-keys))])))))))
+
+(def ^:private memo-compile-query
+  (memoize
+   (fn [query rules]
+     (eval (query->clj query rules)))))
+
+;; Transactions
+
 (s/def :db/id some?)
-(s/def :db/logic-var logic-var?)
 (s/def :db/tx-op (s/or :add (s/cat :op #{:db/add} :e :db/id :a keyword? :v any?)
                        :add-entity (s/and (s/map-of keyword? any?)
                                           (s/keys :req [:db/id]))
@@ -25,32 +433,80 @@
                        :cas (s/cat :op #{:db/cas} :e :db/id :a keyword? :old-v any? :new-v any?)
                        :fn (s/cat :fn symbol? :args (s/* any?))))
 
-(s/def :db.query/find (s/coll-of :db/logic-var :kind vector? :min-count 1))
-(s/def :db.query.where.clause/triple (s/and vector? (s/cat :e any? :a (some-fn keyword? logic-var?) :v any?)))
-(s/def :db.query.where.clause/rule (s/and list? (s/cat :rule-name symbol? :args (s/* any?))))
-(s/def :db.query.where.clause/pred (s/tuple (s/coll-of any? :kind list? :min-count 1)))
-(s/def :db.query.where.clause/fn (s/tuple (s/coll-of any? :kind list? :min-count 1) :db/logic-var))
-(s/def :db.query.where/clause (s/or :triple :db.query.where.clause/triple
-                                    :rule :db.query.where.clause/rule
-                                    :pred :db.query.where.clause/pred
-                                    :fn :db.query.where.clause/fn))
-(s/def :db.query/where (s/coll-of :db.query.where/clause :kind vector? :min-count 1))
-(s/def :db.query/in (s/coll-of (some-fn logic-var? source-var? rules-var?) :kind vector?))
-(s/def :db.query/keys (s/coll-of symbol? :kind vector? :min-count 1))
+(defn- add-entity-ops [entity]
+  (let [e (:db/id entity)]
+    (for [[a v] entity
+          v (if (set? v)
+              v
+              #{v})]
+      [:db/add e a v])))
 
-(s/def :db/query (s/keys :req-un [:db.query/where :db.query/find]
-                         :opt-un [:db.query/in :db.query/keys]))
+(defn- retract-entity-ops [db e]
+  (for [{:keys [e a v]} (datoms db :eav e)]
+    [:db/retract e a v]))
 
-(s/def :db.query.rule/head (s/spec (s/cat :rule-name symbol?
-                                          :bound-vars (s/? (s/coll-of :db/logic-var :kind vector?))
-                                          :free-vars (s/* :db/logic-var))))
-(s/def :db.query/rule (s/cat :rule-head :db.query.rule/head
-                             :rule-body (s/+ :db.query.where/clause)))
-(s/def :db.query/rules (s/coll-of :db.query/rule :kind vector? :min-count 1))
+(defn- cas-ops [db e a old-v new-v]
+  (if (seq (datoms db :eav e a old-v))
+    [[:db/retract e a old-v]
+     [:db/add e a new-v]]
+    []))
 
-(defprotocol Db
-  (-transact [this tx-ops])
-  (-datoms [this index components]))
+(defn- flatten-tx-ops [db tx-ops]
+  (vec (for [tx-op tx-ops
+             :let [_ (s/assert :db/tx-op tx-op)
+                   [op-type {:keys [e a v] :as conformed-tx-op}] (s/conform :db/tx-op tx-op)]
+             tx-op (case op-type
+                     :add [tx-op]
+                     :add-entity (add-entity-ops tx-op)
+                     :retract [tx-op]
+                     :retract-entity (retract-entity-ops db e)
+                     :cas (let [{:keys [e a old-v new-v]} conformed-tx-op]
+                            (cas-ops db e a old-v new-v))
+                     :fn (let [{:keys [fn args]} conformed-tx-op]
+                           (flatten-tx-ops db (apply fn db args))))]
+         tx-op)))
+
+;; API
+
+(defn qseq [{:keys [query args]}]
+  (let [{:keys [inputs]} (s/conform ::query (normalize-query query))
+        inputs (mapv second (:inputs inputs))
+        {rules '%} (zipmap inputs args)]
+    (apply (memo-compile-query query rules) args)))
+
+(defn q [query & inputs]
+  (let [{:keys [find-spec]} (s/conform ::query (normalize-query query))
+        [find-type find-spec] (:find-spec find-spec)
+        result (qseq {:query query :args inputs})]
+    (case find-type
+      :find-rel (set result)
+      :find-coll (mapv first result)
+      :find-scalar (ffirst result)
+      :find-tuple (first result))))
+
+(defn datoms [db index & components]
+  (-datoms db index components))
+
+(defn entity [db eid]
+  (reduce
+   (fn [acc {:keys [e a v]}]
+     (update acc a (fn [x]
+                     (cond
+                       (set? x)
+                       (conj x v)
+
+                       (some? x)
+                       (conj #{} x v)
+
+                       :else
+                       v))))
+   {}
+   (datoms db :eav eid)))
+
+(defn transact [db tx-ops]
+  (-transact db (flatten-tx-ops db tx-ops)))
+
+;; Default map implementation
 
 (def ^:private tx-op->fn
   {:db/add (fnil conj #{})
@@ -92,181 +548,6 @@
           3 (when (get-in idx components)
               [(zipmap ks (vec components))])))
       (throw (IllegalArgumentException. (str "unknown index: " index))))))
-
-(defn datoms [db index & components]
-  (-datoms db index components))
-
-(defmacro lvar [x]
-  (if (or (not (logic-var? x))
-          (contains? &env x))
-    x
-    ::unbound))
-
-(defn triple [$ e a v]
-  (for [{:keys [e a v]}
-        (if (= ::unbound e)
-          (if (= ::unbound a)
-            (if (= ::unbound v)
-              (datoms $ :aev)
-              (datoms $ :vae v))
-            (if (= ::unbound v)
-              (datoms $ :aev a)
-              (datoms $ :ave a v)))
-          (if (= ::unbound a)
-            (if (= ::unbound v)
-              (datoms $ :eav e)
-              (for [datom (datoms $ :eav e)
-                    :when (= v (:v datom))]
-                datom))
-            (if (= ::unbound v)
-              (datoms $ :eav e a)
-              (datoms $ :eav e a v))))]
-    [e a v]))
-
-(defn rule [rule-ctx leg-fns args]
-  (for [leg-fn leg-fns
-        :let [rule-leg-key [leg-fn args]]
-        :when (not (contains? rule-ctx rule-leg-key))
-        x (apply leg-fn (conj rule-ctx rule-leg-key) args)]
-    x))
-
-(def ^:private rule-ctx-sym (gensym 'rule-ctx))
-
-(defn- logic-var-or-blank [x]
-  (if (logic-var? x)
-    x
-    '_))
-
-(defn- lvar-ref [x]
-  (list 'lvar x))
-
-(defn- expr-with-lvar-refs [x]
-  (w/postwalk (fn [x]
-                (if (logic-var? x)
-                  (lvar-ref x)
-                  x)) x))
-
-(defn- clauses->clj [clauses]
-  (->> (for [[clause-type clause] clauses]
-         (case clause-type
-           :triple (let [{:keys [e a v]} clause]
-                     `[~(mapv logic-var-or-blank [e a v])
-                       (triple ~'$ ~@(map lvar-ref [e a v]))])
-           :rule (let [{:keys [rule-name args] :as rule} clause]
-                   `[~(vec args)
-                     (~rule-name ~rule-ctx-sym ~@(map lvar-ref args))])
-           :pred (let [[expr] clause]
-                   [:when (expr-with-lvar-refs expr)])
-           :fn (let [[expr binding] clause]
-                 [:let [binding (expr-with-lvar-refs expr)]])))
-       (reduce into [])))
-
-(defn- rule-leg-name [rule-name idx]
-  (symbol (str rule-name "-" idx)))
-
-(defn- rules->clj [rules]
-  (let [name->rules (some->> rules
-                             (s/assert :db.query/rules)
-                             (s/conform :db.query/rules)
-                             (group-by (comp :rule-name :rule-head)))]
-    (->> (for [[rule-name rule-legs] name->rules
-               :let [idx->rule-leg (zipmap (range (count rule-legs)) rule-legs)
-                     rule-leg-refs (mapv #(rule-leg-name rule-name %) (keys idx->rule-leg))]]
-           (->> (for [[idx {:keys [rule-body]
-                            {:keys [bound-vars free-vars]} :rule-head}] idx->rule-leg
-                      :let [arg-vars (concat bound-vars free-vars)]]
-                  `(~(rule-leg-name rule-name idx) [~rule-ctx-sym ~@arg-vars]
-                    (for ~(clauses->clj rule-body)
-                      ~(vec arg-vars))))
-                (cons `(~rule-name [rule-ctx# & args#]
-                        (rule rule-ctx# ~rule-leg-refs args#)))))
-         (reduce into []))))
-
-(defn- normalize-query [query]
-  (if (vector? query)
-    (->> (for [[[k] v] (->> (partition-by keyword? query)
-                            (partition-all 2))]
-           [k (vec v)])
-         (into {}))
-    query))
-
-(defn- query->clj [query rules]
-  (let [query (->> (normalize-query query)
-                   (s/assert :db/query)
-                   (s/conform :db/query))
-        {:keys [find in where] tuple-keys :keys} query]
-    `(fn ~(or in ['$])
-       (let [~rule-ctx-sym #{}]
-         (letfn ~(rules->clj rules)
-           (for ~(clauses->clj where)
-             ~(if tuple-keys
-                `(zipmap '~tuple-keys ~find)
-                find)))))))
-
-(def ^:private memo-compile-query
-  (memoize
-   (fn [query rules]
-     (eval (query->clj query rules)))))
-
-(defn qseq [{:keys [query args]}]
-  (let [{:keys [in]} (s/conform :db/query (normalize-query query))
-        {rules '%} (zipmap in args)]
-    (apply (memo-compile-query query rules) args)))
-
-(defn q [query & inputs]
-  (set (qseq {:query query :args inputs})))
-
-(defn entity [db eid]
-  (reduce
-   (fn [acc {:keys [e a v]}]
-     (update acc a (fn [x]
-                     (cond
-                       (set? x)
-                       (conj x v)
-
-                       (some? x)
-                       (conj #{} x v)
-
-                       :else
-                       v))))
-   {}
-   (datoms db :eav eid)))
-
-(defn- add-entity-ops [entity]
-  (let [e (:db/id entity)]
-    (for [[a v] entity
-          v (if (set? v)
-              v
-              #{v})]
-      [:db/add e a v])))
-
-(defn- retract-entity-ops [db e]
-  (for [{:keys [e a v]} (datoms db :eav e)]
-    [:db/retract e a v]))
-
-(defn- cas-ops [db e a old-v new-v]
-  (if (seq (datoms db :eav e a old-v))
-    [[:db/retract e a old-v]
-     [:db/add e a new-v]]
-    []))
-
-(defn- flatten-tx-ops [db tx-ops]
-  (vec (for [tx-op tx-ops
-             :let [_ (s/assert :db/tx-op tx-op)
-                   [op-type {:keys [e a v] :as conformed-tx-op}] (s/conform :db/tx-op tx-op)]
-             tx-op (case op-type
-                     :add [tx-op]
-                     :add-entity (add-entity-ops tx-op)
-                     :retract [tx-op]
-                     :retract-entity (retract-entity-ops db e)
-                     :cas (let [{:keys [e a old-v new-v]} conformed-tx-op]
-                            (cas-ops db e a old-v new-v))
-                     :fn (let [{:keys [fn args]} conformed-tx-op]
-                           (flatten-tx-ops db (apply fn db args))))]
-         tx-op)))
-
-(defn transact [db tx-ops]
-  (-transact db (flatten-tx-ops db tx-ops)))
 
 (comment
 
@@ -386,4 +667,30 @@
              [?x :edge ?y]]
             [(path ?x ?y)
              [?x :edge ?z]
-             (path ?z ?y)]]))))
+             (path ?z ?y)]])))
+
+  (= #{[6 1 3 4 2]}
+     (q '[:find (sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)
+          :with ?monster
+          :where [(identity [["Cerberus" 3]
+                             ["Medusa" 1]
+                             ["Cyclops" 1]
+                             ["Chimera" 1]]) [[?monster ?heads]]]]
+        {}))
+
+  (= 55
+     (q '[:find ?f .
+          :in $ % ?n
+          :where (fib ?n ?f)]
+        {}
+        '[[(fib [?n] ?f)
+           [(<= ?n 1)]
+           [(identity ?n) ?f]]
+          [(fib [?n] ?f)
+           [(> ?n 1)]
+           [(- ?n 1) ?n1]
+           [(- ?n 2) ?n2]
+           (fib ?n1 ?f1)
+           (fib ?n2 ?f2)
+           [(+ ?f1 ?f2) ?f]]]
+        10)))
