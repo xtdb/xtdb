@@ -328,8 +328,8 @@
              `[~args
                (let [~'$ ~(or src-var '$)]
                  ~@(map assert-bound-lvar bound-vars)
-                 (binding [*allow-unbound?* true]
-                   (concat ~@(for [[clause-type clause] clauses]
+                 (concat ~@(binding [*allow-unbound?* true]
+                             (for [[clause-type clause] clauses]
                                (assert-new-scope
                                 (cons '$ args)
                                 `(for ~(case clause-type
