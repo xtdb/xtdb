@@ -104,44 +104,57 @@
 ;; GraphViz:
 ;; https://dreampuf.github.io/GraphvizOnline/
 
+
 ;; digraph G {
+;;     compound = true
+;;     fontname = courier
 ;;   subgraph cluster_3 {
 ;;     label = "SELECT (3)"
 ;;     style = dashed
-;;     b3_head [label = "head: distinct=true\l[partno, descr, suppno]\l", shape=box]
-;;     b3_bpdy [label = "body: distinct=enforce\l[q1.partno, q1.descr, q2.suppno]\l", shape=box]
-;;     q1 [label="q1 (F)", shape=circle, style=filled]
-;;     q2 [label="q2 (F)", shape=circle, style=filled]
-;;     q4 [label="q4 (A)", shape=circle, style=filled]
+;;     {
+;;       rank = source
+;;       b3 [label = "head: distinct=true\l[partno   , descr   , suppno   ]\l[q1.partno, q1.descr, q2.suppno]\lbody: distinct=enforce\l", shape=box, fontname = courier]
+;;     }
+;;     {
+;;       rank = same
+;;       q1 [label="q1(F)", shape=circle, style=filled, margin=0, fontname = courier]
+;;       q2 [label="q2(F)", shape=circle, style=filled, margin=0, fontname = courier]
+;;       q4 [label="q4(A)", shape=circle, style=filled, margin=0, fontname = courier]
+;;     }
 ;;   }
 
 ;;   subgraph cluster_4 {
 ;;     label = "SELECT (4)"
 ;;     style = dashed
-;;     b4_head [label = "head: distinct=false\l[price]\l", shape=box]
-;;     b4_bpdy [label = "body: distinct=permit\l[q3.price]\l", shape=box]
-;;     q3 [label="q3 (F)", shape=circle, style=filled]
+;;     {
+;;       rank = source
+;;       b4 [label = "head: distinct=false\l[price   ]\l[q3.price]\lbody: distinct=permit\l", shape=box, fontname = courier]
+;;     }
+;;     {
+;;       rank = same
+;;       q3 [label="q3(F)", shape=circle, style=filled, margin=0, fontname = courier]
+;;     }
 ;;   }
 
 ;;   subgraph cluster_2 {
-;;       label = "(2)"
+;;       label = "BASE (2)"
 ;;       style=dashed
-;;       b2_head [shape=none, label="quotations"]
+;;       b2 [shape=none, label="quotations", fontname = courier]
 ;;   }
 
 ;;   subgraph cluster_1 {
-;;       label = "(1)"
+;;       label = "BASE (1)"
 ;;       style=dashed
-;;       b1_head [shape=none, label="inventory"]
+;;       b1 [shape=none, label="inventory", fontname = courier]
 ;;   }
 
-;;   q1 -> b1_head [label="partno, descr"]
-;;   q2 -> b2_head [label="partno, price"]
-;;   q3 -> b2_head [label="partno, price"]
-;;   q4 -> b4_head [label="price"]
+;;   q1 -> b1 [label="partno, descr" lhead=cluster_1, fontname = courier]
+;;   q2 -> b2 [label="partno, price" lhead=cluster_2, fontname = courier]
+;;   q3 -> b2 [label="partno, price" lhead=cluster_2, fontname = courier]
+;;   q4 -> b4 [label="price" lhead=cluster_4, fontname = courier]
 
-;;   q1 -> q1 [label="q1.descr = \"engine\"", dir=none]
-;;   q1 -> q2 [label="q1.partno = q2.partno", dir=none]
-;;   q2 -> q4 [label="q2.partno <= q4.partno", dir=none]
-;;   q2 -> q3 [label="q2.partno = q3.partno", dir=none]
+;;   q1 -> q1 [label="q1.descr = \"engine\"", dir=none, fontname = courier]
+;;   q1 -> q2 [label="q1.partno = q2.partno", dir=none, fontname = courier]
+;;   q2 -> q4 [label="q2.partno <= q4.partno", dir=none, fontname = courier]
+;;   q2 -> q3 [label="q2.partno = q3.partno", dir=none, fontname = courier]
 ;; }
