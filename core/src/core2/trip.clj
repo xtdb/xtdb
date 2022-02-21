@@ -264,7 +264,7 @@
     :bind-coll (let [binding (first binding)]
                  `[binding# ~form
                    :when (can-unify? binding# ~(lvar-ref binding))
-                   :let [~(mapv (comp logic-var-or-blank second) binding) binding#]])
+                   :let [~(logic-var-or-blank binding) binding#]])
     :bind-rel (let [binding (first binding)]
                 `[binding# ~form
                   :when (can-unify? binding# ~(tuple-binding-pattern binding))
