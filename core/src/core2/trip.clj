@@ -190,6 +190,24 @@
     :else
     (= x y)))
 
+(defn -sum [vals]
+  (reduce + vals))
+
+(defn -avg [vals]
+  (/ (reduce + vals) (count vals)))
+
+(defn -min [vals]
+  (reduce min vals))
+
+(defn -max [vals]
+  (reduce max vals))
+
+(defn -count [vals]
+  (count vals))
+
+(defn -count-distinct [vals]
+  (count (distinct vals)))
+
 ;; Query compiler
 
 (def ^:private rule-ctx-sym (gensym 'rule-ctx))
@@ -217,6 +235,12 @@
                   (reduce into))]
        ~@body)))
 
+(defmacro ^:private assert-bound [x]
+  `(let [x# ~x]
+     (if (= ::unbound x#)
+       (throw (IllegalArgumentException. (str "not bound: " '~x)))
+       x#)))
+
 (defn- logic-var-or-blank [x]
   (if (logic-var? x)
     x
@@ -224,6 +248,9 @@
 
 (defn- lvar-ref [x]
   (list 'lvar x))
+
+(defn- assert-bound-lvar [x]
+  (list 'assert-bound x))
 
 (defn- tuple-binding-pattern [binding]
   (vec (for [[tuple-binding-type tuple-binding] binding]
@@ -284,7 +311,7 @@
            :not-join-clause
            (let [{:keys [src-var clauses args]} clause]
              `[:when (let [~src-var ~(or src-var '$)]
-                       (do @~args)
+                       ~@(map assert-bound-lvar args)
                        (with-lvar-scope ~(vec args)
                          (empty? (for ~(clauses->clj clauses)
                                    true))))])
@@ -304,7 +331,7 @@
                  args (vec (concat bound-vars free-vars))]
              `[~args
                (let [~src-var ~(or src-var '$)]
-                 (do ~@bound-vars)
+                 ~@(map assert-bound-lvar bound-vars)
                  (binding [*allow-unbound?* true]
                    (with-lvar-scope ~args
                      (concat ~@(for [[clause-type clause] clauses]
@@ -329,7 +356,7 @@
                             {{:keys [bound-vars free-vars]} :rule-vars} :rule-head}] idx->rule-leg
                       :let [arg-vars (concat bound-vars free-vars)]]
                   `(~(rule-leg-name rule-name idx) [~'$ ~rule-ctx-sym ~@arg-vars]
-                    (do (assert (not-any? #{::unbound} [~@bound-vars]))
+                    (do ~@(map assert-bound-lvar bound-vars)
                         (for [_# [nil]
                               ~@(clauses->clj clauses)]
                           ~(vec arg-vars)))))
@@ -345,18 +372,16 @@
                x (cons k (get query k))]
            x))))
 
+(def ^:private aggregate-fn-name->built-in-fn-name
+  {'sum `-sum 'avg `-avg 'min `-min 'max `-max 'count `-count 'count-distinct `-count-distinct})
+
 (defn- aggregates->clj [find-spec]
   (for [[idx [find-elem-type find-elem]] (map-indexed vector find-spec)]
     (case find-elem-type
       :variable find-elem
-      :aggregate (case (:aggregate-fn-name find-elem)
-                   sum `(reduce + (map #(nth % ~idx) ~group-sym))
-                   avg  `(/ (reduce + (map #(nth % ~idx) ~group-sym))
-                            (count ~group-sym))
-                   min `(reduce min (map #(nth % ~idx) ~group-sym))
-                   max `(reduce max (map #(nth % ~idx) ~group-sym))
-                   count-distinct `(count (distinct (map #(nth % ~idx) ~group-sym)))
-                   count `(count ~group-sym)))))
+      :aggregate (let [{:keys [aggregate-fn-name fn-args]} find-elem]
+                   `(~(get aggregate-fn-name->built-in-fn-name aggregate-fn-name aggregate-fn-name)
+                     ~@(map second (butlast fn-args)) (map #(nth % ~idx) ~group-sym))))))
 
 (defn- query->clj [query rules]
   (let [query (->> (normalize-query query)
