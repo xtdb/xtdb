@@ -226,15 +226,6 @@
 (defmacro ^:private lvars-in-scope []
   (filterv logic-var? (keys &env)))
 
-(defmacro ^:private with-lvar-scope {:style/indent 1} [parent-lvars & body]
-  (let [parent-lvars (set parent-lvars)]
-    `(let [~@(->> (for [k (keys &env)
-                        :when (and (logic-var? k)
-                                   (not (contains? parent-lvars k)))]
-                    [k ::unbound])
-                  (reduce into))]
-       ~@body)))
-
 (defmacro ^:private assert-bound [x]
   `(let [x# ~x]
      (if (= ::unbound x#)
@@ -248,6 +239,10 @@
 
 (defn- lvar-ref [x]
   (list 'lvar x))
+
+(defn- assert-new-scope [parent-vars body]
+  (eval `(fn [~@parent-vars] ~@body))
+  body)
 
 (defn- assert-bound-lvar [x]
   (list 'assert-bound x))
@@ -295,31 +290,32 @@
 
                :pred-expr
                (let [[{:keys [pred args]}] clause]
-                 [:when (cons pred (map second args))])
+                 [:when (cons pred (map (comp assert-bound-lvar second) args))])
 
                :fn-expr
                (let [[{:keys [fn args]} binding] clause]
-                 (binding->clj binding (cons fn (map second args))))))
+                 (binding->clj binding (cons fn (map (comp assert-bound-lvar second) args))))))
 
            :not-clause
            (let [{:keys [src-var clauses]} clause]
-             `[:when (let [~src-var ~(or src-var '$)]
+             `[:when (let [~'$ ~(or src-var '$)]
                        (empty? (for ~(binding [*allow-unbound?* false]
                                        (clauses->clj clauses))
                                  true)))])
 
            :not-join-clause
            (let [{:keys [src-var clauses args]} clause]
-             `[:when (let [~src-var ~(or src-var '$)]
+             `[:when (let [~'$ ~(or src-var '$)]
                        ~@(map assert-bound-lvar args)
-                       (with-lvar-scope ~(vec args)
-                         (empty? (for ~(clauses->clj clauses)
-                                   true))))])
+                       ~(assert-new-scope
+                         (cons '$ args)
+                         `(empty? (for ~(clauses->clj clauses)
+                                    true))))])
 
            :or-clause
            (let [{:keys [src-var clauses]} clause]
              `[(lvars-in-scope)
-               (let [~src-var ~(or src-var '$)]
+               (let [~'$ ~(or src-var '$)]
                  (concat ~@(for [[clause-type clause] clauses]
                              `(for ~(case clause-type
                                       :clause (clauses->clj [clause])
@@ -330,15 +326,16 @@
            (let [{:keys [src-var clauses] {:keys [bound-vars free-vars]} :args} clause
                  args (vec (concat bound-vars free-vars))]
              `[~args
-               (let [~src-var ~(or src-var '$)]
+               (let [~'$ ~(or src-var '$)]
                  ~@(map assert-bound-lvar bound-vars)
                  (binding [*allow-unbound?* true]
-                   (with-lvar-scope ~args
-                     (concat ~@(for [[clause-type clause] clauses]
-                                 `(for ~(case clause-type
-                                          :clause (clauses->clj [clause])
-                                          :and (clauses->clj (:clauses clause)))
-                                    ~args))))))])))
+                   (concat ~@(for [[clause-type clause] clauses]
+                               (assert-new-scope
+                                (cons '$ args)
+                                `(for ~(case clause-type
+                                         :clause (clauses->clj [clause])
+                                         :and (clauses->clj (:clauses clause)))
+                                   ~args))))))])))
        (reduce into [])))
 
 (defn- rule-leg-name [rule-name idx]
