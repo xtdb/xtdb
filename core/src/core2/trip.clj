@@ -404,14 +404,12 @@
                           `[~in (nth ~inputs-sym ~idx)])
                         (reduce into []))
                    `[~'$ (nth ~inputs-sym 0)])
-        inputs (if-let [inputs (:inputs inputs)]
+        inputs (when-let [inputs (:inputs inputs)]
                  (->> (for [[idx [in-type in]] (map-indexed vector inputs)
                             :when (= :binding in-type)]
                         (binding->clj in `(nth ~inputs-sym ~idx)))
-                      (reduce into []))
-                 `[:let [~'$ (nth ~inputs-sym 0)]])
-        [return-map-type return-map] return-map
-        tuple-keys (when-let [symbols (:symbols return-map)]
+                      (reduce into [])))
+        tuple-keys (when-let [[return-map-type {:keys [symbols]}] return-map]
                      (not-empty (map (case return-map-type
                                        :return-keys (comp keyword name)
                                        :return-syms identity
