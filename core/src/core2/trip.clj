@@ -28,12 +28,6 @@
                              :inputs (s/? ::inputs)
                              :where-clauses (s/? ::where-clauses))))
 
-(s/conform ::query '[:find ?b ?q ?t
-                     :in $ ?b
-                     :where
-                     [?b :qgm.box.body/quantifiers ?q]
-                     [?q :qgm.quantifier/type ?t]])
-
 (s/def ::find-spec (s/cat :find #{:find}
                           :find-spec (s/alt :find-rel ::find-rel
                                             :find-coll ::find-coll
@@ -241,10 +235,10 @@
   (case binding-type
     :bind-scalar `[:let [binding# ~form]
                    :when (can-unify? binding# ~(lvar-ref binding))
-                   :let [~binding binding#]]
+                   :let [~(logic-var-or-blank binding) binding#]]
     :bind-tuple `[:let [binding# ~form]
                   :when (can-unify? binding# ~(tuple-binding-pattern binding))
-                  :let [~binding binding#]]
+                  :let [~(mapv logic-var-or-blank binding) binding#]]
     :bind-coll (let [binding (first binding)]
                  `[binding# ~form
                    :when (can-unify? binding# ~(lvar-ref binding))
