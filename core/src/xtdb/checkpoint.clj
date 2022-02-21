@@ -147,9 +147,10 @@
       (try
         (sync-path cp-path to-path)
         (catch Exception e
-          (throw (ex-info e "incomplete checkpoint restore"
+          (throw (ex-info "incomplete checkpoint restore"
                           {:cp-path cp-path
-                           :local-dir to-path}))))))
+                           :local-dir to-path}
+                          e))))))
 
   (upload-checkpoint [_ dir {:keys [tx ::cp-format]}]
     (let [from-path (.toPath ^File dir)
