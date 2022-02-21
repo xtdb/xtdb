@@ -686,11 +686,11 @@
   (= #{[6 1 3 4 2]}
      (q '[:find (sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)
           :with ?monster
-          :where [(identity [["Cerberus" 3]
-                             ["Medusa" 1]
-                             ["Cyclops" 1]
-                             ["Chimera" 1]]) [[?monster ?heads]]]]
-        {}))
+          :in [[?monster ?heads]]]
+        [["Cerberus" 3]
+         ["Medusa" 1]
+         ["Cyclops" 1]
+         ["Chimera" 1]]))
 
   (= 55
      (q '[:find ?f .
