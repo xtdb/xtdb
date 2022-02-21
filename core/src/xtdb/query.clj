@@ -1221,6 +1221,21 @@
                   (into #{} (mapcat (collect-vars type->clauses))
                         [:e-vars :range-vars :not-vars :or-vars :pred-arg-vars])))
 
+(defn- join-order-var-score [{:keys [bound-vars ^double score ^double cardinality]} var-clauses]
+  (let [clauses (for [{:keys [other-var ^double cardinality this-per-other]} var-clauses]
+                  {:cardinality cardinality
+                   :selectivity (/ (double (if (contains? bound-vars other-var)
+                                             this-per-other
+                                             cardinality))
+                                   cardinality)})
+
+        ^double intersection (->> clauses (map :cardinality) (apply min))
+        ^double selectivity (->> clauses (map :selectivity) (apply *))
+        cardinality (* cardinality intersection selectivity)]
+
+    {:score (+ score cardinality)
+     :cardinality cardinality}))
+
 (defn- triple-join-order [{triple-clauses :triple, :as type->clauses} in-var-cardinalities stats]
   (let [join-vars (->join-vars triple-clauses)
         start-vars (single-value-vars type->clauses join-vars in-var-cardinalities)
@@ -1255,40 +1270,26 @@
                                     (into {}))
 
         selected-order
-        (letfn [(step-var [{:keys [bound-vars join-order ^double score ^double cardinality]} var-to-join]
-                  (let [clauses (for [{:keys [other-var ^double cardinality this-per-other]} (get var->clauses var-to-join)]
-                                  {:cardinality cardinality
-                                   :selectivity (/ (double (if (contains? bound-vars other-var)
-                                                             this-per-other
-                                                             cardinality))
-                                                   cardinality)})
+        (->> (for [join-var-order (or (seq (permutations join-vars)) [[]])]
+               (->> join-var-order
+                    (reduce (fn [acc join-var]
+                              (->> (for [vars-to-join (permutations (join-var->vars-to-bind join-var))]
+                                     (reduce (fn [{:keys [bound-vars join-order] :as acc} var-to-join]
+                                               (into {:bound-vars (conj bound-vars var-to-join)
+                                                      :join-order (conj join-order var-to-join)}
+                                                     (join-order-var-score acc (get var->clauses var-to-join))))
+                                             acc
+                                             vars-to-join))
+                                   (sort-by :score)
+                                   first))
+                            {:bound-vars start-vars
+                             :join-order (vec start-vars)
+                             :score 0.0
+                             :cardinality 1.0})))
 
-                        ^double intersection (->> clauses (map :cardinality) (apply min))
-                        ^double selectivity (->> clauses (map :selectivity) (apply *))
-                        cardinality (* cardinality intersection selectivity)]
-
-                    {:bound-vars (conj bound-vars var-to-join)
-                     :join-order (conj join-order var-to-join)
-                     :score (+ score cardinality)
-                     :cardinality cardinality}))
-
-                (step-join-var [acc join-var]
-                  (->> (for [vars-to-join (permutations (join-var->vars-to-bind join-var))]
-                         (reduce step-var acc vars-to-join))
-                       (sort-by :score)
-                       first))]
-
-          (->> (for [join-var-order (or (seq (permutations join-vars)) [[]])]
-                 (->> join-var-order
-                      (reduce step-join-var
-                              {:bound-vars start-vars
-                               :join-order (vec start-vars)
-                               :score 0.0
-                               :cardinality 1.0})))
-
-               (sort-by :score)
-               first
-               :join-order))]
+             (sort-by :score)
+             first
+             :join-order)]
 
     {:triple-clause-join-order selected-order
      :project-only-leaf-vars project-only-leaf-vars}))
