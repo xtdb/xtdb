@@ -5,6 +5,8 @@
 
 ;; Internal triple store.
 
+;; TODO: unification of same vars inside a binding isn't dealt with.
+
 (defprotocol Db
   (-transact [this tx-ops])
   (-datoms [this index components]))
