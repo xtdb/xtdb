@@ -181,17 +181,6 @@
         x (apply leg-fn $ (conj rule-ctx rule-leg-key) args)]
     x))
 
-(defn can-unify? [x y]
-  (cond
-    (or (= ::unbound x) (= ::unbound y))
-    true
-
-    (and (vector? x) (vector? y))
-    (every? true? (map can-unify? x y))
-
-    :else
-    (= x y)))
-
 (defn -sum [vals]
   (reduce + vals))
 
@@ -213,7 +202,6 @@
 ;; Query compiler
 
 (def ^:private rule-ctx-sym (gensym 'rule-ctx))
-(def ^:private inputs-sym (gensym 'inputs))
 (def ^:private group-sym (gensym 'group))
 
 (def ^:private ^:dynamic *allow-unbound?* true)
@@ -234,10 +222,27 @@
        (throw (IllegalArgumentException. (str "not bound: " '~x)))
        x#)))
 
-(defn- logic-var-or-blank [x]
-  (if (logic-var? x)
-    x
-    '_))
+(defmacro ^:private can-unify? [binding pattern]
+  (cond (blank-var? pattern)
+        true
+
+        (contains? &env pattern)
+        `(let [pattern# ~pattern]
+           (or (and *allow-unbound?* (= ::unbound pattern#)) (= ~binding pattern#)))
+
+        (vector? pattern)
+        (let [tmp-sym (gensym 'tmp)]
+          `(let [~tmp-sym ~binding]
+             (and (vector? ~tmp-sym)
+                  ~@(for [[_ unify-group] (group-by second (map-indexed vector pattern))
+                          :when (> (count unify-group) 1)]
+                      `(= ~@(for [[idx] unify-group]
+                              `(nth ~tmp-sym ~idx))))
+                  ~@(for [[idx pattern] (map-indexed vector pattern)]
+                      `(can-unify? (nth ~tmp-sym ~idx) ~pattern)))))
+
+        :else
+        true))
 
 (defn- lvar-ref [x]
   (list 'lvar x))
@@ -258,19 +263,26 @@
 (defn- binding->clj [[binding-type binding] form]
   (case binding-type
     :bind-scalar `[:let [binding# ~form]
-                   :when (can-unify? binding# ~(lvar-ref binding))
-                   :let [~(logic-var-or-blank binding) binding#]]
-    :bind-tuple `[:let [binding# ~form]
-                  :when (can-unify? binding# ~(tuple-binding-pattern binding))
-                  :let [~(mapv logic-var-or-blank binding) binding#]]
+                   :when (can-unify? binding# ~binding)
+                   :let [~binding binding#]]
+    :bind-tuple (let [binding (mapv second binding)]
+                  `[:let [binding# ~form]
+                    :when (can-unify? binding# ~binding)
+                    :let [~binding binding#]])
     :bind-coll (let [binding (first binding)]
                  `[binding# ~form
-                   :when (can-unify? binding# ~(lvar-ref binding))
-                   :let [~(logic-var-or-blank binding) binding#]])
-    :bind-rel (let [binding (first binding)]
+                   :when (can-unify? binding# ~binding)
+                   :let [~binding binding#]])
+    :bind-rel (let [binding (mapv second (first binding))]
                 `[binding# ~form
-                  :when (can-unify? binding# ~(tuple-binding-pattern binding))
-                  :let [~(mapv (comp logic-var-or-blank second) binding) binding#]])))
+                  :when (can-unify? binding# ~binding)
+                  :let [~binding binding#]])))
+
+(defn- pattern->bind-rel [pattern]
+  [:bind-rel [(vec (for [pattern pattern]
+                     (if (logic-var? pattern)
+                       [:variable pattern]
+                       [:blank-var '_])))]])
 
 (defn- clauses->clj [clauses]
   (->> (for [[clause-type clause] clauses]
@@ -281,14 +293,16 @@
                :data-pattern
                (let [{:keys [src-var pattern]} clause
                      [e a v] (map second pattern)]
-                 `[~(mapv logic-var-or-blank [e a v])
-                   (data-pattern ~(or src-var '$) ~@(map lvar-ref [e a v]))])
+                 (binding->clj
+                  (pattern->bind-rel [e a v])
+                  `(data-pattern ~(or src-var '$) ~@(map lvar-ref [e a v]))))
 
                :rule-expr
                (let [{:keys [src-var rule-name args] :as rule} clause
                      args (map second args)]
-                 `[~(mapv logic-var-or-blank args)
-                   (~rule-name ~(or src-var '$) ~rule-ctx-sym ~@(map lvar-ref args))])
+                 (binding->clj
+                  (pattern->bind-rel args)
+                  `(~rule-name ~(or src-var '$) ~rule-ctx-sym ~@(map lvar-ref args))))
 
                :pred-expr
                (let [[{:keys [pred args]}] clause]
@@ -326,18 +340,19 @@
 
            :or-join-clause
            (let [{:keys [src-var clauses] {:keys [bound-vars free-vars]} :args} clause
-                 args (vec (concat bound-vars free-vars))]
-             `[~args
-               (let [~'$ ~(or src-var '$)]
+                 args (vec free-vars)]
+             (binding->clj
+              (pattern->bind-rel args)
+              `(let [~'$ ~(or src-var '$)]
                  ~@(map assert-bound-lvar bound-vars)
                  (concat ~@(binding [*allow-unbound?* true]
                              (for [[clause-type clause] clauses]
                                (assert-new-scope
-                                (cons '$ args)
+                                (cons '$ (concat bound-vars free-vars))
                                 `(for ~(case clause-type
                                          :clause (clauses->clj [clause])
                                          :and (clauses->clj (:clauses clause)))
-                                   ~args))))))])))
+                                   ~args))))))))))
        (reduce into [])))
 
 (defn- rule-leg-name [rule-name idx]
@@ -400,6 +415,7 @@
                               (case find-elem-type
                                 :variable find-elem
                                 :aggregate (second (last (:fn-args find-elem))))))
+        inputs-sym (gensym 'inputs)
         src-vars (if-let [inputs (:inputs inputs)]
                    (->> (for [[idx [in-type in]] (map-indexed vector inputs)
                               :when (= :src-var in-type)]
@@ -693,6 +709,13 @@
          ["Medusa" 1]
          ["Cyclops" 1]
          ["Chimera" 1]]))
+
+  (= #{[1] [5]}
+     (q '[:find ?x
+          :in [[?x ?x]]]
+        [[1 1]
+         [1 2]
+         [5 5]]))
 
   (= 55
      (q '[:find ?f .
