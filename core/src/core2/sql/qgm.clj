@@ -60,6 +60,7 @@
   subgraph cluster_%s {
     label=\"BASE (%s)\"
     style=dashed
+    rank=min
     %s [shape=none, label=\"%s\", fontname=courier]
   }" (:db/id box) (:db/id box) (:db/id box) (:qgm.box.base-table/name box))
     :qgm.box.type/select
@@ -67,32 +68,30 @@
   subgraph cluster_%s {
     label=\"SELECT (%s)\"
     style=dashed
-    {
-      rank=source
-      %s [label = \"%s\", shape=record, fontname=courier]
-    }
-    {
-      rank=same
-      %s
-    }
+    rank=max
+    %s [label = \"%s\", shape=record, fontname=courier, penwidth=2]
+    %s
   }"
             (:db/id box)
             (:db/id box)
             (:db/id box)
-            (format "{ HEAD: DISTINCT=%s\\l | { { { %s\\l } | { %s\\l } } } | BODY: DISTINCT=%s\\l }"
-                    (:qgm.box.head/distinct? box)
+            (format "{ <head> HEAD: distinct=%s\\l | { { { %s\\l } | { %s\\l } } } | <body> BODY: distinct=%s\\l }"
+                    (str/upper-case (:qgm.box.head/distinct? box))
                     (str/join "\\l|" (:qgm.box.head/columns box))
                     (str/join "\\l|" (:qgm.box.body/columns box))
                     (str/upper-case (name (:qgm.box.body/distinct box))))
             (let [id->q (zipmap (map :db/id qs) qs)]
-              (str/join "\n      "
+              (str/join "\n    "
                         (for [q (sort (:qgm.box.body/quantifiers box))]
                           (format "%s [label=\"%s(%s)\", shape=circle, style=filled, margin=0, fontname=courier]"
                                   q q (str/upper-case (first (name (get-in id->q [q :qgm.quantifier/type] "F")))))))))))
 
 (defn- quantifier->dot [q]
-  (format "%s -> %s [label=\"%s\" lhead=cluster_%s, fontname=courier]"
-          (:db/id q) (:qgm.quantifier/ranges-over q) (str/join ", " (:qgm.quantifier/columns q)) (:qgm.quantifier/ranges-over q)))
+  (format "%s -> %s:head [label=\"%s\", lhead=cluster_%s, fontname=courier]"
+          (:db/id q)
+          (:qgm.quantifier/ranges-over q)
+          (str/join ", " (:qgm.quantifier/columns q))
+          (:qgm.quantifier/ranges-over q)))
 
 (defn- predicate->dot [p]
   (format "%s -> %s [label=\"%s\", dir=none, fontname=courier, color=grey]"
@@ -106,6 +105,8 @@
 digraph {
   compound=true
   fontname=courier
+  newrank=true
+  penwidth=2
   %s
 
   %s
