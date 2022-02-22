@@ -52,8 +52,7 @@
 (s/def :qgm/node (s/or :box :qgm/box :quantifier :qgm/quantifier :predicate :qgm/predicate))
 (s/def :qgm/graph (s/coll-of :qgm/node :kind set?))
 
-;; GraphViz:
-;; https://dreampuf.github.io/GraphvizOnline/
+;; GraphViz
 
 (defn- box->dot [box qs]
   (case (:qgm.box/type box)
@@ -133,7 +132,12 @@ digraph {
   (let [{:keys [exit out err]} (sh/sh "dot" "-Tsvg" :in dot)]
     (if (zero? exit)
       out
-      (throw (RuntimeException. (str err))))))
+      (throw (IllegalArgumentException. (str err))))))
+
+(defn- dot->file [dot format file]
+  (let [{:keys [exit out err]} (sh/sh "dot" (str "-T" format) "-o" file :in dot)]
+    (when-not (zero? exit)
+      (throw (IllegalArgumentException. (str err))))))
 
 ;; https://dreampuf.github.io/GraphvizOnline/#
 ;; http://magjac.com/graphviz-visual-editor/?dot=
@@ -148,61 +152,62 @@ digraph {
 
 (comment
 
-  (spit "target/qgm.svg"
-   (dot->svg
-        (qgm->dot
-         "
+  (dot->file
+   (qgm->dot
+    "
 SELECT DISTINCT ql.partno, ql .descr, q2.suppno
 FROM inventory ql, quotations q2
 WHERE ql .partno = qz.partno AND ql .descr= \"engine\"
   AND q2.price <= ALL
       (SELECT q3.price FROM quotations q3
        WHERE q2.partno=q3.partno)"
-         '[{:db/id b1
-            :qgm.box/type :qgm.box.type/base-table
-            :qgm.box.base-table/name inventory}
-           {:db/id b2
-            :qgm.box/type :qgm.box.type/base-table
-            :qgm.box.base-table/name quotations}
-           {:db/id b3
-            :qgm.box/type :qgm.box.type/select
-            :qgm.box.head/distinct? true
-            :qgm.box.head/columns [partno descr suppno]
-            :qgm.box.body/columns [q1.partno q1.descr q2.suppno]
-            :qgm.box.body/distinct :qgm.box.body.distinct/enforce
-            :qgm.box.body/quantifiers #{q1 q2 q4}}
-           {:db/id b4
-            :qgm.box/type :qgm.box.type/select
-            :qgm.box.head/distinct? false
-            :qgm.box.head/columns [price]
-            :qgm.box.body/columns [q3.price]
-            :qgm.box.body/distinct :qgm.box.body.distinct/permit
-            :qgm.box.body/quantifiers #{q3}}]
-         '[{:db/id q1
-            :qgm.quantifier/type :qgm.quantifier.type/foreach
-            :qgm.quantifier/columns [partno descr]
-            :qgm.quantifier/ranges-over b1}
-           {:db/id q2
-            :qgm.quantifier/type :qgm.quantifier.type/foreach
-            :qgm.quantifier/columns [partno price]
-            :qgm.quantifier/ranges-over b2}
-           {:db/id q3
-            :qgm.quantifaier/type :qgm.quantifier.type/foreach
-            :qgm.quantifier/columns [partno price]
-            :qgm.quantifier/ranges-over b2}
-           {:db/id q4
-            :qgm.quantifier/type :qgm.quantifier.type/all
-            :qgm.quantifier/columns [price]
-            :qgm.quantifier/ranges-over b4}]
-         '[{:db/id p1
-            :qgm.predicate/expression (= q1.descr "engine")
-            :qgm.predicate/quantifiers #{q1}}
-           {:db/id p2
-            :qgm.predicate/expression (= q1.partno q2.partno)
-            :qgm.predicate/quantifiers #{q1 q2}}
-           {:db/id p3
-            :qgm.predicate/expression (<= q2.partno q4.partno)
-            :qgm.predicate/quantifiers #{q2 q4}}
-           {:db/id p4
-            :qgm.predicate/expression (= q2.partno q3.partno)
-            :qgm.predicate/quantifiers #{q2 q3}}]))))
+    '[{:db/id b1
+       :qgm.box/type :qgm.box.type/base-table
+       :qgm.box.base-table/name inventory}
+      {:db/id b2
+       :qgm.box/type :qgm.box.type/base-table
+       :qgm.box.base-table/name quotations}
+      {:db/id b3
+       :qgm.box/type :qgm.box.type/select
+       :qgm.box.head/distinct? true
+       :qgm.box.head/columns [partno descr suppno]
+       :qgm.box.body/columns [q1.partno q1.descr q2.suppno]
+       :qgm.box.body/distinct :qgm.box.body.distinct/enforce
+       :qgm.box.body/quantifiers #{q1 q2 q4}}
+      {:db/id b4
+       :qgm.box/type :qgm.box.type/select
+       :qgm.box.head/distinct? false
+       :qgm.box.head/columns [price]
+       :qgm.box.body/columns [q3.price]
+       :qgm.box.body/distinct :qgm.box.body.distinct/permit
+       :qgm.box.body/quantifiers #{q3}}]
+    '[{:db/id q1
+       :qgm.quantifier/type :qgm.quantifier.type/foreach
+       :qgm.quantifier/columns [partno descr]
+       :qgm.quantifier/ranges-over b1}
+      {:db/id q2
+       :qgm.quantifier/type :qgm.quantifier.type/foreach
+       :qgm.quantifier/columns [partno price]
+       :qgm.quantifier/ranges-over b2}
+      {:db/id q3
+       :qgm.quantifaier/type :qgm.quantifier.type/foreach
+       :qgm.quantifier/columns [partno price]
+       :qgm.quantifier/ranges-over b2}
+      {:db/id q4
+       :qgm.quantifier/type :qgm.quantifier.type/all
+       :qgm.quantifier/columns [price]
+       :qgm.quantifier/ranges-over b4}]
+    '[{:db/id p1
+       :qgm.predicate/expression (= q1.descr "engine")
+       :qgm.predicate/quantifiers #{q1}}
+      {:db/id p2
+       :qgm.predicate/expression (= q1.partno q2.partno)
+       :qgm.predicate/quantifiers #{q1 q2}}
+      {:db/id p3
+       :qgm.predicate/expression (<= q2.partno q4.partno)
+       :qgm.predicate/quantifiers #{q2 q4}}
+      {:db/id p4
+       :qgm.predicate/expression (= q2.partno q3.partno)
+       :qgm.predicate/quantifiers #{q2 q3}}])
+   "png"
+   "target/qgm.png"))
