@@ -204,7 +204,7 @@ WHERE ql .partno = qz.partno AND ql .descr= \"engine\"
        :qgm.predicate/expression (= q1.partno q2.partno)
        :qgm.predicate/quantifiers #{q1 q2}}
       {:db/id p3
-       :qgm.predicate/expression (<= q2.partno q4.partno)
+       :qgm.predicate/expression (<= q2.price q4.price)
        :qgm.predicate/quantifiers #{q2 q4}}
       {:db/id p4
        :qgm.predicate/expression (= q2.partno q3.partno)
