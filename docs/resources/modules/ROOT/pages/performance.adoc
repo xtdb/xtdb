@@ -16,7 +16,7 @@ image::bench-dash-query.png[Query benchmarks dashboard example,align="center"]
 
 image::bench-dash-ingest.png[Ingest benchmarks dashboard example,align="center"]
 
-For an example of independent benchmarking by the community, see the https://odpi.github.io/egeria-connector-crux/cts/testing-overview/["XTDB Connector" performance analysis] by the Linux Foundation's Egeria project, which compares XTDB against an existing JanusGraph Connector.
+For an example of independent benchmarking by the community, see the https://egeria-project.org/connectors/repository/xtdb/performance/["XTDB Connector" performance analysis] by the Linux Foundation's Egeria project, which compares XTDB against an existing JanusGraph Connector.
 
 [#tpch]
 == TPC-H
