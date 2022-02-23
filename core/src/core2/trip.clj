@@ -5,9 +5,6 @@
 
 ;; Internal triple store.
 
-;; TODO: fix 'or', its way of attempting to use &env to create the
-;; binding is broken.
-
 (defprotocol Db
   (-transact [this tx-ops])
   (-datoms [this index components]))
@@ -214,8 +211,9 @@
     x
     ::unbound))
 
-(defmacro ^:private lvars-in-scope []
-  (filterv logic-var? (keys &env)))
+(defmacro ^:private lvars-in-scope-env []
+  (let [vars (filterv logic-var? (keys &env))]
+    `(zipmap '~vars ~vars)))
 
 (defmacro ^:private assert-bound [x]
   `(let [x# ~x]
@@ -330,14 +328,15 @@
                                     true))))])
 
            :or-clause
-           (let [{:keys [src-var clauses]} clause]
-             `[(lvars-in-scope)
+           (let [{:keys [src-var clauses]} clause
+                 args (filterv logic-var? (distinct (flatten clause)))]
+             `[{:syms ~args :or ~(zipmap args (repeat ::unbound))}
                (let [~'$ ~(or src-var '$)]
                  (concat ~@(for [[clause-type clause] clauses]
                              `(for ~(case clause-type
                                       :clause (clauses->clj [clause])
                                       :and (clauses->clj (:clauses clause)))
-                                (lvars-in-scope)))))])
+                                (lvars-in-scope-env)))))])
 
            :or-join-clause
            (let [{:keys [src-var clauses] {:keys [bound-vars free-vars]} :args} clause
