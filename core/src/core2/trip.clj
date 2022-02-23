@@ -299,9 +299,10 @@
                      [bound-args free-args] (-> name->rules
                                                 (get-in [rule-name 0 :rule-head :rule-vars :bound-vars])
                                                 (count)
-                                                (split-at args))]
+                                                (split-at args))
+                     out-args (vec free-args)]
                  (binding->clj
-                  (pattern->bind-rel args)
+                  (pattern->bind-rel out-args)
                   `(~rule-name ~(or src-var '$) ~rule-ctx-sym ~@(map assert-bound-lvar bound-args) ~@(map lvar-ref free-args))))
 
                :pred-expr
@@ -330,8 +331,8 @@
 
            :or-clause
            (let [{:keys [src-var clauses]} clause
-                 args (filterv logic-var? (distinct (flatten clause)))]
-             `[{:syms ~args :or ~(zipmap args (repeat ::unbound))}
+                 out-args (filterv logic-var? (distinct (flatten clause)))]
+             `[{:syms ~out-args :or ~(zipmap out-args (repeat ::unbound))}
                (let [~'$ ~(or src-var '$)]
                  (concat ~@(for [[clause-type clause] clauses]
                              `(for ~(case clause-type
@@ -341,9 +342,9 @@
 
            :or-join-clause
            (let [{:keys [src-var clauses] {:keys [bound-vars free-vars]} :args} clause
-                 args (vec free-vars)]
+                 out-args (vec free-vars)]
              (binding->clj
-              (pattern->bind-rel args)
+              (pattern->bind-rel out-args)
               `(let [~'$ ~(or src-var '$)]
                  ~@(map assert-bound-lvar bound-vars)
                  (concat ~@(binding [*allow-unbound?* true]
@@ -353,7 +354,7 @@
                                 `(for ~(case clause-type
                                          :clause (clauses->clj rule-ctx-sym name->rules [clause])
                                          :and (clauses->clj rule-ctx-sym name->rules (:clauses clause)))
-                                   ~args))))))))))
+                                   ~out-args))))))))))
        (reduce into [])))
 
 (defn- rule-leg-name [rule-name idx]
@@ -370,7 +371,7 @@
                   (do ~@(map assert-bound-lvar bound-vars)
                       (for [_# [nil]
                             ~@(clauses->clj rule-ctx-sym name->rules clauses)]
-                        ~(vec arg-vars)))))
+                        ~(vec free-vars)))))
               (cons `(~rule-name [~'$ rule-ctx# & args#]
                       (rule ~'$ rule-ctx# ~rule-leg-refs args#)))))
        (reduce into [])))
