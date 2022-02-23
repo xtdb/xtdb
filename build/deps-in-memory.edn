@@ -8,4 +8,9 @@
         ;; XTDB
         com.xtdb/xtdb-core {:mvn/version "xtdb-git-version"}
         com.xtdb/xtdb-http-server {:mvn/version "xtdb-git-version"}
-        com.xtdb/xtdb-sql {:mvn/version "xtdb-git-version"}}}
+        com.xtdb/xtdb-sql {:mvn/version "xtdb-git-version"}}
+
+ :aliases {:uberjar {:deps {io.github.seancorfield/build-clj {:git/tag "v0.6.7" :git/sha "22c2d09"}}
+                     :exec-fn org.corfield.build/uber
+                     :exec-args {:main xtdb.main
+                                 :ns-compile [xtdb.main]}}}}
