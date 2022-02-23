@@ -257,8 +257,7 @@
       (loop [bind-groups (partition-all 2 seq-exprs)
              acc []]
         (if (empty? bind-groups)
-          `(for [_# [nil]
-                 ~@(apply concat acc)]
+          `(for [~@(apply concat acc)]
              ~body-expr)
           (if-let [bind-group (some (fn [bind-group]
                                       (when (compiles? (keys &env)
