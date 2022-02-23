@@ -96,13 +96,14 @@
   (tpch/load-docs! (dev/xtdb-node) 0.05)
 
   (time
-   (count (xt/q (xt/db (xtdb-node))
-                (-> tpch/q5
-                    (assoc :timeout 120000)))))
+   (count
+    (tpch/run-query (xt/db (xtdb-node))
+                    (-> tpch/q5
+                        (assoc :timeout 120000)))))
 
   (time
    (doseq [q tpch/tpch-queries]
      (time
-      (xt/q (xt/db (xtdb-node))
-            (-> q
-                (assoc :timeout 120000)))))))
+      (tpch/run-query (xt/db (xtdb-node))
+                      (-> q
+                          (assoc :timeout 120000)))))))

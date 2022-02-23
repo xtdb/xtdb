@@ -5,7 +5,8 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.fixtures :as fix :refer [*api*]])
+            [xtdb.fixtures :as fix :refer [*api*]]
+            [xtdb.query :as q])
   (:import (io.airlift.tpch GenerateUtils TpchColumn TpchColumnType$Base TpchEntity TpchTable)
            (java.util Date)))
 
@@ -94,6 +95,15 @@
 (defn load-docs! [node & args]
   (xt/await-tx node (apply submit-docs! node args)))
 
+(defn- with-in-args [q in-args]
+ (-> q (vary-meta assoc ::in-args in-args)))
+
+(defn run-query [db q]
+  (apply xt/q db q (::in-args (meta q))))
+
+(defn query-plan-for [db q]
+  (q/query-plan-for db q (::in-args (meta q))))
+
 ;; NOTE: timings below are hot/cold, on my machine (Ryzen 7 5800X, 16GB RAM)
 ;; SF 0.05, against commit `d4437676`, 2022-02-04
 ;; they're not particularly scientifically measured, so worth not paying too much attention
@@ -169,23 +179,25 @@
 ;; "Elapsed time: 1355.255634 msecs"
 ;; "Elapsed time: 764.763165 msecs"
 (def q3
-  '{:find [o
-           (sum (* l_extendedprice (- 1 l_discount)))
-           o_orderdate
-           o_shippriority]
-    :where [[c :c_mktsegment "BUILDING"]
-            [o :o_custkey c]
-            [o :o_shippriority o_shippriority]
-            [o :o_orderdate o_orderdate]
-            [(< o_orderdate #inst "1995-03-15")]
-            [l :l_orderkey o]
-            [l :l_discount l_discount]
-            [l :l_extendedprice l_extendedprice]
-            [l :l_shipdate l_shipdate]
-            [(> l_shipdate #inst "1995-03-15")]]
-    :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]
-               [o_orderdate :asc]]
-    :limit 10})
+  (-> '{:find [o
+               (sum (* l_extendedprice (- 1 l_discount)))
+               o_orderdate
+               o_shippriority]
+        :in [?segment]
+        :where [[c :c_mktsegment ?segment]
+                [o :o_custkey c]
+                [o :o_shippriority o_shippriority]
+                [o :o_orderdate o_orderdate]
+                [(< o_orderdate #inst "1995-03-15")]
+                [l :l_orderkey o]
+                [l :l_discount l_discount]
+                [l :l_extendedprice l_extendedprice]
+                [l :l_shipdate l_shipdate]
+                [(> l_shipdate #inst "1995-03-15")]]
+        :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]
+                   [o_orderdate :asc]]
+        :limit 10}
+      (with-in-args ["BUILDING"])))
 
 ;; "Elapsed time: 621.653381 msecs"
 ;; "Elapsed time: 262.517773 msecs"
@@ -206,21 +218,23 @@
 ;; "Elapsed time: 3365.050276 msecs"
 ;; "Elapsed time: 1927.300129 msecs"
 (def q5
-  '{:find [n_name (sum (* l_extendedprice (- 1 l_discount)))]
-    :where [[o :o_custkey c]
-            [l :l_orderkey o]
-            [l :l_suppkey s]
-            [s :s_nationkey n]
-            [c :c_nationkey n]
-            [n :n_name n_name]
-            [n :n_regionkey r]
-            [r :r_name "ASIA"]
-            [l :l_extendedprice l_extendedprice]
-            [l :l_discount l_discount]
-            [o :o_orderdate o_orderdate]
-            [(>= o_orderdate #inst "1994-01-01")]
-            [(< o_orderdate #inst "1995-01-01")]]
-    :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]})
+  (-> '{:find [n_name (sum (* l_extendedprice (- 1 l_discount)))]
+        :in [?region]
+        :where [[o :o_custkey c]
+                [l :l_orderkey o]
+                [l :l_suppkey s]
+                [s :s_nationkey n]
+                [c :c_nationkey n]
+                [n :n_name n_name]
+                [n :n_regionkey r]
+                [r :r_name ?region]
+                [l :l_extendedprice l_extendedprice]
+                [l :l_discount l_discount]
+                [o :o_orderdate o_orderdate]
+                [(>= o_orderdate #inst "1994-01-01")]
+                [(< o_orderdate #inst "1995-01-01")]]
+        :order-by [[(sum (* l_extendedprice (- 1 l_discount))) :desc]]}
+      (with-in-args ["ASIA"])))
 
 ;; "Elapsed time: 995.197119 msecs"
 ;; "Elapsed time: 963.57298 msecs"

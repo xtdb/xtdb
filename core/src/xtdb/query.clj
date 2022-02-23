@@ -1182,7 +1182,6 @@
 (defn- triple-join-order [type->clauses in-var-cardinalities stats]
   ;; TODO make more use of in-var-cardinalities
   (let [[type->clauses project-only-leaf-vars] (expand-leaf-preds type->clauses (set (keys in-var-cardinalities)) stats)
-
         {triple-clauses :triple, range-clauses :range, pred-clauses :pred} type->clauses
 
         collected-vars (collect-vars type->clauses)
@@ -1199,6 +1198,17 @@
                                      sym [sym sym-a sym-b]
                                      :when (logic-var? sym)]
                                  sym))
+
+        var->clauses (merge-with into
+                                 (group-by :v triple-clauses)
+                                 (group-by :e triple-clauses))
+
+        literal-vars (->> (keys var->clauses)
+                          (into #{} (filter literal?)))
+
+        single-value-in-vars (->> in-var-cardinalities
+                                  (into #{} (comp (filter #(= (double (val %)) 1.0))
+                                                  (map key))))
 
         cardinality-for-var (fn [var cardinality]
                               (cond-> (double (cond
@@ -1222,13 +1232,13 @@
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
                              (let [{:keys [self-join? ignore-v?]} (meta clause)
                                    es (double (cardinality-for-var e (cond->> (double (db/eid-cardinality stats a))
-                                                                       (literal? v) (/ 1.0))))
+                                                                       (or (literal? v) (single-value-in-vars v)) (/ 1.0))))
                                    vs (cond
                                         ignore-v? Double/MAX_VALUE
                                         self-join? (Math/nextUp es)
                                         :else
                                         (cardinality-for-var v (cond->> (double (db/value-cardinality stats a))
-                                                                 (literal? e) (/ 1.0))))]
+                                                                 (or (literal? e) (single-value-in-vars e)) (/ 1.0))))]
                                (-> acc
                                    (update v (fnil min Double/MAX_VALUE) vs)
                                    (update e (fnil min Double/MAX_VALUE) es))))
@@ -1236,16 +1246,13 @@
         var->cardinality (doto (reduce update-cardinality {} triple-clauses)
                            (->> (log/debug :triple-joins-var->cardinality)))
 
-        var->clauses (merge-with into
-                                 (group-by :v triple-clauses)
-                                 (group-by :e triple-clauses))
+        start-vars (set/union literal-vars single-value-in-vars)
 
-        triple-clause-var-order (loop [vars (filter logic-var? (map key (sort-by val var->cardinality)))
-                                       join-order (->> (keys var->clauses) (filter literal?) set vec)
+        triple-clause-var-order (loop [vars (->> (sort-by val var->cardinality) (map key) (filter logic-var?) (remove #(contains? start-vars %)))
+                                       join-order (vec start-vars)
                                        reachable-var-groups (list)]
                                   (if-not (seq vars)
                                     (vec (distinct join-order))
-
 
                                     (let [var (first (or (not-empty (for [reachable-var-group reachable-var-groups
                                                                           var (->> (filter reachable-var-group vars)

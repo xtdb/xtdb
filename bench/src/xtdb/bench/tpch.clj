@@ -1,12 +1,14 @@
 (ns xtdb.bench.tpch
-  (:require [xtdb.api :as xt]
-            [xtdb.bench :as bench]
-            [xtdb.fixtures.tpch :as tpch]))
+  (:require [xtdb.bench :as bench]
+            [xtdb.fixtures.tpch :as tpch]
+            [xtdb.api :as xt]))
 
 (defn run-tpch-query [node n]
-  (xt/q (xt/db node) (assoc (get tpch/tpch-queries (dec n)) :timeout 120000)))
+  (tpch/run-query (xt/db node)
+                  (-> (get tpch/tpch-queries (dec n))
+                      (assoc :timeout 120000))))
 
-(defn run-tpch-queries [node {:keys [scale-factor] :as opts}]
+(defn run-tpch-queries [node {:keys [scale-factor]}]
   (every? true? (for [n (range 1 23)]
                   (let [actual (run-tpch-query node n)]
                     (if (= 0.01 scale-factor)

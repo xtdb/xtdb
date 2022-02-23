@@ -3625,6 +3625,23 @@
                   :vars-in-join-order
                   (filter #{'m 'e}))))))
 
+(t/deftest prioritises-single-value-in-vars-like-literals-1556
+  (fix/submit+await-tx (->> (for [x (range 1000)]
+                              [[::xt/put {:xt/id (str "thing-" x), :type :thing, :v x}]
+                               [::xt/put {:xt/id (str "other-thing-" x), :type :other-thing, :v x}]])
+                            (apply concat)))
+
+  (let [db (xt/db *api*)]
+    (t/is (= '[v e]
+             (->> (q/query-plan-for db
+                                    '{:find [e]
+                                      :in [v]
+                                      :where [[e :type :thing]
+                                              [e :v v]]}
+                                    [590])
+                  :vars-in-join-order
+                  (filter #{'e 'v}))))))
+
 (t/deftest test-binds-against-false-arg-885
   (fix/submit+await-tx [[::xt/put {:xt/id :foo, :name "foo", :flag? false}]
                         [::xt/put {:xt/id :bar, :name "bar", :flag? true}]
@@ -3884,7 +3901,7 @@
                                [::xt/put {:xt/id (UUID/randomUUID)
                                           :type "extra type"}]))
 
-    (t/is (= '[?name ?e ?type]
+    (t/is (= '[?type ?name ?e]
              (-> (q/query-plan-for (xt/db *api*) query
                                    ["person-104" :person])
                  :vars-in-join-order)))
@@ -3894,7 +3911,7 @@
                           [::xt/put {:xt/id (UUID/randomUUID)
                                      :name "another extra name"}]])
 
-    (t/is (= '[?name ?e ?type]
+    (t/is (= '[?type ?name ?e]
              (-> (q/query-plan-for (xt/db *api*) query
                                    ["person-104" :person])
                  :vars-in-join-order)))))
