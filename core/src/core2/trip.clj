@@ -240,6 +240,35 @@
         :else
         true))
 
+(defn- compiles? [parent-vars form]
+  (try
+    (eval `(fn [~@parent-vars]
+             ~form))
+    true
+    (catch Exception sfinae
+      false)))
+
+(defmacro ^:private ^{:style/indent 1} for-deps [seq-exprs body-expr]
+  (let [seq-exprs (concat `[_# [nil]] seq-exprs)]
+    (if (compiles? (keys &env)
+                   `(for [~@seq-exprs]
+                      true))
+      `(for [~@seq-exprs] ~body-expr)
+      (loop [bind-groups (partition-all 2 seq-exprs)
+             acc []]
+        (if (empty? bind-groups)
+          `(for [_# [nil]
+                 ~@(apply concat acc)]
+             ~body-expr)
+          (if-let [bind-group (some (fn [bind-group]
+                                      (when (compiles? (keys &env)
+                                                       `(for [~@(apply concat (conj acc bind-group))]
+                                                          true))
+                                        bind-group))
+                                    bind-groups)]
+            (recur (remove #{bind-group} bind-groups) (conj acc bind-group))
+            (throw (IllegalArgumentException. "Circular dependency."))))))))
+
 (defn- lvar-ref [x]
   (list 'lvar x))
 
@@ -257,22 +286,23 @@
            :blank-var ::unbound))))
 
 (defn- binding->clj [[binding-type binding] form]
-  (case binding-type
-    :bind-scalar `[:let [binding# ~form]
-                   :when (can-unify? binding# ~binding)
-                   :let [~binding binding#]]
-    :bind-tuple (let [binding (mapv second binding)]
-                  `[:let [binding# ~form]
-                    :when (can-unify? binding# ~binding)
-                    :let [~binding binding#]])
-    :bind-coll (let [binding (first binding)]
-                 `[binding# ~form
-                   :when (can-unify? binding# ~binding)
-                   :let [~binding binding#]])
-    :bind-rel (let [binding (mapv second (first binding))]
-                `[binding# ~form
-                  :when (can-unify? binding# ~binding)
-                  :let [~binding binding#]])))
+  (let [binding-sym (gensym 'binding)]
+    (case binding-type
+      :bind-scalar `[:let [~binding-sym ~form]
+                     :when (can-unify? ~binding-sym ~binding)
+                     :let [~binding ~binding-sym]]
+      :bind-tuple (let [binding (mapv second binding)]
+                    `[:let [~binding-sym ~form]
+                      :when (can-unify? ~binding-sym ~binding)
+                      :let [~binding ~binding-sym]])
+      :bind-coll (let [binding (first binding)]
+                   `[~binding-sym ~form
+                     :when (can-unify? ~binding-sym ~binding)
+                     :let [~binding ~binding-sym]])
+      :bind-rel (let [binding (mapv second (first binding))]
+                  `[~binding-sym ~form
+                    :when (can-unify? ~binding-sym ~binding)
+                    :let [~binding ~binding-sym]]))))
 
 (defn- pattern->bind-rel [pattern]
   [:bind-rel [(vec (for [pattern pattern]
@@ -316,8 +346,8 @@
            :not-clause
            (let [{:keys [src-var clauses]} clause]
              `[:when (let [~'$ ~(or src-var '$)]
-                       (empty? (for ~(binding [*allow-unbound?* false]
-                                       (clauses->clj clauses))
+                       (empty? (for-deps ~(binding [*allow-unbound?* false]
+                                            (clauses->clj clauses))
                                  true)))])
 
            :not-join-clause
@@ -326,7 +356,7 @@
                        ~@(map assert-bound-lvar args)
                        ~(assert-new-scope
                          (cons '$ args)
-                         `(empty? (for ~(clauses->clj rule-ctx-sym name->rules clauses)
+                         `(empty? (for-deps ~(clauses->clj rule-ctx-sym name->rules clauses)
                                     true))))])
 
            :or-clause
@@ -335,9 +365,9 @@
              `[{:syms ~out-args :or ~(zipmap out-args (repeat ::unbound))}
                (let [~'$ ~(or src-var '$)]
                  (concat ~@(for [[clause-type clause] clauses]
-                             `(for ~(case clause-type
-                                      :clause (clauses->clj rule-ctx-sym name->rules [clause])
-                                      :and (clauses->clj rule-ctx-sym name->rules (:clauses clause)))
+                             `(for-deps ~(case clause-type
+                                           :clause (clauses->clj rule-ctx-sym name->rules [clause])
+                                           :and (clauses->clj rule-ctx-sym name->rules (:clauses clause)))
                                 (lvars-in-scope-env)))))])
 
            :or-join-clause
@@ -351,9 +381,9 @@
                              (for [[clause-type clause] clauses]
                                (assert-new-scope
                                 (cons '$ (concat bound-vars free-vars))
-                                `(for ~(case clause-type
-                                         :clause (clauses->clj rule-ctx-sym name->rules [clause])
-                                         :and (clauses->clj rule-ctx-sym name->rules (:clauses clause)))
+                                `(for-deps ~(case clause-type
+                                              :clause (clauses->clj rule-ctx-sym name->rules [clause])
+                                              :and (clauses->clj rule-ctx-sym name->rules (:clauses clause)))
                                    ~out-args))))))))))
        (reduce into [])))
 
@@ -369,8 +399,7 @@
                     :let [arg-vars (concat bound-vars free-vars)]]
                 `(~(rule-leg-name rule-name idx) [~'$ ~rule-ctx-sym ~@arg-vars]
                   (do ~@(map assert-bound-lvar bound-vars)
-                      (for [_# [nil]
-                            ~@(clauses->clj rule-ctx-sym name->rules clauses)]
+                      (for-deps [_# [nil] ~@(clauses->clj rule-ctx-sym name->rules clauses)]
                         ~(vec free-vars)))))
               (cons `(~rule-name [~'$ rule-ctx# & args#]
                       (rule ~'$ rule-ctx# ~rule-leg-refs args#)))))
@@ -442,9 +471,8 @@
        (let [~@src-vars
              ~rule-ctx-sym #{}]
          (letfn ~(rules->clj rule-ctx-sym name->rules)
-           (->> (for [_# [nil]
-                      ~@inputs
-                      ~@(clauses->clj rule-ctx-sym name->rules where-clauses)]
+           (->> (for-deps [~@inputs
+                           ~@(clauses->clj rule-ctx-sym name->rules where-clauses)]
                   ~projected-vars)
                 ~@(when aggregates?
                     `[(group-by #(mapv % ~group-idxs))
@@ -720,6 +748,14 @@
         [[1 1]
          [1 2]
          [5 5]]))
+
+  (= [3 4 5]
+     (q '[:find [?z ...]
+          :in [?x ...]
+          :where
+          [(inc ?y) ?z]
+          [(inc ?x) ?y]]
+        [1 2 3]))
 
   (= 55
      (q '[:find ?f .
