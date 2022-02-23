@@ -5,6 +5,9 @@
 
 ;; Internal triple store.
 
+;; TODO: fix 'or', its way of attempting to use &env to create the
+;; binding is broken.
+
 (defprotocol Db
   (-transact [this tx-ops])
   (-datoms [this index components]))
