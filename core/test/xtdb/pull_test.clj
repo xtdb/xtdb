@@ -131,14 +131,26 @@
                  #:film{:name "Spectre", :year "2015"}}
                (set (xt/pull-many db [:film/name :film/year] #{:skyfall :spectre})))))
 
-    (t/testing "pullMany fn vector"
-      (t/is (= [#:film {:name "Skyfall", :year "2012"}
-                #:film {:name "Spectre", :year "2015"}]
-               (xt/pull-many db (pr-str [:film/name :film/year]) #{:skyfall :spectre})))
+    (t/testing "pull many respects order and cardinality of input eids"
+      (t/is [= [#:film{:name "Spectre", :year "2015"}
+                nil
+                #:film{:name "Skyfall", :year "2012"}]
+             (xt/pull-many db [:film/name :film/year] [:spectre :doesnt-exist :skyfall])])
 
-      (t/is (= [#:film {:name "Skyfall", :year "2012"}
-                #:film {:name "Spectre", :year "2015"}]
-               (xt/pull-many db [:film/name :film/year] #{:skyfall :spectre}))))))
+      (t/is [= [#:film{:name "Skyfall", :year "2012"}
+                nil
+                #:film{:name "Spectre", :year "2015"}
+                nil]
+             (xt/pull-many db [:film/name :film/year] [:skyfall :doesnt-exist :spectre :nor-does-this])]))
+
+    (t/testing "pullMany fn vector"
+      (t/is (= #{#:film {:name "Skyfall", :year "2012"}
+                 #:film {:name "Spectre", :year "2015"}}
+               (set (xt/pull-many db (pr-str [:film/name :film/year]) #{:skyfall :spectre}))))
+
+      (t/is (= #{#:film {:name "Skyfall", :year "2012"}
+                 #:film {:name "Spectre", :year "2015"}}
+               (set (xt/pull-many db [:film/name :film/year] #{:skyfall :spectre})))))))
 
 (t/deftest test-limit
   (let [db (submit-bond)]

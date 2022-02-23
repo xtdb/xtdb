@@ -2056,11 +2056,12 @@
   (pull-many [db projection eids]
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
-      (->> (xt/q db
-                  {:find [(list 'pull ?eid projection)]
-                   :in [[?eid '...]]}
-                  eids)
-           (mapv first))))
+      (mapv (->> (xt/q db
+                       {:find [?eid (list 'pull ?eid projection)]
+                        :in [[?eid '...]]}
+                       eids)
+                 (into {}))
+            eids)))
 
   ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
   ;; as the new Java ones?
