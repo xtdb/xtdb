@@ -1336,11 +1336,13 @@
 (defn- rule-name->rules [rules]
   (group-by (comp :name :head) rules))
 
-(defn- expand-rules [where rule-name->rules recursion-cache]
+(defn- expand-rules [where rule-name->rules seen-rules]
   (->> (for [[type clause :as sub-clause] where]
-         (if-not (= :rule type)
-           [sub-clause]
+         (cond
+           (not= :rule type) [sub-clause]
+           (contains? seen-rules (:name clause)) [sub-clause]
 
+           :else
            (let [rule-name (:name clause)
                  rules (get rule-name->rules rule-name)]
              (when-not rules
@@ -1376,7 +1378,6 @@
                  (throw (err/illegal-arg :rule-invocation-wrong-arity
                                          {::err/message (str "Rule invocation has wrong arity, expected: " arity " " (xio/pr-edn-str sub-clause))})))
 
-               ;; TODO: the caches and expansion here needs revisiting.
                (let [expanded-rules (for [[args _ body] rule-args+num-bound-args+body
                                           :let [rule-arg->query-arg (zipmap args (:args clause))
                                                 body-vars (->> (normalize-clauses body)
@@ -1386,16 +1387,8 @@
                                                                (reduce into #{}))
                                                 body-var->hidden-var (zipmap body-vars
                                                                              (map gensym body-vars))]]
-                                      (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body))
-                     cache-key [:seen-rules rule-name]
-                     ;; TODO: Understand this, does this really work in the general case?
-                     expanded-rules (if (zero? (long (get-in recursion-cache cache-key 0)))
-                                      (for [expanded-rule expanded-rules
-                                            :let [expanded-rule (expand-rules expanded-rule rule-name->rules
-                                                                              (update-in recursion-cache cache-key (fnil inc 0)))]
-                                            :when (seq expanded-rule)]
-                                        expanded-rule)
-                                      expanded-rules)]
+                                      (-> (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body)
+                                          (expand-rules rule-name->rules (conj seen-rules rule-name))))]
 
                  (if (= 1 (count expanded-rules))
                    (first expanded-rules)
@@ -1479,7 +1472,7 @@
   (try
     (let [in-vars (set (keys in-var-cardinalities))
 
-          type->clauses (-> (expand-rules where rule-name->rules {})
+          type->clauses (-> (expand-rules where rule-name->rules #{})
                             (build-pred-fns fn-allow-list)
                             (normalize-clauses)
                             (group-clauses-by-type))
