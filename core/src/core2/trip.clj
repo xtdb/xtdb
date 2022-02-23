@@ -309,7 +309,7 @@
                        [:variable pattern]
                        [:blank-var '_])))]])
 
-(defn- clauses->clj [rule-ctx-sym name->rules clauses]
+(defn- clauses->clj [{:keys [name->rules] {:keys [rule-ctx-sym]} :symbols :as ctx} clauses]
   (->> (for [[clause-type clause] clauses]
          (case clause-type
            :expression-clause
@@ -346,7 +346,7 @@
            (let [{:keys [src-var clauses]} clause]
              `[:when (let [~'$ ~(or src-var '$)]
                        (empty? (for-deps ~(binding [*allow-unbound?* false]
-                                            (clauses->clj clauses))
+                                            (clauses->clj ctx clauses))
                                  true)))])
 
            :not-join-clause
@@ -355,7 +355,7 @@
                        ~@(map assert-bound-lvar args)
                        ~(assert-new-scope
                          (cons '$ args)
-                         `(empty? (for-deps ~(clauses->clj rule-ctx-sym name->rules clauses)
+                         `(empty? (for-deps ~(clauses->clj ctx clauses)
                                     true))))])
 
            :or-clause
@@ -365,8 +365,8 @@
                (let [~'$ ~(or src-var '$)]
                  (concat ~@(for [[clause-type clause] clauses]
                              `(for-deps ~(case clause-type
-                                           :clause (clauses->clj rule-ctx-sym name->rules [clause])
-                                           :and (clauses->clj rule-ctx-sym name->rules (:clauses clause)))
+                                           :clause (clauses->clj ctx [clause])
+                                           :and (clauses->clj ctx (:clauses clause)))
                                 (lvars-in-scope-env)))))])
 
            :or-join-clause
@@ -381,15 +381,15 @@
                                (assert-new-scope
                                 (cons '$ (concat bound-vars free-vars))
                                 `(for-deps ~(case clause-type
-                                              :clause (clauses->clj rule-ctx-sym name->rules [clause])
-                                              :and (clauses->clj rule-ctx-sym name->rules (:clauses clause)))
+                                              :clause (clauses->clj ctx [clause])
+                                              :and (clauses->clj ctx (:clauses clause)))
                                    ~out-args))))))))))
        (reduce into [])))
 
 (defn- rule-leg-name [rule-name idx]
   (symbol (str rule-name "-" idx)))
 
-(defn- rules->clj [rule-ctx-sym name->rules]
+(defn- rules->clj [{:keys [name->rules] {:keys [rule-ctx-sym]} :symbols :as ctx}]
   (->> (for [[rule-name rule-legs] name->rules
              :let [idx->rule-leg (zipmap (range (count rule-legs)) rule-legs)
                    rule-leg-refs (mapv #(rule-leg-name rule-name %) (keys idx->rule-leg))]]
@@ -398,7 +398,7 @@
                     :let [arg-vars (concat bound-vars free-vars)]]
                 `(~(rule-leg-name rule-name idx) [~'$ ~rule-ctx-sym ~@arg-vars]
                   (do ~@(map assert-bound-lvar bound-vars)
-                      (for-deps [_# [nil] ~@(clauses->clj rule-ctx-sym name->rules clauses)]
+                      (for-deps [~@(clauses->clj ctx clauses)]
                         ~(vec free-vars)))))
               (cons `(~rule-name [~'$ rule-ctx# & args#]
                       (rule ~'$ rule-ctx# ~rule-leg-refs args#)))))
@@ -415,7 +415,7 @@
 (def ^:private aggregate-fn-name->built-in-fn-name
   {'sum `-sum 'avg `-avg 'min `-min 'max `-max 'count `-count 'count-distinct `-count-distinct})
 
-(defn- aggregates->clj [group-sym find-spec]
+(defn- aggregates->clj [{{:keys [group-sym]} :symbols :as ctx} find-spec]
   (for [[idx [find-elem-type find-elem]] (map-indexed vector find-spec)]
     (case find-elem-type
       :variable find-elem
@@ -465,18 +465,22 @@
                              (s/assert ::rule)
                              (s/conform ::rule)
                              (group-by (comp :rule-name :rule-head)))
-        rule-ctx-sym (gensym 'rule-ctx)]
+        rule-ctx-sym (gensym 'rule-ctx)
+        ctx {:symbols {:rule-ctx-sym rule-ctx-sym
+                       :inputs-sym inputs-sym
+                       :group-sym group-sym}
+             :name->rules name->rules}]
     `(fn [& ~inputs-sym]
        (let [~@src-vars
              ~rule-ctx-sym #{}]
-         (letfn ~(rules->clj rule-ctx-sym name->rules)
+         (letfn ~(rules->clj ctx)
            (->> (for-deps [~@inputs
-                           ~@(clauses->clj rule-ctx-sym name->rules where-clauses)]
+                           ~@(clauses->clj ctx where-clauses)]
                   ~projected-vars)
                 ~@(when aggregates?
                     `[(group-by #(mapv % ~group-idxs))
                       (map (fn [[~projected-vars ~group-sym]]
-                             [~@(aggregates->clj group-sym find-spec)]))])
+                             [~@(aggregates->clj ctx find-spec)]))])
                 ~@(when tuple-keys
                     `[(map (partial zipmap '~tuple-keys))])))))))
 
