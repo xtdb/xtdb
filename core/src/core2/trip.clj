@@ -427,7 +427,7 @@
   (let [query (->> (normalize-query query)
                    (s/assert ::query)
                    (s/conform ::query))
-        {:keys [find-spec return-map with-clause inputs where-clauses] tuple-keys :keys} query
+        {:keys [find-spec return-map with-clause inputs where-clauses]} query
         [find-type find-spec] (:find-spec find-spec)
         find-spec (case find-type
                     (:find-rel :find-tuple) find-spec
