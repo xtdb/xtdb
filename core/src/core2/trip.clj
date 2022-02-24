@@ -257,15 +257,15 @@
       (loop [bind-groups (partition-all 2 seq-exprs)
              acc []]
         (if (empty? bind-groups)
-          `(for [~@(apply concat acc)]
+          `(for [~@acc]
              ~body-expr)
           (if-let [bind-group (some (fn [bind-group]
                                       (when (compiles? (keys &env)
-                                                       `(for [~@(apply concat (conj acc bind-group))]
+                                                       `(for [~@(into acc bind-group)]
                                                           true))
                                         bind-group))
                                     bind-groups)]
-            (recur (remove #{bind-group} bind-groups) (conj acc bind-group))
+            (recur (remove #{bind-group} bind-groups) (into acc bind-group))
             (throw (IllegalArgumentException. "Circular dependency."))))))))
 
 (defn- lvar-ref [x]
@@ -278,38 +278,29 @@
 (defn- assert-bound-lvar-ref [x]
   (list 'assert-bound-lvar x))
 
-(defmulti ^:private datalog->clj (fn [datalog ctx from] (first datalog)))
+(defmulti ^:private datalog->clj (fn [datalog ctx] (first datalog)))
 
 (defn- clauses->clj [ctx clauses]
-  (mapcat #(datalog->clj % ctx nil) clauses))
+  (mapcat #(datalog->clj % ctx) clauses))
 
-(defmethod datalog->clj :bind-scalar [[binding-type binding] _ form]
+(defn- binding->clj [[binding-type binding] form]
   (let [binding-sym (gensym 'binding)]
-    `[:let [~binding-sym ~form]
-      :when (can-unify? ~binding-sym ~binding)
-      :let [~binding ~binding-sym]]))
-
-(defmethod datalog->clj :bind-tuple [[binding-type binding] _ form]
-  (let [binding-sym (gensym 'binding)
-        binding (mapv second binding)]
-    `[:let [~binding-sym ~form]
-      :when (can-unify? ~binding-sym ~binding)
-      :let [~binding ~binding-sym]]))
-
-(defmethod datalog->clj :bind-coll [[binding-type binding] _ form]
-  (let [binding-sym (gensym 'binding)
-        binding (first binding)]
-    `[~binding-sym ~form
-      :when (can-unify? ~binding-sym ~binding)
-      :let [~binding ~binding-sym]]))
-
-(defmethod datalog->clj :bind-rel [[binding-type binding] _ form]
-  (let [binding-sym (gensym 'binding)
-        binding (mapv second (first binding))]
-    (prn binding)
-    `[~binding-sym ~form
-      :when (can-unify? ~binding-sym ~binding)
-      :let [~binding ~binding-sym]]))
+    (case binding-type
+      :bind-scalar `[:let [~binding-sym ~form]
+                     :when (can-unify? ~binding-sym ~binding)
+                     :let [~binding ~binding-sym]]
+      :bind-tuple (let [binding (mapv second binding)]
+                    `[:let [~binding-sym ~form]
+                      :when (can-unify? ~binding-sym ~binding)
+                      :let [~binding ~binding-sym]])
+      :bind-coll (let [binding (first binding)]
+                   `[~binding-sym ~form
+                     :when (can-unify? ~binding-sym ~binding)
+                     :let [~binding ~binding-sym]])
+      :bind-rel (let [binding (mapv second (first binding))]
+                  `[~binding-sym ~form
+                    :when (can-unify? ~binding-sym ~binding)
+                    :let [~binding ~binding-sym]]))))
 
 (defn- pattern->bind-rel [pattern]
   [:bind-rel [(vec (for [pattern pattern]
@@ -317,41 +308,39 @@
                        [:variable pattern]
                        [:blank-var '_])))]])
 
-(defmethod datalog->clj :expression-clause [[_ clause] ctx form]
-  (datalog->clj clause ctx form))
+(defmethod datalog->clj :expression-clause [[_ clause] ctx]
+  (datalog->clj clause ctx))
 
-(defmethod datalog->clj :data-pattern [[_ {:keys [src-var pattern]}] ctx _]
+(defmethod datalog->clj :data-pattern [[_ {:keys [src-var pattern]}] ctx]
   (let [[e a v] (map second pattern)]
-    (datalog->clj
+    (binding->clj
      (pattern->bind-rel [e a v])
-     ctx
      `(data-pattern ~(or src-var '$) ~@(map lvar-ref [e a v])))))
 
-(defmethod datalog->clj :rule-expr [[_ {:keys [src-var rule-name args]}] {:keys [name->rules] {:keys [rule-ctx-sym]} :symbols :as ctx} _]
+(defmethod datalog->clj :rule-expr [[_ {:keys [src-var rule-name args]}] {:keys [name->rules] {:keys [rule-table-sym]} :symbols :as ctx}]
   (let [args (map second args)
         [bound-args free-args] (-> name->rules
                                    (get-in [rule-name 0 :rule-head :rule-vars :bound-vars])
                                    (count)
                                    (split-at args))
         out-args (vec free-args)]
-    (datalog->clj
+    (binding->clj
      (pattern->bind-rel out-args)
-     ctx
-     `(~rule-name ~(or src-var '$) ~rule-ctx-sym ~@(map assert-bound-lvar-ref bound-args) ~@(map lvar-ref free-args)))))
+     `(~rule-name ~(or src-var '$) ~rule-table-sym ~@(map assert-bound-lvar-ref bound-args) ~@(map lvar-ref free-args)))))
 
-(defmethod datalog->clj :pred-expr [[_ [{:keys [pred args]}]] _ _]
+(defmethod datalog->clj :pred-expr [[_ [{:keys [pred args]}]] _]
   [:when `(~pred ~@(map (comp assert-bound-lvar-ref second) args))])
 
-(defmethod datalog->clj :fn-expr [[_ [{:keys [fn args]} binding]] ctx _]
-  (datalog->clj binding ctx `(~fn ~@(map (comp assert-bound-lvar-ref second) args))))
+(defmethod datalog->clj :fn-expr [[_ [{:keys [fn args]} binding]] ctx]
+  (binding->clj binding `(~fn ~@(map (comp assert-bound-lvar-ref second) args))))
 
-(defmethod datalog->clj :not-clause [[_ {:keys [src-var clauses]}] ctx _]
+(defmethod datalog->clj :not-clause [[_ {:keys [src-var clauses]}] ctx]
   `[:when (let [~'$ ~(or src-var '$)]
             (empty? (for-deps ~(binding [*allow-unbound?* false]
                                  (clauses->clj ctx clauses))
                       true)))])
 
-(defmethod datalog->clj :not-join-clause [[_ {:keys [src-var clauses args]}] ctx _]
+(defmethod datalog->clj :not-join-clause [[_ {:keys [src-var clauses args]}] ctx]
   `[:when (let [~'$ ~(or src-var '$)]
             ~@(map assert-bound-lvar-ref args)
             ~(assert-new-scope
@@ -359,7 +348,7 @@
               `(empty? (for-deps ~(clauses->clj ctx clauses)
                          true))))])
 
-(defmethod datalog->clj :or-clause [[_ {:keys [src-var clauses]}] ctx _]
+(defmethod datalog->clj :or-clause [[_ {:keys [src-var clauses]}] ctx]
   (let [out-args (filterv logic-var? (distinct (flatten clauses)))]
     `[{:syms ~out-args :or ~(zipmap out-args (repeat ::unbound))}
       (let [~'$ ~(or src-var '$)]
@@ -369,11 +358,10 @@
                                   :and (clauses->clj ctx (:clauses clause)))
                        (lvars-in-scope-env)))))]))
 
-(defmethod datalog->clj :or-join-clause [[_ {:keys [src-var clauses] {:keys [bound-vars free-vars]} :args}] ctx _]
+(defmethod datalog->clj :or-join-clause [[_ {:keys [src-var clauses] {:keys [bound-vars free-vars]} :args}] ctx]
   (let [out-args (vec free-vars)]
-    (datalog->clj
+    (binding->clj
      (pattern->bind-rel out-args)
-     ctx
      `(let [~'$ ~(or src-var '$)]
         ~@(map assert-bound-lvar-ref bound-vars)
         (concat ~@(binding [*allow-unbound?* true]
@@ -388,19 +376,19 @@
 (defn- rule-leg-name [rule-name idx]
   (symbol (str rule-name "-" idx)))
 
-(defn- rules->clj [{:keys [name->rules] {:keys [rule-ctx-sym]} :symbols :as ctx}]
+(defn- rules->clj [{:keys [name->rules] {:keys [rule-table-sym]} :symbols :as ctx}]
   (->> (for [[rule-name rule-legs] name->rules
              :let [idx->rule-leg (zipmap (range (count rule-legs)) rule-legs)
                    rule-leg-refs (mapv #(rule-leg-name rule-name %) (keys idx->rule-leg))]]
          (->> (for [[idx {:keys [clauses]
                           {{:keys [bound-vars free-vars]} :rule-vars} :rule-head}] idx->rule-leg
                     :let [arg-vars (concat bound-vars free-vars)]]
-                `(~(rule-leg-name rule-name idx) [~'$ ~rule-ctx-sym ~@arg-vars]
+                `(~(rule-leg-name rule-name idx) [~'$ ~rule-table-sym ~@arg-vars]
                   (do ~@(map assert-bound-lvar-ref bound-vars)
                       (for-deps [~@(clauses->clj ctx clauses)]
                         ~(vec free-vars)))))
-              (cons `(~rule-name [~'$ rule-ctx# & args#]
-                      (rule ~'$ rule-ctx# ~rule-leg-refs args#)))))
+              (cons `(~rule-name [db# rule-table# & args#]
+                      (rule db# rule-table# ~rule-leg-refs args#)))))
        (reduce into [])))
 
 (def ^:private aggregate-fn-name->built-in-fn-name
@@ -414,41 +402,48 @@
                    `(~(get aggregate-fn-name->built-in-fn-name aggregate-fn-name aggregate-fn-name)
                      ~@(map second (butlast fn-args)) (map #(nth % ~idx) ~group-sym))))))
 
-(defn- wrap-with-find-spec [find-spec {{:keys [group-sym]} :symbols :as ctx} form]
-  (let [[find-type find-spec] (:find-spec find-spec)
-        find-elements (case find-type
-                        (:find-rel :find-tuple) find-spec
-                        :find-coll [(first find-spec)]
-                        :find-scalar [(:find-elem find-spec)])
-        group-idxs (vec (for [[idx [find-elem-type _]] (map-indexed vector find-elements)
-                              :when (= :variable find-elem-type)]
-                          idx))
-        aggregates? (boolean (some #{:aggregate} (map first find-elements)))
-        projected-vars (vec (for [[find-elem-type find-elem] find-elements]
-                              (case find-elem-type
-                                :variable find-elem
-                                :aggregate (second (last (:fn-args find-elem))))))
-        form `(for-deps ~form
+(defn- find-spec-elements [find-spec]
+  (let [[find-type find-spec] (:find-spec find-spec)]
+    (case find-type
+      (:find-rel :find-tuple) find-spec
+      :find-coll [(first find-spec)]
+      :find-scalar [(:find-elem find-spec)])))
+
+(defn- find-element-projection [[find-elem-type find-elem]]
+  (case find-elem-type
+    :variable find-elem
+    :aggregate (second (last (:fn-args find-elem)))))
+
+(defn- group-idxs [find-elements]
+  (vec (for [[idx [find-elem-type _]] (map-indexed vector find-elements)
+             :when (= :variable find-elem-type)]
+         idx)))
+
+(defn- wrap-with-find-spec [find-spec {{:keys [group-sym]} :symbols :as ctx} seq-exprs-form]
+  (let [find-elements (find-spec-elements find-spec)
+        aggregates? (some #{:aggregate} (map first find-elements))
+        projected-vars (mapv find-element-projection find-elements)
+        form `(for-deps ~seq-exprs-form
                 ~projected-vars)]
     (if aggregates?
       `(->> ~form
-            (group-by #(mapv % ~group-idxs))
+            (group-by #(mapv % ~(group-idxs find-elements)))
             (map (fn [[~projected-vars ~group-sym]]
                    [~@(aggregates->clj find-elements ctx)])))
       form)))
 
-(defn- wrap-with-return-map [return-map _ form]
+(defn- wrap-with-return-map [return-map _ query-form]
   (if-let [tuple-keys (when-let [[return-map-type {:keys [symbols]}] return-map]
                         (not-empty (map (case return-map-type
                                           :return-keys (comp keyword name)
                                           :return-syms identity
                                           :return-strs name)
-                                          symbols)))]
+                                        symbols)))]
 
-    `(map (partial zipmap '~tuple-keys) ~form)
-    form))
+    `(map (partial zipmap '~tuple-keys) ~query-form)
+    query-form))
 
-(defn- src-var-bindings [inputs {{:keys [inputs-sym]} :symbols :as ctx}]
+(defn- src-var-top-level-bindings [inputs {{:keys [inputs-sym]} :symbols :as ctx}]
   (if-let [inputs (:inputs inputs)]
     (->> (for [[idx [in-type in]] (map-indexed vector inputs)
                :when (= :src-var in-type)]
@@ -460,7 +455,7 @@
   (when-let [inputs (:inputs inputs)]
     (->> (for [[idx [in-type in]] (map-indexed vector inputs)
                :when (= :binding in-type)]
-           (datalog->clj in ctx `(nth ~inputs-sym ~idx)))
+           (binding->clj in `(nth ~inputs-sym ~idx)))
          (reduce into []))))
 
 (defn- normalize-query [query]
@@ -479,23 +474,20 @@
                              (s/assert ::rule)
                              (s/conform ::rule)
                              (group-by (comp :rule-name :rule-head)))
-        rule-ctx-sym (gensym 'rule-ctx)
+        rule-table-sym (gensym 'rule-ctx)
         inputs-sym (gensym 'inputs)
         group-sym (gensym 'group)
-        ctx {:symbols {:rule-ctx-sym rule-ctx-sym
+        ctx {:symbols {:rule-table-sym rule-table-sym
                        :inputs-sym inputs-sym
                        :group-sym group-sym}
              :name->rules name->rules}
-        {:keys [find-spec return-map with-clause inputs where-clauses]} query
-        input-bindings (input-bindings inputs ctx)
-        src-var-bindings (src-var-bindings inputs ctx)
-        where-clauses (:clauses where-clauses)]
+        {:keys [find-spec return-map with-clause inputs where-clauses]} query]
     `(fn [& ~inputs-sym]
-       (let [~@src-var-bindings
-             ~rule-ctx-sym #{}]
+       (let [~@(src-var-top-level-bindings inputs ctx)
+             ~rule-table-sym #{}]
          (letfn ~(rules->clj ctx)
-           ~(->> `[~@input-bindings
-                   ~@(clauses->clj ctx where-clauses)]
+           ~(->> `[~@(input-bindings inputs ctx)
+                   ~@(clauses->clj ctx (:clauses where-clauses))]
                  (wrap-with-find-spec find-spec ctx)
                  (wrap-with-return-map return-map ctx)))))))
 
@@ -630,71 +622,6 @@
           3 (when (get-in idx components)
               [(zipmap ks (vec components))])))
       (throw (IllegalArgumentException. (str "unknown index: " index))))))
-
-(comment
-
-  (let [db (->> '[{:db/id b1
-                   :qgm.box/type :qgm.box.type/base-table
-                   :qgm.box.base-table/name inventory}
-                  {:db/id b2
-                   :qgm.box/type :qgm.box.type/base-table
-                   :qgm.box.base-table/name quotations}
-                  {:db/id b3
-                   :qgm.box/type :qgm.box.type/select
-                   :qgm.box.head/distinct? true
-                   :qgm.box.head/columns [partno descr suppno]
-                   :qgm.box.body/columns [q1.partno q1.descr q2.suppno]
-                   :qgm.box.body/distinct :qgm.box.body.distinct/enforce
-                   :qgm.box.body/quantifiers #{q1 q2 q4}}
-                  {:db/id b4
-                   :qgm.box/type :qgm.box.type/select
-                   :qgm.box.head/distinct? false
-                   :qgm.box.head/columns [price]
-                   :qgm.box.body/columns [q3.price]
-                   :qgm.box.body/distinct :qgm.box.body.distinct/permit
-                   :qgm.box.body/quantifiers #{q3}}
-
-                  {:db/id q1
-                   :qgm.quantifier/type :qgm.quantifier.type/foreach
-                   :qgm.quantifier/columns [partno descr]
-                   :qgm.quantifier/ranges-over b1}
-                  {:db/id q2
-                   :qgm.quantifier/type :qgm.quantifier.type/foreach
-                   :qgm.quantifier/columns [partno price]
-                   :qgm.quantifier/ranges-over b2}
-                  {:db/id q3
-                   :qgm.quantifier/type :qgm.quantifier.type/foreach
-                   :qgm.quantifier/columns [partno price]
-                   :qgm.quantifier/ranges-over b2}
-                  {:db/id q4
-                   :qgm.quantifier/type :qgm.quantifier.type/all
-                   :qgm.quantifier/columns [price]
-                   :qgm.quantifier/ranges-over b4}
-
-                  {:db/id p1
-                   :qgm.predicate/expression (= q1.descr "engine")
-                   :qgm.predicate/quantifiers #{q1}}
-                  {:db/id p2
-                   :qgm.predicate/expression (= q1.partno q2.partno)
-                   :qgm.predicate/quantifiers #{q1 q2}}
-                  {:db/id p3
-                   :qgm.predicate/expression (<= q2.partno q4.partno)
-                   :qgm.predicate/quantifiers #{q2 q4}}
-                  {:db/id p4
-                   :qgm.predicate/expression (= q2.partno q3.partno)
-                   :qgm.predicate/quantifiers #{q2 q3}}]
-                (map #(s/assert :qgm/node %))
-                (transact {}))]
-
-    (entity db 'b3)
-    (datoms db :aev :qgm.box.body/quantifiers 'b3)
-
-    (q '[:find ?b ?q ?t
-         :in $ ?b
-         :where
-         [?b :qgm.box.body/quantifiers ?q]
-         [?q :qgm.quantifier/type ?t]]
-       db 'b3)))
 
 (comment
 
