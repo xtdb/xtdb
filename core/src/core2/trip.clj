@@ -283,7 +283,7 @@
 (defn- clauses->clj [ctx clauses]
   (mapcat #(datalog->clj % ctx) clauses))
 
-(defn- binding->clj [[binding-type binding] form]
+(defn- wrap-with-binding [[binding-type binding] form]
   (let [binding-sym (gensym 'binding)]
     (case binding-type
       :bind-scalar `[:let [~binding-sym ~form]
@@ -313,7 +313,7 @@
 
 (defmethod datalog->clj :data-pattern [[_ {:keys [src-var pattern]}] ctx]
   (let [[e a v] (map second pattern)]
-    (binding->clj
+    (wrap-with-binding
      (pattern->bind-rel [e a v])
      `(data-pattern ~(or src-var '$) ~@(map lvar-ref [e a v])))))
 
@@ -324,7 +324,7 @@
                                    (count)
                                    (split-at args))
         out-args (vec free-args)]
-    (binding->clj
+    (wrap-with-binding
      (pattern->bind-rel out-args)
      `(~rule-name ~(or src-var '$) ~rule-table-sym ~@(map assert-bound-lvar-ref bound-args) ~@(map lvar-ref free-args)))))
 
@@ -332,7 +332,7 @@
   [:when `(~pred ~@(map (comp assert-bound-lvar-ref second) args))])
 
 (defmethod datalog->clj :fn-expr [[_ [{:keys [fn args]} binding]] ctx]
-  (binding->clj binding `(~fn ~@(map (comp assert-bound-lvar-ref second) args))))
+  (wrap-with-binding binding `(~fn ~@(map (comp assert-bound-lvar-ref second) args))))
 
 (defmethod datalog->clj :not-clause [[_ {:keys [src-var clauses]}] ctx]
   `[:when (let [~'$ ~(or src-var '$)]
@@ -360,7 +360,7 @@
 
 (defmethod datalog->clj :or-join-clause [[_ {:keys [src-var clauses] {:keys [bound-vars free-vars]} :args}] ctx]
   (let [out-args (vec free-vars)]
-    (binding->clj
+    (wrap-with-binding
      (pattern->bind-rel out-args)
      `(let [~'$ ~(or src-var '$)]
         ~@(map assert-bound-lvar-ref bound-vars)
@@ -455,7 +455,7 @@
   (when-let [inputs (:inputs inputs)]
     (->> (for [[idx [in-type in]] (map-indexed vector inputs)
                :when (= :binding in-type)]
-           (binding->clj in `(nth ~inputs-sym ~idx)))
+           (wrap-with-binding in `(nth ~inputs-sym ~idx)))
          (reduce into []))))
 
 (defn- normalize-query [query]
