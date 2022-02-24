@@ -278,24 +278,35 @@
 (defn- assert-bound-lvar-ref [x]
   (list 'assert-bound-lvar x))
 
-(defn- binding->clj [[binding-type binding] form]
+(defmulti ^:private datalog->clj (fn [datalog ctx from] (first datalog)))
+
+(defmethod datalog->clj :bind-scalar [[binding-type binding] _ form]
   (let [binding-sym (gensym 'binding)]
-    (case binding-type
-      :bind-scalar `[:let [~binding-sym ~form]
-                     :when (can-unify? ~binding-sym ~binding)
-                     :let [~binding ~binding-sym]]
-      :bind-tuple (let [binding (mapv second binding)]
-                    `[:let [~binding-sym ~form]
-                      :when (can-unify? ~binding-sym ~binding)
-                      :let [~binding ~binding-sym]])
-      :bind-coll (let [binding (first binding)]
-                   `[~binding-sym ~form
-                     :when (can-unify? ~binding-sym ~binding)
-                     :let [~binding ~binding-sym]])
-      :bind-rel (let [binding (mapv second (first binding))]
-                  `[~binding-sym ~form
-                    :when (can-unify? ~binding-sym ~binding)
-                    :let [~binding ~binding-sym]]))))
+    `[:let [~binding-sym ~form]
+      :when (can-unify? ~binding-sym ~binding)
+      :let [~binding ~binding-sym]]))
+
+(defmethod datalog->clj :bind-tuple [[binding-type binding] _ form]
+  (let [binding-sym (gensym 'binding)
+        binding (mapv second binding)]
+    `[:let [~binding-sym ~form]
+      :when (can-unify? ~binding-sym ~binding)
+      :let [~binding ~binding-sym]]))
+
+(defmethod datalog->clj :bind-coll [[binding-type binding] _ form]
+  (let [binding-sym (gensym 'binding)
+        binding (first binding)]
+    `[~binding-sym ~form
+      :when (can-unify? ~binding-sym ~binding)
+      :let [~binding ~binding-sym]]))
+
+(defmethod datalog->clj :bind-rel [[binding-type binding] _ form]
+  (let [binding-sym (gensym 'binding)
+        binding (mapv second (first binding))]
+    (prn binding)
+    `[~binding-sym ~form
+      :when (can-unify? ~binding-sym ~binding)
+      :let [~binding ~binding-sym]]))
 
 (defn- pattern->bind-rel [pattern]
   [:bind-rel [(vec (for [pattern pattern]
@@ -303,82 +314,76 @@
                        [:variable pattern]
                        [:blank-var '_])))]])
 
-(defn- clauses->clj [{:keys [name->rules] {:keys [rule-ctx-sym]} :symbols :as ctx} clauses]
-  (->> (for [[clause-type clause] clauses]
-         (case clause-type
-           :expression-clause
-           (let [[clause-type clause] clause]
-             (case clause-type
-               :data-pattern
-               (let [{:keys [src-var pattern]} clause
-                     [e a v] (map second pattern)]
-                 (binding->clj
-                  (pattern->bind-rel [e a v])
-                  `(data-pattern ~(or src-var '$) ~@(map lvar-ref [e a v]))))
+(defmethod datalog->clj :expression-clause [[_ clause] ctx form]
+  (datalog->clj clause ctx form))
 
-               :rule-expr
-               (let [{:keys [src-var rule-name args] :as rule} clause
-                     args (map second args)
-                     [bound-args free-args] (-> name->rules
-                                                (get-in [rule-name 0 :rule-head :rule-vars :bound-vars])
-                                                (count)
-                                                (split-at args))
-                     out-args (vec free-args)]
-                 (binding->clj
-                  (pattern->bind-rel out-args)
-                  `(~rule-name ~(or src-var '$) ~rule-ctx-sym ~@(map assert-bound-lvar-ref bound-args) ~@(map lvar-ref free-args))))
+(defmethod datalog->clj :data-pattern [[_ {:keys [src-var pattern]}] ctx _]
+  (let [[e a v] (map second pattern)]
+    (datalog->clj
+     (pattern->bind-rel [e a v])
+     ctx
+     `(data-pattern ~(or src-var '$) ~@(map lvar-ref [e a v])))))
 
-               :pred-expr
-               (let [[{:keys [pred args]}] clause]
-                 [:when `(~pred ~@(map (comp assert-bound-lvar-ref second) args))])
+(defmethod datalog->clj :rule-expr [[_ {:keys [src-var rule-name args]}] {:keys [name->rules] {:keys [rule-ctx-sym]} :symbols :as ctx} _]
+  (let [args (map second args)
+        [bound-args free-args] (-> name->rules
+                                   (get-in [rule-name 0 :rule-head :rule-vars :bound-vars])
+                                   (count)
+                                   (split-at args))
+        out-args (vec free-args)]
+    (datalog->clj
+     (pattern->bind-rel out-args)
+     ctx
+     `(~rule-name ~(or src-var '$) ~rule-ctx-sym ~@(map assert-bound-lvar-ref bound-args) ~@(map lvar-ref free-args)))))
 
-               :fn-expr
-               (let [[{:keys [fn args]} binding] clause]
-                 (binding->clj binding `(~fn ~@(map (comp assert-bound-lvar-ref second) args))))))
+(defmethod datalog->clj :pred-expr [[_ [{:keys [pred args]}]] _ _]
+  [:when `(~pred ~@(map (comp assert-bound-lvar-ref second) args))])
 
-           :not-clause
-           (let [{:keys [src-var clauses]} clause]
-             `[:when (let [~'$ ~(or src-var '$)]
-                       (empty? (for-deps ~(binding [*allow-unbound?* false]
-                                            (clauses->clj ctx clauses))
-                                 true)))])
+(defmethod datalog->clj :fn-expr [[_ [{:keys [fn args]} binding]] ctx _]
+  (datalog->clj binding ctx `(~fn ~@(map (comp assert-bound-lvar-ref second) args))))
 
-           :not-join-clause
-           (let [{:keys [src-var clauses args]} clause]
-             `[:when (let [~'$ ~(or src-var '$)]
-                       ~@(map assert-bound-lvar-ref args)
-                       ~(assert-new-scope
-                         (cons '$ args)
-                         `(empty? (for-deps ~(clauses->clj ctx clauses)
-                                    true))))])
+(defmethod datalog->clj :not-clause [[_ {:keys [src-var clauses]}] ctx _]
+  `[:when (let [~'$ ~(or src-var '$)]
+            (empty? (for-deps ~(binding [*allow-unbound?* false]
+                                 (clauses->clj ctx clauses))
+                      true)))])
 
-           :or-clause
-           (let [{:keys [src-var clauses]} clause
-                 out-args (filterv logic-var? (distinct (flatten clause)))]
-             `[{:syms ~out-args :or ~(zipmap out-args (repeat ::unbound))}
-               (let [~'$ ~(or src-var '$)]
-                 (concat ~@(for [[clause-type clause] clauses]
-                             `(for-deps ~(case clause-type
-                                           :clause (clauses->clj ctx [clause])
-                                           :and (clauses->clj ctx (:clauses clause)))
-                                (lvars-in-scope-env)))))])
+(defmethod datalog->clj :not-join-clause [[_ {:keys [src-var clauses args]}] ctx _]
+  `[:when (let [~'$ ~(or src-var '$)]
+            ~@(map assert-bound-lvar-ref args)
+            ~(assert-new-scope
+              (cons '$ args)
+              `(empty? (for-deps ~(clauses->clj ctx clauses)
+                         true))))])
 
-           :or-join-clause
-           (let [{:keys [src-var clauses] {:keys [bound-vars free-vars]} :args} clause
-                 out-args (vec free-vars)]
-             (binding->clj
-              (pattern->bind-rel out-args)
-              `(let [~'$ ~(or src-var '$)]
-                 ~@(map assert-bound-lvar-ref bound-vars)
-                 (concat ~@(binding [*allow-unbound?* true]
-                             (for [[clause-type clause] clauses]
-                               (assert-new-scope
-                                (cons '$ (concat bound-vars free-vars))
-                                `(for-deps ~(case clause-type
-                                              :clause (clauses->clj ctx [clause])
-                                              :and (clauses->clj ctx (:clauses clause)))
-                                   ~out-args))))))))))
-       (reduce into [])))
+(defmethod datalog->clj :or-clause [[_ {:keys [src-var clauses]}] ctx _]
+  (let [out-args (filterv logic-var? (distinct (flatten clauses)))]
+    `[{:syms ~out-args :or ~(zipmap out-args (repeat ::unbound))}
+      (let [~'$ ~(or src-var '$)]
+        (concat ~@(for [[clause-type clause] clauses]
+                    `(for-deps ~(case clause-type
+                                  :clause (clauses->clj ctx [clause])
+                                  :and (clauses->clj ctx (:clauses clause)))
+                       (lvars-in-scope-env)))))]))
+
+(defmethod datalog->clj :or-join-clause [[_ {:keys [src-var clauses] {:keys [bound-vars free-vars]} :args}] ctx _]
+  (let [out-args (vec free-vars)]
+    (datalog->clj
+     (pattern->bind-rel out-args)
+     ctx
+     `(let [~'$ ~(or src-var '$)]
+        ~@(map assert-bound-lvar-ref bound-vars)
+        (concat ~@(binding [*allow-unbound?* true]
+                    (for [[clause-type clause] clauses]
+                      (assert-new-scope
+                       (cons '$ (concat bound-vars free-vars))
+                       `(for-deps ~(case clause-type
+                                     :clause (clauses->clj ctx [clause])
+                                     :and (clauses->clj ctx (:clauses clause)))
+                          ~out-args)))))))))
+
+(defn- clauses->clj [ctx clauses]
+  (mapcat #(datalog->clj % ctx nil) clauses))
 
 (defn- rule-leg-name [rule-name idx]
   (symbol (str rule-name "-" idx)))
@@ -398,14 +403,6 @@
                       (rule ~'$ rule-ctx# ~rule-leg-refs args#)))))
        (reduce into [])))
 
-(defn- normalize-query [query]
-  (if (vector? query)
-    query
-    (vec (for [k [:find :keys :syms :strs :with :in :where]
-               :when (contains? query k)
-               x (cons k (get query k))]
-           x))))
-
 (def ^:private aggregate-fn-name->built-in-fn-name
   {'sum `-sum 'avg `-avg 'min `-min 'max `-max 'count `-count 'count-distinct `-count-distinct})
 
@@ -417,10 +414,29 @@
                    `(~(get aggregate-fn-name->built-in-fn-name aggregate-fn-name aggregate-fn-name)
                      ~@(map second (butlast fn-args)) (map #(nth % ~idx) ~group-sym))))))
 
+(defn- normalize-query [query]
+  (if (vector? query)
+    query
+    (vec (for [k [:find :keys :syms :strs :with :in :where]
+               :when (contains? query k)
+               x (cons k (get query k))]
+           x))))
+
 (defn- query->clj [query rules]
   (let [query (->> (normalize-query query)
                    (s/assert ::query)
                    (s/conform ::query))
+        name->rules (some->> rules
+                             (s/assert ::rule)
+                             (s/conform ::rule)
+                             (group-by (comp :rule-name :rule-head)))
+        rule-ctx-sym (gensym 'rule-ctx)
+        inputs-sym (gensym 'inputs)
+        group-sym (gensym 'group)
+        ctx {:symbols {:rule-ctx-sym rule-ctx-sym
+                       :inputs-sym inputs-sym
+                       :group-sym group-sym}
+             :name->rules name->rules}
         {:keys [find-spec return-map with-clause inputs where-clauses]} query
         [find-type find-spec] (:find-spec find-spec)
         find-spec (case find-type
@@ -431,44 +447,33 @@
                               :when (= :variable find-elem-type)]
                           idx))
         aggregates? (boolean (some #{:aggregate} (map first find-spec)))
-        group-sym (gensym 'group)
         projected-vars (vec (for [[find-elem-type find-elem] find-spec]
                               (case find-elem-type
                                 :variable find-elem
                                 :aggregate (second (last (:fn-args find-elem))))))
-        inputs-sym (gensym 'inputs)
-        src-vars (if-let [inputs (:inputs inputs)]
-                   (->> (for [[idx [in-type in]] (map-indexed vector inputs)
-                              :when (= :src-var in-type)]
-                          `[~in (nth ~inputs-sym ~idx)])
-                        (reduce into []))
-                   `[~'$ (nth ~inputs-sym 0)])
-        inputs (when-let [inputs (:inputs inputs)]
-                 (->> (for [[idx [in-type in]] (map-indexed vector inputs)
-                            :when (= :binding in-type)]
-                        (binding->clj in `(nth ~inputs-sym ~idx)))
-                      (reduce into [])))
+        src-var-bindings (if-let [inputs (:inputs inputs)]
+                           (->> (for [[idx [in-type in]] (map-indexed vector inputs)
+                                      :when (= :src-var in-type)]
+                                  `[~in (nth ~inputs-sym ~idx)])
+                                (reduce into []))
+                           `[~'$ (nth ~inputs-sym 0)])
+        input-bindings (when-let [inputs (:inputs inputs)]
+                         (->> (for [[idx [in-type in]] (map-indexed vector inputs)
+                                    :when (= :binding in-type)]
+                                (datalog->clj in ctx `(nth ~inputs-sym ~idx)))
+                              (reduce into [])))
         tuple-keys (when-let [[return-map-type {:keys [symbols]}] return-map]
                      (not-empty (map (case return-map-type
                                        :return-keys (comp keyword name)
                                        :return-syms identity
                                        :return-strs name)
                                      symbols)))
-        where-clauses (:clauses where-clauses)
-        name->rules (some->> rules
-                             (s/assert ::rule)
-                             (s/conform ::rule)
-                             (group-by (comp :rule-name :rule-head)))
-        rule-ctx-sym (gensym 'rule-ctx)
-        ctx {:symbols {:rule-ctx-sym rule-ctx-sym
-                       :inputs-sym inputs-sym
-                       :group-sym group-sym}
-             :name->rules name->rules}]
+        where-clauses (:clauses where-clauses)]
     `(fn [& ~inputs-sym]
-       (let [~@src-vars
+       (let [~@src-var-bindings
              ~rule-ctx-sym #{}]
          (letfn ~(rules->clj ctx)
-           (->> (for-deps [~@inputs
+           (->> (for-deps [~@input-bindings
                            ~@(clauses->clj ctx where-clauses)]
                   ~projected-vars)
                 ~@(when aggregates?
