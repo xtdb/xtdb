@@ -65,8 +65,10 @@
      '~sym))
 
 (def-obj-store-tests in-mem [f]
-  (f (ig/init-key ::os/memory-object-store {})))
+  (with-open [os (ig/init-key ::os/memory-object-store {})]
+    (f os)))
 
 (def-obj-store-tests fs [f]
   (tu/with-tmp-dirs #{os-path}
-    (f (ig/init-key ::os/file-system-object-store {:root-path os-path, :pool-size 2}))))
+    (with-open [os (ig/init-key ::os/file-system-object-store {:root-path os-path, :pool-size 2})]
+      (f os))))
