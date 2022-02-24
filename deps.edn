@@ -4,7 +4,7 @@
         com.xtdb.labs/core2-server {:local/root "server"}
         com.xtdb.labs/core2-datasets {:local/root "modules/datasets"}
 
-        com.xtdb.labs/core2-kafka {:local/root "modules/datasets"}
+        com.xtdb.labs/core2-kafka {:local/root "modules/kafka"}
         com.xtdb.labs/core2-s3 {:local/root "modules/s3"}
         com.xtdb.labs/core2-jdbc {:local/root "modules/jdbc"}
         com.xtdb.labs/core2-bench {:local/root "modules/bench"}
