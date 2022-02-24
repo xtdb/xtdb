@@ -1,16 +1,18 @@
 (ns core2.trip
-  (:require [clojure.string :as str]
-            [clojure.spec.alpha :as s])
+  (:require [clojure.spec.alpha :as s])
   (:import clojure.lang.IPersistentMap))
 
 ;; Internal triple store.
 
-(defprotocol Db
+(defprotocol DbConnection
   (-transact [this tx-ops])
+  (-db [this]))
+
+(defprotocol Db
   (-datoms [this index components]))
 
 (defn logic-var? [x]
-  (and (symbol? x) (str/starts-with? (name x) "?")))
+  (and (symbol? x) (= \? (first (name x)))))
 
 (defn source-var? [x]
   (= '$ x))
@@ -577,8 +579,16 @@
    {}
    (datoms db :eav eid)))
 
-(defn transact [db tx-ops]
-  (-transact db (flatten-tx-ops db tx-ops)))
+(defn db [conn]
+  (-db conn))
+
+(defn transact [conn tx-ops]
+  (let [db (db conn)
+        tx-ops (flatten-tx-ops db tx-ops)]
+    {:db-before db
+     :db-after (-transact conn tx-ops)
+     :tx-data (vec (for [[op e a v] tx-ops]
+                     {:e e :a a :v v :added (= op :db/add)}))}))
 
 ;; Default map implementation
 
@@ -592,22 +602,25 @@
    :ave [:a :v :e]
    :vae [:v :a :e]})
 
-(extend-protocol Db
-  IPersistentMap
-  (-transact [db tx-ops]
+(extend-type IPersistentMap
+  DbConnection
+  (-db [this] this)
+
+  (-transact [this tx-ops]
     (reduce
-     (fn [db [op-type e a v]]
+     (fn [this [op-type e a v]]
        (let [f (get tx-op->fn op-type)]
-         (-> db
+         (-> this
              (update-in [:eav e a] f v)
              (update-in [:aev a e] f v)
              (update-in [:ave a v] f e)
              (update-in [:vae v a] f e))))
-     db
+     this
      tx-ops))
 
-  (-datoms [db index [x y z :as components]]
-    (if-let [idx (get db index)]
+  Db
+  (-datoms [this index [x y z :as components]]
+    (if-let [idx (get this index)]
       (let [ks (index->keys index)]
         (case (count components)
           0 (for [[x ys] idx
@@ -625,10 +638,11 @@
 
 (comment
 
-  (let [db (transact {}
-                     '[{:db/id :john :parent :douglas}
-                       {:db/id :bob :parent :john}
-                       {:db/id :ebbon :parent :bob}])]
+  (let [db (->> '[{:db/id :john :parent :douglas}
+                  {:db/id :bob :parent :john}
+                  {:db/id :ebbon :parent :bob}]
+                (transact {})
+                :db-after)]
     (= #{[:ebbon :bob]
          [:bob :john]
          [:john :douglas]
@@ -646,11 +660,12 @@
              [?a :parent ?c]
              (ancestor ?c ?b)]])))
 
-  (let [db (transact {}
-                     '[{:db/id :a :edge :b}
-                       {:db/id :b :edge :c}
-                       {:db/id :c :edge :d}
-                       {:db/id :d :edge :a}])]
+  (let [db (->> '[{:db/id :a :edge :b}
+                  {:db/id :b :edge :c}
+                  {:db/id :c :edge :d}
+                  {:db/id :d :edge :a}]
+                (transact {})
+                :db-after)]
     (= #{[:a :a]
          [:a :d]
          [:a :c]
