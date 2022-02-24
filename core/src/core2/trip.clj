@@ -338,9 +338,9 @@
 
 (defmethod datalog->clj :not-clause [[_ {:keys [src-var clauses]}] ctx]
   `[:when (let [~'$ ~(or src-var '$)]
-            (empty? (for-deps ~(binding [*allow-unbound?* false]
-                                 (clauses->clj ctx clauses))
-                      true)))])
+            (binding [*allow-unbound?* false]
+              (empty? (for-deps ~(clauses->clj ctx clauses)
+                        true))))])
 
 (defmethod datalog->clj :not-join-clause [[_ {:keys [src-var clauses args]}] ctx]
   `[:when (let [~'$ ~(or src-var '$)]
@@ -366,14 +366,14 @@
      (pattern->bind-rel out-args)
      `(let [~'$ ~(or src-var '$)]
         ~@(map assert-bound-lvar-ref bound-vars)
-        (concat ~@(binding [*allow-unbound?* true]
-                    (for [[clause-type clause] clauses]
-                      (assert-new-scope
-                       (cons '$ (concat bound-vars free-vars))
-                       `(for-deps ~(case clause-type
-                                     :clause (clauses->clj ctx [clause])
-                                     :and (clauses->clj ctx (:clauses clause)))
-                          ~out-args)))))))))
+        (binding [*allow-unbound?* true]
+          (vec (concat ~@(for [[clause-type clause] clauses]
+                           (assert-new-scope
+                            (cons '$ (concat bound-vars free-vars))
+                            `(for-deps ~(case clause-type
+                                          :clause (clauses->clj ctx [clause])
+                                          :and (clauses->clj ctx (:clauses clause)))
+                               ~out-args))))))))))
 
 (defn- rule-leg-name [rule-name idx]
   (symbol (str rule-name "-" idx)))
