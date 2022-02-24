@@ -280,6 +280,9 @@
 
 (defmulti ^:private datalog->clj (fn [datalog ctx from] (first datalog)))
 
+(defn- clauses->clj [ctx clauses]
+  (mapcat #(datalog->clj % ctx nil) clauses))
+
 (defmethod datalog->clj :bind-scalar [[binding-type binding] _ form]
   (let [binding-sym (gensym 'binding)]
     `[:let [~binding-sym ~form]
@@ -382,9 +385,6 @@
                                      :and (clauses->clj ctx (:clauses clause)))
                           ~out-args)))))))))
 
-(defn- clauses->clj [ctx clauses]
-  (mapcat #(datalog->clj % ctx nil) clauses))
-
 (defn- rule-leg-name [rule-name idx]
   (symbol (str rule-name "-" idx)))
 
@@ -406,13 +406,62 @@
 (def ^:private aggregate-fn-name->built-in-fn-name
   {'sum `-sum 'avg `-avg 'min `-min 'max `-max 'count `-count 'count-distinct `-count-distinct})
 
-(defn- aggregates->clj [{{:keys [group-sym]} :symbols :as ctx} find-spec]
-  (for [[idx [find-elem-type find-elem]] (map-indexed vector find-spec)]
+(defn- aggregates->clj [find-elements {{:keys [group-sym]} :symbols :as ctx}]
+  (for [[idx [find-elem-type find-elem]] (map-indexed vector find-elements)]
     (case find-elem-type
       :variable find-elem
       :aggregate (let [{:keys [aggregate-fn-name fn-args]} find-elem]
                    `(~(get aggregate-fn-name->built-in-fn-name aggregate-fn-name aggregate-fn-name)
                      ~@(map second (butlast fn-args)) (map #(nth % ~idx) ~group-sym))))))
+
+(defn- wrap-with-find-spec [find-spec {{:keys [group-sym]} :symbols :as ctx} form]
+  (let [[find-type find-spec] (:find-spec find-spec)
+        find-elements (case find-type
+                        (:find-rel :find-tuple) find-spec
+                        :find-coll [(first find-spec)]
+                        :find-scalar [(:find-elem find-spec)])
+        group-idxs (vec (for [[idx [find-elem-type _]] (map-indexed vector find-elements)
+                              :when (= :variable find-elem-type)]
+                          idx))
+        aggregates? (boolean (some #{:aggregate} (map first find-elements)))
+        projected-vars (vec (for [[find-elem-type find-elem] find-elements]
+                              (case find-elem-type
+                                :variable find-elem
+                                :aggregate (second (last (:fn-args find-elem))))))
+        form `(for-deps ~form
+                ~projected-vars)]
+    (if aggregates?
+      `(->> ~form
+            (group-by #(mapv % ~group-idxs))
+            (map (fn [[~projected-vars ~group-sym]]
+                   [~@(aggregates->clj find-elements ctx)])))
+      form)))
+
+(defn- wrap-with-return-map [return-map _ form]
+  (if-let [tuple-keys (when-let [[return-map-type {:keys [symbols]}] return-map]
+                        (not-empty (map (case return-map-type
+                                          :return-keys (comp keyword name)
+                                          :return-syms identity
+                                          :return-strs name)
+                                          symbols)))]
+
+    `(map (partial zipmap '~tuple-keys) ~form)
+    form))
+
+(defn- src-var-bindings [inputs {{:keys [inputs-sym]} :symbols :as ctx}]
+  (if-let [inputs (:inputs inputs)]
+    (->> (for [[idx [in-type in]] (map-indexed vector inputs)
+               :when (= :src-var in-type)]
+           `[~in (nth ~inputs-sym ~idx)])
+         (reduce into []))
+    `[~'$ (nth ~inputs-sym 0)]))
+
+(defn- input-bindings [inputs {{:keys [inputs-sym]} :symbols :as ctx}]
+  (when-let [inputs (:inputs inputs)]
+    (->> (for [[idx [in-type in]] (map-indexed vector inputs)
+               :when (= :binding in-type)]
+           (datalog->clj in ctx `(nth ~inputs-sym ~idx)))
+         (reduce into []))))
 
 (defn- normalize-query [query]
   (if (vector? query)
@@ -438,50 +487,17 @@
                        :group-sym group-sym}
              :name->rules name->rules}
         {:keys [find-spec return-map with-clause inputs where-clauses]} query
-        [find-type find-spec] (:find-spec find-spec)
-        find-spec (case find-type
-                    (:find-rel :find-tuple) find-spec
-                    :find-coll [(first find-spec)]
-                    :find-scalar [(:find-elem find-spec)])
-        group-idxs (vec (for [[idx [find-elem-type _]] (map-indexed vector find-spec)
-                              :when (= :variable find-elem-type)]
-                          idx))
-        aggregates? (boolean (some #{:aggregate} (map first find-spec)))
-        projected-vars (vec (for [[find-elem-type find-elem] find-spec]
-                              (case find-elem-type
-                                :variable find-elem
-                                :aggregate (second (last (:fn-args find-elem))))))
-        src-var-bindings (if-let [inputs (:inputs inputs)]
-                           (->> (for [[idx [in-type in]] (map-indexed vector inputs)
-                                      :when (= :src-var in-type)]
-                                  `[~in (nth ~inputs-sym ~idx)])
-                                (reduce into []))
-                           `[~'$ (nth ~inputs-sym 0)])
-        input-bindings (when-let [inputs (:inputs inputs)]
-                         (->> (for [[idx [in-type in]] (map-indexed vector inputs)
-                                    :when (= :binding in-type)]
-                                (datalog->clj in ctx `(nth ~inputs-sym ~idx)))
-                              (reduce into [])))
-        tuple-keys (when-let [[return-map-type {:keys [symbols]}] return-map]
-                     (not-empty (map (case return-map-type
-                                       :return-keys (comp keyword name)
-                                       :return-syms identity
-                                       :return-strs name)
-                                     symbols)))
+        input-bindings (input-bindings inputs ctx)
+        src-var-bindings (src-var-bindings inputs ctx)
         where-clauses (:clauses where-clauses)]
     `(fn [& ~inputs-sym]
        (let [~@src-var-bindings
              ~rule-ctx-sym #{}]
          (letfn ~(rules->clj ctx)
-           (->> (for-deps [~@input-bindings
-                           ~@(clauses->clj ctx where-clauses)]
-                  ~projected-vars)
-                ~@(when aggregates?
-                    `[(group-by #(mapv % ~group-idxs))
-                      (map (fn [[~projected-vars ~group-sym]]
-                             [~@(aggregates->clj ctx find-spec)]))])
-                ~@(when tuple-keys
-                    `[(map (partial zipmap '~tuple-keys))])))))))
+           ~(->> `[~@input-bindings
+                   ~@(clauses->clj ctx where-clauses)]
+                 (wrap-with-find-spec find-spec ctx)
+                 (wrap-with-return-map return-map ctx)))))))
 
 (def ^:private memo-compile-query
   (memoize
