@@ -212,7 +212,7 @@
   (let [vars (filterv logic-var? (keys &env))]
     `(zipmap '~vars ~vars)))
 
-(defmacro ^:private assert-bound [x]
+(defmacro ^:private assert-bound-lvar [x]
   `(let [x# ~x]
      (if (= ::unbound x#)
        (throw (IllegalArgumentException. (str "not bound: " '~x)))
@@ -275,14 +275,8 @@
   (eval `(fn [~@parent-vars] ~@body))
   body)
 
-(defn- assert-bound-lvar [x]
-  (list 'assert-bound x))
-
-(defn- tuple-binding-pattern [binding]
-  (vec (for [[tuple-binding-type tuple-binding] binding]
-         (case tuple-binding-type
-           :variable (lvar-ref tuple-binding)
-           :blank-var ::unbound))))
+(defn- assert-bound-lvar-ref [x]
+  (list 'assert-bound-lvar x))
 
 (defn- binding->clj [[binding-type binding] form]
   (let [binding-sym (gensym 'binding)]
@@ -332,15 +326,15 @@
                      out-args (vec free-args)]
                  (binding->clj
                   (pattern->bind-rel out-args)
-                  `(~rule-name ~(or src-var '$) ~rule-ctx-sym ~@(map assert-bound-lvar bound-args) ~@(map lvar-ref free-args))))
+                  `(~rule-name ~(or src-var '$) ~rule-ctx-sym ~@(map assert-bound-lvar-ref bound-args) ~@(map lvar-ref free-args))))
 
                :pred-expr
                (let [[{:keys [pred args]}] clause]
-                 [:when (cons pred (map (comp assert-bound-lvar second) args))])
+                 [:when `(~pred ~@(map (comp assert-bound-lvar-ref second) args))])
 
                :fn-expr
                (let [[{:keys [fn args]} binding] clause]
-                 (binding->clj binding (cons fn (map (comp assert-bound-lvar second) args))))))
+                 (binding->clj binding `(~fn ~@(map (comp assert-bound-lvar-ref second) args))))))
 
            :not-clause
            (let [{:keys [src-var clauses]} clause]
@@ -352,7 +346,7 @@
            :not-join-clause
            (let [{:keys [src-var clauses args]} clause]
              `[:when (let [~'$ ~(or src-var '$)]
-                       ~@(map assert-bound-lvar args)
+                       ~@(map assert-bound-lvar-ref args)
                        ~(assert-new-scope
                          (cons '$ args)
                          `(empty? (for-deps ~(clauses->clj ctx clauses)
@@ -375,7 +369,7 @@
              (binding->clj
               (pattern->bind-rel out-args)
               `(let [~'$ ~(or src-var '$)]
-                 ~@(map assert-bound-lvar bound-vars)
+                 ~@(map assert-bound-lvar-ref bound-vars)
                  (concat ~@(binding [*allow-unbound?* true]
                              (for [[clause-type clause] clauses]
                                (assert-new-scope
@@ -397,7 +391,7 @@
                           {{:keys [bound-vars free-vars]} :rule-vars} :rule-head}] idx->rule-leg
                     :let [arg-vars (concat bound-vars free-vars)]]
                 `(~(rule-leg-name rule-name idx) [~'$ ~rule-ctx-sym ~@arg-vars]
-                  (do ~@(map assert-bound-lvar bound-vars)
+                  (do ~@(map assert-bound-lvar-ref bound-vars)
                       (for-deps [~@(clauses->clj ctx clauses)]
                         ~(vec free-vars)))))
               (cons `(~rule-name [~'$ rule-ctx# & args#]
