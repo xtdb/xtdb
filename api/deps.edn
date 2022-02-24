@@ -1,0 +1,11 @@
+{:deps {org.clojure/clojure {:mvn/version "1.10.3"}}
+
+ :paths ["src" "target/classes"]
+
+ :deps/prep-lib {:ensure "target/classes"
+                 :alias :build
+                 :fn build/prep}
+
+ :aliases {:build {:deps {io.github.clojure/tools.build {:git/tag "v0.7.7" :git/sha "1474ad6"}}
+
+                   :ns-default build}}}

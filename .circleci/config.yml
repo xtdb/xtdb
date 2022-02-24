@@ -2,80 +2,68 @@
 version: 2.1
 
 executors:
-  clojure-lein:
+  clojure:
     working_directory: ~/core2
     docker:
-      - image: circleci/clojure:lein-2.9.5
+      - image: clojure:openjdk-11-tools-deps
 
 jobs:
   setup:
-    executor: clojure-lein
+    executor: clojure
 
     environment:
-      LEIN_ROOT: "true"
       JVM_OPTS: -Xmx3200m
 
     steps:
       - checkout
 
-      - run: 'md5sum project.clj */project.clj modules/*/project.clj > .circleci-cache-key'
+      - run: 'md5sum deps.edn */deps.edn modules/*/deps.edn > .circleci-cache-key'
 
       - restore_cache:
           keys:
-            - v2-dependencies-{{ checksum ".circleci-cache-key" }}
+            - v4-dependencies-{{ checksum ".circleci-cache-key" }}
             # fallback to using the latest cache if no exact match is found
-            - v2-dependencies-
+            - v4-dependencies-
 
-      - run: './lein-sub install'
-      - run: './lein-sub deps'
+      - run: 'clojure -Srepro -X:deps prep'
+      - run: 'clojure -P'
 
       - persist_to_workspace:
           root: ~/
           paths:
             - .m2
+            - .gitlibs
             - core2
-
-  cache-m2:
-    executor: clojure-lein
-
-    steps:
-      - attach_workspace:
-          at: ~/
-
-      - run: 'rm -rf ~/.m2/repository/com/xtdb/*'
 
       - save_cache:
           paths:
             - ~/.m2
-          key: v2-dependencies-{{ checksum ".circleci-cache-key" }}
+            - ~/.gitlibs
+          key: v4-dependencies-{{ checksum ".circleci-cache-key" }}
 
   test:
-    executor: clojure-lein
+    executor: clojure
 
     steps:
       - attach_workspace:
           at: ~/
 
-      - run: './lein-sub check'
-      - run: "./lein-sub test"
+      - run: 'clojure -Srepro -X:test'
 
   integration-test:
-    executor: clojure-lein
+    executor: clojure
 
     steps:
       - attach_workspace:
           at: ~/
 
       # TODO should test the other modules too
-      - run: "./lein-sub -s core test :integration"
+      - run: 'clojure -Srepro -X:integration-test'
 
 workflows:
   build:
     jobs:
       - setup
-      - cache-m2:
-          requires:
-            - setup
       - test:
           requires:
             - setup

@@ -4,23 +4,18 @@
 
 [source,clojure]
 ----
-;; project.clj
-:repositories {"ossrh-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
-
-:dependencies [[com.xtdb.labs/core2-core "dev-SNAPSHOT"]
-               [com.xtdb.labs/core2-kafka "dev-SNAPSHOT"]
-               [com.xtdb.labs/core2-jdbc "dev-SNAPSHOT"]
-               [com.xtdb.labs/core2-s3 "dev-SNAPSHOT"]]
-
-
 ;; deps.edn
-:mvn/repos {"ossrh-snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}}
+{:deps {com.xtdb.labs/core2-core
+        {:git/url "ssh://git@github.com/xtdb/core2",
+         :git/sha "<sha>"
+         :deps/root "core"}}}
 
-:deps {com.xtdb.labs/core2-core {:mvn/version "dev-SNAPSHOT"}
-       com.xtdb.labs/core2-kafka {:mvn/version "dev-SNAPSHOT"}
-       com.xtdb.labs/core2-jdbc {:mvn/version "dev-SNAPSHOT"}
-       com.xtdb.labs/core2-s3 {:mvn/version "dev-SNAPSHOT"}}
+;; duplicate for other modules, setting their `:deps/root`.
+;; S3/JDBC/Kafka etc are under `"modules/*"`
 ----
+
+* First time: `clojure -X:deps prep`
+* When you bump the version: `clojure -X:deps prep :force true`
 
 ==  Usage - differences to Classic
 
@@ -99,6 +94,7 @@ When finalised (by `reduce`) this will ensure the query results are adequately c
 These queries currently return a vector of maps `[{:e ..., :name ...}, {...}]`, although this is only because it's what was closest to what we had available at the time.
 
 === Bases
+
 Core2 doesn't have the concept of DBs - instead, we pass the node and (optionally) a 'basis' to queries.
 In Core2, the upper bound for the tx-time is applied per-source; the default upper bound for VT is applied at the query level - this is because each data source has their own tx-time timeline, but VT is assumed to be a single timeline, consistent across data sources.
 
@@ -164,36 +160,62 @@ There is also `op/query-ra` which accepts a lower-level relational algebra query
 
 == Developing Core2
 
-First time:
-- `./lein-sub install`
+Core2 is a mono-repo - we develop it from the root directory of the git repository.
 
-- Start and connect to your REPL in the usual fashion
+- First time: `clojure -X:deps prep`
+- `clojure -X:deps prep :force true` to re-run `javac` if you change Java classes
+- Start and connect to a REPL at the top-level of the project - this starts a REPL with all of the modules available.
++
+For Emacs/CIDER:
++
+[source,clojure]
+----
+;; ~/.clojure/deps.edn
+{:aliases {:repl/cider {:extra-deps {nrepl/nrepl {:mvn/version "0.9.0"}
+                                     cider/cider-nrepl {:mvn/version "0.28.2"}
+                                     refactor-nrepl/refactor-nrepl {:mvn/version "3.2.0"}}
+
+                        :main-opts ["-m" "nrepl.cmdline"
+                                    "--middleware" "[cider.nrepl/cider-middleware]"]}}}
+
+;; then `clojure -M:repl/cider`, and `cider-connect-clj`
+----
 - `(dev)`
 - `(go)`
 - `node` is then bound to a started node, using `dev/dev-node` as a persistent data directory
 
 === Links
 
-- https://github.com/juxt/xtdb-rnd/projects/1[Kanban board]
-- https://app.circleci.com/pipelines/github/juxt/xtdb-rnd[Continuous Integration (CircleCI)]
+- https://github.com/xtdb/core2/projects/1[Kanban board]
+- https://app.circleci.com/pipelines/github/xtdb/core2[Continuous Integration (CircleCI)]
 - link:bibliography.org[bibliography.org] - a list of light bedtime reading.
 
 === Testing
 
-* Can test individual modules by `lein test`
-* Test all with `./lein-sub test`; `./lein-sub test :integration` for longer tests
+* Test all with `clj -X:test`; `clj -X:integration-test` for longer tests
 * Some tests have external dependencies which require `docker-compose`:
   * `docker-compose up` (`docker-compose up <postgres|kafka>` etc for individual containers),
-  * `lein test :with-docker` / `./lein-sub test :with-docker`
+  * `clojure -X:jdbc-test` / `clojure -X:kafka-test`
   * `docker-compose down`
 
 === Profiling
 
-To attach YourKit, `lein run with-profile +attach-yourkit repl :headless` (assumes YourKit in `/opt/yourkit` as installed by the AUR)
+To attach YourKit:
+
+* Install YourKit (it's on the AUR, for Arch folks)
+* Add an alias to `~/.clojure/deps.edn`:
++
+[source,clojure]
+----
+{:aliases {:yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}}}
+----
+* `clj -A:yourkit -M:repl/cider`
 
 === Building Core2
 
 ==== Maven Central
+
+TODO: migrate from Lein
 
 Core2 artifacts are deployed to Maven Central.
 
@@ -201,6 +223,8 @@ Core2 artifacts are deployed to Maven Central.
 * To deploy a release, `CORE2_VERSION=<version> ./lein-sub do install, deploy`, then head to the https://oss.sonatype.org/[Nexus UI] to close/release it.
 
 ==== Uberjar
+
+TODO: migrate from Lein
 
 * `./lein-sub do clean, install`
 * `lein uberjar` => `target/core2-standalone.jar`

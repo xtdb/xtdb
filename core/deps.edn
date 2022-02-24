@@ -1,0 +1,32 @@
+{:paths ["src" "target/classes"]
+
+ :deps {org.clojure/clojure {:mvn/version "1.10.3"}
+        com.xtdb.labs/core2-api {:local/root "../api"}
+
+        org.clojure/tools.logging {:mvn/version "1.1.0"}
+        org.clojure/spec.alpha {:mvn/version "0.2.194"}
+        org.clojure/data.json {:mvn/version "2.3.1"}
+        org.clojure/data.csv {:mvn/version "1.0.0"}
+        org.clojure/tools.cli {:mvn/version "1.0.206"}
+
+        org.apache.arrow/arrow-algorithm {:mvn/version "6.0.0"}
+        org.apache.arrow/arrow-compression {:mvn/version "6.0.0"}
+        org.apache.arrow/arrow-vector {:mvn/version "6.0.0"}
+        org.apache.arrow/arrow-memory-netty {:mvn/version "6.0.0"}
+
+        org.roaringbitmap/RoaringBitmap {:mvn/version "0.9.15"}
+
+        instaparse/instaparse {:mvn/version "1.4.10"}
+
+        pro.juxt.clojars-mirrors.integrant/integrant {:mvn/version "0.8.0"}}
+
+ :deps/prep-lib {:ensure "target/classes"
+                 :alias :build
+                 :fn build/prep}
+
+ :aliases {:generate-sql-parser {:extra-paths ["test"]
+                                 ;; should this be in `test`?
+                                 :main-opts ["-m" "core2.sql.parser-generator"]}
+
+           :build {:deps {io.github.clojure/tools.build {:git/tag "v0.7.7" :git/sha "1474ad6"}}
+                   :ns-default build}}}

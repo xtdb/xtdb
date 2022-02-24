@@ -1,0 +1,13 @@
+{:deps {com.xtdb.labs/core2-api {:local/root "../../api"}
+        com.xtdb.labs/core2-core {:local/root "../../core"}
+
+        software.amazon.awssdk/s3 {:mvn/version "2.16.76"}}
+
+ :paths ["src" "target/classes"]
+
+ :deps/prep-lib {:ensure "target/classes"
+                 :alias :build
+                 :fn build/prep}
+
+ :aliases {:build {:deps {io.github.clojure/tools.build {:git/tag "v0.7.7" :git/sha "1474ad6"}}
+                   :ns-default build}}}

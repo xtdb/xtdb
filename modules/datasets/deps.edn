@@ -1,0 +1,7 @@
+{:deps {com.xtdb.labs/core2-api {:local/root "../../api"}
+        com.xtdb.labs/core2-core {:local/root "../../core"}
+
+        io.airlift.tpch/tpch {:mvn/version "0.10"}
+        org.clojure/data.csv {:mvn/version "1.0.0"}
+
+        software.amazon.awssdk/s3 {:mvn/version "2.16.76"}}}

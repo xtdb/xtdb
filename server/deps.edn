@@ -1,0 +1,18 @@
+{:deps {com.xtdb.labs/core2-api {:local/root "../../api"}
+        com.xtdb.labs/core2-core {:local/root "../../core"}
+
+        ring/ring-core {:mvn/version "1.9.4"}
+        info.sunng/ring-jetty9-adapter {:mvn/version "0.15.2"}
+        org.eclipse.jetty/jetty-alpn-server {:mvn/version "10.0.6"}
+
+        metosin/muuntaja {:mvn/version "0.6.8"}
+        metosin/jsonista {:mvn/version "0.3.3"}
+        metosin/reitit-core {:mvn/version "0.5.15"}
+        metosin/reitit-interceptors {:mvn/version "0.5.15"}
+        metosin/reitit-ring {:mvn/version "0.5.15"}
+        metosin/reitit-http {:mvn/version "0.5.15"}
+        metosin/reitit-sieppari {:mvn/version "0.5.15"}
+        metosin/reitit-swagger {:mvn/version "0.5.15"}
+        metosin/reitit-spec {:mvn/version "0.5.15"}
+
+        com.cognitect/transit-clj {:mvn/version "1.0.324"}}}

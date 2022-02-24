@@ -1,0 +1,73 @@
+{:deps {com.xtdb.labs/core2-api {:local/root "api"}
+        com.xtdb.labs/core2-core {:local/root "core"}
+        com.xtdb.labs/core2-client {:local/root "client"}
+        com.xtdb.labs/core2-server {:local/root "server"}
+        com.xtdb.labs/core2-datasets {:local/root "modules/datasets"}
+
+        com.xtdb.labs/core2-kafka {:local/root "modules/datasets"}
+        com.xtdb.labs/core2-s3 {:local/root "modules/s3"}
+        com.xtdb.labs/core2-jdbc {:local/root "modules/jdbc"}
+        com.xtdb.labs/core2-bench {:local/root "modules/bench"}
+
+        integrant/repl {:mvn/version "0.3.2"}
+        org.slf4j/slf4j-api {:mvn/version "1.7.36"}
+        ch.qos.logback/logback-classic {:mvn/version "1.2.10"}
+        cheshire/cheshire {:mvn/version "5.10.0"}
+        com.cognitect/transit-clj {:mvn/version "1.0.324"}
+
+        org.clojure/data.csv {:mvn/version "1.0.0"}
+        org.clojure/tools.namespace {:mvn/version "1.2.0"}
+
+        org.postgresql/postgresql {:mvn/version "42.2.20"}
+
+        io.github.cognitect-labs/test-runner {:git/tag "v0.5.0" :git/sha "b3fd0d2"}}
+
+ :paths ["dev"
+         "dev-resources"
+         "api/test"
+         "core/test"
+         "core/test-resources"
+         "server/test"
+         "modules/datasets/data"
+         "modules/s3/test"
+         "modules/jdbc/test"
+         "modules/kafka/test"]
+
+ :jvm-opts ["-Xmx2G"
+            "-XX:MaxDirectMemorySize=2G"
+            "-Dio.netty.tryReflectionSetAccessible=true"
+            #_"-Darrow.enable_null_check_for_get=false"
+            "-Dclojure.spec.check-asserts=true"
+            "--illegal-access=warn" ;; needed on JDK16 to allow Netty/Arrow access DirectBuffer internals
+            #_"--add-modules=jdk.incubator.vector" ;; doesn't work if it doesn't exist, like on JDK11.
+            #_"--add-modules=ALL-SYSTEM" ;; enables all incubator modules instead
+            #_"-Darrow.memory.debug.allocator=true"
+            #_"-Darrow.enable_unsafe_memory_access=true"]
+
+ :aliases {:test {:exec-fn cognitect.test-runner.api/test
+                  :exec-args {:dirs ["api/test" "core/test" "server/test"]
+                              :excludes [:integration :timescale]}}
+
+           :integration-test {:exec-fn cognitect.test-runner.api/test
+                              :exec-args {:dirs ["api/test" "core/test" "server/test"]
+                                          :includes [:integration]}}
+
+           :timescale-test {:exec-fn cognitect.test-runner.api/test
+                            :exec-args {:dirs ["api/test" "core/test" "server/test"]
+                                        :includes [:timescale]}}
+
+           :s3-test {:exec-fn cognitect.test-runner.api/test
+                     :exec-args {:dirs ["modules/s3/test"]}}
+
+           :kafka-test {:exec-fn cognitect.test-runner.api/test
+                        :exec-args {:dirs ["modules/kafka/test"]}}
+
+           :jdbc-test {:exec-fn cognitect.test-runner.api/test
+                       :exec-args {:dirs ["modules/jdbc/test"]}}
+
+           :uberjar {:deps {io.github.seancorfield/build-clj {:git/tag "v0.6.7" :git/sha "22c2d09"}}
+                     :replace-paths []
+                     :exec-fn org.corfield.build/uber
+                     :exec-args {:main core2.main
+                                 :ns-compile [core2.main]
+                                 :uber-file "core2-standalone.jar"}}}}
