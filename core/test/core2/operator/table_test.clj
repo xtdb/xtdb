@@ -10,23 +10,28 @@
 (t/deftest test-table
   (t/is (= [{:a 12, :b "foo" :c 1.2, :d nil, :e true, :f (Duration/ofHours 1)}
             {:a 100, :b "bar", :c 3.14, :d (util/->zdt #inst "2020"), :e 10, :f (Duration/ofMinutes 1)}]
-           (op/query-ra '[:table $table]
+           (op/query-ra '[:table #{a b c d e f} $table]
                         {'$table [{:a 12, :b "foo" :c 1.2 :d nil :e true :f (Duration/ofHours 1)}
                                   {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10, :f (Duration/ofMinutes 1)}]})))
 
-  (t/testing "inline table"
-    (t/is (= [{:a 12, :b "foo" :c 1.2 :d nil :e true}
-              {:a 100, :b "bar" :c 3.14 :d (util/->zdt #inst "2020") :e 10}]
-             (op/query-ra '[:table [{:a 12, :b "foo", :c 1.2, :d nil, :e true}
-                                    {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10}]]
-                          {}))))
+  (t/is (= [{:a 12, :b "foo" :c 1.2 :d nil :e true}
+            {:a 100, :b "bar" :c 3.14 :d (util/->zdt #inst "2020") :e 10}]
+           (op/query-ra '[:table [{:a 12, :b "foo", :c 1.2, :d nil, :e true}
+                                  {:a 100, :b "bar", :c 3.14, :d #inst "2020", :e 10}]]
+                        {}))
+        "inline table")
 
-  (t/testing "empty"
-    (t/is (empty? (op/query-ra '[:table $table]
-                               {'$table []}))))
+  (t/is (empty? (op/query-ra '[:table $table]
+                             {'$table []}))
+        "empty")
 
-  (t/testing "requires same columns"
-    (t/is (thrown? IllegalArgumentException
-                   (op/query-ra '[:table $table]
-                                {'$table [{:a 12, :b "foo"}
-                                          {:a 100}]})))))
+  (t/is (thrown? IllegalArgumentException
+                 (op/query-ra '[:table $table]
+                              {'$table [{:a 12, :b "foo"}
+                                        {:a 100}]}))
+        "requires same columns")
+
+  (t/is (thrown? IllegalArgumentException
+                 (op/query-ra '[:table #{'a} $table]
+                              {'$table [{:a 12, :b "foo"}]}))
+        "doesn't match provided col-names"))

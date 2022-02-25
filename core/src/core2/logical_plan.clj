@@ -42,6 +42,7 @@
 
 (defmethod ra-expr :table [_]
   (s/cat :op #{:table}
+         :explicit-col-names (s/? (s/coll-of ::column :kind set?))
          :table (s/or :rows (s/coll-of (s/map-of simple-ident? any?))
                       :source ::source)))
 

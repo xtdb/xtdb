@@ -2,21 +2,21 @@
   (:require [core2.error :as err]
             [core2.types :as ty]
             [core2.util :as util]
-            [core2.vector.writer :as vw]
-            [core2.vector.indirect :as iv])
-  (:import core2.ICursor
-           [java.util ArrayList LinkedList List]
-           org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.complex.DenseUnionVector))
+            [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw])
+  (:import (core2 ICursor)
+           (java.util ArrayList LinkedList List Set)
+           (org.apache.arrow.memory BufferAllocator)
+           (org.apache.arrow.vector.complex DenseUnionVector)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype TableCursor [^BufferAllocator allocator
+                      ^Set col-names
                       ^List rows
                       ^:unsynchronized-mutable done?]
   ICursor
-  (getColumnNames [_]
-    (into #{} (map name) (keys (first rows))))
+  (getColumnNames [_] col-names)
 
   (tryAdvance [this c]
     (if (or done? (.isEmpty rows))
@@ -53,10 +53,13 @@
 
   (close [_]))
 
-(defn ->table-cursor ^core2.ICursor [^BufferAllocator allocator, ^List rows]
-  (when-not (or (empty? rows) (= 1 (count (distinct (map keys rows)))))
-    (throw (err/illegal-arg :mismatched-keys-in-table
-                            {::err/message "Mismatched keys in table"
-                             :key-sets (into #{} (map keys) rows)})))
+(defn ->table-cursor ^core2.ICursor [^BufferAllocator allocator, ^List rows, {:keys [explicit-col-names]}]
+  (let [col-names (or explicit-col-names
+                      (into #{} (map symbol) (keys (first rows))))]
+    (when-not (every? #(= col-names (into #{} (map symbol) (keys %))) rows)
+      (throw (err/illegal-arg :mismatched-keys-in-table
+                              {::err/message "Mismatched keys in table"
+                               :expected col-names
+                               :key-sets (into #{} (map keys) rows)})))
 
-  (TableCursor. allocator (ArrayList. rows) false))
+    (TableCursor. allocator col-names (ArrayList. rows) false)))

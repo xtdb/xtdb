@@ -14,20 +14,20 @@
             [core2.operator.rename :as rename]
             [core2.operator.select :as select]
             [core2.operator.set :as set-op]
-            [core2.operator.unwind :as unwind]
-            [core2.operator.top :as top]
             [core2.operator.table :as table]
+            [core2.operator.top :as top]
+            [core2.operator.unwind :as unwind]
             core2.snapshot
             [core2.util :as util]
             [core2.vector.indirect :as iv])
-  (:import clojure.lang.MapEntry
-           [core2 ICursor IResultSet]
-           [core2.operator.set ICursorFactory IFixpointCursorFactory]
-           core2.snapshot.ISnapshot
-           java.time.Instant
-           java.util.function.Consumer
-           java.util.Iterator
-           [org.apache.arrow.memory BufferAllocator RootAllocator]))
+  (:import (clojure.lang MapEntry)
+           (core2 ICursor IResultSet)
+           (core2.operator.set ICursorFactory IFixpointCursorFactory)
+           (core2.snapshot ISnapshot)
+           (java.time Instant)
+           (java.util Iterator)
+           (java.util.function Consumer)
+           (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
 (defmulti emit-op
   (fn [ra-expr srcs]
@@ -70,7 +70,7 @@
 
         (.scan db allocator col-names metadata-pred col-preds temporal-min-range temporal-max-range)))))
 
-(defmethod emit-op :table [{[table-type table-arg] :table} srcs]
+(defmethod emit-op :table [{[table-type table-arg] :table, :keys [explicit-col-names]} srcs]
   (let [rows (case table-type
                :rows table-arg
                :source (or (get srcs table-arg)
@@ -79,7 +79,7 @@
                                                     :table table-arg
                                                     :srcs (keys srcs)}))))]
     (fn [{:keys [allocator]}]
-      (table/->table-cursor allocator rows))))
+      (table/->table-cursor allocator rows {:explicit-col-names explicit-col-names}))))
 
 (defmethod emit-op :csv [{:keys [path col-types]} _srcs]
   (fn [{:keys [allocator]}]
