@@ -1,14 +1,15 @@
 (ns core2.operator.unwind
-  (:require [core2.util :as util]
-            [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
-  (:import core2.ICursor
-           [core2.vector IIndirectVector IIndirectRelation IVectorWriter]
-           java.util.function.Consumer
-           java.util.stream.IntStream
-           java.util.LinkedList
-           org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector.complex BaseListVector DenseUnionVector FixedSizeListVector ListVector]))
+  (:require [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw]
+            [core2.util :as util])
+  (:import (core2 ICursor)
+           (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
+           (java.util LinkedList)
+           (java.util.function Consumer IntConsumer)
+           (java.util.stream IntStream)
+           (org.apache.arrow.memory BufferAllocator)
+           (org.apache.arrow.vector IntVector)
+           (org.apache.arrow.vector.complex BaseListVector DenseUnionVector FixedSizeListVector ListVector)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -30,7 +31,8 @@
 
 (deftype UnwindCursor [^BufferAllocator allocator
                        ^ICursor in-cursor
-                       ^String column-name]
+                       ^String column-name
+                       with-ordinality?]
   ICursor
   (getColumnNames [_] (.getColumnNames in-cursor))
 
@@ -43,38 +45,63 @@
                                          out-cols (LinkedList.)
                                          from-col (.vectorForName in-rel column-name)
                                          idxs (IntStream/builder)
-                                         in-vec (.getVector from-col)]
-                                     (with-open [out-vec (DenseUnionVector/empty column-name allocator)]
-                                       (let [out-writer (vw/vec->writer out-vec)]
-                                         (cond
-                                           (instance? DenseUnionVector in-vec)
-                                           (let [^DenseUnionVector in-vec in-vec]
-                                             (dotimes [n (.getValueCount from-col)]
-                                               (let [idx (.getIndex from-col n)
-                                                     inner-vec (.getVectorByType in-vec (.getTypeId in-vec idx))]
-                                                 (when (instance? BaseListVector inner-vec)
-                                                   (dotimes [m (unwind-list-element inner-vec out-writer (.getOffset in-vec idx))]
-                                                     (.add idxs n))))))
+                                         in-vec (.getVector from-col)
 
-                                           (instance? BaseListVector in-vec)
-                                           (dotimes [n (.getValueCount from-col)]
-                                             (dotimes [m (unwind-list-element in-vec out-writer (.getIndex from-col n))]
-                                               (.add idxs n)))))
+                                         ordinal-vec (when with-ordinality?
+                                                       (IntVector. "_ordinal" allocator))]
 
-                                       (let [idxs (.toArray (.build idxs))]
-                                         (when (pos? (alength idxs))
-                                           (doseq [^IIndirectVector in-col in-rel]
-                                             (if (= column-name (.getName in-col))
-                                               (.add out-cols (iv/->direct-vec out-vec))
-                                               (.add out-cols (.select in-col idxs))))
+                                     (try
+                                       (let [^IntConsumer
+                                             add-ordinal (if with-ordinality?
+                                                           (let [w (vw/vec->writer ordinal-vec)]
+                                                             (.add out-cols (iv/->direct-vec ordinal-vec))
 
-                                           (.accept c (iv/->indirect-rel out-cols))
-                                           (aset advanced? 0 true))))))))
+                                                             (reify IntConsumer
+                                                               (accept [_ ordinal]
+                                                                 (let [pos (.startValue w)]
+                                                                   (.setSafe ordinal-vec pos ordinal)
+                                                                   (.endValue w)
+                                                                   (.setValueCount ordinal-vec (inc pos))))))
+
+                                                           (reify IntConsumer
+                                                             (accept [_ _ordinal])))]
+
+                                         (with-open [out-vec (DenseUnionVector/empty column-name allocator)]
+                                           (let [out-writer (vw/vec->writer out-vec)]
+                                             (cond
+                                               (instance? DenseUnionVector in-vec)
+                                               (let [^DenseUnionVector in-vec in-vec]
+                                                 (dotimes [n (.getValueCount from-col)]
+                                                   (let [idx (.getIndex from-col n)
+                                                         inner-vec (.getVectorByType in-vec (.getTypeId in-vec idx))]
+                                                     (when (instance? BaseListVector inner-vec)
+                                                       (dotimes [m (unwind-list-element inner-vec out-writer (.getOffset in-vec idx))]
+                                                         (.add idxs n)
+                                                         (.accept add-ordinal (inc m)))))))
+
+                                               (instance? BaseListVector in-vec)
+                                               (dotimes [n (.getValueCount from-col)]
+                                                 (dotimes [m (unwind-list-element in-vec out-writer (.getIndex from-col n))]
+                                                   (.add idxs n)
+                                                   (.accept add-ordinal (inc m))))))
+
+                                           (let [idxs (.toArray (.build idxs))]
+                                             (when (pos? (alength idxs))
+                                               (doseq [^IIndirectVector in-col in-rel]
+                                                 (if (= column-name (.getName in-col))
+                                                   (.add out-cols (iv/->direct-vec out-vec))
+                                                   (.add out-cols (.select in-col idxs))))
+
+                                               (.accept c (iv/->indirect-rel out-cols))
+                                               (aset advanced? 0 true)))))
+                                       (finally
+                                         (util/try-close ordinal-vec)))))))
+
                   (not (aget advanced? 0))))
       (aget advanced? 0)))
 
   (close [_]
     (.close in-cursor)))
 
-(defn ->unwind-cursor ^core2.ICursor [allocator ^ICursor in-cursor column-name]
-  (UnwindCursor. allocator in-cursor column-name))
+(defn ->unwind-cursor ^core2.ICursor [allocator ^ICursor in-cursor column-name {:keys [with-ordinality?]}]
+  (UnwindCursor. allocator in-cursor column-name with-ordinality?))

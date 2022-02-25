@@ -248,25 +248,35 @@
                             $y [{:b 1}]})))))
 
 (t/deftest test-unwind-operator
-  (t/is (= [{:a 1 :b 1} {:a 1 :b 2} {:a 2 :b 3} {:a 2 :b 4} {:a 2 :b 5}]
+  (t/is (= [{:a 1, :b 1} {:a 1, :b 2} {:a 2, :b 3} {:a 2, :b 4} {:a 2, :b 5}]
            (op/query-ra '[:unwind b
                           [:table $x]]
-                        '{$x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]})))
+                        '{$x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]})))
 
-  (t/testing "skips rows with empty lists"
-    (t/is (= [{:a 1 :b 1} {:a 1 :b 2}]
+  (t/is (= [{:a 1, :b 1} {:a 1, :b 2}]
            (op/query-ra '[:unwind b
                           [:table $x]]
-                        '{$x [{:a 1 :b [1 2]} {:a 2 :b []}]}))))
+                        '{$x [{:a 1, :b [1 2]} {:a 2, :b []}]}))
+        "skips rows with empty lists")
 
-  (t/testing "skips rows with non-list unwind column"
-    (t/is (= [{:a 1 :b 1} {:a 1 :b 2}]
+  (t/is (= [{:a 1, :b 1} {:a 1, :b 2}]
            (op/query-ra '[:unwind b
                           [:table $x]]
-                        '{$x [{:a 2 :b 1} {:a 1 :b [1 2]}]}))))
+                        '{$x [{:a 2, :b 1} {:a 1, :b [1 2]}]}))
+        "skips rows with non-list unwind column")
 
-  (t/testing "handles multiple types"
-    (t/is (= [{:a 1 :b 1} {:a 1 :b "foo"}]
+  (t/is (= [{:a 1, :b 1} {:a 1, :b "foo"}]
            (op/query-ra '[:unwind b
                           [:table $x]]
-                        '{$x [{:a 1 :b [1 "foo"]}]})))))
+                        '{$x [{:a 1, :b [1 "foo"]}]}))
+        "handles multiple types")
+
+  (t/is (= [{:a 1, :b 1, :_ordinal 1}
+            {:a 1, :b 2, :_ordinal 2}
+            {:a 2, :b 3, :_ordinal 1}
+            {:a 2, :b 4, :_ordinal 2}
+            {:a 2, :b 5, :_ordinal 3}]
+           (op/query-ra '[:unwind b {:with-ordinality? true}
+                          [:table $x]]
+                        '{$x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}))
+        "with-ordinality"))

@@ -204,10 +204,10 @@
             (fn [_opts inner]
               (top/->top-cursor inner skip limit))))
 
-(defmethod emit-op :unwind [{:keys [column relation]} srcs]
+(defmethod emit-op :unwind [{:keys [column opts relation]} srcs]
   (unary-op relation srcs
             (fn [{:keys [allocator]} inner]
-              (unwind/->unwind-cursor allocator inner (name column)))))
+              (unwind/->unwind-cursor allocator inner (name column) opts))))
 
 (def ^:dynamic ^:private *relation-variable->cursor-factory* {})
 

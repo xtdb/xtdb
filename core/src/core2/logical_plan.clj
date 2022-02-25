@@ -161,9 +161,12 @@
          :base ::ra-expression
          :recursive ::ra-expression))
 
+(s/def ::with-ordinality? boolean?)
+
 (defmethod ra-expr :unwind [_]
   (s/cat :op #{:ω :unwind}
          :column ::column
+         :opts (s/? (s/keys :opt-un [::with-ordinality?]))
          :relation ::ra-expression))
 
 (defmethod ra-expr :assign [_]
