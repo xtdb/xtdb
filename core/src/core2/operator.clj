@@ -9,6 +9,7 @@
             [core2.operator.csv :as csv]
             [core2.operator.group-by :as group-by]
             [core2.operator.join :as join]
+            [core2.operator.max-1-row :as max1]
             [core2.operator.order-by :as order-by]
             [core2.operator.project :as project]
             [core2.operator.rename :as rename]
@@ -243,6 +244,11 @@
       (with-bindings {#'*relation-variable->cursor-factory* assignments}
         (let [inner-f (emit-op relation srcs)]
           (inner-f opts))))))
+
+(defmethod emit-op :max-1-row [{:keys [relation]} srcs]
+  (unary-op relation srcs
+            (fn [{:keys [allocator]} inner]
+              (max1/->max-1-row-cursor allocator inner))))
 
 ;; we have to use our own class (rather than `Spliterators.iterator`) because we
 ;; need to call rel->rows eagerly - the rel may have been reused/closed after

@@ -280,3 +280,23 @@
                           [:table $x]]
                         '{$x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}))
         "with-ordinality"))
+
+(t/deftest test-max-1-row-operator
+  (t/is (= [{:a 1, :b 2}]
+           (op/query-ra '[:max-1-row [:table $x]]
+                        '{$x [{:a 1, :b 2}]})))
+
+  (t/is (thrown-with-msg? RuntimeException
+                          #"cardinality violation"
+                          (op/query-ra '[:max-1-row [:table $x]]
+                                       '{$x [{:a 1, :b 2} {:a 3, :b 4}]}))
+        "throws on cardinality > 1")
+
+  (t/testing "returns null on empty"
+    (t/is (= [{}]
+             (op/query-ra '[:max-1-row [:table $x]]
+                          '{$x []})))
+
+    (t/is (= [{:a nil, :b nil}]
+             (op/query-ra '[:max-1-row [:table #{a b} $x]]
+                          '{$x []})))))

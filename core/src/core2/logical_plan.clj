@@ -181,6 +181,10 @@
                         {:op :relation :relation rel})
                       :relation)))
 
+(defmethod ra-expr :max-1-row [_]
+  (s/cat :op #{:max-1-row}
+         :relation ::ra-expression))
+
 (s/def ::ra-expression (s/multi-spec ra-expr :op))
 
 (s/def ::logical-plan ::ra-expression)
