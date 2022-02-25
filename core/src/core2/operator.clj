@@ -5,6 +5,7 @@
             [core2.expression.metadata :as expr.meta]
             [core2.expression.temporal :as expr.temp]
             [core2.logical-plan :as lp]
+            [core2.operator.apply :as apply]
             [core2.operator.arrow :as arrow]
             [core2.operator.csv :as csv]
             [core2.operator.group-by :as group-by]
@@ -20,9 +21,11 @@
             [core2.operator.unwind :as unwind]
             core2.snapshot
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            [core2.types :as types])
   (:import (clojure.lang MapEntry)
            (core2 ICursor IResultSet)
+           (core2.operator.apply IDependentCursorFactory)
            (core2.operator.set ICursorFactory IFixpointCursorFactory)
            (core2.snapshot ISnapshot)
            (java.time Instant)
@@ -249,6 +252,28 @@
   (unary-op relation srcs
             (fn [{:keys [allocator]} inner]
               (max1/->max-1-row-cursor allocator inner))))
+
+(defmethod emit-op :apply [{:keys [mode columns dependent-column-names
+                                   independent-relation dependent-relation]}
+                           srcs]
+  ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
+  ;; TODO: shouldn't re-emit the op each time - required though because emit-op still takes srcs,
+  ;;       and not just the keys to those srcs
+
+  (unary-op independent-relation srcs
+            (fn [{:keys [allocator] :as query-opts} independent-cursor]
+              (let [dependent-cursor-factory
+                    (reify IDependentCursorFactory
+                      (getColumnNames [_] dependent-column-names)
+                      (openDependentCursor [_ in-rel idx]
+                        (let [srcs (into srcs
+                                         (for [[ik dk] columns]
+                                           (let [iv (.vectorForName in-rel (name ik))]
+                                             (MapEntry/create dk (types/get-object (.getVector iv) (.getIndex iv idx))))))
+                              op-f (emit-op dependent-relation srcs)]
+                          (op-f query-opts))))]
+
+                (apply/->apply-operator allocator mode independent-cursor dependent-cursor-factory)))))
 
 ;; we have to use our own class (rather than `Spliterators.iterator`) because we
 ;; need to call rel->rows eagerly - the rel may have been reused/closed after

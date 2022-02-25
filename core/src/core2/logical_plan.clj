@@ -175,6 +175,14 @@
          :bindings (s/and vector? (s/* (s/cat :variable ::relation :value ::ra-expression)))
          :relation ::ra-expression))
 
+(defmethod ra-expr :apply [_]
+  (s/cat :op #{:apply}
+         :mode #{:cross-join, :left-outer-join, :semi-join, :anti-join}
+         :columns (s/map-of ::column ::column, :conform-keys true)
+         :dependent-column-names (s/coll-of ::column, :kind set?)
+         :independent-relation ::ra-expression
+         :dependent-relation ::ra-expression))
+
 (defmethod ra-expr :relation [_]
   (s/and ::relation
          (s/conformer (fn [rel]

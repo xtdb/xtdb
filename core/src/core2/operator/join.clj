@@ -93,23 +93,12 @@
       (.add rel-map-builder build-idx)
       (.add pushdown-bloom ^ints (bloom/bloom-hashes internal-vec (.getIndex build-col build-idx))))))
 
-(defn- ->null-row-copier ^core2.vector.IRowCopier [^IVectorWriter out-writer]
-  (let [null-writer (-> out-writer
-                        (.asDenseUnion)
-                        (.writerForType LegType/NULL))]
-    (reify IRowCopier
-      (copyRow [_ _idx]
-        (.startValue out-writer)
-        (.startValue null-writer)
-        (.endValue null-writer)
-        (.endValue out-writer)))))
-
 (defn- ->nullable-row-copier ^core2.vector.IRowCopier [^IIndirectVector in-col, ^IRelationWriter out-rel, join-type]
   (let [col-name (.getName in-col)
         writer (.writerForName out-rel col-name)
         row-copier (vw/->row-copier writer in-col)
         null-copier (when (contains? #{:full-outer :left-outer} join-type)
-                      (->null-row-copier writer))]
+                      (vw/->null-row-copier writer))]
     (reify IRowCopier
       (copyRow [_ idx]
         (if (neg? idx)
@@ -222,7 +211,7 @@
 
                                                         (for [probe-col-name (set/difference (.getColumnNames probe-cursor)
                                                                                              (.getColumnNames build-cursor))]
-                                                          (->null-row-copier (.writerForName rel-writer probe-col-name))))]
+                                                          (vw/->null-row-copier (.writerForName rel-writer probe-col-name))))]
 
                    (.forEach unmatched-build-idxs
                              (reify IntConsumer

@@ -300,3 +300,37 @@
     (t/is (= [{:a nil, :b nil}]
              (op/query-ra '[:max-1-row [:table #{a b} $x]]
                           '{$x []})))))
+
+(t/deftest test-apply-operator
+  (letfn [(q [mode]
+            (op/query-ra [:apply mode '{c-id ?c-id} '#{o-customer-id o-value}
+                          '[:table $customers]
+                          '[:select (= o-customer-id ?c-id)
+                            [:table $orders]]]
+
+                         {'$customers [{:c-id "c1", :c-name "Alan"}
+                                       {:c-id "c2", :c-name "Bob"}
+                                       {:c-id "c3", :c-name "Charlie"}]
+                          '$orders [{:o-customer-id "c1", :o-value 12.34}
+                                    {:o-customer-id "c1", :o-value 14.80}
+                                    {:o-customer-id "c2", :o-value 91.46}
+                                    {:o-customer-id "c4", :o-value 55.32}]}))]
+
+    (t/is (= [{:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 12.34}
+              {:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 14.80}
+              {:c-id "c2", :c-name "Bob", :o-customer-id "c2", :o-value 91.46}]
+
+             (q :cross-join)))
+
+    (t/is (= [{:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 12.34}
+              {:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 14.80}
+              {:c-id "c2", :c-name "Bob", :o-customer-id "c2", :o-value 91.46}
+              {:c-id "c3", :c-name "Charlie", :o-customer-id nil, :o-value nil}]
+
+             (q :left-outer-join)))
+
+    (t/is (= [{:c-id "c1", :c-name "Alan"}, {:c-id "c2", :c-name "Bob"}]
+             (q :semi-join)))
+
+    (t/is (= [{:c-id "c3", :c-name "Charlie"}]
+             (q :anti-join)))))
