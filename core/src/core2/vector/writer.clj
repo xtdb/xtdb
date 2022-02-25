@@ -2,16 +2,17 @@
   (:require [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
-  (:import [core2.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter]
-           java.lang.AutoCloseable
-           [java.util HashMap LinkedHashMap Map]
-           java.util.function.Function
-           org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.util.AutoCloseables
-           [org.apache.arrow.vector ExtensionTypeVector NullVector ValueVector]
-           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType]
-           org.apache.arrow.vector.types.Types))
+  (:import (core2.types LegType)
+           (core2.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter)
+           (java.lang AutoCloseable)
+           (java.util HashMap LinkedHashMap Map)
+           (java.util.function Function)
+           (org.apache.arrow.memory BufferAllocator)
+           (org.apache.arrow.util AutoCloseables)
+           (org.apache.arrow.vector ExtensionTypeVector NullVector ValueVector)
+           (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
+           (org.apache.arrow.vector.types Types)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType)))
 
 (deftype DuvChildWriter [^IDenseUnionWriter parent-writer,
                          ^byte type-id
@@ -358,6 +359,17 @@
         (.startValue vec-writer)
         (.copyRow row-copier (.getIndex in-col src-idx))
         (.endValue vec-writer)))))
+
+(defn ->null-row-copier ^core2.vector.IRowCopier [^IVectorWriter out-writer]
+  (let [null-writer (-> out-writer
+                        (.asDenseUnion)
+                        (.writerForType LegType/NULL))]
+    (reify IRowCopier
+      (copyRow [_ _idx]
+        (.startValue out-writer)
+        (.startValue null-writer)
+        (.endValue null-writer)
+        (.endValue out-writer)))))
 
 (defn append-vec [^IVectorWriter vec-writer, ^IIndirectVector in-col]
   (let [row-copier (->row-copier vec-writer in-col)]
