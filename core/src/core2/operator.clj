@@ -265,6 +265,7 @@
                              (accept [_ rel]
                                (set! (.-next-values res)
                                      (.iterator (iv/rel->rows rel))))))
+              next-values
               (.hasNext next-values)))))
 
   (next [_]
