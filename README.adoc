@@ -176,7 +176,7 @@ For Emacs/CIDER:
                                      refactor-nrepl/refactor-nrepl {:mvn/version "3.2.0"}}
 
                         :main-opts ["-m" "nrepl.cmdline"
-                                    "--middleware" "[cider.nrepl/cider-middleware]"]}}}
+                                    "--middleware" "[refactor-nrepl.middleware/wrap-refactor,cider.nrepl/cider-middleware]"]}}}
 
 ;; then `clojure -M:repl/cider`, and `cider-connect-clj`
 ----
