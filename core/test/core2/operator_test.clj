@@ -300,3 +300,23 @@
     (t/is (= [{:a nil, :b nil}]
              (op/query-ra '[:max-1-row [:table #{a b} $x]]
                           '{$x []})))))
+
+(t/deftest test-apply-operator
+  (let [tables {'$customers [{:c-id "c1", :c-name "Alan"}
+                             {:c-id "c2", :c-name "Bob"}
+                             {:c-id "c3", :c-name "Charlie"}]
+                '$orders [{:o-customer-id "c1", :o-value 12.34}
+                          {:o-customer-id "c1", :o-value 14.80}
+                          {:o-customer-id "c2", :o-value 91.46}
+                          {:o-customer-id "c4", :o-value 55.32}]}]
+    (t/is (= [{:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 12.34}
+              {:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 14.80}
+              {:c-id "c2", :c-name "Bob", :o-customer-id "c2", :o-value 91.46}]
+
+             ;; SELECT * FROM customers c
+             ;; LATERAL JOIN (SELECT * FROM orders o WHERE c.c_id = o.customer_id)
+             (op/query-ra '[:apply :cross-join {c-id ?c-id} #{o-customer-id o-value}
+                            [:table $customers]
+                            [:select (= o-customer-id ?c-id)
+                             [:table $orders]]]
+                          tables)))))
