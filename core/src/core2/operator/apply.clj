@@ -10,7 +10,6 @@
            (org.apache.arrow.memory BufferAllocator)))
 
 (definterface IDependentCursorFactory
-  (^java.util.Set getColumnNames [])
   (^core2.ICursor openDependentCursor [^core2.vector.IIndirectRelation inRelation, ^int idx]))
 
 (definterface ModeStrategy
@@ -19,76 +18,73 @@
                  ^java.util.stream.IntStream$Builder idxs
                  ^int inIdx]))
 
-(def mode-strategies
-  {:cross-join
-   (reify ModeStrategy
-     (accept [_ dep-cursor dep-out-writer idxs in-idx]
-       (while (.tryAdvance dep-cursor
-                           (reify Consumer
-                             (accept [_ dep-rel]
-                               (let [^IIndirectRelation dep-rel dep-rel]
-                                 (vw/append-rel dep-out-writer dep-rel)
+(defn ->mode-strategy [mode dependent-col-names]
+  (case mode
+    :cross-join
+    (reify ModeStrategy
+      (accept [_ dep-cursor dep-out-writer idxs in-idx]
+        (while (.tryAdvance dep-cursor
+                            (reify Consumer
+                              (accept [_ dep-rel]
+                                (let [^IIndirectRelation dep-rel dep-rel]
+                                  (vw/append-rel dep-out-writer dep-rel)
 
-                                 (dotimes [_ (.rowCount dep-rel)]
-                                   (.add idxs in-idx)))))))))
+                                  (dotimes [_ (.rowCount dep-rel)]
+                                    (.add idxs in-idx)))))))))
 
-   :left-outer-join
-   (reify ModeStrategy
-     (accept [_ dep-cursor dep-out-writer idxs in-idx]
-       (let [match? (boolean-array [false])]
-         (while (.tryAdvance dep-cursor
-                             (reify Consumer
-                               (accept [_ dep-rel]
-                                 (let [^IIndirectRelation dep-rel dep-rel]
-                                   (when (pos? (.rowCount dep-rel))
-                                     (aset match? 0 true)
-                                     (vw/append-rel dep-out-writer dep-rel)
+    :left-outer-join
+    (reify ModeStrategy
+      (accept [_ dep-cursor dep-out-writer idxs in-idx]
+        (let [match? (boolean-array [false])]
+          (while (.tryAdvance dep-cursor
+                              (reify Consumer
+                                (accept [_ dep-rel]
+                                  (let [^IIndirectRelation dep-rel dep-rel]
+                                    (when (pos? (.rowCount dep-rel))
+                                      (aset match? 0 true)
+                                      (vw/append-rel dep-out-writer dep-rel)
 
-                                     (dotimes [_ (.rowCount dep-rel)]
-                                       (.add idxs in-idx))))))))
-         (when-not (aget match? 0)
-           (.add idxs in-idx)
-           (doseq [col-name (.getColumnNames dep-cursor)]
-             (doto (-> (.writerForName dep-out-writer (name col-name))
-                       (vw/->null-row-copier))
-               (.copyRow -1)))))))
+                                      (dotimes [_ (.rowCount dep-rel)]
+                                        (.add idxs in-idx))))))))
+          (when-not (aget match? 0)
+            (.add idxs in-idx)
+            (doseq [col-name dependent-col-names]
+              (doto (-> (.writerForName dep-out-writer (name col-name))
+                        (vw/->null-row-copier))
+                (.copyRow -1)))))))
 
-   :semi-join
-   (reify ModeStrategy
-     (accept [_ dep-cursor _dep-out-writer idxs in-idx]
-       (let [match? (boolean-array [false])]
-         (while (and (not (aget match? 0))
-                     (.tryAdvance dep-cursor
-                                  (reify Consumer
-                                    (accept [_ dep-rel]
-                                      (let [^IIndirectRelation dep-rel dep-rel]
-                                        (when (pos? (.rowCount dep-rel))
-                                          (aset match? 0 true)
-                                          (.add idxs in-idx)))))))))))
+    :semi-join
+    (reify ModeStrategy
+      (accept [_ dep-cursor _dep-out-writer idxs in-idx]
+        (let [match? (boolean-array [false])]
+          (while (and (not (aget match? 0))
+                      (.tryAdvance dep-cursor
+                                   (reify Consumer
+                                     (accept [_ dep-rel]
+                                       (let [^IIndirectRelation dep-rel dep-rel]
+                                         (when (pos? (.rowCount dep-rel))
+                                           (aset match? 0 true)
+                                           (.add idxs in-idx)))))))))))
 
-   :anti-join
-   (reify ModeStrategy
-     (accept [_ dep-cursor _dep-out-writer idxs in-idx]
-       (let [match? (boolean-array [false])]
-         (while (and (not (aget match? 0))
-                     (.tryAdvance dep-cursor
-                                  (reify Consumer
-                                    (accept [_ dep-rel]
-                                      (let [^IIndirectRelation dep-rel dep-rel]
-                                        (when (pos? (.rowCount dep-rel))
-                                          (aset match? 0 true))))))))
-         (when-not (aget match? 0)
-           (.add idxs in-idx)))))})
+    :anti-join
+    (reify ModeStrategy
+      (accept [_ dep-cursor _dep-out-writer idxs in-idx]
+        (let [match? (boolean-array [false])]
+          (while (and (not (aget match? 0))
+                      (.tryAdvance dep-cursor
+                                   (reify Consumer
+                                     (accept [_ dep-rel]
+                                       (let [^IIndirectRelation dep-rel dep-rel]
+                                         (when (pos? (.rowCount dep-rel))
+                                           (aset match? 0 true))))))))
+          (when-not (aget match? 0)
+            (.add idxs in-idx)))))))
 
 (deftype ApplyCursor [^BufferAllocator allocator
                       ^ModeStrategy mode-strategy
                       ^ICursor independent-cursor
                       ^IDependentCursorFactory dependent-cursor-factory]
   ICursor
-  (getColumnNames [_]
-    (set/union (.getColumnNames independent-cursor)
-               (.getColumnNames dependent-cursor-factory)))
-
   (tryAdvance [_ c]
     (.tryAdvance independent-cursor
                  (reify Consumer
@@ -110,5 +106,5 @@
   (close [_]
     (util/try-close independent-cursor)))
 
-(defn ->apply-operator [allocator mode independent-cursor dependent-cursor-factory]
-  (ApplyCursor. allocator (get mode-strategies mode) independent-cursor dependent-cursor-factory))
+(defn ->apply-operator [allocator mode independent-cursor dependent-col-names dependent-cursor-factory]
+  (ApplyCursor. allocator (->mode-strategy mode dependent-col-names) independent-cursor dependent-cursor-factory))

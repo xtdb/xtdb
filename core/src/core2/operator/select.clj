@@ -12,8 +12,6 @@
 
 (deftype SelectCursor [^BufferAllocator allocator, ^ICursor in-cursor, ^IRelationSelector selector]
   ICursor
-  (getColumnNames [_] (.getColumnNames in-cursor))
-
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor

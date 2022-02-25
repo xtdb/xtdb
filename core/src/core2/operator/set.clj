@@ -13,20 +13,9 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn union-compatible-col-names [^ICursor left, ^ICursor right]
-  (let [left-col-names (.getColumnNames left)
-        right-col-names (.getColumnNames right)]
-    (when-not (= left-col-names right-col-names)
-      (throw (IllegalArgumentException. (format "union incompatible cols: %s vs %s" (pr-str left-col-names) (pr-str right-col-names)))))
-
-    left-col-names))
-
-(deftype UnionAllCursor [^Set col-names
-                         ^ICursor left-cursor
+(deftype UnionAllCursor [^ICursor left-cursor
                          ^ICursor right-cursor]
   ICursor
-  (getColumnNames [_] col-names)
-
   (tryAdvance [_ c]
     (boolean
      (or (.tryAdvance left-cursor
@@ -48,16 +37,13 @@
     (util/try-close right-cursor)))
 
 (defn ->union-all-cursor ^core2.ICursor [^ICursor left-cursor, ^ICursor right-cursor]
-  (UnionAllCursor. (union-compatible-col-names left-cursor right-cursor)
-                   left-cursor right-cursor))
+  (UnionAllCursor. left-cursor right-cursor))
 
-(deftype IntersectionCursor [^Set col-names
-                             ^ICursor left-cursor
+(deftype IntersectionCursor [^ICursor left-cursor
                              ^ICursor right-cursor
                              ^IRelationMap rel-map
                              difference?]
   ICursor
-  (getColumnNames [_] col-names)
   (tryAdvance [_ c]
     (.forEachRemaining right-cursor
                        (reify Consumer
@@ -95,25 +81,19 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
-(defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (let [col-names (union-compatible-col-names left-cursor right-cursor)]
-    (IntersectionCursor. col-names
-                         left-cursor right-cursor
-                         (emap/->relation-map allocator {:key-col-names col-names})
-                         true)))
+(defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^Set col-names, ^ICursor left-cursor, ^ICursor right-cursor]
+  (IntersectionCursor. left-cursor right-cursor
+                       (emap/->relation-map allocator {:key-col-names (map name col-names)})
+                       true))
 
-(defn ->intersection-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (let [col-names (union-compatible-col-names left-cursor right-cursor)]
-    (IntersectionCursor. col-names
-                         left-cursor right-cursor
-                         (emap/->relation-map allocator {:key-col-names col-names})
-                         false)))
+(defn ->intersection-cursor ^core2.ICursor [^BufferAllocator allocator, ^Set col-names, ^ICursor left-cursor, ^ICursor right-cursor]
+  (IntersectionCursor. left-cursor right-cursor
+                       (emap/->relation-map allocator {:key-col-names (map name col-names)})
+                       false))
 
 (deftype DistinctCursor [^ICursor in-cursor
                          ^IRelationMap rel-map]
   ICursor
-  (getColumnNames [_] (.getColumnNames in-cursor))
-
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
       (while (and (not (aget advanced? 0))
@@ -139,8 +119,8 @@
     (util/try-close rel-map)
     (util/try-close in-cursor)))
 
-(defn ->distinct-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor]
-  (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (vec (.getColumnNames in-cursor))})))
+(defn ->distinct-cursor ^core2.ICursor [^BufferAllocator allocator, ^Set col-names, ^ICursor in-cursor]
+  (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (map name col-names)})))
 
 (defn- ->set-key [^List cols ^long idx]
   (let [set-key (ArrayList. (count cols))]
@@ -195,9 +175,6 @@
                          ^:unsynchronized-mutable ^ICursor recursive-cursor
                          ^:unsynchronized-mutable continue?]
   ICursor
-  ;; HACK assumes recursive-cursor-factory has the same cols
-  (getColumnNames [_] (.getColumnNames base-cursor))
-
   (tryAdvance [this c]
     (if-not (or continue? recursive-cursor)
       false

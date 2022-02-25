@@ -21,8 +21,6 @@
                     ^long limit
                     ^:unsynchronized-mutable ^long idx]
   ICursor
-  (getColumnNames [_] (.getColumnNames in-cursor))
-
   (tryAdvance [this c]
     (let [advanced? (boolean-array 1)]
       (while (and (not (aget advanced? 0))

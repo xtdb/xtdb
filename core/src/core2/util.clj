@@ -270,13 +270,6 @@
 (defn root-field-count ^long [^VectorSchemaRoot root]
   (.size (.getFields (.getSchema root))))
 
-(defn schema->col-names [^Schema schema]
-  (set (for [^Field field (.getFields schema)]
-         (.getName field))))
-
-(defn root->col-names [^VectorSchemaRoot root]
-  (schema->col-names (.getSchema root)))
-
 ;; TODO: can maybe tweak in DenseUnionVector, but that doesn't
 ;; solve the VSR calling this.
 (defn set-value-count [^ValueVector v ^long value-count]
@@ -468,9 +461,6 @@
                       ^:unsynchronized-mutable ^ArrowRecordBatch current-batch
                       ^boolean close-buffer?]
   ICursor
-  (getColumnNames [_]
-    (root->col-names root))
-
   (tryAdvance [this c]
     (when current-batch
       (try-close current-batch)

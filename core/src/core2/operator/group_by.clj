@@ -17,13 +17,11 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IGroupMapper
-  (^java.util.Set getColumnNames [])
   (^org.apache.arrow.vector.IntVector groupMapping [^core2.vector.IIndirectRelation inRelation])
   (^java.util.List #_<IIndirectVector> finish []))
 
 (deftype NullGroupMapper [^IntVector group-mapping]
   IGroupMapper
-  (getColumnNames [_] #{})
   (groupMapping [_ in-rel]
     (.clear group-mapping)
     (let [row-count (.rowCount in-rel)]
@@ -42,7 +40,6 @@
                       ^IRelationMap rel-map
                       ^IntVector group-mapping]
   IGroupMapper
-  (getColumnNames [_] (set group-col-names))
   (groupMapping [_ in-rel]
     (.clear group-mapping)
     (.setValueCount group-mapping (.rowCount in-rel))
@@ -71,12 +68,12 @@
       (NullGroupMapper. gm-vec))))
 
 (definterface IAggregateSpec
-  (^String getColumnName [])
   (^void aggregate [^core2.vector.IIndirectRelation inRelation,
                     ^org.apache.arrow.vector.IntVector groupMapping])
   (^core2.vector.IIndirectVector finish []))
 
 (definterface IAggregateSpecFactory
+  (^String getColumnName [])
   (^core2.operator.group_by.IAggregateSpec build [^org.apache.arrow.memory.BufferAllocator allocator]))
 
 (defmulti ^core2.operator.group_by.IAggregateSpecFactory ->aggregate-factory
@@ -110,6 +107,8 @@
 (defmethod ->aggregate-factory :count [_ ^String from-name, ^String to-name]
   (let [from-var (symbol from-name)]
     (reify IAggregateSpecFactory
+      (getColumnName [_] to-name)
+
       (build [_ al]
         (let [out-vec (BigIntVector. to-name al)]
           (reify
@@ -185,12 +184,12 @@
 (defn- promotable-agg-factory [^String from-name, ^String to-name, emit-step]
   (let [from-var (symbol from-name)]
     (reify IAggregateSpecFactory
+      (getColumnName [_] to-name)
+
       (build [_ al]
         (let [out-pvec (PromotableVector. al (NullVector. to-name))]
           (reify
             IAggregateSpec
-            (getColumnName [_] to-name)
-
             (aggregate [_ in-rel group-mapping]
               (when (pos? (.rowCount in-rel))
                 (let [in-vec (.vectorForName in-rel (name from-var))
@@ -223,14 +222,14 @@
         count-agg (->aggregate-factory :count from-name "cnt")
         projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt) {})]
     (reify IAggregateSpecFactory
+      (getColumnName [_] to-name)
+
       (build [_ al]
         (let [sum-agg (.build sum-agg al)
               count-agg (.build count-agg al)
               res-vec (Float8Vector. to-name al)]
           (reify
             IAggregateSpec
-            (getColumnName [_] to-name)
-
             (aggregate [_ in-rel group-mapping]
               (.aggregate sum-agg in-rel group-mapping)
               (.aggregate count-agg in-rel group-mapping))
@@ -259,14 +258,14 @@
         x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var) {})
         finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx)) {})]
     (reify IAggregateSpecFactory
+      (getColumnName [_] to-name)
+
       (build [_ al]
         (let [avgx-agg (.build avgx-agg al)
               avgx2-agg (.build avgx2-agg al)
               res-vec (Float8Vector. to-name al)]
           (reify
             IAggregateSpec
-            (getColumnName [_] to-name)
-
             (aggregate [_ in-rel group-mapping]
               (with-open [x2 (.project x2-projecter al in-rel)]
                 (.aggregate avgx-agg in-rel group-mapping)
@@ -293,13 +292,13 @@
   (let [variance-agg (->aggregate-factory :variance from-name "variance")
         finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance) {})]
     (reify IAggregateSpecFactory
+      (getColumnName [_] to-name)
+
       (build [_ al]
         (let [variance-agg (.build variance-agg al)
               res-vec (Float8Vector. to-name al)]
           (reify
             IAggregateSpec
-            (getColumnName [_] to-name)
-
             (aggregate [_ in-rel group-mapping]
               (.aggregate variance-agg in-rel group-mapping))
 
@@ -347,11 +346,6 @@
                         ^IGroupMapper group-mapper
                         ^List aggregate-specs]
   ICursor
-  (getColumnNames [_]
-    (into (.getColumnNames group-mapper)
-          (map #(.getColumnName ^IAggregateSpec %))
-          aggregate-specs))
-
   (tryAdvance [_ c]
     (try
       (.forEachRemaining in-cursor

@@ -21,8 +21,6 @@
                     col-parsers
                     ^Iterator row-batches]
   ICursor
-  (getColumnNames [_] (util/root->col-names root))
-
   (tryAdvance [_ c]
     (if (.hasNext row-batches)
       (let [row-batch (.next row-batches)

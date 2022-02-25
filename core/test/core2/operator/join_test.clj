@@ -3,8 +3,8 @@
             [core2.operator.join :as join]
             [core2.test-util :as tu]
             [core2.types :as ty])
-  (:import core2.ICursor
-           org.apache.arrow.vector.types.pojo.Schema))
+  (:import (core2 ICursor)
+           (org.apache.arrow.vector.types.pojo Field Schema)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -21,16 +21,18 @@
      :or {left-fields [a-field], right-fields [b-field]
           left-join-col "a", right-join-col "b"}}]
 
-   (with-open [left-cursor (tu/->cursor (Schema. left-fields) left-blocks)
-               right-cursor (tu/->cursor (Schema. right-fields) right-blocks)
-               ^ICursor join-cursor (->join-cursor tu/*allocator*
-                                                   left-cursor left-join-col
-                                                   right-cursor right-join-col)]
+   (let [left-col-names (->> left-fields (into #{} (map (comp symbol #(.getName ^Field %)))))
+         right-col-names (->> right-fields (into #{} (map (comp symbol #(.getName ^Field %)))))]
+     (with-open [left-cursor (tu/->cursor (Schema. left-fields) left-blocks)
+                 right-cursor (tu/->cursor (Schema. right-fields) right-blocks)
+                 ^ICursor join-cursor (->join-cursor tu/*allocator*
+                                                     left-cursor left-join-col left-col-names
+                                                     right-cursor right-join-col right-col-names)]
 
-     (vec (tu/<-cursor join-cursor)))))
+       (vec (tu/<-cursor join-cursor))))))
 
 (t/deftest test-cross-join
-  (letfn [(->cross-join-cursor [al lc _ljc rc _rjc]
+  (letfn [(->cross-join-cursor [al lc _ljc _lcns rc _rjc _rcns]
             (join/->cross-join-cursor al lc rc))]
     (t/is (= [{{:a 12, :b 10, :c 1} 2,
                {:a 12, :b 15, :c 2} 2,

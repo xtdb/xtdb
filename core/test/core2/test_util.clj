@@ -160,8 +160,6 @@
   (let [blocks (LinkedList. blocks)
         root (VectorSchemaRoot/create schema *allocator*)]
     (reify ICursor
-      (getColumnNames [_] (util/schema->col-names schema))
-
       (tryAdvance [_ c]
         (if-let [block (some-> (.poll blocks) vec)]
           (do

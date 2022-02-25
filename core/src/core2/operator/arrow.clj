@@ -8,8 +8,6 @@
 
 (deftype ArrowCursor [^ArrowFileReader rdr]
   ICursor
-  (getColumnNames [_] (util/root->col-names (.getVectorSchemaRoot rdr)))
-
   (tryAdvance [_ c]
     (if (.loadNextBatch rdr)
       (do

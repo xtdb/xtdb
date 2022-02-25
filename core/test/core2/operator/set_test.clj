@@ -47,7 +47,7 @@
                 right-cursor (tu/->cursor (Schema. [a-field b-field])
                                           [[{:a 10 :b 1}, {:a 15 :b 2}]
                                            [{:a 0 :b 15}]])
-                intersection-cursor (set-op/->intersection-cursor tu/*allocator* left-cursor right-cursor)]
+                intersection-cursor (set-op/->intersection-cursor tu/*allocator* #{'a 'b} left-cursor right-cursor)]
 
       (t/is (= [#{{:a 0, :b 15}}]
                (mapv set (tu/<-cursor intersection-cursor)))))
@@ -57,7 +57,7 @@
                                            [])
                   right-cursor (tu/->cursor (Schema. [a-field])
                                             [])
-                  intersection-cursor (set-op/->intersection-cursor tu/*allocator* left-cursor right-cursor)]
+                  intersection-cursor (set-op/->intersection-cursor tu/*allocator* #{'a} left-cursor right-cursor)]
 
         (t/is (empty? (tu/<-cursor intersection-cursor))))
 
@@ -65,7 +65,7 @@
                                            [])
                   right-cursor (tu/->cursor (Schema. [a-field])
                                             [[{:a 10}, {:a 15}]])
-                  intersection-cursor (set-op/->intersection-cursor tu/*allocator* left-cursor right-cursor)]
+                  intersection-cursor (set-op/->intersection-cursor tu/*allocator* #{'a} left-cursor right-cursor)]
 
         (t/is (empty? (tu/<-cursor intersection-cursor))))
 
@@ -73,7 +73,7 @@
                                            [[{:a 10}, {:a 15}]])
                   right-cursor (tu/->cursor (Schema. [a-field])
                                             [])
-                  intersection-cursor (set-op/->intersection-cursor tu/*allocator* left-cursor right-cursor)]
+                  intersection-cursor (set-op/->intersection-cursor tu/*allocator* #{'a} left-cursor right-cursor)]
 
         (t/is (empty? (tu/<-cursor intersection-cursor))))
 
@@ -81,7 +81,7 @@
                                            [[{:a 10}]])
                   right-cursor (tu/->cursor (Schema. [a-field])
                                             [[{:a 20}]])
-                  intersection-cursor (set-op/->intersection-cursor tu/*allocator* left-cursor right-cursor)]
+                  intersection-cursor (set-op/->intersection-cursor tu/*allocator* #{'a} left-cursor right-cursor)]
 
         (t/is (empty? (tu/<-cursor intersection-cursor)))))))
 
@@ -94,7 +94,7 @@
                 right-cursor (tu/->cursor (Schema. [a-field b-field])
                                           [[{:a 10 :b 1}, {:a 15 :b 2}]
                                            [{:a 0 :b 15}]])
-                difference-cursor (set-op/->difference-cursor tu/*allocator* left-cursor right-cursor)]
+                difference-cursor (set-op/->difference-cursor tu/*allocator* #{'a 'b} left-cursor right-cursor)]
 
       (t/is (= [#{{:a 12, :b 10}}
                 #{{:a 100 :b 15}}]
@@ -105,7 +105,7 @@
                                            [])
                   right-cursor (tu/->cursor (Schema. [a-field])
                                             [])
-                  difference-cursor (set-op/->difference-cursor tu/*allocator* left-cursor right-cursor)]
+                  difference-cursor (set-op/->difference-cursor tu/*allocator* #{'a} left-cursor right-cursor)]
 
         (t/is (empty? (tu/<-cursor difference-cursor))))
 
@@ -113,13 +113,13 @@
                                            [])
                   right-cursor (tu/->cursor (Schema. [a-field])
                                             [[{:a 10}, {:a 15}]])
-                  difference-cursor (set-op/->difference-cursor tu/*allocator* left-cursor right-cursor)]
+                  difference-cursor (set-op/->difference-cursor tu/*allocator* #{'a} left-cursor right-cursor)]
 
         (t/is (empty? (tu/<-cursor difference-cursor))))
 
       (with-open [left-cursor (tu/->cursor (Schema. [a-field]) [[{:a 10}, {:a 15}]])
                   right-cursor (tu/->cursor (Schema. [a-field]) [])
-                  difference-cursor (set-op/->difference-cursor tu/*allocator* left-cursor right-cursor)]
+                  difference-cursor (set-op/->difference-cursor tu/*allocator* #{'a} left-cursor right-cursor)]
 
         (t/is (= [#{{:a 10} {:a 15}}] (mapv set (tu/<-cursor difference-cursor))))))))
 
@@ -132,7 +132,7 @@
                                         [{:a 100 :b 15} {:a 0 :b 15}]
                                         [{:a 100 :b 15}]
                                         [{:a 10 :b 15} {:a 10 :b 15}]])
-                distinct-cursor (set-op/->distinct-cursor tu/*allocator* in-cursor)]
+                distinct-cursor (set-op/->distinct-cursor tu/*allocator* #{'a 'b} in-cursor)]
 
         (t/is (= [#{{:a 12, :b 10} {:a 0, :b 15}}
                   #{{:a 100, :b 15}}
@@ -144,7 +144,7 @@
       (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
                                          [[{:a 12 :b 10}, {:a 0 :b 15}]
                                           [{:a 100 :b 15}]])
-                  distinct-cursor (set-op/->distinct-cursor tu/*allocator* in-cursor)]
+                  distinct-cursor (set-op/->distinct-cursor tu/*allocator* #{'a 'b} in-cursor)]
 
         (t/is (= [#{{:a 12, :b 10} {:a 0, :b 15}}
                   #{{:a 100, :b 15}}]
@@ -152,7 +152,7 @@
 
     (t/testing "empty input and output"
       (with-open [in-cursor (tu/->cursor (Schema. [a-field]) [])
-                  distinct-cursor (set-op/->distinct-cursor tu/*allocator* in-cursor)]
+                  distinct-cursor (set-op/->distinct-cursor tu/*allocator* #{'a} in-cursor)]
 
         (t/is (empty? (tu/<-cursor distinct-cursor)))))))
 

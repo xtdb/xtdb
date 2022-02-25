@@ -5,8 +5,6 @@ import java.util.Spliterator;
 import java.util.function.Consumer;
 
 public interface ICursor<E> extends Spliterator<E>, AutoCloseable {
-    Set<String> getColumnNames();
-
     @Override
     default Spliterator<E> trySplit() {
         return null;

@@ -12,12 +12,9 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype TableCursor [^BufferAllocator allocator
-                      ^Set col-names
                       ^List rows
                       ^:unsynchronized-mutable done?]
   ICursor
-  (getColumnNames [_] col-names)
-
   (tryAdvance [this c]
     (if (or done? (.isEmpty rows))
       false
@@ -53,13 +50,5 @@
 
   (close [_]))
 
-(defn ->table-cursor ^core2.ICursor [^BufferAllocator allocator, ^List rows, {:keys [explicit-col-names]}]
-  (let [col-names (or explicit-col-names
-                      (into #{} (map symbol) (keys (first rows))))]
-    (when-not (every? #(= col-names (into #{} (map symbol) (keys %))) rows)
-      (throw (err/illegal-arg :mismatched-keys-in-table
-                              {::err/message "Mismatched keys in table"
-                               :expected col-names
-                               :key-sets (into #{} (map keys) rows)})))
-
-    (TableCursor. allocator col-names (ArrayList. rows) false)))
+(defn ->table-cursor ^core2.ICursor [^BufferAllocator allocator, ^List rows]
+  (TableCursor. allocator (ArrayList. rows) false))

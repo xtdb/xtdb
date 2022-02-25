@@ -42,10 +42,6 @@
                           ^:unsynchronized-mutable ^Iterator left-rel-iterator
                           ^:unsynchronized-mutable ^IIndirectRelation right-rel]
   ICursor
-  (getColumnNames [_]
-    (set/union (set (.getColumnNames left-cursor))
-               (set (.getColumnNames right-cursor))))
-
   (tryAdvance [this c]
     (.forEachRemaining left-cursor
                        (reify Consumer
@@ -157,8 +153,8 @@
         (copy-rel probe-rel (.toArray (.build matching-probe-idxs)))))))
 
 (deftype JoinCursor [^BufferAllocator allocator
-                     ^ICursor build-cursor, ^String build-column-name
-                     ^ICursor probe-cursor, ^String probe-column-name
+                     ^ICursor build-cursor, ^String build-key-column-name, build-column-names
+                     ^ICursor probe-cursor, ^String probe-key-column-name, probe-column-names
                      ^IRelationWriter rel-writer
                      ^List build-rels
                      ^IRelationMap rel-map
@@ -166,29 +162,25 @@
                      ^MutableRoaringBitmap pushdown-bloom
                      join-type]
   ICursor
-  (getColumnNames [_]
-    (set/union (set (.getColumnNames build-cursor))
-               (set (.getColumnNames probe-cursor))))
-
   (tryAdvance [_ c]
     (.forEachRemaining build-cursor
                        (reify Consumer
                          (accept [_ build-rel]
                            (let [build-rel (iv/copy build-rel allocator)]
                              (.add build-rels build-rel)
-                             (build-phase build-rel build-column-name rel-map pushdown-bloom)))))
+                             (build-phase build-rel build-key-column-name rel-map pushdown-bloom)))))
 
     (let [yield-missing? (contains? #{:anti-semi :left-outer :full-outer} join-type)]
       (boolean
        (or (let [advanced? (boolean-array 1)]
              (binding [scan/*column->pushdown-bloom* (if yield-missing?
                                                        scan/*column->pushdown-bloom*
-                                                       (assoc scan/*column->pushdown-bloom* probe-column-name pushdown-bloom))]
+                                                       (assoc scan/*column->pushdown-bloom* probe-key-column-name pushdown-bloom))]
                (while (and (not (aget advanced? 0))
                            (.tryAdvance probe-cursor
                                         (reify Consumer
                                           (accept [_ probe-rel]
-                                            (probe-phase rel-writer probe-rel rel-map probe-column-name matched-build-idxs join-type)
+                                            (probe-phase rel-writer probe-rel rel-map probe-key-column-name matched-build-idxs join-type)
 
                                             (with-open [out-rel (vw/rel-writer->reader rel-writer)]
                                               (try
@@ -206,11 +198,10 @@
                (when-not (.isEmpty unmatched-build-idxs)
                  (.add matched-build-idxs 0 build-row-count)
 
-                 (doseq [^IRowCopier row-copier (concat (for [col-name (.getColumnNames build-cursor)]
+                 (doseq [^IRowCopier row-copier (concat (for [col-name (map name build-column-names)]
                                                           (vw/->row-copier (.writerForName rel-writer col-name) (.vectorForName build-rel col-name)))
 
-                                                        (for [probe-col-name (set/difference (.getColumnNames probe-cursor)
-                                                                                             (.getColumnNames build-cursor))]
+                                                        (for [probe-col-name (map name (set/difference probe-column-names build-column-names))]
                                                           (vw/->null-row-copier (.writerForName rel-writer probe-col-name))))]
 
                    (.forEach unmatched-build-idxs
@@ -232,67 +223,71 @@
     (util/try-close probe-cursor)))
 
 (defn ->equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                         ^ICursor left-cursor, ^String left-column-name,
-                                         ^ICursor right-cursor, ^String right-column-name]
+                                         ^ICursor left-cursor, ^String left-key-column-name, left-column-names
+                                         ^ICursor right-cursor, ^String right-key-column-name, right-column-names]
   (JoinCursor. allocator
-               left-cursor left-column-name right-cursor right-column-name
+               left-cursor left-key-column-name left-column-names
+               right-cursor right-key-column-name right-column-names
                (vw/->rel-writer allocator)
                (ArrayList.)
-               (emap/->relation-map allocator {:build-key-col-names [left-column-name]
-                                               :probe-key-col-names [right-column-name]})
+               (emap/->relation-map allocator {:build-key-col-names [left-key-column-name]
+                                               :probe-key-col-names [right-key-column-name]})
                nil
                (MutableRoaringBitmap.)
                :inner))
 
 (defn ->left-semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                                   ^ICursor left-cursor, ^String left-column-name,
-                                                   ^ICursor right-cursor, ^String right-column-name]
+                                                   ^ICursor left-cursor, ^String left-key-column-name, left-column-names
+                                                   ^ICursor right-cursor, ^String right-key-column-name, right-column-names]
   (JoinCursor. allocator
-               right-cursor right-column-name left-cursor left-column-name
+               right-cursor right-key-column-name right-column-names
+               left-cursor left-key-column-name left-column-names
                (vw/->rel-writer allocator)
                (ArrayList.)
-               (emap/->relation-map allocator {:build-key-col-names [right-column-name]
-                                               :probe-key-col-names [left-column-name]})
+               (emap/->relation-map allocator {:build-key-col-names [right-key-column-name]
+                                               :probe-key-col-names [left-key-column-name]})
                nil
                (MutableRoaringBitmap.)
                :semi))
 
 (defn ->left-outer-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                                    ^ICursor left-cursor, ^String left-column-name,
-                                                    ^ICursor right-cursor, ^String right-column-name]
+                                                    ^ICursor left-cursor, ^String left-key-column-name, left-column-names
+                                                    ^ICursor right-cursor, ^String right-key-column-name, right-column-names]
   (JoinCursor. allocator
-               right-cursor right-column-name left-cursor left-column-name
+               right-cursor right-key-column-name right-column-names
+               left-cursor left-key-column-name left-column-names
                (vw/->rel-writer allocator)
                (ArrayList.)
-               (emap/->relation-map allocator {:build-key-col-names [right-column-name]
-                                               :probe-key-col-names [left-column-name]})
+               (emap/->relation-map allocator {:build-key-col-names [right-key-column-name]
+                                               :probe-key-col-names [left-key-column-name]})
                nil
                (MutableRoaringBitmap.)
                :left-outer))
 
 (defn ->full-outer-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                                    ^ICursor left-cursor, ^String left-column-name,
-                                                    ^ICursor right-cursor, ^String right-column-name]
+                                                    ^ICursor left-cursor, ^String left-key-column-name, left-column-names
+                                                    ^ICursor right-cursor, ^String right-key-column-name, right-column-names]
   (JoinCursor. allocator
-               left-cursor left-column-name right-cursor right-column-name
+               left-cursor left-key-column-name left-column-names
+               right-cursor right-key-column-name right-column-names
                (vw/->rel-writer allocator)
                (ArrayList.)
-               (emap/->relation-map allocator {:build-key-col-names [left-column-name]
-
-                                               :probe-key-col-names [right-column-name]})
+               (emap/->relation-map allocator {:build-key-col-names [left-key-column-name]
+                                               :probe-key-col-names [right-key-column-name]})
                (RoaringBitmap.)
                (MutableRoaringBitmap.)
                :full-outer))
 
 (defn ->left-anti-semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                                        ^ICursor left-cursor, ^String left-column-name,
-                                                        ^ICursor right-cursor, ^String right-column-name]
+                                                        ^ICursor left-cursor, ^String left-key-column-name, left-column-names
+                                                        ^ICursor right-cursor, ^String right-key-column-name, right-column-names]
   (JoinCursor. allocator
-               right-cursor right-column-name left-cursor left-column-name
+               right-cursor right-key-column-name right-column-names
+               left-cursor left-key-column-name left-column-names
                (vw/->rel-writer allocator)
                (ArrayList.)
-               (emap/->relation-map allocator {:build-key-col-names [right-column-name]
-                                               :probe-key-col-names [left-column-name]})
+               (emap/->relation-map allocator {:build-key-col-names [right-key-column-name]
+                                               :probe-key-col-names [left-key-column-name]})
                nil
                (MutableRoaringBitmap.)
                :anti-semi))

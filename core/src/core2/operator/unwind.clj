@@ -34,8 +34,6 @@
                        ^String column-name
                        with-ordinality?]
   ICursor
-  (getColumnNames [_] (.getColumnNames in-cursor))
-
   (tryAdvance [this c]
     (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor
