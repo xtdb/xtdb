@@ -6,8 +6,10 @@
             [xtdb.system :as sys])
   (:import [com.codahale.metrics Gauge Meter MetricRegistry Snapshot Timer]))
 
-(defn ->registry [_]
-  (dropwizard/new-registry))
+(defn ->registry {::sys/args {:registry {:doc       "Your own com.codahale.metrics.MetricRegistry"
+                                         :default   (dropwizard/new-registry)}}}
+  [{:keys [registry]}]
+  registry)
 
 (defn ->metrics {::sys/deps {:registry ::registry
                              :xtdb/node :xtdb/node
