@@ -12,7 +12,7 @@
   (-datoms [this index components]))
 
 (defn logic-var? [x]
-  (and (symbol? x) (= \? (first (name x)))))
+  (and (simple-symbol? x) (= \? (first (name x)))))
 
 (defn source-var? [x]
   (= '$ x))
@@ -63,7 +63,7 @@
 (s/def ::rules-var rules-var?)
 (s/def ::blank-var blank-var?)
 
-(s/def ::plain-symbol (s/and symbol? (complement (some-fn source-var? logic-var?))))
+(s/def ::plain-symbol (s/and symbol? (complement (some-fn source-var? logic-var? rules-var?))))
 
 (s/def ::and-clause (s/cat :and '#{and} :clauses (s/+ ::clause)))
 (s/def ::expression-clause (s/or :data-pattern ::data-pattern
@@ -145,9 +145,8 @@
                :min-count 1))
 (s/def ::rule-head (s/and list? (s/cat :rule-name ::rule-name
                                        :rule-vars ::rule-vars)))
-(s/def ::unqualified-plain-symbol (s/and ::plain-symbol #(and (not= 'and %)
-                                                              (nil? (namespace %)))))
-(s/def ::rule-name ::unqualified-plain-symbol)
+(s/def ::unqualified-plain-symbol simple-symbol?)
+(s/def ::rule-name (s/and ::unqualified-plain-symbol (complement '#{and or or-join not not-join})))
 
 ;; Query runtime
 
@@ -437,9 +436,9 @@
 (defn- wrap-with-return-map [return-map _ query-form]
   (if-let [tuple-keys (when-let [[return-map-type {:keys [symbols]}] return-map]
                         (not-empty (map (case return-map-type
-                                          :return-keys (comp keyword name)
+                                          :return-keys keyword
                                           :return-syms identity
-                                          :return-strs name)
+                                          :return-strs str)
                                         symbols)))]
 
     `(map (partial zipmap '~tuple-keys) ~query-form)
