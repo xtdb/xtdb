@@ -190,7 +190,7 @@ WHERE ql .partno = qz.partno AND ql .descr= \"engine\"
        :qgm.quantifier/columns [partno price]
        :qgm.quantifier/ranges-over b2}
       {:db/id q3
-       :qgm.quantifaier/type :qgm.quantifier.type/foreach
+       :qgm.quantifier/type :qgm.quantifier.type/foreach
        :qgm.quantifier/columns [partno price]
        :qgm.quantifier/ranges-over b2}
       {:db/id q4

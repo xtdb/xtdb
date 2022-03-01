@@ -30,6 +30,7 @@
 ;; - align names and language with spec, add references?
 ;; - grouping column check for asterisks should really expand and then fail.
 ;; - named columns join should only output single named columns: COALESCE(lhs.x, rhs.x) AS x
+;; - remove with-redefs, won't work with multiple threads.
 
 (defn- enter-env-scope
   ([env]
