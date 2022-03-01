@@ -648,20 +648,20 @@
 (defn plan-query [query]
   (if-let [parse-failure (insta/get-failure query)]
     {:errs [(prn-str parse-failure)]}
-    (r/with-memoized-attributes [#'sem/id
-                                 #'sem/ctei
-                                 #'sem/cteo
-                                 #'sem/cte-env
-                                 #'sem/dcli
-                                 #'sem/dclo
-                                 #'sem/env
-                                 #'sem/group-env
-                                 #'sem/projected-columns
-                                 #'sem/column-reference]
-      #(let [ag (z/vector-zip query)]
-         (if-let [errs (not-empty (sem/errs ag))]
-           {:errs errs}
-           {:plan (->> (z/vector-zip (plan ag))
-                       (r/innermost (r/mono-tp optimize-plan))
-                       (z/node)
-                       (s/assert ::lp/logical-plan))})))))
+    (r/with-memoized-attributes [sem/id
+                                 sem/ctei
+                                 sem/cteo
+                                 sem/cte-env
+                                 sem/dcli
+                                 sem/dclo
+                                 sem/env
+                                 sem/group-env
+                                 sem/projected-columns
+                                 sem/column-reference]
+      (let [ag (z/vector-zip query)]
+        (if-let [errs (not-empty (sem/errs ag))]
+          {:errs errs}
+          {:plan (->> (z/vector-zip (plan ag))
+                      (r/innermost (r/mono-tp optimize-plan))
+                      (z/node)
+                      (s/assert ::lp/logical-plan))})))))

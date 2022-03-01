@@ -125,9 +125,9 @@
 (defmacro zcase {:style/indent 1} [ag & body]
   `(case (ctor ~ag) ~@body))
 
-(defn with-memoized-attributes [attr-vars f]
-  (let [attrs (zipmap attr-vars (map (comp memoize deref) attr-vars))]
-    (with-redefs-fn attrs f)))
+(defmacro with-memoized-attributes [attrs & body]
+  `(binding [~@(interleave attrs (map (partial list 'memoize) attrs))]
+     ~@body))
 
 ;; Strategic Zippers based on Ztrategic
 
@@ -565,7 +565,7 @@
 
   ;; Based number example
 
-  (defn base [n]
+  (defn ^:dynamic base [n]
     (case (ctor n)
       :basechar (case (lexeme n 1)
                   "o" 8
@@ -573,7 +573,7 @@
       :based-num (base ($ n 2))
       (:num :digit) (base (parent n))))
 
-  (defn value [n]
+  (defn ^:dynamic value [n]
     (case (ctor n)
       :digit (let [v (Double/parseDouble (lexeme n 1))]
                (if (> v (base n))
@@ -589,18 +589,18 @@
   (time
    (= 229.0
       (with-memoized-attributes
-        [#'base #'value]
-        #(value
-          (z/vector-zip
-           [:based-num
+        [base value]
+        (value
+         (z/vector-zip
+          [:based-num
+           [:num
             [:num
              [:num
               [:num
-               [:num
-                [:digit "3"]]
-               [:digit "4"]]
-              [:digit "5"]]]
-            [:basechar "o"]]))))))
+               [:digit "3"]]
+              [:digit "4"]]
+             [:digit "5"]]]
+           [:basechar "o"]]))))))
 
 (comment
   (defn ->attributed-tree [tree attr-vars]

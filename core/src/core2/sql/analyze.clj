@@ -30,7 +30,6 @@
 ;; - align names and language with spec, add references?
 ;; - grouping column check for asterisks should really expand and then fail.
 ;; - named columns join should only output single named columns: COALESCE(lhs.x, rhs.x) AS x
-;; - remove with-redefs, won't work with multiple threads.
 
 (defn- enter-env-scope
   ([env]
@@ -74,7 +73,7 @@
 
 ;; Ids
 
-(defn id [ag]
+(defn ^:dynamic id [ag]
   (r/zcase ag
     :table_primary
     (if (r/ctor? :qualified_join ag)
@@ -168,7 +167,7 @@
         {:ref ag}))))
 
 ;; Inherited
-(defn- ctei [ag]
+(defn ^:dynamic ctei [ag]
   (r/zcase ag
     :query_expression
     (enter-env-scope (cte-env (r/parent ag)))
@@ -181,7 +180,7 @@
     (r/inherit ag)))
 
 ;; Synthesised
-(defn- cteo [ag]
+(defn ^:dynamic cteo [ag]
   (r/zcase ag
     :query_expression
     (if (r/ctor? :with_clause (r/$ ag 1))
@@ -194,7 +193,7 @@
     :with_list
     (ctei (r/$ ag -1))))
 
-(defn- cte-env [ag]
+(defn ^:dynamic cte-env [ag]
   (r/zcase ag
     :query_expression
     (cteo ag)
@@ -317,7 +316,7 @@
     (r/inherit ag)))
 
 ;; Inherited
-(defn- dcli [ag]
+(defn ^:dynamic dcli [ag]
   (r/zcase ag
     :query_specification
     (enter-env-scope (env (r/parent ag)))
@@ -332,7 +331,7 @@
     (r/inherit ag)))
 
 ;; Synthesised
-(defn- dclo [ag]
+(defn ^:dynamic dclo [ag]
   (r/zcase ag
     :query_specification
     (dclo (r/$ ag -1))
@@ -346,7 +345,7 @@
     :table_reference_list
     (dcli (r/$ ag -1))))
 
-(defn env [ag]
+(defn ^:dynamic env [ag]
   (r/zcase ag
     :query_specification
     (dclo ag)
@@ -393,7 +392,7 @@
        (sort-by count)
        (last)))
 
-(defn group-env [ag]
+(defn ^:dynamic group-env [ag]
   (r/zcase ag
     :query_specification
     (enter-env-scope (group-env (r/parent ag))
@@ -436,7 +435,7 @@
 
 (declare column-reference)
 
-(defn projected-columns [ag]
+(defn ^:dynamic projected-columns [ag]
   (r/zcase ag
     :table_primary
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
@@ -640,7 +639,7 @@
 
 ;; Column references
 
-(defn column-reference [ag]
+(defn ^:dynamic column-reference [ag]
   (r/zcase ag
     :column_reference
     (let [identifiers (identifiers ag)
@@ -933,7 +932,7 @@
        [(column-reference ag)]))
    ag))
 
-(defn scope-element [ag]
+(defn ^:dynamic scope-element [ag]
   (r/zcase ag
     (:query_expression
      :query_specification)
@@ -941,7 +940,7 @@
 
     (r/inherit ag)))
 
-(defn- scope [ag]
+(defn- ^:dynamic scope [ag]
   (r/zcase ag
     (:query_expression
      :query_specification)
@@ -1008,20 +1007,20 @@
 (defn analyze-query [query]
   (if-let [parse-failure (insta/get-failure query)]
     {:errs [(prn-str parse-failure)]}
-    (r/with-memoized-attributes [#'id
-                                 #'ctei
-                                 #'cteo
-                                 #'cte-env
-                                 #'dcli
-                                 #'dclo
-                                 #'env
-                                 #'group-env
-                                 #'projected-columns
-                                 #'column-reference
-                                 #'scope-element
-                                 #'scope]
-      #(let [ag (z/vector-zip query)]
-         (if-let [errs (not-empty (errs ag))]
-           {:errs errs}
-           {:scopes (scopes ag)
-            :errs []})))))
+    (r/with-memoized-attributes [id
+                                 ctei
+                                 cteo
+                                 cte-env
+                                 dcli
+                                 dclo
+                                 env
+                                 group-env
+                                 projected-columns
+                                 column-reference
+                                 scope-element
+                                 scope]
+      (let [ag (z/vector-zip query)]
+        (if-let [errs (not-empty (errs ag))]
+          {:errs errs}
+          {:scopes (scopes ag)
+           :errs []})))))
