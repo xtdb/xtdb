@@ -1,13 +1,14 @@
 (ns core2.sql.qgm
   (:require [clojure.java.shell :as sh]
-            [clojure.string :as str]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.zip :as z]
+            [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
             [core2.sql.plan :as plan]
-            [core2.rewrite :as r]
             [core2.trip :as trip])
-  (:import [java.net URI URL]))
+  (:import (clojure.lang MapEntry)
+           (java.net URI URL)))
 
 ;; Query Graph Model using internal triple store.
 ;; http://projectsweb.cs.washington.edu/research/projects/db/weld/pirahesh-starburst-92.pdf
@@ -88,9 +89,10 @@
                     (str/upper-case (name (:qgm.box.body/distinct box))))
             (let [id->q (zipmap (map :db/id qs) qs)]
               (str/join "\n    "
-                        (for [q (sort (:qgm.box.body/quantifiers box))]
-                          (format "%s [label=\"%s(%s)\", shape=circle, style=filled, margin=0]"
-                                  q q (str/upper-case (first (name (get-in id->q [q :qgm.quantifier/type] "F")))))))))))
+                        (let [qs (:qgm.box.body/quantifiers box)]
+                          (for [q (if (coll? qs) qs [qs])]
+                            (format "%s [label=\"%s(%s)\", shape=circle, style=filled, margin=0]"
+                                    q q (str/upper-case (first (name (get-in id->q [q :qgm.quantifier/type] "F"))))))))))))
 
 (defn- quantifier->dot [q]
   (format "%s -> %s:head [label=\"%s\", lhead=cluster_%s]"
@@ -100,15 +102,35 @@
           (:qgm.quantifier/ranges-over q)))
 
 (defn- predicate->dot [p]
-  (format "%s -> %s [label=\"%s\", dir=none, color=grey]"
-          (first (:qgm.predicate/quantifiers p))
-          (or (second (:qgm.predicate/quantifiers p))
-              (first (:qgm.predicate/quantifiers p)))
-          (str/replace (str (:qgm.predicate/expression p)) "\"" "\\\"")))
+  (let [qs (:qgm.predicate/quantifiers p)
+        qs (if (coll? qs) qs [qs])]
+    (format "%s -> %s [label=\"%s\", dir=none, color=grey]"
+            (first qs)
+            (or (second qs)
+                (first qs))
+            (str/replace (str (:qgm.predicate/expression p)) "\"" "\\\""))))
 
-(defn- qgm->dot [label bs qs ps]
-  (str/trim
-   (format "
+(defn- qgm->dot [label qgm]
+  (let [entities (->> qgm
+                      (reduce (fn [acc [e a v]]
+                                (-> acc
+                                    (assoc-in [e :db/id] e)
+                                    (update-in [e a]
+                                               (fn [x]
+                                                 (cond
+                                                   (set? x) (conj x v)
+                                                   (some? x) (conj #{} x v)
+                                                   :else v)))))
+                              {})
+                      vals)
+        {bs :box, qs :quantifier, ps :predicate} (->> entities
+                                                      (group-by (fn [e]
+                                                                  (cond
+                                                                    (:qgm.box/type e) :box
+                                                                    (:qgm.quantifier/type e) :quantifier
+                                                                    :else :predicate))))]
+    (str/trim
+     (format "
 digraph {
   compound=true
   fontname=courier
@@ -123,15 +145,15 @@ digraph {
 
   %s
 }"
-           (-> (str/trim label)
-               (str/replace "\n" "\\l")
-               (str/replace "\"" "\\\"")
-               (str "\\l"))
-           (str/join "\n"
-                     (for [b (sort-by :db/id bs)]
-                       (box->dot b qs)))
-           (str/join "\n  " (map quantifier->dot (sort-by :db/id qs)))
-           (str/join "\n  " (map predicate->dot (sort-by :db/id ps))))))
+             (-> (str/trim label)
+                 (str/replace "\n" "\\l")
+                 (str/replace "\"" "\\\"")
+                 (str "\\l"))
+             (str/join "\n"
+                       (for [b (sort-by :db/id bs)]
+                         (box->dot b qs)))
+             (str/join "\n  " (map quantifier->dot (sort-by :db/id qs)))
+             (str/join "\n  " (map predicate->dot (sort-by :db/id ps)))))))
 
 (defn- dot->svg [dot]
   (let [{:keys [exit out err]} (sh/sh "dot" "-Tsvg" :in dot)]
@@ -157,65 +179,74 @@ digraph {
 
 (comment
 
-  (dot->file
-   (qgm->dot
-    "
-SELECT DISTINCT q1.partno, q1.descr, q2.suppno
-FROM inventory q1, quotations q2
-WHERE q1.partno = q2.partno AND q1.descr= 'engine'
-  AND q2.price <= ALL
-      (SELECT q3.price FROM quotations q3
-       WHERE q2.partno=q3.partno)"
-    '[{:db/id b1
-       :qgm.box/type :qgm.box.type/base-table
-       :qgm.box.base-table/name inventory}
-      {:db/id b2
-       :qgm.box/type :qgm.box.type/base-table
-       :qgm.box.base-table/name quotations}
-      {:db/id b3
-       :qgm.box/type :qgm.box.type/select
-       :qgm.box.head/distinct? true
-       :qgm.box.head/columns [partno descr suppno]
-       :qgm.box.body/columns [q1.partno q1.descr q2.suppno]
-       :qgm.box.body/distinct :qgm.box.body.distinct/enforce
-       :qgm.box.body/quantifiers #{q1 q2 q4}}
-      {:db/id b4
-       :qgm.box/type :qgm.box.type/select
-       :qgm.box.head/distinct? false
-       :qgm.box.head/columns [price]
-       :qgm.box.body/columns [q3.price]
-       :qgm.box.body/distinct :qgm.box.body.distinct/permit
-       :qgm.box.body/quantifiers #{q3}}]
-    '[{:db/id q1
-       :qgm.quantifier/type :qgm.quantifier.type/foreach
-       :qgm.quantifier/columns [partno descr]
-       :qgm.quantifier/ranges-over b1}
-      {:db/id q2
-       :qgm.quantifier/type :qgm.quantifier.type/foreach
-       :qgm.quantifier/columns [partno price]
-       :qgm.quantifier/ranges-over b2}
-      {:db/id q3
-       :qgm.quantifier/type :qgm.quantifier.type/foreach
-       :qgm.quantifier/columns [partno price]
-       :qgm.quantifier/ranges-over b2}
-      {:db/id q4
-       :qgm.quantifier/type :qgm.quantifier.type/all
-       :qgm.quantifier/columns [price]
-       :qgm.quantifier/ranges-over b4}]
-    '[{:db/id p1
-       :qgm.predicate/expression (= q1.descr "engine")
-       :qgm.predicate/quantifiers #{q1}}
-      {:db/id p2
-       :qgm.predicate/expression (= q1.partno q2.partno)
-       :qgm.predicate/quantifiers #{q1 q2}}
-      {:db/id p3
-       :qgm.predicate/expression (<= q2.pr__ice q4.price)
-       :qgm.predicate/quantifiers #{q2 q4}}
-      {:db/id p4
-       :qgm.predicate/expression (= q2.partno q3.partno)
-       :qgm.predicate/quantifiers #{q2 q3}}])
-   "png"
-   "target/qgm.png"))
+  (declare qgm)
+
+  #_
+  "SELECT DISTINCT q1.partno, q1.descr, q2.suppno
+   FROM inventory q1, quotations q2
+   WHERE q1.partno = q2.partno AND q1.descr= 'engine'"
+
+  #_
+  "SELECT DISTINCT q1.partno, q1.descr, q2.suppno
+   FROM inventory q1, quotations q2
+   WHERE q1.partno = q2.partno AND q1.descr= 'engine'
+     AND q2.price <= ALL
+         (SELECT q3.price FROM quotations q3
+          WHERE q2.partno=q3.partno)"
+
+  #_
+  '[{:db/id b1
+     :qgm.box/type :qgm.box.type/base-table
+     :qgm.box.base-table/name inventory}
+    {:db/id b2
+     :qgm.box/type :qgm.box.type/base-table
+     :qgm.box.base-table/name quotations}
+    {:db/id b3
+     :qgm.box/type :qgm.box.type/select
+     :qgm.box.head/distinct? true
+     :qgm.box.head/columns [partno descr suppno]
+     :qgm.box.body/columns [q1.partno q1.descr q2.suppno]
+     :qgm.box.body/distinct :qgm.box.body.distinct/enforce
+     :qgm.box.body/quantifiers #{q1 q2 q4}}
+    {:db/id b4
+     :qgm.box/type :qgm.box.type/select
+     :qgm.box.head/distinct? false
+     :qgm.box.head/columns [price]
+     :qgm.box.body/columns [q3.price]
+     :qgm.box.body/distinct :qgm.box.body.distinct/permit
+     :qgm.box.body/quantifiers #{q3}}
+    {:db/id q1
+     :qgm.quantifier/type :qgm.quantifier.type/foreach
+     :qgm.quantifier/columns [partno descr]
+     :qgm.quantifier/ranges-over b1}
+    {:db/id q2
+     :qgm.quantifier/type :qgm.quantifier.type/foreach
+     :qgm.quantifier/columns [partno price]
+     :qgm.quantifier/ranges-over b2}
+    {:db/id q3
+     :qgm.quantifier/type :qgm.quantifier.type/foreach
+     :qgm.quantifier/columns [partno price]
+     :qgm.quantifier/ranges-over b2}
+    {:db/id q4
+     :qgm.quantifier/type :qgm.quantifier.type/all
+     :qgm.quantifier/columns [price]
+     :qgm.quantifier/ranges-over b4}
+    {:db/id p1
+     :qgm.predicate/expression (= q1.descr "engine")
+     :qgm.predicate/quantifiers #{q1}}
+    {:db/id p2
+     :qgm.predicate/expression (= q1.partno q2.partno)
+     :qgm.predicate/quantifiers #{q1 q2}}
+    {:db/id p3
+     :qgm.predicate/expression (<= q2.price q4.price)
+     :qgm.predicate/quantifiers #{q2 q4}}
+    {:db/id p4
+     :qgm.predicate/expression (= q2.partno q3.partno)
+     :qgm.predicate/quantifiers #{q2 q3}}]
+
+  (let [q "SELECT q3.price FROM quotations q3 WHERE q3.partno = 1"]
+    (-> (qgm->dot q (qgm (z/vector-zip (core2.sql/parse q))))
+        (dot->file "png" "target/qgm.png"))))
 
 (defn build-query-spec [ag distinct?]
   (let [id (sem/id (sem/scope-element ag))
