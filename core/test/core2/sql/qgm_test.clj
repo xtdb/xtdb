@@ -1,4 +1,4 @@
-(ns core2.qgm-test
+(ns core2.sql.qgm-test
   (:require [clojure.test :as t]
             [core2.sql.qgm :as qgm]
             [core2.sql :as sql]
