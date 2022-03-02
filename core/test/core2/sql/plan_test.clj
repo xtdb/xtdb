@@ -85,9 +85,11 @@
   (valid? "SELECT me.name, SUM(m.length) FROM MovieExec AS me, Movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.year) < 1930"
           '[:rename {me__4_name name}
             [:project [me__4_name {$column_2$ $agg_out__2_3$}]
-             [:select (< $agg_out__2_6$ 1930)
-              [:group-by [me__4_name {$agg_out__2_3$ (sum $agg_in__2_3$)} {$agg_out__2_6$ (min $agg_in__2_6$)}]
-               [:project [me__4_name {$agg_in__2_3$ m__5_length} {$agg_in__2_6$ m__5_year}]
+             [:select (< $agg_out__2_8$ 1930)
+              [:group-by [me__4_name
+                          {$agg_out__2_3$ (sum $agg_in__2_3$)}
+                          {$agg_out__2_8$ (min $agg_in__2_8$)}]
+               [:project [me__4_name {$agg_in__2_3$ m__5_length} {$agg_in__2_8$ m__5_year}]
                 [:join {me__4_cert m__5_producer}
                  [:rename me__4 [:scan [name cert]]]
                  [:rename m__5 [:scan [length producer year]]]]]]]]])
@@ -228,8 +230,8 @@
 
   (valid? "SELECT si.year = 'foo' FROM StarsIn AS si ORDER BY si.year = 'foo'"
           '[:order-by [{$column_1$ :asc}]
-            [:project [{$column_1$ (= si__3_year "foo")}]
-             [:rename si__3 [:scan [year]]]]])
+            [:project [{$column_1$ (= si__4_year "foo")}]
+             [:rename si__4 [:scan [year]]]]])
 
   (valid? "SELECT film.name FROM StarsIn AS si, UNNEST(si.films) AS film(name)"
           '[:rename

@@ -83,7 +83,8 @@
     (:query_expression
      :query_specification
      :with_list_element
-     :aggregate_function)
+     :aggregate_function
+     :comparison_predicate)
     (inc ^long (id (z/prev ag)))
 
     (or (some-> (z/prev ag) (id)) 0)))
