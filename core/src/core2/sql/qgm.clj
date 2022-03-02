@@ -162,7 +162,7 @@ digraph {
     "
 SELECT DISTINCT q1.partno, q1.descr, q2.suppno
 FROM inventory q1, quotations q2
-WHERE q1.partno = q2.partno AND q1.descr= \"engine\"
+WHERE q1.partno = q2.partno AND q1.descr= 'engine'
   AND q2.price <= ALL
       (SELECT q3.price FROM quotations q3
        WHERE q2.partno=q3.partno)"
@@ -209,7 +209,7 @@ WHERE q1.partno = q2.partno AND q1.descr= \"engine\"
        :qgm.predicate/expression (= q1.partno q2.partno)
        :qgm.predicate/quantifiers #{q1 q2}}
       {:db/id p3
-       :qgm.predicate/expression (<= q2.price q4.price)
+       :qgm.predicate/expression (<= q2.pr__ice q4.price)
        :qgm.predicate/quantifiers #{q2 q4}}
       {:db/id p4
        :qgm.predicate/expression (= q2.partno q3.partno)
@@ -217,21 +217,30 @@ WHERE q1.partno = q2.partno AND q1.descr= \"engine\"
    "png"
    "target/qgm.png"))
 
+(defn build-query-spec [ag distinct?]
+  (let [id (sem/id (sem/scope-element ag))
+        eid (symbol (str "b" id))
+        projection (first (sem/projected-columns ag))
+        root? (r/ctor? :directly_executable_statement (r/parent (sem/scope-element (r/parent ag))))]
+    (cond-> [[eid :qgm.box/type :qgm.box.type/select]
+             [eid :qgm.box.head/distinct? distinct?]
+             [eid :qgm.box.head/columns (mapv plan/unqualifed-projection-symbol projection)]
+             [eid :qgm.box.body/columns (mapv plan/qualified-projection-symbol projection)]
+             [eid :qgm.box.body/distinct (if distinct?
+                                           :qgm.box.body.distinct/enforce
+                                           :qgm.box.body.distinct/permit)]]
+      root? (conj [eid :qgm.box/root? true]))))
+
 (defn qgm [ag]
   (r/collect
    (fn [ag]
-     (r/zmatch ag
+     (r/zmatch
+       ag
        [:query_specification _ _ _]
-       (let [id (sem/id (sem/scope-element ag))
-             eid (symbol (str "b" id))
-             projection (first (sem/projected-columns ag))
-             root? (r/ctor? :directly_executable_statement (r/parent (sem/scope-element (r/parent ag))))]
-         (cond-> [[eid :qgm.box/type :qgm.box.type/select]
-                  [eid :qgm.box.head/distinct? false]
-                  [eid :qgm.box.head/columns (mapv plan/unqualifed-projection-symbol projection)]
-                  [eid :qgm.box.body/columns (mapv plan/qualified-projection-symbol projection)]
-                  [eid :qgm.box.body/distinct :qgm.box.body.distinct/permit]]
-           root? (conj [eid :qgm.box/root? true])))
+       (build-query-spec ag false)
+
+       [:query_specification _ [:set_quantifier d] _ _]
+       (build-query-spec ag (= d "DISTINCT"))
 
        [:table_primary _ _]
        (let [table (sem/table ag)
@@ -248,24 +257,25 @@ WHERE q1.partno = q2.partno AND q1.descr= \"engine\"
             [scope-id :qgm.box.body/quantifiers qid]]))
 
        [:comparison_predicate _ _]
-       (let [pred-id 'p1 #_(gensym 'p)]
+       (let [pred-id (symbol (str "p" (sem/id ag)))]
          (into [[pred-id :qgm.predicate/expression (plan/expr ag)]]
                (r/collect-stop
-                (fn [ag]
-                  (r/zmatch ag
-                    [:column_reference _]
-                    (let [{:keys [identifiers table-id]} (sem/column-reference ag)
-                          q (symbol (str (first identifiers) "__" table-id))]
-                      [[pred-id :qgm.predicate/quantifiers q]])
+                 (fn [ag]
+                   (r/zmatch ag
+                             [:column_reference _]
+                             (let [{:keys [identifiers table-id]} (sem/column-reference ag)
+                                   q (symbol (str (first identifiers) "__" table-id))]
+                               [[pred-id :qgm.predicate/quantifiers q]])
 
-                    [:subquery _]
-                    []))
-                ag)))))
+                             [:subquery _]
+                             []))
+                 ag)))))
    ag))
 
 (defn plan-query [query]
   (trip/transact {} (vec (for [[e a v] (qgm (z/vector-zip query))]
                            [:db/add e a v]))))
+
 
 (comment
 
@@ -307,8 +317,8 @@ WHERE q1.partno = q2.partno AND q1.descr= \"engine\"
                          [b2 :qgm.box.head/distinct? false]
                          [b3 :qgm.box/type :qgm.box.type/base-table]
                          [b3 :qgm.box.base-table/name quotations]
-                         [p1 :qgm.predicate/expression (= q3__3_partno 1)]
-                         [p1 :qgm.predicate/quantifiers q3__3]
+                         [p4 :qgm.predicate/expression (= q3__3_partno 1)]
+                         [p4 :qgm.predicate/quantifiers q3__3]
                          [q3__3 :qgm.quantifier/columns [price partno]]
                          [q3__3 :qgm.quantifier/ranges-over b3]
                          [q3__3 :qgm.quantifier/type :qgm.quantifier.type/foreach]))
@@ -316,4 +326,104 @@ WHERE q1.partno = q2.partno AND q1.descr= \"engine\"
         actual (qgm (z/vector-zip (core2.sql/parse "SELECT q3.price FROM quotations q3 WHERE q3.partno = 1")))]
 
     (println (= expected (sort actual)))
+    (clojure.pprint/pprint (sort actual)))
+
+[:directly_executable_statement
+ [:query_expression
+  [:query_specification
+   "SELECT"
+   [:set_quantifier "DISTINCT"]
+   [:select_list
+    [:derived_column
+     [:column_reference
+      [:identifier_chain
+       [:regular_identifier "q1"]
+       [:regular_identifier "partno"]]]]
+    [:derived_column
+     [:column_reference
+      [:identifier_chain
+       [:regular_identifier "q1"]
+       [:regular_identifier "descr"]]]]
+    [:derived_column
+     [:column_reference
+      [:identifier_chain
+       [:regular_identifier "q2"]
+       [:regular_identifier "suppno"]]]]]
+   [:table_expression
+    [:from_clause
+     "FROM"
+     [:table_reference_list
+      [:table_primary
+       [:regular_identifier "inventory"]
+       [:regular_identifier "q1"]]
+      [:table_primary
+       [:regular_identifier "quotations"]
+       [:regular_identifier "q2"]]]]
+    [:where_clause
+     "WHERE"
+     [:boolean_term
+      [:boolean_test
+       [:comparison_predicate
+        [:column_reference
+         [:identifier_chain
+          [:regular_identifier "q1"]
+          [:regular_identifier "partno"]]]
+        [:comparison_predicate_part_2
+         [:equals_operator "="]
+         [:column_reference
+          [:identifier_chain
+           [:regular_identifier "q2"]
+           [:regular_identifier "partno"]]]]]]
+      "AND"
+      [:boolean_test
+       [:comparison_predicate
+        [:column_reference
+         [:identifier_chain
+          [:regular_identifier "q1"]
+          [:regular_identifier "descr"]]]
+        [:comparison_predicate_part_2
+         [:equals_operator "="]
+         [:character_string_literal "'engine'"]]]]]]]]]]
+
+  (let [expected (set '([b2 :qgm.box/root? true]
+                        [b2 :qgm.box/type :qgm.box.type/select]
+                        [b2 :qgm.box.body/columns [q1__3_partno q1__3_descr q2__4_suppno]]
+                        [b2 :qgm.box.body/distinct :qgm.box.body.distinct/enforce]
+                        [b2 :qgm.box.body/quantifiers q1__3]
+                        [b2 :qgm.box.body/quantifiers q2__4]
+                        [b2 :qgm.box.head/columns [partno descr suppno]]
+                        [b2 :qgm.box.head/distinct? true]
+
+                        ;; base tables
+                        [b3 :qgm.box/type :qgm.box.type/base-table]
+                        [b3 :qgm.box.base-table/name inventory]
+
+                        [b4 :qgm.box/type :qgm.box.type/base-table]
+                        [b4 :qgm.box.base-table/name quotations]
+
+
+                        ;; predicate
+                        [p5 :qgm.predicate/expression (= q1__3_partno q2__4_partno)]
+                        [p5 :qgm.predicate/quantifiers q1__3]
+                        [p5 :qgm.predicate/quantifiers q2__4]
+
+                        [p6 :qgm.predicate/expression (= q1__3_descr "engine")]
+                        [p6 :qgm.predicate/quantifiers q1__3]
+
+                        ;quantifiers
+                        [q1__3 :qgm.quantifier/columns [partno descr]]
+                        [q1__3 :qgm.quantifier/ranges-over b3]
+                        [q1__3 :qgm.quantifier/type :qgm.quantifier.type/foreach]
+
+                        [q2__4 :qgm.quantifier/columns [suppno partno]]
+                        [q2__4 :qgm.quantifier/ranges-over b4]
+                        [q2__4 :qgm.quantifier/type :qgm.quantifier.type/foreach]
+                        ))
+
+        actual (qgm (z/vector-zip
+                      (core2.sql/parse "SELECT DISTINCT q1.partno, q1.descr, q2.suppno
+                                       FROM inventory q1, quotations q2
+                                       WHERE q1.partno = q2.partno AND q1.descr= 'engine'")))]
+
+    (println (= (sort expected) (sort actual)))
     (clojure.pprint/pprint (sort actual))))
