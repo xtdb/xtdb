@@ -5,7 +5,8 @@
             [clojure.zip :as z]
             [core2.sql.analyze :as sem]
             [core2.sql.plan :as plan]
-            [core2.rewrite :as r])
+            [core2.rewrite :as r]
+            [core2.trip :as trip])
   (:import [java.net URI URL]))
 
 ;; Query Graph Model using internal triple store.
@@ -223,12 +224,14 @@ WHERE ql .partno = qz.partno AND ql .descr= \"engine\"
        [:query_specification _ _ _]
        (let [id (sem/id (sem/scope-element ag))
              eid (symbol (str "b" id))
-             projection (first (sem/projected-columns ag))]
-         [[eid :qgm.box/type :qgm.box.type/select]
-          [eid :qgm.box.head/distinct? false]
-          [eid :qgm.box.head/columns (mapv plan/unqualifed-projection-symbol projection)]
-          [eid :qgm.box.body/columns (mapv plan/qualified-projection-symbol projection)]
-          [eid :qgm.box.body/distinct :qgm.box.body.distinct/permit]])
+             projection (first (sem/projected-columns ag))
+             root? (r/ctor? :directly_executable_statement (r/parent (sem/scope-element (r/parent ag))))]
+         (cond-> [[eid :qgm.box/type :qgm.box.type/select]
+                  [eid :qgm.box.head/distinct? false]
+                  [eid :qgm.box.head/columns (mapv plan/unqualifed-projection-symbol projection)]
+                  [eid :qgm.box.body/columns (mapv plan/qualified-projection-symbol projection)]
+                  [eid :qgm.box.body/distinct :qgm.box.body.distinct/permit]]
+           root? (conj [eid :qgm.box/root? true])))
 
        [:table_primary _ _]
        (let [table (sem/table ag)
@@ -259,6 +262,10 @@ WHERE ql .partno = qz.partno AND ql .descr= \"engine\"
                     []))
                 ag)))))
    ag))
+
+(defn plan-query [query]
+  (trip/transact {} (vec (for [[e a v] (qgm (z/vector-zip query))]
+                           [:db/add e a v]))))
 
 (comment
 
@@ -291,7 +298,8 @@ WHERE ql .partno = qz.partno AND ql .descr= \"engine\"
            [:equals_operator "="]
            [:exact_numeric_literal [:unsigned_integer "1"]]]]]]]]]]
 
-  (let [expected (sort '([b2 :qgm.box/type :qgm.box.type/select]
+  (let [expected (sort '([b2 :qgm.box/root? true]
+                         [b2 :qgm.box/type :qgm.box.type/select]
                          [b2 :qgm.box.body/columns [q3__3_price]]
                          [b2 :qgm.box.body/distinct :qgm.box.body.distinct/permit]
                          [b2 :qgm.box.body/quantifiers q3__3]
