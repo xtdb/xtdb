@@ -366,12 +366,12 @@
 
      [:table_expression ^:z fc [:group_by_clause _ _ _] [:having_clause _ ^:z hsc]]
      ;;=>
-     (->> (wrap-with-group-by z)
+     (->> (wrap-with-group-by z (plan fc))
           (wrap-with-select (expr hsc)))
 
      [:table_expression ^:z fc [:having_clause _ ^:z hsc]]
      ;;=>
-     (->> (wrap-with-group-by z)
+     (->> (wrap-with-group-by z (plan fc))
           (wrap-with-select (expr hsc)))
 
      [:table_primary [:collection_derived_table _ _] _ _]
