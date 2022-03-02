@@ -1,7 +1,11 @@
 (ns core2.sql.qgm
   (:require [clojure.java.shell :as sh]
             [clojure.string :as str]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [clojure.zip :as z]
+            [core2.sql.analyze :as sem]
+            [core2.sql.plan :as plan]
+            [core2.rewrite :as r])
   (:import [java.net URI URL]))
 
 ;; Query Graph Model using internal triple store.
@@ -211,3 +215,97 @@ WHERE ql .partno = qz.partno AND ql .descr= \"engine\"
        :qgm.predicate/quantifiers #{q2 q3}}])
    "png"
    "target/qgm.png"))
+
+(defn qgm [ag]
+  (r/collect
+   (fn [ag]
+     (r/zmatch ag
+       [:query_specification _ _ _]
+       (let [id (sem/id (sem/scope-element ag))
+             eid (symbol (str "b" id))
+             projection (first (sem/projected-columns ag))]
+         [[eid :qgm.box/type :qgm.box.type/select]
+          [eid :qgm.box.head/distinct? false]
+          [eid :qgm.box.head/columns (mapv plan/unqualifed-projection-symbol projection)]
+          [eid :qgm.box.body/columns (mapv plan/qualified-projection-symbol projection)]
+          [eid :qgm.box.body/distinct :qgm.box.body.distinct/permit]])
+
+       [:table_primary _ _]
+       (let [table (sem/table ag)
+             scope-id (symbol (str "b" (:scope-id table)))
+             eid (symbol (str "b" (:id table)))
+             qid (symbol (str (:correlation-name table) "__" (:id table)))
+             projection (first (sem/projected-columns ag))]
+         (when-not (:subquery-scope-id table)
+           [[eid :qgm.box/type :qgm.box.type/base-table]
+            [eid :qgm.box.base-table/name (symbol (:table-or-query-name table))]
+            [qid :qgm.quantifier/ranges-over eid]
+            [qid :qgm.quantifier/type :qgm.quantifier.type/foreach]
+            [qid :qgm.quantifier/columns (mapv plan/unqualifed-projection-symbol projection)]
+            [scope-id :qgm.box.body/quantifiers qid]]))
+
+       [:comparison_predicate _ _]
+       (let [pred-id 'p1 #_(gensym 'p)]
+         (into [[pred-id :qgm.predicate/expression (plan/expr ag)]]
+               (r/collect-stop
+                (fn [ag]
+                  (r/zmatch ag
+                    [:column_reference _]
+                    (let [{:keys [identifiers table-id]} (sem/column-reference ag)
+                          q (symbol (str (first identifiers) "__" table-id))]
+                      [[pred-id :qgm.predicate/quantifiers q]])
+
+                    [:subquery _]
+                    []))
+                ag)))))
+   ag))
+
+(comment
+
+  '[:directly_executable_statement
+    [:query_expression
+     [:query_specification
+      "SELECT"
+      [:select_list
+       [:derived_column
+        [:column_reference
+         [:identifier_chain
+          [:regular_identifier "q3"]
+          [:regular_identifier "price"]]]]]
+      [:table_expression
+       [:from_clause
+        "FROM"
+        [:table_reference_list
+         [:table_primary
+          [:regular_identifier "quotations"]
+          [:regular_identifier "q3"]]]]
+       [:where_clause
+        "WHERE"
+        [:boolean_test
+         [:comparison_predicate
+          [:column_reference
+           [:identifier_chain
+            [:regular_identifier "q3"]
+            [:regular_identifier "partno"]]]
+          [:comparison_predicate_part_2
+           [:equals_operator "="]
+           [:exact_numeric_literal [:unsigned_integer "1"]]]]]]]]]]
+
+  (let [expected (sort '([b2 :qgm.box/type :qgm.box.type/select]
+                         [b2 :qgm.box.body/columns [q3__3_price]]
+                         [b2 :qgm.box.body/distinct :qgm.box.body.distinct/permit]
+                         [b2 :qgm.box.body/quantifiers q3__3]
+                         [b2 :qgm.box.head/columns [price]]
+                         [b2 :qgm.box.head/distinct? false]
+                         [b3 :qgm.box/type :qgm.box.type/base-table]
+                         [b3 :qgm.box.base-table/name quotations]
+                         [p1 :qgm.predicate/expression (= q3__3_partno 1)]
+                         [p1 :qgm.predicate/quantifiers q3__3]
+                         [q3__3 :qgm.quantifier/columns [price partno]]
+                         [q3__3 :qgm.quantifier/ranges-over b3]
+                         [q3__3 :qgm.quantifier/type :qgm.quantifier.type/foreach]))
+
+        actual (qgm (z/vector-zip (core2.sql/parse "SELECT q3.price FROM quotations q3 WHERE q3.partno = 1")))]
+
+    (println (= expected (sort actual)))
+    (clojure.pprint/pprint (sort actual))))

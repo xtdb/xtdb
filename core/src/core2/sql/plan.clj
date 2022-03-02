@@ -31,10 +31,10 @@
                         :correlation-name table
                         :column column}}))
 
-(defn- unqualifed-projection-symbol [{:keys [identifier ^long index] :as projection}]
+(defn unqualifed-projection-symbol [{:keys [identifier ^long index] :as projection}]
   (symbol (or identifier (str "$column_" (inc index) "$"))))
 
-(defn- qualified-projection-symbol [{:keys [qualified-column original-index] :as projection}]
+(defn qualified-projection-symbol [{:keys [qualified-column original-index] :as projection}]
   (let [{derived-column :ref table :table} (meta projection)]
     (if derived-column
       (expr (r/$ derived-column 1))
@@ -50,7 +50,7 @@
 
 ;; Expressions.
 
-(defn- expr [z]
+(defn expr [z]
   (maybe-add-ref
    z
    (r/zmatch z
