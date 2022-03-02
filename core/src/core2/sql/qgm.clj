@@ -110,19 +110,22 @@
                 (first qs))
             (str/replace (str (:qgm.predicate/expression p)) "\"" "\\\""))))
 
+(defn qgm->entities [qgm]
+  (->> qgm
+       (reduce (fn [acc [e a v]]
+                 (-> acc
+                     (assoc-in [e :db/id] e)
+                     (update-in [e a]
+                                (fn [x]
+                                  (cond
+                                    (set? x) (conj x v)
+                                    (some? x) (conj #{} x v)
+                                    :else v)))))
+               {})
+       vals))
+
 (defn- qgm->dot [label qgm]
-  (let [entities (->> qgm
-                      (reduce (fn [acc [e a v]]
-                                (-> acc
-                                    (assoc-in [e :db/id] e)
-                                    (update-in [e a]
-                                               (fn [x]
-                                                 (cond
-                                                   (set? x) (conj x v)
-                                                   (some? x) (conj #{} x v)
-                                                   :else v)))))
-                              {})
-                      vals)
+  (let [entities (qgm->entities qgm)
         {bs :box, qs :quantifier, ps :predicate} (->> entities
                                                       (group-by (fn [e]
                                                                   (cond
@@ -262,11 +265,23 @@ digraph {
                                            :qgm.box.body.distinct/permit)]]
       root? (conj [eid :qgm.box/root? true]))))
 
+(defn- expr-quantifiers [ag]
+  (r/collect-stop
+   (fn [ag]
+     (r/zmatch ag
+       [:column_reference _]
+       (let [{:keys [identifiers table-id]} (sem/column-reference ag)
+             q (symbol (str (first identifiers) "__" table-id))]
+         [q])
+
+       [:subquery _]
+       []))
+   ag))
+
 (defn qgm [ag]
   (r/collect
    (fn [ag]
-     (r/zmatch
-       ag
+     (r/zmatch ag
        [:query_specification _ _ _]
        (build-query-spec ag false)
 
@@ -276,7 +291,7 @@ digraph {
        [:table_primary _ _]
        (let [table (sem/table ag)
              scope-id (symbol (str "b" (:scope-id table)))
-             eid (symbol (str "b" (:id table)))
+             eid (symbol (str "bt-" (:table-or-query-name table)))
              qid (symbol (str (:correlation-name table) "__" (:id table)))
              projection (first (sem/projected-columns ag))]
          (when-not (:subquery-scope-id table)
@@ -290,17 +305,36 @@ digraph {
        [:comparison_predicate _ _]
        (let [pred-id (symbol (str "p" (sem/id ag)))]
          (into [[pred-id :qgm.predicate/expression (plan/expr ag)]]
-               (r/collect-stop
-                 (fn [ag]
-                   (r/zmatch ag
-                             [:column_reference _]
-                             (let [{:keys [identifiers table-id]} (sem/column-reference ag)
-                                   q (symbol (str (first identifiers) "__" table-id))]
-                               [[pred-id :qgm.predicate/quantifiers q]])
+               (for [q (expr-quantifiers ag)]
+                 [pred-id :qgm.predicate/quantifiers q])))
 
-                             [:subquery _]
-                             []))
-                 ag)))))
+       [:quantified_comparison_predicate ^:z lhs
+        [:quantified_comparison_predicate_part_2 [_ op] [q-type _] ^:z subquery]]
+       ;; HACK: give me a proper id
+       (let [pred-id 'hack-qp1
+             sq-el (sem/subquery-element subquery)
+             sq-el (if (= (r/ctor sq-el) :query_expression)
+                     (r/$ sq-el 1)
+                     sq-el)
+             qid (symbol (str "q" (sem/id sq-el)))
+             expr (list (symbol op)
+                        (plan/expr lhs)
+                        (symbol (str qid "__" (->> (ffirst (sem/projected-columns subquery))
+                                                   plan/unqualifed-projection-symbol))))
+             scope-id (symbol (str "b" (sem/id (sem/scope-element ag))))]
+         (into [[pred-id :qgm.predicate/expression expr]
+                [pred-id :qgm.predicate/quantifiers qid]
+
+                [qid :qgm.quantifier/type (case q-type
+                                            :all :qgm.quantifier.type/all)]
+                [qid :qgm.quantifier/ranges-over (symbol (str "b" (sem/id sq-el)))]
+                [qid :qgm.quantifier/columns (->> (first (sem/projected-columns subquery))
+                                                  (mapv plan/unqualifed-projection-symbol))]
+
+                [scope-id :qgm.box.body/quantifiers qid]]
+
+               (for [q (expr-quantifiers lhs)]
+                 [pred-id :qgm.predicate/quantifiers q])))))
    ag))
 
 (defn plan-query [query]

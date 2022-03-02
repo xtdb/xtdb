@@ -215,7 +215,7 @@
     (when (r/ctor? :column_name_list (r/$ ag -1))
       (identifiers (r/$ ag -1)))))
 
-(defn- subquery-element [ag]
+(defn subquery-element [ag]
   (r/zcase ag
     (:table_primary
      :subquery)
