@@ -1,2 +1,4 @@
-{:lint-as {core2.object-store-test/def-obj-store-tests clojure.core/defn}
+{:lint-as {core2.object-store-test/def-obj-store-tests clojure.core/defn
+           core2.rewrite/zmatch clojure.core.match/match
+           core2.rewrite/zcase clojure.core/case}
  :linters {:not-empty? {:level :off}}}
