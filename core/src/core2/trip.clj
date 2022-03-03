@@ -1,6 +1,7 @@
 (ns core2.trip
   (:require [clojure.spec.alpha :as s])
-  (:import clojure.lang.IPersistentMap))
+  (:import clojure.lang.IPersistentMap
+           clojure.lang.Compiler$CompilerException))
 
 ;; Internal triple store.
 
@@ -202,24 +203,24 @@
 
 (def ^:private ^:dynamic *allow-unbound?* true)
 
-(defmacro ^:private lvar [x]
+(defmacro lvar [x]
   (if (or (not (logic-var? x))
           (contains? &env x)
           (not *allow-unbound?*))
     x
     ::unbound))
 
-(defmacro ^:private lvars-in-scope-env []
+(defmacro lvars-in-scope-env []
   (let [vars (filterv logic-var? (keys &env))]
     `(zipmap '~vars ~vars)))
 
-(defmacro ^:private assert-bound-lvar [x]
+(defmacro assert-bound-lvar [x]
   `(let [x# ~x]
      (if (= ::unbound x#)
        (throw (IllegalArgumentException. (str "not bound: " '~x)))
        x#)))
 
-(defmacro ^:private can-unify? [binding pattern]
+(defmacro can-unify? [binding pattern]
   (cond (blank-var? pattern)
         true
 
@@ -231,8 +232,8 @@
         (let [tmp-sym (gensym 'tmp)]
           `(let [~tmp-sym ~binding]
              (and (vector? ~tmp-sym)
-                  ~@(for [[_ unify-group] (group-by second (map-indexed vector pattern))
-                          :when (> (count unify-group) 1)]
+                  ~@(for [[k unify-group] (group-by second (map-indexed vector pattern))
+                          :when (and (logic-var? k) (> (count unify-group) 1))]
                       `(= ~@(for [[idx] unify-group]
                               `(nth ~tmp-sym ~idx))))
                   ~@(for [[idx pattern] (map-indexed vector pattern)]
@@ -246,10 +247,12 @@
     (eval `(fn [~@parent-vars]
              ~form))
     true
-    (catch Exception sfinae
-      false)))
+    (catch Compiler$CompilerException sfinae
+      (if (and (.getCause sfinae) (re-find #"^Unable to resolve symbol:" (.getMessage (.getCause sfinae))))
+        false
+        (throw sfinae)))))
 
-(defmacro ^:private ^{:style/indent 1} for-deps [seq-exprs body-expr]
+(defmacro ^{:style/indent 1} for-deps [seq-exprs body-expr]
   (let [seq-exprs (concat `[_# [nil]] seq-exprs)]
     (if (compiles? (keys &env)
                    `(for [~@seq-exprs]
@@ -270,14 +273,14 @@
             (throw (IllegalArgumentException. "Circular dependency."))))))))
 
 (defn- lvar-ref [x]
-  (list 'lvar x))
+  (list `lvar x))
 
 (defn- assert-new-scope [parent-vars body]
   (eval `(fn [~@parent-vars] ~@body))
   body)
 
 (defn- assert-bound-lvar-ref [x]
-  (list 'assert-bound-lvar x))
+  (list `assert-bound-lvar x))
 
 (defmulti ^:private datalog->clj (fn [datalog ctx] (first datalog)))
 
@@ -533,8 +536,7 @@
 
 (defn- flatten-tx-ops [db tx-ops]
   (vec (for [tx-op tx-ops
-             :let [_ (conform-or-throw :db/tx-op tx-op)
-                   [op-type {:keys [e a v] :as conformed-tx-op}] (s/conform :db/tx-op tx-op)]
+             :let [[op-type {:keys [e a v] :as conformed-tx-op}] (conform-or-throw :db/tx-op tx-op)]
              tx-op (case op-type
                      :add [tx-op]
                      :add-entity (add-entity-ops tx-op)
