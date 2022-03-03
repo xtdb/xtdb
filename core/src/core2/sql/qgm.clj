@@ -247,12 +247,12 @@ digraph {
      AND q2.price <= ALL
          (SELECT q3.price FROM quotations q3
           WHERE q2.partno=q3.partno)"
-            "SELECT q1.partno, q1.price, q1.ord_qty
+            "SELECT q1.partno, q1.price, q1.order_qty
              FROM quotations q1
              WHERE q1.partno IN
                (SELECT q3.partno
                 FROM inventory q3
-                WHERE q3.onhand_qty < q1.ord_qty AND q3.type = 'CPU')"]
+                WHERE q3.onhand_qty < q1.order_qty AND q3.type = 'CPU')"]
         q (nth qs 3)]
     (-> (qgm->dot q (qgm (z/vector-zip (core2.sql/parse q))))
         (dot->file "png" "target/qgm.png"))))

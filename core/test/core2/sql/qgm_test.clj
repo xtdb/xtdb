@@ -144,8 +144,8 @@
   (t/is (= '{b2 {:db/id b2,
                  :qgm.box/type :qgm.box.type/select,
                  :qgm.box.head/distinct? false,
-                 :qgm.box.head/columns [partno price ord_qty],
-                 :qgm.box.body/columns [q1__3_partno q1__3_price q1__3_ord_qty],
+                 :qgm.box.head/columns [partno price order_qty],
+                 :qgm.box.body/columns [q1__3_partno q1__3_price q1__3_order_qty],
                  :qgm.box.body/distinct :qgm.box.body.distinct/permit,
                  :qgm.box/root? true,
                  :qgm.box.body/quantifiers #{q1__3 q5}},
@@ -165,7 +165,7 @@
              q1__3 {:db/id q1__3,
                     :qgm.quantifier/ranges-over bt_quotations,
                     :qgm.quantifier/type :qgm.quantifier.type/foreach,
-                    :qgm.quantifier/columns [partno price ord_qty]},
+                    :qgm.quantifier/columns [partno price order_qty]},
              q3__6 {:db/id q3__6,
                     :qgm.quantifier/ranges-over bt_inventory,
                     :qgm.quantifier/type :qgm.quantifier.type/foreach,
@@ -175,7 +175,7 @@
                  :qgm.quantifier/ranges-over b5,
                  :qgm.quantifier/columns [partno]}
              p7 {:db/id p7,
-                 :qgm.predicate/expression (< q3__6_onhand_qty q1__3_ord_qty),
+                 :qgm.predicate/expression (< q3__6_onhand_qty q1__3_order_qty),
                  :qgm.predicate/quantifiers #{q3__6 q1__3}},
              p8 {:db/id p8,
                  :qgm.predicate/expression (= q3__6_type "CPU"),
@@ -184,12 +184,12 @@
              {:db/id hack-qp1,
               :qgm.predicate/expression (= q1__3_partno q5__partno),
               :qgm.predicate/quantifiers #{q1__3 q5}}}
-           (-> (sql/parse "SELECT q1.partno, q1.price, q1.ord_qty
+           (-> (sql/parse "SELECT q1.partno, q1.price, q1.order_qty
              FROM quotations q1
              WHERE q1.partno IN
                (SELECT q3.partno
                 FROM inventory q3
-                WHERE q3.onhand_qty < q1.ord_qty AND q3.type = 'CPU')")
+                WHERE q3.onhand_qty < q1.order_qty AND q3.type = 'CPU')")
                z/vector-zip
                qgm/qgm
                qgm/qgm->entities
