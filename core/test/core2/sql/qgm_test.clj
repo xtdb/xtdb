@@ -13,14 +13,14 @@
                    [b2 :qgm.box.head/columns [price]]
                    [b2 :qgm.box.head/distinct? false]
 
-                   [bt-quotations :qgm.box/type :qgm.box.type/base-table]
-                   [bt-quotations :qgm.box.base-table/name quotations]
+                   [bt_quotations :qgm.box/type :qgm.box.type/base-table]
+                   [bt_quotations :qgm.box.base-table/name quotations]
 
                    [p4 :qgm.predicate/expression (= q3__3_partno 1)]
                    [p4 :qgm.predicate/quantifiers q3__3]
 
                    [q3__3 :qgm.quantifier/columns [price partno]]
-                   [q3__3 :qgm.quantifier/ranges-over bt-quotations]
+                   [q3__3 :qgm.quantifier/ranges-over bt_quotations]
                    [q3__3 :qgm.quantifier/type :qgm.quantifier.type/foreach]))
 
            (sort (qgm/qgm
@@ -39,11 +39,11 @@
                    [b2 :qgm.box.head/distinct? true]
 
                    ;; base tables
-                   [bt-inventory :qgm.box/type :qgm.box.type/base-table]
-                   [bt-inventory :qgm.box.base-table/name inventory]
+                   [bt_inventory :qgm.box/type :qgm.box.type/base-table]
+                   [bt_inventory :qgm.box.base-table/name inventory]
 
-                   [bt-quotations :qgm.box/type :qgm.box.type/base-table]
-                   [bt-quotations :qgm.box.base-table/name quotations]
+                   [bt_quotations :qgm.box/type :qgm.box.type/base-table]
+                   [bt_quotations :qgm.box.base-table/name quotations]
 
                    ;; predicate
                    [p5 :qgm.predicate/expression (= q1__3_partno q2__4_partno)]
@@ -55,11 +55,11 @@
 
                    ;; quantifiers
                    [q1__3 :qgm.quantifier/columns [partno descr]]
-                   [q1__3 :qgm.quantifier/ranges-over bt-inventory]
+                   [q1__3 :qgm.quantifier/ranges-over bt_inventory]
                    [q1__3 :qgm.quantifier/type :qgm.quantifier.type/foreach]
 
                    [q2__4 :qgm.quantifier/columns [suppno partno]]
-                   [q2__4 :qgm.quantifier/ranges-over bt-quotations]
+                   [q2__4 :qgm.quantifier/ranges-over bt_quotations]
                    [q2__4 :qgm.quantifier/type :qgm.quantifier.type/foreach]))
 
            (sort (qgm/qgm
@@ -86,24 +86,24 @@
                  :qgm.box.body/distinct :qgm.box.body.distinct/permit,
                  :qgm.box.body/quantifiers q3__9},
 
-             bt-inventory {:db/id bt-inventory,
+             bt_inventory {:db/id bt_inventory,
                            :qgm.box/type :qgm.box.type/base-table,
                            :qgm.box.base-table/name inventory},
 
-             bt-quotations {:db/id bt-quotations,
-                            :qgm.box/type #{:qgm.box.type/base-table},
-                            :qgm.box.base-table/name #{quotations}},
+             bt_quotations {:db/id bt_quotations,
+                            :qgm.box/type :qgm.box.type/base-table,
+                            :qgm.box.base-table/name quotations},
 
              q1__3 {:db/id q1__3,
-                    :qgm.quantifier/ranges-over bt-inventory,
+                    :qgm.quantifier/ranges-over bt_inventory,
                     :qgm.quantifier/type :qgm.quantifier.type/foreach,
                     :qgm.quantifier/columns [partno descr]},
              q2__4 {:db/id q2__4,
-                    :qgm.quantifier/ranges-over bt-quotations,
+                    :qgm.quantifier/ranges-over bt_quotations,
                     :qgm.quantifier/type :qgm.quantifier.type/foreach,
                     :qgm.quantifier/columns [suppno partno price]},
              q3__9 {:db/id q3__9,
-                    :qgm.quantifier/ranges-over bt-quotations,
+                    :qgm.quantifier/ranges-over bt_quotations,
                     :qgm.quantifier/type :qgm.quantifier.type/foreach,
                     :qgm.quantifier/columns [price partno]},
 

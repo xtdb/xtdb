@@ -7,14 +7,15 @@
             [core2.sql.analyze :as sem]
             [core2.sql.plan :as plan]
             [core2.trip :as trip])
-  (:import (clojure.lang MapEntry)
-           (java.net URI URL)))
+  (:import (java.net URI URL)))
 
 ;; Query Graph Model using internal triple store.
 ;; http://projectsweb.cs.washington.edu/research/projects/db/weld/pirahesh-starburst-92.pdf
 
 ;; TODO: try constructing this by adding the triples local for each
 ;; node during a collect somehow?
+
+(defn- setify [x] (if (coll? x) (set x) #{x}))
 
 (s/def :qgm/id symbol?)
 
@@ -89,10 +90,9 @@
                     (str/upper-case (name (:qgm.box.body/distinct box))))
             (let [id->q (zipmap (map :db/id qs) qs)]
               (str/join "\n    "
-                        (let [qs (:qgm.box.body/quantifiers box)]
-                          (for [q (if (coll? qs) qs [qs])]
-                            (format "%s [label=\"%s(%s)\", shape=circle, style=filled, margin=0]"
-                                    q q (str/upper-case (first (name (get-in id->q [q :qgm.quantifier/type] "F"))))))))))))
+                        (for [q (setify (:qgm.box.body/quantifiers box))]
+                          (format "%s [label=\"%s(%s)\", shape=circle, style=filled, margin=0]"
+                                  q q (str/upper-case (first (name (get-in id->q [q :qgm.quantifier/type] "F")))))))))))
 
 (defn- quantifier->dot [q]
   (format "%s -> %s:head [label=\"%s\", lhead=cluster_%s]"
@@ -102,8 +102,7 @@
           (:qgm.quantifier/ranges-over q)))
 
 (defn- predicate->dot [p]
-  (let [qs (:qgm.predicate/quantifiers p)
-        qs (if (coll? qs) qs [qs])]
+  (let [qs (setify (:qgm.predicate/quantifiers p))]
     (format "%s -> %s [label=\"%s\", dir=none, color=grey]"
             (first qs)
             (or (second qs)
@@ -112,6 +111,7 @@
 
 (defn qgm->entities [qgm]
   (->> qgm
+       distinct
        (reduce (fn [acc [e a v]]
                  (-> acc
                      (assoc-in [e :db/id] e)
@@ -185,19 +185,6 @@ digraph {
   (declare qgm)
 
   #_
-  "SELECT DISTINCT q1.partno, q1.descr, q2.suppno
-   FROM inventory q1, quotations q2
-   WHERE q1.partno = q2.partno AND q1.descr= 'engine'"
-
-  #_
-  "SELECT DISTINCT q1.partno, q1.descr, q2.suppno
-   FROM inventory q1, quotations q2
-   WHERE q1.partno = q2.partno AND q1.descr= 'engine'
-     AND q2.price <= ALL
-         (SELECT q3.price FROM quotations q3
-          WHERE q2.partno=q3.partno)"
-
-  #_
   '[{:db/id b1
      :qgm.box/type :qgm.box.type/base-table
      :qgm.box.base-table/name inventory}
@@ -247,7 +234,19 @@ digraph {
      :qgm.predicate/expression (= q2.partno q3.partno)
      :qgm.predicate/quantifiers #{q2 q3}}]
 
-  (let [q "SELECT q3.price FROM quotations q3 WHERE q3.partno = 1"]
+  (let [qs ["SELECT q3.price FROM quotations q3 WHERE q3.partno = 1"
+
+            "SELECT DISTINCT q1.partno, q1.descr, q2.suppno
+   FROM inventory q1, quotations q2
+   WHERE q1.partno = q2.partno AND q1.descr= 'engine'"
+
+            "SELECT DISTINCT q1.partno, q1.descr, q2.suppno
+   FROM inventory q1, quotations q2
+   WHERE q1.partno = q2.partno AND q1.descr= 'engine'
+     AND q2.price <= ALL
+         (SELECT q3.price FROM quotations q3
+          WHERE q2.partno=q3.partno)"]
+        q (nth qs 1)]
     (-> (qgm->dot q (qgm (z/vector-zip (core2.sql/parse q))))
         (dot->file "png" "target/qgm.png"))))
 
@@ -291,7 +290,7 @@ digraph {
        [:table_primary _ _]
        (let [table (sem/table ag)
              scope-id (symbol (str "b" (:scope-id table)))
-             eid (symbol (str "bt-" (:table-or-query-name table)))
+             eid (symbol (str "bt_" (:table-or-query-name table)))
              qid (symbol (str (:correlation-name table) "__" (:id table)))
              projection (first (sem/projected-columns ag))]
          (when-not (:subquery-scope-id table)
