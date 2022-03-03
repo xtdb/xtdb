@@ -195,3 +195,26 @@
                qgm/qgm->entities
                (->> (into {} (map (juxt :db/id identity))))))
         "existential correlated sub-query"))
+
+(t/deftest test-qgm-query-plan
+  (t/is (= {:plan '[:rename {q3__3_price price}
+                    [:project [q3__3_price]
+                     [:select (= q3__3_partno 1)
+                      [:rename q3__3
+                       [:scan [price {partno (= partno 1)}]]]]]]}
+           (qgm/plan-query (sql/parse "
+SELECT q3.price FROM quotations q3 WHERE q3.partno = 1"))))
+
+  (t/is (= {:plan '[:rename {q1__3_partno partno, q1__3_descr descr, q2__4_suppno suppno}
+                    [:project [q1__3_partno q1__3_descr q2__4_suppno]
+                     [:select (and (= q1__3_descr "engine")
+                                   (= q1__3_partno q2__4_partno))
+                      [:cross-join
+                       [:rename q2__4 [:scan [suppno partno]]]
+                       [:rename q1__3 [:scan [partno descr]]]]]]]}
+           (qgm/plan-query (sql/parse "
+SELECT DISTINCT q1.partno, q1.descr, q2.suppno
+FROM inventory q1, quotations q2
+WHERE q1.partno = q2.partno AND q1.descr= 'engine'"))))
+
+  )

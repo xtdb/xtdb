@@ -390,9 +390,9 @@ digraph {
 
             (wrap-select [plan qids]
               (if-let [exprs (seq
-                              (for [qid qids
-                                    pid (->> (trip/-datoms db :ave [:qgm.predicate/quantifiers qid])
-                                             (into #{} (map :e)))
+                              (for [pid (->> (for [qid qids]
+                                               (trip/-datoms db :ave [:qgm.predicate/quantifiers qid]))
+                                             (into #{} (comp cat (map :e))))
                                     :let [{:qgm.predicate/keys [quantifiers expression]} (eid->entity pid)]
                                     :when (every? (set qids) (setify quantifiers))]
                                 expression))]
