@@ -467,13 +467,18 @@
                x (cons k (get query k))]
            x))))
 
+(defn- conform-or-throw [spec x]
+  (let [c (s/conform spec x)]
+    (if (s/invalid? c)
+      (throw (ex-info (str "invalid " (name spec))
+                      (s/explain-data spec x)))
+      c)))
+
 (defn- query->clj [query rules]
   (let [query (->> (normalize-query query)
-                   (s/assert ::query)
-                   (s/conform ::query))
+                   (conform-or-throw ::query))
         name->rules (some->> rules
-                             (s/assert ::rule)
-                             (s/conform ::rule)
+                             (conform-or-throw ::rule)
                              (group-by (comp :rule-name :rule-head)))
         rule-table-sym (gensym 'rule-ctx)
         inputs-sym (gensym 'inputs)
@@ -528,7 +533,7 @@
 
 (defn- flatten-tx-ops [db tx-ops]
   (vec (for [tx-op tx-ops
-             :let [_ (s/assert :db/tx-op tx-op)
+             :let [_ (conform-or-throw :db/tx-op tx-op)
                    [op-type {:keys [e a v] :as conformed-tx-op}] (s/conform :db/tx-op tx-op)]
              tx-op (case op-type
                      :add [tx-op]
@@ -544,17 +549,15 @@
 ;; API
 
 (defn qseq [{:keys [query args]}]
-  (let [{:keys [inputs]} (s/conform ::query (normalize-query query))
+  (let [{:keys [inputs]} (->> (normalize-query query)
+                              (conform-or-throw ::query))
         inputs (mapv second (:inputs inputs))
         {rules '%} (zipmap inputs args)]
     (apply (memo-compile-query query rules) args)))
 
 (defn q [query & inputs]
-  (let [nq (normalize-query query)
-        {:keys [find-spec]} (let [cq (s/conform ::query nq)]
-                              (if (s/invalid? cq)
-                                (throw (ex-info "invalid query"
-                                                (s/explain-data ::query nq)))))
+  (let [{:keys [find-spec]} (->> (normalize-query query)
+                                 (conform-or-throw ::query))
         [find-type find-spec] (:find-spec find-spec)
         result (qseq {:query query :args inputs})]
     (case find-type
