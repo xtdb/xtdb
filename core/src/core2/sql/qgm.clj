@@ -403,9 +403,12 @@ digraph {
                 plan))
 
             (plan-select-box [box]
-              (let [qids (setify (:qgm.box.body/quantifiers box))]
-                (-> (plan-quantifier (eid->entity (first qids)))
-                    (wrap-select qids))))]
+              (let [qids (setify (:qgm.box.body/quantifiers box))
+                    body-cols (:qgm.box.body/columns box)]
+                [:rename (zipmap body-cols (:qgm.box.head/columns box))
+                 [:project body-cols
+                  (-> (plan-quantifier (eid->entity (first qids)))
+                      (wrap-select qids))]]))]
 
       (plan-select-box (-> (trip/-datoms db :ave [:qgm.box/root? true])
                            first :e
