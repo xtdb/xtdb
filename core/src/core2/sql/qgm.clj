@@ -30,12 +30,12 @@
   (s/keys :req [:db/id :qgm.box/type :qgm.box.base-table/name]))
 
 (s/def :qgm.box.head/distinct? boolean?)
-(s/def :qgm.box.head/columns (s/coll-of symbol? :kind vector :min-count 1))
-(s/def :qgm.box.body/columns (s/coll-of any? :kind vector :min-count 1))
+(s/def :qgm.box.head/columns (s/coll-of symbol? :kind vector? :min-count 1))
+(s/def :qgm.box.body/columns (s/coll-of any? :kind vector? :min-count 1))
 (s/def :qgm.box.body/distinct #{:qgm.box.body.distinct/enforce
                                 :qgm.box.body.distinct/preserve
                                 :qgm.box.body.distinct/permit})
-(s/def :qgm.box.body/quantifiers (s/coll-of :qgm/id :kind vector :min-count 1))
+(s/def :qgm.box.body/quantifiers (s/coll-of :qgm/id :kind set? :min-count 1))
 
 (defmethod box-spec :qgm.box.type/select [_]
   (s/keys :req [:db/id :qgm.box/type
