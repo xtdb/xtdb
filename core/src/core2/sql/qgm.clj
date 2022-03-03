@@ -396,23 +396,37 @@ digraph {
                                     :let [{:qgm.predicate/keys [quantifiers expression]} (eid->entity pid)]
                                     :when (every? (set qids) (setify quantifiers))]
                                 expression))]
-                [:select (reduce (fn [acc expr]
-                                   (list 'and acc expr))
-                                 exprs)
+                [:select (if (= (count exprs) 1)
+                           (first exprs)
+                           (list* 'and exprs))
                  plan]
                 plan))
 
             (plan-select-box [box]
-              (let [qids (setify (:qgm.box.body/quantifiers box))
-                    body-cols (:qgm.box.body/columns box)]
+              (let [body-cols (:qgm.box.body/columns box)]
                 [:rename (zipmap body-cols (:qgm.box.head/columns box))
                  [:project body-cols
-                  (-> (plan-quantifier (eid->entity (first qids)))
-                      (wrap-select qids))]]))]
+                  (let [qids (setify (:qgm.box.body/quantifiers box))]
+                    (-> (reduce (fn [acc el]
+                                  [:cross-join acc el])
+                                (for [qid qids]
+                                  (plan-quantifier (eid->entity qid))))
+                        (wrap-select qids)))]]))]
 
       (plan-select-box (-> (trip/-datoms db :ave [:qgm.box/root? true])
                            first :e
                            eid->entity)))))
+
+(comment
+  (declare plan-query)
+
+  [(plan-query (sql/parse "
+SELECT q3.price FROM quotations q3 WHERE q3.partno = 1"))
+
+   (plan-query (sql/parse "
+SELECT DISTINCT q1.partno, q1.descr, q2.suppno
+FROM inventory q1, quotations q2
+WHERE q1.partno = q2.partno AND q1.descr= 'engine'"))])
 
 (defn plan-query [query]
   (if-let [parse-failure (insta/get-failure query)]
@@ -435,6 +449,3 @@ digraph {
                       (r/innermost (r/mono-tp plan/optimize-plan))
                       (z/node)
                       (s/assert ::lp/logical-plan))})))))
-
-(comment
-  (plan-query (sql/parse "SELECT q3.price FROM quotations q3 WHERE q3.partno = 1")))
