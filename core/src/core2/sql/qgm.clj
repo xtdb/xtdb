@@ -6,7 +6,10 @@
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
             [core2.sql.plan :as plan]
-            [core2.trip :as trip])
+            [core2.trip :as trip]
+            [instaparse.core :as insta]
+            [core2.sql :as sql]
+            [core2.logical-plan :as lp])
   (:import (java.net URI URL)))
 
 ;; Query Graph Model using internal triple store.
@@ -371,6 +374,64 @@ digraph {
                  [pred-id :qgm.predicate/quantifiers q])))))
    ag))
 
+(defn plan-qgm [trips]
+  (let [db (-> (trip/transact {} (vec (for [[e a v] trips]
+                                        [:db/add e a v])))
+               :db-after)
+
+        eid->entity (->> (qgm->entities trips)
+                         (into {} (map (juxt :db/id identity))))]
+    (letfn [(plan-quantifier [q]
+              (let [box (eid->entity (:qgm.quantifier/ranges-over q))]
+                (case (:qgm.box/type box)
+                  :qgm.box.type/base-table
+                  [:rename (:db/id q)
+                   [:scan (:qgm.quantifier/columns q)]])))
+
+            (wrap-select [plan qids]
+              (if-let [exprs (seq
+                              (for [qid qids
+                                    pid (->> (trip/-datoms db :ave [:qgm.predicate/quantifiers qid])
+                                             (into #{} (map :e)))
+                                    :let [{:qgm.predicate/keys [quantifiers expression]} (eid->entity pid)]
+                                    :when (every? (set qids) (setify quantifiers))]
+                                expression))]
+                [:select (reduce (fn [acc expr]
+                                   (list 'and acc expr))
+                                 exprs)
+                 plan]
+                plan))
+
+            (plan-select-box [box]
+              (let [qids (setify (:qgm.box.body/quantifiers box))]
+                (-> (plan-quantifier (eid->entity (first qids)))
+                    (wrap-select qids))))]
+
+      (plan-select-box (-> (trip/-datoms db :ave [:qgm.box/root? true])
+                           first :e
+                           eid->entity)))))
+
 (defn plan-query [query]
-  (trip/transact {} (vec (for [[e a v] (qgm (z/vector-zip query))]
-                           [:db/add e a v]))))
+  (if-let [parse-failure (insta/get-failure query)]
+    {:errs [(prn-str parse-failure)]}
+    (r/with-memoized-attributes [sem/id
+                                 sem/ctei
+                                 sem/cteo
+                                 sem/cte-env
+                                 sem/dcli
+                                 sem/dclo
+                                 sem/env
+                                 sem/group-env
+                                 sem/projected-columns
+                                 sem/column-reference]
+      (let [ag (z/vector-zip query)]
+        (if-let [errs (not-empty (sem/errs ag))]
+          {:errs errs}
+          {:plan (->> (plan-qgm (qgm (z/vector-zip query)))
+                      (z/vector-zip)
+                      (r/innermost (r/mono-tp plan/optimize-plan))
+                      (z/node)
+                      (s/assert ::lp/logical-plan))})))))
+
+(comment
+  (plan-query (sql/parse "SELECT q3.price FROM quotations q3 WHERE q3.partno = 1")))

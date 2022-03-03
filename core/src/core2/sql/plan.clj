@@ -632,7 +632,7 @@
         [:select predicate
          [:rename prefix [:scan new-columns]]]))))
 
-(def ^:private optimize-plan
+(def optimize-plan
   (some-fn promote-selection-cross-join-to-join
            promote-selection-to-join
            push-selection-down-past-join
