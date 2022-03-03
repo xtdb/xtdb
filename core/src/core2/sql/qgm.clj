@@ -125,7 +125,7 @@
                {})
        vals))
 
-(defn- qgm->dot [label qgm]
+(defn qgm->dot [label qgm]
   (let [entities (qgm->entities qgm)
         {bs :box, qs :quantifier, ps :predicate} (->> entities
                                                       (group-by (fn [e]
@@ -165,7 +165,7 @@ digraph {
       out
       (throw (IllegalArgumentException. (str err))))))
 
-(defn- dot->file [dot format file]
+(defn dot->file [dot format file]
   (let [{:keys [exit out err]} (sh/sh "dot" (str "-T" format) "-o" file :in dot)]
     (when-not (zero? exit)
       (throw (IllegalArgumentException. (str err))))))
