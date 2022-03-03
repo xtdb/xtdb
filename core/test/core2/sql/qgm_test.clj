@@ -139,4 +139,58 @@
                qgm/qgm->entities
                (->> (into {} (map (juxt :db/id identity))))))
 
-        "correlated sub-query"))
+        "correlated sub-query")
+
+  (t/is (= '{b2 {:db/id b2,
+                 :qgm.box/type :qgm.box.type/select,
+                 :qgm.box.head/distinct? false,
+                 :qgm.box.head/columns [partno price ord_qty],
+                 :qgm.box.body/columns [q1__3_partno q1__3_price q1__3_ord_qty],
+                 :qgm.box.body/distinct :qgm.box.body.distinct/permit,
+                 :qgm.box/root? true,
+                 :qgm.box.body/quantifiers #{q1__3 q5}},
+             b5 {:db/id b5,
+                 :qgm.box/type :qgm.box.type/select,
+                 :qgm.box.head/distinct? false,
+                 :qgm.box.head/columns [partno],
+                 :qgm.box.body/columns [q3__6_partno],
+                 :qgm.box.body/distinct :qgm.box.body.distinct/permit,
+                 :qgm.box.body/quantifiers q3__6},
+             bt_inventory {:db/id bt_inventory,
+                           :qgm.box/type :qgm.box.type/base-table,
+                           :qgm.box.base-table/name inventory},
+             bt_quotations {:db/id bt_quotations,
+                            :qgm.box/type :qgm.box.type/base-table,
+                            :qgm.box.base-table/name quotations},
+             q1__3 {:db/id q1__3,
+                    :qgm.quantifier/ranges-over bt_quotations,
+                    :qgm.quantifier/type :qgm.quantifier.type/foreach,
+                    :qgm.quantifier/columns [partno price ord_qty]},
+             q3__6 {:db/id q3__6,
+                    :qgm.quantifier/ranges-over bt_inventory,
+                    :qgm.quantifier/type :qgm.quantifier.type/foreach,
+                    :qgm.quantifier/columns [partno onhand_qty type]},
+             q5 {:db/id q5,
+                 :qgm.quantifier/type :qgm.quantifier.type/existential,
+                 :qgm.quantifier/ranges-over b5,
+                 :qgm.quantifier/columns [partno]}
+             p7 {:db/id p7,
+                 :qgm.predicate/expression (< q3__6_onhand_qty q1__3_ord_qty),
+                 :qgm.predicate/quantifiers #{q3__6 q1__3}},
+             p8 {:db/id p8,
+                 :qgm.predicate/expression (= q3__6_type "CPU"),
+                 :qgm.predicate/quantifiers q3__6}
+             hack-qp1
+             {:db/id hack-qp1,
+              :qgm.predicate/expression (= q1__3_partno q5__partno),
+              :qgm.predicate/quantifiers #{q1__3 q5}}}
+           (-> (sql/parse "SELECT q1.partno, q1.price, q1.ord_qty
+             FROM quotations q1
+             WHERE q1.partno IN
+               (SELECT q3.partno
+                FROM inventory q3
+                WHERE q3.onhand_qty < q1.ord_qty AND q3.type = 'CPU')")
+               z/vector-zip
+               qgm/qgm
+               qgm/qgm->entities
+               (->> (into {} (map (juxt :db/id identity))))))))

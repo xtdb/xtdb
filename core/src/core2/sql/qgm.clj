@@ -11,6 +11,7 @@
 
 ;; Query Graph Model using internal triple store.
 ;; http://projectsweb.cs.washington.edu/research/projects/db/weld/pirahesh-starburst-92.pdf
+;; https://www.researchgate.net/publication/221214813_Abstract_Extensible_Query_Processing_in_Starburst
 
 ;; TODO: try constructing this by adding the triples local for each
 ;; node during a collect somehow?
@@ -245,10 +246,17 @@ digraph {
    WHERE q1.partno = q2.partno AND q1.descr= 'engine'
      AND q2.price <= ALL
          (SELECT q3.price FROM quotations q3
-          WHERE q2.partno=q3.partno)"]
-        q (nth qs 1)]
+          WHERE q2.partno=q3.partno)"
+            "SELECT q1.partno, q1.price, q1.ord_qty
+             FROM quotations q1
+             WHERE q1.partno IN
+               (SELECT q3.partno
+                FROM inventory q3
+                WHERE q3.onhand_qty < q1.ord_qty AND q3.type = 'CPU')"]
+        q (nth qs 3)]
     (-> (qgm->dot q (qgm (z/vector-zip (core2.sql/parse q))))
         (dot->file "png" "target/qgm.png"))))
+
 
 (defn build-query-spec [ag distinct?]
   (let [id (sem/id (sem/scope-element ag))
@@ -326,6 +334,33 @@ digraph {
 
                 [qid :qgm.quantifier/type (case q-type
                                             :all :qgm.quantifier.type/all)]
+                [qid :qgm.quantifier/ranges-over (symbol (str "b" (sem/id sq-el)))]
+                [qid :qgm.quantifier/columns (->> (first (sem/projected-columns subquery))
+                                                  (mapv plan/unqualified-projection-symbol))]
+
+                [scope-id :qgm.box.body/quantifiers qid]]
+
+               (for [q (expr-quantifiers lhs)]
+                 [pred-id :qgm.predicate/quantifiers q])))
+
+       [:in_predicate ^:z lhs
+        [:in_predicate_part_2 _ [:in_predicate_value ^:z subquery]]]
+       ;; HACK: give me a proper id
+       (let [pred-id 'hack-qp1
+             sq-el (sem/subquery-element subquery)
+             sq-el (if (= (r/ctor sq-el) :query_expression)
+                     (r/$ sq-el 1)
+                     sq-el)
+             qid (symbol (str "q" (sem/id sq-el)))
+             expr (list '=
+                        (plan/expr lhs)
+                        (symbol (str qid "__" (->> (ffirst (sem/projected-columns subquery))
+                                                   plan/unqualified-projection-symbol))))
+             scope-id (symbol (str "b" (sem/id (sem/scope-element ag))))]
+         (into [[pred-id :qgm.predicate/expression expr]
+                [pred-id :qgm.predicate/quantifiers qid]
+
+                [qid :qgm.quantifier/type :qgm.quantifier.type/existential]
                 [qid :qgm.quantifier/ranges-over (symbol (str "b" (sem/id sq-el)))]
                 [qid :qgm.quantifier/columns (->> (first (sem/projected-columns subquery))
                                                   (mapv plan/unqualified-projection-symbol))]
