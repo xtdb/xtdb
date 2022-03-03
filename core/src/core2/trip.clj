@@ -204,7 +204,7 @@
 (def ^:dynamic *allow-unbound?* true)
 
 (defmacro lvar [x]
-  (if (or (not (logic-var? x))
+  (if (or (not (or (logic-var? x) (blank-var? x)))
           (contains? &env x)
           (not *allow-unbound?*))
     x
@@ -316,10 +316,10 @@
   (datalog->clj clause ctx))
 
 (defmethod datalog->clj :data-pattern [[_ {:keys [src-var pattern]}] ctx]
-  (let [[e a v] (map second pattern)]
+  (let [pattern (take 3 (concat (mapv second pattern) (repeat '_)))]
     (wrap-with-binding
-     (pattern->bind-rel [e a v])
-     `(data-pattern ~(or src-var '$) ~@(map lvar-ref [e a v])))))
+     (pattern->bind-rel pattern)
+     `(data-pattern ~(or src-var '$) ~@(map lvar-ref pattern)))))
 
 (defmethod datalog->clj :rule-expr [[_ {:keys [src-var rule-name args]}] {:keys [name->rules] {:keys [rule-table-sym]} :symbols :as ctx}]
   (let [args (map second args)
