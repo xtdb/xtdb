@@ -139,7 +139,7 @@
                qgm/qgm->entities
                (->> (into {} (map (juxt :db/id identity))))))
 
-        "correlated sub-query")
+        "all correlated sub-query")
 
   (t/is (= '{b2 {:db/id b2,
                  :qgm.box/type :qgm.box.type/select,
@@ -193,4 +193,5 @@
                z/vector-zip
                qgm/qgm
                qgm/qgm->entities
-               (->> (into {} (map (juxt :db/id identity))))))))
+               (->> (into {} (map (juxt :db/id identity))))))
+        "existential correlated sub-query"))
