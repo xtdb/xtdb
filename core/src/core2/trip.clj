@@ -550,7 +550,11 @@
     (apply (memo-compile-query query rules) args)))
 
 (defn q [query & inputs]
-  (let [{:keys [find-spec]} (s/conform ::query (normalize-query query))
+  (let [nq (normalize-query query)
+        {:keys [find-spec]} (let [cq (s/conform ::query nq)]
+                              (if (s/invalid? cq)
+                                (throw (ex-info "invalid query"
+                                                (s/explain-data ::query nq)))))
         [find-type find-spec] (:find-spec find-spec)
         result (qseq {:query query :args inputs})]
     (case find-type
