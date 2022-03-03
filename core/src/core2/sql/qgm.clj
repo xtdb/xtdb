@@ -258,7 +258,7 @@ digraph {
         root? (r/ctor? :directly_executable_statement (r/parent (sem/scope-element (r/parent ag))))]
     (cond-> [[eid :qgm.box/type :qgm.box.type/select]
              [eid :qgm.box.head/distinct? distinct?]
-             [eid :qgm.box.head/columns (mapv plan/unqualifed-projection-symbol projection)]
+             [eid :qgm.box.head/columns (mapv plan/unqualified-projection-symbol projection)]
              [eid :qgm.box.body/columns (mapv plan/qualified-projection-symbol projection)]
              [eid :qgm.box.body/distinct (if distinct?
                                            :qgm.box.body.distinct/enforce
@@ -299,7 +299,7 @@ digraph {
             [eid :qgm.box.base-table/name (symbol (:table-or-query-name table))]
             [qid :qgm.quantifier/ranges-over eid]
             [qid :qgm.quantifier/type :qgm.quantifier.type/foreach]
-            [qid :qgm.quantifier/columns (mapv plan/unqualifed-projection-symbol projection)]
+            [qid :qgm.quantifier/columns (mapv plan/unqualified-projection-symbol projection)]
             [scope-id :qgm.box.body/quantifiers qid]]))
 
        [:comparison_predicate _ _]
@@ -320,7 +320,7 @@ digraph {
              expr (list (symbol op)
                         (plan/expr lhs)
                         (symbol (str qid "__" (->> (ffirst (sem/projected-columns subquery))
-                                                   plan/unqualifed-projection-symbol))))
+                                                   plan/unqualified-projection-symbol))))
              scope-id (symbol (str "b" (sem/id (sem/scope-element ag))))]
          (into [[pred-id :qgm.predicate/expression expr]
                 [pred-id :qgm.predicate/quantifiers qid]
@@ -329,7 +329,7 @@ digraph {
                                             :all :qgm.quantifier.type/all)]
                 [qid :qgm.quantifier/ranges-over (symbol (str "b" (sem/id sq-el)))]
                 [qid :qgm.quantifier/columns (->> (first (sem/projected-columns subquery))
-                                                  (mapv plan/unqualifed-projection-symbol))]
+                                                  (mapv plan/unqualified-projection-symbol))]
 
                 [scope-id :qgm.box.body/quantifiers qid]]
 

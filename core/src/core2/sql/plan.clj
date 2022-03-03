@@ -31,7 +31,7 @@
                         :correlation-name table
                         :column column}}))
 
-(defn unqualifed-projection-symbol [{:keys [identifier ^long index] :as projection}]
+(defn unqualified-projection-symbol [{:keys [identifier ^long index] :as projection}]
   (symbol (or identifier (str "$column_" (inc index) "$"))))
 
 (defn qualified-projection-symbol [{:keys [qualified-column original-index] :as projection}]
@@ -40,7 +40,7 @@
       (expr (r/$ derived-column 1))
       (id-symbol (first qualified-column)
                  (:id table)
-                 (unqualifed-projection-symbol
+                 (unqualified-projection-symbol
                   (cond-> projection
                     original-index (assoc :index original-index)))))))
 
@@ -166,7 +166,7 @@
                                               "DESC" :desc
                                               :asc)]
                               [(if-let [idx (sem/order-by-index z)]
-                                 {:spec {(unqualifed-projection-symbol (nth projection idx)) direction}}
+                                 {:spec {(unqualified-projection-symbol (nth projection idx)) direction}}
                                  (let [column (symbol (str "$order_by__" query-id  "_" (r/child-idx z) "$"))]
                                    {:spec {column direction}
                                     :projection {column (expr (r/$ z 1))}}))])
@@ -178,7 +178,7 @@
                         ssl)
         order-by-projection (keep :projection order-by-specs)
         extra-projection (distinct (mapcat (comp expr-symbols vals) order-by-projection))
-        base-projection (mapv unqualifed-projection-symbol projection)
+        base-projection (mapv unqualified-projection-symbol projection)
         relation (if (not-empty extra-projection)
                    (->> (z/vector-zip relation)
                         (r/once-td-tp
@@ -205,13 +205,13 @@
         unqualified-rename-map (->> (for [{:keys [qualified-column] :as projection} projection
                                           :when qualified-column]
                                       [(qualified-projection-symbol projection)
-                                       (unqualifed-projection-symbol projection)])
+                                       (unqualified-projection-symbol projection)])
                                     (into {}))
         qualified-projection (vec (for [{:keys [qualified-column] :as projection} projection
                                         :let [derived-column (:ref (meta projection))]]
                                     (if qualified-column
                                       (qualified-projection-symbol projection)
-                                      {(unqualifed-projection-symbol projection)
+                                      {(unqualified-projection-symbol projection)
                                        (expr (r/$ derived-column 1))})))
         qualified-project [:project qualified-projection (plan te)]]
     (if (not-empty unqualified-rename-map)
@@ -219,8 +219,8 @@
       qualified-project)))
 
 (defn- build-set-op [set-op lhs rhs]
-  (let [lhs-unqualified-project (mapv unqualifed-projection-symbol (first (sem/projected-columns lhs)))
-        rhs-unqualified-project (mapv unqualifed-projection-symbol (first (sem/projected-columns rhs)))]
+  (let [lhs-unqualified-project (mapv unqualified-projection-symbol (first (sem/projected-columns lhs)))
+        rhs-unqualified-project (mapv unqualified-projection-symbol (first (sem/projected-columns rhs)))]
     [set-op (plan lhs)
      (if (= lhs-unqualified-project rhs-unqualified-project)
        (plan rhs)
@@ -253,7 +253,7 @@
                                   :correlation-name correlation-name}})
      (if-let [subquery-ref (:subquery-ref (meta table))]
        (if-let [derived-columns (sem/derived-columns tp)]
-         [:rename (zipmap (map unqualifed-projection-symbol (first (sem/projected-columns subquery-ref)))
+         [:rename (zipmap (map unqualified-projection-symbol (first (sem/projected-columns subquery-ref)))
                           (map symbol derived-columns))
           (plan subquery-ref)]
          (plan subquery-ref))
