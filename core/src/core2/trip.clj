@@ -201,7 +201,7 @@
 
 ;; Query compiler
 
-(def ^:private ^:dynamic *allow-unbound?* true)
+(def ^:dynamic *allow-unbound?* true)
 
 (defmacro lvar [x]
   (if (or (not (logic-var? x))
@@ -643,101 +643,3 @@
           3 (when (get-in idx components)
               [(zipmap ks (vec components))])))
       (throw (IllegalArgumentException. (str "unknown index: " index))))))
-
-(comment
-
-  (let [db (->> '[{:db/id :john :parent :douglas}
-                  {:db/id :bob :parent :john}
-                  {:db/id :ebbon :parent :bob}]
-                (transact {})
-                :db-after)]
-    (= #{[:ebbon :bob]
-         [:bob :john]
-         [:john :douglas]
-         [:bob :douglas]
-         [:ebbon :john]
-         [:ebbon :douglas]}
-
-       (q '{:find [?a ?b]
-            :in [$ %]
-            :where [(ancestor ?a ?b)]}
-          db
-          '[[(ancestor ?a ?b)
-             [?a :parent ?b]]
-            [(ancestor ?a ?b)
-             [?a :parent ?c]
-             (ancestor ?c ?b)]])))
-
-  (let [db (->> '[{:db/id :a :edge :b}
-                  {:db/id :b :edge :c}
-                  {:db/id :c :edge :d}
-                  {:db/id :d :edge :a}]
-                (transact {})
-                :db-after)]
-    (= #{[:a :a]
-         [:a :d]
-         [:a :c]
-         [:a :b]
-         [:b :a]
-         [:b :d]
-         [:b :c]
-         [:b :b]
-         [:c :a]
-         [:c :d]
-         [:c :c]
-         [:c :b]
-         [:d :b]
-         [:d :c]
-         [:d :d]
-         [:d :a]}
-
-       (q '{:find [?x ?y]
-            :in [$ %]
-            :where [(path ?x ?y)]}
-          db
-          '[[(path ?x ?y)
-             [?x :edge ?y]]
-            [(path ?x ?y)
-             [?x :edge ?z]
-             (path ?z ?y)]])))
-
-  (= #{[6 1 3 4 2]}
-     (q '[:find (sum ?heads) (min ?heads) (max ?heads) (count ?heads) (count-distinct ?heads)
-          :with ?monster
-          :in [[?monster ?heads]]]
-        [["Cerberus" 3]
-         ["Medusa" 1]
-         ["Cyclops" 1]
-         ["Chimera" 1]]))
-
-  (= #{[1] [5]}
-     (q '[:find ?x
-          :in [[?x ?x]]]
-        [[1 1]
-         [1 2]
-         [5 5]]))
-
-  (= [3 4 5]
-     (q '[:find [?z ...]
-          :in [?x ...]
-          :where
-          [(inc ?y) ?z]
-          [(inc ?x) ?y]]
-        [1 2 3]))
-
-  (= 55
-     (q '[:find ?f .
-          :in $ % ?n
-          :where (fib ?n ?f)]
-        {}
-        '[[(fib [?n] ?f)
-           [(<= ?n 1)]
-           [(identity ?n) ?f]]
-          [(fib [?n] ?f)
-           [(> ?n 1)]
-           [(- ?n 1) ?n1]
-           [(- ?n 2) ?n2]
-           (fib ?n1 ?f1)
-           (fib ?n2 ?f2)
-           [(+ ?f1 ?f2) ?f]]]
-        10)))
