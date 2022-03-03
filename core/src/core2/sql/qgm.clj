@@ -402,16 +402,22 @@ digraph {
                  plan]
                 plan))
 
+            (wrap-distinct [plan box]
+              (if (= :qgm.box.body.distinct/enforce (:qgm.box.body/distinct box))
+                [:distinct plan]
+                plan))
+
             (plan-select-box [box]
-              (let [body-cols (:qgm.box.body/columns box)]
-                [:rename (zipmap body-cols (:qgm.box.head/columns box))
-                 [:project body-cols
-                  (let [qids (setify (:qgm.box.body/quantifiers box))]
-                    (-> (reduce (fn [acc el]
-                                  [:cross-join acc el])
-                                (for [qid qids]
-                                  (plan-quantifier (eid->entity qid))))
-                        (wrap-select qids)))]]))]
+              (-> (let [body-cols (:qgm.box.body/columns box)]
+                    [:rename (zipmap body-cols (:qgm.box.head/columns box))
+                     [:project body-cols
+                      (let [qids (setify (:qgm.box.body/quantifiers box))]
+                        (-> (reduce (fn [acc el]
+                                      [:cross-join acc el])
+                                    (for [qid qids]
+                                      (plan-quantifier (eid->entity qid))))
+                            (wrap-select qids)))]])
+                  (wrap-distinct box)))]
 
       (plan-select-box (-> (trip/-datoms db :ave [:qgm.box/root? true])
                            first :e

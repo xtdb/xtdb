@@ -205,13 +205,14 @@
            (qgm/plan-query (sql/parse "
 SELECT q3.price FROM quotations q3 WHERE q3.partno = 1"))))
 
-  (t/is (= {:plan '[:rename {q1__3_partno partno, q1__3_descr descr, q2__4_suppno suppno}
-                    [:project [q1__3_partno q1__3_descr q2__4_suppno]
-                     [:select (and (= q1__3_descr "engine")
-                                   (= q1__3_partno q2__4_partno))
-                      [:cross-join
-                       [:rename q2__4 [:scan [suppno partno]]]
-                       [:rename q1__3 [:scan [partno descr]]]]]]]}
+  (t/is (= {:plan '[:distinct
+                    [:rename {q1__3_partno partno, q1__3_descr descr, q2__4_suppno suppno}
+                     [:project [q1__3_partno q1__3_descr q2__4_suppno]
+                      [:select (and (= q1__3_descr "engine")
+                                    (= q1__3_partno q2__4_partno))
+                       [:cross-join
+                        [:rename q2__4 [:scan [suppno partno]]]
+                        [:rename q1__3 [:scan [partno descr]]]]]]]]}
            (qgm/plan-query (sql/parse "
 SELECT DISTINCT q1.partno, q1.descr, q2.suppno
 FROM inventory q1, quotations q2
