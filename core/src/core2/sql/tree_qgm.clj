@@ -13,16 +13,17 @@
 
 (s/def :qgm/id symbol?)
 
-(s/def :qgm.box/type #{:qgm.box.type/base-table :qgm.box.type/select})
+(s/def :qgm.box/type #{:qgm.box/base-table :qgm.box/select})
 
-(defmulti box-spec :qgm.box/type)
+(defmulti box-spec first)
 
 (s/def :qgm/box (s/multi-spec box-spec :qgm.box/type))
 
 (s/def :qgm.box.base-table/name symbol?)
 
-(defmethod box-spec :qgm.box.type/base-table [_]
-  (s/keys :req [:db/id :qgm.box/type :qgm.box.base-table/name]))
+(defmethod box-spec :qgm.box/base-table [_]
+  (s/cat :qgm.box/type #{:qgm.box/base-table}
+         :qgm.box.base-table/name :qgm.box.base-table/name))
 
 (s/def :qgm.box.head/distinct? boolean?)
 (s/def :qgm.box.head/columns (s/coll-of symbol? :kind vector? :min-count 1))
@@ -30,28 +31,35 @@
 (s/def :qgm.box.body/distinct #{:qgm.box.body.distinct/enforce
                                 :qgm.box.body.distinct/preserve
                                 :qgm.box.body.distinct/permit})
-(s/def :qgm.box.body/quantifiers (s/coll-of :qgm/id :kind set? :min-count 1))
 
-(defmethod box-spec :qgm.box.type/select [_]
-  (s/keys :req [:db/id :qgm.box/type
-                :qgm.box.head/distinct? :qgm.box.head/columns
-                :qgm.box.body/columns :qgm.box.body/distinct :qgm.box.body/quantifiers]))
+(defmethod box-spec :qgm.box/select [_]
+  (s/cat :qgm.box/type #{:qgm.box/select}
+         :qgm.box/properties (s/keys :req [:qgm.box.head/distinct? :qgm.box.head/columns
+                                           :qgm.box.body/columns :qgm.box.body/distinct])
+         :qgm.box/quantifiers (s/map-of :qgm/id :qgm/quantifier)))
 
-(s/def :qgm.quantifier/type #{:qgm.quantifier.type/foreach
-                              :qgm.quantifier.type/preserved-foreach
-                              :qgm.quantifier.type/existential
-                              :qgm.quantifier.type/all})
+(s/def :qgm.quantifier/type #{:qgm.quantifier/foreach
+                              :qgm.quantifier/preserved-foreach
+                              :qgm.quantifier/existential
+                              :qgm.quantifier/all})
+
 (s/def :qgm.quantifier/columns (s/coll-of symbol? :kind vector? :min-count 1))
-(s/def :qgm.quantifier/ranges-over :qgm/id)
 
-(s/def :qgm/quantifier (s/keys :req [:db/id :qgm.quantifier/type :qgm.quantifier/columns :qgm.quantifier/ranges-over]))
+(s/def :qgm/quantifier
+  (s/cat :qgm.quantifier/type :qgm.quantifier/type
+         :qgm.quantifier/id :qgm/id
+         :qgm.quantifier/columns :qgm.quantifier/columns
+         :qgm.quantifier/ranges-over :qgm/box))
 
 (s/def :qgm.predicate/expression any?)
 (s/def :qgm.predicate/quantifiers (s/coll-of :qgm/id :kind set?))
-(s/def :qgm/predicate (s/keys :req [:db/id :qgm.predicate/expression :qgm.predicate/quantifiers]))
+(s/def :qgm/predicate (s/keys :req [:qgm.predicate/expression :qgm.predicate/quantifiers]))
 
-(s/def :qgm/node (s/or :box :qgm/box :quantifier :qgm/quantifier :predicate :qgm/predicate))
-(s/def :qgm/graph (s/coll-of :qgm/node :kind set?))
+(s/def :qgm/preds (s/map-of :qgm/id :qgm/predicate))
+
+(s/def :qgm/tree :qgm/box)
+
+(s/def :qgm/qgm (s/keys :req-un [:qgm/preds :qgm/tree]))
 
 (defn build-query-spec [ag distinct?]
   (let [projection (first (sem/projected-columns ag))]
@@ -175,15 +183,16 @@
          (into {}))))
 
 (defn qgm [ag]
-  {:tree (->> ag
-              (r/collect-stop
-               (fn [ag]
-                 (r/zcase ag
-                   :query_specification [(qgm-box ag)]
-                   nil)))
-              first)
+  (->> {:tree (->> ag
+                   (r/collect-stop
+                     (fn [ag]
+                       (r/zcase ag
+                                :query_specification [(qgm-box ag)]
+                                nil)))
+                   first)
 
-   :preds (qgm-preds ag)})
+        :preds (qgm-preds ag)}
+       (s/assert :qgm/qgm)))
 
 (defn qgm-zip [{:keys [tree preds]}]
   (-> (z/zipper (fn [qgm]
