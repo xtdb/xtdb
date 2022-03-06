@@ -59,17 +59,32 @@
            :else
            nil))))))
 
+(defn ->zipper [x]
+  (cond
+    (:zip/make-node (meta x))
+    x
+
+    (or (vector? x)
+        (symbol? x)
+        (instance? Pattern x))
+    (z/vector-zip x)
+
+    (sequential? x)
+    (z/seq-zip x)
+
+    :else
+    (throw (IllegalArgumentException. (str "No zipper constructor for: " (type x))))))
+
 (defmacro zmatch {:style/indent 1} [loc & [pattern expr & clauses]]
   (when pattern
     (if expr
-      (let [vars (->> (flatten pattern)
-                      (filter symbol?)
-                      (remove '#{_}))]
-        `(let [loc# ~loc
-               loc# (if (:zip/make-node (meta loc#))
-                      loc#
-                      (z/vector-zip loc#))]
-           (if-let [{:syms [~@vars] :as acc#} (zip-match (z/vector-zip '~pattern) loc#)]
+      (let [vars (if (symbol? pattern)
+                   #{pattern}
+                   (->> (flatten pattern)
+                        (filter symbol?)
+                        (remove '#{_})))]
+        `(let [loc# (->zipper ~loc)]
+           (if-let [{:syms [~@vars] :as acc#} (zip-match (->zipper '~pattern) loc#)]
              ~expr
              (zmatch loc# ~@clauses))))
       pattern)))
@@ -85,7 +100,7 @@
 (defn ctor [ag]
   (when ag
     (let [node (z/node ag)]
-      (when (vector? node)
+      (when (sequential? node)
         (first node)))))
 
 (defn ctor? [kw ag]
