@@ -70,6 +70,14 @@
                               :qgm.box.body.distinct/enforce
                               :qgm.box.body.distinct/permit)}))
 
+(defn- table-primary->quantifier [ag]
+  (let [table (sem/table ag)
+        qid (symbol (str (:correlation-name table) "__" (:id table)))
+        projection (first (sem/projected-columns ag))]
+    (when-not (:subquery-scope-id table)
+      [[qid [:qgm.quantifier/foreach qid (mapv plan/unqualified-projection-symbol projection)
+             [:qgm.box/base-table (symbol (:table-or-query-name table))]]]])))
+
 (defn- expr-quantifiers [ag]
   (r/collect-stop
    (fn [ag]
@@ -91,12 +99,10 @@
         (fn [ag]
           (r/zmatch ag
             [:table_primary _ _]
-            (let [table (sem/table ag)
-                  qid (symbol (str (:correlation-name table) "__" (:id table)))
-                  projection (first (sem/projected-columns ag))]
-              (when-not (:subquery-scope-id table)
-                [[qid [:qgm.quantifier/foreach qid (mapv plan/unqualified-projection-symbol projection)
-                       [:qgm.box/base-table (symbol (:table-or-query-name table))]]]]))
+            (table-primary->quantifier ag)
+
+            [:table_primary _ _ _]
+            (table-primary->quantifier ag)
 
             [:quantified_comparison_predicate _
              [:quantified_comparison_predicate_part_2 [_ _] [q-type _] ^:z subquery]]
