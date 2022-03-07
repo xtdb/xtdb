@@ -185,6 +185,6 @@ digraph {
                 FROM inventory q3
                 WHERE q3.onhand_qty < q1.order_qty AND q3.type = 'CPU')"]
         q (nth qs 1)]
-    (-> (qgm->dot q (qgm/qgm (z/vector-zip (core2.sql/parse q))))
+    (-> (qgm->dot q (qgm/->qgm (z/vector-zip (core2.sql/parse q))))
         #_(doto println)
         (dot->file "png" "target/qgm.png"))))

@@ -182,17 +182,13 @@
 
          (into {}))))
 
-(defn qgm [ag]
-  (->> {:tree (->> ag
-                   (r/collect-stop
-                     (fn [ag]
-                       (r/zcase ag
-                                :query_specification [(qgm-box ag)]
-                                nil)))
-                   first)
-
-        :preds (qgm-preds ag)}
-       (s/assert :qgm/qgm)))
+(defn- ->preds-by-qid [preds]
+  (->> (for [[pid pred] preds
+             qid (:qgm.predicate/quantifiers pred)]
+         [qid pid])
+       (reduce (fn [acc [qid pid]]
+                 (update acc qid (fnil conj #{}) pid))
+               {})))
 
 (defn qgm-zip [{:keys [tree preds]}]
   (-> (z/zipper (fn [qgm]
@@ -219,12 +215,22 @@
                 tree)
 
       (vary-meta into {::preds preds
-                       ::qid->pids (->> (for [[pid pred] preds
-                                              qid (:qgm.predicate/quantifiers pred)]
-                                          [qid pid])
-                                        (reduce (fn [acc [qid pid]]
-                                                  (update acc qid (fnil conj #{}) pid))
-                                                {}))})))
+                       ::qid->pids (->preds-by-qid preds)})))
+
+(defn qgm-unzip [z]
+  {:tree (z/node z), :preds (::preds (meta z))})
+
+(defn ->qgm [ag]
+  (->> {:tree (->> ag
+                   (r/collect-stop
+                    (fn [ag]
+                      (r/zcase ag
+                        :query_specification [(qgm-box ag)]
+                        nil)))
+                   first)
+
+        :preds (qgm-preds ag)}
+       (s/assert :qgm/qgm)))
 
 (defn plan-qgm [{:keys [tree preds]}]
   (let [qid->pids (->> (for [[pid pred] preds
@@ -285,8 +291,10 @@
       (let [ag (z/vector-zip query)]
         (if-let [errs (not-empty (sem/errs ag))]
           {:errs errs}
-          {:plan (->> (plan-qgm (qgm (z/vector-zip query)))
-                      (z/vector-zip)
-                      (r/innermost (r/mono-tp plan/optimize-plan))
-                      (z/node)
-                      (s/assert ::lp/logical-plan))})))))
+          (let [qgm (->qgm (z/vector-zip query))]
+            {:qgm qgm
+             :plan (->> (plan-qgm qgm)
+                        (z/vector-zip)
+                        (r/innermost (r/mono-tp plan/optimize-plan))
+                        (z/node)
+                        (s/assert ::lp/logical-plan))}))))))
