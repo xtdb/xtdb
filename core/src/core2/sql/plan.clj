@@ -444,7 +444,7 @@
        (map :table-id)
        (set)))
 
-(defn- expr-symbols [expr]
+(defn expr-symbols [expr]
   (set (for [x (flatten expr)
              :when (:column-reference (meta x))]
          x)))

@@ -5,7 +5,8 @@
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
             [core2.sql.plan :as plan]
-            [instaparse.core :as insta]))
+            [instaparse.core :as insta]
+            [clojure.walk :as w]))
 
 ;; Query Graph Model
 ;; http://projectsweb.cs.washington.edu/research/projects/db/weld/pirahesh-starburst-92.pdf
@@ -239,29 +240,48 @@
        (s/assert :qgm/qgm)))
 
 (defn plan-qgm [{:keys [tree preds]}]
-  (let [qid->pids (->> (for [[pid pred] preds
-                             qid (:qgm.predicate/quantifiers pred)]
-                         [qid pid])
-                       (reduce (fn [acc [qid pid]]
-                                 (update acc qid (fnil conj #{}) pid))
-                               {}))]
+  (let [preds (->> (for [[pred-id pred] preds]
+                     [pred-id (assoc pred
+                                     :qgm.predicate/expr-symbols
+                                     (plan/expr-symbols (:qgm.predicate/expression pred)))])
+                   (into {}))
+        qid->pids (->preds-by-qid preds)]
+
     (letfn [(plan-quantifier [[_q-type qid cols [box-type :as _box]]]
               (case box-type
                 :qgm.box/base-table
-                [:rename qid
-                 [:scan cols]]))
+                (let [scan-preds (->> (qid->pids qid)
+                                      (map preds)
+                                      (filter (comp #(= 1 %) count :qgm.predicate/expr-symbols))
+                                      (group-by (comp first :qgm.predicate/expr-symbols)))]
+                  [:rename qid
+                   [:scan (vec
+                           (for [col cols]
+                             (let [fq-col (symbol (str qid "_" col))
+                                   col-scan-preds (->> (get scan-preds fq-col)
+                                                       (map :qgm.predicate/expression)
+                                                       (w/postwalk-replace {fq-col col}))]
+                               (case (count col-scan-preds)
+                                 0 col
+                                 1 {col (first col-scan-preds)}
+                                 {col (list* 'and col-scan-preds)}))))]])))
 
             (wrap-select [plan qids]
-              (if-let [exprs (seq
-                              (for [pid (->> qids (into #{} (mapcat qid->pids)))
-                                    :let [{:qgm.predicate/keys [quantifiers expression]} (get preds pid)]
-                                    :when (every? (set qids) quantifiers)]
-                                expression))]
-                [:select (if (= (count exprs) 1)
-                           (first exprs)
-                           (list* 'and exprs))
-                 plan]
-                plan))
+              (let [exprs (->> qids
+                               (into []
+                                     (comp
+                                      (mapcat qid->pids)
+                                      (distinct)
+                                      (map preds)
+                                      (filter (fn [{:qgm.predicate/keys [quantifiers expr-symbols]}]
+                                                (and (every? (set qids) quantifiers)
+                                                     (> (count expr-symbols) 1))))
+                                      (map :qgm.predicate/expression))))]
+                (case (count exprs)
+                  0 plan
+                  1 [:select (first exprs) plan]
+                  [:select (list* 'and exprs)
+                   plan])))
 
             (wrap-distinct [plan [_box-type box-opts _qs]]
               (if (= :qgm.box.body.distinct/enforce (:qgm.box.body/distinct box-opts))
