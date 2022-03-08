@@ -753,13 +753,15 @@
 ;; operator, where the right hand side is a reference to the scalar
 ;; column itself. That is, this can be done via wrapping the
 ;; parameterised relation with [:select (or (<inv-comp-op> <lhs>
-;; <scalar-column>) (nil? <lhs>) (nil? <scalar-column>)) ...]. It's
-;; assumed that lhs has itself already been translated at this point
-;; if needed, as it itself may contain subqueries etc.
+;; <scalar-column>) (nil? <lhs>) (nil? <scalar-column>)) ...]. Moving
+;; left hand side into the parameterised expression will introduce
+;; correlation on any column references it contains. Left hand side
+;; may be arbitrary complex, and may contain further Apply operators.
 
 ;; ANY is translated into EXISTS where the left hand side is moved
 ;; inside to wrap the parameterised relation. [:select (<comp-op>
-;; <lhs> <scalar-column>) ...]
+;; <lhs> <scalar-column>) ...] Correlation maybe introduced as
+;; mentioned above.
 
 ;; IN is translated into = ANY and then as above.
 ;; NOT IN is translated into <> ALL and then as above.
@@ -784,4 +786,6 @@
 ;; passed down several levels to be used in other Apply operators. In
 ;; these cases the variable itself will already be in the current
 ;; parameter scope having been passed down, and simply needs to be
-;; passed on.
+;; passed on. Column references to outer columns will be generated as
+;; parameters in the plan, that is, they will be prefixed with a
+;; question mark.
