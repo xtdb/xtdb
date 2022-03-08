@@ -720,15 +720,17 @@
 
 ;; A row subquery may only appear in a few places, like inside a
 ;; VALUES or IN expression, in which case it will bind N number of
-;; original columns to fresh variables/columns, and use max-1-row. It
-;; would expand into a literal row where the elements are these
-;; columns. [:table [{:a <fv-1>, :b <fv-2>}] [:apply ... [:max-1-row
-;; [:project [{<fv-1> <row-col-1} {fv-2 <row-col-2}] ...]]]] This is
-;; just an example to illustrate the translation, the keys would
-;; normally be determined based on the projected columns of the
-;; surrounding query. Often the columns would be anonymous and ordinal
-;; only. This is a general problem of how to generate plans for VALUES
-;; and not specifically to Apply, so not in scope for this note.
+;; original columns to fresh variables/columns, and use
+;; max-1-row. (Alternatively, this could be translated into returning
+;; a single struct.) It would expand into a literal row where the
+;; elements are these columns. [:table [{:a <fv-1>, :b <fv-2>}]
+;; [:apply ... [:max-1-row [:project [{<fv-1> <row-col-1} {fv-2
+;; <row-col-2}] ...]]]] This is just an example to illustrate the
+;; translation, the keys would normally be determined based on the
+;; projected columns of the surrounding query. Often the columns would
+;; be anonymous and ordinal only. This is a general problem of how to
+;; generate plans for VALUES and not specifically to Apply, so not in
+;; scope for this note.
 
 ;; Conditional evaluation, like CASE and short-circuiting AND/OR (if
 ;; the spec enforces this) pose additional challenges, but are not
@@ -788,6 +790,9 @@
 ;; [{<fv-out> (= <fv-in> <N>)}] [:group-by [{<fv-in> (count ...)}]
 ;; [:top {:limit 1} ....]  where N is 1 for EXISTS and 0 for NOT
 ;; EXISTS. The Apply mode here is cross join.
+
+;; Note that for ALL/ANY/IN, the subquery may return more than one
+;; column, which can be deal with by returning a struct.
 
 ;; Correlated variables:
 
