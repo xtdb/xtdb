@@ -16,57 +16,57 @@
 
 (defmethod box->dot :qgm.box/base-table [box-id [_ table-name]]
   (let [table-name (str table-name)]
-    (format "
-  subgraph cluster_%s {
+    {:nodes [(format "  subgraph cluster_%s {
     label=\"BASE\"
     style=dashed
-    rank=min
+    rank=same
     %s [shape=none, label=\"%s\"]
-  }" box-id box-id table-name)))
+  }" box-id box-id table-name)]}))
 
 (defmethod box->dot :qgm.box/select [box-id [_ box-opts qs]]
-  (->> (into [(format "
-subgraph cluster_%s {
-  label=\"SELECT\"
-  style=dashed
-  rank=max
-  %s
-}"
-                      box-id
-                      (->> [(format "%s [label = \"%s\", shape=record, penwidth=2]"
-                                    box-id
-                                    (format "{ <head> HEAD: distinct=%s\\l | { { { %s\\l } | { %s\\l } } } | <body> BODY: distinct=%s\\l }"
-                                            (str/upper-case (:qgm.box.head/distinct? box-opts))
-                                            (str/join "\\l|" (:qgm.box.head/columns box-opts))
-                                            (str/join "\\l|" (:qgm.box.body/columns box-opts))
-                                            (str/upper-case (name (:qgm.box.body/distinct box-opts)))))
+  (let [sub-graphs (for [[qid [_q-type _qid _cols ranges-over]] qs]
+                     (box->dot (symbol (str "box_" qid)) ranges-over))]
+    {:nodes (into [(format "  subgraph cluster_%s {
+    label=\"SELECT\"
+    style=dashed
+    rank=same
+    %s
+  }"
+                           box-id
+                           (->> [(format "%s [label = \"%s\", shape=record, penwidth=2]"
+                                         box-id
+                                         (format "{ <head> HEAD: distinct=%s\\l | { { { %s\\l } | { %s\\l } } } | <body> BODY: distinct=%s\\l }"
+                                                 (str/upper-case (:qgm.box.head/distinct? box-opts))
+                                                 (str/join "\\l|" (:qgm.box.head/columns box-opts))
+                                                 (str/join "\\l|" (:qgm.box.body/columns box-opts))
+                                                 (str/upper-case (name (:qgm.box.body/distinct box-opts)))))
 
-                            (->> (for [[qid [q-type _qid cols _ranges-over]] qs]
-                                   [(format "%s [label=\"%s(%s)\", shape=circle, style=filled, margin=0]"
-                                            qid qid (str/upper-case (first (name q-type))))
-                                    (let [box-id (symbol (str "box_" qid))]
-                                      (format "%s -> %s:head [label=\"%s\", lhead=cluster_%s]"
-                                              qid box-id (str/join ", " cols) box-id))])
-                                 (apply concat)
-                                 (str/join "\n    "))]
-                           (str/join "\n")))]
-
-             (for [[qid [_q-type _qid _cols ranges-over]] qs]
-               (box->dot (symbol (str "box_" qid)) ranges-over)))
-
-       (str/join "\n\n")))
+                                 (->> (for [[qid [q-type _qid _cols _ranges-over]] qs]
+                                        (format "    %s [label=\"%s(%s)\", shape=circle, style=filled, margin=0]"
+                                                qid qid (str/upper-case (first (name q-type)))))
+                                      (str/join "\n"))]
+                                (str/join "\n")))]
+                  (mapcat :nodes)
+                  sub-graphs)
+     :edges (into (vec (for [[qid [_q-type _qid cols _ranges-over]] qs]
+                         (let [box-id (symbol (str "box_" qid))]
+                           (format "  %s -> %s [label=\"%s\", lhead=cluster_%s]"
+                                   qid box-id (str/join ", " cols) box-id))))
+                  (mapcat :edges)
+                  sub-graphs)}))
 
 (defn- predicate->dot [p]
   (let [qs (:qgm.predicate/quantifiers p)]
-    (format "%s -> %s [label=\"%s\", dir=none, color=grey]"
+    (format "  %s -> %s [label=\"%s\", dir=none, color=grey]"
             (first qs)
             (or (second qs)
                 (first qs))
             (str/replace (str (:qgm.predicate/expression p)) "\"" "\\\""))))
 
 (defn qgm->dot [label {:keys [tree preds]}]
-  (str/trim
-   (format "
+  (let [{:keys [nodes edges]} (box->dot 'root tree)]
+    (str/trim
+     (format "
 digraph {
   compound=true
   fontname=courier
@@ -76,17 +76,17 @@ digraph {
   penwidth=2
   %s
 }"
-           (->> [(format "label=\"%s\""
-                         (-> (str/trim label)
-                             (str/replace "\n" "\\l")
-                             (str/replace "\"" "\\\"")
-                             (str "\\l")))
-                 (box->dot 'root tree)
-                 (->> preds
-                      (sort-by key)
-                      (map (comp predicate->dot val))
-                      (str/join "\n  "))]
-                (str/join "\n\n")))))
+             (->> [(format "label=\"%s\""
+                           (-> (str/trim label)
+                               (str/replace "\n" "\\l")
+                               (str/replace "\"" "\\\"")
+                               (str "\\l")))
+                   (->> nodes (str/join "\n\n"))
+                   (->> edges (str/join "\n"))
+                   (->> (vals preds)
+                        (map predicate->dot)
+                        (str/join "\n"))]
+                  (str/join "\n\n"))))))
 
 #_{:clj-kondo/ignore #{:unused-private-var}}
 (defn- dot->svg [dot]
@@ -187,4 +187,4 @@ digraph {
         q (nth qs 1)]
     (-> (qgm->dot q (qgm/->qgm (z/vector-zip (core2.sql/parse q))))
         #_(doto println)
-        (dot->file "png" "target/qgm.png"))))
+        (dot->file "png" "target/tree-qgm.png"))))
