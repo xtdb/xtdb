@@ -723,7 +723,7 @@
 ;; original columns to fresh variables/columns, and use max-1-row. It
 ;; would expand into a literal row where the elements are these
 ;; columns. [:table [{:a <fv-1>, :b <fv-2>}] [:apply ... [:max-1-row
-;; [:project {<fv-1> <row-col-1} {fv-2 <row-col-2} ...]]]] This is
+;; [:project [{<fv-1> <row-col-1} {fv-2 <row-col-2}] ...]]]] This is
 ;; just an example to illustrate the translation, the keys would
 ;; normally be determined based on the projected columns of the
 ;; surrounding query. Often the columns would be anonymous and ordinal
@@ -742,7 +742,7 @@
 ;; left-outer-join also be the mode?), and the original output column
 ;; is renamed to its fresh variable/column. This works the same
 ;; regardless context. [:select (... <fv> ...) [:apply ... [:project
-;; {<fv> <scalar-column>} ...]] There are situations where one can
+;; [{<fv> <scalar-column>}] ...]] There are situations where one can
 ;; avoid wrapping via the max-1-row, like if the parameterised
 ;; relation is a scalar aggregate.
 
@@ -768,6 +768,14 @@
 ;; <lhs> <scalar-column>) ...] Correlation maybe introduced as
 ;; mentioned above.
 
+;; A potential different translation is to not simplify these to (NOT)
+;; EXISTS and pass in lhs as well as a parameter, avoiding introducing
+;; correlation. As above, this parameter might need to be calculated
+;; via Apply itself if it's complex. This translation diverges more
+;; from the literature, and would require adapted rewrite rules to
+;; decorrelate.
+
+
 ;; IN is translated into = ANY and then as above.
 ;; NOT IN is translated into <> ALL and then as above.
 ;; IN value lists can be seen as an IN with a VALUES subquery.
@@ -778,9 +786,9 @@
 
 ;; Otherwise, the expression is a fresh variable/column which boolean
 ;; value is calculated with an parameterised relation as [:project
-;; {<fv-out> (= <fv-in> <N>)} [:group-by {<fv-in> (count ...)} [:top
-;; {:limit 1} ....]  where N is 1 for EXISTS and 0 for NOT EXISTS. The
-;; Apply mode here is cross join.
+;; [{<fv-out> (= <fv-in> <N>)}] [:group-by [{<fv-in> (count ...)}]
+;; [:top {:limit 1} ....]  where N is 1 for EXISTS and 0 for NOT
+;; EXISTS. The Apply mode here is cross join.
 
 ;; Correlated variables:
 
