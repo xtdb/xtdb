@@ -138,18 +138,53 @@
 (defn qgm-box [ag]
   (->> ag
        (r/collect-stop
-        (fn [ag]
-          (r/zmatch ag
-            [:query_specification _ _ _]
-            [[:qgm.box/select (build-query-spec ag false)
-              (qgm-quantifiers ag)]]
+        (letfn [(with-order-by [box ssl]
+                  (throw (UnsupportedOperationException.))
+                  #_
+                  (-> box
+                      (assoc-in [1 :qgm.box.body/order-by] ssl)))
 
-            [:query_specification _ [:set_quantifier d] _ _]
-            [[:qgm.box/select (build-query-spec ag (= d "DISTINCT"))
-              (qgm-quantifiers ag)]]
+                (with-fetch-first [box ffrc]
+                  (-> box
+                      (assoc-in [1 :qgm.box.body/fetch-first] (plan/expr ffrc))))
 
-            [:subquery _ _]
-            [])))
+                (with-result-offset [box rorc]
+                  (-> box
+                      (assoc-in [1 :qgm.box.body/result-offset] (plan/expr rorc))))]
+
+          (fn [ag]
+            (r/zmatch ag
+              [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl]]
+              [(-> (qgm-box qeb) (with-order-by ssl))]
+
+              [:query_expression ^:z qeb [:fetch_first_clause _ _ ffrc _ _]]
+              [(-> (qgm-box qeb) (with-fetch-first ffrc))]
+
+              [:query_expression ^:z qeb [:result_offset_clause _ rorc _]]
+              [(-> (qgm-box qeb) (with-result-offset rorc))]
+
+              [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _]]
+              [(-> (qgm-box qeb) (with-order-by ssl) (with-result-offset rorc))]
+
+              [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:fetch_first_clause _ _ ffrc _ _]]
+              [(-> (qgm-box qeb) (with-order-by ssl) (with-fetch-first ffrc))]
+
+              [:query_expression ^:z qeb [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
+              [(-> (qgm-box qeb) (with-result-offset rorc) (with-fetch-first ffrc))]
+
+              [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
+              [(-> (qgm-box qeb) (with-order-by ssl) (with-result-offset rorc) (with-fetch-first ffrc))]
+
+              [:query_specification _ _ _]
+              [[:qgm.box/select (build-query-spec ag false)
+                (qgm-quantifiers ag)]]
+
+              [:query_specification _ [:set_quantifier d] _ _]
+              [[:qgm.box/select (build-query-spec ag (= d "DISTINCT"))
+                (qgm-quantifiers ag)]]
+
+              [:subquery _ _]
+              []))))
        first))
 
 (defn- qgm-preds [ag]
@@ -232,7 +267,7 @@
                    (r/collect-stop
                     (fn [ag]
                       (r/zcase ag
-                        :query_specification [(qgm-box ag)]
+                        :query_expression [(qgm-box ag)]
                         nil)))
                    first)
 
@@ -288,6 +323,13 @@
                 [:distinct plan]
                 plan))
 
+            (wrap-top [plan [_box-type {:qgm.box.body/keys [result-offset fetch-first]} __qs]]
+              (if (or result-offset fetch-first)
+                [:top (->> {:skip result-offset, :limit fetch-first}
+                           (into {} (filter val)))
+                 plan]
+                plan))
+
             (plan-select-box [[_ box-opts qs :as box]]
               (-> (let [body-cols (:qgm.box.body/columns box-opts)]
                     [:rename (zipmap body-cols (:qgm.box.head/columns box-opts))
@@ -297,7 +339,8 @@
                                (reduce (fn [acc el]
                                          [:cross-join acc el])))
                           (wrap-select (keys qs)))]])
-                  (wrap-distinct box)))]
+                  (wrap-distinct box)
+                  (wrap-top box)))]
 
       (plan-select-box tree))))
 
