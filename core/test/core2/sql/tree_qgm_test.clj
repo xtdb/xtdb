@@ -277,7 +277,6 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'"))))))
              {si__3_movieTitle movieTitle}
              [:rename si__3 [:scan [movieTitle]]]]])
 
-  #_
   (valid? "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si"
           '[:difference
             [:rename
@@ -287,7 +286,6 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'"))))))
              {si__5_name name}
              [:rename si__5 [:scan [name]]]]])
 
-  #_
   (valid? "SELECT si.name FROM StarsIn AS si UNION ALL SELECT si.name FROM StarsIn AS si"
           '[:union-all
             [:rename
@@ -297,9 +295,8 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'"))))))
              {si__5_name name}
              [:rename si__5 [:scan [name]]]]])
 
-  #_
   (valid? "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si"
-          '[:intersect
+          '[:intersection
             [:rename
              {si__3_name name}
              [:rename si__3 [:scan [name]]]]
@@ -307,7 +304,6 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'"))))))
              {si__5_name name}
              [:rename si__5 [:scan [name]]]]])
 
-  #_
   (valid? "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si"
           '[:distinct
             [:union-all
@@ -315,10 +311,9 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'"))))))
               {si__3_movieTitle movieTitle}
               [:rename si__3 [:scan [movieTitle]]]]
              [:rename
-              {si__5_name movieTitle}
+              {si__5_name name}
               [:rename si__5 [:scan [name]]]]]])
 
-  #_
   (valid? "SELECT si.name FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si ORDER BY name"
           '[:order-by [{name :asc}]
             [:distinct

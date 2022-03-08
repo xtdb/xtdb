@@ -209,7 +209,13 @@
 
                 (with-result-offset [box rorc]
                   (-> box
-                      (assoc-in [1 :qgm.box.body/result-offset] (plan/expr rorc))))]
+                      (assoc-in [1 :qgm.box.body/result-offset] (plan/expr rorc))))
+
+                (set-box [box-type opts lhs rhs]
+                  (let [lbox (qgm-box lhs)]
+                    [[box-type
+                      (into {:qgm.box.head/columns (:qgm.box.head/columns (nth lbox 1))} opts)
+                      lbox (qgm-box rhs)]]))]
 
           (fn [ag]
             (r/zmatch ag
@@ -233,6 +239,30 @@
 
               [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl] [:result_offset_clause _ rorc _] [:fetch_first_clause _ _ ffrc _ _]]
               [(-> (qgm-box qeb) (with-order-by ssl) (with-result-offset rorc) (with-fetch-first ffrc))]
+
+              [:query_expression_body ^:z qeb "UNION" ^:z qt]
+              (set-box :qgm.box/union
+                       {:qgm.box.head/distinct? true
+                        :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
+                       qeb qt)
+
+              [:query_expression_body ^:z qeb "UNION" "ALL" ^:z qt]
+              (set-box :qgm.box/union
+                       {:qgm.box.head/distinct? false
+                        :qgm.box.body/distinct :qgm.box.body.distinct/preserve}
+                       qeb qt)
+
+              [:query_expression_body ^:z qeb "EXCEPT" ^:z qt]
+              (set-box :qgm.box/except
+                       {:qgm.box.head/distinct? true
+                        :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
+                       qeb qt)
+
+              [:query_term ^:z qt "INTERSECT" ^:z qp]
+              (set-box :qgm.box/intersect
+                       {:qgm.box.head/distinct? true
+                        :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
+                       qt qp)
 
               [:query_specification _ _ _]
               [[:qgm.box/select (build-query-spec ag false)
@@ -394,11 +424,27 @@
                                (reduce (fn [acc el]
                                          [:cross-join acc el])))
                           (wrap-select (keys qs)))]]
-                    (wrap-distinct box)
-                    (wrap-order-by box)
-                    (wrap-top box))))]
+                    (wrap-distinct box))))
 
-      (plan-select-box tree))))
+            (plan-box [[box-type :as box]]
+              (-> (case box-type
+                    :qgm.box/select (plan-select-box box)
+                    :qgm.box/except (let [[_ _ lbox rbox] box]
+                                      [:difference (plan-box lbox) (plan-box rbox)])
+
+                    :qgm.box/intersect (let [[_ _ lbox rbox] box]
+                                         [:intersection (plan-box lbox) (plan-box rbox)])
+
+                    :qgm.box/union (let [[_ box-opts lbox rbox] box
+                                         plan [:union-all (plan-box lbox) (plan-box rbox)]]
+                                     (if (= :qgm.box.body.distinct/enforce
+                                            (:qgm.box.body/distinct box-opts))
+                                       [:distinct plan]
+                                       plan)))
+                  (wrap-order-by box)
+                  (wrap-top box)))]
+
+      (plan-box tree))))
 
 (defn plan-query [query]
   (if-let [parse-failure (insta/get-failure query)]
