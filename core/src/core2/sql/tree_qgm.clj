@@ -62,6 +62,44 @@
 
 (s/def :qgm/qgm (s/keys :req-un [:qgm/preds :qgm/tree]))
 
+(defn- ->preds-by-qid [preds]
+  (->> (for [[pid pred] preds
+             qid (:qgm.predicate/quantifiers pred)]
+         [qid pid])
+       (reduce (fn [acc [qid pid]]
+                 (update acc qid (fnil conj #{}) pid))
+               {})))
+
+(defn qgm-zip [{:keys [tree preds]}]
+  (-> (z/zipper (fn [qgm]
+                  (and (vector? qgm)
+                       (contains? #{:qgm.box/select
+                                    :qgm.quantifier/foreach
+                                    :qgm.quantifier/all
+                                    :qgm.quantifier/existential}
+                                  (first qgm))))
+                (fn [qgm]
+                  (case (first qgm)
+                    :qgm.box/select (vals (last qgm))
+
+                    (:qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
+                    [(last qgm)]))
+
+                (fn [node children]
+                  (case (first node)
+                    :qgm.box/select (assoc node 2 (into {} (map (juxt second identity)) children))
+
+                    (:qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
+                    (assoc node 3 (first children))))
+
+                tree)
+
+      (vary-meta into {::preds preds
+                       ::qid->pids (->preds-by-qid preds)})))
+
+(defn qgm-unzip [z]
+  {:tree (z/node z), :preds (::preds (meta z))})
+
 (defn build-query-spec [ag distinct?]
   (let [projection (first (sem/projected-columns ag))]
     {:qgm.box.head/distinct? distinct?
@@ -251,44 +289,6 @@
               [])))
 
          (into {}))))
-
-(defn- ->preds-by-qid [preds]
-  (->> (for [[pid pred] preds
-             qid (:qgm.predicate/quantifiers pred)]
-         [qid pid])
-       (reduce (fn [acc [qid pid]]
-                 (update acc qid (fnil conj #{}) pid))
-               {})))
-
-(defn qgm-zip [{:keys [tree preds]}]
-  (-> (z/zipper (fn [qgm]
-                  (and (vector? qgm)
-                       (contains? #{:qgm.box/select
-                                    :qgm.quantifier/foreach
-                                    :qgm.quantifier/all
-                                    :qgm.quantifier/existential}
-                                  (first qgm))))
-                (fn [qgm]
-                  (case (first qgm)
-                    :qgm.box/select (vals (last qgm))
-
-                    (:qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
-                    [(last qgm)]))
-
-                (fn [node children]
-                  (case (first node)
-                    :qgm.box/select (conj node (into {} (map (juxt second identity)) children))
-
-                    (:qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
-                    (into node children)))
-
-                tree)
-
-      (vary-meta into {::preds preds
-                       ::qid->pids (->preds-by-qid preds)})))
-
-(defn qgm-unzip [z]
-  {:tree (z/node z), :preds (::preds (meta z))})
 
 (defn ->qgm [ag]
   (->> {:tree (->> ag
