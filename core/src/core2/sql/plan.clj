@@ -691,14 +691,14 @@
 ;; expression. The default Apply mode is left-outer-join, but
 ;; max-1-row may replace this need, and use cross-join?
 
-;; Apply can happen in two relational contexts, in a top-level
-;; conjunction select or inside a normal select/project. During
-;; top-level select, the expression may get replaced with the constant
-;; true (which could be optimised away) and the Apply operator mode
-;; configured to semi/anti etc. Otherwise, one needs to calculate the
-;; actual value of the expression and bind it to a fresh
-;; variable/column so it can be used in the original expression, which
-;; may be arbitrary complex.
+;; Usage of Apply for expressions can happen in two relational
+;; contexts, in a top-level conjunction select or inside a normal
+;; select/project. During top-level select, the expression may get
+;; replaced with the constant true (which could be optimised away) and
+;; the Apply operator mode configured to semi/anti etc. Otherwise, one
+;; needs to calculate the actual value of the expression and bind it
+;; to a fresh variable/column so it can be used in the original
+;; expression, which may be arbitrary complex.
 
 ;; The top-level conjunction context could/should be detected and
 ;; dealt with as a rewrite instead of being generated directly. The
