@@ -1,12 +1,12 @@
 (ns core2.sql.tree-qgm
   (:require [clojure.spec.alpha :as s]
+            [clojure.walk :as w]
             [clojure.zip :as z]
             [core2.logical-plan :as lp]
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
             [core2.sql.plan :as plan]
-            [instaparse.core :as insta]
-            [clojure.walk :as w]))
+            [instaparse.core :as insta]))
 
 ;; Query Graph Model
 ;; http://projectsweb.cs.washington.edu/research/projects/db/weld/pirahesh-starburst-92.pdf
@@ -39,10 +39,22 @@
                                            :qgm.box.body/columns :qgm.box.body/distinct])
          :qgm.box/quantifiers (s/map-of :qgm/id :qgm/quantifier)))
 
-(s/def :qgm.quantifier/type #{:qgm.quantifier/foreach
-                              :qgm.quantifier/preserved-foreach
-                              :qgm.quantifier/existential
-                              :qgm.quantifier/all})
+(defn- set-box-spec [box-type]
+  (s/cat :qgm.box/type #{box-type}
+         :qgm.box/properties (s/keys :req [:qgm.box.head/distinct? :qgm.box.head/columns
+                                           :qgm.box.body/distinct])
+         :qgm.box/left-box :qgm/box
+         :qgm.box/right-box :qgm/box))
+
+(defmethod box-spec :qgm.box/intersect [_] (set-box-spec :qgm.box/intersect))
+(defmethod box-spec :qgm.box/except [_] (set-box-spec :qgm.box/except))
+(defmethod box-spec :qgm.box/union [_] (set-box-spec :qgm.box/union))
+
+(s/def :qgm.quantifier/type
+  #{:qgm.quantifier/foreach
+    :qgm.quantifier/preserved-foreach
+    :qgm.quantifier/existential
+    :qgm.quantifier/all})
 
 (s/def :qgm.quantifier/columns (s/coll-of symbol? :kind vector? :min-count 1))
 
@@ -73,24 +85,28 @@
 (defn qgm-zip [{:keys [tree preds]}]
   (-> (z/zipper (fn [qgm]
                   (and (vector? qgm)
-                       (contains? #{:qgm.box/select
-                                    :qgm.quantifier/foreach
-                                    :qgm.quantifier/all
-                                    :qgm.quantifier/existential}
+                       (contains? #{:qgm.box/select :qgm.box/intersect :qgm.box/union :qgm.box/except
+                                    :qgm.quantifier/foreach :qgm.quantifier/all :qgm.quantifier/existential}
                                   (first qgm))))
                 (fn [qgm]
                   (case (first qgm)
                     :qgm.box/select (vals (last qgm))
 
+                    (:qgm.box/intersect :qgm.box/union :qgm.box/except)
+                    (subvec qgm 2)
+
                     (:qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
-                    [(last qgm)]))
+                    (subvec qgm 3)))
 
                 (fn [node children]
                   (case (first node)
                     :qgm.box/select (assoc node 2 (into {} (map (juxt second identity)) children))
 
+                    (:qgm.box/intersect :qgm.box/union :qgm.box/except)
+                    (into (subvec node 0 2) children)
+
                     (:qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
-                    (assoc node 3 (first children))))
+                    (into (subvec node 0 3) children)))
 
                 tree)
 
