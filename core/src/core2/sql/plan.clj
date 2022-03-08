@@ -679,7 +679,7 @@
 
 ;; Each subquery has two parts, an expression replacing it in its
 ;; parent expression, and a relational algebra tree used in the
-;; wrapping Apply operator.  The replacement expression is usually a
+;; wrapping Apply operator. The replacement expression is usually a
 ;; fresh variable/column, but could be a constant, like true (when the
 ;; mode is anti/semi-join).
 
@@ -746,16 +746,16 @@
 ;; There are three places these can occur inside expressions: (NOT)
 ;; IN, ALL/ANY and (NOT) EXISTS. (NOT) IN and ALL/ANY are normalised
 ;; into (NOT) EXISTS. Exactly how this is translated differs between
-;; (top-level) select and .
+;; (top-level) select and usage inside other expressions.
 
 ;; ALL is translated into NOT EXISTS, where the left hand side is
 ;; moved into parameterised relation using the inverse comparison
-;; operator, and where the right hand side is the scalar column
-;; itself. That is, this can be done via wrapping the parameterised
-;; relation with [:select (or (<inv-comp-op> <lhs> <scalar-column>)
-;; (nil? <lhs>) (nil? <scalar-column>)) ...]. It's assumed that lhs
-;; has itself already been translated at this point if needed, as it
-;; itself may contain subqueries etc.
+;; operator, where the right hand side is a reference to the scalar
+;; column itself. That is, this can be done via wrapping the
+;; parameterised relation with [:select (or (<inv-comp-op> <lhs>
+;; <scalar-column>) (nil? <lhs>) (nil? <scalar-column>)) ...]. It's
+;; assumed that lhs has itself already been translated at this point
+;; if needed, as it itself may contain subqueries etc.
 
 ;; ANY is translated into EXISTS where the left hand side is moved
 ;; inside to wrap the parameterised relation. [:select (<comp-op>
@@ -769,11 +769,11 @@
 ;; true (or dropped) in all the above cases, and the Apply mode is set
 ;; to semi-join for EXISTS and anti-join for NOT EXISTS.
 
-;; Otherwise, the expression is a fresh variable/column containing,
-;; which boolean value is calculated with an parameterised relation as
-;; [:project {<fv-out> (= <fv-in> <N>)} [:group-by {<fv-in> (count
-;; ...)} [:top {:limit 1} ....]  where N is 1 for EXISTS and 0 for NOT
-;; EXISTS. The Apply mode here is cross join.
+;; Otherwise, the expression is a fresh variable/column which boolean
+;; value is calculated with an parameterised relation as [:project
+;; {<fv-out> (= <fv-in> <N>)} [:group-by {<fv-in> (count ...)} [:top
+;; {:limit 1} ....]  where N is 1 for EXISTS and 0 for NOT EXISTS. The
+;; Apply mode here is cross join.
 
 ;; Correlated variables:
 
