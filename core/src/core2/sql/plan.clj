@@ -768,12 +768,11 @@
 ;; <lhs> <scalar-column>) ...] Correlation maybe introduced as
 ;; mentioned above.
 
-;; A potential different translation is to not simplify these to (NOT)
-;; EXISTS and pass in lhs as well as a parameter, avoiding introducing
-;; correlation. As above, this parameter might need to be calculated
-;; via Apply itself if it's complex. This translation diverges more
-;; from the literature, and would require adapted rewrite rules to
-;; decorrelate.
+;; A potential different translation is to pass in lhs as well as a
+;; parameter, avoiding introducing correlation. As above, this
+;; parameter might need to be calculated via Apply itself if it's
+;; complex. This translation diverges more from the literature, and
+;; may require adapted rewrite rules to decorrelate.
 
 
 ;; IN is translated into = ANY and then as above.
