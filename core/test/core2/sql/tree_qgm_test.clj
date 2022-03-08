@@ -123,19 +123,17 @@ WHERE q1.partno IN (SELECT q3.partno
 (t/deftest test-qgm-query-plan
   (t/is (= '[:rename {q3__3_price price}
              [:project [q3__3_price]
-              [:select (= q3__3_partno 1)
-               [:rename q3__3
-                [:scan [price {partno (= partno 1)}]]]]]]
+              [:rename q3__3
+               [:scan [price {partno (= partno 1)}]]]]]
            (:plan (qgm/plan-query (sql/parse "
 SELECT q3.price FROM quotations q3 WHERE q3.partno = 1")))))
 
   (t/is (= '[:distinct
              [:rename {q1__3_partno partno, q1__3_descr descr, q2__4_suppno suppno}
               [:project [q1__3_partno q1__3_descr q2__4_suppno]
-               [:select (and (= q1__3_descr "engine")
-                             (= q1__3_partno q2__4_partno))
+               [:select (= q1__3_partno q2__4_partno)
                 [:cross-join
-                 [:rename q1__3 [:scan [partno descr]]]
+                 [:rename q1__3 [:scan [partno {descr (= descr "engine")}]]]
                  [:rename q2__4 [:scan [suppno partno]]]]]]]]
            (:plan (qgm/plan-query (sql/parse "
 SELECT DISTINCT q1.partno, q1.descr, q2.suppno
@@ -350,14 +348,12 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'"))))))
              {si__3_movieTitle movieTitle}
              [:rename si__3 [:scan [movieTitle]]]]])
 
-  #_
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle"
           '[:order-by [{movieTitle :asc}]
             [:rename
              {si__3_movieTitle movieTitle}
              [:rename si__3 [:scan [movieTitle]]]]])
 
-  #_
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle OFFSET 100 ROWS"
           '[:top {:skip 100}
             [:order-by [{movieTitle :asc}]
@@ -365,14 +361,12 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'"))))))
               {si__3_movieTitle movieTitle}
               [:rename si__3 [:scan [movieTitle]]]]]])
 
-  #_
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY movieTitle DESC"
           '[:order-by [{movieTitle :desc}]
             [:rename
              {si__3_movieTitle movieTitle}
              [:rename si__3 [:scan [movieTitle]]]]])
 
-  #_
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle"
           '[:project [movieTitle]
             [:order-by [{$order_by__1_1$ :desc} {movieTitle :asc}]
@@ -381,7 +375,6 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'"))))))
                {si__3_movieTitle movieTitle}
                [:rename si__3 [:scan [movieTitle year]]]]]]])
 
-  #_
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year"
           '[:project [movieTitle]
             [:order-by [{$order_by__1_1$ :asc}]

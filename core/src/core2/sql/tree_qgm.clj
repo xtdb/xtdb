@@ -135,14 +135,35 @@
 
        (into {})))
 
+(defn- ssl->order-by [ssl]
+  (let [projection (first (sem/projected-columns ssl))
+        query-id (sem/id (sem/scope-element ssl))]
+    (r/collect-stop
+     (fn [z]
+       (r/zcase z
+         :sort_specification
+         (let [direction (case (sem/ordering-specification z)
+                           "ASC" :asc
+                           "DESC" :desc
+                           :asc)]
+           [(if-let [idx (sem/order-by-index z)]
+              {:spec {(plan/unqualified-projection-symbol (nth projection idx)) direction}}
+              (let [column (symbol (str "$order_by__" query-id  "_" (r/child-idx z) "$"))]
+                {:spec {column direction}
+                 :projection {column (plan/expr (r/$ z 1))}}))])
+
+         :subquery
+         []
+
+         nil))
+     ssl)))
+
 (defn qgm-box [ag]
   (->> ag
        (r/collect-stop
         (letfn [(with-order-by [box ssl]
-                  (throw (UnsupportedOperationException.))
-                  #_
                   (-> box
-                      (assoc-in [1 :qgm.box.body/order-by] ssl)))
+                      (assoc-in [1 :qgm.box.body/order-by] (ssl->order-by ssl))))
 
                 (with-fetch-first [box ffrc]
                   (-> box
@@ -205,7 +226,7 @@
 
                          :qgm.predicate/quantifiers (into #{qid} (expr-quantifiers lhs))}]]))]
     (->> ag
-         (r/collect
+         (r/collect-stop
           (fn [ag]
             (r/zmatch ag
               [:comparison_predicate _ _]
@@ -215,12 +236,19 @@
 
               [:quantified_comparison_predicate ^:z lhs
                [:quantified_comparison_predicate_part_2 [_ op] _ ^:z sq-ag]]
-              (subquery-pred sq-ag op lhs)
+              (into (qgm-preds sq-ag)
+                    (subquery-pred sq-ag op lhs))
 
               [:in_predicate ^:z lhs
                [:in_predicate_part_2 _
                 [:in_predicate_value ^:z sq-ag]]]
-              (subquery-pred sq-ag '= lhs))))
+              (into (qgm-preds sq-ag) (subquery-pred sq-ag '= lhs))
+
+              [:order_by_clause _ _ _]
+              []
+
+              [:select_list _]
+              [])))
 
          (into {}))))
 
@@ -323,24 +351,52 @@
                 [:distinct plan]
                 plan))
 
-            (wrap-top [plan [_box-type {:qgm.box.body/keys [result-offset fetch-first]} __qs]]
+            (wrap-top [plan [_box-type {:qgm.box.body/keys [result-offset fetch-first]} _qs]]
               (if (or result-offset fetch-first)
                 [:top (->> {:skip result-offset, :limit fetch-first}
                            (into {} (filter val)))
                  plan]
                 plan))
 
+            (wrap-order-by [plan [_box-type box-opts _qs]]
+              (if-let [order-by-specs (:qgm.box.body/order-by box-opts)]
+                (let [base-projection (:qgm.box.head/columns box-opts)
+                      order-by-projection (keep :projection order-by-specs)
+
+                      extra-projection (distinct (mapcat (comp plan/expr-symbols vals) order-by-projection))
+                      relation (if (not-empty extra-projection)
+                                 (->> (z/vector-zip plan)
+                                      (r/once-td-tp
+                                       (r/mono-tp
+                                        (fn [z]
+                                          (r/zmatch z
+                                            [:project projection relation]
+                                            ;;=>
+                                            [:project (vec (concat projection extra-projection)) relation]))))
+                                      (z/node))
+                                 plan)
+                      order-by [:order-by (mapv :spec order-by-specs)
+                                (if (not-empty order-by-projection)
+                                  [:project (vec (concat base-projection order-by-projection)) relation]
+                                  relation)]]
+                  (if (not-empty order-by-projection)
+                    [:project base-projection order-by]
+                    order-by))
+
+                plan))
+
             (plan-select-box [[_ box-opts qs :as box]]
-              (-> (let [body-cols (:qgm.box.body/columns box-opts)]
-                    [:rename (zipmap body-cols (:qgm.box.head/columns box-opts))
+              (let [body-cols (:qgm.box.body/columns box-opts)]
+                (-> [:rename (zipmap body-cols (:qgm.box.head/columns box-opts))
                      [:project body-cols
                       (-> (->> (vals qs)
                                (map plan-quantifier)
                                (reduce (fn [acc el]
                                          [:cross-join acc el])))
-                          (wrap-select (keys qs)))]])
-                  (wrap-distinct box)
-                  (wrap-top box)))]
+                          (wrap-select (keys qs)))]]
+                    (wrap-distinct box)
+                    (wrap-order-by box)
+                    (wrap-top box))))]
 
       (plan-select-box tree))))
 
