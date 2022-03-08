@@ -726,9 +726,9 @@
 ;; [:project {<fv-1> <row-col-1} {fv-2 <row-col-2} ...]]]] This is
 ;; just an example to illustrate the translation, the keys would
 ;; normally be determined based on the projected columns of the
-;; surrounding scope. This is a general problem of how to generate
-;; plans for VALUES and not specifically to Apply, so not in scope for
-;; this note.
+;; surrounding query. Often the columns would be anonymous and ordinal
+;; only. This is a general problem of how to generate plans for VALUES
+;; and not specifically to Apply, so not in scope for this note.
 
 ;; Conditional evaluation, like CASE and short-circuiting AND/OR (if
 ;; the spec enforces this) pose additional challenges, but are not
@@ -736,8 +736,8 @@
 
 ;; Scalar subqueries:
 
-;; This is basic case, they introduce a fresh variable/column in its
-;; place in the expression, and then an Apply operator where the
+;; This is the basic case, they introduce a fresh variable/column in
+;; its place in the expression, and then an Apply operator where the
 ;; parameterised relation is wrapped with max-1-row (why would
 ;; left-outer-join also be the mode?), and the original output column
 ;; is renamed to its fresh variable/column. This works the same
@@ -759,7 +759,7 @@
 ;; column itself. That is, this can be done via wrapping the
 ;; parameterised relation with [:select (or (<inv-comp-op> <lhs>
 ;; <scalar-column>) (nil? <lhs>) (nil? <scalar-column>)) ...]. Moving
-;; left hand side into the parameterised expression will introduce
+;; the left hand side into the parameterised expression will introduce
 ;; correlation on any column references it contains. Left hand side
 ;; may be arbitrary complex, and may contain further Apply operators.
 
@@ -770,7 +770,7 @@
 
 ;; IN is translated into = ANY and then as above.
 ;; NOT IN is translated into <> ALL and then as above.
-;; IN value lists can be seen as a VALUES subquery.
+;; IN value lists can be seen as an IN with a VALUES subquery.
 
 ;; Inside top-level select, the original expression is replaced with
 ;; true (or dropped) in all the above cases, and the Apply mode is set
