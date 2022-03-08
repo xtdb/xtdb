@@ -256,7 +256,7 @@
             cte (assoc :cte cte
                        :subquery-ref (r/$ (:ref (meta cte)) -1))))))))
 
-(defn- local-tables [ag]
+(defn local-tables [ag]
   (r/collect-stop
    (fn [ag]
      (r/zcase ag
@@ -305,7 +305,7 @@
           rhs (r/$ qualified-join -2)
           [lhs rhs] (for [side [lhs rhs]]
                       (select-keys
-                       (->> (for [{:keys [id] :as table} (local-tables side)
+                       (->> (for [table (local-tables side)
                                   projection (first (projected-columns (:ref (meta table))))]
                               projection)
                             (group-by :identifier))

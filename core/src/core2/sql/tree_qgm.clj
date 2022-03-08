@@ -125,9 +125,12 @@
                               :qgm.box.body.distinct/enforce
                               :qgm.box.body.distinct/permit)}))
 
+(defn- table->qid [table]
+  (symbol (str (:correlation-name table) "__" (:id table))))
+
 (defn- table-primary->quantifier [ag]
   (let [table (sem/table ag)
-        qid (symbol (str (:correlation-name table) "__" (:id table)))
+        qid (table->qid table)
         projection (first (sem/projected-columns ag))]
     (when-not (:subquery-scope-id table)
       [[qid [:qgm.quantifier/foreach qid (mapv plan/unqualified-projection-symbol projection)
@@ -327,6 +330,13 @@
                [:in_predicate_part_2 _
                 [:in_predicate_value ^:z sq-ag]]]
               (into (qgm-preds sq-ag) (subquery-pred sq-ag '= lhs))
+
+              [:named_columns_join _ _]
+              (let [pred-id 'hack_ncj_p1]
+                [[pred-id
+                  {:qgm.predicate/expression (plan/expr ag)
+                   :qgm.predicate/quantifiers (->> (sem/local-tables (r/parent ag))
+                                                   (into #{} (map table->qid)))}]])
 
               [:order_by_clause _ _ _]
               []

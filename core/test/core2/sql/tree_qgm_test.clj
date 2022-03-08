@@ -164,8 +164,7 @@ FROM inventory q1, quotations q2
 WHERE q1.partno = q2.partno AND q1.descr= 'engine'")
 
   #_ ; TODO
-  (plan-is '[:rename
-             {si__3_name name}
+  (plan-is '[:rename {si__3_name name}
              [:rename si__3 [:scan [name]]]]
            "SELECT * FROM StarsIn AS si(name)")
 
@@ -246,8 +245,15 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'")
                 [:rename si__4 [:scan [movieTitle year]]]]]]]
            "SELECT si.movieTitle FROM Movie AS m JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")
 
-  #_
   (plan-is '[:rename {si__4_title title}
+             [:project [si__4_title]
+              [:select (= m__3_title si__4_title)
+               [:cross-join
+                [:rename m__3 [:scan [title]]]
+                [:rename si__4 [:scan [title]]]]]]]
+
+           #_ ; TODO cross-join -> join
+           '[:rename {si__4_title title}
              [:project [si__4_title]
               [:join {m__3_title si__4_title}
                [:rename m__3 [:scan [title]]]
