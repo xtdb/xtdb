@@ -288,18 +288,28 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'")
                 [:rename si__6 [:scan [name]]]]]]]
            "SELECT * FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)")
 
-  #_
   (plan-is '[:rename {si__3_movieTitle movieTitle}
+             [:project [si__3_movieTitle]
+              [:select (= si__3_starName m__4_name)
+               [:cross-join
+                [:rename si__3 [:scan [movieTitle starName]]]
+                [:rename m__4
+                 [:rename {ms__7_name name}
+                  [:project [ms__7_name]
+                   [:rename ms__7
+                    [:scan [name {birthdate (= birthdate 1960)}]]]]]]]]]]
+
+           #_ ; TODO cross-join -> join
+           '[:rename {si__3_movieTitle movieTitle}
              [:project [si__3_movieTitle]
               [:join {si__3_starName m__4_name}
                [:rename si__3 [:scan [movieTitle starName]]]
                [:rename m__4
                 [:rename {ms__7_name name}
                  [:project [ms__7_name]
-                  [:select (= ms__7_birthdate 1960)
-                   [:rename ms__7 [:scan [name {birthdate (= birthdate 1960)}]]]]]]]]]]
+                  [:rename ms__7
+                   [:scan [name {birthdate (= birthdate 1960)}]]]]]]]]]
            "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name"))
-
 
 (t/deftest test-grouping-plans
   #_

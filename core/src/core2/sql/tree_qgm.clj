@@ -128,13 +128,16 @@
 (defn- table->qid [table]
   (symbol (str (:correlation-name table) "__" (:id table))))
 
+(declare qgm-box)
+
 (defn- table-primary->quantifier [ag]
   (let [table (sem/table ag)
         qid (table->qid table)
         projection (first (sem/projected-columns ag))]
-    (when-not (:subquery-scope-id table)
-      [[qid [:qgm.quantifier/foreach qid (mapv plan/unqualified-projection-symbol projection)
-             [:qgm.box/base-table (symbol (:table-or-query-name table))]]]])))
+    [[qid [:qgm.quantifier/foreach qid (mapv plan/unqualified-projection-symbol projection)
+           (if (:subquery-scope-id table)
+             (qgm-box ag)
+             [:qgm.box/base-table (symbol (:table-or-query-name table))])]]]))
 
 (defn- expr-quantifiers [ag]
   (r/collect-stop
@@ -148,8 +151,6 @@
        [:subquery _]
        []))
    ag))
-
-(declare qgm-box)
 
 (defn- qgm-quantifiers [ag]
   (->> ag
@@ -366,14 +367,13 @@
                    (into {}))
         qid->pids (->preds-by-qid preds)]
 
-    (letfn [(plan-quantifier [[_q-type qid cols [box-type :as _box]]]
-              (case box-type
-                :qgm.box/base-table
-                (let [scan-preds (->> (qid->pids qid)
-                                      (map preds)
-                                      (filter (comp #(= 1 %) count :qgm.predicate/expr-symbols))
-                                      (group-by (comp first :qgm.predicate/expr-symbols)))]
-                  [:rename qid
+    (letfn [(plan-quantifier [[_q-type qid cols [box-type :as box]]]
+              [:rename qid
+               (if (= :qgm.box/base-table box-type)
+                 (let [scan-preds (->> (qid->pids qid)
+                                       (map preds)
+                                       (filter (comp #(= 1 %) count :qgm.predicate/expr-symbols))
+                                       (group-by (comp first :qgm.predicate/expr-symbols)))]
                    [:scan (vec
                            (for [col cols]
                              (let [fq-col (symbol (str qid "_" col))
@@ -383,7 +383,8 @@
                                (case (count col-scan-preds)
                                  0 col
                                  1 {col (first col-scan-preds)}
-                                 {col (list* 'and col-scan-preds)}))))]])))
+                                 {col (list* 'and col-scan-preds)}))))])
+                 (plan-box box))])
 
             (wrap-select [plan qids]
               (let [exprs (->> qids
