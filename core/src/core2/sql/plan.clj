@@ -683,7 +683,7 @@
 ;; fresh variable/column, but could be a constant, like true (when the
 ;; mode is anti/semi-join).
 
-;; The Apply operator ends up around the existing tree and the
+;; The Apply operator ends up around the existing tree and below the
 ;; operator introducing the subquery, so if the subquery sits in a
 ;; select: [:select (... replaced expression ...) [:apply .... input
 ;; relation subquery] Apply will map the out columns of the subquery
