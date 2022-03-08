@@ -665,3 +665,123 @@
                       (r/innermost (r/mono-tp optimize-plan))
                       (z/node)
                       (s/assert ::lp/logical-plan))})))))
+
+;; Building plans using the Apply operator:
+
+;; Aims to digest information from the following in terms of our
+;; logical plan:
+
+;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf "Orthogonal Optimization of Subqueries and Aggregation"
+;; http://www.cse.iitb.ac.in/infolab/Data/Courses/CS632/2010/Papers/subquery-proc-elhemali-sigmod07.pdf "Execution Strategies for SQL Subqueries"
+;; https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf "Parameterized Queries and Nesting Equivalences"
+
+;; Introduction:
+
+;; Each subquery has two parts, an expression replacing it in its
+;; parent expression, and a relational algebra tree used in the
+;; wrapping Apply operator.  The replacement expression is usually a
+;; fresh variable/column, but could be a constant, like true (when the
+;; mode is anti/semi-join).
+
+;; The Apply operator ends up around the existing tree and the
+;; operator introducing the subquery, so if the subquery sits in a
+;; select: [:select (... replaced expression ...) [:apply .... input
+;; relation subquery] Apply will map the out columns of the subquery
+;; to fresh column/variable(s) and these will be used in the replaced
+;; expression. The default Apply mode is left-outer-join, but
+;; max-1-row may replace this need, and use cross-join?
+
+;; Apply can happen in two relational contexts, in a top-level
+;; conjunction select or inside a normal select/project. During
+;; top-level select, the expression may get replaced with the constant
+;; true (which could be optimised away) and the Apply operator mode
+;; configured to semi/anti etc. Otherwise, one needs to calculate the
+;; actual value of the expression and bind it to a fresh
+;; variable/column so it can be used in the original expression, which
+;; may be arbitrary complex.
+
+;; The top-level conjunction context could/should be detected and
+;; dealt with as a rewrite instead of being generated directly. The
+;; main reason to use different modes is to simplify further rewrites
+;; to get rid of the Apply operator, which are out of scope for this
+;; note.
+
+;; A few special cases:
+
+;; A table subquery may also occur in the FROM clause (and not in an
+;; expression as above), in which case it's dealt with separately. If
+;; the subquery isn't a LATERAL derived table, it will simply be
+;; translated verbatim without the Apply operator. It may still have
+;; correlated variables from an outer query, but that would been dealt
+;; with higher up. A LATERAL subquery is executed as an Apply cross
+;; join where used columns from tables defined to the left may be
+;; among its parameters. If there are no columns to the left used, it
+;; doesn't need to use the Apply operator.
+
+;; A row subquery may only appear in a few places, like inside a
+;; VALUES or IN expression, in which case it will bind N number of
+;; original columns to fresh variables/columns, and use max-1-row. It
+;; would expand into a literal array where the elements are these
+;; columns. [:table [[<fv-1>, <fv-2]] [:apply ... [:max-1-row
+;; [:project {<fv-1> <row-col-1} {fv-2 <row-col-2} ...]]]]
+
+;; Conditional evaluation, like CASE and short-circuiting AND/OR (if
+;; the spec enforces this) pose additional challenges, but are not
+;; currently dealt with in this note.
+
+;; Scalar subqueries:
+
+;; This is basic case, they introduce a fresh variable/column in its
+;; place in the expression, and then an Apply operator where the
+;; parameterised relation is wrapped with max-1-row (why would
+;; left-outer-join also be the mode?), and the original output column
+;; is renamed to its fresh variable/column. This works the same
+;; regardless context. [:select (... <fv> ...) [:apply ... [:project
+;; {<fv> <scalar-column>} ...]] There are situations where one can
+;; avoid wrapping via the max-1-row, like if the parameterised
+;; relation is a scalar aggregate.
+
+;; Table subqueries:
+
+;; There are three places these can occur inside expressions: (NOT)
+;; IN, ALL/ANY and (NOT) EXISTS. (NOT) IN and ALL/ANY are normalised
+;; into (NOT) EXISTS. Exactly how this is translated differs between
+;; (top-level) select and .
+
+;; ALL is translated into NOT EXISTS, where the left hand side is
+;; moved into parameterised relation using the inverse comparison
+;; operator, and where the right hand side is the scalar column
+;; itself. That is, this can be done via wrapping the parameterised
+;; relation with [:select (or (<inv-comp-op> <lhs> <scalar-column>)
+;; (nil? <lhs>) (nil? <scalar-column>)) ...]. It's assumed that lhs
+;; has itself already been translated at this point if needed, as it
+;; itself may contain subqueries etc.
+
+;; ANY is translated into EXISTS where the left hand side is moved
+;; inside to wrap the parameterised relation. [:select (<comp-op>
+;; <lhs> <scalar-column>) ...]
+
+;; IN is translated into = ANY and then as above.
+;; NOT IN is translated into <> ALL and then as above.
+;; IN value lists can be seen as a VALUES subquery.
+
+;; Inside top-level select, the original expression is replaced with
+;; true (or dropped) in all the above cases, and the Apply mode is set
+;; to semi-join for EXISTS and anti-join for NOT EXISTS.
+
+;; Otherwise, the expression is a fresh variable/column containing,
+;; which boolean value is calculated with an parameterised relation as
+;; [:project {<fv-out> (= <fv-in> <N>)} [:group-by {<fv-in> (count
+;; ...)} [:top {:limit 1} ....]  where N is 1 for EXISTS and 0 for NOT
+;; EXISTS. The Apply mode here is cross join.
+
+;; Correlated variables:
+
+;; In all cases, the dependent variables/columns necessary to give as
+;; a parameters to the Apply operator can be calculated via the
+;; attributes, in ways similar to how the scope attribute currently
+;; does it. Note that variables may need to be made available and
+;; passed down several levels to be used in other Apply operators. In
+;; these cases the variable itself will already be in the current
+;; parameter scope having been passed down, and simply needs to be
+;; passed on.
