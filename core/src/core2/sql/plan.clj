@@ -721,9 +721,14 @@
 ;; A row subquery may only appear in a few places, like inside a
 ;; VALUES or IN expression, in which case it will bind N number of
 ;; original columns to fresh variables/columns, and use max-1-row. It
-;; would expand into a literal array where the elements are these
-;; columns. [:table [[<fv-1>, <fv-2]] [:apply ... [:max-1-row
-;; [:project {<fv-1> <row-col-1} {fv-2 <row-col-2} ...]]]]
+;; would expand into a literal row where the elements are these
+;; columns. [:table [{:a <fv-1>, :b <fv-2>}] [:apply ... [:max-1-row
+;; [:project {<fv-1> <row-col-1} {fv-2 <row-col-2} ...]]]] This is
+;; just an example to illustrate the translation, the keys would
+;; normally be determined based on the projected columns of the
+;; surrounding scope. This is a general problem of how to generate
+;; plans for VALUES and not specifically to Apply, so not in scope for
+;; this note.
 
 ;; Conditional evaluation, like CASE and short-circuiting AND/OR (if
 ;; the spec enforces this) pose additional challenges, but are not
