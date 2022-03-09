@@ -250,3 +250,105 @@
              [:unwind film__4_$column_1$
               [:project [si__3_films {film__4_$column_1$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]]))
+;; TODO:
+;; - make queries work.
+;; - table operator likely won't support expression atm?
+;; - add IN, ALL, ANY, correlated subqueries inside WHERE etc.
+
+#_(t/deftest test-subqueries
+    ;; Scalar subquery:
+    (valid? "SELECT (1 + (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
+            '[:project {some_column (+ 1 $subquery.max_foo_bar$)}
+              [:cross-join
+               [:rename {max_foo_bar $subquery.max_foo_bar$}
+                [:group-by [{max_foo_bar (max foo.bar)}]
+                 [:scan foo [bar]]]]
+               [:select (= x.y 1)
+                [:rename x [:scan [y z]]]]]])
+
+    ;; Correlated subquery:
+    (valid? "SELECT (1 + (SELECT MAX (foo.bar + x.y) FROM foo)) AS some_column FROM x WHERE x.y = 1"
+            '[:project {some_column (+ 1 $subquery.max_foo_bar$)}
+              [:apply
+               :cross-join
+               ;; dependent column -> parameter
+               {x.y ?x.y}
+               ;; columns projected from the dependent relation?
+               #{$subquery.max_foo_bar$}
+               ;; independent
+               ;; WHERE
+               [:select (= x.y 1)
+                ;; FROM
+                [:rename x [:scan [y z]]]]
+               ;; dependent (parameterised query)
+               [:rename {max_foo_bar $subquery.max_foo_bar$}
+                [:group-by [{max_foo_bar (max $agg_in$)}]
+                 [:project [{$agg_in$ (+ foo.bar ?x.y)}]
+                  [:scan foo [bar]]]]]]])
+
+    ;; EXISTS as expression in WHERE clause:
+    (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
+            '[:rename {$subquery.exists$ my_boolean}
+              [:select $subquery.exists$
+               [:select (= x.z 10)
+                [:apply
+                 :cross-join
+                 {x.y ?x.y}
+                 #{$subquery.exists$}
+                 [:select (= x.z 10)
+                  [:rename x [:scan [y z]]]]
+                 [:top {:limit 1}
+                  [:union-all
+                   [:project [{$subquery.exists$ true}]
+                    [:rename {y.z z}
+                     [:select (= y.z ?x.y)
+                      [:rename x [:scan [y]]]]]]
+                   [:table [{$subquery.exists$ false}]]]]]]]])
+
+    ;; EXISTS as expression in SELECT clause:
+    (valid? "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AS my_boolean FROM x WHERE x.z = 10"
+            '[:rename {$subquery.exists$ my_boolean}
+              [:select $subquery.exists$
+               [:select (= x.z 10)
+                [:apply
+                 :cross-join
+                 {x.y ?x.y}
+                 #{$subquery.exists$}
+                 [:select (= x.z 10)
+                  [:rename x [:scan [y z]]]]
+                 [:top {:limit 1}
+                  [:union-all
+                   [:project [{$subquery.exists$ true}]
+                    [:rename {y.z z}
+                     [:select (= y.z ?x.y)
+                      [:rename x [:scan [y]]]]]]
+                   [:table [{$subquery.exists$ false}]]]]]]]])
+
+    ;; LATERAL derived table
+    (valid? "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
+            '[:rename {x.y y y.z z}
+              [:project [x.y y.z]
+               [:apply
+                :cross-join
+                {x.y ?x.y}
+                #{z.z}
+                [:rename x [:scan [y]]]
+                [:rename y
+                 [:rename {z.z z}
+                  [:select (= z.z ?x.y)
+                   [:rename z [:scan [z]]]]]]]]])
+
+    ;; Row subquery
+    (valid? "VALUES (1, 2), (SELECT x.a, x.b FROM x WHERE x.a = 10)"
+            '[:apply
+              :cross-join
+              {$subquery__1_row$ ?$subquery__1_row$}
+              #{}
+              [:project [{$subquery__1_row$ {:a a :b b}}]
+               [:rename {x.a a x.b b}
+                [:select (= x.a 10)
+                 [:rename x [:scan [a b]]]]]]
+              [:table [{:$column_1$ 1
+                        :$column_2$ 2}
+                       {:$column_1$ (. ?$subquery__1_row$ a)
+                        :$column_2$ (. ?$subquery__1_row$ b)}]]]))
