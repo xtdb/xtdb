@@ -256,35 +256,39 @@
 ;; - add IN, ALL, ANY, correlated subqueries inside WHERE etc.
 
 #_(t/deftest test-subqueries
+
     ;; Scalar subquery:
     (valid? "SELECT (1 + (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
-            '[:project {some_column (+ 1 $subquery.max_foo_bar$)}
+            '[:project [{some_column (+ 1 subquery__1_$column_1$)}]
               [:cross-join
-               [:rename {max_foo_bar $subquery.max_foo_bar$}
-                [:group-by [{max_foo_bar (max foo.bar)}]
-                 [:scan foo [bar]]]]
-               [:select (= x.y 1)
-                [:rename x [:scan [y z]]]]]])
+               [:select (= x__4_y 1)
+                [:rename x__4 [:scan [{y (= y 1)}]]]]
+               [:max-1-row
+                [:rename subquery__1
+                 [:project [{$column_1$ $agg_out__2_3$}]
+                  [:group-by [{$agg_out__2_3$ (max $agg_in__2_3$)}]
+                   [:project [{$agg_in__2_3$ foo__4_bar}]
+                    [:rename foo__4 [:scan [bar]]]]]]]]]])
 
     ;; Correlated subquery:
     (valid? "SELECT (1 + (SELECT MAX (foo.bar + x.y) FROM foo)) AS some_column FROM x WHERE x.y = 1"
-            '[:project {some_column (+ 1 $subquery.max_foo_bar$)}
+            '[:project [{some_column (+ 1 subquery__1_$column_1$)}]
               [:apply
                :cross-join
                ;; dependent column -> parameter
-               {x.y ?x.y}
+               {x__4_y ?x__4_y}
                ;; columns projected from the dependent relation?
-               #{$subquery.max_foo_bar$}
+               #{subquery__1_$column_1$}
                ;; independent
-               ;; WHERE
-               [:select (= x.y 1)
-                ;; FROM
-                [:rename x [:scan [y z]]]]
+               [:select (= x__4_y 1)
+                [:rename x__4 [:scan [{y (= y 1)}]]]]
                ;; dependent (parameterised query)
-               [:rename {max_foo_bar $subquery.max_foo_bar$}
-                [:group-by [{max_foo_bar (max $agg_in$)}]
-                 [:project [{$agg_in$ (+ foo.bar ?x.y)}]
-                  [:scan foo [bar]]]]]]])
+               [:max-1-row
+                [:rename subquery__1
+                 [:project [{$column_1$ $agg_out__2_3$}]
+                  [:group-by [{$agg_out__2_3$ (max $agg_in__2_3$)}]
+                   [:project [{$agg_in__2_3$ (+ foo__4_bar ?x__4_y)}]
+                    [:rename foo__4 [:scan [bar]]]]]]]]]])
 
     ;; EXISTS as expression in WHERE clause:
     (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
