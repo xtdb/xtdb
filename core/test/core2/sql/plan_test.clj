@@ -290,69 +290,72 @@
                    [:project [{$agg_in__2_3$ (+ foo__4_bar ?x__4_y)}]
                     [:rename foo__4 [:scan [bar]]]]]]]]]])
 
-    ;; EXISTS as expression in WHERE clause:
     (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
-            '[:rename {$subquery.exists$ my_boolean}
-              [:select $subquery.exists$
-               [:select (= x.z 10)
+            '[:rename {x__3_y y}
+              [:project [x__3_y]
+               [:select subquery__1_$exists$
                 [:apply
                  :cross-join
-                 {x.y ?x.y}
-                 #{$subquery.exists$}
-                 [:select (= x.z 10)
-                  [:rename x [:scan [y z]]]]
+                 {x__2_y ?x__2_y}
+                 #{}
+                 [:select (= x__3_z 10)
+                  [:rename x__3 [:scan [y {z (= z 10)}]]]]
                  [:top {:limit 1}
                   [:union-all
-                   [:project [{$subquery.exists$ true}]
-                    [:rename {y.z z}
-                     [:select (= y.z ?x.y)
-                      [:rename x [:scan [y]]]]]]
-                   [:table [{$subquery.exists$ false}]]]]]]]])
+                   [:project [{subquery__1_$exists$ true}]
+                    [:rename subquery__1
+                     [:rename {y__3_z z}
+                      [:project [y__3_z]
+                       [:select (= y__3_z ?x__2_y)
+                        [:rename y__3 [:scan [{z (= z ?x__2_y)}]]]]]]]]
+                   [:table [{:subquery__1_$exists$ false}]]]]]]]])
 
     ;; EXISTS as expression in SELECT clause:
-    (valid? "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AS my_boolean FROM x WHERE x.z = 10"
-            '[:rename {$subquery.exists$ my_boolean}
-              [:select $subquery.exists$
-               [:select (= x.z 10)
-                [:apply
-                 :cross-join
-                 {x.y ?x.y}
-                 #{$subquery.exists$}
-                 [:select (= x.z 10)
-                  [:rename x [:scan [y z]]]]
-                 [:top {:limit 1}
-                  [:union-all
-                   [:project [{$subquery.exists$ true}]
-                    [:rename {y.z z}
-                     [:select (= y.z ?x.y)
-                      [:rename x [:scan [y]]]]]]
-                   [:table [{$subquery.exists$ false}]]]]]]]])
+    (valid? "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"
+            '[:project [{$column_1$ subquery__1_$exists$}]
+              [:apply
+               :cross-join
+               {x__2_y ?x__2_y}
+               #{}
+               [:select (= x__3_z 10)
+                [:rename x__3 [:scan [y {z (= z 10)}]]]]
+               [:top {:limit 1}
+                [:union-all
+                 [:project [{subquery__1_$exists$ true}]
+                  [:rename subquery__1
+                   [:rename {y__3_z z}
+                    [:project [y__3_z]
+                     [:select (= y__3_z ?x__2_y)
+                      [:rename y__3 [:scan [{z (= z ?x__2_y)}]]]]]]]]
+                 [:table [{:subquery__1_$exists$ false}]]]]]])
 
     ;; LATERAL derived table
     (valid? "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
-            '[:rename {x.y y y.z z}
-              [:project [x.y y.z]
+            '[:rename {x__3_y y, y__4_z z}
+              [:project [x__3_y y__4_z]
                [:apply
                 :cross-join
-                {x.y ?x.y}
-                #{z.z}
-                [:rename x [:scan [y]]]
-                [:rename y
-                 [:rename {z.z z}
-                  [:select (= z.z ?x.y)
-                   [:rename z [:scan [z]]]]]]]]])
+                {x__3_y ?x__3_y}
+                #{y__4_z}
+                [:rename x__3 [:scan [y]]]
+                [:rename y__4
+                 [:rename {z__7_z z}
+                  [:project [z__7_z]
+                   [:select (= z__7_z ?x__3_y)
+                    [:rename z__7 [:scan [z]]]]]]]]]])
 
     ;; Row subquery
     (valid? "VALUES (1, 2), (SELECT x.a, x.b FROM x WHERE x.a = 10)"
             '[:apply
               :cross-join
-              {$subquery__1_row$ ?$subquery__1_row$}
+              {subquery__1_$row$ ?subquery__1_$row$}
               #{}
-              [:project [{$subquery__1_row$ {:a a :b b}}]
-               [:rename {x.a a x.b b}
-                [:select (= x.a 10)
-                 [:rename x [:scan [a b]]]]]]
+              [:project [{subquery__1_$row$ {:a a :b b}}]
+               [:rename {x__3_a a, x__3_b b}
+                [:project [x__3_a x__3_b]
+                 [:select (= x__3_a 10)
+                  [:rename x__3 [:scan [{a (= a 10)} b]]]]]]]
               [:table [{:$column_1$ 1
                         :$column_2$ 2}
-                       {:$column_1$ (. ?$subquery__1_row$ a)
-                        :$column_2$ (. ?$subquery__1_row$ b)}]]]))
+                       {:$column_1$ (. ?subquery__1_$row$ a)
+                        :$column_2$ (. ?subquery__1_$row$ b)}]]]))
