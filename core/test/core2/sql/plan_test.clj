@@ -250,13 +250,10 @@
              [:unwind film__4_$column_1$
               [:project [si__3_films {film__4_$column_1$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]]))
-;; TODO:
-;; - make queries work.
-;; - table operator likely won't support expression atm?
-;; - add IN, ALL, ANY, correlated subqueries inside WHERE etc.
 
-#_(t/deftest test-subqueries
+(comment
 
+  (t/deftest test-subqueries
     ;; Scalar subquery:
     (valid? "SELECT (1 + (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
             '[:project [{some_column (+ 1 subquery__1_$column_1$)}]
@@ -444,7 +441,8 @@
                    [:select (= z__7_z ?x__3_y)
                     [:rename z__7 [:scan [z]]]]]]]]]])
 
-    ;; Row subquery
+    ;; Row subquery (won't work in execution layer, needs expression
+    ;; support in table)
     (valid? "VALUES (1, 2), (SELECT x.a, x.b FROM x WHERE x.a = 10)"
             '[:apply
               :cross-join
@@ -458,4 +456,4 @@
               [:table [{:$column_1$ 1
                         :$column_2$ 2}
                        {:$column_1$ (. ?subquery__1_$row$ a)
-                        :$column_2$ (. ?subquery__1_$row$ b)}]]]))
+                        :$column_2$ (. ?subquery__1_$row$ b)}]]])))
