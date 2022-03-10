@@ -329,6 +329,72 @@
                       [:rename y__3 [:scan [{z (= z ?x__2_y)}]]]]]]]]
                  [:table [{:subquery__1_$exists$ false}]]]]]])
 
+    ;; ALL as expression in WHERE clause:
+
+    ;; NOTE: Potential alternatives:
+
+    ;; 1. collect all dependent columns inside lhs and send in one by
+    ;; one, and expand lhs and then postwalk-replace the columns with
+    ;; their parameters. Due to the nil? check we may want to
+    ;; calculate lhs in one project first?
+
+    ;; 2. calculate lhs on the outside around the independent relation
+    ;; and send it in as a single value. This would be easier if we
+    ;; had a Map operator, as it requires maintaining the full
+    ;; projection of the incoming relation. Though we can most likely
+    ;; calculate this in most cases.
+    (valid? "SELECT x.y FROM x WHERE x.z > ALL (SELECT y.z FROM y)"
+            '[:rename {x__2_y y}
+              [:project [x__2_y]
+               [:select subquery__1_$all$
+                [:apply
+                 :cross-join
+                 ;; Introduced correlated column, not available in the
+                 ;; scope analysis, see below.
+                 {x__2_z ?x__2_z}
+                 #{}
+                 [:rename x__2 [:scan [y z]]]
+                 ;; This outer part is like NOT EXISTS.
+                 [:top {:limit 1}
+                  [:union-all
+                   [:project [{subquery__1_$all$ false}]
+                    ;; This select is ALL/ANY specific, usage of lhs,
+                    ;; which most likely will contain correlated
+                    ;; parameters, in this case it's just a an outer
+                    ;; column reference. This expression needs to be
+                    ;; postwalk-replaced as the scope analysis doesn't
+                    ;; know about these introduced correlations.
+                    [:select (or (<= ?x__2_z subquery__1_z)
+                                 (nil? subquery__1_z)
+                                 (nil? ?x__2_z))
+                     [:rename subquery__1
+                      [:rename {y__3_z z}
+                       [:project [y__3_z]
+                        [:rename y__3 [:scan [z]]]]]]]]
+                   [:table [{:subquery__1_$all$ true}]]]]]]]])
+
+    ;; ANY as expression in WHERE clause:
+    (valid? "SELECT x.y FROM x WHERE (x.z = 1) > ANY (SELECT y.z FROM y)"
+            '[:rename {x__2_y y}
+              [:project [x__2_y]
+               [:select subquery__1_$any$
+                [:apply
+                 :cross-join
+                 {x__2_z ?x__2_z}
+                 #{}
+                 [:rename x__2 [:scan [y z]]]
+                 [:top {:limit 1}
+                  [:union-all
+                   [:project [{subquery__1_$any$ true}]
+                    ;; Correlated parameters are part of the original
+                    ;; lhs expression.
+                    [:select (> (= ?x__2_z 1) subquery__1_z)
+                     [:rename subquery__1
+                      [:rename {y__3_z z}
+                       [:project [y__3_z]
+                        [:rename y__3 [:scan [z]]]]]]]]
+                   [:table [{:subquery__1_$any$ false}]]]]]]]])
+
     ;; LATERAL derived table
     (valid? "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
             '[:rename {x__3_y y, y__4_z z}
