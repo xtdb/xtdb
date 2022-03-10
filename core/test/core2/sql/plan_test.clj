@@ -395,6 +395,40 @@
                         [:rename y__3 [:scan [z]]]]]]]]
                    [:table [{:subquery__1_$any$ false}]]]]]]]])
 
+
+    ;; ANY variant which calculates lhs as a single parameter and
+    ;; expands its expression in the correct scope as a project
+    ;; without need for postwalk-replace etc.
+    (valid? "SELECT x.y FROM x WHERE (x.z = 1) > ANY (SELECT y.z FROM y)"
+            '[:rename {x__2_y y}
+              [:project [x__2_y]
+               [:select subquery__1_$any_out$
+                [:apply
+                 :cross-join
+                 ;; Pass in lhs as a single parameter.
+                 {subquery__1_$any_in$ ?subquery__1_$any_in$}
+                 #{}
+                 ;; Calculate lhs, needs to maintain the rest of the
+                 ;; projection. If there are several ANY/ALL like
+                 ;; this, they need to ensure their introduced
+                 ;; parameters are still projected by the time their
+                 ;; wrapping apply is reached. Some ways of expanding
+                 ;; these would probably maintain that invariant, a
+                 ;; parameter is added, used, and then maybe dropped
+                 ;; as the next projection wouldn't know of it.
+                 [:project [x__2 {subquery__1_$any_in$ (= x__2_z 1)}]
+                  [:rename x__2 [:scan [y z]]]]
+                 [:top {:limit 1}
+                  [:union-all
+                   [:project [{subquery__1_$any_out$ true}]
+                    ;; Usage of single lhs parameter.
+                    [:select (> ?subquery__1_$any_in$ subquery__1_z)
+                     [:rename subquery__1
+                      [:rename {y__3_z z}
+                       [:project [y__3_z]
+                        [:rename y__3 [:scan [z]]]]]]]]
+                   [:table [{:subquery__1_$any_out$ false}]]]]]]]])
+
     ;; LATERAL derived table
     (valid? "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
             '[:rename {x__3_y y, y__4_z z}
