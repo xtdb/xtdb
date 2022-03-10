@@ -163,6 +163,9 @@
             [:table_primary _ _ _]
             (table-primary->quantifier ag)
 
+            [:table_primary _ _ _ _]
+            (table-primary->quantifier ag)
+
             [:quantified_comparison_predicate _
              [:quantified_comparison_predicate_part_2 [_ _] [q-type _] ^:z subquery]]
             (let [sq-el (sem/subquery-element subquery)
@@ -239,6 +242,10 @@
 
           (fn [ag]
             (r/zmatch ag
+              [:table_primary ^:z toqn _ _ _]
+              [(-> (qgm-box toqn)
+                   (assoc-in [1 :qgm.box.head/columns] (mapv symbol (sem/derived-columns ag))))]
+
               [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl]]
               [(-> (qgm-box qeb) (with-order-by ssl))]
 

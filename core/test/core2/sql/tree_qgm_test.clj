@@ -163,7 +163,6 @@ SELECT DISTINCT q1.partno, q1.descr, q2.suppno
 FROM inventory q1, quotations q2
 WHERE q1.partno = q2.partno AND q1.descr= 'engine'")
 
-  #_ ; TODO
   (plan-is '[:rename {si__3_name name}
              [:rename si__3 [:scan [name]]]]
            "SELECT * FROM StarsIn AS si(name)")
@@ -280,7 +279,6 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'")
 
 
 (t/deftest test-from-subquery
-  #_
   (plan-is '[:rename {foo__3_bar bar}
              [:project [foo__3_bar]
               [:rename foo__3
