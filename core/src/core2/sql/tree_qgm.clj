@@ -56,12 +56,12 @@
     :qgm.quantifier/existential
     :qgm.quantifier/all})
 
+(s/def :qgm.quantifier/id :qgm/id)
 (s/def :qgm.quantifier/columns (s/coll-of symbol? :kind vector? :min-count 1))
 
 (s/def :qgm/quantifier
   (s/cat :qgm.quantifier/type :qgm.quantifier/type
-         :qgm.quantifier/id :qgm/id
-         :qgm.quantifier/columns :qgm.quantifier/columns
+         :qgm.quantifier/properties (s/keys :req [:qgm.quantifier/id :qgm.quantifier/columns])
          :qgm.quantifier/ranges-over :qgm/box))
 
 (s/def :qgm.predicate/expression any?)
@@ -90,23 +90,20 @@
                                   (first qgm))))
                 (fn [qgm]
                   (case (first qgm)
-                    :qgm.box/select (vals (last qgm))
+                    :qgm.box/select (vals (qgm 2))
 
-                    (:qgm.box/intersect :qgm.box/union :qgm.box/except)
-                    (subvec qgm 2)
-
-                    (:qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
-                    (subvec qgm 3)))
+                    (:qgm.box/intersect :qgm.box/union :qgm.box/except :qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
+                    (subvec qgm 2)))
 
                 (fn [node children]
                   (case (first node)
-                    :qgm.box/select (assoc node 2 (into {} (map (juxt second identity)) children))
+                    :qgm.box/select
+                    (assoc node 2 (->> children
+                                       (into {} (map (juxt (comp :qgm.quantifier/id second)
+                                                           identity)))))
 
-                    (:qgm.box/intersect :qgm.box/union :qgm.box/except)
-                    (into (subvec node 0 2) children)
-
-                    (:qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
-                    (into (subvec node 0 3) children)))
+                    (:qgm.box/intersect :qgm.box/union :qgm.box/except :qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
+                    (into (subvec node 0 2) children)))
 
                 tree)
 
@@ -134,65 +131,47 @@
   (let [table (sem/table ag)
         qid (table->qid table)
         projection (first (sem/projected-columns ag))]
-    [[qid [:qgm.quantifier/foreach qid (mapv plan/unqualified-projection-symbol projection)
+    [[qid [:qgm.quantifier/foreach {:qgm.quantifier/id qid
+                                    :qgm.quantifier/columns (mapv plan/unqualified-projection-symbol projection)}
            (if (:subquery-scope-id table)
              (qgm-box ag)
              [:qgm.box/base-table (symbol (:table-or-query-name table))])]]]))
 
-(defn- expr-quantifiers [ag]
-  (r/collect-stop
-   (fn [ag]
-     (r/zmatch ag
-       [:column_reference _]
-       (let [{:keys [identifiers table-id]} (sem/column-reference ag)
-             q (symbol (str (first identifiers) "__" table-id))]
-         [q])
-
-       [:subquery _]
-       []))
-   ag))
-
 (defn- qgm-quantifiers [ag]
   (->> ag
        (r/collect-stop
-        (fn [ag]
-          (r/zmatch ag
-            [:table_primary _ _]
-            (table-primary->quantifier ag)
+        (letfn [(sq-quantifier [q-type subquery]
+                  (let [sq-el (sem/subquery-element subquery)
+                        sq-el (if (= (r/ctor sq-el) :query_expression)
+                                (r/$ sq-el 1)
+                                sq-el)
+                        qid (symbol (str "q" (sem/id sq-el)))]
 
-            [:table_primary _ _ _]
-            (table-primary->quantifier ag)
+                    [[qid [q-type
+                           {:qgm.quantifier/id qid
+                            :qgm.quantifier/columns (->> (first (sem/projected-columns subquery))
+                                                         (mapv plan/unqualified-projection-symbol))}
+                           (qgm-box sq-el)]]]))]
+          (fn [ag]
+            (r/zmatch ag
+              [:table_primary _ _]
+              (table-primary->quantifier ag)
 
-            [:table_primary _ _ _ _]
-            (table-primary->quantifier ag)
+              [:table_primary _ _ _]
+              (table-primary->quantifier ag)
 
-            [:quantified_comparison_predicate _
-             [:quantified_comparison_predicate_part_2 [_ _] [q-type _] ^:z subquery]]
-            (let [sq-el (sem/subquery-element subquery)
-                  sq-el (if (= (r/ctor sq-el) :query_expression)
-                          (r/$ sq-el 1)
-                          sq-el)
-                  qid (symbol (str "q" (sem/id sq-el)))]
+              [:table_primary _ _ _ _]
+              (table-primary->quantifier ag)
 
-              [[qid [(keyword (name :qgm.quantifier) (name q-type))
-                     qid
-                     (->> (first (sem/projected-columns subquery))
-                          (mapv plan/unqualified-projection-symbol))
-                     (qgm-box sq-el)]]])
+              [:quantified_comparison_predicate _
+               [:quantified_comparison_predicate_part_2 [_ _] [q-type _] ^:z subquery]]
+              (sq-quantifier (keyword (name :qgm.quantifier) (name q-type)) subquery)
 
-            [:in_predicate _
-             [:in_predicate_part_2 _ [:in_predicate_value ^:z subquery]]]
-            (let [sq-el (sem/subquery-element subquery)
-                  sq-el (if (= (r/ctor sq-el) :query_expression)
-                          (r/$ sq-el 1)
-                          sq-el)
-                  qid (symbol (str "q" (sem/id sq-el)))]
-              [[qid [:qgm.quantifier/existential qid
-                     (->> (first (sem/projected-columns subquery))
-                          (mapv plan/unqualified-projection-symbol))
-                     (qgm-box sq-el)]]])
+              [:in_predicate _
+               [:in_predicate_part_2 _ [:in_predicate_value ^:z subquery]]]
+              (sq-quantifier :qgm.quantifier/existential subquery)
 
-            [:subquery _] [])))
+              [:subquery _] []))))
 
        (into {})))
 
@@ -303,6 +282,19 @@
               []))))
        first))
 
+(defn- expr-quantifiers [ag]
+  (r/collect-stop
+   (fn [ag]
+     (r/zmatch ag
+       [:column_reference _]
+       (let [{:keys [identifiers table-id]} (sem/column-reference ag)
+             q (symbol (str (first identifiers) "__" table-id))]
+         [q])
+
+       [:subquery _]
+       []))
+   ag))
+
 (defn- qgm-preds [ag]
   (letfn [(subquery-pred [sq-ag op lhs]
             ;; HACK: give me a proper id
@@ -374,7 +366,7 @@
                    (into {}))
         qid->pids (->preds-by-qid preds)]
 
-    (letfn [(plan-quantifier [[_q-type qid cols [box-type :as box]]]
+    (letfn [(plan-quantifier [[_q-type {qid :qgm.quantifier/id, cols :qgm.quantifier/columns} [box-type :as box]]]
               [:rename qid
                (if (= :qgm.box/base-table box-type)
                  (let [scan-preds (->> (qid->pids qid)

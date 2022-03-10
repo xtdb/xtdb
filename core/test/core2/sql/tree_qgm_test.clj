@@ -10,7 +10,8 @@
                                      :qgm.box.head/columns [price]
                                      :qgm.box.body/columns [q3__3_price]}
 
-                    {q3__3 [:qgm.quantifier/foreach q3__3 [price partno]
+                    {q3__3 [:qgm.quantifier/foreach {:qgm.quantifier/id q3__3
+                                                     :qgm.quantifier/columns [price partno]}
                             [:qgm.box/base-table quotations]]}]
 
             :preds '{p4 {:qgm.predicate/expression (= q3__3_partno 1)
@@ -26,10 +27,12 @@
                                      :qgm.box.body/distinct :qgm.box.body.distinct/enforce
                                      :qgm.box.head/columns [partno descr suppno]
                                      :qgm.box.body/columns [q1__3_partno q1__3_descr q2__4_suppno]}
-                    {q1__3 [:qgm.quantifier/foreach q1__3 [partno descr]
+                    {q1__3 [:qgm.quantifier/foreach {:qgm.quantifier/id q1__3
+                                                     :qgm.quantifier/columns [partno descr]}
                             [:qgm.box/base-table inventory]]
 
-                     q2__4 [:qgm.quantifier/foreach q2__4 [suppno partno]
+                     q2__4 [:qgm.quantifier/foreach {:qgm.quantifier/id q2__4
+                                                     :qgm.quantifier/columns [suppno partno]}
                             [:qgm.box/base-table quotations]]}]
 
             :preds '{p5 {:qgm.predicate/expression (= q1__3_partno q2__4_partno)
@@ -52,18 +55,22 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'")
                                      :qgm.box.body/columns [q1__3_partno q1__3_descr q2__4_suppno],
                                      :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
 
-                    {q1__3 [:qgm.quantifier/foreach q1__3 [partno descr]
+                    {q1__3 [:qgm.quantifier/foreach {:qgm.quantifier/id q1__3
+                                                     :qgm.quantifier/columns [partno descr]}
                             [:qgm.box/base-table inventory]]
 
-                     q2__4 [:qgm.quantifier/foreach q2__4 [suppno partno price]
+                     q2__4 [:qgm.quantifier/foreach {:qgm.quantifier/id q2__4
+                                                     :qgm.quantifier/columns [suppno partno price]}
                             [:qgm.box/base-table quotations]]
 
-                     q8 [:qgm.quantifier/all q8 [price]
+                     q8 [:qgm.quantifier/all {:qgm.quantifier/id q8
+                                              :qgm.quantifier/columns [price]}
                          [:qgm.box/select {:qgm.box.head/distinct? false,
                                            :qgm.box.head/columns [price],
                                            :qgm.box.body/columns [q3__9_price],
                                            :qgm.box.body/distinct :qgm.box.body.distinct/permit}
-                          {q3__9 [:qgm.quantifier/foreach q3__9 [price partno]
+                          {q3__9 [:qgm.quantifier/foreach {:qgm.quantifier/id q3__9
+                                                           :qgm.quantifier/columns [price partno]}
                                   [:qgm.box/base-table quotations]]}]]}]
 
             :preds '{p5 {:qgm.predicate/expression (= q1__3_partno q2__4_partno),
@@ -93,14 +100,17 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'
                                      :qgm.box.head/columns [partno price order_qty],
                                      :qgm.box.body/columns [q1__3_partno q1__3_price q1__3_order_qty],
                                      :qgm.box.body/distinct :qgm.box.body.distinct/permit}
-                    {q1__3 [:qgm.quantifier/foreach q1__3 [partno price order_qty]
+                    {q1__3 [:qgm.quantifier/foreach {:qgm.quantifier/id q1__3
+                                                     :qgm.quantifier/columns [partno price order_qty]}
                             [:qgm.box/base-table quotations]],
-                     q5 [:qgm.quantifier/existential q5 [partno]
+                     q5 [:qgm.quantifier/existential {:qgm.quantifier/id q5
+                                                      :qgm.quantifier/columns [partno]}
                          [:qgm.box/select {:qgm.box.head/distinct? false,
                                            :qgm.box.head/columns [partno],
                                            :qgm.box.body/columns [q3__6_partno],
                                            :qgm.box.body/distinct :qgm.box.body.distinct/permit}
-                          {q3__6 [:qgm.quantifier/foreach q3__6 [partno onhand_qty type]
+                          {q3__6 [:qgm.quantifier/foreach {:qgm.quantifier/id q3__6
+                                                           :qgm.quantifier/columns [partno onhand_qty type]}
                                   [:qgm.box/base-table inventory]]}]]}]
 
             :preds '{p7 {:qgm.predicate/expression (< q3__6_onhand_qty q1__3_order_qty),
