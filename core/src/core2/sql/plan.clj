@@ -116,6 +116,11 @@
        (case (:type subquery-type)
          :scalar_subquery (first (subquery-projection-symbols "subquery" qe))))
 
+     [:exists_predicate _
+      [:subquery ^:z qe]]
+     (let [qe-id (sem/id qe)]
+       (id-symbol "subquery" qe-id "$exists$"))
+
      (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (z/node z))))))))
 
 ;; Logical plan.
@@ -129,7 +134,17 @@
              column->param
              projected-columns
              relation
-             (w/postwalk-replace column->param subquery-plan)])]
+             (w/postwalk-replace column->param subquery-plan)])
+          (column->param [qe scope-id]
+            (->> (for [{:keys [^long table-scope-id] :as column-reference} (sem/all-column-references qe)
+                       :when (<= table-scope-id scope-id)
+                       :let [column-reference-symbol (column-reference-symbol column-reference)
+                             param-symbol (symbol (str "?" column-reference-symbol))]]
+                   [(if (= table-scope-id scope-id)
+                      column-reference-symbol
+                      param-symbol)
+                    param-symbol])
+                 (into {})))]
     (let [subqueries (r/collect-stop
                        (fn [z]
                          (r/zcase z
@@ -146,15 +161,7 @@
            [:subquery ^:z qe]
            (let [qe-id (sem/id qe)
                  subquery-plan [:rename (symbol (str "subquery__" qe-id)) (plan qe)]
-                 column->param (->> (for [{:keys [^long table-scope-id] :as column-reference} (sem/all-column-references qe)
-                                          :when (<= table-scope-id scope-id)
-                                          :let [column-reference-symbol (column-reference-symbol column-reference)
-                                                param-symbol (symbol (str "?" column-reference-symbol))]]
-                                      [(if (= table-scope-id scope-id)
-                                         column-reference-symbol
-                                         param-symbol)
-                                       param-symbol])
-                                    (into {}))
+                 column->param (column->param qe scope-id)
                  subquery-type (sem/subquery-type sq)
                  projected-columns (set (subquery-projection-symbols "subquery" qe))]
              (build-apply
@@ -163,7 +170,24 @@
               relation
               (if (= :scalar_subquery (:type subquery-type))
                 [:max-1-row subquery-plan]
-                subquery-plan)))))
+                subquery-plan)))
+           [:exists_predicate _
+            [:subquery ^:z qe]]
+           (let [qe-id (sem/id qe)
+                 exists-column (id-symbol "subquery" qe-id "$exists$")
+                 subquery-plan [:top {:limit 1}
+                                [:union-all
+                                 [:project [{exists-column true}]
+                                  [:rename (symbol (str "subquery__" qe-id)) (plan qe)]]
+                                 [:table [{(keyword exists-column) false}]]]]
+                 column->param (column->param qe scope-id)
+                 projected-columns #{exists-column}]
+             (build-apply
+               column->param
+               projected-columns
+               relation
+               subquery-plan))
+           (throw (IllegalArgumentException. "unkown subquery type"))))
        relation
        subqueries))))
 
@@ -174,7 +198,7 @@
        [:select predicate acc])
      (wrap-with-subquery-apply sc relation)
      ((fn step [sc-expr]
-        (if (and (list? sc-expr)
+        (if (and (sequential? sc-expr)
                  (= 'and (first sc-expr)))
           (concat (step (nth sc-expr 1))
                   (step (nth sc-expr 2)))
@@ -519,7 +543,8 @@
        (set)))
 
 (defn- equals-predicate? [predicate]
-  (and (= '= (first predicate))
+  (and (sequential? predicate)
+       (= '= (first predicate))
        (= 3 (count predicate))))
 
 (defn- build-join-map [predicate lhs rhs]
@@ -601,8 +626,9 @@
      [:select predicate-2
       relation]]
     ;;=>
-    (when (< (count (expr-table-ids predicate-1))
-             (count (expr-table-ids predicate-2)))
+    (when (and (not (equals-predicate? predicate-2))
+               (< (count (expr-table-ids predicate-1))
+                  (count (expr-table-ids predicate-2))))
       [:select predicate-2
        [:select predicate-1
         relation]])))

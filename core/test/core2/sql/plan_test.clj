@@ -304,28 +304,28 @@
                 [{$column_1$ (= foo__7_bar ?x__8_y)}]
                 [:rename foo__7 [:scan [bar]]]]]]]])
 
-  (comment
+  ;; EXISTS
+  (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
+          '[:rename {x__3_y y}
+            [:project [x__3_y]
+             [:select subquery__4_$exists$
+              [:select (= x__3_z 10)
+               [:apply
+                :cross-join
+                {x__3_y ?x__3_y}
+                #{subquery__4_$exists$}
+                [:rename x__3 [:scan [y z]]]
+                [:top {:limit 1}
+                 [:union-all
+                  [:project [{subquery__4_$exists$ true}]
+                   [:rename subquery__4
+                    [:rename {y__6_z z}
+                     [:project [y__6_z]
+                      [:select (= y__6_z ?x__3_y)
+                       [:rename y__6 [:scan [{z (= z ?x__3_y)}]]]]]]]]
+                  [:table [{:subquery__4_$exists$ false}]]]]]]]]])
 
-    ;; EXISTS
-    (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
-            '[:rename {x__3_y y}
-              [:project [x__3_y]
-               [:select subquery__1_$exists$
-                [:apply
-                 :cross-join
-                 {x__2_y ?x__2_y}
-                 #{}
-                 [:select (= x__3_z 10)
-                  [:rename x__3 [:scan [y {z (= z 10)}]]]]
-                 [:top {:limit 1}
-                  [:union-all
-                   [:project [{subquery__1_$exists$ true}]
-                    [:rename subquery__1
-                     [:rename {y__3_z z}
-                      [:project [y__3_z]
-                       [:select (= y__3_z ?x__2_y)
-                        [:rename y__3 [:scan [{z (= z ?x__2_y)}]]]]]]]]
-                   [:table [{:subquery__1_$exists$ false}]]]]]]]])
+  (comment
 
     ;; NOT EXISTS
     (valid? "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
