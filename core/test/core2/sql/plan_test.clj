@@ -287,6 +287,7 @@
                    [:project [{$agg_in__2_3$ (+ foo__4_bar ?x__4_y)}]
                     [:rename foo__4 [:scan [bar]]]]]]]]]])
 
+    ;; EXISTS
     (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
             '[:rename {x__3_y y}
               [:project [x__3_y]
@@ -306,6 +307,29 @@
                        [:select (= y__3_z ?x__2_y)
                         [:rename y__3 [:scan [{z (= z ?x__2_y)}]]]]]]]]
                    [:table [{:subquery__1_$exists$ false}]]]]]]]])
+
+    ;; NOT EXISTS
+    (valid? "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
+            '[:rename {x__3_y y}
+              [:project [x__3_y]
+               [:select subquery__1_$not_exists$
+                [:apply
+                 :cross-join
+                 {x__2_y ?x__2_y}
+                 #{}
+                 [:select (= x__3_z 10)
+                  [:rename x__3 [:scan [y {z (= z 10)}]]]]
+                 [:top {:limit 1}
+                  [:union-all
+                   [:project [{subquery__1_$not_exists$ false}]
+                    [:rename subquery__1
+                     [:rename {y__3_z z}
+                      [:project [y__3_z]
+                       [:select (or (<> ?x__2_y subquery__1_z)
+                                    (nil? subquery__1_z)
+                                    (nil? ?x__2_y))
+                        [:rename y__3 [:scan [{z (= z ?x__2_y)}]]]]]]]]
+                   [:table [{:subquery__1_$not_exists$ true}]]]]]]]])
 
     ;; EXISTS as expression in SELECT clause:
     (valid? "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"
@@ -378,6 +402,50 @@
                        [:project [y__3_z]
                         [:rename y__3 [:scan [z]]]]]]]]
                    [:table [{:subquery__1_$any$ false}]]]]]]]])
+
+    ;; IN (= ANY, EXISTS) as expression in WHERE clause:
+    (valid? "SELECT x.y FROM x WHERE x.z IN (SELECT y.z FROM y)"
+            '[:rename {x__2_y y}
+              [:project [x__2_y]
+               [:select subquery__1_$in$
+                [:apply
+                 :cross-join
+                 {x__2_z ?x__2_z}
+                 #{}
+                 [:rename x__2 [:scan [y z]]]
+                 [:top {:limit 1}
+                  [:union-all
+                   [:project [{subquery__1_$in$ true}]
+                    ;; Correlated parameters are part of the original
+                    ;; lhs expression.
+                    [:select (= ?x__2_z subquery__1_z)
+                     [:rename subquery__1
+                      [:rename {y__3_z z}
+                       [:project [y__3_z]
+                        [:rename y__3 [:scan [z]]]]]]]]
+                   [:table [{:subquery__1_$in$ false}]]]]]]]])
+
+    ;; NOT IN (<> ALL, NOT EXISTS) as expression in WHERE clause:
+    (valid? "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.z FROM y)"
+            '[:rename {x__2_y y}
+              [:project [x__2_y]
+               [:select subquery__1_$not_in$
+                [:apply
+                 :cross-join
+                 {x__2_z ?x__2_z}
+                 #{}
+                 [:rename x__2 [:scan [y z]]]
+                 [:top {:limit 1}
+                  [:union-all
+                   [:project [{subquery__1_$not_in$ false}]
+                    [:select (or (<> ?x__2_z subquery__1_z)
+                                 (nil? subquery__1_z)
+                                 (nil? ?x__2_z))
+                     [:rename subquery__1
+                      [:rename {y__3_z z}
+                       [:project [y__3_z]
+                        [:rename y__3 [:scan [z]]]]]]]]
+                   [:table [{:subquery__1_$not_in$ true}]]]]]]]])
 
     ;; LATERAL derived table
     (valid? "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
