@@ -44,6 +44,10 @@
                   (cond-> projection
                     original-index (assoc :index original-index)))))))
 
+(defn- column-reference-symbol [{:keys [table-id identifiers] :as column-reference}]
+  (let [[table column] identifiers]
+    (id-symbol table table-id column)))
+
 (defn- aggregate-symbol [prefix z]
   (let [query-id (sem/id (sem/scope-element z))]
     (symbol (str "$" prefix "__" query-id "_" (sem/id z) "$"))))
@@ -60,9 +64,7 @@
    z
    (r/zmatch z
      [:column_reference _]
-     (let [{:keys [table-id identifiers]} (sem/column-reference z)
-           [table column] identifiers]
-       (id-symbol table table-id column))
+     (column-reference-symbol (sem/column-reference z))
 
      [:boolean_value_expression ^:z bve _ ^:z bt]
      ;;=>
@@ -121,39 +123,44 @@
 (declare plan)
 
 (defn- wrap-with-subquery-apply [z relation]
-  (let [subqueries (r/collect-stop
-                    (fn [z]
-                      (r/zcase z
-                        (:subquery
-                         :exists_predicate
-                         :in_predicate
-                         :quantified_comparison_predicate) [z]
-                        nil))
-                    z)]
-    (reduce
-     (fn [acc sq]
-       (letfn [(build-apply [column->param projected-columns relation subquery-plan]
-                 [:apply
-                  :cross-join
-                  column->param
-                  projected-columns
-                  relation
-                  (w/postwalk-replace column->param subquery-plan)])]
+  (letfn [(build-apply [column->param projected-columns relation subquery-plan]
+            [:apply
+             :cross-join
+             column->param
+             projected-columns
+             relation
+             (w/postwalk-replace column->param subquery-plan)])]
+    (let [subqueries (r/collect-stop
+                      (fn [z]
+                        (r/zcase z
+                          (:subquery
+                           :exists_predicate
+                           :in_predicate
+                           :quantified_comparison_predicate) [z]
+                          nil))
+                      z)]
+      (reduce
+       (fn [acc sq]
          (r/zmatch sq
            [:subquery ^:z qe]
-           (let [subquery-type (sem/subquery-type sq)
-                 projected-columns (set (subquery-projection-symbols "subquery" qe))
-                 sq-id (symbol (str "subquery__" (sem/id qe)))
-                 subquery-plan [:rename sq-id (plan qe)]]
+           (let [sq-id (sem/id qe)
+                 subquery-plan [:rename (symbol (str "subquery__" sq-id)) (plan qe)]
+                 column->param (->> (for [{:keys [^long table-scope-id] :as column-reference} (sem/all-column-references qe)
+                                          :when (< table-scope-id sq-id)
+                                          :let [column-reference-symbol (column-reference-symbol column-reference)]]
+                                      [column-reference-symbol (symbol (str "?" column-reference-symbol))])
+                                    (into {}))
+                 subquery-type (sem/subquery-type sq)
+                 projected-columns (set (subquery-projection-symbols "subquery" qe))]
              (build-apply
-              {}
+              column->param
               projected-columns
               relation
               (if (= :scalar_subquery (:type subquery-type))
                 [:max-1-row subquery-plan]
-                subquery-plan))))))
-     relation
-     subqueries)))
+                subquery-plan)))))
+       relation
+       subqueries))))
 
 (defn- wrap-with-select [sc relation]
   (let [sc-expr (expr sc)]

@@ -251,6 +251,10 @@
               [:project [si__3_films {film__4_$column_1$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]]))
 
+;; TODO: sanity check semantic analysis for correlation both inside
+;; and outside MAX, gives errors in both cases, are these correct?
+;; SELECT MAX(foo.bar) FROM foo
+
 (t/deftest test-subqueries
   ;; Scalar subquery in SELECT:
   (valid? "SELECT (1 = (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
@@ -284,27 +288,23 @@
                   [:group-by [{$agg_out__6_7$ (max $agg_in__6_7$)}]
                    [:project [{$agg_in__6_7$ foo__8_bar}]
                     [:rename foo__8 [:scan [bar]]]]]]]]]]]])
-  (comment
 
-    ;; Correlated subquery:
-    (valid? "SELECT (1 + (SELECT MAX (foo.bar + x.y) FROM foo)) AS some_column FROM x WHERE x.y = 1"
-            '[:project [{some_column (+ 1 subquery__1_$column_1$)}]
-              [:apply
-               :cross-join
-               ;; dependent column -> parameter
-               {x__4_y ?x__4_y}
-               ;; columns projected from the dependent relation?
-               #{subquery__1_$column_1$}
-               ;; independent
-               [:select (= x__4_y 1)
-                [:rename x__4 [:scan [{y (= y 1)}]]]]
-               ;; dependent (parameterised query)
-               [:max-1-row
-                [:rename subquery__1
-                 [:project [{$column_1$ $agg_out__2_3$}]
-                  [:group-by [{$agg_out__2_3$ (max $agg_in__2_3$)}]
-                   [:project [{$agg_in__2_3$ (+ foo__4_bar ?x__4_y)}]
-                    [:rename foo__4 [:scan [bar]]]]]]]]]])
+  ;; Correlated subquery:
+  (valid? "SELECT (1 = (SELECT foo.bar = x.y FROM foo)) AS some_column FROM x WHERE x.y = 1"
+          '[:project [{some_column (= 1 subquery__4_$column_1$)}]
+            [:apply
+             :cross-join
+             {x__8_y ?x__8_y}
+             #{subquery__4_$column_1$}
+             [:select (= x__8_y 1)
+              [:rename x__8 [:scan [{y (= y 1)}]]]]
+             [:max-1-row
+              [:rename subquery__4
+               [:project
+                [{$column_1$ (= foo__7_bar ?x__8_y)}]
+                [:rename foo__7 [:scan [bar]]]]]]]])
+
+  (comment
 
     ;; EXISTS
     (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"

@@ -926,7 +926,7 @@
 
 ;; Scopes
 
-(defn- all-column-references [ag]
+(defn all-column-references [ag]
   (r/collect
    (fn [ag]
      (when (r/ctor? :column_reference ag)
