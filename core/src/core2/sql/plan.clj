@@ -118,6 +118,43 @@
 
 ;; Logical plan.
 
+(declare plan)
+
+(defn- wrap-with-subquery-apply [z relation]
+  (let [subqueries (r/collect-stop
+                    (fn [z]
+                      (r/zcase z
+                        (:subquery
+                         :exists_predicate
+                         :in_predicate
+                         :quantified_comparison_predicate) [z]
+                        nil))
+                    z)]
+    (reduce
+     (fn [acc sq]
+       (letfn [(build-apply [column->param projected-columns relation subquery-plan]
+                 [:apply
+                  :cross-join
+                  column->param
+                  projected-columns
+                  relation
+                  (w/postwalk-replace column->param subquery-plan)])]
+         (r/zmatch sq
+           [:subquery ^:z qe]
+           (let [subquery-type (sem/subquery-type sq)
+                 projected-columns (set (subquery-projection-symbols "subquery" qe))
+                 sq-id (symbol (str "subquery__" (sem/id qe)))
+                 subquery-plan [:rename sq-id (plan qe)]]
+             (build-apply
+              {}
+              projected-columns
+              relation
+              (if (= :scalar_subquery (:type subquery-type))
+                [:max-1-row subquery-plan]
+                subquery-plan))))))
+     relation
+     subqueries)))
+
 (defn- wrap-with-select [sc relation]
   (let [sc-expr (expr sc)]
     (reduce
@@ -208,43 +245,6 @@
     (if (not-empty order-by-projection)
       [:project base-projection order-by]
       order-by)))
-
-(defn- wrap-with-subquery-apply [z relation]
-  (let [subqueries (r/collect-stop
-                    (fn [z]
-                      (r/zcase z
-                        (:subquery
-                         :exists_predicate
-                         :in_predicate
-                         :quantified_comparison_predicate) [z]
-                        nil))
-                    z)]
-    (reduce
-     (fn [acc sq]
-       (letfn [(build-apply [column->param projected-columns relation subquery-plan]
-                 [:apply
-                  :cross-join
-                  column->param
-                  projected-columns
-                  relation
-                  (w/postwalk-replace column->param subquery-plan)])]
-         (r/zmatch sq
-           [:subquery ^:z qe]
-           (let [subquery-type (sem/subquery-type sq)
-                 projected-columns (set (subquery-projection-symbols "subquery" qe))
-                 sq-id (symbol (str "subquery__" (sem/id qe)))
-                 subquery-plan [:rename sq-id (plan qe)]]
-             (build-apply
-              {}
-              projected-columns
-              relation
-              (if (= :scalar_subquery (:type subquery-type))
-                [:max-1-row subquery-plan]
-                subquery-plan))))))
-     relation
-     subqueries)))
-
-(declare plan)
 
 (defn- build-query-specification [sl te]
   (let [projection (first (sem/projected-columns sl))
