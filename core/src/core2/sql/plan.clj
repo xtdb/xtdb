@@ -131,20 +131,20 @@
              relation
              (w/postwalk-replace column->param subquery-plan)])]
     (let [subqueries (r/collect-stop
-                      (fn [z]
-                        (r/zcase z
-                          (:subquery
-                           :exists_predicate
-                           :in_predicate
-                           :quantified_comparison_predicate) [z]
-                          nil))
-                      z)]
+                       (fn [z]
+                         (r/zcase z
+                                  (:subquery
+                                    :exists_predicate
+                                    :in_predicate
+                                    :quantified_comparison_predicate) [z]
+                                  nil))
+                       z)
+          scope-id (sem/id (sem/scope-element z))]
       (reduce
-       (fn [acc sq]
+       (fn [relation sq]
          (r/zmatch sq
            [:subquery ^:z qe]
            (let [qe-id (sem/id qe)
-                 scope-id (sem/id (sem/scope-element sq))
                  subquery-plan [:rename (symbol (str "subquery__" qe-id)) (plan qe)]
                  column->param (->> (for [{:keys [^long table-scope-id] :as column-reference} (sem/all-column-references qe)
                                           :when (<= table-scope-id scope-id)
