@@ -270,8 +270,34 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'")
            "SELECT si.title FROM Movie AS m JOIN StarsIn AS si USING (title)")
 
   (t/testing "outer joins"
-    #_
+    (plan-is '[:rename {si__4_title title}
+               [:project [si__4_title]
+                [:rename hack_oj1
+                 [:select (= m__3_title si__4_title)
+                  [:left-outer-join {}
+                   [:rename si__4 [:scan [title]]]
+                   [:rename m__3 [:scan [title]]]]]]]]
+
+             #_ ; TODO condition into LOJ.
+             ;; this is worse with LOJ than IJ because it's semantically different
+             '[:rename {si__4_title title}
+               [:project [si__4_title]
+                [:left-outer-join {si__4_title m__3_title}
+                 [:rename si__4 [:scan [title]]]
+                 [:rename m__3 [:scan [title]]]]]]
+             "SELECT si.title FROM Movie AS m RIGHT OUTER JOIN StarsIn AS si USING (title)")
+
     (plan-is '[:rename {si__4_movieTitle movieTitle}
+               [:project [si__4_movieTitle]
+                [:rename hack_oj1
+                 [:select (and (= si__4_year m__3_movieYear) (= m__3_title si__4_movieTitle))
+                  [:left-outer-join {}
+                   [:rename m__3 [:scan [title movieYear]]]
+                   [:rename si__4 [:scan [movieTitle year]]]]]]]]
+
+             #_ ; TODO condition into LOJ.
+             ;; this is worse with LOJ than IJ because it's semantically different
+             '[:rename {si__4_movieTitle movieTitle}
                [:project [si__4_movieTitle]
                 [:select (= si__4_year m__3_movieYear)
                  [:left-outer-join {m__3_title si__4_movieTitle}
@@ -279,14 +305,23 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'")
                   [:rename si__4 [:scan [movieTitle year]]]]]]]
              "SELECT si.movieTitle FROM Movie AS m LEFT JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")
 
-    #_
-    (plan-is '[:rename {si__4_title title}
-               [:project [si__4_title]
-                [:left-outer-join {si__4_title m__3_title}
-                 [:rename si__4 [:scan [title]]]
-                 [:rename m__3 [:scan [title]]]]]]
-             "SELECT si.title FROM Movie AS m RIGHT OUTER JOIN StarsIn AS si USING (title)")))
+    (plan-is '[:rename {si__4_movieTitle movieTitle}
+               [:project [si__4_movieTitle]
+                [:rename hack_oj1
+                 [:select (and (= si__4_year m__3_movieYear) (= m__3_title si__4_movieTitle))
+                  [:full-outer-join {}
+                   [:rename m__3 [:scan [title movieYear]]]
+                   [:rename si__4 [:scan [movieTitle year]]]]]]]]
 
+             #_ ; TODO condition into FOJ.
+             ;; this is worse with FOJ than IJ because it's semantically different
+             '[:rename {si__4_movieTitle movieTitle}
+               [:project [si__4_movieTitle]
+                [:select (= si__4_year m__3_movieYear)
+                 [:full-outer-join {m__3_title si__4_movieTitle}
+                  [:rename m__3 [:scan [title movieYear]]]
+                  [:rename si__4 [:scan [movieTitle year]]]]]]]
+             "SELECT si.movieTitle FROM Movie AS m FULL OUTER JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")))
 
 (t/deftest test-from-subquery
   (plan-is '[:rename {foo__3_bar bar}

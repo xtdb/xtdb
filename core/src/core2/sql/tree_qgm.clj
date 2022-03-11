@@ -39,6 +39,15 @@
                                            :qgm.box.body/columns :qgm.box.body/distinct])
          :qgm.box/quantifiers (s/map-of :qgm/id :qgm/quantifier)))
 
+(s/def :qgm.box.outer-join/foreach-quantifier (s/nilable :qgm/id))
+
+(defmethod box-spec :qgm.box/outer-join [_]
+  (s/cat :qgm.box/type #{:qgm.box/outer-join}
+         :qgm.box/properties (s/keys :req [:qgm.box.head/distinct? :qgm.box.head/columns
+                                           :qgm.box.body/columns :qgm.box.body/distinct]
+                                     :opt [:qgm.box.outer-join/foreach-quantifier])
+         :qgm.box/quantifiers (s/map-of :qgm/id :qgm/quantifier)))
+
 (defn- set-box-spec [box-type]
   (s/cat :qgm.box/type #{box-type}
          :qgm.box/properties (s/keys :req [:qgm.box.head/distinct? :qgm.box.head/columns
@@ -131,45 +140,56 @@
   (let [table (sem/table ag)
         qid (table->qid table)
         projection (first (sem/projected-columns ag))]
-    [[qid [:qgm.quantifier/foreach {:qgm.quantifier/id qid
-                                    :qgm.quantifier/columns (mapv plan/unqualified-projection-symbol projection)}
-           (if (:subquery-scope-id table)
-             (qgm-box ag)
-             [:qgm.box/base-table (symbol (:table-or-query-name table))])]]]))
+    [qid [:qgm.quantifier/foreach {:qgm.quantifier/id qid
+                                   :qgm.quantifier/columns (mapv plan/unqualified-projection-symbol projection)}
+          (qgm-box ag)]]))
 
 (defn- qgm-quantifiers [ag]
   (->> ag
        (r/collect-stop
-        (letfn [(sq-quantifier [q-type subquery]
+        (letfn [(oj-quantifier [ag]
+                  (let [qid 'hack_oj1 ; HACK id pls
+                        projection (first (sem/projected-columns ag))]
+                    [qid [:qgm.quantifier/foreach {:qgm.quantifier/id qid
+                                                   :qgm.quantifier/columns (mapv plan/unqualified-projection-symbol projection)}
+                          (qgm-box ag)]]))
+
+                (sq-quantifier [q-type subquery]
                   (let [sq-el (sem/subquery-element subquery)
                         sq-el (if (= (r/ctor sq-el) :query_expression)
                                 (r/$ sq-el 1)
                                 sq-el)
                         qid (symbol (str "q" (sem/id sq-el)))]
 
-                    [[qid [q-type
-                           {:qgm.quantifier/id qid
-                            :qgm.quantifier/columns (->> (first (sem/projected-columns subquery))
-                                                         (mapv plan/unqualified-projection-symbol))}
-                           (qgm-box sq-el)]]]))]
+                    [qid [q-type
+                          {:qgm.quantifier/id qid
+                           :qgm.quantifier/columns (->> (first (sem/projected-columns subquery))
+                                                        (mapv plan/unqualified-projection-symbol))}
+                          (qgm-box sq-el)]]))]
           (fn [ag]
             (r/zmatch ag
+              [:qualified_join _ [:join_type [:outer_join_type _]] _ _ _]
+              [(oj-quantifier ag)]
+
+              [:qualified_join _ [:join_type [:outer_join_type _] _] _ _ _]
+              [(oj-quantifier ag)]
+
               [:table_primary _ _]
-              (table-primary->quantifier ag)
+              [(table-primary->quantifier ag)]
 
               [:table_primary _ _ _]
-              (table-primary->quantifier ag)
+              [(table-primary->quantifier ag)]
 
               [:table_primary _ _ _ _]
-              (table-primary->quantifier ag)
+              [(table-primary->quantifier ag)]
 
               [:quantified_comparison_predicate _
                [:quantified_comparison_predicate_part_2 [_ _] [q-type _] ^:z subquery]]
-              (sq-quantifier (keyword (name :qgm.quantifier) (name q-type)) subquery)
+              [(sq-quantifier (keyword (name :qgm.quantifier) (name q-type)) subquery)]
 
               [:in_predicate _
                [:in_predicate_part_2 _ [:in_predicate_value ^:z subquery]]]
-              (sq-quantifier :qgm.quantifier/existential subquery)
+              [(sq-quantifier :qgm.quantifier/existential subquery)]
 
               [:subquery _] []))))
 
@@ -201,7 +221,13 @@
 (defn qgm-box [ag]
   (->> ag
        (r/collect-stop
-        (letfn [(with-order-by [box ssl]
+        (letfn [(table-box [ag]
+                  (let [table (sem/table ag)]
+                    (if (:subquery-scope-id table)
+                      (qgm-box (sem/subquery-element ag))
+                      [:qgm.box/base-table (symbol (:table-or-query-name table))])))
+
+                (with-order-by [box ssl]
                   (-> box
                       (assoc-in [1 :qgm.box.body/order-by] (ssl->order-by ssl))))
 
@@ -213,14 +239,35 @@
                   (-> box
                       (assoc-in [1 :qgm.box.body/result-offset] (plan/expr rorc))))
 
+                (oj-box [lhs ojt rhs]
+                  (let [[lhs-qid lhs-q] (first (qgm-quantifiers lhs))
+                        [rhs-qid rhs-q] (first (qgm-quantifiers rhs))
+                        f-qid (case ojt "LEFT" rhs-qid, "RIGHT" lhs-qid, nil)]
+                    [:qgm.box/outer-join (-> (build-query-spec ag false)
+                                             (assoc :qgm.box.outer-join/foreach-quantifier f-qid))
+                     {lhs-qid (cond-> lhs-q
+                                (not= f-qid lhs-qid) (assoc 0 :qgm.quantifier/preserved-foreach))
+                      rhs-qid (cond-> rhs-q
+                                (not= f-qid rhs-qid) (assoc 0 :qgm.quantifier/preserved-foreach))}]))
+
                 (set-box [box-type opts lhs rhs]
                   (let [lbox (qgm-box lhs)]
-                    [[box-type
-                      (into {:qgm.box.head/columns (:qgm.box.head/columns (nth lbox 1))} opts)
-                      lbox (qgm-box rhs)]]))]
+                    [box-type
+                     (into {:qgm.box.head/columns (:qgm.box.head/columns (nth lbox 1))} opts)
+                     lbox (qgm-box rhs)]))]
 
           (fn [ag]
             (r/zmatch ag
+              [:table_primary _ _]
+              [(table-box ag)]
+
+              [:table_primary _ _ _]
+              [(table-box ag)]
+
+              ;; TODO renaming columns of a base table?
+              [:table_primary [:regular_identifier _] _ _ _]
+              [(table-box ag)]
+
               [:table_primary ^:z toqn _ _ _]
               [(-> (qgm-box toqn)
                    (assoc-in [1 :qgm.box.head/columns] (mapv symbol (sem/derived-columns ag))))]
@@ -247,28 +294,28 @@
               [(-> (qgm-box qeb) (with-order-by ssl) (with-result-offset rorc) (with-fetch-first ffrc))]
 
               [:query_expression_body ^:z qeb "UNION" ^:z qt]
-              (set-box :qgm.box/union
-                       {:qgm.box.head/distinct? true
-                        :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
-                       qeb qt)
+              [(set-box :qgm.box/union
+                        {:qgm.box.head/distinct? true
+                         :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
+                        qeb qt)]
 
               [:query_expression_body ^:z qeb "UNION" "ALL" ^:z qt]
-              (set-box :qgm.box/union
-                       {:qgm.box.head/distinct? false
-                        :qgm.box.body/distinct :qgm.box.body.distinct/preserve}
-                       qeb qt)
+              [(set-box :qgm.box/union
+                        {:qgm.box.head/distinct? false
+                         :qgm.box.body/distinct :qgm.box.body.distinct/preserve}
+                        qeb qt)]
 
               [:query_expression_body ^:z qeb "EXCEPT" ^:z qt]
-              (set-box :qgm.box/except
-                       {:qgm.box.head/distinct? true
-                        :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
-                       qeb qt)
+              [(set-box :qgm.box/except
+                        {:qgm.box.head/distinct? true
+                         :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
+                        qeb qt)]
 
               [:query_term ^:z qt "INTERSECT" ^:z qp]
-              (set-box :qgm.box/intersect
-                       {:qgm.box.head/distinct? true
-                        :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
-                       qt qp)
+              [(set-box :qgm.box/intersect
+                        {:qgm.box.head/distinct? true
+                         :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
+                        qt qp)]
 
               [:query_specification _ _ _]
               [[:qgm.box/select (build-query-spec ag false)
@@ -277,6 +324,12 @@
               [:query_specification _ [:set_quantifier d] _ _]
               [[:qgm.box/select (build-query-spec ag (= d "DISTINCT"))
                 (qgm-quantifiers ag)]]
+
+              [:qualified_join ^:z lhs [:join_type [:outer_join_type ojt]] _ ^:z rhs _]
+              [(oj-box lhs ojt rhs)]
+
+              [:qualified_join ^:z lhs [:join_type [:outer_join_type ojt] _] _ ^:z rhs _]
+              [(oj-box lhs ojt rhs)]
 
               [:subquery _ _]
               []))))
@@ -452,9 +505,22 @@
                           (wrap-select (keys qs)))]]
                     (wrap-distinct box))))
 
+            (plan-oj-box [[_ box-opts qs]]
+              (assert (= 2 (count qs)) "can't handle more than 2 yet")
+
+              (-> (if-let [f-qid (:qgm.box.outer-join/foreach-quantifier box-opts)]
+                    [:left-outer-join {}
+                     (plan-quantifier (-> (dissoc qs f-qid) vals first))
+                     (plan-quantifier (get qs f-qid))]
+                    (into [:full-outer-join {}]
+                          (map plan-quantifier)
+                          (vals qs)))
+                  (wrap-select (keys qs))))
+
             (plan-box [[box-type :as box]]
               (-> (case box-type
                     :qgm.box/select (plan-select-box box)
+                    :qgm.box/outer-join (plan-oj-box box)
                     :qgm.box/except (let [[_ _ lbox rbox] box]
                                       [:difference (plan-box lbox) (plan-box rbox)])
 
