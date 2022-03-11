@@ -118,18 +118,19 @@
 
 ;; Logical plan.
 
-(defn- wrap-with-select [sc-expr relation]
-  (reduce
-   (fn [acc predicate]
-     [:select predicate acc])
-   relation
-   ((fn step [sc-expr]
-      (if (and (list? sc-expr)
-               (= 'and (first sc-expr)))
-        (concat (step (nth sc-expr 1))
-                (step (nth sc-expr 2)))
-        [sc-expr]))
-    sc-expr)))
+(defn- wrap-with-select [sc relation]
+  (let [sc-expr (expr sc)]
+    (reduce
+     (fn [acc predicate]
+       [:select predicate acc])
+     (wrap-with-subquery-apply sc relation)
+     ((fn step [sc-expr]
+        (if (and (list? sc-expr)
+                 (= 'and (first sc-expr)))
+          (concat (step (nth sc-expr 1))
+                  (step (nth sc-expr 2)))
+          [sc-expr]))
+      sc-expr))))
 
 (defn- needs-group-by? [z]
   (boolean (:grouping-columns (sem/local-env (sem/group-env z)))))
@@ -390,35 +391,35 @@
 
      [:table_expression ^:z fc [:where_clause _ ^:z sc]]
      ;;=>
-     (cond->> (wrap-with-select (expr sc) (plan fc))
+     (cond->> (wrap-with-select sc (plan fc))
        (needs-group-by? z) (wrap-with-group-by z))
 
      [:table_expression ^:z fc [:where_clause _ ^:z sc] [:group_by_clause _ _ _]]
      ;;=>
-     (->> (wrap-with-select (expr sc) (plan fc))
+     (->> (wrap-with-select sc (plan fc))
           (wrap-with-group-by z))
 
      [:table_expression ^:z fc [:where_clause _ ^:z sc] [:group_by_clause _ _ _] [:having_clause _ ^:z hsc]]
      ;;=>
-     (->> (wrap-with-select (expr sc) (plan fc))
+     (->> (wrap-with-select sc (plan fc))
           (wrap-with-group-by z)
-          (wrap-with-select (expr hsc)))
+          (wrap-with-select hsc))
 
      [:table_expression ^:z fc [:where_clause _ ^:z sc] [:having_clause _ ^:z hsc]]
      ;;=>
-     (->> (wrap-with-select (expr sc) (plan fc))
+     (->> (wrap-with-select sc (plan fc))
           (wrap-with-group-by z)
-          (wrap-with-select (expr hsc)))
+          (wrap-with-select hsc))
 
      [:table_expression ^:z fc [:group_by_clause _ _ _] [:having_clause _ ^:z hsc]]
      ;;=>
      (->> (wrap-with-group-by z (plan fc))
-          (wrap-with-select (expr hsc)))
+          (wrap-with-select hsc))
 
      [:table_expression ^:z fc [:having_clause _ ^:z hsc]]
      ;;=>
      (->> (wrap-with-group-by z (plan fc))
-          (wrap-with-select (expr hsc)))
+          (wrap-with-select hsc))
 
      [:table_primary [:collection_derived_table _ _] _ _]
      ;;=>
@@ -445,25 +446,25 @@
 
      [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
      ;;=>
-     (wrap-with-select (expr sc) [:join {} (plan lhs) (plan rhs)])
+     (wrap-with-select sc [:join {} (plan lhs) (plan rhs)])
 
      [:qualified_join ^:z lhs ^:z jt _ ^:z rhs [:join_condition _ ^:z sc]]
      ;;=>
-     (wrap-with-select (expr sc) (case (sem/join-type jt)
-                                   "LEFT" [:left-outer-join {} (plan lhs) (plan rhs)]
-                                   "RIGHT" [:left-outer-join {} (plan rhs) (plan lhs)]
-                                   "INNER" [:join {} (plan lhs) (plan rhs)]))
+     (wrap-with-select sc (case (sem/join-type jt)
+                            "LEFT" [:left-outer-join {} (plan lhs) (plan rhs)]
+                            "RIGHT" [:left-outer-join {} (plan rhs) (plan lhs)]
+                            "INNER" [:join {} (plan lhs) (plan rhs)]))
 
      [:qualified_join ^:z lhs _ ^:z rhs ^:z ncj]
      ;;=>
-     (wrap-with-select (expr ncj) [:join {} (plan lhs) (plan rhs)])
+     (wrap-with-select ncj [:join {} (plan lhs) (plan rhs)])
 
      [:qualified_join ^:z lhs ^:z jt _ ^:z rhs ^:z ncj]
      ;;=>
-     (wrap-with-select (expr ncj) (case (sem/join-type jt)
-                                    "LEFT" [:left-outer-join {} (plan lhs) (plan rhs)]
-                                    "RIGHT" [:left-outer-join {} (plan rhs) (plan lhs)]
-                                    "INNER" [:join {} (plan lhs) (plan rhs)]))
+     (wrap-with-select ncj (case (sem/join-type jt)
+                             "LEFT" [:left-outer-join {} (plan lhs) (plan rhs)]
+                             "RIGHT" [:left-outer-join {} (plan rhs) (plan lhs)]
+                             "INNER" [:join {} (plan lhs) (plan rhs)]))
 
      [:from_clause _ ^:z trl]
      ;;=>
