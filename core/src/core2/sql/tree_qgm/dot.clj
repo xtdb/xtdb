@@ -10,11 +10,12 @@
 #_{:clj-kondo/ignore #{:unused-binding}}
 (defmulti box->dot
   (fn [box-id box]
-    (first box)))
+    (first box))
+  :default ::default)
 
 (alter-meta! #'box->dot assoc :private true)
 
-(defmethod box->dot :qgm.box/base-table [box-id [_ table-name]]
+(defmethod box->dot :qgm.box/base-table [box-id [_box-type table-name]]
   (let [table-name (str table-name)]
     {:nodes [(format "  subgraph cluster_%s {
     label=\"BASE\"
@@ -23,16 +24,17 @@
     %s [shape=none, label=\"%s\"]
   }" box-id box-id table-name)]}))
 
-(defmethod box->dot :qgm.box/select [box-id [_ box-opts qs]]
-  (let [sub-graphs (for [[qid [_q-type _qid _cols ranges-over]] qs]
+(defmethod box->dot ::default [box-id [box-type box-opts qs]]
+  (let [sub-graphs (for [[qid [_q-type _opts ranges-over]] qs]
                      (box->dot (symbol (str "box_" qid)) ranges-over))]
     {:nodes (into [(format "  subgraph cluster_%s {
-    label=\"SELECT\"
+    label=\"%s\"
     style=dashed
     rank=same
     %s
   }"
                            box-id
+                           (str/upper-case (name box-type))
                            (->> [(format "%s [label = \"%s\", shape=record, penwidth=2]"
                                          box-id
                                          (format "{ <head> HEAD: distinct=%s\\l | { { { %s\\l } | { %s\\l } } } | <body> BODY: distinct=%s\\l }"
@@ -41,14 +43,15 @@
                                                  (str/join "\\l|" (:qgm.box.body/columns box-opts))
                                                  (str/upper-case (name (:qgm.box.body/distinct box-opts)))))
 
-                                 (->> (for [[qid [q-type _qid _cols _ranges-over]] qs]
+                                 (->> (for [[qid [q-type _opts _ranges-over]] qs]
                                         (format "    %s [label=\"%s(%s)\", shape=circle, style=filled, margin=0]"
                                                 qid qid (str/upper-case (first (name q-type)))))
                                       (str/join "\n"))]
                                 (str/join "\n")))]
                   (mapcat :nodes)
                   sub-graphs)
-     :edges (into (vec (for [[qid [_q-type _qid cols _ranges-over]] qs]
+
+     :edges (into (vec (for [[qid [_q-type {cols :qgm.quantifier/columns} _ranges-over]] qs]
                          (let [box-id (symbol (str "box_" qid))]
                            (format "  %s -> %s [label=\"%s\", lhead=cluster_%s]"
                                    qid box-id (str/join ", " cols) box-id))))
@@ -183,7 +186,9 @@ digraph {
              WHERE q1.partno IN
                (SELECT q3.partno
                 FROM inventory q3
-                WHERE q3.onhand_qty < q1.order_qty AND q3.type = 'CPU')"]
+                WHERE q3.onhand_qty < q1.order_qty AND q3.type = 'CPU')"
+
+            "SELECT si.movieTitle FROM Movie AS m LEFT JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear"]
         q (nth qs 1)]
     (-> (qgm->dot q (qgm/->qgm (z/vector-zip (core2.sql/parse q))))
         #_(doto println)
