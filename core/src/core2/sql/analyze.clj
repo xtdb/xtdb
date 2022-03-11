@@ -811,7 +811,7 @@
        nil))
    ag))
 
-(defn- subquery-type [ag]
+(defn subquery-type [ag]
   (r/zcase ag
     (:query_expression
      :in_value_list)

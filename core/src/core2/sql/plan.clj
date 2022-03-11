@@ -48,6 +48,11 @@
   (let [query-id (sem/id (sem/scope-element z))]
     (symbol (str "$" prefix "__" query-id "_" (sem/id z) "$"))))
 
+(defn- subquery-projection-symbols [prefix qe]
+  (let [subquery-id (sem/id qe)]
+    (vec (for [projection (first (sem/projected-columns qe))]
+           (id-symbol prefix subquery-id (unqualified-projection-symbol projection))))))
+
 ;; Expressions.
 
 (defn expr [z]
@@ -103,6 +108,11 @@
 
      [:aggregate_function _]
      (aggregate-symbol "agg_out" z)
+
+     [:subquery ^:z qe]
+     (let [subquery-type (sem/subquery-type z)]
+       (case (:type subquery-type)
+         :scalar_subquery (first (subquery-projection-symbols "subquery" qe))))
 
      (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (z/node z))))))))
 
@@ -198,6 +208,41 @@
       [:project base-projection order-by]
       order-by)))
 
+(defn- wrap-with-subquery-apply [z relation]
+  (let [subqueries (r/collect-stop
+                    (fn [z]
+                      (r/zcase z
+                        (:subquery
+                         :exists_predicate
+                         :in_predicate
+                         :quantified_comparison_predicate) [z]
+                        nil))
+                    z)]
+    (reduce
+     (fn [acc sq]
+       (letfn [(build-apply [column->param projected-columns relation subquery-plan]
+                 [:apply
+                  :cross-join
+                  column->param
+                  projected-columns
+                  relation
+                  (w/postwalk-replace column->param subquery-plan)])]
+         (r/zmatch sq
+           [:subquery ^:z qe]
+           (let [subquery-type (sem/subquery-type sq)
+                 projected-columns (set (subquery-projection-symbols "subquery" qe))
+                 sq-id (symbol (str "subquery__" (sem/id qe)))
+                 subquery-plan [:rename sq-id (plan qe)]]
+             (build-apply
+              {}
+              projected-columns
+              relation
+              (if (= :scalar_subquery (:type subquery-type))
+                [:max-1-row subquery-plan]
+                subquery-plan))))))
+     relation
+     subqueries)))
+
 (declare plan)
 
 (defn- build-query-specification [sl te]
@@ -213,7 +258,8 @@
                                       (qualified-projection-symbol projection)
                                       {(unqualified-projection-symbol projection)
                                        (expr (r/$ derived-column 1))})))
-        qualified-project [:project qualified-projection (plan te)]]
+        relation (wrap-with-subquery-apply sl (plan te))
+        qualified-project [:project qualified-projection relation]]
     (if (not-empty unqualified-rename-map)
       [:rename unqualified-rename-map qualified-project]
       qualified-project)))

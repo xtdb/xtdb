@@ -251,17 +251,35 @@
               [:project [si__3_films {film__4_$column_1$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]]))
 
-(comment
+(t/deftest test-subqueries
+  ;; Scalar subquery:
+  (valid? "SELECT (1 = (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
+          '[:project [{some_column (= 1 subquery__4_$column_1$)}]
+            [:apply
+             :cross-join
+             {}
+             #{subquery__4_$column_1$}
+             [:select (= x__8_y 1)
+              [:rename x__8 [:scan [{y (= y 1)}]]]]
+             [:max-1-row
+              [:rename subquery__4
+               [:project [{$column_1$ $agg_out__5_6$}]
+                [:group-by [{$agg_out__5_6$ (max $agg_in__5_6$)}]
+                 [:project [{$agg_in__5_6$ foo__7_bar}]
+                  [:rename foo__7 [:scan [bar]]]]]]]]]])
 
-  (t/deftest test-subqueries
-    ;; Scalar subquery:
-    (valid? "SELECT (1 + (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
-            '[:project [{some_column (+ 1 subquery__1_$column_1$)}]
-              [:cross-join
-               [:select (= x__4_y 1)
-                [:rename x__4 [:scan [{y (= y 1)}]]]]
+  (comment
+
+    (valid? "SELECT x.y AS some_column FROM x WHERE x.y = (SELECT MAX(foo.bar) FROM foo)"
+            '[:project [{some_column (= 1 subquery__4_$column_1$)}]
+              [:apply
+               :cross-join
+               {}
+               #{subquery__4_$column_1$}
+               [:select (= x__8_y 1)
+                [:rename x__8 [:scan [{y (= y 1)}]]]]
                [:max-1-row
-                [:rename subquery__1
+                [:rename subquery__4
                  [:project [{$column_1$ $agg_out__2_3$}]
                   [:group-by [{$agg_out__2_3$ (max $agg_in__2_3$)}]
                    [:project [{$agg_in__2_3$ foo__4_bar}]
