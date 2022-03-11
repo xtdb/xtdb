@@ -143,12 +143,17 @@
        (fn [acc sq]
          (r/zmatch sq
            [:subquery ^:z qe]
-           (let [sq-id (sem/id qe)
-                 subquery-plan [:rename (symbol (str "subquery__" sq-id)) (plan qe)]
+           (let [qe-id (sem/id qe)
+                 scope-id (sem/id (sem/scope-element sq))
+                 subquery-plan [:rename (symbol (str "subquery__" qe-id)) (plan qe)]
                  column->param (->> (for [{:keys [^long table-scope-id] :as column-reference} (sem/all-column-references qe)
-                                          :when (< table-scope-id sq-id)
-                                          :let [column-reference-symbol (column-reference-symbol column-reference)]]
-                                      [column-reference-symbol (symbol (str "?" column-reference-symbol))])
+                                          :when (<= table-scope-id scope-id)
+                                          :let [column-reference-symbol (column-reference-symbol column-reference)
+                                                param-symbol (symbol (str "?" column-reference-symbol))]]
+                                      [(if (= table-scope-id scope-id)
+                                         column-reference-symbol
+                                         param-symbol)
+                                       param-symbol])
                                     (into {}))
                  subquery-type (sem/subquery-type sq)
                  projected-columns (set (subquery-projection-symbols "subquery" qe))]
