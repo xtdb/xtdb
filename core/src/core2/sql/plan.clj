@@ -121,6 +121,22 @@
      (let [qe-id (sem/id qe)]
        (id-symbol "subquery" qe-id "$exists$"))
 
+     [:in_predicate _ [:in_predicate_part_2 _ [:in_predicate_value [:subquery ^:z qe]]]]
+     (let [qe-id (sem/id qe)]
+       (id-symbol "subquery" qe-id "$exists$"))
+
+     [:in_predicate _ [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]]
+     (let [qe-id (sem/id qe)]
+       (list 'not (id-symbol "subquery" qe-id "$exists$")))
+
+     [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:some _] [:subquery ^:z qe]]]
+     (let [qe-id (sem/id qe)]
+       (id-symbol "subquery" qe-id "$exists$"))
+
+     [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:all _] [:subquery ^:z qe]]]
+          (let [qe-id (sem/id qe)]
+       (list 'not (id-symbol "subquery" qe-id "$exists$")))
+
      (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (z/node z))))))))
 
 ;; Logical plan.
@@ -144,16 +160,30 @@
                       column-reference-symbol
                       param-symbol)
                     param-symbol])
-                 (into {})))]
+                 (into {})))
+          (wrap-with-exists [exists-column relation]
+            [:top {:limit 1}
+             [:union-all
+              [:project [{exists-column true}]
+               relation]
+              [:table [{(keyword exists-column) false}]]]])
+          (flip-comparsion [co]
+            (case co
+              < '>=
+              <= '>
+              > '<=
+              >= '<
+              = '<>
+              <> '=))]
     (let [subqueries (r/collect-stop
-                       (fn [z]
-                         (r/zcase z
-                                  (:subquery
-                                    :exists_predicate
-                                    :in_predicate
-                                    :quantified_comparison_predicate) [z]
-                                  nil))
-                       z)
+                      (fn [z]
+                        (r/zcase z
+                          (:subquery
+                           :exists_predicate
+                           :in_predicate
+                           :quantified_comparison_predicate) [z]
+                          nil))
+                      z)
           scope-id (sem/id (sem/scope-element z))]
       (reduce
        (fn [relation sq]
@@ -168,26 +198,75 @@
               column->param
               projected-columns
               relation
-              (if (= :scalar_subquery (:type subquery-type))
-                [:max-1-row subquery-plan]
+              (case (:type subquery-type)
+                (:scalar_subquery
+                 :row_subquery) [:max-1-row subquery-plan]
                 subquery-plan)))
            [:exists_predicate _
             [:subquery ^:z qe]]
            (let [qe-id (sem/id qe)
                  exists-column (id-symbol "subquery" qe-id "$exists$")
-                 subquery-plan [:top {:limit 1}
-                                [:union-all
-                                 [:project [{exists-column true}]
-                                  [:rename (symbol (str "subquery__" qe-id)) (plan qe)]]
-                                 [:table [{(keyword exists-column) false}]]]]
+                 subquery-plan (wrap-with-exists
+                                exists-column
+                                [:rename (symbol (str "subquery__" qe-id)) (plan qe)])
                  column->param (column->param qe scope-id)
                  projected-columns #{exists-column}]
              (build-apply
-               column->param
-               projected-columns
-               relation
-               subquery-plan))
-           (throw (IllegalArgumentException. "unkown subquery type"))))
+              column->param
+              projected-columns
+              relation
+              subquery-plan))
+
+           [:in_predicate ^:z rvp ^:z ipp2]
+           (let [qe (r/zmatch ipp2
+                      [:in_predicate_part_2 _ [:in_predicate_value [:subquery ^:z qe]]]
+                      qe
+
+                      [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]
+                      qe
+
+                      (throw (IllegalArgumentException. "unknown in type")))
+                 qe-id (sem/id qe)
+                 exists-column (id-symbol "subquery" qe-id "$exists$")
+                 predicate (list '= (expr rvp) (first (subquery-projection-symbols "subquery" qe)))
+                 subquery-plan (wrap-with-exists
+                                exists-column
+                                [:select predicate
+                                 [:rename (symbol (str "subquery__" qe-id)) (plan qe)]])
+                 column->param (merge (column->param qe scope-id)
+                                      (column->param rvp scope-id))
+                 projected-columns #{exists-column}]
+             (build-apply
+              column->param
+              projected-columns
+              relation
+              subquery-plan))
+
+           [:quantified_comparison_predicate ^:z rvp [:quantified_comparison_predicate_part_2 [_ co] [quantifier _] [:subquery ^:z qe]]]
+           (let [qe-id (sem/id qe)
+                 exists-column (id-symbol "subquery" qe-id "$exists$")
+                 projection-symbol (first (subquery-projection-symbols "subquery" qe))
+                 predicate (case quantifier
+                             :all `(~'or (~(flip-comparsion (symbol co))
+                                          ~(expr rvp)
+                                          ~projection-symbol)
+                                    (~'nil? ~(expr rvp))
+                                    (~'nil? ~projection-symbol))
+                             :some (list (symbol co) (expr rvp) projection-symbol))
+                 subquery-plan (wrap-with-exists
+                                exists-column
+                                [:select predicate
+                                 [:rename (symbol (str "subquery__" qe-id)) (plan qe)]])
+                 column->param (merge (column->param qe scope-id)
+                                      (column->param rvp scope-id))
+                 projected-columns #{exists-column}]
+             (build-apply
+              column->param
+              projected-columns
+              relation
+              subquery-plan))
+
+           (throw (IllegalArgumentException. "unknown subquery type"))))
        relation
        subqueries))))
 
