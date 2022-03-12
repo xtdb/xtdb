@@ -154,7 +154,10 @@
   (->> (for [{:keys [^long table-scope-id] :as column-reference} (sem/all-column-references qe)
              :when (<= table-scope-id scope-id)
              :let [column-reference-symbol (column-reference-symbol column-reference)
-                   param-symbol (symbol (str "?" column-reference-symbol))]]
+                   param-symbol (with-meta
+                                  (symbol (str "?" column-reference-symbol))
+                                  {:correlated-column-reference
+                                   (:column-reference (meta column-reference-symbol))})]]
          [(if (= table-scope-id scope-id)
             column-reference-symbol
             param-symbol)
