@@ -895,10 +895,12 @@
       (let [ag (z/vector-zip query)]
         (if-let [errs (not-empty (sem/errs ag))]
           {:errs errs}
-          {:plan (->> (z/vector-zip (plan ag))
-                      (r/innermost (r/mono-tp optimize-plan))
-                      (z/node)
-                      (s/assert ::lp/logical-plan))})))))
+          {:plan (let [plan (->> (z/vector-zip (plan ag))
+                                 (r/innermost (r/mono-tp optimize-plan))
+                                 (z/node))]
+                   (if (s/invalid? (s/conform ::lp/logical-plan plan))
+                     (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
+                     plan))})))))
 
 ;; Building plans using the Apply operator:
 
