@@ -273,15 +273,14 @@
   (valid? "SELECT x.y AS some_column FROM x WHERE x.y = (SELECT MAX(foo.bar) FROM foo)"
           '[:rename {x__3_y some_column}
             [:project [x__3_y]
-             [:select (= x__3_y subquery__5_$column_1$)
-              [:cross-join
-               [:rename x__3 [:scan [y]]]
-               [:max-1-row
-                [:rename subquery__5
-                 [:project [{$column_1$ $agg_out__6_7$}]
-                  [:group-by [{$agg_out__6_7$ (max $agg_in__6_7$)}]
-                   [:project [{$agg_in__6_7$ foo__8_bar}]
-                    [:rename foo__8 [:scan [bar]]]]]]]]]]]])
+             [:join {x__3_y subquery__5_$column_1$}
+              [:rename x__3 [:scan [y]]]
+              [:max-1-row
+               [:rename subquery__5
+                [:project [{$column_1$ $agg_out__6_7$}]
+                 [:group-by [{$agg_out__6_7$ (max $agg_in__6_7$)}]
+                  [:project [{$agg_in__6_7$ foo__8_bar}]
+                   [:rename foo__8 [:scan [bar]]]]]]]]]]])
 
   ;; Correlated subquery:
   (valid? "SELECT (1 = (SELECT foo.bar = x.y FROM foo)) AS some_column FROM x WHERE x.y = 1"
