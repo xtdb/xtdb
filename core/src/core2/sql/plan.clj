@@ -528,7 +528,9 @@
        (set)))
 
 (defn expr-symbols [expr]
-  (set (for [x (flatten expr)
+  (set (for [x (flatten (if (coll? expr)
+                          (seq expr)
+                          [expr]))
              :when (:column-reference (meta x))]
          x)))
 
@@ -563,7 +565,8 @@
         {lhs-v rhs-v}))))
 
 (defn- conjunction-clauses [predicate]
-  (if (= 'and (first predicate))
+  (if (and (sequential? predicate)
+           (= 'and (first predicate)))
     (rest predicate)
     [predicate]))
 
@@ -593,6 +596,43 @@
      ;;=>
      (when-let [join-map (build-join-map predicate lhs rhs)]
        [join-op join-map lhs rhs])))
+
+(defn- promote-apply-mode [z]
+  (r/zmatch z
+    [:select predicate
+     [:apply :cross-join columns dependent-column-names independent-relation
+      [:top {:limit 1}
+       [:union-all
+        [:project [_]
+         dependent-relation]
+        [:table [_]]]]]]
+    ;;=>
+    (cond
+      (and (symbol? predicate)
+           (= #{predicate} dependent-column-names)
+           (str/ends-with? (name predicate) "$exists$"))
+      [:apply :semi-join columns #{} independent-relation dependent-relation]
+
+      (and (sequential? predicate)
+           (= 'not (first predicate))
+           (= 2 (count predicate))
+           (= #{(second predicate)} dependent-column-names)
+           (str/ends-with? (name (second predicate)) "$exists$"))
+      [:apply :anti-join columns #{} independent-relation dependent-relation])))
+
+(defn- push-selection-down-past-apply [z]
+  (r/zmatch z
+    [:select predicate
+     [:apply mode columns dependent-column-names independent-relation dependent-relation]]
+    ;;=>
+    (when (empty? (set/intersection (expr-table-ids predicate)
+                                    (expr-table-ids dependent-column-names)))
+      [:apply
+       mode
+       columns
+       dependent-column-names
+       [:select predicate independent-relation]
+       dependent-relation])))
 
 (defn- push-selection-down-past-join [z]
   (letfn [(push-selection-down [predicate lhs rhs]
@@ -668,6 +708,12 @@
                         columns-2)]
         [:rename (with-meta rename-map (meta columns-2)) relation]))))
 
+(defn- remove-uncorrelated-apply [z]
+  (r/zmatch z
+    [:apply :cross-join {} _ independent-relation dependent-relation]
+    ;;=>
+    [:cross-join independent-relation dependent-relation]))
+
 (defn- remove-superseded-projects [z]
   (r/zmatch z
     [:project projections-1
@@ -720,11 +766,14 @@
 (def optimize-plan
   (some-fn promote-selection-cross-join-to-join
            promote-selection-to-join
+           promote-apply-mode
            push-selection-down-past-join
+           push-selection-down-past-apply
            push-selections-with-fewer-variables-down
            push-selections-with-equals-down
            merge-selections-with-same-variables
            merge-renames
+           remove-uncorrelated-apply
            remove-superseded-projects
            add-selection-to-scan-predicate))
 

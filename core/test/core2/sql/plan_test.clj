@@ -259,10 +259,7 @@
   ;; Scalar subquery in SELECT:
   (valid? "SELECT (1 = (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
           '[:project [{some_column (= 1 subquery__4_$column_1$)}]
-            [:apply
-             :cross-join
-             {}
-             #{subquery__4_$column_1$}
+            [:cross-join
              [:select (= x__8_y 1)
               [:rename x__8 [:scan [{y (= y 1)}]]]]
              [:max-1-row
@@ -277,10 +274,7 @@
           '[:rename {x__3_y some_column}
             [:project [x__3_y]
              [:select (= x__3_y subquery__5_$column_1$)
-              [:apply
-               :cross-join
-               {}
-               #{subquery__5_$column_1$}
+              [:cross-join
                [:rename x__3 [:scan [y]]]
                [:max-1-row
                 [:rename subquery__5
@@ -308,66 +302,53 @@
   (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
           '[:rename {x__3_y y}
             [:project [x__3_y]
-             [:select subquery__4_$exists$
+             [:apply
+              :semi-join
+              {x__3_y ?x__3_y}
+              #{}
               [:select (= x__3_z 10)
-               [:apply
-                :cross-join
-                {x__3_y ?x__3_y}
-                #{subquery__4_$exists$}
-                [:rename x__3 [:scan [y z]]]
-                [:top {:limit 1}
-                 [:union-all
-                  [:project [{subquery__4_$exists$ true}]
-                   [:rename subquery__4
-                    [:rename {y__6_z z}
-                     [:project [y__6_z]
-                      [:select (= y__6_z ?x__3_y)
-                       [:rename y__6 [:scan [{z (= z ?x__3_y)}]]]]]]]]
-                  [:table [{:subquery__4_$exists$ false}]]]]]]]]])
+               [:rename x__3 [:scan [y {z (= z 10)}]]]]
+              [:rename subquery__4
+               [:rename {y__6_z z}
+                [:project [y__6_z]
+                 [:select (= y__6_z ?x__3_y)
+                  [:rename y__6 [:scan [{z (= z ?x__3_y)}]]]]]]]]]])
+
+  ;; EXISTS as expression in SELECT clause:
+  (valid? "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"
+          '[:project [{$column_1$ subquery__3_$exists$}]
+            [:apply
+             :cross-join
+             {x__7_y ?x__7_y}
+             #{subquery__3_$exists$}
+             [:select (= x__7_z 10)
+              [:rename x__7 [:scan [y {z (= z 10)}]]]]
+             [:top {:limit 1}
+              [:union-all
+               [:project [{subquery__3_$exists$ true}]
+                [:rename subquery__3
+                 [:rename {y__5_z z}
+                  [:project [y__5_z]
+                   [:select (= y__5_z ?x__7_y)
+                    [:rename y__5 [:scan [{z (= z ?x__7_y)}]]]]]]]]
+               [:table [{:subquery__3_$exists$ false}]]]]]])
+
+  ;; NOT EXISTS
+  (valid? "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
+          '[:rename {x__3_y y}
+            [:project [x__3_y]
+             [:apply
+              :anti-join
+              {x__3_y ?x__3_y}
+              #{}
+              [:select (= x__3_z 10) [:rename x__3 [:scan [y {z (= z 10)}]]]]
+              [:rename subquery__4
+               [:rename {y__6_z z}
+                [:project [y__6_z]
+                 [:select (= y__6_z ?x__3_y)
+                  [:rename y__6 [:scan [{z (= z ?x__3_y)}]]]]]]]]]])
 
   (comment
-
-    ;; NOT EXISTS
-    (valid? "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
-            '[:rename {x__3_y y}
-              [:project [x__3_y]
-               [:select subquery__1_$not_exists$
-                [:apply
-                 :cross-join
-                 {x__2_y ?x__2_y}
-                 #{}
-                 [:select (= x__3_z 10)
-                  [:rename x__3 [:scan [y {z (= z 10)}]]]]
-                 [:top {:limit 1}
-                  [:union-all
-                   [:project [{subquery__1_$not_exists$ false}]
-                    [:rename subquery__1
-                     [:rename {y__3_z z}
-                      [:project [y__3_z]
-                       [:select (or (<> ?x__2_y subquery__1_z)
-                                    (nil? subquery__1_z)
-                                    (nil? ?x__2_y))
-                        [:rename y__3 [:scan [{z (= z ?x__2_y)}]]]]]]]]
-                   [:table [{:subquery__1_$not_exists$ true}]]]]]]]])
-
-    ;; EXISTS as expression in SELECT clause:
-    (valid? "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"
-            '[:project [{$column_1$ subquery__1_$exists$}]
-              [:apply
-               :cross-join
-               {x__2_y ?x__2_y}
-               #{}
-               [:select (= x__3_z 10)
-                [:rename x__3 [:scan [y {z (= z 10)}]]]]
-               [:top {:limit 1}
-                [:union-all
-                 [:project [{subquery__1_$exists$ true}]
-                  [:rename subquery__1
-                   [:rename {y__3_z z}
-                    [:project [y__3_z]
-                     [:select (= y__3_z ?x__2_y)
-                      [:rename y__3 [:scan [{z (= z ?x__2_y)}]]]]]]]]
-                 [:table [{:subquery__1_$exists$ false}]]]]]])
 
     ;; ALL as expression in WHERE clause:
     (valid? "SELECT x.y FROM x WHERE x.z > ALL (SELECT y.z FROM y)"
