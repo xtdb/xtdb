@@ -143,6 +143,17 @@
 
 (declare plan)
 
+(defn- correlated-column->param [qe scope-id]
+  (->> (for [{:keys [^long table-scope-id] :as column-reference} (sem/all-column-references qe)
+             :when (<= table-scope-id scope-id)
+             :let [column-reference-symbol (column-reference-symbol column-reference)
+                   param-symbol (symbol (str "?" column-reference-symbol))]]
+         [(if (= table-scope-id scope-id)
+            column-reference-symbol
+            param-symbol)
+          param-symbol])
+       (into {})))
+
 (defn- wrap-with-subquery-apply [z relation]
   (letfn [(build-apply [column->param projected-columns relation subquery-plan]
             [:apply
@@ -151,16 +162,6 @@
              projected-columns
              relation
              (w/postwalk-replace column->param subquery-plan)])
-          (column->param [qe scope-id]
-            (->> (for [{:keys [^long table-scope-id] :as column-reference} (sem/all-column-references qe)
-                       :when (<= table-scope-id scope-id)
-                       :let [column-reference-symbol (column-reference-symbol column-reference)
-                             param-symbol (symbol (str "?" column-reference-symbol))]]
-                   [(if (= table-scope-id scope-id)
-                      column-reference-symbol
-                      param-symbol)
-                    param-symbol])
-                 (into {})))
           (wrap-with-exists [exists-column relation]
             [:top {:limit 1}
              [:union-all
@@ -191,7 +192,7 @@
            [:subquery ^:z qe]
            (let [qe-id (sem/id qe)
                  subquery-plan [:rename (symbol (str "subquery__" qe-id)) (plan qe)]
-                 column->param (column->param qe scope-id)
+                 column->param (correlated-column->param qe scope-id)
                  subquery-type (sem/subquery-type sq)
                  projected-columns (set (subquery-projection-symbols "subquery" qe))]
              (build-apply
@@ -209,7 +210,7 @@
                  subquery-plan (wrap-with-exists
                                 exists-column
                                 [:rename (symbol (str "subquery__" qe-id)) (plan qe)])
-                 column->param (column->param qe scope-id)
+                 column->param (correlated-column->param qe scope-id)
                  projected-columns #{exists-column}]
              (build-apply
               column->param
@@ -233,8 +234,8 @@
                                 exists-column
                                 [:select predicate
                                  [:rename (symbol (str "subquery__" qe-id)) (plan qe)]])
-                 column->param (merge (column->param qe scope-id)
-                                      (column->param rvp scope-id))
+                 column->param (merge (correlated-column->param qe scope-id)
+                                      (correlated-column->param rvp scope-id))
                  projected-columns #{exists-column}]
              (build-apply
               column->param
@@ -257,8 +258,8 @@
                                 exists-column
                                 [:select predicate
                                  [:rename (symbol (str "subquery__" qe-id)) (plan qe)]])
-                 column->param (merge (column->param qe scope-id)
-                                      (column->param rvp scope-id))
+                 column->param (merge (correlated-column->param qe scope-id)
+                                      (correlated-column->param rvp scope-id))
                  projected-columns #{exists-column}]
              (build-apply
               column->param
@@ -422,6 +423,16 @@
        [:scan (vec (for [{:keys [identifier]} projection]
                      (symbol identifier)))])]))
 
+(defn- build-lateral-derived-table [tp qe]
+  (let [scope-id (sem/id (sem/scope-element tp))
+        column->param (correlated-column->param qe scope-id)]
+    [:apply
+     :cross-join
+     column->param
+     (set (map qualified-projection-symbol (first (sem/projected-columns tp))))
+     nil
+     (w/postwalk-replace column->param (build-table-primary tp))]))
+
 (defn- build-table-reference-list [trl]
   (reduce
    (fn [acc table]
@@ -429,6 +440,10 @@
        [:unwind cve [:project projection nil]]
        ;;=>
        [:unwind cve [:project projection acc]]
+
+       [:apply :cross-join columns dependent-column-names nil dependent-relation]
+       ;;=>
+       [:apply :cross-join columns dependent-column-names acc dependent-relation]
 
        [:cross-join acc table]))
    (r/collect-stop
@@ -542,6 +557,9 @@
 
      [:table_primary [:collection_derived_table _ _] _ _ _]
      (build-collection-derived-table z)
+
+     [:table_primary [:lateral_derived_table _ [:subquery ^:z qe]] _ _]
+     (build-lateral-derived-table z qe)
 
      [:table_primary _]
      ;;=>

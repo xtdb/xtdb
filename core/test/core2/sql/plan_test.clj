@@ -286,8 +286,7 @@
   ;; Correlated subquery:
   (valid? "SELECT (1 = (SELECT foo.bar = x.y FROM foo)) AS some_column FROM x WHERE x.y = 1"
           '[:project [{some_column (= 1 subquery__4_$column_1$)}]
-            [:apply
-             :cross-join
+            [:apply :cross-join
              {x__8_y ?x__8_y}
              #{subquery__4_$column_1$}
              [:select (= x__8_y 1)
@@ -302,8 +301,7 @@
   (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
           '[:rename {x__3_y y}
             [:project [x__3_y]
-             [:apply
-              :semi-join
+             [:apply :semi-join
               {x__3_y ?x__3_y}
               #{}
               [:select (= x__3_z 10)
@@ -317,8 +315,7 @@
   ;; EXISTS as expression in SELECT clause:
   (valid? "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"
           '[:project [{$column_1$ subquery__3_$exists$}]
-            [:apply
-             :cross-join
+            [:apply :cross-join
              {x__7_y ?x__7_y}
              #{subquery__3_$exists$}
              [:select (= x__7_z 10)
@@ -337,8 +334,7 @@
   (valid? "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
           '[:rename {x__3_y y}
             [:project [x__3_y]
-             [:apply
-              :anti-join
+             [:apply :anti-join
               {x__3_y ?x__3_y}
               #{}
               [:select (= x__3_z 10) [:rename x__3 [:scan [y {z (= z 10)}]]]]
@@ -415,28 +411,26 @@
                   [:rename {y__5_z z} [:rename y__5 [:scan [z]]]]]]]
                [:table [{:subquery__3_$exists$ false}]]]]]])
 
-  (comment
+  ;; LATERAL derived table
+  (valid? "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
+          '[:rename {x__3_y y, y__4_z z}
+            [:project [x__3_y y__4_z]
+             [:apply :cross-join
+              {x__3_y ?x__3_y}
+              #{y__4_z}
+              [:rename x__3 [:scan [y]]]
+              [:rename y__4
+               [:rename {z__7_z z}
+                [:project [z__7_z]
+                 [:select (= z__7_z ?x__3_y)
+                  [:rename z__7 [:scan [{z (= z ?x__3_y)}]]]]]]]]]])
 
-    ;; LATERAL derived table
-    (valid? "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
-            '[:rename {x__3_y y, y__4_z z}
-              [:project [x__3_y y__4_z]
-               [:apply
-                :cross-join
-                {x__3_y ?x__3_y}
-                #{y__4_z}
-                [:rename x__3 [:scan [y]]]
-                [:rename y__4
-                 [:rename {z__7_z z}
-                  [:project [z__7_z]
-                   [:select (= z__7_z ?x__3_y)
-                    [:rename z__7 [:scan [z]]]]]]]]]])
+  (comment
 
     ;; Row subquery (won't work in execution layer, needs expression
     ;; support in table)
     (valid? "VALUES (1, 2), (SELECT x.a, x.b FROM x WHERE x.a = 10)"
-            '[:apply
-              :cross-join
+            '[:apply :cross-join
               {subquery__1_$row$ ?subquery__1_$row$}
               #{}
               [:project [{subquery__1_$row$ {:a a :b b}}]
