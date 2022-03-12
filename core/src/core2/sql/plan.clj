@@ -59,7 +59,7 @@
     (symbol (str "$" prefix relation-id-delimiter query-id relation-prefix-delimiter (sem/id z) "$"))))
 
 (defn- exists-symbol [qe]
-  (id-symbol "subquery" (sem/id qe) "$exists$"))
+  (vary-meta (id-symbol "subquery" (sem/id qe) "$exists$") assoc :exists? true))
 
 (defn- subquery-reference-symbol [qe]
   (table-reference-symbol "subquery" (sem/id qe)))
@@ -646,6 +646,11 @@
        (= '= (first predicate))
        (= 3 (count predicate))))
 
+(defn- not-predicate? [predicate]
+  (and (sequential? predicate)
+       (= 'not (first predicate))
+       (= 2 (count predicate))))
+
 (defn- build-join-map [predicate lhs rhs]
   (when (equals-predicate? predicate)
     (let [[_ x y] predicate
@@ -707,14 +712,12 @@
     (cond
       (and (symbol? predicate)
            (= #{predicate} dependent-column-names)
-           (str/ends-with? (name predicate) "$exists$"))
+           (:exists? (meta predicate)))
       [:apply :semi-join columns #{} independent-relation dependent-relation]
 
-      (and (sequential? predicate)
-           (= 'not (first predicate))
-           (= 2 (count predicate))
+      (and (not-predicate? predicate)
            (= #{(second predicate)} dependent-column-names)
-           (str/ends-with? (name (second predicate)) "$exists$"))
+           (:exists? (meta (second predicate))))
       [:apply :anti-join columns #{} independent-relation dependent-relation])))
 
 (defn- push-selection-down-past-apply [z]
