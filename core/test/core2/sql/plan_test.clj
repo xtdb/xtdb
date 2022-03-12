@@ -404,6 +404,23 @@
                      [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
 
   (comment
+    (t/testing "decorrelation"
+      ;; 2001 paper
+      (valid? "select c.custkey
+from customer c
+where 1000000 <
+(select sum(o.totalprice)
+from orders o
+where o.custkey = c.custkey)"
+              [])
+
+      ;; 2000 paper
+      (valid? "select customers.name, (select count(*) from orders where customers.custno = orders.custno)
+from customers
+where customers.country <> all
+(select salesp.country from salesp)"
+              []))
+
     (t/testing "Row subquery"
       ;; Row subquery (won't work in execution layer, needs expression
       ;; support in table)

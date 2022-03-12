@@ -123,6 +123,9 @@
      [:aggregate_function _]
      (aggregate-symbol "agg_out" z)
 
+     [:aggregate_function "COUNT" [:asterisk "*"]]
+     (aggregate-symbol "agg_out" z)
+
      [:subquery ^:z qe]
      (let [subquery-type (sem/subquery-type z)]
        (case (:type subquery-type)
@@ -317,12 +320,19 @@
                       (r/zmatch aggregate
                         [:aggregate_function [:general_set_function [:computational_operation sf] _]]
                         {(aggregate-symbol "agg_out" aggregate)
-                         (list (symbol (str/lower-case sf)) (aggregate-symbol "agg_in" aggregate))}))
+                         (list (symbol (str/lower-case sf)) (aggregate-symbol "agg_in" aggregate))}
+
+                        [:aggregate_function "COUNT" [:asterisk "*"]]
+                        {(aggregate-symbol "agg_out" aggregate)
+                         (list 'count (aggregate-symbol "agg_in" aggregate))}))
                     (into grouping-columns))
      [:project (->> (for [aggregate aggregates]
                       (r/zmatch aggregate
                         [:aggregate_function [:general_set_function _ ^:z ve]]
-                        {(aggregate-symbol "agg_in" aggregate) (expr ve)}))
+                        {(aggregate-symbol "agg_in" aggregate) (expr ve)}
+
+                        [:aggregate_function "COUNT" [:asterisk "*"]]
+                        {(aggregate-symbol "agg_in" aggregate) 1}))
                     (into grouping-columns))
       relation]]))
 
