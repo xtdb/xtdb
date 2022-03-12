@@ -737,6 +737,30 @@
        [:select predicate independent-relation]
        dependent-relation])))
 
+(defn- push-selection-down-past-rename [z]
+  (r/zmatch z
+    [:select predicate
+     [:rename columns
+      relation]]
+    ;;=>
+    (cond
+      (and (symbol? columns)
+           (set/subset? (expr-table-ids predicate)
+                        (table-ids-in-subtree [:rename columns relation])))
+      (let [column->unqualified-column (->> (for [c (expr-symbols predicate)]
+                                              [c (with-meta (symbol (get-in (meta c) [:column-reference :column]))
+                                                   (meta c))])
+                                            (into {}))]
+        [:rename columns
+         [:select (w/postwalk-replace column->unqualified-column predicate)
+          relation]])
+
+      (and (map? columns)
+           (set/subset? (expr-symbols predicate) (set (vals columns))))
+      [:rename columns
+       [:select (w/postwalk-replace (set/map-invert columns) predicate)
+        relation]])))
+
 (defn- push-selection-down-past-join [z]
   (letfn [(push-selection-down [predicate lhs rhs]
             (let [expr-table-ids (expr-table-ids predicate)
@@ -842,7 +866,7 @@
 (defn- add-selection-to-scan-predicate [z]
   (r/zmatch z
     [:select predicate
-     [:rename prefix [:scan columns]]]
+     [:scan columns]]
     ;;=>
     (let [new-columns (reduce
                        (fn [acc predicate]
@@ -853,18 +877,17 @@
                                         :let [column (if (map? column-or-select)
                                                        (key (first column-or-select))
                                                        column-or-select)]]
-                                    (if (= single-symbol (symbol (str prefix relation-prefix-delimiter column)))
-                                      (let [predicate (w/postwalk-replace {single-symbol column} predicate)]
-                                        (if (map? column-or-select)
-                                          (update column-or-select column (partial merge-conjunctions predicate))
-                                          {column predicate}))
+                                    (if (= single-symbol column)
+                                      (if (map? column-or-select)
+                                        (update column-or-select column (partial merge-conjunctions predicate))
+                                        {column predicate})
                                       column-or-select)))
                              acc)))
                        columns
                        (conjunction-clauses predicate))]
       (when-not (= columns new-columns)
         [:select predicate
-         [:rename prefix [:scan new-columns]]]))))
+         [:scan new-columns]]))))
 
 (def optimize-plan
   (some-fn promote-selection-cross-join-to-join
@@ -872,6 +895,7 @@
            promote-apply-mode
            push-selection-down-past-join
            push-selection-down-past-apply
+           push-selection-down-past-rename
            push-selections-with-fewer-variables-down
            push-selections-with-equals-down
            merge-selections-with-same-variables

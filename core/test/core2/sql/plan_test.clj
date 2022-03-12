@@ -12,34 +12,31 @@
 
 (t/deftest test-basic-queries
   (valid? "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate = 1960"
-          '[:rename
-            {si__3_movieTitle movieTitle}
-            [:project
-             [si__3_movieTitle]
+          '[:rename {si__3_movieTitle movieTitle}
+            [:project [si__3_movieTitle]
              [:join {si__3_starName ms__4_name}
               [:rename si__3 [:scan [movieTitle starName]]]
-              [:select (= ms__4_birthdate 1960)
-               [:rename ms__4 [:scan [name {birthdate (= birthdate 1960)}]]]]]]])
+              [:rename ms__4
+               [:select (= birthdate 1960)
+                [:scan [name {birthdate (= birthdate 1960)}]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950"
-          '[:rename
-            {si__3_movieTitle movieTitle}
-            [:project
-             [si__3_movieTitle]
+          '[:rename {si__3_movieTitle movieTitle}
+            [:project [si__3_movieTitle]
              [:join {si__3_starName ms__4_name}
               [:rename si__3 [:scan [movieTitle starName]]]
-              [:select (and (< ms__4_birthdate 1960) (> ms__4_birthdate 1950))
-               [:rename ms__4 [:scan [name {birthdate (and (< birthdate 1960) (> birthdate 1950))}]]]]]]])
+              [:rename ms__4
+               [:select (and (< birthdate 1960) (> birthdate 1950))
+                [:scan [name {birthdate (and (< birthdate 1960) (> birthdate 1950))}]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.name = 'Foo'"
-          '[:rename
-            {si__3_movieTitle movieTitle}
-            [:project
-             [si__3_movieTitle]
+          '[:rename {si__3_movieTitle movieTitle}
+            [:project [si__3_movieTitle]
              [:join {si__3_starName ms__4_name}
               [:rename si__3 [:scan [movieTitle starName]]]
-              [:select (and (< ms__4_birthdate 1960) (= ms__4_name "Foo"))
-               [:rename ms__4 [:scan [{name (= name "Foo")} {birthdate (< birthdate 1960)}]]]]]]])
+              [:rename ms__4
+               [:select (and (< birthdate 1960) (= name "Foo"))
+                [:scan [{name (= name "Foo")} {birthdate (< birthdate 1960)}]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name"
           '[:rename {si__3_movieTitle movieTitle}
@@ -49,8 +46,9 @@
               [:rename m__4
                [:rename {ms__7_name name}
                 [:project [ms__7_name]
-                 [:select (= ms__7_birthdate 1960)
-                  [:rename ms__7 [:scan [name {birthdate (= birthdate 1960)}]]]]]]]]]])
+                 [:rename ms__7
+                  [:select (= birthdate 1960)
+                   [:scan [name {birthdate (= birthdate 1960)}]]]]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM Movie AS m JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear"
           '[:rename {si__4_movieTitle movieTitle}
@@ -113,78 +111,64 @@
                [:rename si__6 [:scan [name]]]]]]])
 
   (valid? "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname"
-          '[:rename
-            {si__3_name name si__3_lastname lastname}
-            [:project
-             [si__3_name si__3_lastname]
-             [:select (= si__3_name si__3_lastname)
-              [:rename si__3 [:scan [name lastname]]]]]])
+          '[:rename {si__3_name name si__3_lastname lastname}
+            [:project [si__3_name si__3_lastname]
+             [:rename si__3
+              [:select (= name lastname)
+               [:scan [name lastname]]]]]])
 
   (valid? "SELECT DISTINCT si.movieTitle FROM StarsIn AS si"
           '[:distinct
-            [:rename
-             {si__3_movieTitle movieTitle}
+            [:rename {si__3_movieTitle movieTitle}
              [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si"
           '[:difference
-            [:rename
-             {si__3_name name}
+            [:rename {si__3_name name}
              [:rename si__3 [:scan [name]]]]
-            [:rename
-             {si__5_name name}
+            [:rename {si__5_name name}
              [:rename si__5 [:scan [name]]]]])
 
 
   (valid? "SELECT si.name FROM StarsIn AS si UNION ALL SELECT si.name FROM StarsIn AS si"
           '[:union-all
-            [:rename
-             {si__3_name name}
+            [:rename {si__3_name name}
              [:rename si__3 [:scan [name]]]]
-            [:rename
-             {si__5_name name}
+            [:rename {si__5_name name}
              [:rename si__5 [:scan [name]]]]])
 
   (valid? "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si"
           '[:intersect
-            [:rename
-             {si__3_name name}
+            [:rename {si__3_name name}
              [:rename si__3 [:scan [name]]]]
-            [:rename
-             {si__5_name name}
+            [:rename {si__5_name name}
              [:rename si__5 [:scan [name]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si"
           '[:distinct
             [:union-all
-             [:rename
-              {si__3_movieTitle movieTitle}
+             [:rename {si__3_movieTitle movieTitle}
               [:rename si__3 [:scan [movieTitle]]]]
-             [:rename
-              {si__5_name movieTitle}
+             [:rename {si__5_name movieTitle}
               [:rename si__5 [:scan [name]]]]]])
 
   (valid? "SELECT si.name FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si ORDER BY name"
           '[:order-by [{name :asc}]
             [:distinct
              [:union-all
-              [:rename
-               {si__3_name name}
+              [:rename {si__3_name name}
                [:rename si__3 [:scan [name]]]]
-              [:rename
-               {si__5_name name}
+              [:rename {si__5_name name}
                [:rename si__5 [:scan [name]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY"
           '[:top {:limit 10}
-            [:rename
-             {si__3_movieTitle movieTitle}
+            [:rename {si__3_movieTitle movieTitle}
              [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS"
           '[:top {:skip 5}
-            [:rename
-             {si__3_movieTitle movieTitle}
+            [:rename {si__3_movieTitle movieTitle}
              [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS FETCH FIRST 10 ROWS ONLY"
@@ -195,37 +179,32 @@
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle"
           '[:order-by [{movieTitle :asc}]
-            [:rename
-             {si__3_movieTitle movieTitle}
+            [:rename {si__3_movieTitle movieTitle}
              [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle OFFSET 100 ROWS"
           '[:top {:skip 100}
             [:order-by [{movieTitle :asc}]
-             [:rename
-              {si__3_movieTitle movieTitle}
+             [:rename {si__3_movieTitle movieTitle}
               [:rename si__3 [:scan [movieTitle]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY movieTitle DESC"
           '[:order-by [{movieTitle :desc}]
-            [:rename
-             {si__3_movieTitle movieTitle}
+            [:rename {si__3_movieTitle movieTitle}
              [:rename si__3 [:scan [movieTitle]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle"
           '[:project [movieTitle]
             [:order-by [{$order_by__1_1$ :desc} {movieTitle :asc}]
              [:project [movieTitle {$order_by__1_1$ (= si__3_year "foo")}]
-              [:rename
-               {si__3_movieTitle movieTitle}
+              [:rename {si__3_movieTitle movieTitle}
                [:rename si__3 [:scan [movieTitle year]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year"
           '[:project [movieTitle]
             [:order-by [{$order_by__1_1$ :asc}]
              [:project [movieTitle {$order_by__1_1$ si__3_year}]
-              [:rename
-               {si__3_movieTitle movieTitle}
+              [:rename {si__3_movieTitle movieTitle}
                [:rename si__3 [:scan [movieTitle year]]]]]]])
 
   (valid? "SELECT si.year = 'foo' FROM StarsIn AS si ORDER BY si.year = 'foo'"
@@ -234,19 +213,15 @@
              [:rename si__4 [:scan [year]]]]])
 
   (valid? "SELECT film.name FROM StarsIn AS si, UNNEST(si.films) AS film(name)"
-          '[:rename
-            {film__4_name name}
-            [:project
-             [film__4_name]
+          '[:rename {film__4_name name}
+            [:project [film__4_name]
              [:unwind film__4_name
               [:project [si__3_films {film__4_name si__3_films}]
                [:rename si__3 [:scan [films]]]]]]])
 
   (valid? "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film"
-          '[:rename
-            {si__3_films films film__4_$column_1$ $column_2$}
-            [:project
-             [si__3_films film__4_$column_1$]
+          '[:rename {si__3_films films film__4_$column_1$ $column_2$}
+            [:project [si__3_films film__4_$column_1$]
              [:unwind film__4_$column_1$
               [:project [si__3_films {film__4_$column_1$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]]))
@@ -260,8 +235,9 @@
     (valid? "SELECT (1 = (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"
             '[:project [{some_column (= 1 subquery__4_$column_1$)}]
               [:cross-join
-               [:select (= x__8_y 1)
-                [:rename x__8 [:scan [{y (= y 1)}]]]]
+               [:rename x__8
+                [:select (= y 1)
+                 [:scan [{y (= y 1)}]]]]
                [:max-1-row
                 [:rename subquery__4
                  [:project [{$column_1$ $agg_out__5_6$}]
@@ -285,11 +261,10 @@
   (t/testing "Correlated scalar subquery in SELECT"
     (valid? "SELECT (1 = (SELECT foo.bar = x.y FROM foo)) AS some_column FROM x WHERE x.y = 1"
             '[:project [{some_column (= 1 subquery__4_$column_1$)}]
-              [:apply :cross-join
-               {x__8_y ?x__8_y}
-               #{subquery__4_$column_1$}
-               [:select (= x__8_y 1)
-                [:rename x__8 [:scan [{y (= y 1)}]]]]
+              [:apply :cross-join {x__8_y ?x__8_y} #{subquery__4_$column_1$}
+               [:rename x__8
+                [:select (= y 1)
+                 [:scan [{y (= y 1)}]]]]
                [:max-1-row
                 [:rename subquery__4
                  [:project
@@ -300,129 +275,133 @@
     (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
             '[:rename {x__3_y y}
               [:project [x__3_y]
-               [:apply :semi-join
-                {x__3_y ?x__3_y}
-                #{}
-                [:select (= x__3_z 10)
-                 [:rename x__3 [:scan [y {z (= z 10)}]]]]
+               [:apply :semi-join {x__3_y ?x__3_y} #{}
+                [:rename x__3
+                 [:select (= z 10)
+                  [:scan [y {z (= z 10)}]]]]
                 [:rename subquery__4
                  [:rename {y__6_z z}
                   [:project [y__6_z]
-                   [:select (= y__6_z ?x__3_y)
-                    [:rename y__6 [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
+                   [:rename y__6
+                    [:select (= z ?x__3_y)
+                     [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
 
   (t/testing "EXISTS as expression in SELECT"
     (valid? "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"
             '[:project [{$column_1$ subquery__3_$exists$}]
-              [:apply :cross-join
-               {x__7_y ?x__7_y}
-               #{subquery__3_$exists$}
-               [:select (= x__7_z 10)
-                [:rename x__7 [:scan [y {z (= z 10)}]]]]
+              [:apply :cross-join {x__7_y ?x__7_y} #{subquery__3_$exists$}
+               [:rename x__7
+                [:select (= z 10)
+                 [:scan [y {z (= z 10)}]]]]
                [:top {:limit 1}
                 [:union-all
                  [:project [{subquery__3_$exists$ true}]
                   [:rename subquery__3
                    [:rename {y__5_z z}
                     [:project [y__5_z]
-                     [:select (= y__5_z ?x__7_y)
-                      [:rename y__5 [:scan [{z (= z ?x__7_y)}]]]]]]]]
+                     [:rename y__5
+                      [:select (= z ?x__7_y)
+                       [:scan [{z (= z ?x__7_y)}]]]]]]]]
                  [:table [{:subquery__3_$exists$ false}]]]]]]))
 
   (t/testing "NOT EXISTS in WHERE"
     (valid? "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
             '[:rename {x__3_y y}
               [:project [x__3_y]
-               [:apply :anti-join
-                {x__3_y ?x__3_y}
-                #{}
-                [:select (= x__3_z 10) [:rename x__3 [:scan [y {z (= z 10)}]]]]
+               [:apply :anti-join {x__3_y ?x__3_y} #{}
+                [:rename x__3
+                 [:select (= z 10)
+                  [:scan [y {z (= z 10)}]]]]
                 [:rename subquery__4
                  [:rename {y__6_z z}
                   [:project [y__6_z]
-                   [:select (= y__6_z ?x__3_y)
-                    [:rename y__6 [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
+                   [:rename y__6
+                    [:select (= z ?x__3_y)
+                     [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
 
   (t/testing "IN in WHERE"
     (valid? "SELECT x.y FROM x WHERE x.z IN (SELECT y.z FROM y)"
             '[:rename {x__3_y y}
               [:project [x__3_y]
-               [:apply :semi-join
-                {x__3_z ?x__3_z}
-                #{}
+               [:apply :semi-join {x__3_z ?x__3_z} #{}
                 [:rename x__3 [:scan [y z]]]
-                [:select (= ?x__3_z subquery__4_z)
-                 [:rename  subquery__4
-                  [:rename {y__6_z z} [:rename y__6 [:scan [z]]]]]]]]]))
+                [:rename subquery__4
+                 [:rename {y__6_z z}
+                  [:rename y__6
+                   [:select (= ?x__3_z z)
+                    [:scan [{z (= ?x__3_z z)}]]]]]]]]]))
 
   (t/testing "NOT IN in WHERE"
     (valid? "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.z FROM y)"
             '[:rename {x__3_y y}
               [:project [x__3_y]
-               [:apply :anti-join
-                {x__3_z ?x__3_z}
-                #{}
+               [:apply :anti-join {x__3_z ?x__3_z} #{}
                 [:rename x__3 [:scan [y z]]]
-                [:select (= ?x__3_z subquery__4_z)
-                 [:rename  subquery__4
-                  [:rename {y__6_z z} [:rename y__6 [:scan [z]]]]]]]]]))
+                [:rename subquery__4
+                 [:rename {y__6_z z}
+                  [:rename y__6
+                   [:select (= ?x__3_z z)
+                    [:scan [{z (= ?x__3_z z)}]]]]]]]]]))
 
   (t/testing "ALL in WHERE"
     (valid? "SELECT x.y FROM x WHERE x.z > ALL (SELECT y.z FROM y)"
             '[:rename {x__3_y y}
               [:project [x__3_y]
-               [:apply :anti-join
-                {x__3_z ?x__3_z}
-                #{}
+               [:apply :anti-join {x__3_z ?x__3_z} #{}
                 [:rename x__3 [:scan [y z]]]
-                [:select (or (<= ?x__3_z subquery__4_z)
-                             (nil? ?x__3_z)
-                             (nil? subquery__4_z))
-                 [:rename subquery__4
-                  [:rename {y__6_z z} [:rename y__6 [:scan [z]]]]]]]]]))
+                [:rename subquery__4
+                 [:rename {y__6_z z}
+                  [:rename y__6
+                   [:select (or (<= ?x__3_z z)
+                                (nil? ?x__3_z)
+                                (nil? z))
+                    [:scan [{z (or (<= ?x__3_z z)
+                                   (nil? ?x__3_z)
+                                   (nil? z))}]]]]]]]]]))
 
   (t/testing "ANY in WHERE"
     (valid? "SELECT x.y FROM x WHERE (x.z = 1) > ANY (SELECT y.z FROM y)"
             '[:rename {x__3_y y}
               [:project [x__3_y]
-               [:apply :semi-join
-                {x__3_z ?x__3_z}
-                #{}
+               [:apply :semi-join {x__3_z ?x__3_z} #{}
                 [:rename x__3 [:scan [y z]]]
-                [:select (> (= ?x__3_z 1) subquery__5_z)
-                 [:rename subquery__5
-                  [:rename {y__7_z z} [:rename y__7 [:scan [z]]]]]]]]]))
+                [:rename subquery__5
+                 [:rename {y__7_z z}
+                  [:rename y__7
+                   [:select (> (= ?x__3_z 1) z)
+                    [:scan [{z (> (= ?x__3_z 1) z)}]]]]]]]]]))
 
   (t/testing "ALL as expression in SELECT"
     (valid? "SELECT x.z <= ALL (SELECT y.z FROM y) FROM x"
             '[:project [{$column_1$ (not subquery__3_$exists$)}]
-              [:apply :cross-join
-               {x__6_z ?x__6_z}
-               #{subquery__3_$exists$}
+              [:apply :cross-join {x__6_z ?x__6_z} #{subquery__3_$exists$}
                [:rename x__6 [:scan [z]]]
                [:top {:limit 1}
                 [:union-all
                  [:project [{subquery__3_$exists$ true}]
-                  [:select (or (> ?x__6_z subquery__3_z)
-                               (nil? ?x__6_z)
-                               (nil? subquery__3_z))
-                   [:rename  subquery__3
-                    [:rename {y__5_z z} [:rename y__5 [:scan [z]]]]]]]
+                  [:rename subquery__3
+                   [:rename {y__5_z z}
+                    [:rename y__5
+                     [:select (or (> ?x__6_z z)
+                                  (nil? ?x__6_z)
+                                  (nil? z))
+                      [:scan [{z (or (> ?x__6_z z)
+                                     (nil? ?x__6_z)
+                                     (nil? z))}]]]]]]]
                  [:table [{:subquery__3_$exists$ false}]]]]]]))
 
   (t/testing "LATERAL derived table"
     (valid? "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
             '[:rename {x__3_y y, y__4_z z}
               [:project [x__3_y y__4_z]
-               [:apply :cross-join
-                {x__3_y ?x__3_y}
-                #{y__4_z}
+               [:apply :cross-join {x__3_y ?x__3_y} #{y__4_z}
                 [:rename x__3 [:scan [y]]]
                 [:rename y__4
                  [:rename {z__7_z z}
                   [:project [z__7_z]
-                   [:select (= z__7_z ?x__3_y)
-                    [:rename z__7 [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
+                   [:rename z__7
+                    [:select (= z ?x__3_y)
+                     [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
 
   (comment
     (t/testing "Row subquery"
