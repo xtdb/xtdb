@@ -789,6 +789,14 @@
        (= '= (first predicate))
        (= 3 (count predicate))))
 
+(defn- all-predicate? [predicate]
+  (and (sequential? predicate)
+       (= 'or (first predicate))
+       (equals-predicate? (second predicate))
+       (= 'nil? (first (nth predicate 2)))
+       (= 'nil? (first (nth predicate 3)))
+       (= 4 (count predicate))))
+
 (defn- not-predicate? [predicate]
   (and (sequential? predicate)
        (= 'not (first predicate))
@@ -1105,9 +1113,12 @@
     [:apply mode columns dependent-column-names independent-relation [:rename rename-columns [:select predicate dependent-relation]]]
     ;;=>
     (when (or (= :cross-join mode)
-              (equals-predicate? predicate))
+              (equals-predicate? predicate)
+              (all-predicate? predicate))
       [:rename rename-columns
-       [:select (w/postwalk-replace (set/map-invert columns) predicate)
+       [:select (w/postwalk-replace (set/map-invert columns) (if (all-predicate? predicate)
+                                                               (second predicate)
+                                                               predicate))
         (let [columns (->> columns
                            (filter (comp (expr-correlated-symbols dependent-relation) val))
                            (into {}))]
@@ -1116,8 +1127,11 @@
     [:apply mode columns dependent-column-names independent-relation [:select predicate dependent-relation]]
     ;;=>
     (when (or (= :cross-join mode)
-              (equals-predicate? predicate))
-      [:select (w/postwalk-replace (set/map-invert columns) predicate)
+              (equals-predicate? predicate)
+              (all-predicate? predicate))
+      [:select (w/postwalk-replace (set/map-invert columns) (if (all-predicate? predicate)
+                                                              (second predicate)
+                                                              predicate))
        (let [columns (->> columns
                           (filter (comp (expr-correlated-symbols dependent-relation) val))
                           (into {}))]
@@ -1201,10 +1215,11 @@
      [:select predicate-2
       relation]]
     ;;=>
-    (when (and (not-empty (expr-correlated-symbols predicate-2))
-               (or (empty? (expr-correlated-symbols predicate-1))
-                   (and (equals-predicate? predicate-2)
-                        (not (equals-predicate? predicate-1)))))
+    (when (or (:exists? (meta predicate-1))
+              (and (not-empty (expr-correlated-symbols predicate-2))
+                   (or (empty? (expr-correlated-symbols predicate-1))
+                       (and (equals-predicate? predicate-2)
+                            (not (equals-predicate? predicate-1))))))
       [:select predicate-2
        [:select predicate-1
         relation]])

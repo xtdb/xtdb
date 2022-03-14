@@ -420,54 +420,38 @@
                       [:left-outer-join {c__3_custkey o__8_custkey}
                        [:project [c__3_custkey {$row_number$ (row_number)}]
                         [:rename c__3 [:scan [custkey]]]]
-                       [:rename o__8 [:scan [totalprice custkey]]]]]]]]]]])))
-
-  (comment
+                       [:rename o__8 [:scan [totalprice custkey]]]]]]]]]]]))
 
     ;; https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf "Parameterized Queries and Nesting Equivalences"
-    (t/testing "decorrelation"
-      (valid? "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
+    (valid? "SELECT * FROM customers WHERE customers.country = 'Mexico' AND EXISTS (SELECT * FROM orders WHERE customers.custno = orders.custno)"
+            '[:rename {customers__3_country country, customers__3_custno custno}
+              [:project [customers__3_country customers__3_custno]
+               [:semi-join {customers__3_custno subquery__5_custno}
+                [:rename customers__3
+                 [:select (= country "Mexico")
+                  [:scan [{country (= country "Mexico")} custno]]]]
+                [:rename subquery__5
+                 [:rename {orders__7_custno custno}
+                  [:rename orders__7 [:scan [custno]]]]]]]])
+
+    (valid? "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
 FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)"
-              '[:rename {customers__8_name name}
-                [:project [customers__8_name {$column_2$ subquery__3_$column_1$}]
-                 [:rename subquery__3
-                  [:project [customers__8_name customers__8_custno customers__8_country {$column_1$ $agg_out__4_5$}]
-                   [:group-by [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_out__4_5$ (count $agg_in__4_5$)}]
-                    [:project [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_in__4_5$ 1}]
-                     [:left-outer-join {customers__8_custno orders__6_custno}
-                      [:project [customers__8_name customers__8_custno customers__8_country {$row_number$ (row_number)}]
-                       [:apply :anti-join {customers__8_country ?customers__8_country} #{}
-                        [:rename customers__8 [:scan [name custno country]]]
-                        [:rename subquery__9
-                         [:rename {salesp__11_country country}
-                          [:rename salesp__11
-                           [:select (or (= ?customers__8_country country)
-                                        (nil? ?customers__8_country)
-                                        (nil? country))
-                            [:scan [{country (or (= ?customers__8_country country)
-                                                 (nil? ?customers__8_country)
-                                                 (nil? country))}]]]]]]]]
-                      [:rename orders__6 [:scan [custno]]]]]]]]]]
+            '[:rename {customers__8_name name}
+              [:project [customers__8_name {$column_2$ subquery__3_$column_1$}]
+               [:rename subquery__3
+                [:project [customers__8_name customers__8_custno customers__8_country {$column_1$ $agg_out__4_5$}]
+                 [:group-by [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_out__4_5$ (count $agg_in__4_5$)}]
+                  [:project [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_in__4_5$ 1}]
+                   [:left-outer-join {customers__8_custno orders__6_custno}
+                    [:project [customers__8_name customers__8_custno customers__8_country {$row_number$ (row_number)}]
+                     [:anti-join {customers__8_country subquery__9_country}
+                      [:rename customers__8 [:scan [name custno country]]]
+                      [:rename subquery__9
+                       [:rename {salesp__11_country country}
+                        [:rename salesp__11 [:scan [country]]]]]]]
+                    [:rename orders__6 [:scan [custno]]]]]]]]]]))
 
-
-              '[:rename {customers__8_name name}
-                [:project [customers__8_name {$column_2$ subquery__3_$column_1$}]
-                 [:apply :cross-join {customers__8_custno ?customers__8_custno} #{subquery__3_$column_1$}
-                  [:apply :anti-join {customers__8_country ?customers__8_country} #{}
-                   [:rename customers__8 [:scan [name custno country]]]
-                   [:rename subquery__9
-                    [:rename {salesp__11_country country}
-                     [:rename salesp__11
-                      [:select (or (= ?customers__8_country country) (nil? ?customers__8_country) (nil? country))
-                       [:scan [{country (or (= ?customers__8_country country) (nil? ?customers__8_country) (nil? country))}]]]]]]]
-                  [:max-1-row
-                   [:rename subquery__3
-                    [:project [{$column_1$ $agg_out__4_5$}]
-                     [:group-by [{$agg_out__4_5$ (count $agg_in__4_5$)}]
-                      [:project [{$agg_in__4_5$ 1}]
-                       [:rename orders__6
-                        [:select (= ?customers__8_custno custno)
-                         [:scan [{custno (= ?customers__8_custno custno)}]]]]]]]]]]]]))
+  (comment
 
     (t/testing "Row subquery"
       ;; Row subquery (won't work in execution layer, needs expression
