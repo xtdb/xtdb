@@ -182,7 +182,7 @@
      relation]
     [:table [{(keyword exists-column) false}]]]])
 
-(defn- flip-comparsion [co]
+(defn- flip-comparison [co]
   (case co
     < '>=
     <= '>
@@ -191,7 +191,8 @@
     = '<>
     <> '=))
 
-(defn- wrap-with-subquery-apply [z relation]
+;; TODO: deal with row subqueries.
+(defn- wrap-with-apply [z relation]
   (let [subqueries (r/collect-stop
                     (fn [z]
                       (r/zcase z
@@ -261,7 +262,7 @@
          (let [exists-symbol (exists-symbol qe)
                projection-symbol (first (subquery-projection-symbols qe))
                predicate (case quantifier
-                           :all `(~'or (~(flip-comparsion (symbol co))
+                           :all `(~'or (~(flip-comparison (symbol co))
                                         ~(expr rvp)
                                         ~projection-symbol)
                                   (~'nil? ~(expr rvp))
@@ -289,7 +290,7 @@
     (reduce
      (fn [acc predicate]
        [:select predicate acc])
-     (wrap-with-subquery-apply sc relation)
+     (wrap-with-apply sc relation)
      ((fn step [sc-expr]
         (if (and (sequential? sc-expr)
                  (= 'and (first sc-expr)))
@@ -395,7 +396,7 @@
                                       (qualified-projection-symbol projection)
                                       {(unqualified-projection-symbol projection)
                                        (expr (r/$ derived-column 1))})))
-        relation (wrap-with-subquery-apply sl (plan te))
+        relation (wrap-with-apply sl (plan te))
         qualified-project [:project qualified-projection relation]]
     (if (not-empty unqualified-rename-map)
       [:rename unqualified-rename-map qualified-project]
@@ -446,6 +447,9 @@
         projected-columns (set (map qualified-projection-symbol (first (sem/projected-columns tp))))]
     (build-apply column->param projected-columns nil (build-table-primary tp))))
 
+;; TODO: both UNNEST and LATERAL are only dealt with on top-level in
+;; FROM. UNNEST also needs to take potential subqueries in cve into
+;; account.
 (defn- build-table-reference-list [trl]
   (reduce
    (fn [acc table]
@@ -898,6 +902,24 @@
       (when-not (= columns new-columns)
         [:select predicate
          [:scan new-columns]]))))
+
+;; TODO: add potentially separate step before this dealing with the
+;; Apply unnesting rules. We'll skip any rule that duplicates the
+;; independent relation for now. These rules should be possible to
+;; implement using the current framework, but will need to take
+;; renames, parameters and attempting to move the right parts of the
+;; tree into place to ensure they fire properly. Things missed will
+;; still work, it will just stay as Apply operators, so one can chip
+;; away at this making it detect more cases over time.
+
+;; This will require us adding support for ROW_NUMBER() OVER() so we
+;; can generate unique rows when translating scalar group by. OVER is
+;; a valid (empty) window specification. This value is 1 based.
+;; Alternative ways of adding unique rows are adding an operator
+;; similar to unwind that has the same effect, but internal and
+;; unrelated to future window support. A third way is to use something
+;; like an UUID function to make rows unique, but this is
+;; non-deterministic.
 
 (def optimize-plan
   (some-fn promote-selection-cross-join-to-join

@@ -404,6 +404,9 @@
                      [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
 
   (comment
+
+    ;; NOTE: These expected trees are simply what's currently being
+    ;; generated, not the decorrelated target.
     (t/testing "decorrelation"
       ;; 2001 paper
       (valid? "select c.custkey
@@ -412,14 +415,43 @@ where 1000000 <
 (select sum(o.totalprice)
 from orders o
 where o.custkey = c.custkey)"
-              [])
+              '[:rename {c__3_custkey custkey}
+                [:project [c__3_custkey]
+                 [:select (< 1000000 subquery__5_$column_1$)
+                  [:apply :cross-join {c__3_custkey ?c__3_custkey} #{subquery__5_$column_1$}
+                   [:rename c__3 [:scan [custkey]]]
+                   [:max-1-row
+                    [:rename subquery__5
+                     [:project [{$column_1$ $agg_out__6_7$}]
+                      [:group-by [{$agg_out__6_7$ (sum $agg_in__6_7$)}]
+                       [:project [{$agg_in__6_7$ o__8_totalprice}]
+                        [:rename o__8
+                         [:select (= custkey ?c__3_custkey)
+                          [:scan [totalprice {custkey (= custkey ?c__3_custkey)}]]]]]]]]]]]]])
 
       ;; 2000 paper
       (valid? "select customers.name, (select count(*) from orders where customers.custno = orders.custno)
 from customers
 where customers.country <> all
 (select salesp.country from salesp)"
-              []))
+              '[:rename {customers__8_name name}
+                [:project [customers__8_name {$column_2$ subquery__3_$column_1$}]
+                 [:apply :cross-join {customers__8_custno ?customers__8_custno} #{subquery__3_$column_1$}
+                  [:apply :anti-join {customers__8_country ?customers__8_country} #{}
+                   [:rename customers__8 [:scan [name custno country]]]
+                   [:rename subquery__9
+                    [:rename {salesp__11_country country}
+                     [:rename salesp__11
+                      [:select (or (= ?customers__8_country country) (nil? ?customers__8_country) (nil? country))
+                       [:scan [{country (or (= ?customers__8_country country) (nil? ?customers__8_country) (nil? country))}]]]]]]]
+                  [:max-1-row
+                   [:rename subquery__3
+                    [:project [{$column_1$ $agg_out__4_5$}]
+                     [:group-by [{$agg_out__4_5$ (count $agg_in__4_5$)}]
+                      [:project [{$agg_in__4_5$ 1}]
+                       [:rename orders__6
+                        [:select (= ?customers__8_custno custno)
+                         [:scan [{custno (= ?customers__8_custno custno)}]]]]]]]]]]]]))
 
     (t/testing "Row subquery"
       ;; Row subquery (won't work in execution layer, needs expression
