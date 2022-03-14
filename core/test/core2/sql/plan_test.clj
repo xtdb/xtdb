@@ -433,6 +433,7 @@ where 1000000 <
 (select sum(o.totalprice)
 from orders o
 where o.custkey = c.custkey)"
+              ;; correlated plan:
               '[:rename {c__3_custkey custkey}
                 [:project [c__3_custkey]
                  [:select (< 1000000 subquery__5_$column_1$)
@@ -446,6 +447,19 @@ where o.custkey = c.custkey)"
                         [:rename o__8
                          [:select (= custkey ?c__3_custkey)
                           [:scan [totalprice {custkey (= custkey ?c__3_custkey)}]]]]]]]]]]]]])
+
+      ;; decorrelated plan:
+      '[:rename {c__3_custkey custkey}
+        [:project [c__3_custkey]
+         [:rename subquery__5
+          [:select (< 1000000 $column_1$)
+           [:project [c__3_custkey {$column_1$ $agg_out__6_7$}]
+            [:group-by [c__3_custkey $row_number$ {$agg_out__6_7$ (sum $agg_in__6_7$)}]
+             [:project [c__3_custkey $row_number$ {$agg_in__6_7$ o__8_totalprice}]
+              [:left-outer-join {c__3_custkey o__8_custkey}
+               [:project [c__3_custkey {$row_number$ (row_number)}]
+                [:rename c__3 [:scan [custkey]]]]
+               [:rename o__8 [:scan [totalprice custkey]]]]]]]]]]]
 
       ;; 2000 paper
       (valid? "select customers.name, (select count(*) from orders where customers.custno = orders.custno)
