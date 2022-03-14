@@ -411,22 +411,31 @@
        [:rename (zipmap rhs-unqualified-project lhs-unqualified-project)
         (plan rhs)])]))
 
-(defn- build-collection-derived-table [tp]
+;; TODO: Probably better if the operator explicitly takes the name of the
+;; source column, the destination column and an optional ordinal
+;; column instead of this workaround.
+(defn- build-collection-derived-table [tp with-ordinality?]
   (let [{:keys [id correlation-name] :as table} (sem/table tp)
-        unwind-column (qualified-projection-symbol (ffirst (sem/projected-columns tp)))
+        [unwind-column ordinality-column] (map qualified-projection-symbol (first (sem/projected-columns tp)))
         cdt (r/$ tp 1)
         qualified-projection (vec (for [table (vals (sem/local-env-singleton-values (sem/env cdt)))
                                         :let [{:keys [ref]} (meta table)]
                                         projection (first (sem/projected-columns ref))
-                                        :let [column (qualified-projection-symbol projection)]]
+                                        :let [column (qualified-projection-symbol projection)]
+                                        :when (not= ordinality-column column)]
                                     (if (= unwind-column column)
                                       {unwind-column (expr (r/$ cdt 2))}
-                                      column)))]
-    [:unwind (with-meta
-               unwind-column
-               {:table-reference {:table-id id
-                                  :correlation-name correlation-name}})
-     [:project qualified-projection nil]]))
+                                      column)))
+        unwind-relation [:unwind
+                         (with-meta
+                           unwind-column
+                           {:table-reference {:table-id id
+                                              :correlation-name correlation-name}})
+                         {:with-ordinality? with-ordinality?}
+                         [:project qualified-projection nil]]]
+    (if ordinality-column
+      [:rename {'_ordinal ordinality-column} unwind-relation]
+      unwind-relation)))
 
 (defn- build-table-primary [tp]
   (let [{:keys [id correlation-name] :as table} (sem/table tp)
@@ -454,9 +463,14 @@
   (reduce
    (fn [acc table]
      (r/zmatch table
-       [:unwind cve [:project projection nil]]
+       [:unwind cve {:with-ordinality? false} [:project projection nil]]
        ;;=>
-       [:unwind cve [:project projection acc]]
+       [:unwind cve {:with-ordinality? false} [:project projection acc]]
+
+       [:rename columns [:unwind cve {:with-ordinality? true} [:project projection nil]]]
+       ;;=>
+       [:rename columns [:unwind cve {:with-ordinality? true} [:project projection acc]]]
+
 
        [:apply :cross-join columns dependent-column-names nil dependent-relation]
        ;;=>
@@ -570,10 +584,18 @@
 
      [:table_primary [:collection_derived_table _ _] _ _]
      ;;=>
-     (build-collection-derived-table z)
+     (build-collection-derived-table z false)
 
      [:table_primary [:collection_derived_table _ _] _ _ _]
-     (build-collection-derived-table z)
+     (build-collection-derived-table z false)
+
+     [:table_primary [:collection_derived_table _ _ "WITH" "ORDINALITY"] _ _]
+     ;;=>
+     (build-collection-derived-table z true)
+
+     [:table_primary [:collection_derived_table _ _ "WITH" "ORDINALITY"] _ _ _]
+     (build-collection-derived-table z true)
+
 
      [:table_primary [:lateral_derived_table _ [:subquery ^:z qe]] _ _]
      (build-lateral-derived-table z qe)
@@ -623,6 +645,99 @@
      (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (z/node z))))))))
 
 ;; Rewriting of logical plan.
+
+;; NOTE: might be better to try do this via projected-columns and meta
+;; data when building the initial plan? Though that requires rewrites
+;; consistently updating this if they change anything. Some operators
+;; don't know their columns, like csv and arrow, though they might
+;; have some form of AS clause that does at the SQL-level. This
+;; function will mainly be used for decorrelation, so not being able
+;; to deduct this, fail, and keep Apply is also an option, say by
+;; returning nil instead of throwing an exception like now.
+(defn- relation-columns [relation]
+  (letfn [(->column [column-or-expr]
+            (if (map? column-or-expr)
+              (first (keys column-or-expr))
+              column-or-expr))]
+    (r/zmatch relation
+      [:table explicit-column-names _]
+      (vec explicit-column-names)
+
+      [:table table]
+      (vec (keys (first table)))
+
+      [:scan columns]
+      (mapv ->column columns)
+
+      [:join _ lhs rhs]
+      (vec (mapcat relation-columns [lhs rhs]))
+
+      [:cross-join _ lhs rhs]
+      (vec (mapcat relation-columns [lhs rhs]))
+
+      [:left-outer-join _ lhs rhs]
+      (vec (mapcat relation-columns [lhs rhs]))
+
+      [:semi-join _ lhs _]
+      (relation-columns lhs)
+
+      [:anti-join _ lhs _]
+      (relation-columns lhs)
+
+      [:rename prefix-or-columns relation]
+      (if (symbol? prefix-or-columns)
+        (vec (for [c (relation-columns relation)]
+               (symbol (str prefix-or-columns "_"  c))))
+        (replace prefix-or-columns (relation-columns relation)))
+
+      [:project projection _]
+      (mapv ->column projection)
+
+      [:group-by columns _]
+      (mapv ->column columns)
+
+      [:select _ relation]
+      (relation-columns relation)
+
+      [:order-by _ relation]
+      (relation-columns relation)
+
+      [:top _ relation]
+      (relation-columns relation)
+
+      [:distinct relation]
+      (relation-columns relation)
+
+      [:intersect lhs _]
+      (relation-columns lhs)
+
+      [:difference lhs _]
+      (relation-columns lhs)
+
+      [:union-all lhs _]
+      (relation-columns lhs)
+
+      [:fixpoint _ base _]
+      (relation-columns base)
+
+      [:unwind _ opts relation]
+      (cond-> (relation-columns relation)
+        (:with-ordinality? opts) (conj '_ordinal))
+
+      [:assign _ relation]
+      (relation-columns relation)
+
+      [:apply mode _ dependent-column-names independent-relation _]
+      (-> (relation-columns independent-relation)
+          (concat (case mode
+                    (:cross-join :left-outer-join) dependent-column-names
+                    []))
+          (vec))
+
+      [:max-1-row relation]
+      (relation-columns relation)
+
+      (throw (IllegalArgumentException. "cannot calculate columns for: " (pr-str relation))))))
 
 (defn- table-references-in-subtree [op]
   (set (r/collect-stop
