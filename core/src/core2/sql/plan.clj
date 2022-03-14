@@ -453,8 +453,11 @@
 (defn- build-lateral-derived-table [tp qe]
   (let [scope-id (sem/id (sem/scope-element tp))
         column->param (correlated-column->param qe scope-id)
-        projected-columns (set (map qualified-projection-symbol (first (sem/projected-columns tp))))]
-    (build-apply column->param projected-columns nil (build-table-primary tp))))
+        projected-columns (set (map qualified-projection-symbol (first (sem/projected-columns tp))))
+        relation (build-table-primary tp)]
+    (if (every? true? (map = (keys column->param) (vals column->param)))
+      relation
+      (build-apply column->param projected-columns nil relation))))
 
 ;; TODO: both UNNEST and LATERAL are only dealt with on top-level in
 ;; FROM. UNNEST also needs to take potential subqueries in cve into

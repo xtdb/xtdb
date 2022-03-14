@@ -409,7 +409,17 @@
                   [:project [z__7_z]
                    [:rename z__7
                     [:select (= z ?x__3_y)
-                     [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
+                     [:scan [{z (= z ?x__3_y)}]]]]]]]]]])
+
+    (valid? "SELECT y.z FROM LATERAL (SELECT z.z FROM z WHERE z.z = 1) AS y"
+            '[:rename {y__3_z z}
+              [:project [y__3_z]
+               [:rename y__3
+                [:rename {z__6_z z}
+                 [:project [z__6_z]
+                  [:rename z__6
+                   [:select (= z 1)
+                    [:scan [{z (= z 1)}]]]]]]]]]))
 
   (comment
 
