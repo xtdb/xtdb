@@ -502,6 +502,6 @@ The entities submitted by the speculative Put take their valid time (if not expl
 [#dropping-the-database]
 == Dropping the database
 
-XTDB does not currently provide any API to perform a "drop" operation (physical deletion) of the entire database. To drop the database, you must first manually `.stop` the node(s), then delete the underlying index-store directory, and then delete the relevant data (or directories) for the backend modules used for the transaction log and document store components.
+XTDB does not currently provide any API to perform a "drop" operation (physical deletion) of the entire database. To drop the database, you must first manually call the `close` method on the node(s), and then delete both the index-store directory and the relevant data (or directories) for the backend modules used for the transaction log and document store components (as per your configuration).
 
 For testing purposes you can use `Files/createTempDirectory` or equivalent.
