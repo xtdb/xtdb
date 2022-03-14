@@ -905,21 +905,56 @@
 
 ;; TODO: add potentially separate step before this dealing with the
 ;; Apply unnesting rules. We'll skip any rule that duplicates the
-;; independent relation for now. These rules should be possible to
-;; implement using the current framework, but will need to take
+;; independent relation for now (5-7). These rules should be possible
+;; to implement using the current framework, but will need to take
 ;; renames, parameters and attempting to move the right parts of the
 ;; tree into place to ensure they fire properly. Things missed will
 ;; still work, it will just stay as Apply operators, so one can chip
 ;; away at this making it detect more cases over time.
 
 ;; This will require us adding support for ROW_NUMBER() OVER() so we
-;; can generate unique rows when translating scalar group by. OVER is
-;; a valid (empty) window specification. This value is 1 based.
+;; can generate unique rows when translating group by (8-9). OVER is a
+;; valid (empty) window specification. This value is 1 based.
 ;; Alternative ways of adding unique rows are adding an operator
 ;; similar to unwind that has the same effect, but internal and
 ;; unrelated to future window support. A third way is to use something
 ;; like an UUID function to make rows unique, but this is
 ;; non-deterministic.
+
+;; Rule 1-2 below may be involved in semi/anti-join translation.
+
+;; Rules from 2001 paper:
+
+;; 1.
+;; R A⊗ E = R ⊗true E,
+;; if no parameters in E resolved from R
+
+;; 2.
+;; R A⊗(σp E) = R ⊗p E,
+;; if no parameters in E resolved from R
+
+;; 3.
+;; R A× (σp E) = σp (R A× E)
+
+;; 4.
+;; R A× (πv E) = πv ∪ columns(R) (R A× E)
+
+;; 5.
+;; R A× (E1 ∪ E2) = (R A× E1) ∪ (R A× E2)
+
+;; 6.
+;; R A× (E1 − E2) = (R A× E1) − (R A× E2)
+
+;; 7.
+;; R A× (E1 × E2) = (R A× E1) ⋈R.key (R A× E2)
+
+;; 8.
+;; R A× (G A,F E) = G A ∪ columns(R),F (R A× E)
+
+;; 9.
+;; R A× (G F1 E) = G columns(R),F' (R A⟕ E)
+
+;; Identities 7 through 9 require that R contain a key R.key.
 
 (def optimize-plan
   (some-fn promote-selection-cross-join-to-join
