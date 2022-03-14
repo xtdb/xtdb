@@ -1102,20 +1102,22 @@
   (r/zmatch z
     [:apply mode columns dependent-column-names independent-relation [:rename rename-columns [:select predicate dependent-relation]]]
     ;;=>
-    [:rename rename-columns
-     [:select (w/postwalk-replace (set/map-invert columns) predicate)
-      (let [columns (->> columns
-                         (filter (comp (expr-correlated-symbols dependent-relation) val))
-                         (into {}))]
-        [:apply mode columns dependent-column-names independent-relation dependent-relation])]]
+    (when (equals-predicate? predicate)
+      [:rename rename-columns
+       [:select (w/postwalk-replace (set/map-invert columns) predicate)
+        (let [columns (->> columns
+                           (filter (comp (expr-correlated-symbols dependent-relation) val))
+                           (into {}))]
+          [:apply mode columns dependent-column-names independent-relation dependent-relation])]])
 
     [:apply mode columns dependent-column-names independent-relation [:select predicate dependent-relation]]
     ;;=>
-    [:select (w/postwalk-replace (set/map-invert columns) predicate)
-     (let [columns (->> columns
-                        (filter (comp (expr-correlated-symbols dependent-relation) val))
-                        (into {}))]
-       [:apply mode columns dependent-column-names independent-relation dependent-relation])]
+    (when (equals-predicate? predicate)
+      [:select (w/postwalk-replace (set/map-invert columns) predicate)
+       (let [columns (->> columns
+                          (filter (comp (expr-correlated-symbols dependent-relation) val))
+                          (into {}))]
+         [:apply mode columns dependent-column-names independent-relation dependent-relation])])
 
     [:apply mode columns dependent-column-names independent-relation [:rename rename-columns [:project projection dependent-relation]]]
     ;;=>
@@ -1144,24 +1146,32 @@
         [:project pre-group-by-projection
          dependent-relation]]]]]
     ;;=>
-    (let [independent-projection (relation-columns independent-relation)
-          smap (set/map-invert columns)]
-      [:rename rename-columns
-       [:project (vec (concat independent-projection
-                              (w/postwalk-replace smap post-group-by-projection)))
-        [:group-by (vec (concat independent-projection
-                                ['$row_number$]
-                                (w/postwalk-replace smap group-by-columns)))
+    (if (empty? columns)
+      [:cross-join
+       independent-relation
+       [:rename rename-columns
+        [:project post-group-by-projection
+         [:group-by group-by-columns
+          [:project pre-group-by-projection
+           dependent-relation]]]]]
+      (let [independent-projection (relation-columns independent-relation)
+            smap (set/map-invert columns)]
+        [:rename rename-columns
          [:project (vec (concat independent-projection
-                                ['$row_number$]
-                                (w/postwalk-replace smap pre-group-by-projection)))
-          (let [columns (->> columns
-                             (filter (comp (expr-correlated-symbols dependent-relation) val))
-                             (into {}))]
-            [:apply :cross-join columns dependent-column-names
-             [:project (vec (concat independent-projection [{'$row_number$ '(row_number)}]))
-              independent-relation]
-             dependent-relation])]]]])
+                                (w/postwalk-replace smap post-group-by-projection)))
+          [:group-by (vec (concat independent-projection
+                                  ['$row_number$]
+                                  (w/postwalk-replace smap group-by-columns)))
+           [:project (vec (concat independent-projection
+                                  ['$row_number$]
+                                  (w/postwalk-replace smap pre-group-by-projection)))
+            (let [columns (->> columns
+                               (filter (comp (expr-correlated-symbols dependent-relation) val))
+                               (into {}))]
+              [:apply :cross-join columns dependent-column-names
+               [:project (vec (concat independent-projection [{'$row_number$ '(row_number)}]))
+                independent-relation]
+               dependent-relation])]]]]))
 
     [:apply :cross-join columns dependent-column-names independent-relation
      [:max-1-row
@@ -1171,24 +1181,33 @@
          [:project pre-group-by-projection
           dependent-relation]]]]]]
     ;;=>
-    (let [independent-projection (relation-columns independent-relation)
-          smap (set/map-invert columns)]
-      [:rename rename-columns
-       [:project (vec (concat independent-projection
-                              (w/postwalk-replace smap post-group-by-projection)))
-        [:group-by (vec (concat independent-projection
-                                ['$row_number$]
-                                (w/postwalk-replace smap group-by-columns)))
+    (if (empty? columns)
+      [:cross-join
+       independent-relation
+       [:max-1-row
+        [:rename rename-columns
+         [:project post-group-by-projection
+          [:group-by group-by-columns
+           [:project pre-group-by-projection
+            dependent-relation]]]]]]
+      (let [independent-projection (relation-columns independent-relation)
+            smap (set/map-invert columns)]
+        [:rename rename-columns
          [:project (vec (concat independent-projection
-                                ['$row_number$]
-                                (w/postwalk-replace smap pre-group-by-projection)))
-          (let [columns (->> columns
-                             (filter (comp (expr-correlated-symbols dependent-relation) val))
-                             (into {}))]
-            [:apply :left-outer-join columns dependent-column-names
-             [:project (vec (concat independent-projection [{'$row_number$ '(row_number)}]))
-              independent-relation]
-             dependent-relation])]]]])))
+                                (w/postwalk-replace smap post-group-by-projection)))
+          [:group-by (vec (concat independent-projection
+                                  ['$row_number$]
+                                  (w/postwalk-replace smap group-by-columns)))
+           [:project (vec (concat independent-projection
+                                  ['$row_number$]
+                                  (w/postwalk-replace smap pre-group-by-projection)))
+            (let [columns (->> columns
+                               (filter (comp (expr-correlated-symbols dependent-relation) val))
+                               (into {}))]
+              [:apply :left-outer-join columns dependent-column-names
+               [:project (vec (concat independent-projection [{'$row_number$ '(row_number)}]))
+                independent-relation]
+               dependent-relation])]]]]))))
 
 (def decorrelate-plan
   (some-fn promote-apply-mode
@@ -1198,7 +1217,6 @@
 (def optimize-plan
   (some-fn promote-selection-cross-join-to-join
            promote-selection-to-join
-           promote-apply-mode
            push-selection-down-past-join
            push-selection-down-past-apply
            push-selection-down-past-rename
@@ -1206,7 +1224,6 @@
            push-selections-with-equals-down
            merge-selections-with-same-variables
            merge-renames
-           remove-uncorrelated-apply
            remove-superseded-projects
            add-selection-to-scan-predicate))
 
@@ -1229,7 +1246,7 @@
         (if-let [errs (not-empty (sem/errs ag))]
           {:errs errs}
           {:plan (let [plan (->> (z/vector-zip (plan ag))
-                                 ;; (r/innermost (r/mono-tp decorrelate-plan))
+                                 (r/innermost (r/mono-tp decorrelate-plan))
                                  (r/innermost (r/mono-tp optimize-plan))
                                  (z/node))]
                    (if (s/invalid? (s/conform ::lp/logical-plan plan))

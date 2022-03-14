@@ -331,25 +331,23 @@
     (valid? "SELECT x.y FROM x WHERE x.z IN (SELECT y.z FROM y)"
             '[:rename {x__3_y y}
               [:project [x__3_y]
-               [:apply :semi-join {x__3_z ?x__3_z} #{}
+               [:semi-join {x__3_z subquery__4_z}
                 [:rename x__3 [:scan [y z]]]
                 [:rename subquery__4
                  [:rename {y__6_z z}
                   [:rename y__6
-                   [:select (= ?x__3_z z)
-                    [:scan [{z (= ?x__3_z z)}]]]]]]]]]))
+                   [:scan [z]]]]]]]]))
 
   (t/testing "NOT IN in WHERE"
     (valid? "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.z FROM y)"
             '[:rename {x__3_y y}
               [:project [x__3_y]
-               [:apply :anti-join {x__3_z ?x__3_z} #{}
+               [:anti-join {x__3_z subquery__4_z}
                 [:rename x__3 [:scan [y z]]]
                 [:rename subquery__4
                  [:rename {y__6_z z}
                   [:rename y__6
-                   [:select (= ?x__3_z z)
-                    [:scan [{z (= ?x__3_z z)}]]]]]]]]]))
+                   [:scan [z]]]]]]]]))
 
   (t/testing "ALL in WHERE"
     (valid? "SELECT x.y FROM x WHERE x.z > ALL (SELECT y.z FROM y)"
@@ -419,53 +417,51 @@
                  [:project [z__6_z]
                   [:rename z__6
                    [:select (= z 1)
-                    [:scan [{z (= z 1)}]]]]]]]]]))
+                    [:scan [{z (= z 1)}]]]]]]]]])
+
+    ;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf "Orthogonal Optimization of Subqueries and Aggregation"
+    (t/testing "decorrelation"
+      (valid? "SELECT c.custkey FROM customer c WHERE 1000000 < (SELECT SUM(o.totalprice) FROM orders o WHERE o.custkey = c.custkey)"
+              '[:rename {c__3_custkey custkey}
+                [:project [c__3_custkey]
+                 [:rename subquery__5
+                  [:select (< 1000000 $column_1$)
+                   [:project [c__3_custkey {$column_1$ $agg_out__6_7$}]
+                    [:group-by [c__3_custkey $row_number$ {$agg_out__6_7$ (sum $agg_in__6_7$)}]
+                     [:project [c__3_custkey $row_number$ {$agg_in__6_7$ o__8_totalprice}]
+                      [:left-outer-join {c__3_custkey o__8_custkey}
+                       [:project [c__3_custkey {$row_number$ (row_number)}]
+                        [:rename c__3 [:scan [custkey]]]]
+                       [:rename o__8 [:scan [totalprice custkey]]]]]]]]]]])))
 
   (comment
 
-    ;; NOTE: These expected trees are simply what's currently being
-    ;; generated, not the decorrelated target.
+    ;; https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf "Parameterized Queries and Nesting Equivalences"
     (t/testing "decorrelation"
-      ;; 2001 paper
-      (valid? "select c.custkey
-from customer c
-where 1000000 <
-(select sum(o.totalprice)
-from orders o
-where o.custkey = c.custkey)"
-              ;; correlated plan:
-              '[:rename {c__3_custkey custkey}
-                [:project [c__3_custkey]
-                 [:select (< 1000000 subquery__5_$column_1$)
-                  [:apply :cross-join {c__3_custkey ?c__3_custkey} #{subquery__5_$column_1$}
-                   [:rename c__3 [:scan [custkey]]]
-                   [:max-1-row
-                    [:rename subquery__5
-                     [:project [{$column_1$ $agg_out__6_7$}]
-                      [:group-by [{$agg_out__6_7$ (sum $agg_in__6_7$)}]
-                       [:project [{$agg_in__6_7$ o__8_totalprice}]
-                        [:rename o__8
-                         [:select (= custkey ?c__3_custkey)
-                          [:scan [totalprice {custkey (= custkey ?c__3_custkey)}]]]]]]]]]]]]])
+      (valid? "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
+FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)"
+              '[:rename {customers__8_name name}
+                [:project [customers__8_name {$column_2$ subquery__3_$column_1$}]
+                 [:rename subquery__3
+                  [:project [customers__8_name customers__8_custno customers__8_country {$column_1$ $agg_out__4_5$}]
+                   [:group-by [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_out__4_5$ (count $agg_in__4_5$)}]
+                    [:project [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_in__4_5$ 1}]
+                     [:left-outer-join {customers__8_custno orders__6_custno}
+                      [:project [customers__8_name customers__8_custno customers__8_country {$row_number$ (row_number)}]
+                       [:apply :anti-join {customers__8_country ?customers__8_country} #{}
+                        [:rename customers__8 [:scan [name custno country]]]
+                        [:rename subquery__9
+                         [:rename {salesp__11_country country}
+                          [:rename salesp__11
+                           [:select (or (= ?customers__8_country country)
+                                        (nil? ?customers__8_country)
+                                        (nil? country))
+                            [:scan [{country (or (= ?customers__8_country country)
+                                                 (nil? ?customers__8_country)
+                                                 (nil? country))}]]]]]]]]
+                      [:rename orders__6 [:scan [custno]]]]]]]]]]
 
-      ;; decorrelated plan:
-      '[:rename {c__3_custkey custkey}
-        [:project [c__3_custkey]
-         [:rename subquery__5
-          [:select (< 1000000 $column_1$)
-           [:project [c__3_custkey {$column_1$ $agg_out__6_7$}]
-            [:group-by [c__3_custkey $row_number$ {$agg_out__6_7$ (sum $agg_in__6_7$)}]
-             [:project [c__3_custkey $row_number$ {$agg_in__6_7$ o__8_totalprice}]
-              [:left-outer-join {c__3_custkey o__8_custkey}
-               [:project [c__3_custkey {$row_number$ (row_number)}]
-                [:rename c__3 [:scan [custkey]]]]
-               [:rename o__8 [:scan [totalprice custkey]]]]]]]]]]]
 
-      ;; 2000 paper
-      (valid? "select customers.name, (select count(*) from orders where customers.custno = orders.custno)
-from customers
-where customers.country <> all
-(select salesp.country from salesp)"
               '[:rename {customers__8_name name}
                 [:project [customers__8_name {$column_2$ subquery__3_$column_1$}]
                  [:apply :cross-join {customers__8_custno ?customers__8_custno} #{subquery__3_$column_1$}
