@@ -10,7 +10,7 @@ image::local-cluster-mode.svg[Local Cluster Mode,450,150,align="center"]
 ====
 Kafka's document store requires a copy of the documents kept locally for random access - these can be stored in a KV store like xref:rocksdb.adoc[RocksDB] or xref:lmdb.adoc[LMDB].
 
-For this reason, unless you want to keep both transactions and documents on Kafka (for simplicity, say, or historical reasons), we'd now recommend a different document store implementation - xref:jdbc.adoc[JDBC] or xref:aws-s3.adoc[S3], for example.
+For this reason, unless you want to keep both transactions and documents on Kafka (e.g. for high write throughput, or for architectural simplicity), we now recommend a different document store implementation - xref:jdbc.adoc[JDBC] or xref:aws-s3.adoc[S3], for example.
 
 (The Kafka transaction log does not have this requirement)
 ====
@@ -158,7 +158,7 @@ If you do not want the local node to index transactions, you can use the xref:su
 
 ==== Sharing the local KV store
 
-You can use the same local document store as the query indices, as follows:
+You can safely use the same KV storage to hold both the local document store and the main query indices, which can potentially simplify related configurations (e.g. xref:administration::checkpointing.adoc[checkpointing]) and improve resource utilization.
 
 [tabs]
 ====
