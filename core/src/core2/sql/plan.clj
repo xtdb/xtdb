@@ -599,7 +599,6 @@
      [:table_primary [:collection_derived_table _ _ "WITH" "ORDINALITY"] _ _ _]
      (build-collection-derived-table z true)
 
-
      [:table_primary [:lateral_derived_table _ [:subquery ^:z qe]] _ _]
      (build-lateral-derived-table z qe)
 
