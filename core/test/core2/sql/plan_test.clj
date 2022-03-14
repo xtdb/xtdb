@@ -283,16 +283,11 @@
     (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
             '[:rename {x__3_y y}
               [:project [x__3_y]
-               [:apply :semi-join {x__3_y ?x__3_y} #{}
-                [:rename x__3
-                 [:select (= z 10)
-                  [:scan [y {z (= z 10)}]]]]
+               [:semi-join {x__3_y subquery__4_z}
+                [:rename x__3 [:select (= z 10) [:scan [y {z (= z 10)}]]]]
                 [:rename subquery__4
                  [:rename {y__6_z z}
-                  [:project [y__6_z]
-                   [:rename y__6
-                    [:select (= z ?x__3_y)
-                     [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
+                  [:rename y__6 [:scan [z]]]]]]]]))
 
   (t/testing "EXISTS as expression in SELECT"
     (valid? "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"
@@ -306,26 +301,22 @@
                  [:project [{subquery__3_$exists$ true}]
                   [:rename subquery__3
                    [:rename {y__5_z z}
-                    [:project [y__5_z]
-                     [:rename y__5
-                      [:select (= z ?x__7_y)
-                       [:scan [{z (= z ?x__7_y)}]]]]]]]]
+                    [:rename y__5
+                     [:select (= z ?x__7_y)
+                      [:scan [{z (= z ?x__7_y)}]]]]]]]
                  [:table [{:subquery__3_$exists$ false}]]]]]]))
 
   (t/testing "NOT EXISTS in WHERE"
     (valid? "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
             '[:rename {x__3_y y}
               [:project [x__3_y]
-               [:apply :anti-join {x__3_y ?x__3_y} #{}
+               [:anti-join {x__3_y subquery__4_z}
                 [:rename x__3
                  [:select (= z 10)
                   [:scan [y {z (= z 10)}]]]]
                 [:rename subquery__4
                  [:rename {y__6_z z}
-                  [:project [y__6_z]
-                   [:rename y__6
-                    [:select (= z ?x__3_y)
-                     [:scan [{z (= z ?x__3_y)}]]]]]]]]]]))
+                  [:rename y__6 [:scan [z]]]]]]]]))
 
   (t/testing "IN in WHERE"
     (valid? "SELECT x.y FROM x WHERE x.z IN (SELECT y.z FROM y)"
@@ -400,14 +391,11 @@
     (valid? "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y"
             '[:rename {x__3_y y, y__4_z z}
               [:project [x__3_y y__4_z]
-               [:apply :cross-join {x__3_y ?x__3_y} #{y__4_z}
+               [:join {x__3_y y__4_z}
                 [:rename x__3 [:scan [y]]]
                 [:rename y__4
                  [:rename {z__7_z z}
-                  [:project [z__7_z]
-                   [:rename z__7
-                    [:select (= z ?x__3_y)
-                     [:scan [{z (= z ?x__3_y)}]]]]]]]]]])
+                  [:rename z__7 [:scan [z]]]]]]]])
 
     (valid? "SELECT y.z FROM LATERAL (SELECT z.z FROM z WHERE z.z = 1) AS y"
             '[:rename {y__3_z z}

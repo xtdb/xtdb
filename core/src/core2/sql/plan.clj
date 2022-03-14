@@ -1195,8 +1195,72 @@
               independent-relation]
              dependent-relation])]]]])))
 
+(defn- pull-correlated-selection-up-towards-apply [z]
+  (r/zmatch z
+    [:select predicate-1
+     [:select predicate-2
+      relation]]
+    ;;=>
+    (when (and (not-empty (expr-correlated-symbols predicate-2))
+               (or (empty? (expr-correlated-symbols predicate-1))
+                   (and (equals-predicate? predicate-2)
+                        (not (equals-predicate? predicate-1)))))
+      [:select predicate-2
+       [:select predicate-1
+        relation]])
+
+    [:project projection
+     [:select predicate
+      relation]]
+    ;;=>
+    (when (and (not-empty (expr-correlated-symbols predicate))
+               (set/subset?
+                (expr-symbols predicate)
+                (set (relation-columns [:project projection nil]))))
+      [:select predicate
+       [:project projection
+        relation]])
+
+    [:group-by group-by-columns
+     [:select predicate
+      relation]]
+    ;;=>
+    (when (and (not-empty (expr-correlated-symbols predicate))
+               (set/subset?
+                (expr-symbols predicate)
+                (set (relation-columns [:group-by group-by-columns nil]))))
+      [:select predicate
+       [:group-by group-by-columns
+        relation]])
+
+    [:rename columns
+     [:select predicate
+      relation]]
+    ;;=>
+    (when (not-empty (expr-correlated-symbols predicate))
+      (cond
+        (map? columns)
+        (let [smap-with-meta (->> (for [[k v] columns]
+                                    [k (if (meta v)
+                                         v
+                                         (with-meta v (meta k)))])
+                                  (into {}))]
+          [:select (w/postwalk-replace smap-with-meta predicate)
+           [:rename columns
+            relation]])
+
+        (symbol? columns)
+        (let [{:keys [table-id correlation-name]} (:table-reference (meta columns))
+              column->qualified-column (->> (for [c (expr-symbols predicate)]
+                                              [c (id-symbol correlation-name table-id c)])
+                                            (into {}))]
+          [:select (w/postwalk-replace column->qualified-column predicate)
+           [:rename columns
+            relation]])))))
+
 (def decorrelate-plan
-  (some-fn promote-apply-mode
+  (some-fn pull-correlated-selection-up-towards-apply
+           promote-apply-mode
            decorrelate-apply
            remove-uncorrelated-apply))
 
