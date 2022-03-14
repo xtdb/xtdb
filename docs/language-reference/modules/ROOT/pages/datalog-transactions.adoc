@@ -404,6 +404,11 @@ The following types of `:xt/id` are allowed:
 --
 ====
 
+[#indexing]
+=== Indexing
+
+XTDB automatically indexes the top-level fields across all documents as Entity-Attribute-Value triples. Vector and Set values are indexed as cardinality-many values, i.e. producing multiple EAVs.
+
 [#transaction-time]
 == Transaction Time
 
