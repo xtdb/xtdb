@@ -93,7 +93,7 @@ added to your project definition:
 
 ```clojure
 ;; project.clj
-:repositories [["sonatype snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"]]
+:repositories [["sonatype snapshots" {:url "https://s01.oss.sonatype.org/content/repositories/snapshots"}]]
 ```
 
 ```clojure
