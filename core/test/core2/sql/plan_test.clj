@@ -413,7 +413,7 @@
              WHERE 1000000 < (SELECT SUM(o.totalprice) FROM orders o WHERE o.custkey = c.custkey)"
             '[:rename {c__3_custkey custkey}
               [:project [c__3_custkey]
-               [:rename subquery__5
+               [:rename {$column_1$ subquery__5_$column_1$}
                 [:select (< 1000000 $column_1$)
                  [:project [c__3_custkey {$column_1$ $agg_out__6_7$}]
                   [:group-by [c__3_custkey $row_number$ {$agg_out__6_7$ (sum $agg_in__6_7$)}]
@@ -437,13 +437,13 @@
                  [:rename {orders__7_custno custno}
                   [:rename orders__7 [:scan [custno]]]]]]]])
 
-  ;; NOTE: these below simply check what's currently being produced,
-  ;; not necessarily what should be produced.
+    ;; NOTE: these below simply check what's currently being produced,
+    ;; not necessarily what should be produced.
     (valid? "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
 FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)"
             '[:rename {customers__8_name name}
               [:project [customers__8_name {$column_2$ subquery__3_$column_1$}]
-               [:rename subquery__3
+               [:rename {$column_1$ subquery__3_$column_1$}
                 [:project [customers__8_name customers__8_custno customers__8_country {$column_1$ $agg_out__4_5$}]
                  [:group-by [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_out__4_5$ (count $agg_in__4_5$)}]
                   [:project [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_in__4_5$ 1}]
@@ -465,18 +465,17 @@ FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp
                         WHERE s.id = e2.sid)"
             '[:rename {s__3_name name, e__4_course course}
               [:project [s__3_name e__4_course]
-               [:select (= e__4_grade subquery__7_$column_1$)
-                [:select (= s__3_id e__4_sid)
-                 [:rename subquery__7
-                  [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade {$column_1$ $agg_out__8_9$}]
-                   [:group-by [s__3_name s__3_id e__4_course e__4_sid e__4_grade $row_number$ {$agg_out__8_9$ (min $agg_in__8_9$)}]
-                    [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade $row_number$ {$agg_in__8_9$ e2__10_grade}]
-                     [:left-outer-join {s__3_id e2__10_sid}
-                      [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade {$row_number$ (row_number)}]
-                       [:cross-join
-                        [:rename s__3 [:scan [name id]]]
-                        [:rename e__4 [:scan [course sid grade]]]]]
-                      [:rename e2__10 [:scan [grade sid]]]]]]]]]]]])
+               [:rename {$column_1$ subquery__7_$column_1$}
+                [:select (= e__4_grade $column_1$)
+                 [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade {$column_1$ $agg_out__8_9$}]
+                  [:group-by [s__3_name s__3_id e__4_course e__4_sid e__4_grade $row_number$ {$agg_out__8_9$ (min $agg_in__8_9$)}]
+                   [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade $row_number$ {$agg_in__8_9$ e2__10_grade}]
+                    [:left-outer-join {s__3_id e2__10_sid}
+                     [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade {$row_number$ (row_number)}]
+                      [:join {s__3_id e__4_sid}
+                       [:rename s__3 [:scan [name id]]]
+                       [:rename e__4 [:scan [course sid grade]]]]]
+                     [:rename e2__10 [:scan [grade sid]]]]]]]]]]])
 
     (valid? "SELECT s.name, e.course
              FROM students s, exams e
@@ -489,21 +488,21 @@ FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp
                                       s.year > e2.date))"
             '[:rename {s__3_name name, e__4_course course}
               [:project [s__3_name e__4_course]
-               [:select (>= e__4_grade subquery__9_$column_1$)
-                [:select (or (= s__3_major "CS") (= s__3_major "Games Eng"))
-                 [:select (= s__3_id e__4_sid)
-                  [:rename subquery__9
-                   [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade {$column_1$ (+ $agg_out__10_11$ 1)}]
-                    [:group-by [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade $row_number$ {$agg_out__10_11$ (avg $agg_in__10_11$)}]
-                     [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade $row_number$ {$agg_in__10_11$ e2__12_grade}]
-                      [:apply :left-outer-join {s__3_id ?s__3_id, s__3_major ?s__3_major, s__3_year ?s__3_year} #{subquery__9_$column_1$}
-                       [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade {$row_number$ (row_number)}]
-                        [:cross-join
-                         [:rename s__3 [:scan [name id major year]]]
-                         [:rename e__4 [:scan [course sid grade]]]]]
-                       [:rename e2__12
-                        [:select (or (= ?s__3_id sid) (and (= curriculum ?s__3_major) (> ?s__3_year date)))
-                         [:scan [grade sid curriculum date]]]]]]]]]]]]]]))
+               [:rename {$column_1$ subquery__9_$column_1$}
+                [:select (>= e__4_grade $column_1$)
+                 [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade {$column_1$ (+ $agg_out__10_11$ 1)}]
+                  [:group-by [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade $row_number$ {$agg_out__10_11$ (avg $agg_in__10_11$)}]
+                   [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade $row_number$ {$agg_in__10_11$ e2__12_grade}]
+                    [:apply :left-outer-join {s__3_id ?s__3_id, s__3_major ?s__3_major, s__3_year ?s__3_year} #{subquery__9_$column_1$}
+                     [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade {$row_number$ (row_number)}]
+                      [:join {s__3_id e__4_sid}
+                       [:rename s__3
+                        [:select (or (= major "CS") (= major "Games Eng"))
+                         [:scan [name id {major (or (= major "CS") (= major "Games Eng"))} year]]]]
+                       [:rename e__4 [:scan [course sid grade]]]]]
+                     [:rename e2__12
+                      [:select (or (= ?s__3_id sid) (and (= curriculum ?s__3_major) (> ?s__3_year date)))
+                       [:scan [grade sid curriculum date]]]]]]]]]]]]))
 
   (comment
 

@@ -901,11 +901,43 @@
          [:select (w/postwalk-replace column->unqualified-column predicate)
           relation]])
 
-      (and (map? columns)
-           (set/subset? (expr-symbols predicate) (set (vals columns))))
+      (map? columns)
       [:rename columns
        [:select (w/postwalk-replace (set/map-invert columns) predicate)
         relation]])))
+
+;; TODO: this check should really check that selection only depends on
+;; non calculated projection using expr-symbols or similar meta data
+;; based approaches, but this isn't setup properly for some cases when
+;; there's introduction or references to unqualified columns.
+(defn- predicate-depends-on-calculated-expression? [predicate projection]
+  (not-empty (set/intersection (set (filter symbol? (flatten (if (coll? predicate)
+                                                               predicate
+                                                               [predicate]))))
+                               (set (map (comp key first) (filter map? projection))))))
+
+(defn- push-selection-down-past-project [z]
+  (r/zmatch z
+    [:select predicate
+     [:project projection
+      relation]]
+    ;;=>
+    (when-not (predicate-depends-on-calculated-expression? predicate projection)
+      [:project projection
+       [:select predicate
+        relation]])))
+
+(defn- push-selection-down-past-group-by [z]
+  (r/zmatch z
+    [:select predicate
+     [:group-by group-by-columns
+      relation]]
+    ;;=>
+    (when-not (predicate-depends-on-calculated-expression? predicate group-by-columns)
+      [:group-by group-by-columns
+       [:select predicate
+        relation]])))
+
 
 (defn- push-selection-down-past-join [z]
   (letfn [(push-selection-down [predicate lhs rhs]
@@ -1171,6 +1203,14 @@
        (filter (comp (expr-correlated-symbols dependent-relation) val))
        (into {})))
 
+(defn- group-by-after-apply-rename-map [rename-columns post-group-by-projection]
+  (if (map? rename-columns)
+    rename-columns
+    (let [{:keys [table-id correlation-name]} (:table-reference (meta rename-columns))]
+      (->> (for [c (relation-columns [:project post-group-by-projection nil])]
+             [c (id-symbol correlation-name table-id c)])
+           (into {})))))
+
 (defn- decorrelate-apply [z]
   (r/zmatch z
     ;; Rule 3.
@@ -1225,7 +1265,7 @@
     ;;=>
     (let [independent-projection (relation-columns independent-relation)
           smap (set/map-invert columns)]
-      [:rename rename-columns
+      [:rename (group-by-after-apply-rename-map rename-columns post-group-by-projection)
        [:project (vec (concat independent-projection
                               (w/postwalk-replace smap post-group-by-projection)))
         [:group-by (vec (concat independent-projection
@@ -1251,7 +1291,7 @@
     ;;=>
     (let [independent-projection (relation-columns independent-relation)
           smap (set/map-invert columns)]
-      [:rename rename-columns
+      [:rename (group-by-after-apply-rename-map rename-columns post-group-by-projection)
        [:project (vec (concat independent-projection
                               (w/postwalk-replace smap post-group-by-projection)))
         [:group-by (vec (concat independent-projection
@@ -1324,6 +1364,8 @@
            push-selection-down-past-join
            push-selection-down-past-apply
            push-selection-down-past-rename
+           push-selection-down-past-project
+           push-selection-down-past-group-by
            push-selections-with-fewer-variables-down
            push-selections-with-equals-down
            merge-selections-with-same-variables
