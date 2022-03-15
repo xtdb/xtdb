@@ -1122,11 +1122,10 @@
      [:select predicate-2
       relation]]
     ;;=>
-    (when (or (exists-predicate? predicate-1)
-              (and (not-empty (expr-correlated-symbols predicate-2))
-                   (or (empty? (expr-correlated-symbols predicate-1))
-                       (and (equals-predicate? predicate-2)
-                            (not (equals-predicate? predicate-1))))))
+    (when (and (not-empty (expr-correlated-symbols predicate-2))
+               (or (empty? (expr-correlated-symbols predicate-1))
+                   (and (equals-predicate? predicate-2)
+                        (not (equals-predicate? predicate-1)))))
       [:select predicate-2
        [:select predicate-1
         relation]])
@@ -1291,6 +1290,15 @@
 
 (defn- promote-apply-mode [z]
   (r/zmatch z
+    [:select predicate-1
+     [:select predicate-2
+      relation]]
+    ;;=>
+    (when (exists-predicate? predicate-1)
+      [:select predicate-2
+       [:select predicate-1
+        relation]])
+
     [:select predicate
      [:apply :cross-join columns dependent-column-names independent-relation
       [:top {:limit 1}
