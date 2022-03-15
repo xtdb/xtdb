@@ -37,7 +37,7 @@
   (s/cat :qgm.box/type #{:qgm.box/select}
          :qgm.box/properties (s/keys :req [:qgm.box.head/distinct? :qgm.box.head/columns
                                            :qgm.box.body/columns :qgm.box.body/distinct])
-         :qgm.box/quantifiers (s/map-of :qgm/id :qgm/quantifier)))
+         :qgm.box/quantifiers (s/+ :qgm/quantifier)))
 
 (s/def :qgm.box.outer-join/foreach-quantifier (s/nilable :qgm/id))
 
@@ -46,7 +46,7 @@
          :qgm.box/properties (s/keys :req [:qgm.box.head/distinct? :qgm.box.head/columns
                                            :qgm.box.body/columns :qgm.box.body/distinct]
                                      :opt [:qgm.box.outer-join/foreach-quantifier])
-         :qgm.box/quantifiers (s/map-of :qgm/id :qgm/quantifier)))
+         :qgm.box/quantifiers (s/+ :qgm/quantifier)))
 
 (defn- set-box-spec [box-type]
   (s/cat :qgm.box/type #{box-type}
@@ -92,32 +92,8 @@
                {})))
 
 (defn qgm-zip [{:keys [tree preds]}]
-  (-> (z/zipper (fn [qgm]
-                  (and (vector? qgm)
-                       (contains? #{:qgm.box/select :qgm.box/intersect :qgm.box/union :qgm.box/except
-                                    :qgm.quantifier/foreach :qgm.quantifier/all :qgm.quantifier/existential}
-                                  (first qgm))))
-                (fn [qgm]
-                  (case (first qgm)
-                    :qgm.box/select (vals (qgm 2))
-
-                    (:qgm.box/intersect :qgm.box/union :qgm.box/except :qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
-                    (subvec qgm 2)))
-
-                (fn [node children]
-                  (case (first node)
-                    :qgm.box/select
-                    (assoc node 2 (->> children
-                                       (into {} (map (juxt (comp :qgm.quantifier/id second)
-                                                           identity)))))
-
-                    (:qgm.box/intersect :qgm.box/union :qgm.box/except :qgm.quantifier/all :qgm.quantifier/foreach :qgm.quantifier/existential)
-                    (into (subvec node 0 2) children)))
-
-                tree)
-
-      (vary-meta into {::preds preds
-                       ::qid->pids (->preds-by-qid preds)})))
+  (-> (z/vector-zip tree)
+      (vary-meta assoc ::preds preds)))
 
 (defn qgm-unzip [z]
   {:tree (z/node z), :preds (::preds (meta z))})
@@ -137,35 +113,30 @@
 (declare qgm-box)
 
 (defn- table-primary->quantifier [ag]
-  (let [table (sem/table ag)
-        qid (table->qid table)
-        projection (first (sem/projected-columns ag))]
-    [qid [:qgm.quantifier/foreach {:qgm.quantifier/id qid
-                                   :qgm.quantifier/columns (mapv plan/unqualified-projection-symbol projection)}
-          (qgm-box ag)]]))
+  (let [projection (first (sem/projected-columns ag))]
+    [:qgm.quantifier/foreach {:qgm.quantifier/id (table->qid (sem/table ag))
+                              :qgm.quantifier/columns (mapv plan/unqualified-projection-symbol projection)}
+     (qgm-box ag)]))
 
 (defn- qgm-quantifiers [ag]
   (->> ag
        (r/collect-stop
         (letfn [(oj-quantifier [ag]
-                  (let [qid 'hack_oj1 ; HACK id pls
-                        projection (first (sem/projected-columns ag))]
-                    [qid [:qgm.quantifier/foreach {:qgm.quantifier/id qid
-                                                   :qgm.quantifier/columns (mapv plan/unqualified-projection-symbol projection)}
-                          (qgm-box ag)]]))
+                  (let [projection (first (sem/projected-columns ag))]
+                    [:qgm.quantifier/foreach {:qgm.quantifier/id 'hack_oj1 ; HACK id pls
+                                              :qgm.quantifier/columns (mapv plan/unqualified-projection-symbol projection)}
+                     (qgm-box ag)]))
 
                 (sq-quantifier [q-type subquery]
                   (let [sq-el (sem/subquery-element subquery)
                         sq-el (if (= (r/ctor sq-el) :query_expression)
                                 (r/$ sq-el 1)
-                                sq-el)
-                        qid (symbol (str "q" (sem/id sq-el)))]
+                                sq-el)]
 
-                    [qid [q-type
-                          {:qgm.quantifier/id qid
-                           :qgm.quantifier/columns (->> (first (sem/projected-columns subquery))
-                                                        (mapv plan/unqualified-projection-symbol))}
-                          (qgm-box sq-el)]]))]
+                    [q-type {:qgm.quantifier/id (symbol (str "q" (sem/id sq-el)))
+                             :qgm.quantifier/columns (->> (first (sem/projected-columns subquery))
+                                                          (mapv plan/unqualified-projection-symbol))}
+                     (qgm-box sq-el)]))]
           (fn [ag]
             (r/zmatch ag
               [:qualified_join _ [:join_type [:outer_join_type _]] _ _ _]
@@ -191,9 +162,7 @@
                [:in_predicate_part_2 _ [:in_predicate_value ^:z subquery]]]
               [(sq-quantifier :qgm.quantifier/existential subquery)]
 
-              [:subquery _] []))))
-
-       (into {})))
+              [:subquery _] []))))))
 
 (defn- ssl->order-by [ssl]
   (let [projection (first (sem/projected-columns ssl))
@@ -240,15 +209,15 @@
                       (assoc-in [1 :qgm.box.body/result-offset] (plan/expr rorc))))
 
                 (oj-box [lhs ojt rhs]
-                  (let [[lhs-qid lhs-q] (first (qgm-quantifiers lhs))
-                        [rhs-qid rhs-q] (first (qgm-quantifiers rhs))
+                  (let [[[_ {lhs-qid :qgm.quantifier/id} :as lhs-q]] (qgm-quantifiers lhs)
+                        [[_ {rhs-qid :qgm.quantifier/id} :as rhs-q]] (qgm-quantifiers rhs)
                         f-qid (case ojt "LEFT" rhs-qid, "RIGHT" lhs-qid, nil)]
                     [:qgm.box/outer-join (-> (build-query-spec ag false)
                                              (assoc :qgm.box.outer-join/foreach-quantifier f-qid))
-                     {lhs-qid (cond-> lhs-q
-                                (not= f-qid lhs-qid) (assoc 0 :qgm.quantifier/preserved-foreach))
-                      rhs-qid (cond-> rhs-q
-                                (not= f-qid rhs-qid) (assoc 0 :qgm.quantifier/preserved-foreach))}]))
+                     (cond-> lhs-q
+                       (not= f-qid lhs-qid) (assoc 0 :qgm.quantifier/preserved-foreach))
+                     (cond-> rhs-q
+                       (not= f-qid rhs-qid) (assoc 0 :qgm.quantifier/preserved-foreach))]))
 
                 (set-box [box-type opts lhs rhs]
                   (let [lbox (qgm-box lhs)]
@@ -318,12 +287,12 @@
                         qt qp)]
 
               [:query_specification _ _ _]
-              [[:qgm.box/select (build-query-spec ag false)
-                (qgm-quantifiers ag)]]
+              [(into [:qgm.box/select (build-query-spec ag false)]
+                     (qgm-quantifiers ag))]
 
               [:query_specification _ [:set_quantifier d] _ _]
-              [[:qgm.box/select (build-query-spec ag (= d "DISTINCT"))
-                (qgm-quantifiers ag)]]
+              [(into [:qgm.box/select (build-query-spec ag (= d "DISTINCT"))]
+                     (qgm-quantifiers ag))]
 
               [:qualified_join ^:z lhs [:join_type [:outer_join_type ojt]] _ ^:z rhs _]
               [(oj-box lhs ojt rhs)]
@@ -351,20 +320,20 @@
 (defn- qgm-preds [ag]
   (letfn [(subquery-pred [sq-ag op lhs]
             ;; HACK: give me a proper id
-            (let [pred-id 'hack-qp1
+            (let [pred-id 'hack_qp1
                   sq-el (sem/subquery-element sq-ag)
                   sq-el (if (= (r/ctor sq-el) :query_expression)
                           (r/$ sq-el 1)
                           sq-el)
                   qid (symbol (str "q" (sem/id sq-el)))]
 
-              [[pred-id {:qgm.predicate/expression
-                         (list (symbol op)
-                               (plan/expr lhs)
-                               (symbol (str qid "__" (->> (ffirst (sem/projected-columns sq-ag))
-                                                          plan/unqualified-projection-symbol))))
+              [pred-id {:qgm.predicate/expression
+                        (list (symbol op)
+                              (plan/expr lhs)
+                              (symbol (str qid "__" (->> (ffirst (sem/projected-columns sq-ag))
+                                                         plan/unqualified-projection-symbol))))
 
-                         :qgm.predicate/quantifiers (into #{qid} (expr-quantifiers lhs))}]]))]
+                        :qgm.predicate/quantifiers (into #{qid} (expr-quantifiers lhs))}]))]
     (->> ag
          (r/collect-stop
           (fn [ag]
@@ -376,13 +345,13 @@
 
               [:quantified_comparison_predicate ^:z lhs
                [:quantified_comparison_predicate_part_2 [_ op] _ ^:z sq-ag]]
-              (into (qgm-preds sq-ag)
+              (conj (qgm-preds sq-ag)
                     (subquery-pred sq-ag op lhs))
 
               [:in_predicate ^:z lhs
                [:in_predicate_part_2 _
                 [:in_predicate_value ^:z sq-ag]]]
-              (into (qgm-preds sq-ag) (subquery-pred sq-ag '= lhs))
+              (conj (qgm-preds sq-ag) (subquery-pred sq-ag '= lhs))
 
               [:named_columns_join _ _]
               (let [pred-id 'hack_ncj_p1]
@@ -438,15 +407,16 @@
                                  {col (list* 'and col-scan-preds)}))))])
                  (plan-box box))])
 
-            (wrap-select [plan qids]
-              (let [exprs (->> qids
+            (wrap-select [plan qs]
+              (let [qids (into #{} (map (comp :qgm.quantifier/id second)) qs)
+                    exprs (->> qids
                                (into []
                                      (comp
                                       (mapcat qid->pids)
                                       (distinct)
                                       (map preds)
                                       (filter (fn [{:qgm.predicate/keys [quantifiers expr-symbols]}]
-                                                (and (every? (set qids) quantifiers)
+                                                (and (every? qids quantifiers)
                                                      (> (count expr-symbols) 1))))
                                       (map :qgm.predicate/expression))))]
                 (case (count exprs)
@@ -455,19 +425,19 @@
                   [:select (list* 'and exprs)
                    plan])))
 
-            (wrap-distinct [plan [_box-type box-opts _qs]]
+            (wrap-distinct [plan [_box-type box-opts & _qs]]
               (if (= :qgm.box.body.distinct/enforce (:qgm.box.body/distinct box-opts))
                 [:distinct plan]
                 plan))
 
-            (wrap-top [plan [_box-type {:qgm.box.body/keys [result-offset fetch-first]} _qs]]
+            (wrap-top [plan [_box-type {:qgm.box.body/keys [result-offset fetch-first]} & _qs]]
               (if (or result-offset fetch-first)
                 [:top (->> {:skip result-offset, :limit fetch-first}
                            (into {} (filter val)))
                  plan]
                 plan))
 
-            (wrap-order-by [plan [_box-type box-opts _qs]]
+            (wrap-order-by [plan [_box-type box-opts & _qs]]
               (if-let [order-by-specs (:qgm.box.body/order-by box-opts)]
                 (let [base-projection (:qgm.box.head/columns box-opts)
                       order-by-projection (keep :projection order-by-specs)
@@ -494,28 +464,30 @@
 
                 plan))
 
-            (plan-select-box [[_ box-opts qs :as box]]
+            (plan-select-box [[_ box-opts & qs :as box]]
               (let [body-cols (:qgm.box.body/columns box-opts)]
                 (-> [:rename (zipmap body-cols (:qgm.box.head/columns box-opts))
                      [:project body-cols
-                      (-> (->> (vals qs)
+                      (-> (->> qs
                                (map plan-quantifier)
                                (reduce (fn [acc el]
                                          [:cross-join acc el])))
-                          (wrap-select (keys qs)))]]
+                          (wrap-select qs))]]
                     (wrap-distinct box))))
 
-            (plan-oj-box [[_ box-opts qs]]
+            (plan-oj-box [[_ box-opts & qs]]
               (assert (= 2 (count qs)) "can't handle more than 2 yet")
 
-              (-> (if-let [f-qid (:qgm.box.outer-join/foreach-quantifier box-opts)]
-                    [:left-outer-join {}
-                     (plan-quantifier (-> (dissoc qs f-qid) vals first))
-                     (plan-quantifier (get qs f-qid))]
-                    (into [:full-outer-join {}]
-                          (map plan-quantifier)
-                          (vals qs)))
-                  (wrap-select (keys qs))))
+              (let [{[fe] :qgm.quantifier/foreach, pfe :qgm.quantifier/preserved-foreach} (group-by first qs)]
+                (-> (if fe
+                      [:left-outer-join {}
+                       (plan-quantifier (first pfe))
+                       (plan-quantifier fe)]
+
+                      (into [:full-outer-join {}]
+                            (map plan-quantifier)
+                            qs))
+                    (wrap-select qs))))
 
             (plan-box [[box-type :as box]]
               (-> (case box-type

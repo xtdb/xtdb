@@ -24,8 +24,8 @@
     %s [shape=none, label=\"%s\"]
   }" box-id box-id table-name)]}))
 
-(defmethod box->dot ::default [box-id [box-type box-opts qs]]
-  (let [sub-graphs (for [[qid [_q-type _opts ranges-over]] qs]
+(defmethod box->dot ::default [box-id [box-type box-opts & qs]]
+  (let [sub-graphs (for [[_q-type {qid :qgm.quantifier/id} ranges-over] qs]
                      (box->dot (symbol (str "box_" qid)) ranges-over))]
     {:nodes (into [(format "  subgraph cluster_%s {
     label=\"%s\"
@@ -43,7 +43,7 @@
                                                  (str/join "\\l|" (:qgm.box.body/columns box-opts))
                                                  (str/upper-case (name (:qgm.box.body/distinct box-opts)))))
 
-                                 (->> (for [[qid [q-type _opts _ranges-over]] qs]
+                                 (->> (for [[q-type {qid :qgm.quantifier/id} _ranges-over] qs]
                                         (format "    %s [label=\"%s(%s)\", shape=circle, style=filled, margin=0]"
                                                 qid qid (str/upper-case (first (name q-type)))))
                                       (str/join "\n"))]
@@ -51,7 +51,7 @@
                   (mapcat :nodes)
                   sub-graphs)
 
-     :edges (into (vec (for [[qid [_q-type {cols :qgm.quantifier/columns} _ranges-over]] qs]
+     :edges (into (vec (for [[_q-type {qid :qgm.quantifier/id, cols :qgm.quantifier/columns} _ranges-over] qs]
                          (let [box-id (symbol (str "box_" qid))]
                            (format "  %s -> %s [label=\"%s\", lhead=cluster_%s]"
                                    qid box-id (str/join ", " cols) box-id))))
@@ -189,7 +189,7 @@ digraph {
                 WHERE q3.onhand_qty < q1.order_qty AND q3.type = 'CPU')"
 
             "SELECT si.movieTitle FROM Movie AS m LEFT JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear"]
-        q (nth qs 1)]
+        q (nth qs 2)]
     (-> (qgm->dot q (qgm/->qgm (z/vector-zip (core2.sql/parse q))))
         #_(doto println)
         (dot->file "png" "target/tree-qgm.png"))))
