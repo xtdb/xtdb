@@ -32,9 +32,9 @@
 (deftype UnwindCursor [^BufferAllocator allocator
                        ^ICursor in-cursor
                        ^String column-name
-                       with-ordinality?]
+                       ^String ordinality-column]
   ICursor
-  (tryAdvance [this c]
+  (tryAdvance [_this c]
     (let [advanced? (boolean-array 1)]
       (while (and (.tryAdvance in-cursor
                                (reify Consumer
@@ -45,12 +45,12 @@
                                          idxs (IntStream/builder)
                                          in-vec (.getVector from-col)
 
-                                         ordinal-vec (when with-ordinality?
-                                                       (IntVector. "_ordinal" allocator))]
+                                         ordinal-vec (when ordinality-column
+                                                       (IntVector. ordinality-column allocator))]
 
                                      (try
                                        (let [^IntConsumer
-                                             add-ordinal (if with-ordinality?
+                                             add-ordinal (if ordinal-vec
                                                            (let [w (vw/vec->writer ordinal-vec)]
                                                              (.add out-cols (iv/->direct-vec ordinal-vec))
 
@@ -101,5 +101,5 @@
   (close [_]
     (.close in-cursor)))
 
-(defn ->unwind-cursor ^core2.ICursor [allocator ^ICursor in-cursor column-name {:keys [with-ordinality?]}]
-  (UnwindCursor. allocator in-cursor column-name with-ordinality?))
+(defn ->unwind-cursor ^core2.ICursor [allocator ^ICursor in-cursor column-name {:keys [ordinality-column]}]
+  (UnwindCursor. allocator in-cursor column-name ordinality-column))

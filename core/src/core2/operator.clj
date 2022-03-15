@@ -273,7 +273,8 @@
             (fn [col-names]
               {:col-names col-names
                :->cursor (fn [{:keys [allocator]} inner]
-                           (unwind/->unwind-cursor allocator inner (name column) opts))})))
+                           (unwind/->unwind-cursor allocator inner (name column)
+                                                   (update opts :ordinality-column #(some-> % name))))})))
 
 (def ^:dynamic ^:private *relation-variable->col-names* {})
 (def ^:dynamic ^:private *relation-variable->cursor-factory* {})

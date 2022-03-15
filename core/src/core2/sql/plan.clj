@@ -435,8 +435,8 @@
 ;; TODO: Probably better if the operator explicitly takes the name of the
 ;; source column, the destination column and an optional ordinal
 ;; column instead of this workaround.
-(defn- build-collection-derived-table [tp with-ordinality?]
-  (let [{:keys [id correlation-name] :as table} (sem/table tp)
+(defn- build-collection-derived-table [tp]
+  (let [{:keys [id correlation-name]} (sem/table tp)
         [unwind-column ordinality-column] (map qualified-projection-symbol (first (sem/projected-columns tp)))
         cdt (r/$ tp 1)
         qualified-projection (vec (for [table (vals (sem/local-env-singleton-values (sem/env cdt)))
@@ -446,17 +446,13 @@
                                         :when (not= ordinality-column column)]
                                     (if (= unwind-column column)
                                       {unwind-column (expr (r/$ cdt 2))}
-                                      column)))
-        unwind-relation [:unwind
-                         (with-meta
-                           unwind-column
-                           {:table-reference {:table-id id
-                                              :correlation-name correlation-name}})
-                         {:with-ordinality? with-ordinality?}
-                         [:project qualified-projection nil]]]
-    (if ordinality-column
-      [:rename {'_ordinal ordinality-column} unwind-relation]
-      unwind-relation)))
+                                      column)))]
+    [:unwind (-> unwind-column
+                 (with-meta {:table-reference {:table-id id
+                                               :correlation-name correlation-name}}))
+     (->> {:ordinality-column ordinality-column}
+          (into {} (remove (comp nil? val))))
+     [:project qualified-projection nil]]))
 
 (defn- build-table-primary [tp]
   (let [{:keys [id correlation-name] :as table} (sem/table tp)
@@ -487,14 +483,9 @@
   (reduce
    (fn [acc table]
      (r/zmatch table
-       [:unwind cve {:with-ordinality? false} [:project projection nil]]
+       [:unwind cve unwind-opts [:project projection nil]]
        ;;=>
-       [:unwind cve {:with-ordinality? false} [:project projection acc]]
-
-       [:rename columns [:unwind cve {:with-ordinality? true} [:project projection nil]]]
-       ;;=>
-       [:rename columns [:unwind cve {:with-ordinality? true} [:project projection acc]]]
-
+       [:unwind cve unwind-opts [:project projection acc]]
 
        [:apply :cross-join columns dependent-column-names nil dependent-relation]
        ;;=>
@@ -608,17 +599,17 @@
 
      [:table_primary [:collection_derived_table _ _] _ _]
      ;;=>
-     (build-collection-derived-table z false)
+     (build-collection-derived-table z)
 
      [:table_primary [:collection_derived_table _ _] _ _ _]
-     (build-collection-derived-table z false)
+     (build-collection-derived-table z)
 
-     [:table_primary [:collection_derived_table _ _ "WITH" "ORDINALITY"] _ _]
+     [:table_primary [:collection_derived_table _ _ _ _] _ _]
      ;;=>
-     (build-collection-derived-table z true)
+     (build-collection-derived-table z)
 
-     [:table_primary [:collection_derived_table _ _ "WITH" "ORDINALITY"] _ _ _]
-     (build-collection-derived-table z true)
+     [:table_primary [:collection_derived_table _ _ _ _] _ _ _]
+     (build-collection-derived-table z)
 
      [:table_primary [:lateral_derived_table _ [:subquery ^:z qe]] _ _]
      (build-lateral-derived-table z qe)
@@ -1387,7 +1378,9 @@
                                  (r/innermost (r/mono-tp optimize-plan))
                                  (z/node))]
                    (if (s/invalid? (s/conform ::lp/logical-plan plan))
-                     (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
+                     (do
+                       (prn plan)
+                       (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan))))
                      plan))})))))
 
 ;; Building plans using the Apply operator:

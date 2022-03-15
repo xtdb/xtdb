@@ -271,15 +271,15 @@
                         '{$x [{:a 1, :b [1 "foo"]}]}))
         "handles multiple types")
 
-  (t/is (= [{:a 1, :b 1, :_ordinal 1}
-            {:a 1, :b 2, :_ordinal 2}
-            {:a 2, :b 3, :_ordinal 1}
-            {:a 2, :b 4, :_ordinal 2}
-            {:a 2, :b 5, :_ordinal 3}]
-           (op/query-ra '[:unwind b {:with-ordinality? true}
+  (t/is (= [{:a 1, :b 1, :$ordinal 1}
+            {:a 1, :b 2, :$ordinal 2}
+            {:a 2, :b 3, :$ordinal 1}
+            {:a 2, :b 4, :$ordinal 2}
+            {:a 2, :b 5, :$ordinal 3}]
+           (op/query-ra '[:unwind b {:ordinality-column $ordinal}
                           [:table $x]]
                         '{$x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}))
-        "with-ordinality"))
+        "with ordinality"))
 
 (t/deftest test-max-1-row-operator
   (t/is (= [{:a 1, :b 2}]
