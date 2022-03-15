@@ -42,6 +42,9 @@
              node (z/node loc)]
          (cond
            (or (= pattern-node node)
+               (and (keyword? pattern-node)
+                    (ident? node)
+                    (= (name pattern-node) (name node)))
                (and (instance? Pattern pattern-node)
                     (re-find pattern-node (str node))))
            (recur (zip-next-skip-subtree pattern-loc) (zip-next-skip-subtree loc) acc)

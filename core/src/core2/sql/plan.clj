@@ -287,6 +287,10 @@
      relation
      subqueries)))
 
+(defn- and-predicate? [predicate]
+  (and (sequential? predicate)
+       (= 'and (first predicate))))
+
 (defn- wrap-with-select [sc relation]
   (let [sc-expr (expr sc)]
     (reduce
@@ -294,8 +298,7 @@
        [:select predicate acc])
      (wrap-with-apply sc relation)
      ((fn step [sc-expr]
-        (if (and (sequential? sc-expr)
-                 (= 'and (first sc-expr)))
+        (if (and-predicate? sc-expr)
           (concat (step (nth sc-expr 1))
                   (step (nth sc-expr 2)))
           [sc-expr]))
@@ -388,9 +391,11 @@
 (defn- build-query-specification [sl te]
   (let [projection (first (sem/projected-columns sl))
         unqualified-rename-map (->> (for [{:keys [qualified-column] :as projection} projection
-                                          :when qualified-column]
-                                      [(qualified-projection-symbol projection)
-                                       (unqualified-projection-symbol projection)])
+                                          :when qualified-column
+                                          :let [column (qualified-projection-symbol projection)]]
+                                      [column (with-meta
+                                                (unqualified-projection-symbol projection)
+                                                (meta column))])
                                     (into {}))
         qualified-projection (vec (for [{:keys [qualified-column] :as projection} projection
                                         :let [derived-column (:ref (meta projection))]]
@@ -785,22 +790,31 @@
        (set)))
 
 (defn- equals-predicate? [predicate]
-  (and (sequential? predicate)
-       (= '= (first predicate))
-       (= 3 (count predicate))))
+  (r/zmatch predicate
+    [:= x y]
+    true
+
+    false))
 
 (defn- all-predicate? [predicate]
-  (and (sequential? predicate)
-       (= 'or (first predicate))
-       (equals-predicate? (second predicate))
-       (= 'nil? (first (nth predicate 2)))
-       (= 'nil? (first (nth predicate 3)))
-       (= 4 (count predicate))))
+  (r/zmatch predicate
+    [:or [:= x y] [:nil? x] [:nil? y]]
+    true
+
+    false))
 
 (defn- not-predicate? [predicate]
-  (and (sequential? predicate)
-       (= 'not (first predicate))
-       (= 2 (count predicate))))
+  (r/zmatch predicate
+    [:not _]
+    true
+
+    false))
+
+(defn- exists-predicate? [predicate]
+  (if (symbol? predicate)
+    (:exists? (meta predicate))
+    (and (not-predicate? predicate)
+         (exists-predicate? (second predicate)))))
 
 (defn- build-join-map [predicate lhs rhs]
   (when (equals-predicate? predicate)
@@ -818,8 +832,7 @@
         {lhs-v rhs-v}))))
 
 (defn- conjunction-clauses [predicate]
-  (if (and (sequential? predicate)
-           (= 'and (first predicate)))
+  (if (and-predicate? predicate)
     (rest predicate)
     [predicate]))
 
@@ -863,12 +876,12 @@
     (cond
       (and (symbol? predicate)
            (= #{predicate} dependent-column-names)
-           (:exists? (meta predicate)))
+           (exists-predicate? predicate))
       [:apply :semi-join columns #{} independent-relation dependent-relation]
 
       (and (not-predicate? predicate)
            (= #{(second predicate)} dependent-column-names)
-           (:exists? (meta (second predicate))))
+           (exists-predicate? predicate))
       [:apply :anti-join columns #{} independent-relation dependent-relation])))
 
 (defn- push-selection-down-past-apply [z]
@@ -1215,7 +1228,7 @@
      [:select predicate-2
       relation]]
     ;;=>
-    (when (or (:exists? (meta predicate-1))
+    (when (or (exists-predicate? predicate-1)
               (and (not-empty (expr-correlated-symbols predicate-2))
                    (or (empty? (expr-correlated-symbols predicate-1))
                        (and (equals-predicate? predicate-2)
@@ -1255,14 +1268,9 @@
     (when (not-empty (expr-correlated-symbols predicate))
       (cond
         (map? columns)
-        (let [smap-with-meta (->> (for [[k v] columns]
-                                    [k (if (meta v)
-                                         v
-                                         (with-meta v (meta k)))])
-                                  (into {}))]
-          [:select (w/postwalk-replace smap-with-meta predicate)
-           [:rename columns
-            relation]])
+        [:select (w/postwalk-replace columns predicate)
+         [:rename columns
+          relation]]
 
         (symbol? columns)
         (let [{:keys [table-id correlation-name]} (:table-reference (meta columns))
