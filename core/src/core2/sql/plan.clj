@@ -97,6 +97,12 @@
      ;;=>
      (list (symbol co) (expr rvp-1) (expr rvp-2))
 
+     [:numeric_value_expression ^:z nve [_ op] ^:z t]
+     (list (symbol op) (expr nve) (expr t))
+
+     [:term ^:z t [_ op] ^:z f]
+     (list (symbol op) (expr t) (expr f))
+
      [:signed_numeric_literal ^:z unl]
      (expr unl)
 
@@ -681,7 +687,7 @@
       [:join _ lhs rhs]
       (vec (mapcat relation-columns [lhs rhs]))
 
-      [:cross-join _ lhs rhs]
+      [:cross-join lhs rhs]
       (vec (mapcat relation-columns [lhs rhs]))
 
       [:left-outer-join _ lhs rhs]
@@ -746,7 +752,7 @@
       [:max-1-row relation]
       (relation-columns relation)
 
-      (throw (IllegalArgumentException. "cannot calculate columns for: " (pr-str relation))))))
+      (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation)))))))
 
 (defn- table-references-in-subtree [op]
   (set (r/collect-stop
@@ -1100,6 +1106,31 @@
       [:select predicate
        [:project projection
         relation]])
+
+    [:cross-join [:select predicate lhs] rhs]
+    ;;=>
+    (when (not-empty (expr-correlated-symbols predicate))
+      [:select predicate [:cross-join lhs rhs]])
+
+    [:cross-join lhs [:select predicate rhs]]
+    ;;=>
+    (when (not-empty (expr-correlated-symbols predicate))
+      [:select predicate [:cross-join lhs rhs]])
+
+    [join-op join-map [:select predicate lhs] rhs]
+    ;;=>
+    (when (not-empty (expr-correlated-symbols predicate))
+      [:select predicate [join-op join-map lhs rhs]])
+
+    [:join join-map lhs [:select predicate rhs]]
+    ;;=>
+    (when (not-empty (expr-correlated-symbols predicate))
+      [:select predicate [:join join-map lhs rhs]])
+
+    [:left-outer-join join-map lhs [:select predicate rhs]]
+    ;;=>
+    (when (not-empty (expr-correlated-symbols predicate))
+      [:select predicate [:left-outer-join join-map lhs rhs]])
 
     [:group-by group-by-columns
      [:select predicate

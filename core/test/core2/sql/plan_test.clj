@@ -405,25 +405,28 @@
                  [:project [z__6_z]
                   [:rename z__6
                    [:select (= z 1)
-                    [:scan [{z (= z 1)}]]]]]]]]])
+                    [:scan [{z (= z 1)}]]]]]]]]]))
 
+  (t/testing "decorrelation"
     ;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf "Orthogonal Optimization of Subqueries and Aggregation"
-    (t/testing "decorrelation"
-      (valid? "SELECT c.custkey FROM customer c WHERE 1000000 < (SELECT SUM(o.totalprice) FROM orders o WHERE o.custkey = c.custkey)"
-              '[:rename {c__3_custkey custkey}
-                [:project [c__3_custkey]
-                 [:rename subquery__5
-                  [:select (< 1000000 $column_1$)
-                   [:project [c__3_custkey {$column_1$ $agg_out__6_7$}]
-                    [:group-by [c__3_custkey $row_number$ {$agg_out__6_7$ (sum $agg_in__6_7$)}]
-                     [:project [c__3_custkey $row_number$ {$agg_in__6_7$ o__8_totalprice}]
-                      [:left-outer-join {c__3_custkey o__8_custkey}
-                       [:project [c__3_custkey {$row_number$ (row_number)}]
-                        [:rename c__3 [:scan [custkey]]]]
-                       [:rename o__8 [:scan [totalprice custkey]]]]]]]]]]]))
+    (valid? "SELECT c.custkey FROM customer c
+             WHERE 1000000 < (SELECT SUM(o.totalprice) FROM orders o WHERE o.custkey = c.custkey)"
+            '[:rename {c__3_custkey custkey}
+              [:project [c__3_custkey]
+               [:rename subquery__5
+                [:select (< 1000000 $column_1$)
+                 [:project [c__3_custkey {$column_1$ $agg_out__6_7$}]
+                  [:group-by [c__3_custkey $row_number$ {$agg_out__6_7$ (sum $agg_in__6_7$)}]
+                   [:project [c__3_custkey $row_number$ {$agg_in__6_7$ o__8_totalprice}]
+                    [:left-outer-join {c__3_custkey o__8_custkey}
+                     [:project [c__3_custkey {$row_number$ (row_number)}]
+                      [:rename c__3 [:scan [custkey]]]]
+                     [:rename o__8 [:scan [totalprice custkey]]]]]]]]]]])
 
     ;; https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf "Parameterized Queries and Nesting Equivalences"
-    (valid? "SELECT * FROM customers WHERE customers.country = 'Mexico' AND EXISTS (SELECT * FROM orders WHERE customers.custno = orders.custno)"
+    (valid? "SELECT * FROM customers
+             WHERE customers.country = 'Mexico' AND
+                   EXISTS (SELECT * FROM orders WHERE customers.custno = orders.custno)"
             '[:rename {customers__3_country country, customers__3_custno custno}
               [:project [customers__3_country customers__3_custno]
                [:semi-join {customers__3_custno subquery__5_custno}
@@ -434,6 +437,8 @@
                  [:rename {orders__7_custno custno}
                   [:rename orders__7 [:scan [custno]]]]]]]])
 
+  ;; NOTE: these below simply check what's currently being produced,
+  ;; not necessarily what should be produced.
     (valid? "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
 FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)"
             '[:rename {customers__8_name name}
@@ -449,7 +454,56 @@ FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp
                       [:rename subquery__9
                        [:rename {salesp__11_country country}
                         [:rename salesp__11 [:scan [country]]]]]]]
-                    [:rename orders__6 [:scan [custno]]]]]]]]]]))
+                    [:rename orders__6 [:scan [custno]]]]]]]]]])
+
+    ;; https://subs.emis.de/LNI/Proceedings/Proceedings241/383.pdf "Unnesting Arbitrary Queries"
+    (valid? "SELECT s.name, e.course
+             FROM students s, exams e
+             WHERE s.id = e.sid AND
+             e.grade = (SELECT MIN(e2.grade)
+                        FROM exams e2
+                        WHERE s.id = e2.sid)"
+            '[:rename {s__3_name name, e__4_course course}
+              [:project [s__3_name e__4_course]
+               [:select (= e__4_grade subquery__7_$column_1$)
+                [:select (= s__3_id e__4_sid)
+                 [:rename subquery__7
+                  [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade {$column_1$ $agg_out__8_9$}]
+                   [:group-by [s__3_name s__3_id e__4_course e__4_sid e__4_grade $row_number$ {$agg_out__8_9$ (min $agg_in__8_9$)}]
+                    [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade $row_number$ {$agg_in__8_9$ e2__10_grade}]
+                     [:left-outer-join {s__3_id e2__10_sid}
+                      [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade {$row_number$ (row_number)}]
+                       [:cross-join
+                        [:rename s__3 [:scan [name id]]]
+                        [:rename e__4 [:scan [course sid grade]]]]]
+                      [:rename e2__10 [:scan [grade sid]]]]]]]]]]]])
+
+    (valid? "SELECT s.name, e.course
+             FROM students s, exams e
+             WHERE s.id = e.sid AND
+                   (s.major = 'CS' OR s.major = 'Games Eng') AND
+                   e.grade >= (SELECT AVG(e2.grade) + 1
+                               FROM exams e2
+                               WHERE s.id = e2.sid OR
+                                     (e2.curriculum = s.major AND
+                                      s.year > e2.date))"
+            '[:rename {s__3_name name, e__4_course course}
+              [:project [s__3_name e__4_course]
+               [:select (>= e__4_grade subquery__9_$column_1$)
+                [:select (or (= s__3_major "CS") (= s__3_major "Games Eng"))
+                 [:select (= s__3_id e__4_sid)
+                  [:rename subquery__9
+                   [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade {$column_1$ (+ $agg_out__10_11$ 1)}]
+                    [:group-by [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade $row_number$ {$agg_out__10_11$ (avg $agg_in__10_11$)}]
+                     [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade $row_number$ {$agg_in__10_11$ e2__12_grade}]
+                      [:apply :left-outer-join {s__3_id ?s__3_id, s__3_major ?s__3_major, s__3_year ?s__3_year} #{subquery__9_$column_1$}
+                       [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade {$row_number$ (row_number)}]
+                        [:cross-join
+                         [:rename s__3 [:scan [name id major year]]]
+                         [:rename e__4 [:scan [course sid grade]]]]]
+                       [:rename e2__12
+                        [:select (or (= ?s__3_id sid) (and (= curriculum ?s__3_major) (> ?s__3_year date)))
+                         [:scan [grade sid curriculum date]]]]]]]]]]]]]]))
 
   (comment
 
