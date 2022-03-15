@@ -14,7 +14,7 @@
 
 (s/def :qgm/id symbol?)
 
-(s/def :qgm.box/type #{:qgm.box/base-table :qgm.box/select})
+(s/def :qgm.box/type #{:qgm.box/base-table :qgm.box/select :qgm.box/grouping :qgm.box/outer-join})
 
 (defmulti box-spec first)
 
@@ -22,16 +22,17 @@
 
 (s/def :qgm.box.base-table/name symbol?)
 
-(defmethod box-spec :qgm.box/base-table [_]
-  (s/cat :qgm.box/type #{:qgm.box/base-table}
-         :qgm.box.base-table/name :qgm.box.base-table/name))
-
 (s/def :qgm.box.head/distinct? boolean?)
 (s/def :qgm.box.head/columns (s/coll-of symbol? :kind vector? :min-count 1))
 (s/def :qgm.box.body/columns (s/coll-of any? :kind vector? :min-count 1))
 (s/def :qgm.box.body/distinct #{:qgm.box.body.distinct/enforce
                                 :qgm.box.body.distinct/preserve
                                 :qgm.box.body.distinct/permit})
+
+(defmethod box-spec :qgm.box/base-table [_]
+  (s/cat :qgm.box/type #{:qgm.box/base-table}
+         :qgm.box.base-table/properties (s/keys :req [:qgm.box.base-table/name
+                                                      :qgm.box.head/columns])))
 
 (defmethod box-spec :qgm.box/select [_]
   (s/cat :qgm.box/type #{:qgm.box/select}
@@ -194,7 +195,9 @@
                   (let [table (sem/table ag)]
                     (if (:subquery-scope-id table)
                       (qgm-box (sem/subquery-element ag))
-                      [:qgm.box/base-table (symbol (:table-or-query-name table))])))
+                      [:qgm.box/base-table {:qgm.box.base-table/name (symbol (:table-or-query-name table))
+                                            :qgm.box.head/columns (->> (first (sem/projected-columns ag))
+                                                                       (mapv plan/unqualified-projection-symbol))}])))
 
                 (with-order-by [box ssl]
                   (-> box
