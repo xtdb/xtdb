@@ -31,8 +31,17 @@
                         :correlation-name table
                         :column column}}))
 
+(defn- unqualified-id-symbol
+  ([column] (unqualified-id-symbol nil column))
+  ([table-id column]
+   (with-meta column
+     {:column-reference (cond-> {:column column}
+                          table-id (assoc :table-id table-id))})))
+
 (defn unqualified-projection-symbol [{:keys [identifier ^long index] :as projection}]
-  (symbol (or identifier (str "$column_" (inc index) "$"))))
+  (let [{:keys [table]} (meta projection)
+        column (symbol (or identifier (str "$column_" (inc index) "$")))]
+    (unqualified-id-symbol (:id table) column)))
 
 (defn qualified-projection-symbol [{:keys [qualified-column original-index] :as projection}]
   (let [{derived-column :ref table :table} (meta projection)]
@@ -56,7 +65,8 @@
 
 (defn- aggregate-symbol [prefix z]
   (let [query-id (sem/id (sem/scope-element z))]
-    (symbol (str "$" prefix relation-id-delimiter query-id relation-prefix-delimiter (sem/id z) "$"))))
+    (unqualified-id-symbol query-id
+     (symbol (str "$" prefix relation-id-delimiter query-id relation-prefix-delimiter (sem/id z) "$")))))
 
 (defn- exists-symbol [qe]
   (vary-meta (id-symbol "subquery" (sem/id qe) "$exists$") assoc :exists? true))
@@ -363,7 +373,7 @@
                                               :asc)]
                               [(if-let [idx (sem/order-by-index z)]
                                  {:spec {(unqualified-projection-symbol (nth projection idx)) direction}}
-                                 (let [column (symbol (str "$order_by__" query-id  "_" (r/child-idx z) "$"))]
+                                 (let [column (unqualified-id-symbol query-id (symbol (str "$order_by__" query-id  "_" (r/child-idx z) "$")))]
                                    {:spec {column direction}
                                     :projection {column (expr (r/$ z 1))}}))])
 
@@ -399,9 +409,7 @@
         unqualified-rename-map (->> (for [{:keys [qualified-column] :as projection} projection
                                           :when qualified-column
                                           :let [column (qualified-projection-symbol projection)]]
-                                      [column (with-meta
-                                                (unqualified-projection-symbol projection)
-                                                (meta column))])
+                                      [column (unqualified-projection-symbol projection)])
                                     (into {}))
         qualified-projection (vec (for [{:keys [qualified-column] :as projection} projection
                                         :let [derived-column (:ref (meta projection))]]
@@ -792,7 +800,7 @@
 
 (defn- expr-table-ids [expr]
   (->> (expr-column-references expr)
-       (map :table-id)
+       (keep :table-id)
        (set)))
 
 (defn- equals-predicate? [predicate]
@@ -874,8 +882,10 @@
     [:select predicate
      [:apply mode columns dependent-column-names independent-relation dependent-relation]]
     ;;=>
-    (when (empty? (set/intersection (expr-table-ids predicate)
-                                    (expr-table-ids dependent-column-names)))
+    (when (and (empty? (set/intersection (expr-table-ids predicate)
+                                         (expr-table-ids dependent-column-names)))
+               (empty? (set/intersection (expr-symbols predicate)
+                                         (relation-columns dependent-relation))))
       [:apply
        mode
        columns
@@ -906,15 +916,9 @@
        [:select (w/postwalk-replace (set/map-invert columns) predicate)
         relation]])))
 
-;; TODO: this check should really check that selection only depends on
-;; non calculated projection using expr-symbols or similar meta data
-;; based approaches, but this isn't setup properly for some cases when
-;; there's introduction or references to unqualified columns.
 (defn- predicate-depends-on-calculated-expression? [predicate projection]
-  (not-empty (set/intersection (set (filter symbol? (flatten (if (coll? predicate)
-                                                               predicate
-                                                               [predicate]))))
-                               (set (map (comp key first) (filter map? projection))))))
+  (not (set/subset? (set (expr-symbols predicate))
+                    (set (filter symbol? projection)))))
 
 (defn- push-selection-down-past-project [z]
   (r/zmatch z
@@ -1196,8 +1200,6 @@
            [:rename columns
             relation]])))))
 
-;; Rule 3, 4, 8 and 9.
-
 (defn- remove-unused-correlated-columns [columns dependent-relation]
   (->> columns
        (filter (comp (expr-correlated-symbols dependent-relation) val))
@@ -1211,21 +1213,9 @@
              [c (id-symbol correlation-name table-id c)])
            (into {})))))
 
+;; Rule 3, 4, 8 and 9.
 (defn- decorrelate-apply [z]
   (r/zmatch z
-    ;; Rule 3.
-    [:apply mode columns dependent-column-names independent-relation [:rename rename-columns [:select predicate dependent-relation]]]
-    ;;=>
-    (when (or (= :cross-join mode)
-              (equals-predicate? predicate)
-              (all-predicate? predicate))
-      [:rename rename-columns
-       [:select (w/postwalk-replace (set/map-invert columns) (if (all-predicate? predicate)
-                                                               (second predicate)
-                                                               predicate))
-        (let [columns (remove-unused-correlated-columns columns dependent-relation)]
-          [:apply mode columns dependent-column-names independent-relation dependent-relation])]])
-
     ;; Rule 3.
     [:apply mode columns dependent-column-names independent-relation [:select predicate dependent-relation]]
     ;;=>
@@ -1237,15 +1227,6 @@
                                                               predicate))
        (let [columns (remove-unused-correlated-columns columns dependent-relation)]
          [:apply mode columns dependent-column-names independent-relation dependent-relation])])
-
-    ;; Rule 4.
-    [:apply mode columns dependent-column-names independent-relation [:rename rename-columns [:project projection dependent-relation]]]
-    ;;=>
-    [:rename rename-columns
-     [:project (vec (concat (relation-columns independent-relation)
-                            (w/postwalk-replace (set/map-invert columns) projection)))
-      (let [columns (remove-unused-correlated-columns columns dependent-relation)]
-        [:apply mode columns dependent-column-names independent-relation dependent-relation])]]
 
     ;; Rule 4.
     [:apply mode columns dependent-column-names independent-relation [:project projection dependent-relation]]
@@ -1264,19 +1245,20 @@
          dependent-relation]]]]]
     ;;=>
     (let [independent-projection (relation-columns independent-relation)
-          smap (set/map-invert columns)]
+          smap (set/map-invert columns)
+          row-number-sym (unqualified-id-symbol '$row_number$)]
       [:rename (group-by-after-apply-rename-map rename-columns post-group-by-projection)
        [:project (vec (concat independent-projection
                               (w/postwalk-replace smap post-group-by-projection)))
         [:group-by (vec (concat independent-projection
-                                ['$row_number$]
+                                [row-number-sym]
                                 (w/postwalk-replace smap group-by-columns)))
          [:project (vec (concat independent-projection
-                                ['$row_number$]
+                                [row-number-sym]
                                 (w/postwalk-replace smap pre-group-by-projection)))
           (let [columns (remove-unused-correlated-columns columns dependent-relation)]
             [:apply :cross-join columns dependent-column-names
-             [:project (vec (concat independent-projection [{'$row_number$ '(row_number)}]))
+             [:project (vec (concat independent-projection [{row-number-sym '(row_number)}]))
               independent-relation]
              dependent-relation])]]]])
 
@@ -1290,19 +1272,20 @@
           dependent-relation]]]]]]
     ;;=>
     (let [independent-projection (relation-columns independent-relation)
-          smap (set/map-invert columns)]
+          smap (set/map-invert columns)
+          row-number-sym (unqualified-id-symbol '$row_number$)]
       [:rename (group-by-after-apply-rename-map rename-columns post-group-by-projection)
        [:project (vec (concat independent-projection
                               (w/postwalk-replace smap post-group-by-projection)))
         [:group-by (vec (concat independent-projection
-                                ['$row_number$]
+                                [row-number-sym]
                                 (w/postwalk-replace smap group-by-columns)))
          [:project (vec (concat independent-projection
-                                ['$row_number$]
+                                [row-number-sym]
                                 (w/postwalk-replace smap pre-group-by-projection)))
           (let [columns (remove-unused-correlated-columns columns dependent-relation)]
             [:apply :left-outer-join columns dependent-column-names
-             [:project (vec (concat independent-projection [{'$row_number$ '(row_number)}]))
+             [:project (vec (concat independent-projection [{row-number-sym '(row_number)}]))
               independent-relation]
              dependent-relation])]]]])))
 
