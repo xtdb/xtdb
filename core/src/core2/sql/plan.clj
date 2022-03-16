@@ -679,7 +679,7 @@
       (vec explicit-column-names)
 
       [:table table]
-      (vec (keys (first table)))
+      (mapv symbol (keys (first table)))
 
       [:scan columns]
       (mapv ->column columns)
@@ -753,6 +753,153 @@
       (relation-columns relation)
 
       (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation)))))))
+
+;; Attempt to clean up tree, removing names internally and only add
+;; them back at the top. Scan still needs explicit names to access the
+;; columns, so these are directly renamed.
+
+(declare remove-names)
+
+(def ^:private ^:dynamic *name-counter* (atom 0))
+
+(defn- next-name []
+  (symbol (str 'x (swap! *name-counter* inc))))
+
+(defn- remove-names* [relation]
+  (let [[smap relation] (binding [*name-counter* (atom 0)]
+                          (remove-names relation))]
+    [:rename (select-keys smap (relation-columns relation))
+     relation]))
+
+(defn- remove-names [relation]
+  (letfn [(->column [column-or-expr]
+            (if (map? column-or-expr)
+              (first (keys column-or-expr))
+              column-or-expr))]
+    (r/zmatch relation
+      [:table explicit-column-names table]
+      (let [smap (zipmap (repeatedly next-name)
+                         explicit-column-names)]
+        [smap [:table (w/postwalk-replace (set/map-invert smap) explicit-column-names) table]])
+
+      [:table table]
+      (let [smap (zipmap (repeatedly next-name)
+                         (map symbol (keys (first table))))]
+        [smap [:table (w/postwalk-replace (->> (for [[k v] smap]
+                                                 [(keyword v) k])
+                                               (into {}))
+                                          table)]])
+
+      [:scan columns]
+      (let [smap (zipmap (repeatedly next-name)
+                         (map ->column columns))]
+        [smap [:rename (set/map-invert smap) [:scan columns]]])
+
+      [:join join-map lhs rhs]
+      (let [[smap-lhs lhs] (remove-names lhs)
+            [smap-rhs rhs] (remove-names rhs)
+            smap (merge smap-lhs smap-rhs)]
+        [smap [:join (w/postwalk-replace (set/map-invert smap) join-map) lhs rhs]])
+
+      [:cross-join lhs rhs]
+      (let [[smap-lhs lhs] (remove-names lhs)
+            [smap-rhs rhs] (remove-names rhs)]
+        [(merge smap-lhs smap-rhs) [:cross-join lhs rhs]])
+
+      [:left-outer-join join-map lhs rhs]
+      (let [[smap-lhs lhs] (remove-names lhs)
+            [smap-rhs rhs] (remove-names rhs)
+            smap (merge smap-lhs smap-rhs)]
+        [smap [:left-outer-join (w/postwalk-replace (set/map-invert smap) join-map) lhs rhs]])
+
+      [:semi-join join-map lhs rhs]
+      (let [[smap-lhs lhs] (remove-names lhs)
+            [smap-rhs rhs] (remove-names rhs)
+            smap (merge smap-lhs smap-rhs)]
+        [smap [:semi-join (w/postwalk-replace (set/map-invert smap) join-map) lhs rhs]])
+
+      [:anti-join join-map lhs rhs]
+      (let [[smap-lhs lhs] (remove-names lhs)
+            [smap-rhs rhs] (remove-names rhs)
+            smap (merge smap-lhs smap-rhs)]
+        [smap [:anti-join (w/postwalk-replace (set/map-invert smap) join-map) lhs rhs]])
+
+      [:rename prefix-or-columns relation]
+      (let [[smap relation] (remove-names relation)
+            columns (if (symbol? prefix-or-columns)
+                      (->> (for [c (vals smap)]
+                             [c (symbol (str prefix-or-columns "_" c))])
+                           (into {}))
+                      prefix-or-columns)
+            smap-inv (set/map-invert smap)]
+        [(->> (for [[k v] columns]
+                [(get smap-inv k) v])
+              (into smap)) relation])
+
+      [:project projection relation]
+      (let [[smap relation] (remove-names relation)
+            smap (merge smap (zipmap (repeatedly next-name)
+                                     (map ->column (filter map? projection))))]
+        [smap [:project (w/postwalk-replace (set/map-invert smap) projection) relation]])
+
+      [:group-by columns relation]
+      (let [[smap relation] (remove-names relation)
+            smap (merge smap (zipmap (repeatedly next-name)
+                                     (map ->column (filter map? columns))))]
+        [smap [:group-by (w/postwalk-replace (set/map-invert smap) columns) relation]])
+
+      [:select predicate relation]
+      (let [[smap relation] (remove-names relation)]
+        [smap [:select (w/postwalk-replace (set/map-invert smap) predicate) relation]])
+
+      [:order-by opts relation]
+      (let [[smap relation] (remove-names relation)]
+        [smap [:order-by (w/postwalk-replace (set/map-invert smap) opts) relation]])
+
+      [:top opts relation]
+      (let [[smap relation] (remove-names relation)]
+        [smap [:top opts relation]])
+
+      [:distinct relation]
+      (let [[smap relation] (remove-names relation)]
+        [smap [:distinct relation]])
+
+      [:intersect lhs rhs]
+      (let [[smap-lhs lhs] (remove-names lhs)
+            [smap-rhs rhs] (remove-names rhs)]
+        [(merge smap-lhs smap-rhs) [:intersect lhs (w/postwalk-replace (zipmap (relation-columns rhs)
+                                                                               (relation-columns lhs))
+                                                                       rhs)]])
+
+      [:difference lhs rhs]
+      (let [[smap-lhs lhs] (remove-names lhs)
+            [smap-rhs rhs] (remove-names rhs)]
+        [(merge smap-lhs smap-rhs) [:difference lhs (w/postwalk-replace (zipmap (relation-columns rhs)
+                                                                                (relation-columns lhs))
+                                                                        rhs)]])
+
+      [:union-all lhs rhs]
+      (let [[smap-lhs lhs] (remove-names lhs)
+            [smap-rhs rhs] (remove-names rhs)]
+        [(merge smap-lhs smap-rhs) [:union-all lhs (w/postwalk-replace (zipmap (relation-columns rhs)
+                                                                               (relation-columns lhs))
+                                                                       rhs)]])
+
+      [:apply mode columns dependent-column-names independent-relation dependent-relation]
+      (let [[smap-lhs lhs] (remove-names independent-relation)
+            [smap-rhs rhs] (remove-names dependent-relation)
+            smap (merge smap-lhs smap-rhs)]
+        [smap [:apply mode (w/postwalk-replace (set/map-invert smap-rhs) columns) (w/postwalk-replace (set/map-invert smap-rhs) dependent-column-names) lhs rhs]])
+
+      [:unwind columns opts relation]
+      (let [[smap relation] (remove-names relation)]
+        [smap [:unwind (w/postwalk-replace (set/map-invert smap) columns) (w/postwalk-replace (set/map-invert smap) opts) relation]])
+
+      [:max-1-row relation]
+      (let [[smap relation] (remove-names relation)]
+        [smap [:max-1-row relation]])
+
+      (throw (IllegalArgumentException. (str "cannot remove names for: " (pr-str relation)))))))
 
 (defn- table-references-in-subtree [op]
   (set (r/collect-stop
