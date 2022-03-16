@@ -1378,9 +1378,7 @@
                                  (r/innermost (r/mono-tp optimize-plan))
                                  (z/node))]
                    (if (s/invalid? (s/conform ::lp/logical-plan plan))
-                     (do
-                       (prn plan)
-                       (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan))))
+                     (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
                      plan))})))))
 
 ;; Building plans using the Apply operator:
