@@ -31,7 +31,8 @@
 
 (deftype UnwindCursor [^BufferAllocator allocator
                        ^ICursor in-cursor
-                       ^String column-name
+                       ^String from-column-name
+                       ^String to-column-name
                        ^String ordinality-column]
   ICursor
   (tryAdvance [_this c]
@@ -41,7 +42,7 @@
                                  (accept [_ in-rel]
                                    (let [^IIndirectRelation in-rel in-rel
                                          out-cols (LinkedList.)
-                                         from-col (.vectorForName in-rel column-name)
+                                         from-col (.vectorForName in-rel from-column-name)
                                          idxs (IntStream/builder)
                                          in-vec (.getVector from-col)
 
@@ -64,7 +65,7 @@
                                                            (reify IntConsumer
                                                              (accept [_ _ordinal])))]
 
-                                         (with-open [out-vec (DenseUnionVector/empty column-name allocator)]
+                                         (with-open [out-vec (DenseUnionVector/empty to-column-name allocator)]
                                            (let [out-writer (vw/vec->writer out-vec)]
                                              (cond
                                                (instance? DenseUnionVector in-vec)
@@ -86,9 +87,10 @@
                                            (let [idxs (.toArray (.build idxs))]
                                              (when (pos? (alength idxs))
                                                (doseq [^IIndirectVector in-col in-rel]
-                                                 (if (= column-name (.getName in-col))
-                                                   (.add out-cols (iv/->direct-vec out-vec))
-                                                   (.add out-cols (.select in-col idxs))))
+                                                 (when (= from-column-name (.getName in-col))
+                                                   (.add out-cols (iv/->direct-vec out-vec)))
+
+                                                 (.add out-cols (.select in-col idxs)))
 
                                                (.accept c (iv/->indirect-rel out-cols))
                                                (aset advanced? 0 true)))))
@@ -101,5 +103,5 @@
   (close [_]
     (.close in-cursor)))
 
-(defn ->unwind-cursor ^core2.ICursor [allocator ^ICursor in-cursor column-name {:keys [ordinality-column]}]
-  (UnwindCursor. allocator in-cursor column-name ordinality-column))
+(defn ->unwind-cursor ^core2.ICursor [allocator ^ICursor in-cursor from-column-name to-column-name {:keys [ordinality-column]}]
+  (UnwindCursor. allocator in-cursor from-column-name to-column-name ordinality-column))

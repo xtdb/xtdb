@@ -17,19 +17,25 @@
                  [{:a 4 :b [6 7 8]} {:a 5 :b []}]]]
 
     (with-open [cursor (tu/->cursor (Schema. [a-field b-field]) in-vals)
-                unwind-cursor (unwind/->unwind-cursor tu/*allocator* cursor "b" {})]
-      (t/is (= [[{:a 1 :b 1} {:a 1 :b 2} {:a 2 :b 3} {:a 2 :b 4} {:a 2 :b 5}]
-                [{:a 4 :b 6} {:a 4 :b 7} {:a 4 :b 8}]]
+                unwind-cursor (unwind/->unwind-cursor tu/*allocator* cursor "b" "b*" {})]
+      (t/is (= [[{:a 1, :b [1 2], :b* 1}
+                 {:a 1, :b [1 2], :b* 2}
+                 {:a 2, :b [3 4 5], :b* 3}
+                 {:a 2, :b [3 4 5], :b* 4}
+                 {:a 2, :b [3 4 5], :b* 5}]
+                [{:a 4, :b [6 7 8], :b* 6}
+                 {:a 4, :b [6 7 8], :b* 7}
+                 {:a 4, :b [6 7 8], :b* 8}]]
                (tu/<-cursor unwind-cursor))))
 
     (with-open [cursor (tu/->cursor (Schema. [a-field b-field]) in-vals)
-                unwind-cursor (unwind/->unwind-cursor tu/*allocator* cursor "b" {:ordinality-column "$ordinal"})]
-      (t/is (= [[{:a 1, :b 1, :$ordinal 1}
-                 {:a 1, :b 2, :$ordinal 2}
-                 {:a 2, :b 3, :$ordinal 1}
-                 {:a 2, :b 4, :$ordinal 2}
-                 {:a 2, :b 5, :$ordinal 3}]
-                [{:a 4, :b 6, :$ordinal 1}
-                 {:a 4, :b 7, :$ordinal 2}
-                 {:a 4, :b 8, :$ordinal 3}]]
+                unwind-cursor (unwind/->unwind-cursor tu/*allocator* cursor "b" "b*" {:ordinality-column "$ordinal"})]
+      (t/is (= [[{:a 1, :b [1 2], :b* 1, :$ordinal 1}
+                 {:a 1, :b [1 2], :b* 2, :$ordinal 2}
+                 {:a 2, :b [3 4 5], :b* 3, :$ordinal 1}
+                 {:a 2, :b [3 4 5], :b* 4, :$ordinal 2}
+                 {:a 2, :b [3 4 5], :b* 5, :$ordinal 3}]
+                [{:a 4, :b [6 7 8], :b* 6, :$ordinal 1}
+                 {:a 4, :b [6 7 8], :b* 7, :$ordinal 2}
+                 {:a 4, :b [6 7 8], :b* 8, :$ordinal 3}]]
                (tu/<-cursor unwind-cursor))))))

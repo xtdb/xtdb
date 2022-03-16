@@ -268,13 +268,14 @@
                :->cursor (fn [_opts inner]
                            (top/->top-cursor inner skip limit))})))
 
-(defmethod emit-op :unwind [{:keys [column opts relation]} srcs]
-  (unary-op relation srcs
-            (fn [col-names]
-              {:col-names col-names
-               :->cursor (fn [{:keys [allocator]} inner]
-                           (unwind/->unwind-cursor allocator inner (name column)
-                                                   (update opts :ordinality-column #(some-> % name))))})))
+(defmethod emit-op :unwind [{:keys [columns opts relation]} srcs]
+  (let [[from-col to-col] (first columns)]
+    (unary-op relation srcs
+              (fn [col-names]
+                {:col-names (conj col-names to-col)
+                 :->cursor (fn [{:keys [allocator]} inner]
+                             (unwind/->unwind-cursor allocator inner (name from-col) (name to-col)
+                                                     (update opts :ordinality-column #(some-> % name))))}))))
 
 (def ^:dynamic ^:private *relation-variable->col-names* {})
 (def ^:dynamic ^:private *relation-variable->cursor-factory* {})

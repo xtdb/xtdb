@@ -248,36 +248,44 @@
                             $y [{:b 1}]})))))
 
 (t/deftest test-unwind-operator
-  (t/is (= [{:a 1, :b 1} {:a 1, :b 2} {:a 2, :b 3} {:a 2, :b 4} {:a 2, :b 5}]
-           (op/query-ra '[:unwind b
+  (t/is (= [{:a 1, :b [1 2], :b* 1}
+            {:a 1, :b [1 2], :b* 2}
+            {:a 2, :b [3 4 5], :b* 3}
+            {:a 2, :b [3 4 5], :b* 4}
+            {:a 2, :b [3 4 5], :b* 5}]
+           (op/query-ra '[:unwind {b b*}
                           [:table $x]]
                         '{$x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]})))
 
-  (t/is (= [{:a 1, :b 1} {:a 1, :b 2}]
-           (op/query-ra '[:unwind b
-                          [:table $x]]
+  (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
+           (op/query-ra '[:project [a b*]
+                          [:unwind {b b*}
+                           [:table $x]]]
                         '{$x [{:a 1, :b [1 2]} {:a 2, :b []}]}))
         "skips rows with empty lists")
 
-  (t/is (= [{:a 1, :b 1} {:a 1, :b 2}]
-           (op/query-ra '[:unwind b
-                          [:table $x]]
+  (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
+           (op/query-ra '[:project [a b*]
+                          [:unwind {b b*}
+                           [:table $x]]]
                         '{$x [{:a 2, :b 1} {:a 1, :b [1 2]}]}))
         "skips rows with non-list unwind column")
 
-  (t/is (= [{:a 1, :b 1} {:a 1, :b "foo"}]
-           (op/query-ra '[:unwind b
-                          [:table $x]]
+  (t/is (= [{:a 1, :b* 1} {:a 1, :b* "foo"}]
+           (op/query-ra '[:project [a b*]
+                          [:unwind {b b*}
+                           [:table $x]]]
                         '{$x [{:a 1, :b [1 "foo"]}]}))
         "handles multiple types")
 
-  (t/is (= [{:a 1, :b 1, :$ordinal 1}
-            {:a 1, :b 2, :$ordinal 2}
-            {:a 2, :b 3, :$ordinal 1}
-            {:a 2, :b 4, :$ordinal 2}
-            {:a 2, :b 5, :$ordinal 3}]
-           (op/query-ra '[:unwind b {:ordinality-column $ordinal}
-                          [:table $x]]
+  (t/is (= [{:a 1, :b* 1, :$ordinal 1}
+            {:a 1, :b* 2, :$ordinal 2}
+            {:a 2, :b* 3, :$ordinal 1}
+            {:a 2, :b* 4, :$ordinal 2}
+            {:a 2, :b* 5, :$ordinal 3}]
+           (op/query-ra '[:project [a b* $ordinal]
+                          [:unwind {b b*} {:ordinality-column $ordinal}
+                           [:table $x]]]
                         '{$x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}))
         "with ordinality"))
 

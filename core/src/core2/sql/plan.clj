@@ -438,6 +438,9 @@
 (defn- build-collection-derived-table [tp]
   (let [{:keys [id correlation-name]} (sem/table tp)
         [unwind-column ordinality-column] (map qualified-projection-symbol (first (sem/projected-columns tp)))
+        unwind-column (-> unwind-column
+                          (with-meta {:table-reference {:table-id id
+                                                        :correlation-name correlation-name}}))
         cdt (r/$ tp 1)
         qualified-projection (vec (for [table (vals (sem/local-env-singleton-values (sem/env cdt)))
                                         :let [{:keys [ref]} (meta table)]
@@ -447,9 +450,7 @@
                                     (if (= unwind-column column)
                                       {unwind-column (expr (r/$ cdt 2))}
                                       column)))]
-    [:unwind (-> unwind-column
-                 (with-meta {:table-reference {:table-id id
-                                               :correlation-name correlation-name}}))
+    [:unwind {unwind-column unwind-column}
      (->> {:ordinality-column ordinality-column}
           (into {} (remove (comp nil? val))))
      [:project qualified-projection nil]]))

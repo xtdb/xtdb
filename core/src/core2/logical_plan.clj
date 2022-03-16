@@ -166,7 +166,7 @@
 
 (defmethod ra-expr :unwind [_]
   (s/cat :op #{:ω :unwind}
-         :column ::column
+         :columns (s/map-of ::column ::column, :conform-keys true, :count 1)
          :opts (s/? (s/keys :opt-un [::ordinality-column]))
          :relation ::ra-expression))
 
