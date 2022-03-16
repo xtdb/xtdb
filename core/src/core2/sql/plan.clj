@@ -756,7 +756,8 @@
 
 ;; Attempt to clean up tree, removing names internally and only add
 ;; them back at the top. Scan still needs explicit names to access the
-;; columns, so these are directly renamed.
+;; columns, so these are directly renamed. Project should be able to
+;; pass through more variables and also be dropped at times..
 
 (declare remove-names)
 
@@ -888,8 +889,14 @@
       [:apply mode columns dependent-column-names independent-relation dependent-relation]
       (let [[smap-lhs lhs] (remove-names independent-relation)
             [smap-rhs rhs] (remove-names dependent-relation)
-            smap (merge smap-lhs smap-rhs)]
-        [smap [:apply mode (w/postwalk-replace (set/map-invert smap-rhs) columns) (w/postwalk-replace (set/map-invert smap-rhs) dependent-column-names) lhs rhs]])
+            smap (merge smap-lhs smap-rhs)
+            params (zipmap (filter #(str/starts-with? (name %) "?") (vals columns))
+                           (map #(symbol (str "?" %)) (repeatedly next-name)))]
+        [smap [:apply mode
+               (w/postwalk-replace (merge params (set/map-invert smap)) columns)
+               (w/postwalk-replace (set/map-invert smap-rhs) dependent-column-names)
+               lhs
+               (w/postwalk-replace params rhs)]])
 
       [:unwind columns opts relation]
       (let [[smap relation] (remove-names relation)]
