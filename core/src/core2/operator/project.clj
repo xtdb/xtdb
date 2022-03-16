@@ -6,18 +6,37 @@
            org.apache.arrow.memory.BufferAllocator
            core2.ICursor
            core2.operator.IProjectionSpec
-           java.util.LinkedList))
+           java.util.LinkedList
+           org.apache.arrow.vector.BigIntVector))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype IdentityProjectionSpec [^String col-name]
-  IProjectionSpec
-  (getColumnName [_] col-name)
-  (project [_ _allocator in-rel]
-    (.vectorForName in-rel col-name)))
+  )
 
 (defn ->identity-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
-  (IdentityProjectionSpec. col-name))
+  (reify IProjectionSpec
+    (getColumnName [_] col-name)
+    (project [_ _allocator in-rel]
+      (.vectorForName in-rel col-name))))
+
+(defn ->row-number-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
+  (let [row-num (long-array [1])]
+    (reify IProjectionSpec
+      (getColumnName [_] col-name)
+      (project [_ allocator in-rel]
+        (let [out-vec (BigIntVector. col-name allocator)
+              start-row-num (aget row-num 0)
+              row-count (.rowCount in-rel)]
+          (try
+            (.setValueCount out-vec row-count)
+            (dotimes [idx row-count]
+              (.set out-vec idx (+ idx start-row-num)))
+            (aset row-num 0 (+ start-row-num row-count))
+            (iv/->direct-vec out-vec)
+            (catch Throwable e
+              (.close out-vec)
+              (throw e))))))))
 
 (deftype ProjectCursor [^BufferAllocator allocator
                         ^ICursor in-cursor

@@ -59,7 +59,10 @@
 
 (defmethod ra-expr :project [_]
   (s/cat :op #{:π :pi :project}
-         :projections (s/coll-of (s/or :column ::column :extend ::column-expression) :min-count 1)
+         :projections (s/coll-of (s/or :column ::column
+                                       :row-number-column (s/map-of ::column #{'(row-number)}, :conform-keys true, :count 1)
+                                       :extend ::column-expression)
+                                 :min-count 1)
          :relation ::ra-expression))
 
 (defmethod ra-expr :select [_]
