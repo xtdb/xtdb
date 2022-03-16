@@ -201,7 +201,7 @@
                     [:project [q3__3_price]
                      [:select (= q3__3_partno 1)
                       [:rename q3__3
-                       [:scan [price {partno (= partno 1)}]]]]]]}
+                       [:scan [price partno]]]]]]}
            (qgm/plan-query (sql/parse "
 SELECT q3.price FROM quotations q3 WHERE q3.partno = 1"))))
 
