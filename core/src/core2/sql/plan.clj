@@ -1431,7 +1431,7 @@
                                 (w/postwalk-replace smap pre-group-by-projection)))
           (let [columns (remove-unused-correlated-columns columns dependent-relation)]
             [:apply :cross-join columns dependent-column-names
-             [:project (vec (concat independent-projection [{row-number-sym '(row_number)}]))
+             [:project (vec (concat independent-projection [{row-number-sym '(row-number)}]))
               independent-relation]
              dependent-relation])]]]])
 
@@ -1458,7 +1458,7 @@
                                 (w/postwalk-replace smap pre-group-by-projection)))
           (let [columns (remove-unused-correlated-columns columns dependent-relation)]
             [:apply :left-outer-join columns dependent-column-names
-             [:project (vec (concat independent-projection [{row-number-sym '(row_number)}]))
+             [:project (vec (concat independent-projection [{row-number-sym '(row-number)}]))
               independent-relation]
              dependent-relation])]]]])))
 
