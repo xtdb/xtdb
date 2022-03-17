@@ -274,6 +274,8 @@
 
 (def topdown full-td-tp)
 
+(def bottomup full-bu-tp)
+
 ;; Type Unifying
 
 (defn- monoid [z]

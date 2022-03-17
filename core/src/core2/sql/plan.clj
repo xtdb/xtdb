@@ -735,9 +735,9 @@
       [:fixpoint _ base _]
       (relation-columns base)
 
-      [:unwind _ opts relation]
-      (cond-> (relation-columns relation)
-        (:with-ordinality? opts) (conj '_ordinal))
+      [:unwind columns opts relation]
+      (cond-> (conj (relation-columns relation) (val (first columns)))
+        (:ordinality-column opts) (conj (:ordinality-column opts)))
 
       [:assign _ relation]
       (relation-columns relation)
@@ -756,82 +756,77 @@
 
 ;; Attempt to clean up tree, removing names internally and only add
 ;; them back at the top. Scan still needs explicit names to access the
-;; columns, so these are directly renamed. Project should be able to
-;; pass through more variables and also be dropped at times..
-
-(declare remove-names)
+;; columns, so these are directly renamed.
 
 (def ^:private ^:dynamic *name-counter* (atom 0))
 
 (defn- next-name []
   (symbol (str 'x (swap! *name-counter* inc))))
 
-(defn- remove-names* [relation]
+(defn- remove-names-step [relation]
   (letfn [(->column [column-or-expr]
             (if (map? column-or-expr)
               (first (keys column-or-expr))
-              column-or-expr))]
+              column-or-expr))
+          (with-smap [relation smap]
+            (vary-meta relation assoc :smap smap))
+          (->smap [relation]
+            (:smap (meta relation)))]
     (r/zmatch relation
       [:table explicit-column-names table]
       (let [smap (zipmap explicit-column-names
                          (repeatedly next-name))]
-        [smap [:table (w/postwalk-replace smap explicit-column-names) table]])
+        (with-smap [:table (w/postwalk-replace smap explicit-column-names) table] smap))
 
       [:table table]
       (let [smap (zipmap (map symbol (keys (first table)))
                          (repeatedly next-name))]
-        [smap [:table (w/postwalk-replace (->> (for [[v k] smap]
-                                                 [(keyword v) k])
-                                               (into {}))
-                                          table)]])
+        (with-smap [:table (w/postwalk-replace (->> (for [[v k] smap]
+                                                      [(keyword v) k])
+                                                    (into {}))
+                                               table)]
+          smap))
 
       [:scan columns]
       (let [smap (zipmap (map ->column columns)
                          (repeatedly next-name))]
-        [smap [:rename smap [:scan columns]]])
+        (with-smap [:rename smap [:scan columns]] smap))
 
       [:join join-map lhs rhs]
-      (let [[smap-lhs lhs] (remove-names* lhs)
-            [smap-rhs rhs] (remove-names* rhs)
-            smap (merge smap-lhs smap-rhs)]
-        [smap [:join (w/postwalk-replace smap join-map) lhs rhs]])
+      (let [smap (merge (->smap lhs) (->smap rhs))]
+        (with-smap [:join (w/postwalk-replace smap join-map) lhs rhs] smap))
 
       [:cross-join lhs rhs]
-      (let [[smap-lhs lhs] (remove-names* lhs)
-            [smap-rhs rhs] (remove-names* rhs)]
-        [(merge smap-lhs smap-rhs) [:cross-join lhs rhs]])
+      (let [smap (merge (->smap lhs) (->smap rhs))]
+        (with-smap [:cross-join lhs rhs] smap))
 
       [:left-outer-join join-map lhs rhs]
-      (let [[smap-lhs lhs] (remove-names* lhs)
-            [smap-rhs rhs] (remove-names* rhs)
-            smap (merge smap-lhs smap-rhs)]
-        [smap [:left-outer-join (w/postwalk-replace smap join-map) lhs rhs]])
+      (let [smap (merge (->smap lhs) (->smap rhs))]
+        (with-smap [:left-outer-join (w/postwalk-replace smap join-map) lhs rhs] smap))
 
       [:semi-join join-map lhs rhs]
-      (let [[smap-lhs lhs] (remove-names* lhs)
-            [smap-rhs rhs] (remove-names* rhs)
-            smap (merge smap-lhs smap-rhs)]
-        [smap [:semi-join (w/postwalk-replace smap join-map) lhs rhs]])
+      (let [smap (merge (->smap lhs) (->smap rhs))]
+        (with-smap [:semi-join (w/postwalk-replace smap join-map) lhs rhs]
+          (->smap lhs)))
 
       [:anti-join join-map lhs rhs]
-      (let [[smap-lhs lhs] (remove-names* lhs)
-            [smap-rhs rhs] (remove-names* rhs)
-            smap (merge smap-lhs smap-rhs)]
-        [smap [:anti-join (w/postwalk-replace smap join-map) lhs rhs]])
+      (let [smap (merge (->smap lhs) (->smap rhs))]
+        (with-smap [:anti-join (w/postwalk-replace smap join-map) lhs rhs]
+          (->smap lhs)))
 
       [:rename prefix-or-columns relation]
-      (let [[smap relation] (remove-names* relation)
+      (let [smap (->smap relation)
             columns (if (symbol? prefix-or-columns)
                       (->> (for [c (keys smap)]
                              [c (symbol (str prefix-or-columns "_" c))])
                            (into {}))
                       prefix-or-columns)]
-        [(->> (for [[k v] columns]
-                [v (get smap k)])
-              (into smap)) relation])
+        (with-smap relation (->> (for [[k v] columns]
+                                   [v (get smap k)])
+                                 (into smap))))
 
       [:project projection relation]
-      (let [[smap relation] (remove-names* relation)
+      (let [smap (->smap relation)
             projection (w/postwalk-replace smap projection)
             smap (reduce
                   (fn [acc p]
@@ -850,79 +845,83 @@
                                     k
                                     p))
                                 p)))]
-        [smap (if (every? symbol? projection)
-                relation
-                [:project projection relation])])
+        (with-smap (if (every? symbol? projection)
+                     relation
+                     [:project projection relation]) smap))
 
       [:group-by columns relation]
-      (let [[smap relation] (remove-names* relation)
+      (let [smap (->smap relation)
             smap (merge smap (zipmap (map ->column (filter map? columns))
                                      (repeatedly next-name)))]
-        [smap [:group-by (w/postwalk-replace smap columns) relation]])
+        (with-smap [:group-by (w/postwalk-replace smap columns) relation] smap))
 
       [:select predicate relation]
-      (let [[smap relation] (remove-names* relation)]
-        [smap [:select (w/postwalk-replace smap predicate) relation]])
+      (let [smap (->smap relation)]
+        (with-smap [:select (w/postwalk-replace smap predicate) relation] smap))
 
       [:order-by opts relation]
-      (let [[smap relation] (remove-names* relation)]
-        [smap [:order-by (w/postwalk-replace smap opts) relation]])
+      (let [smap (->smap relation)]
+        (with-smap [:order-by (w/postwalk-replace smap opts) relation] smap))
 
       [:top opts relation]
-      (let [[smap relation] (remove-names* relation)]
-        [smap [:top opts relation]])
+      (with-smap [:top opts relation] (->smap relation))
 
       [:distinct relation]
-      (let [[smap relation] (remove-names* relation)]
-        [smap [:distinct relation]])
+      (with-smap [:distinct relation] (->smap relation))
 
       [:intersect lhs rhs]
-      (let [[smap-lhs lhs] (remove-names* lhs)
-            [smap-rhs rhs] (remove-names* rhs)]
-        [(merge smap-lhs smap-rhs) [:intersect lhs (w/postwalk-replace (zipmap (relation-columns rhs)
-                                                                               (relation-columns lhs))
-                                                                       rhs)]])
+      (with-smap [:intersect lhs (w/postwalk-replace (zipmap (relation-columns rhs)
+                                                             (relation-columns lhs))
+                                                     rhs)]
+        (merge (->smap lhs) (->smap rhs)))
 
       [:difference lhs rhs]
-      (let [[smap-lhs lhs] (remove-names* lhs)
-            [smap-rhs rhs] (remove-names* rhs)]
-        [(merge smap-lhs smap-rhs) [:difference lhs (w/postwalk-replace (zipmap (relation-columns rhs)
-                                                                                (relation-columns lhs))
-                                                                        rhs)]])
+      (with-smap [:difference lhs (w/postwalk-replace (zipmap (relation-columns rhs)
+                                                              (relation-columns lhs))
+                                                      rhs)]
+        (merge (->smap lhs) (->smap rhs)))
 
       [:union-all lhs rhs]
-      (let [[smap-lhs lhs] (remove-names* lhs)
-            [smap-rhs rhs] (remove-names* rhs)]
-        [(merge smap-lhs smap-rhs) [:union-all lhs (w/postwalk-replace (zipmap (relation-columns rhs)
-                                                                               (relation-columns lhs))
-                                                                       rhs)]])
+      (with-smap [:union-all lhs (w/postwalk-replace (zipmap (relation-columns rhs)
+                                                             (relation-columns lhs))
+                                                     rhs)]
+        (merge (->smap lhs) (->smap rhs)))
 
       [:apply mode columns dependent-column-names independent-relation dependent-relation]
-      (let [[smap-lhs lhs] (remove-names* independent-relation)
-            [smap-rhs rhs] (remove-names* dependent-relation)
-            smap (merge smap-lhs smap-rhs)
+      (let [smap (merge (->smap independent-relation) (->smap dependent-relation))
             params (zipmap (filter #(str/starts-with? (name %) "?") (vals columns))
                            (map #(symbol (str "?" %)) (repeatedly next-name)))]
-        [smap [:apply mode
-               (w/postwalk-replace (merge params smap) columns)
-               (w/postwalk-replace smap-rhs dependent-column-names)
-               lhs
-               (w/postwalk-replace params rhs)]])
+        (with-smap [:apply mode
+                    (w/postwalk-replace (merge params smap) columns)
+                    (w/postwalk-replace (->smap dependent-relation) dependent-column-names)
+                    independent-relation
+                    (w/postwalk-replace params dependent-relation)]
+          smap))
 
       [:unwind columns opts relation]
-      (let [[smap relation] (remove-names* relation)]
-        [smap [:unwind (w/postwalk-replace smap columns) (w/postwalk-replace smap opts) relation]])
+      (let [smap (->smap relation)
+            [from to] (first columns)
+            from (get smap from)
+            columns {from (next-name)}
+            smap (assoc smap to (get columns from))
+            [smap opts] (if-let [ordinality-column (:ordinality-column opts)]
+                          (let [smap (assoc smap ordinality-column (next-name))]
+                            [smap {:ordinality-column (get smap ordinality-column)}])
+                          [smap {}])]
+        (with-smap [:unwind columns opts relation] smap))
 
       [:max-1-row relation]
-      (let [[smap relation] (remove-names* relation)]
-        [smap [:max-1-row relation]])
+      (with-smap [:max-1-row relation] (->smap relation))
 
-      (throw (IllegalArgumentException. (str "cannot remove names for: " (pr-str relation)))))))
+      (when (and (vector? (z/node relation))
+                 (keyword? (r/ctor relation)))
+        (throw (IllegalArgumentException. (str "cannot remove names for: " (pr-str (z/node relation)))))))))
 
 (defn- remove-names [relation]
   (let [projection (relation-columns relation)
-        [smap relation] (binding [*name-counter* (atom 0)]
-                          (remove-names* relation))
+        relation (binding [*name-counter* (atom 0)]
+                   (z/node (r/bottomup (r/adhoc-tp r/id-tp remove-names-step) (r/->zipper relation))))
+        smap (:smap (meta relation))
         rename-map (select-keys smap projection)
         projection (replace smap projection)]
     (with-meta
