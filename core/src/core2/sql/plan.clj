@@ -839,9 +839,27 @@
 
       [:project projection relation]
       (let [[smap relation] (remove-names relation)
-            smap (merge smap (zipmap (repeatedly next-name)
-                                     (map ->column (filter map? projection))))]
-        [smap [:project (w/postwalk-replace (set/map-invert smap) projection) relation]])
+            projection (w/postwalk-replace (set/map-invert smap) projection)
+            smap (reduce
+                  (fn [acc p]
+                    (if (map? p)
+                      (let [[k v] (first p)]
+                        (if (symbol? v)
+                          (assoc acc v k)
+                          (assoc acc (next-name) k)))
+                      acc))
+                  smap
+                  projection)
+            projection (vec (for [p (w/postwalk-replace (set/map-invert smap) projection)]
+                              (if (map? p)
+                                (let [[k v] (first p)]
+                                  (if (= k v)
+                                    k
+                                    p))
+                                p)))]
+        [smap (if (every? symbol? projection)
+                relation
+                [:project projection relation])])
 
       [:group-by columns relation]
       (let [[smap relation] (remove-names relation)
@@ -899,8 +917,9 @@
                (w/postwalk-replace params rhs)]])
 
       [:unwind columns opts relation]
-      (let [[smap relation] (remove-names relation)]
-        [smap [:unwind (w/postwalk-replace (set/map-invert smap) columns) (w/postwalk-replace (set/map-invert smap) opts) relation]])
+      (let [[smap relation] (remove-names relation)
+            smap-inv (set/map-invert smap)]
+        [smap [:unwind (w/postwalk-replace smap-inv columns) (w/postwalk-replace smap-inv opts) relation]])
 
       [:max-1-row relation]
       (let [[smap relation] (remove-names relation)]
