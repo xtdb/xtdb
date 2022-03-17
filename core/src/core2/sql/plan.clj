@@ -922,10 +922,13 @@
       (throw (IllegalArgumentException. (str "cannot remove names for: " (pr-str relation)))))))
 
 (defn- remove-names [relation]
-  (let [[smap relation] (binding [*name-counter* (atom 0)]
-                          (remove-names* relation))]
-    [:rename (select-keys smap (relation-columns relation))
-     relation]))
+  (let [projection (relation-columns relation)
+        [smap relation] (binding [*name-counter* (atom 0)]
+                          (remove-names* relation))
+        projection (replace (set/map-invert smap) projection)]
+    [:rename (select-keys smap projection)
+     [:project projection
+      relation]]))
 
 (defn- table-references-in-subtree [op]
   (set (r/collect-stop
