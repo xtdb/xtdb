@@ -271,7 +271,7 @@
                            (top/->top-cursor inner skip limit))})))
 
 (defmethod emit-op :unwind [{:keys [columns opts relation]} srcs]
-  (let [[from-col to-col] (first columns)]
+  (let [[to-col from-col] (first columns)]
     (unary-op relation srcs
               (fn [col-names]
                 {:col-names (conj col-names to-col)
