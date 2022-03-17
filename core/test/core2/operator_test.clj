@@ -349,3 +349,10 @@
                           [:table $a]]
 
                         {'$a [{:a 12} {:a 0} {:a 100}]}))))
+
+(t/deftest test-project-append-columns
+  (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
+           (op/query-ra '[:project {:append-columns? true} [{$row-num (row-number)}]
+                          [:table $a]]
+
+                        {'$a [{:a 12} {:a 0} {:a 100}]}))))

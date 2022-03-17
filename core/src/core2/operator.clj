@@ -148,16 +148,19 @@
                  :->cursor (fn [{:keys [allocator]} inner]
                              (select/->select-cursor allocator inner selector))}))))
 
-(defmethod emit-op :project [{:keys [projections relation]} srcs]
-  (let [projection-specs (for [[p-type arg] projections]
-                           (case p-type
-                             :column (project/->identity-projection-spec (name arg))
-                             :row-number-column (let [[col-name _form] (first arg)]
-                                                  (project/->row-number-projection-spec (name col-name)))
-                             :extend (let [[col-name form] (first arg)]
-                                       (expr/->expression-projection-spec (name col-name) form srcs))))]
-    (unary-op relation srcs
-              (fn [_inner-col-names]
+(defmethod emit-op :project [{:keys [projections relation], {:keys [append-columns?]} :opts} srcs]
+  (unary-op relation srcs
+            (fn [inner-col-names]
+              (let [projection-specs (concat (when append-columns?
+                                               (for [col-name inner-col-names]
+                                                 (project/->identity-projection-spec (name col-name))))
+                                             (for [[p-type arg] projections]
+                                               (case p-type
+                                                 :column (project/->identity-projection-spec (name arg))
+                                                 :row-number-column (let [[col-name _form] (first arg)]
+                                                                      (project/->row-number-projection-spec (name col-name)))
+                                                 :extend (let [[col-name form] (first arg)]
+                                                           (expr/->expression-projection-spec (name col-name) form srcs)))))]
                 {:col-names (->> projection-specs
                                  (into #{} (map #(symbol (.getColumnName ^IProjectionSpec %)))))
                  :->cursor (fn [{:keys [allocator]} inner]

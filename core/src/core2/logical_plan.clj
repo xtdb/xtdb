@@ -57,8 +57,11 @@
   (s/cat :op #{:arrow}
          :path ::util/path))
 
+(s/def ::append-columns? boolean?)
+
 (defmethod ra-expr :project [_]
   (s/cat :op #{:π :pi :project}
+         :opts (s/? (s/keys :req-un [::append-columns?]))
          :projections (s/coll-of (s/or :column ::column
                                        :row-number-column (s/map-of ::column #{'(row-number)}, :conform-keys true, :count 1)
                                        :extend ::column-expression)
