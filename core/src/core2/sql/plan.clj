@@ -433,9 +433,6 @@
        [:rename (zipmap rhs-unqualified-project lhs-unqualified-project)
         (plan rhs)])]))
 
-;; TODO: Probably better if the operator explicitly takes the name of the
-;; source column, the destination column and an optional ordinal
-;; column instead of this workaround.
 (defn- build-collection-derived-table [tp]
   (let [{:keys [id correlation-name]} (sem/table tp)
         [unwind-column ordinality-column] (map qualified-projection-symbol (first (sem/projected-columns tp)))
@@ -452,7 +449,7 @@
                                     (if (= unwind-column column)
                                       {unwind-symbol (expr (r/$ cdt 2))}
                                       column)))]
-    [:unwind {unwind-symbol unwind-column}
+    [:unwind {unwind-column unwind-symbol}
      (cond-> {}
        ordinality-column (assoc :ordinality-column ordinality-column))
      [:project qualified-projection nil]]))
@@ -902,10 +899,10 @@
 
       [:unwind columns opts relation]
       (let [smap (->smap relation)
-            [from to] (first columns)
+            [to from] (first columns)
             from (get smap from)
             smap (assoc smap to (next-name))
-            columns {from (get smap to)}
+            columns {(get smap to) from}
             [smap opts] (if-let [ordinality-column (:ordinality-column opts)]
                           (let [smap (assoc smap ordinality-column (next-name))]
                             [smap {:ordinality-column (get smap ordinality-column)}])

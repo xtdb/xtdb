@@ -215,21 +215,21 @@
   (valid? "SELECT film.name FROM StarsIn AS si, UNNEST(si.films) AS film(name)"
           '[:rename {film__4_name name}
             [:project [film__4_name]
-             [:unwind {$unwind__4$ film__4_name} {}
+             [:unwind {film__4_name $unwind__4$} {}
               [:project [si__3_films {$unwind__4$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]])
 
   (valid? "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film"
           '[:rename {si__3_films films film__4_$column_1$ $column_2$}
             [:project [si__3_films film__4_$column_1$]
-             [:unwind {$unwind__4$ film__4_$column_1$} {}
+             [:unwind {film__4_$column_1$ $unwind__4$} {}
               [:project [si__3_films {$unwind__4$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]])
 
   (valid? "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film"
           '[:rename {si__3_films films film__4_$column_1$ $column_2$ film__4_$column_2$ $column_3$}
             [:project [si__3_films film__4_$column_1$ film__4_$column_2$]
-             [:unwind {$unwind__4$ film__4_$column_1$} {:ordinality-column film__4_$column_2$}
+             [:unwind {film__4_$column_1$ $unwind__4$} {:ordinality-column film__4_$column_2$}
               [:project [si__3_films {$unwind__4$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]]))
 
@@ -418,7 +418,7 @@
                   [:group-by [c__3_custkey $row_number$ {$agg_out__6_7$ (sum $agg_in__6_7$)}]
                    [:project [c__3_custkey $row_number$ {$agg_in__6_7$ o__8_totalprice}]
                     [:left-outer-join {c__3_custkey o__8_custkey}
-                     [:project [c__3_custkey {$row_number$ (row_number)}]
+                     [:project [c__3_custkey {$row_number$ (row-number)}]
                       [:rename c__3 [:scan [custkey]]]]
                      [:rename o__8 [:scan [totalprice custkey]]]]]]]]]]])
 
@@ -447,7 +447,7 @@ FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp
                  [:group-by [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_out__4_5$ (count $agg_in__4_5$)}]
                   [:project [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_in__4_5$ 1}]
                    [:left-outer-join {customers__8_custno orders__6_custno}
-                    [:project [customers__8_name customers__8_custno customers__8_country {$row_number$ (row_number)}]
+                    [:project [customers__8_name customers__8_custno customers__8_country {$row_number$ (row-number)}]
                      [:anti-join {customers__8_country subquery__9_country}
                       [:rename customers__8 [:scan [name custno country]]]
                       [:rename subquery__9
@@ -470,7 +470,7 @@ FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp
                   [:group-by [s__3_name s__3_id e__4_course e__4_sid e__4_grade $row_number$ {$agg_out__8_9$ (min $agg_in__8_9$)}]
                    [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade $row_number$ {$agg_in__8_9$ e2__10_grade}]
                     [:left-outer-join {s__3_id e2__10_sid}
-                     [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade {$row_number$ (row_number)}]
+                     [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade {$row_number$ (row-number)}]
                       [:join {s__3_id e__4_sid}
                        [:rename s__3 [:scan [name id]]]
                        [:rename e__4 [:scan [course sid grade]]]]]
@@ -493,7 +493,7 @@ FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp
                   [:group-by [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade $row_number$ {$agg_out__10_11$ (avg $agg_in__10_11$)}]
                    [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade $row_number$ {$agg_in__10_11$ e2__12_grade}]
                     [:apply :left-outer-join {s__3_id ?s__3_id, s__3_major ?s__3_major, s__3_year ?s__3_year} #{subquery__9_$column_1$}
-                     [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade {$row_number$ (row_number)}]
+                     [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade {$row_number$ (row-number)}]
                       [:join {s__3_id e__4_sid}
                        [:rename s__3
                         [:select (or (= major "CS") (= major "Games Eng"))
