@@ -45,8 +45,8 @@
                                                        [:agg-call avg [:column q1 l_extendedprice]]
                                                        [:agg-call avg [:column q1 l_discount]]
                                                        [:agg-call :count*]]
-                                :qgm.box.grouping/grouping-columns [[:column q1 l_returnflag]
-                                                                    [:column q1 l_linestatus]]}
+                                :qgm.box.grouping/grouping-by [[:column q1 l_returnflag]
+                                                               [:column q1 l_linestatus]]}
              [:qgm.quantifier/foreach {:qgm.quantifier/id q1
                                        :qgm.quantifier/columns [l_returnflag l_linestatus
                                                                 l_quantity l_extendedprice
@@ -123,7 +123,8 @@
              [:qgm.quantifier/foreach {:qgm.quantifier/id q6
                                        :qgm.quantifier/columns [$column_1$]}
               [:qgm.box/grouping {:qgm.box.head/columns [$column_1$]
-                                  :qgm.box.body/columns [[:agg-call min [:column q7 ps_supplycost]]]}
+                                  :qgm.box.body/columns [[:agg-call min [:column q7 ps_supplycost]]]
+                                  :qgm.box.grouping/grouping-by []}
                [:qgm.box/foreach {:qgm.quantifier/id q7
                                   :qgm.quantifier/columns [ps_supplycost]}
                 [:qgm.box/select {:qgm.box.head/columns [ps_supplycost]
@@ -160,3 +161,77 @@
             p10 [:call = [:column q9 s_nationkey] [:column q10 n_nationkey]]
             p11 [:call = [:column q11 n_regionkey] [:column q11 r_regionkey]]
             p12 [:call = [:column q11 r_name] [:param ?region]]}})
+
+(def q21
+  '{:tree [:qgm.box/select {:qgm.box.head/columns [s_name numwait]
+                            :qgm.box.body/columns [[:column q0 s_name], [:column q0 numwait]]
+                            :qgm.box.select/ordering [[[:column q0 numwait] :desc]
+                                                      [[:column q0 s_name] :asc]]}
+
+           [:qgm.quantifier.type/foreach {:qgm.quantifier/id q0
+                                          :qgm.quantifier/columns [s_name numwait]}
+
+            [:qgm.box/grouping {:qgm.box.head/columns [s_name numwait]
+                                :qgm.box.body/columns [[:column q1 s_name]
+                                                       [:agg-call :count*]]
+                                :qgm.box.grouping/grouping-by [[:column q1 s_name]]}
+
+             [:qgm.quantifier/foreach {:qgm.quantifier/id q1
+                                       :qgm.quantifier/columns [s_name]}
+
+              [:qgm.box/select {:qgm.box.head/columns [s_name]
+                                :qgm.box.body/columns [[:column q2 s_name]]}
+
+               [:qgm.quantifier/foreach {:qgm.quantifier/id q2
+                                         :qgm.quantifier/columns [s_name s_suppkey s_nationkey s_name]}
+                [:qgm.box/base-table {:qgm.box.base-table/name supplier
+                                      :qgm.box.head/columns [s_name s_suppkey s_nationkey s_name]}]]
+
+               [:qgm.quantifier/foreach {:qgm.quantifier/id q3
+                                         :qgm.quantifier/columns [l_suppkey l_orderkey l_receiptdate l_commitdate]}
+                [:qgm.box/base-table {:qgm.box.base-table/name lineitem
+                                      :qgm.box.head/columns [l_suppkey l_orderkey l_receiptdate l_commitdate]}]]
+
+               [:qgm.quantifier/foreach {:qgm.quantifier/id q4
+                                         :qgm.quantifier/columns [o_orderkey o_orderstatus]}
+                [:qgm.box/base-table {:qgm.box.base-table/name orders
+                                      :qgm.box.head/columns [o_orderkey o_orderstatus]}]]
+
+               [:qgm.quantifier/foreach {:qgm.quantifier/id q5
+                                         :qgm.quantifier/columns [n_name n_nationkey]}
+                [:qgm.box/base-table {:qgm.box.base-table/name nation
+                                      :qgm.box.head/columns [n_name n_nationkey]}]]
+
+               [:qgm.quantifier/existential {:qgm.quantifier/id q6
+                                             :qgm.quantifier/columns [$column_1$]}
+                [:qgm.box/select {:qgm.box.head/columns [$column_1$]
+                                  :qgm.box.body/columns [[:literal true]]}
+                 [:qgm.quantifier/foreach {:qgm.quantifier/id q7
+                                           :qgm.quantifier/columns [l_orderkey l_suppkey]}
+                  [:qgm.box/base-table {:qgm.box.base-table/name lineitem
+                                        :qgm.box.head/columns [l_orderkey l_suppkey]}]]]]
+
+               [:qgm.quantifier/all {:qgm.quantifier/id q8
+                                     :qgm.quantifier/columns [$column_1$]}
+                [:qgm.box/select {:qgm.box.head/columns [$column_1$]
+                                  :qgm.box.body/columns [[:literal true]]}
+                 [:qgm.quantifier/foreach {:qgm.quantifier/id q9
+                                           :qgm.quantifier/columns [l_orderkey l_suppkey l_receiptdate l_commitdate]}
+                  [:qgm.box/base-table {:qgm.box.base-table/name lineitem
+                                        :qgm.box.head/columns [l_orderkey l_suppkey l_receiptdate l_commitdate]}]]]]]]]]]
+
+    :preds {p0 [:call = [:column q2 s_suppkey] [:column q3 l_suppkey]]
+            p1 [:call = [:column q4 o_orderkey] [:column q3 l_orderkey]]
+            p2 [:call = [:column q4 o_orderstatus] [:literal "F"]]
+            p3 [:call > [:column q3 l_receiptdate] [:column q3 l_commitdate]]
+            p4 [:call = [:column q2 s_nationkey] [:column q5 n_nationkey]]
+            p5 [:call = [:column q5 n_name] [:param ?nation]]
+
+            p6 [:call = [:column q7 l_orderkey] [:column q3 l_orderkey]]
+            p7 [:call <> [:column q7 l_suppkey] [:column q3 l_suppkey]]
+            p8 [:call true? [:column q6 $column_1$]]
+
+            p9 [:call = [:column q9 l_orderkey] [:column q3 l_orderkey]]
+            p10 [:call <> [:column q9 l_suppkey] [:column q3 l_suppkey]]
+            p11 [:call > [:column q9 l_receiptdate] [:column q9 l_commitdate]]
+            p12 [:call false? [:column q8 $column_1$]]}})
