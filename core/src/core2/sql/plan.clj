@@ -926,9 +926,15 @@
         [smap relation] (binding [*name-counter* (atom 0)]
                           (remove-names* relation))
         projection (replace (set/map-invert smap) projection)]
-    [:rename (select-keys smap projection)
-     [:project projection
-      relation]]))
+    (with-meta
+      [:rename (select-keys smap projection)
+       [:project projection
+        relation]]
+      {:column->name smap})))
+
+(defn- reconstruct-names [relation]
+  (let [smap (:column->name (meta relation))]
+    (w/postwalk-replace smap relation)))
 
 (defn- table-references-in-subtree [op]
   (set (r/collect-stop
