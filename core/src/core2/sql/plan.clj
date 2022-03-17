@@ -373,7 +373,8 @@
                                               :asc)]
                               [(if-let [idx (sem/order-by-index z)]
                                  {:spec {(unqualified-projection-symbol (nth projection idx)) direction}}
-                                 (let [column (unqualified-id-symbol query-id (symbol (str "$order_by__" query-id  "_" (r/child-idx z) "$")))]
+                                 (let [column (->> (symbol (str "$order_by" relation-id-delimiter query-id relation-prefix-delimiter (r/child-idx z) "$"))
+                                                   (unqualified-id-symbol query-id))]
                                    {:spec {column direction}
                                     :projection {column (expr (r/$ z 1))}}))])
 
@@ -442,17 +443,18 @@
                           (with-meta {:table-reference {:table-id id
                                                         :correlation-name correlation-name}}))
         cdt (r/$ tp 1)
+        unwind-symbol (unqualified-id-symbol id (symbol (str "$unwind" relation-id-delimiter id "$")))
         qualified-projection (vec (for [table (vals (sem/local-env-singleton-values (sem/env cdt)))
                                         :let [{:keys [ref]} (meta table)]
                                         projection (first (sem/projected-columns ref))
                                         :let [column (qualified-projection-symbol projection)]
                                         :when (not= ordinality-column column)]
                                     (if (= unwind-column column)
-                                      {unwind-column (expr (r/$ cdt 2))}
+                                      {unwind-symbol (expr (r/$ cdt 2))}
                                       column)))]
-    [:unwind {unwind-column unwind-column}
-     (->> {:ordinality-column ordinality-column}
-          (into {} (remove (comp nil? val))))
+    [:unwind {unwind-symbol unwind-column}
+     (cond-> {}
+       ordinality-column (assoc :ordinality-column ordinality-column))
      [:project qualified-projection nil]]))
 
 (defn- build-table-primary [tp]
@@ -702,7 +704,7 @@
       [:rename prefix-or-columns relation]
       (if (symbol? prefix-or-columns)
         (vec (for [c (relation-columns relation)]
-               (symbol (str prefix-or-columns "_"  c))))
+               (symbol (str prefix-or-columns relation-prefix-delimiter  c))))
         (replace prefix-or-columns (relation-columns relation)))
 
       [:project projection _]
@@ -818,7 +820,7 @@
       (let [smap (->smap relation)
             columns (if (symbol? prefix-or-columns)
                       (->> (for [c (keys smap)]
-                             [c (symbol (str prefix-or-columns "_" c))])
+                             [c (symbol (str prefix-or-columns relation-prefix-delimiter c))])
                            (into {}))
                       prefix-or-columns)]
         (with-smap relation (->> (for [[k v] columns]
@@ -851,6 +853,7 @@
 
       [:group-by columns relation]
       (let [smap (->smap relation)
+            columns (w/postwalk-replace smap columns)
             smap (merge smap (zipmap (map ->column (filter map? columns))
                                      (repeatedly next-name)))]
         (with-smap [:group-by (w/postwalk-replace smap columns) relation] smap))
@@ -888,22 +891,21 @@
         (merge (->smap lhs) (->smap rhs)))
 
       [:apply mode columns dependent-column-names independent-relation dependent-relation]
-      (let [smap (merge (->smap independent-relation) (->smap dependent-relation))
-            params (zipmap (filter #(str/starts-with? (name %) "?") (vals columns))
+      (let [params (zipmap (filter #(str/starts-with? (name %) "?") (vals columns))
                            (map #(symbol (str "?" %)) (repeatedly next-name)))]
         (with-smap [:apply mode
-                    (w/postwalk-replace (merge params smap) columns)
+                    (w/postwalk-replace (merge params (->smap independent-relation)) columns)
                     (w/postwalk-replace (->smap dependent-relation) dependent-column-names)
                     independent-relation
                     (w/postwalk-replace params dependent-relation)]
-          smap))
+          (merge (->smap independent-relation) (->smap dependent-relation))))
 
       [:unwind columns opts relation]
       (let [smap (->smap relation)
             [from to] (first columns)
             from (get smap from)
-            columns {from (next-name)}
-            smap (assoc smap to (get columns from))
+            smap (assoc smap to (next-name))
+            columns {from (get smap to)}
             [smap opts] (if-let [ordinality-column (:ordinality-column opts)]
                           (let [smap (assoc smap ordinality-column (next-name))]
                             [smap {:ordinality-column (get smap ordinality-column)}])

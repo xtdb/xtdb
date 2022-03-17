@@ -215,22 +215,22 @@
   (valid? "SELECT film.name FROM StarsIn AS si, UNNEST(si.films) AS film(name)"
           '[:rename {film__4_name name}
             [:project [film__4_name]
-             [:unwind {film__4_name film__4_name} {}
-              [:project [si__3_films {film__4_name si__3_films}]
+             [:unwind {$unwind__4$ film__4_name} {}
+              [:project [si__3_films {$unwind__4$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]])
 
   (valid? "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film"
           '[:rename {si__3_films films film__4_$column_1$ $column_2$}
             [:project [si__3_films film__4_$column_1$]
-             [:unwind {film__4_$column_1$ film__4_$column_1$} {}
-              [:project [si__3_films {film__4_$column_1$ si__3_films}]
+             [:unwind {$unwind__4$ film__4_$column_1$} {}
+              [:project [si__3_films {$unwind__4$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]])
 
   (valid? "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film"
           '[:rename {si__3_films films film__4_$column_1$ $column_2$ film__4_$column_2$ $column_3$}
             [:project [si__3_films film__4_$column_1$ film__4_$column_2$]
-             [:unwind {film__4_$column_1$ film__4_$column_1$} {:ordinality-column film__4_$column_2$}
-              [:project [si__3_films {film__4_$column_1$ si__3_films}]
+             [:unwind {$unwind__4$ film__4_$column_1$} {:ordinality-column film__4_$column_2$}
+              [:project [si__3_films {$unwind__4$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]]))
 
 ;; TODO: sanity check semantic analysis for correlation both inside
