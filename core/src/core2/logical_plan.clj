@@ -68,6 +68,13 @@
                                  :min-count 1)
          :relation ::ra-expression))
 
+(defmethod ra-expr :map [_]
+  (s/cat :op #{:ⲭ :chi :map}
+         :projections (s/coll-of (s/or :row-number-column (s/map-of ::column #{'(row-number)}, :conform-keys true, :count 1)
+                                       :extend ::column-expression)
+                                 :min-count 1)
+         :relation ::ra-expression))
+
 (defmethod ra-expr :select [_]
   (s/cat :op #{:σ :sigma :select}
          :predicate ::expression

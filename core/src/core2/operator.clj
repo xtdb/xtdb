@@ -166,6 +166,9 @@
                  :->cursor (fn [{:keys [allocator]} inner]
                              (project/->project-cursor allocator inner projection-specs))}))))
 
+(defmethod emit-op :map [op srcs]
+  (emit-op (assoc op :op :project :opts {:append-columns? true}) srcs))
+
 (defmethod emit-op :rename [{:keys [columns relation prefix]} srcs]
   (let [rename-map (->> columns
                         (into {} (map (juxt (comp name key)
