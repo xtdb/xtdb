@@ -707,6 +707,9 @@
       [:project projection _]
       (mapv ->column projection)
 
+      [:map projection relation]
+      (into (relation-columns relation) (map ->column projection))
+
       [:group-by columns _]
       (mapv ->column columns)
 
@@ -770,7 +773,30 @@
           (with-smap [relation smap]
             (vary-meta relation assoc :smap smap))
           (->smap [relation]
-            (:smap (meta relation)))]
+            (:smap (meta relation)))
+          (remove-projection-names [op projection relation]
+            (let [smap (->smap relation)
+                  projection (w/postwalk-replace smap projection)
+                  smap (reduce
+                        (fn [acc p]
+                          (if (map? p)
+                            (let [[k v] (first p)]
+                              (if (symbol? v)
+                                (assoc acc k v)
+                                (assoc acc k (next-name))))
+                            acc))
+                        smap
+                        projection)
+                  projection (vec (for [p (w/postwalk-replace smap projection)]
+                                    (if (map? p)
+                                      (let [[k v] (first p)]
+                                        (if (= k v)
+                                          k
+                                          p))
+                                      p)))]
+              (with-smap (if (every? symbol? projection)
+                           relation
+                           [op projection relation]) smap)))]
     (r/zmatch relation
       [:table explicit-column-names table]
       (let [smap (zipmap explicit-column-names
@@ -825,28 +851,10 @@
                                  (into smap))))
 
       [:project projection relation]
-      (let [smap (->smap relation)
-            projection (w/postwalk-replace smap projection)
-            smap (reduce
-                  (fn [acc p]
-                    (if (map? p)
-                      (let [[k v] (first p)]
-                        (if (symbol? v)
-                          (assoc acc k v)
-                          (assoc acc k (next-name))))
-                      acc))
-                  smap
-                  projection)
-            projection (vec (for [p (w/postwalk-replace smap projection)]
-                              (if (map? p)
-                                (let [[k v] (first p)]
-                                  (if (= k v)
-                                    k
-                                    p))
-                                p)))]
-        (with-smap (if (every? symbol? projection)
-                     relation
-                     [:project projection relation]) smap))
+      (remove-projection-names :project projection relation)
+
+      [:map projection relation]
+      (remove-projection-names :map projection relation)
 
       [:group-by columns relation]
       (let [smap (->smap relation)
