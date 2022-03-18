@@ -76,7 +76,7 @@
 
 (defrecord Core2Client [base-url]
   c2/PClient
-  (-open-query-async [client query params]
+  (-open-datalog-async [client query params]
     (let [basis-tx (get-in query [:basis :tx])
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
                                          basis-tx
@@ -84,11 +84,29 @@
       (-> !basis-tx
           (.thenCompose (reify Function
                           (apply [_ basis-tx]
-                            (request client :post :query
+                            (request client :post :datalog-query
                                      {:content-type :transit+json
                                       :form-params {:query (-> query
                                                                (assoc-in [:basis :tx] basis-tx))
                                                     :params params}
+                                      :as ::transit+json->resultset}))))
+          (.thenApply (reify Function
+                        (apply [_ resp]
+                          (:body resp)))))))
+
+  (-open-sql-async [client query params]
+    ;; HACK basis as first and only param
+    (let [basis-tx (get-in (first params) [:core2/basis :tx])
+          ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
+                                         basis-tx
+                                         (CompletableFuture/completedFuture basis-tx))]
+      (-> !basis-tx
+          (.thenCompose (reify Function
+                          (apply [_ basis-tx]
+                            (request client :post :sql-query
+                                     {:content-type :transit+json
+                                      :form-params {:query query
+                                                    :params [{:core2/basis {:tx basis-tx}}]}
                                       :as ::transit+json->resultset}))))
           (.thenApply (reify Function
                         (apply [_ resp]

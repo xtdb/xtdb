@@ -2,20 +2,23 @@
   (:require [clojure.pprint :as pp]
             [core2.api :as api]
             [core2.datalog :as d]
+            [core2.error :as err]
             [core2.indexer :as idx]
             [core2.operator :as op]
             [core2.snapshot :as snap]
+            [core2.sql :as sql]
+            [core2.sql.plan :as sql.plan]
             [core2.tx-producer :as txp]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import core2.indexer.TransactionIndexer
-           core2.snapshot.ISnapshotFactory
-           core2.tx_producer.ITxProducer
-           [java.io Closeable Writer]
-           java.lang.AutoCloseable
-           [java.time Duration Instant]
-           [java.util.concurrent CompletableFuture TimeUnit]
-           [org.apache.arrow.memory BufferAllocator RootAllocator]))
+  (:import (core2.indexer TransactionIndexer)
+           (core2.snapshot ISnapshotFactory)
+           (core2.tx_producer ITxProducer)
+           (java.io Closeable Writer)
+           (java.lang AutoCloseable)
+           (java.time Duration Instant)
+           (java.util.concurrent CompletableFuture TimeUnit)
+           (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -30,7 +33,7 @@
                  !system
                  close-fn]
   api/PClient
-  (-open-query-async [_ query params]
+  (-open-datalog-async [_ query params]
     (let [{:keys [basis ^Duration basis-timeout]} query
           {:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
       (-> (snap/snapshot-async snapshot-factory tx)
@@ -40,6 +43,23 @@
               (let [{:keys [query srcs]} (-> (dissoc query :basis :basis-timeout)
                                              (d/compile-query params))]
                 (op/open-ra query (merge srcs {'$ db}) {:default-valid-time default-valid-time})))))))
+
+  (-open-sql-async [_ query params]
+    ;; TODO not supporting the bitemp params from `-open-datalog-async` yet
+    ;; HACK basis won't really work in the same way in SQL - we just expect it as the first and only param for now
+    (let [[{:core2/keys [basis ^Duration basis-timeout]}] params
+          {:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
+      (-> (snap/snapshot-async snapshot-factory tx)
+          (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
+          (util/then-apply
+            (fn [db]
+              (let [{:keys [errs plan]} (-> (sql/parse query)
+                                            (sql.plan/plan-query))]
+                (if errs
+                  (throw (err/illegal-arg :invalid-sql-query
+                                          {::err/message "Invalid SQL query:"
+                                           :errs errs}))
+                  (op/open-ra plan {'$ db} {:default-valid-time default-valid-time}))))))))
 
   PNode
   (await-tx-async [_ tx]

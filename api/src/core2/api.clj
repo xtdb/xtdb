@@ -21,7 +21,8 @@
 
 (defprotocol PClient
   ;; we may want to go to `Stream` instead, when we have a Java API
-  (-open-query-async ^java.util.concurrent.CompletableFuture [node query params]))
+  (-open-datalog-async ^java.util.concurrent.CompletableFuture [node query params])
+  (-open-sql-async ^java.util.concurrent.CompletableFuture [node query params]))
 
 (defprotocol PSubmitNode
   (^java.util.concurrent.CompletableFuture #_<TransactionInstant>
@@ -38,36 +39,69 @@
      (catch ExecutionException e#
        (throw (.getCause e#)))))
 
-(defn open-query-async ^java.util.concurrent.CompletableFuture [node query & params]
-  (-open-query-async node query params))
+(defn open-datalog-async ^java.util.concurrent.CompletableFuture [node query & params]
+  (-open-datalog-async node query params))
 
-(defn open-query ^core2.IResultSet [node query & params]
-  (-> @(-open-query-async node query params)
+(defn open-datalog ^core2.IResultSet [node query & params]
+  (-> @(-open-datalog-async node query params)
       rethrowing-cause))
 
-(defn plan-query-async
-  "Calling `reduce` on the result from `plan-query-async` yields a `CompletableFuture`."
+(defn plan-datalog-async
+  "Calling `reduce` on the result from `plan-datalog-async` yields a `CompletableFuture`."
   [node query & params]
 
   (reify IReduceInit
     (reduce [_ f init]
-      (-> (-open-query-async node query params)
+      (-> (-open-datalog-async node query params)
           (.thenApply (reify Function
                         (apply [_ res]
                           (with-open [^IResultSet res res]
                             (reduce f init (iterator-seq res))))))))))
 
-(defn plan-query [node query & params]
+(defn plan-datalog [node query & params]
   (reify IReduceInit
     (reduce [_ f init]
-      (-> @(reduce f init (apply plan-query-async node query params))
+      (-> @(reduce f init (apply plan-datalog-async node query params))
           rethrowing-cause))))
 
-(defn query-async ^java.util.concurrent.CompletableFuture [node query & params]
-  (into [] (apply plan-query-async node query params)))
+(defn datalog-query-async ^java.util.concurrent.CompletableFuture [node query & params]
+  (into [] (apply plan-datalog-async node query params)))
 
-(defn query [node query & params]
-  (into [] (apply plan-query node query params)))
+(defn datalog-query [node query & params]
+  (into [] (apply plan-datalog node query params)))
+
+;;;; SQL
+
+(defn open-sql-async ^java.util.concurrent.CompletableFuture [node query & params]
+  (-open-sql-async node query params))
+
+(defn open-sql ^core2.IResultSet [node query & params]
+  (-> @(-open-sql-async node query params)
+      rethrowing-cause))
+
+(defn plan-sql-async
+  "Calling `reduce` on the result from `plan-sql-async` yields a `CompletableFuture`."
+  [node query & params]
+
+  (reify IReduceInit
+    (reduce [_ f init]
+      (-> (-open-sql-async node query params)
+          (.thenApply (reify Function
+                        (apply [_ res]
+                          (with-open [^IResultSet res res]
+                            (reduce f init (iterator-seq res))))))))))
+
+(defn plan-sql [node query & params]
+  (reify IReduceInit
+    (reduce [_ f init]
+      (-> @(reduce f init (apply plan-sql-async node query params))
+          rethrowing-cause))))
+
+(defn sql-query-async ^java.util.concurrent.CompletableFuture [node query & params]
+  (into [] (apply plan-sql-async node query params)))
+
+(defn sql-query [node query & params]
+  (into [] (apply plan-sql node query params)))
 
 (def http-routes
   [["/status" {:name :status
@@ -78,5 +112,8 @@
            :summary "Transaction"
            :description "Submits a transaction to the cluster"}]
 
-   ["/query" {:name :query
-              :summary "Query"}]])
+   ["/datalog" {:name :datalog-query
+                :summary "Datalog Query"}]
+
+   ["/sql" {:name :sql-query
+            :summary "SQL"}]])

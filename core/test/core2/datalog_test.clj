@@ -14,94 +14,94 @@
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:name "Ivan"}
               {:name "Petr"}]
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?name]
-                                       :where [[?e :first-name ?name]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?name]
+                                         :where [[?e :first-name ?name]]}
+                                       (assoc :basis {:tx tx})))
                   (into []))))
 
     (t/is (= [{:e :ivan, :name "Ivan"}
               {:e :petr, :name "Petr"}]
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e ?name]
-                                       :where [[?e :first-name ?name]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e ?name]
+                                         :where [[?e :first-name ?name]]}
+                                       (assoc :basis {:tx tx})))
                   (into [])))
           "returning eid")))
 
 (t/deftest test-basic-query
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:e :ivan}]
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e]
-                                       :where [[?e :first-name "Ivan"]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e]
+                                         :where [[?e :first-name "Ivan"]]}
+                                       (assoc :basis {:tx tx})))
                   (into [])))
           "query by single field")
 
     (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?first-name ?last-name]
-                                       :where [[?e :first-name "Petr"]
-                                               [?e :first-name ?first-name]
-                                               [?e :last-name ?last-name]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?first-name ?last-name]
+                                         :where [[?e :first-name "Petr"]
+                                                 [?e :first-name ?first-name]
+                                                 [?e :last-name ?last-name]]}
+                                       (assoc :basis {:tx tx})))
                   (into [])))
           "returning the queried field")
 
     (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?first-name ?last-name]
-                                       :where [[:petr :first-name ?first-name]
-                                               [:petr :last-name ?last-name]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?first-name ?last-name]
+                                         :where [[:petr :first-name ?first-name]
+                                                 [:petr :last-name ?last-name]]}
+                                       (assoc :basis {:tx tx})))
                   (into [])))
           "literal eid")))
 
 (t/deftest test-order-by
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?first-name]
-                                       :where [[?e :first-name ?first-name]]
-                                       :order-by [[?first-name]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?first-name]
+                                         :where [[?e :first-name ?first-name]]
+                                         :order-by [[?first-name]]}
+                                       (assoc :basis {:tx tx})))
                   (into []))))
 
     (t/is (= [{:first-name "Petr"} {:first-name "Ivan"}]
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?first-name]
-                                       :where [[?e :first-name ?first-name]]
-                                       :order-by [[?first-name :desc]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?first-name]
+                                         :where [[?e :first-name ?first-name]]
+                                         :order-by [[?first-name :desc]]}
+                                       (assoc :basis {:tx tx})))
                   (into []))))
 
     (t/is (= [{:first-name "Ivan"}]
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?first-name]
-                                       :where [[?e :first-name ?first-name]]
-                                       :order-by [[?first-name]]
-                                       :limit 1}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?first-name]
+                                         :where [[?e :first-name ?first-name]]
+                                         :order-by [[?first-name]]
+                                         :limit 1}
+                                       (assoc :basis {:tx tx})))
                   (into []))))
 
     (t/is (= [{:first-name "Petr"}]
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?first-name]
-                                       :where [[?e :first-name ?first-name]]
-                                       :order-by [[?first-name :desc]]
-                                       :limit 1}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?first-name]
+                                         :where [[?e :first-name ?first-name]]
+                                         :order-by [[?first-name :desc]]
+                                         :limit 1}
+                                       (assoc :basis {:tx tx})))
                   (into []))))
 
     (t/is (= [{:first-name "Petr"}]
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?first-name]
-                                       :where [[?e :first-name ?first-name]]
-                                       :order-by [[?first-name]]
-                                       :limit 1
-                                       :offset 1}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?first-name]
+                                         :where [[?e :first-name ?first-name]]
+                                         :order-by [[?first-name]]
+                                         :limit 1
+                                         :offset 1}
+                                       (assoc :basis {:tx tx})))
                   (into []))))))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
@@ -113,19 +113,19 @@
                           [:put {:_id 4, :age 15}]])]
 
     (t/is (= #{{:e 1} {:e 2} {:e 3}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e]
-                                       :where [[?e :name]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e]
+                                         :where [[?e :name]]}
+                                       (assoc :basis {:tx tx})))
                   (into #{})))
           "testing without V")
 
     (t/is (= #{{:e 1, :v 15} {:e 3, :v 37}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e ?v]
-                                       :where [[?e :name "Ivan"]
-                                               [?e :age ?v]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e ?v]
+                                         :where [[?e :name "Ivan"]
+                                                 [?e :age ?v]]}
+                                       (assoc :basis {:tx tx})))
                   (into #{}))))
 
     (t/is (= #{{:e1 1, :e2 1}
@@ -133,35 +133,35 @@
                {:e1 3, :e2 3}
                {:e1 1, :e2 3}
                {:e1 3, :e2 1}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e1 ?e2]
-                                       :where [[?e1 :name ?n]
-                                               [?e2 :name ?n]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e1 ?e2]
+                                         :where [[?e1 :name ?n]
+                                                 [?e2 :name ?n]]}
+                                       (assoc :basis {:tx tx})))
                   (into #{}))))
 
     (t/is (= #{{:e 1, :e2 1, :n "Ivan"}
                {:e 3, :e2 3, :n "Ivan"}
                {:e 3, :e2 2, :n "Petr"}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e ?e2 ?n]
-                                       :where [[?e :name "Ivan"]
-                                               [?e :age ?a]
-                                               [?e2 :age ?a]
-                                               [?e2 :name ?n]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e ?e2 ?n]
+                                         :where [[?e :name "Ivan"]
+                                                 [?e :age ?a]
+                                                 [?e2 :age ?a]
+                                                 [?e2 :name ?n]]}
+                                       (assoc :basis {:tx tx})))
                   (into #{}))))
 
     (t/is (= #{{:e 1, :e2 1, :n "Ivan"}
                {:e 2, :e2 2, :n "Petr"}
                {:e 3, :e2 3, :n "Ivan"}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e ?e2 ?n]
-                                       :where [[?e :name ?n]
-                                               [?e :age ?a]
-                                               [?e2 :name ?n]
-                                               [?e2 :age ?a]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e ?e2 ?n]
+                                         :where [[?e :name ?n]
+                                                 [?e :age ?a]
+                                                 [?e2 :name ?n]
+                                                 [?e2 :age ?a]]}
+                                       (assoc :basis {:tx tx})))
                   (into #{})))
           "multi-param join")
 
@@ -169,27 +169,27 @@
                {:e1 1, :e2 3, :a1 15, :a2 37}
                {:e1 3, :e2 1, :a1 37, :a2 15}
                {:e1 3, :e2 3, :a1 37, :a2 37}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e1 ?e2 ?a1 ?a2]
-                                       :where [[?e1 :name "Ivan"]
-                                               [?e2 :name "Ivan"]
-                                               [?e1 :age ?a1]
-                                               [?e2 :age ?a2]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e1 ?e2 ?a1 ?a2]
+                                         :where [[?e1 :name "Ivan"]
+                                                 [?e2 :name "Ivan"]
+                                                 [?e1 :age ?a1]
+                                                 [?e2 :age ?a2]]}
+                                       (assoc :basis {:tx tx})))
                   (into #{})))
           "cross join required here")))
 
 (t/deftest test-joins
   (let [tx (c2/submit-tx tu/*node* bond/tx-ops)]
     (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?film-name ?bond-name]
-                                       :in [?film]
-                                       :where [[?film :film/name ?film-name]
-                                               [?film :film/bond ?bond]
-                                               [?bond :person/name ?bond-name]]}
-                                     (assoc :basis {:tx tx}))
-                                 "skyfall")
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?film-name ?bond-name]
+                                         :in [?film]
+                                         :where [[?film :film/name ?film-name]
+                                                 [?film :film/bond ?bond]
+                                                 [?bond :person/name ?bond-name]]}
+                                       (assoc :basis {:tx tx}))
+                                   "skyfall")
                   (into #{})))
           "one -> one")
 
@@ -197,14 +197,14 @@
                {:film-name "Quantum of Solace", :bond-name "Daniel Craig"}
                {:film-name "Skyfall", :bond-name "Daniel Craig"}
                {:film-name "Spectre", :bond-name "Daniel Craig"}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?film-name ?bond-name]
-                                       :in [?bond]
-                                       :where [[?film :film/name ?film-name]
-                                               [?film :film/bond ?bond]
-                                               [?bond :person/name ?bond-name]]}
-                                     (assoc :basis {:tx tx}))
-                                 "daniel-craig")
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?film-name ?bond-name]
+                                         :in [?bond]
+                                         :where [[?film :film/name ?film-name]
+                                                 [?film :film/bond ?bond]
+                                                 [?bond :person/name ?bond-name]]}
+                                       (assoc :basis {:tx tx}))
+                                   "daniel-craig")
                   (into #{})))
           "one -> many")))
 
@@ -216,65 +216,65 @@
                           [:put {:_id :cyclops, :heads 1}]
                           [:put {:_id :chimera, :heads 1}]])]
     (t/is (= #{{:heads 1, :count-?heads 3} {:heads 3, :count-?heads 1}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?heads (count ?heads)]
-                                       :where [[?monster :heads ?heads]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?heads (count ?heads)]
+                                         :where [[?monster :heads ?heads]]}
+                                       (assoc :basis {:tx tx})))
                   (into #{})))
           "head frequency")
 
     (t/is (= #{{:sum-?heads 6, :min-?heads 1, :max-?heads 3, :count-?heads 4}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [(sum ?heads)
-                                              (min ?heads)
-                                              (max ?heads)
-                                              (count ?heads)]
-                                       :where [[?monster :heads ?heads]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [(sum ?heads)
+                                                (min ?heads)
+                                                (max ?heads)
+                                                (count ?heads)]
+                                         :where [[?monster :heads ?heads]]}
+                                       (assoc :basis {:tx tx})))
                   (into #{})))
           "various aggs")))
 
 (t/deftest test-query-with-in-bindings
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:e :ivan}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e]
-                                       :in [?name]
-                                       :where [[?e :first-name ?name]]}
-                                     (assoc :basis {:tx tx}))
-                                 "Ivan")
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e]
+                                         :in [?name]
+                                         :where [[?e :first-name ?name]]}
+                                       (assoc :basis {:tx tx}))
+                                   "Ivan")
                   (into #{})))
           "single arg")
 
     (t/is (= #{{:e :ivan}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e]
-                                       :in [?first-name ?last-name]
-                                       :where [[?e :first-name ?first-name]
-                                               [?e :last-name ?last-name]]}
-                                     (assoc :basis {:tx tx}))
-                                 "Ivan" "Ivanov")
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e]
+                                         :in [?first-name ?last-name]
+                                         :where [[?e :first-name ?first-name]
+                                                 [?e :last-name ?last-name]]}
+                                       (assoc :basis {:tx tx}))
+                                   "Ivan" "Ivanov")
                   (into #{})))
           "multiple args")
 
     (t/is (= #{{:e :ivan}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e]
-                                       :in [[?first-name]]
-                                       :where [[?e :first-name ?first-name]]}
-                                     (assoc :basis {:tx tx}))
-                                 ["Ivan"])
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e]
+                                         :in [[?first-name]]
+                                         :where [[?e :first-name ?first-name]]}
+                                       (assoc :basis {:tx tx}))
+                                   ["Ivan"])
                   (into #{})))
           "tuple with 1 var")
 
     (t/is (= #{{:e :ivan}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?e]
-                                       :in [[?first-name ?last-name]]
-                                       :where [[?e :first-name ?first-name]
-                                               [?e :last-name ?last-name]]}
-                                     (assoc :basis {:tx tx}))
-                                 ["Ivan" "Ivanov"])
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?e]
+                                         :in [[?first-name ?last-name]]
+                                         :where [[?e :first-name ?first-name]
+                                                 [?e :last-name ?last-name]]}
+                                       (assoc :basis {:tx tx}))
+                                   ["Ivan" "Ivanov"])
                   (into #{})))
           "tuple with 2 vars")
 
@@ -284,11 +284,11 @@
                         :where [[?e :first-name ?first-name]]}
                       (assoc :basis {:tx tx}))]
         (t/is (= #{{:e :petr}}
-                 (->> (c2/plan-query tu/*node* query ["Petr"])
+                 (->> (c2/plan-datalog tu/*node* query ["Petr"])
                       (into #{}))))
 
         (t/is (= #{{:e :ivan} {:e :petr}}
-                 (->> (c2/plan-query tu/*node* query ["Ivan" "Petr"])
+                 (->> (c2/plan-datalog tu/*node* query ["Ivan" "Petr"])
                       (into #{}))))))
 
     (t/testing "relation"
@@ -299,69 +299,69 @@
                       (assoc :basis {:tx tx}))]
 
         (t/is (= #{{:e :ivan}}
-                 (->> (c2/plan-query tu/*node* query
-                                     [{:first-name "Ivan", :last-name "Ivanov"}])
+                 (->> (c2/plan-datalog tu/*node* query
+                                       [{:first-name "Ivan", :last-name "Ivanov"}])
                       (into #{}))))
 
         (t/is (= #{{:e :ivan}}
-                 (->> (c2/plan-query tu/*node* query
-                                     [["Ivan" "Ivanov"]])
+                 (->> (c2/plan-datalog tu/*node* query
+                                       [["Ivan" "Ivanov"]])
                       (into #{}))))
 
         (t/is (= #{{:e :ivan} {:e :petr}}
-                 (->> (c2/plan-query tu/*node* query
-                                     [{:first-name "Ivan", :last-name "Ivanov"}
-                                      {:first-name "Petr", :last-name "Petrov"}])
+                 (->> (c2/plan-datalog tu/*node* query
+                                       [{:first-name "Ivan", :last-name "Ivanov"}
+                                        {:first-name "Petr", :last-name "Petrov"}])
                       (into #{}))))
         (t/is (= #{{:e :ivan} {:e :petr}}
-                 (->> (c2/plan-query tu/*node* query
-                                     [["Ivan" "Ivanov"]
-                                      ["Petr" "Petrov"]])
+                 (->> (c2/plan-datalog tu/*node* query
+                                       [["Ivan" "Ivanov"]
+                                        ["Petr" "Petrov"]])
                       (into #{}))))))))
 
 (t/deftest test-in-arity-exceptions
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (thrown-with-msg? IllegalArgumentException
                             #":in arity mismatch"
-                            (->> (c2/plan-query tu/*node*
-                                                (-> '{:find [?e]
-                                                      :in [?foo]}
-                                                    (assoc :basis {:tx tx})))
+                            (->> (c2/plan-datalog tu/*node*
+                                                  (-> '{:find [?e]
+                                                        :in [?foo]}
+                                                      (assoc :basis {:tx tx})))
                                  (into []))))))
 
 (t/deftest test-known-predicates
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?first-name ?last-name]
-                                       :where [[?e :first-name ?first-name]
-                                               [?e :last-name ?last-name]
-                                               [(< ?first-name "James")]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?first-name ?last-name]
+                                         :where [[?e :first-name ?first-name]
+                                                 [?e :last-name ?last-name]
+                                                 [(< ?first-name "James")]]}
+                                       (assoc :basis {:tx tx})))
                   (into #{}))))
 
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?first-name ?last-name]
-                                       :where [[?e :first-name ?first-name]
-                                               [?e :last-name ?last-name]
-                                               [(<= ?first-name "Ivan")]]}
-                                     (assoc :basis {:tx tx})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?first-name ?last-name]
+                                         :where [[?e :first-name ?first-name]
+                                                 [?e :last-name ?last-name]
+                                                 [(<= ?first-name "Ivan")]]}
+                                       (assoc :basis {:tx tx})))
                   (into #{}))))
 
-    (t/is (empty? (->> (c2/plan-query tu/*node*
-                                      (-> '{:find [?first-name ?last-name]
-                                            :where [[?e :first-name ?first-name]
-                                                    [?e :last-name ?last-name]
-                                                    [(<= ?first-name "Ivan")]
-                                                    [(> ?last-name "Ivanov")]]}
-                                          (assoc :basis {:tx tx})))
+    (t/is (empty? (->> (c2/plan-datalog tu/*node*
+                                        (-> '{:find [?first-name ?last-name]
+                                              :where [[?e :first-name ?first-name]
+                                                      [?e :last-name ?last-name]
+                                                      [(<= ?first-name "Ivan")]
+                                                      [(> ?last-name "Ivanov")]]}
+                                            (assoc :basis {:tx tx})))
                        (into []))))
 
-    (t/is (empty? (->> (c2/plan-query tu/*node*
-                                      (-> '{:find [?first-name ?last-name]
-                                            :where [[?e :first-name ?first-name]
-                                                    [?e :last-name ?last-name]
-                                                    [(< ?first-name "Ivan")]]}
-                                          (assoc :basis {:tx tx})))
+    (t/is (empty? (->> (c2/plan-datalog tu/*node*
+                                        (-> '{:find [?first-name ?last-name]
+                                              :where [[?e :first-name ?first-name]
+                                                      [?e :last-name ?last-name]
+                                                      [(< ?first-name "Ivan")]]}
+                                            (assoc :basis {:tx tx})))
                        (into []))))))

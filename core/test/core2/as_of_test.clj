@@ -26,18 +26,18 @@
                                (snap/snapshot snapshot-factory !tx2)))))
 
     (t/is (= #{{:last-updated "tx2"}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?last-updated]
-                                       :where [[?e :last-updated ?last-updated]]}
-                                     (assoc :basis {:tx !tx2})))
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?last-updated]
+                                         :where [[?e :last-updated ?last-updated]]}
+                                       (assoc :basis {:tx !tx2})))
                   (into #{}))))
 
     (t/is (= #{{:last-updated "tx1"}}
-             (->> (c2/plan-query tu/*node*
-                                 (-> '{:find [?last-updated]
-                                       :where [[?e :last-updated ?last-updated]]}
+             (->> (c2/plan-datalog tu/*node*
+                                   (-> '{:find [?last-updated]
+                                         :where [[?e :last-updated ?last-updated]]}
 
-                                     (assoc :basis {:default-valid-time (:tx-time @!tx1), :tx !tx2})))
+                                       (assoc :basis {:default-valid-time (:tx-time @!tx1), :tx !tx2})))
                   (into #{}))))
 
     (t/testing "at tx1"
@@ -46,10 +46,10 @@
                                  (snap/snapshot snapshot-factory !tx1)))))
 
       (t/is (= #{{:last-updated "tx1"}}
-               (->> (c2/plan-query tu/*node*
-                                   (-> '{:find [?last-updated]
-                                         :where [[?e :last-updated ?last-updated]]}
-                                       (assoc :basis {:tx !tx1})))
+               (->> (c2/plan-datalog tu/*node*
+                                     (-> '{:find [?last-updated]
+                                           :where [[?e :last-updated ?last-updated]]}
+                                         (assoc :basis {:tx !tx1})))
                     (into #{})))))))
 
 (t/deftest test-valid-time

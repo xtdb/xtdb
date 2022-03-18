@@ -107,13 +107,14 @@
   (st/spec (s/nilable #(instance? Duration %))
            {:decode/string (fn [_ s] (some-> s Duration/parse))}))
 
-(s/def ::query (s/merge ::d/query (s/keys :opt-un [::basis ::basis-timeout])))
 (s/def ::params (s/nilable (s/coll-of any? :kind vector?)))
 
-(s/def ::query-body
-  (s/keys :req-un [::query], :opt-un [::params]))
+(s/def :core2.server.datalog/query (s/merge ::d/query (s/keys :opt-un [::basis ::basis-timeout])))
 
-(defmethod route-handler :query [_]
+(s/def :core2.server.datalog/query-body
+  (s/keys :req-un [:core2.server.datalog/query], :opt-un [::params]))
+
+(defmethod route-handler :datalog-query [_]
   {:muuntaja (m/create (-> muuntaja-opts
                            (assoc :return :output-stream)
 
@@ -124,11 +125,33 @@
 
    :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query params]} :body} parameters]
-                       (-> (apply c2/open-query-async node query params)
+                       (-> (apply c2/open-datalog-async node query params)
                            (util/then-apply (fn [res]
                                               {:status 200, :body res})))))
 
-          :parameters {:body ::query-body}}})
+          :parameters {:body :core2.server.datalog/query-body}}})
+
+(s/def :core2.server.sql/query string?)
+
+(s/def :core2.server.sql/query-body
+  (s/keys :req-un [:core2.server.sql/query], :opt-un [::params]))
+
+(defmethod route-handler :sql-query [_]
+  {:muuntaja (m/create (-> muuntaja-opts
+                           (assoc :return :output-stream)
+
+                           (assoc-in [:formats "application/transit+json" :encoder]
+                                     [->tj-resultset-encoder {:handlers c2.transit/tj-write-handlers}])
+                           (assoc-in [:formats "application/edn" :encoder]
+                                     [->edn-resultset-encoder])))
+
+   :post {:handler (fn [{:keys [node parameters]}]
+                     (let [{{:keys [query params]} :body} parameters]
+                       (-> (apply c2/open-sql-async node query params)
+                           (util/then-apply (fn [res]
+                                              {:status 200, :body res})))))
+
+          :parameters {:body :core2.server.sql/query-body}}})
 
 (defn- handle-ex-info [ex _req]
   {:status 400, :body ex})

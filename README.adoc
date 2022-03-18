@@ -77,21 +77,33 @@ Transactions are slightly different to Classic:
 - `:xt/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
 - `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
 
-=== Queries
-In a similar manner to `next.jdbc`[https://github.com/seancorfield/next-jdbc], execute Datalog queries in Core2 using `c2/plan-query`.
+=== Datalog Queries
+In a similar manner to `next.jdbc`[https://github.com/seancorfield/next-jdbc], execute Datalog queries in Core2 using `c2/plan-datalog-query`.
 This returns a reducible sequence that you can pass to (say) `reduce`, `into` or `run!`.
 When finalised (by `reduce`) this will ensure the query results are adequately closed.
 
 [source,clojure]
 ----
 (with-open [node (node/start-node {})]
-  (->> (c2/plan-query node
-                      '{:find [?e ?name]
-                        :where [[?e :name ?name]]})
+  (->> (c2/plan-datalog-query node
+                              '{:find [?e ?name]
+                                :where [[?e :name ?name]]})
        (into [])))
 ----
 
 These queries currently return a vector of maps `[{:e ..., :name ...}, {...}]`, although this is only because it's what was closest to what we had available at the time.
+
+=== SQL queries
+
+Same as Datalog, but use `plan-sql-query` instead.
+
+[source,clojure]
+----
+(with-open [node (node/start-node {})]
+  (->> (c2/plan-sql-query node "SELECT u.name FROM users u")
+       (into [])))
+----
+
 
 === Bases
 
@@ -101,29 +113,29 @@ In Core2, the upper bound for the tx-time is applied per-source; the default upp
 [source,clojure]
 ----
 ;; simple case - use the latest tx the node has available:
-(->> (c2/plan-query node '{...})
+(->> (c2/plan-datalog-query node '{...})
      (into []))
 
 ;; or, to read your own writes (timeout optional):
-;; `plan-query` will await the transaction
-(->> (c2/plan-query node
-                    (-> '{:find ..., :where ...}
-                        (assoc :basis {:tx tx}
-                                 :basis-timeout (Duration/ofSeconds 1))))
+;; `plan-datalog-query` will await the transaction
+(->> (c2/plan-datalog-query node
+                            (-> '{:find ..., :where ...}
+                                (assoc :basis {:tx tx}
+                                       :basis-timeout (Duration/ofSeconds 1))))
      (into []))
 ----
 
-The `plan-query` functions take the node, the query, and then a variable number of params.
+The `plan-datalog-query` functions take the node, the query, and then a variable number of params.
 
 [source,clojure]
 ----
-(->> (c2/plan-query tu/*node*
-                    (-> '{:find [?e]
-                          :in [?first-name ?last-name]
-                          :where [[?e :first-name ?first-name]
-                                  [?e :last-name ?last-name]]}
-                        (assoc :basis {:tx tx}))
-                    "Ivan" "Ivanov")
+(->> (c2/plan-datalog-query tu/*node*
+                            (-> '{:find [?e]
+                                  :in [?first-name ?last-name]
+                                  :where [[?e :first-name ?first-name]
+                                          [?e :last-name ?last-name]]}
+                                (assoc :basis {:tx tx}))
+                            "Ivan" "Ivanov")
      (into #{}))
 ----
 
@@ -132,31 +144,33 @@ Unlike Datomic, `$` shouldn't be included in `:in` - if/when we reinstate multip
 [source,clojure]
 ----
 ;; something like this, anyway.
-(->> (c2/plan-query node
-                    (-> '{:find [...]
-                          :where [[$db1 ...], [$db2 ...]]}
-                        (assoc :basis {'$db1 {:tx tx}
-                                       '$db2 {:tx tx}}
-                               :basis-timeout (Duration/ofSeconds 1))))
+(->> (c2/plan-datalog-query node
+                            (-> '{:find [...]
+                                  :where [[$db1 ...], [$db2 ...]]}
+                                (assoc :basis {'$db1 {:tx tx}
+                                               '$db2 {:tx tx}}
+                                       :basis-timeout (Duration/ofSeconds 1))))
      (into []))
 ----
 
-`plan-query-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the query plan.
-(In fact, `plan-query` just calls `plan-query-async` and deref's it.)
+`plan-datalog-query-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the query plan.
+(In fact, `plan-datalog-query` just calls `plan-datalog-query-async` and deref's it.)
 
 The basis map can also contain a `:default-valid-time` option, which applies to any entities that don't specify other valid-time constraints.
 This is for repeatable queries - it defaults to 'now' if not provided.
 
 [source,clojure]
 ----
-(->> (c2/plan-query node
-                    (-> '{:find [?e ?name]
-                          :where [[?e :name ?name]]}
-                        (assoc :basis {:default-valid-time #inst "..."})))
+(->> (c2/plan-datalog-query node
+                            (-> '{:find [?e ?name]
+                                  :where [[?e :name ?name]]}
+                                (assoc :basis {:default-valid-time #inst "..."})))
      (into []))
 ----
 
 There is also `op/query-ra` which accepts a lower-level relational algebra query - have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
+
+SQL queries do not currently support bases.
 
 == Developing Core2
 
