@@ -87,7 +87,7 @@
               [:group-by [me__4_name
                           {$agg_out__2_3$ (sum $agg_in__2_3$)}
                           {$agg_out__2_8$ (min $agg_in__2_8$)}]
-               [:project [me__4_name {$agg_in__2_3$ m__5_length} {$agg_in__2_8$ m__5_year}]
+               [:map [{$agg_in__2_3$ m__5_length} {$agg_in__2_8$ m__5_year}]
                 [:join {me__4_cert m__5_producer}
                  [:rename me__4 [:scan [name cert]]]
                  [:rename m__5 [:scan [length producer year]]]]]]]]])
@@ -95,7 +95,7 @@
   (valid? "SELECT SUM(m.length) FROM Movie AS m"
           '[:project [{$column_1$ $agg_out__2_3$}]
             [:group-by [{$agg_out__2_3$ (sum $agg_in__2_3$)}]
-             [:project [{$agg_in__2_3$ m__4_length}]
+             [:map [{$agg_in__2_3$ m__4_length}]
               [:rename m__4 [:scan [length]]]]]])
 
   (valid? "SELECT * FROM StarsIn AS si(name)"
@@ -196,14 +196,14 @@
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle"
           '[:project [movieTitle]
             [:order-by [{$order_by__1_1$ :desc} {movieTitle :asc}]
-             [:project [movieTitle {$order_by__1_1$ (= si__3_year "foo")}]
+             [:map [{$order_by__1_1$ (= si__3_year "foo")}]
               [:rename {si__3_movieTitle movieTitle}
                [:rename si__3 [:scan [movieTitle year]]]]]]])
 
   (valid? "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year"
           '[:project [movieTitle]
             [:order-by [{$order_by__1_1$ :asc}]
-             [:project [movieTitle {$order_by__1_1$ si__3_year}]
+             [:map [{$order_by__1_1$ si__3_year}]
               [:rename {si__3_movieTitle movieTitle}
                [:rename si__3 [:scan [movieTitle year]]]]]]])
 
@@ -216,21 +216,21 @@
           '[:rename {film__4_name name}
             [:project [film__4_name]
              [:unwind {film__4_name $unwind__4$} {}
-              [:project [si__3_films {$unwind__4$ si__3_films}]
+              [:map [{$unwind__4$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]])
 
   (valid? "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film"
           '[:rename {si__3_films films film__4_$column_1$ $column_2$}
             [:project [si__3_films film__4_$column_1$]
              [:unwind {film__4_$column_1$ $unwind__4$} {}
-              [:project [si__3_films {$unwind__4$ si__3_films}]
+              [:map [{$unwind__4$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]])
 
   (valid? "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film"
           '[:rename {si__3_films films film__4_$column_1$ $column_2$ film__4_$column_2$ $column_3$}
             [:project [si__3_films film__4_$column_1$ film__4_$column_2$]
              [:unwind {film__4_$column_1$ $unwind__4$} {:ordinality-column film__4_$column_2$}
-              [:project [si__3_films {$unwind__4$ si__3_films}]
+              [:map [{$unwind__4$ si__3_films}]
                [:rename si__3 [:scan [films]]]]]]]))
 
 ;; TODO: sanity check semantic analysis for correlation both inside
@@ -249,7 +249,7 @@
                 [:rename subquery__4
                  [:project [{$column_1$ $agg_out__5_6$}]
                   [:group-by [{$agg_out__5_6$ (max $agg_in__5_6$)}]
-                   [:project [{$agg_in__5_6$ foo__7_bar}]
+                   [:map [{$agg_in__5_6$ foo__7_bar}]
                     [:rename foo__7 [:scan [bar]]]]]]]]]]))
 
   (t/testing "Scalar subquery in WHERE"
@@ -262,7 +262,7 @@
                  [:rename subquery__5
                   [:project [{$column_1$ $agg_out__6_7$}]
                    [:group-by [{$agg_out__6_7$ (max $agg_in__6_7$)}]
-                    [:project [{$agg_in__6_7$ foo__8_bar}]
+                    [:map [{$agg_in__6_7$ foo__8_bar}]
                      [:rename foo__8 [:scan [bar]]]]]]]]]]]))
 
   (t/testing "Correlated scalar subquery in SELECT"
@@ -416,9 +416,9 @@
                 [:select (< 1000000 $column_1$)
                  [:project [c__3_custkey {$column_1$ $agg_out__6_7$}]
                   [:group-by [c__3_custkey $row_number$ {$agg_out__6_7$ (sum $agg_in__6_7$)}]
-                   [:project [c__3_custkey $row_number$ {$agg_in__6_7$ o__8_totalprice}]
+                   [:map [{$agg_in__6_7$ o__8_totalprice}]
                     [:left-outer-join {c__3_custkey o__8_custkey}
-                     [:project [c__3_custkey {$row_number$ (row-number)}]
+                     [:map [{$row_number$ (row-number)}]
                       [:rename c__3 [:scan [custkey]]]]
                      [:rename o__8 [:scan [totalprice custkey]]]]]]]]]]])
 
@@ -445,9 +445,9 @@ FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp
                [:rename {$column_1$ subquery__3_$column_1$}
                 [:project [customers__8_name customers__8_custno customers__8_country {$column_1$ $agg_out__4_5$}]
                  [:group-by [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_out__4_5$ (count $agg_in__4_5$)}]
-                  [:project [customers__8_name customers__8_custno customers__8_country $row_number$ {$agg_in__4_5$ 1}]
+                  [:map [{$agg_in__4_5$ 1}]
                    [:left-outer-join {customers__8_custno orders__6_custno}
-                    [:project [customers__8_name customers__8_custno customers__8_country {$row_number$ (row-number)}]
+                    [:map [{$row_number$ (row-number)}]
                      [:anti-join {customers__8_country subquery__9_country}
                       [:rename customers__8 [:scan [name custno country]]]
                       [:rename subquery__9
@@ -468,9 +468,9 @@ FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp
                 [:select (= e__4_grade $column_1$)
                  [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade {$column_1$ $agg_out__8_9$}]
                   [:group-by [s__3_name s__3_id e__4_course e__4_sid e__4_grade $row_number$ {$agg_out__8_9$ (min $agg_in__8_9$)}]
-                   [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade $row_number$ {$agg_in__8_9$ e2__10_grade}]
+                   [:map [{$agg_in__8_9$ e2__10_grade}]
                     [:left-outer-join {s__3_id e2__10_sid}
-                     [:project [s__3_name s__3_id e__4_course e__4_sid e__4_grade {$row_number$ (row-number)}]
+                     [:map [{$row_number$ (row-number)}]
                       [:join {s__3_id e__4_sid}
                        [:rename s__3 [:scan [name id]]]
                        [:rename e__4 [:scan [course sid grade]]]]]
@@ -491,9 +491,9 @@ FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp
                 [:select (>= e__4_grade $column_1$)
                  [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade {$column_1$ (+ $agg_out__10_11$ 1)}]
                   [:group-by [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade $row_number$ {$agg_out__10_11$ (avg $agg_in__10_11$)}]
-                   [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade $row_number$ {$agg_in__10_11$ e2__12_grade}]
+                   [:map [{$agg_in__10_11$ e2__12_grade}]
                     [:apply :left-outer-join {s__3_id ?s__3_id, s__3_major ?s__3_major, s__3_year ?s__3_year} #{subquery__9_$column_1$}
-                     [:project [s__3_name s__3_id s__3_major s__3_year e__4_course e__4_sid e__4_grade {$row_number$ (row-number)}]
+                     [:map [{$row_number$ (row-number)}]
                       [:join {s__3_id e__4_sid}
                        [:rename s__3
                         [:select (or (= major "CS") (= major "Games Eng"))

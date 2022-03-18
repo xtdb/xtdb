@@ -348,14 +348,13 @@
                         {(aggregate-symbol "agg_out" aggregate)
                          (list 'count (aggregate-symbol "agg_in" aggregate))}))
                     (into grouping-columns))
-     [:project (->> (for [aggregate aggregates]
-                      (r/zmatch aggregate
-                        [:aggregate_function [:general_set_function _ ^:z ve]]
-                        {(aggregate-symbol "agg_in" aggregate) (expr ve)}
+     [:map (vec (for [aggregate aggregates]
+                  (r/zmatch aggregate
+                    [:aggregate_function [:general_set_function _ ^:z ve]]
+                    {(aggregate-symbol "agg_in" aggregate) (expr ve)}
 
-                        [:aggregate_function "COUNT" [:asterisk "*"]]
-                        {(aggregate-symbol "agg_in" aggregate) 1}))
-                    (into grouping-columns))
+                    [:aggregate_function "COUNT" [:asterisk "*"]]
+                    {(aggregate-symbol "agg_in" aggregate) 1})))
       relation]]))
 
 (declare expr-symbols)
@@ -383,7 +382,7 @@
 
                             nil))
                         ssl)
-        order-by-projection (keep :projection order-by-specs)
+        order-by-projection (vec (keep :projection order-by-specs))
         extra-projection (distinct (mapcat (comp expr-symbols vals) order-by-projection))
         base-projection (mapv unqualified-projection-symbol projection)
         relation (if (not-empty extra-projection)
@@ -399,7 +398,7 @@
                    relation)
         order-by [:order-by (mapv :spec order-by-specs)
                   (if (not-empty order-by-projection)
-                    [:project (vec (concat base-projection order-by-projection)) relation]
+                    [:map order-by-projection relation]
                     relation)]]
     (if (not-empty order-by-projection)
       [:project base-projection order-by]
@@ -436,23 +435,15 @@
 (defn- build-collection-derived-table [tp]
   (let [{:keys [id correlation-name]} (sem/table tp)
         [unwind-column ordinality-column] (map qualified-projection-symbol (first (sem/projected-columns tp)))
-        unwind-column (-> unwind-column
-                          (with-meta {:table-reference {:table-id id
-                                                        :correlation-name correlation-name}}))
         cdt (r/$ tp 1)
-        unwind-symbol (unqualified-id-symbol id (symbol (str "$unwind" relation-id-delimiter id "$")))
-        qualified-projection (vec (for [table (vals (sem/local-env-singleton-values (sem/env cdt)))
-                                        :let [{:keys [ref]} (meta table)]
-                                        projection (first (sem/projected-columns ref))
-                                        :let [column (qualified-projection-symbol projection)]
-                                        :when (not= ordinality-column column)]
-                                    (if (= unwind-column column)
-                                      {unwind-symbol (expr (r/$ cdt 2))}
-                                      column)))]
-    [:unwind {unwind-column unwind-symbol}
+        cve (r/$ cdt 2)
+        unwind-symbol (unqualified-id-symbol id (symbol (str "$unwind" relation-id-delimiter id "$")))]
+    [:unwind (with-meta {unwind-column unwind-symbol}
+               {:table-reference {:table-id id
+                                  :correlation-name correlation-name}})
      (cond-> {}
        ordinality-column (assoc :ordinality-column ordinality-column))
-     [:project qualified-projection nil]]))
+     [:map [{unwind-symbol (expr cve)}] nil]]))
 
 (defn- build-table-primary [tp]
   (let [{:keys [id correlation-name] :as table} (sem/table tp)
@@ -483,9 +474,9 @@
   (reduce
    (fn [acc table]
      (r/zmatch table
-       [:unwind cve unwind-opts [:project projection nil]]
+       [:unwind cve unwind-opts [:map projection nil]]
        ;;=>
-       [:unwind cve unwind-opts [:project projection acc]]
+       [:unwind cve unwind-opts [:map projection acc]]
 
        [:apply :cross-join columns dependent-column-names nil dependent-relation]
        ;;=>
@@ -948,7 +939,7 @@
             [:rename prefix _]
             (when-let [table-reference (:table-reference (meta prefix))]
               [table-reference])
-            [:unwind cve _]
+            [:unwind cve _ _]
             (when-let [table-reference (:table-reference (meta cve))]
               [table-reference])))
         (z/vector-zip op))))
@@ -1064,7 +1055,7 @@
     (when (and (empty? (set/intersection (expr-table-ids predicate)
                                          (expr-table-ids dependent-column-names)))
                (empty? (set/intersection (expr-symbols predicate)
-                                         (relation-columns dependent-relation))))
+                                         (set (relation-columns dependent-relation)))))
       [:apply
        mode
        columns
@@ -1107,6 +1098,15 @@
     ;;=>
     (when-not (predicate-depends-on-calculated-expression? predicate projection)
       [:project projection
+       [:select predicate
+        relation]])
+
+    [:select predicate
+     [:map projection
+      relation]]
+    ;;=>
+    (when-not (predicate-depends-on-calculated-expression? predicate (relation-columns relation))
+      [:map projection
        [:select predicate
         relation]])))
 
@@ -1419,7 +1419,7 @@
      [:rename rename-columns
       [:project post-group-by-projection
        [:group-by group-by-columns
-        [:project pre-group-by-projection
+        [:map pre-group-by-projection
          dependent-relation]]]]]
     ;;=>
     (let [independent-projection (relation-columns independent-relation)
@@ -1431,12 +1431,10 @@
         [:group-by (vec (concat independent-projection
                                 [row-number-sym]
                                 (w/postwalk-replace smap group-by-columns)))
-         [:project (vec (concat independent-projection
-                                [row-number-sym]
-                                (w/postwalk-replace smap pre-group-by-projection)))
+         [:map (w/postwalk-replace smap pre-group-by-projection)
           (let [columns (remove-unused-correlated-columns columns dependent-relation)]
             [:apply :cross-join columns dependent-column-names
-             [:project (vec (concat independent-projection [{row-number-sym '(row-number)}]))
+             [:map [{row-number-sym '(row-number)}]
               independent-relation]
              dependent-relation])]]]])
 
@@ -1446,7 +1444,7 @@
       [:rename rename-columns
        [:project post-group-by-projection
         [:group-by group-by-columns
-         [:project pre-group-by-projection
+         [:map pre-group-by-projection
           dependent-relation]]]]]]
     ;;=>
     (let [independent-projection (relation-columns independent-relation)
@@ -1458,12 +1456,10 @@
         [:group-by (vec (concat independent-projection
                                 [row-number-sym]
                                 (w/postwalk-replace smap group-by-columns)))
-         [:project (vec (concat independent-projection
-                                [row-number-sym]
-                                (w/postwalk-replace smap pre-group-by-projection)))
+         [:map (w/postwalk-replace smap pre-group-by-projection)
           (let [columns (remove-unused-correlated-columns columns dependent-relation)]
             [:apply :left-outer-join columns dependent-column-names
-             [:project (vec (concat independent-projection [{row-number-sym '(row-number)}]))
+             [:map [{row-number-sym '(row-number)}]
               independent-relation]
              dependent-relation])]]]])))
 
