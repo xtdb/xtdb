@@ -2,9 +2,7 @@
   "Public API of XTDB."
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
             [xtdb.codec :as c]
-            [xtdb.io :as xio]
             [xtdb.system :as sys])
   (:import [xtdb.api IXtdb IXtdbSubmitClient RemoteClientOptions]
            java.lang.AutoCloseable
@@ -244,10 +242,6 @@
                                             :xtdb/secondary-indices 'xtdb.tx/->secondary-indices}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]
-    (when (and (nil? @xio/malloc-arena-max)
-               (xio/glibc?))
-      (defonce warn-on-malloc-arena-max
-        (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for XTDB is 2")))
     (reset! (get-in system [:xtdb/node :!system]) system)
     (-> (:xtdb/node system)
         (assoc :close-fn #(.close ^AutoCloseable system)))))

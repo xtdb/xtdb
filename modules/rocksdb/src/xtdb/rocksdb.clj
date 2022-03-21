@@ -138,6 +138,12 @@
 
   (RocksDB/loadLibrary)
 
+  (when (and (nil? @xio/malloc-arena-max)
+             (xio/glibc?))
+    ;; defonce allows us to see the warning once only
+    (defonce warn-on-malloc-arena-max
+      (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for XTDB is 2")))
+
   (when checkpointer
     (cp/try-restore checkpointer (.toFile db-dir) cp-format))
 
