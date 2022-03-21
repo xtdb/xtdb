@@ -1,7 +1,6 @@
 (ns ^:no-doc xtdb.rocksdb
   "RocksDB KV backend for XTDB."
-  (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.tools.logging :as log]
             [xtdb.kv :as kv]
             [xtdb.rocksdb.loader]
             [xtdb.memory :as mem]
@@ -11,7 +10,6 @@
             [xtdb.kv.index-store :as kvi]
             [xtdb.codec :as c])
   (:import (java.io Closeable File)
-           java.nio.ByteBuffer
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
            (org.rocksdb BlockBasedTableConfig Checkpoint CompressionType FlushOptions LRUCache
