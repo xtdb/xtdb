@@ -1,17 +1,22 @@
 (ns ^:no-doc xtdb.rocksdb
   "RocksDB KV backend for XTDB."
-  (:require [xtdb.checkpoint :as cp]
-            [xtdb.codec :as c]
-            [xtdb.io :as xio]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [xtdb.kv :as kv]
-            [xtdb.kv.index-store :as kvi]
+            [xtdb.rocksdb.loader]
             [xtdb.memory :as mem]
             [xtdb.system :as sys]
-            [clojure.tools.logging :as log])
+            [xtdb.io :as xio]
+            [xtdb.checkpoint :as cp]
+            [xtdb.kv.index-store :as kvi]
+            [xtdb.codec :as c])
   (:import (java.io Closeable File)
+           java.nio.ByteBuffer
            (java.nio.file Files Path)
-           (java.nio.file.attribute FileAttribute)
-           (org.rocksdb BlockBasedTableConfig Checkpoint CompressionType FlushOptions LRUCache Options ReadOptions RocksDB RocksIterator Statistics StatsLevel WriteBatch WriteOptions)))
+           java.nio.file.attribute.FileAttribute
+           (org.rocksdb BlockBasedTableConfig Checkpoint CompressionType FlushOptions LRUCache
+                        Options ReadOptions RocksDB RocksIterator
+                        WriteBatch WriteOptions Statistics StatsLevel)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -21,31 +26,31 @@
 
 (defrecord RocksKvIterator [^RocksIterator i]
   kv/KvIterator
-  (seek [_ k]
+  (seek [this k]
     (.seek i (mem/direct-byte-buffer k))
     (iterator->key i))
 
-  (next [_]
+  (next [this]
     (.next i)
     (iterator->key i))
 
-  (prev [_]
+  (prev [this]
     (.prev i)
     (iterator->key i))
 
-  (value [_]
+  (value [this]
     (mem/as-buffer (.value i)))
 
   Closeable
-  (close [_]
+  (close [this]
     (.close i)))
 
 (defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
   kv/KvSnapshot
-  (new-iterator [_]
+  (new-iterator [this]
     (->RocksKvIterator (.newIterator db read-options)))
 
-  (get-value [_ k]
+  (get-value [this k]
     (some-> (.get db read-options (mem/->on-heap k))
             (mem/as-buffer)))
 
@@ -129,13 +134,7 @@
                               :disable-wal? {:doc "Disable Write Ahead Log"
                                              :default false
                                              :spec ::sys/boolean}}}
-  [{:keys [^Path db-dir sync? disable-wal? metrics checkpointer ^Options db-options block-cache]}]
-
-  (when (and (nil? @xio/malloc-arena-max)
-             (xio/glibc?))
-    #_{:clj-kondo/ignore [:inline-def]}
-    (defonce warn-on-malloc-arena-max
-      (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for XTDB is 2")))
+  [{:keys [^Path db-dir sync? disable-wal? metrics checkpointer ^Options db-options block-cache] :as options}]
 
   (RocksDB/loadLibrary)
 
