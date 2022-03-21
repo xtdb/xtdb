@@ -1,16 +1,11 @@
 package xtdb.api.tx;
 
-import clojure.lang.IPersistentVector;
-import clojure.lang.Keyword;
-import clojure.lang.PersistentVector;
 import xtdb.api.XtdbDocument;
 
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 public final class Transaction {
     public static Transaction buildTx(Consumer<Builder> f) {
@@ -23,18 +18,29 @@ public final class Transaction {
         return new Builder();
     }
 
-    private final List<TransactionOperation> operations;
+    private final Iterable<TransactionOperation> operations;
+    private final Date txTime;
 
-    private Transaction(List<TransactionOperation> operations) {
+    private Transaction(Iterable<TransactionOperation> operations, Date txTime) {
         this.operations = operations;
+        this.txTime = txTime;
+    }
+
+    public Iterable<TransactionOperation> getOperations() {
+        return operations;
+    }
+
+    public Date getTxTime() {
+        return txTime;
     }
 
     public static final class Builder {
         private final ArrayList<TransactionOperation> operations = new ArrayList<>();
+        private Date txTime;
 
         private Builder() {}
 
-        public final Builder add(TransactionOperation operation) {
+        public Builder add(TransactionOperation operation) {
             operations.add(operation);
             return this;
         }
@@ -43,7 +49,7 @@ public final class Transaction {
          * Adds a put operation to the transaction, putting the given document at validTime = now.
          * @return this
          */
-        public final Builder put(XtdbDocument document) {
+        public Builder put(XtdbDocument document) {
             return add(PutOperation.create(document));
         }
 
@@ -51,7 +57,7 @@ public final class Transaction {
          * Adds a put operation to the transaction, putting the given document starting from the given valid time
          * @return this
          */
-        public final Builder put(XtdbDocument document, Date startValidTime) {
+        public Builder put(XtdbDocument document, Date startValidTime) {
             return add(PutOperation.create(document, startValidTime));
         }
 
@@ -59,7 +65,7 @@ public final class Transaction {
          * Adds a put operation to the transaction, putting the given document starting for the given validTime range
          * @return this
          */
-        public final Builder put(XtdbDocument document, Date startValidTime, Date endValidTime) {
+        public Builder put(XtdbDocument document, Date startValidTime, Date endValidTime) {
             return add(PutOperation.create(document, startValidTime, endValidTime));
         }
 
@@ -67,7 +73,7 @@ public final class Transaction {
          * Adds a delete operation to the transaction, deleting the given document from validTime = now.
          * @return this
          */
-        public final Builder delete(Object id) {
+        public Builder delete(Object id) {
             return add(DeleteOperation.create(id));
         }
 
@@ -75,7 +81,7 @@ public final class Transaction {
          * Adds a delete operation to the transaction, deleting the given document starting from the given valid time
          * @return this
          */
-        public final Builder delete(Object id, Date startValidTime) {
+        public Builder delete(Object id, Date startValidTime) {
             return add(DeleteOperation.create(id, startValidTime));
         }
 
@@ -83,7 +89,7 @@ public final class Transaction {
          * Adds a delete operation to the transaction, deleting the given document starting for the given validTime range
          * @return this
          */
-        public final Builder delete(Object id, Date startValidTime, Date endValidTime) {
+        public Builder delete(Object id, Date startValidTime, Date endValidTime) {
             return add(DeleteOperation.create(id, startValidTime, endValidTime));
         }
 
@@ -96,7 +102,7 @@ public final class Transaction {
          *
          * @return this
          */
-        public final Builder evict(Object id) {
+        public Builder evict(Object id) {
             return add(EvictOperation.create(id));
         }
 
@@ -107,7 +113,7 @@ public final class Transaction {
          *
          * @return this
          */
-        public final Builder matchNotExists(Object id) {
+        public Builder matchNotExists(Object id) {
             return add(MatchOperation.create(id));
         }
 
@@ -118,7 +124,7 @@ public final class Transaction {
          *
          * @return this
          */
-        public final Builder match(XtdbDocument document) {
+        public Builder match(XtdbDocument document) {
             return add(MatchOperation.create(document));
         }
 
@@ -129,7 +135,7 @@ public final class Transaction {
          *
          * @return this
          */
-        public final Builder matchNotExists(Object id, Date atValidTime) {
+        public Builder matchNotExists(Object id, Date atValidTime) {
             return add(MatchOperation.create(id, atValidTime));
         }
 
@@ -140,7 +146,7 @@ public final class Transaction {
          *
          * @return this
          */
-        public final Builder match(XtdbDocument document, Date atValidTime) {
+        public Builder match(XtdbDocument document, Date atValidTime) {
             return add(MatchOperation.create(document, atValidTime));
         }
 
@@ -149,113 +155,26 @@ public final class Transaction {
          * Invokes the transaction function with the given id, passing it the given arguments.
          * @return this
          */
-        public final Builder invokeFunction(Object id, Object... arguments) {
+        public Builder invokeFunction(Object id, Object... arguments) {
             return add(InvokeFunctionOperation.create(id, arguments));
         }
 
+        /**
+         * Overrides the txTime of the transaction, for use in imports.
+         *
+         * Mustn't be older than any other transaction already submitted to XT, nor newer than the TxLog's clock.
+         *
+         * @param txTime overridden transaction time of this transaction.
+         * @return this
+         */
+        public Builder withTxTime(Date txTime) {
+            this.txTime = txTime;
+            return this;
+        }
+
         public Transaction build() {
-            return new Transaction(operations);
+            return new Transaction(operations, txTime);
         }
-    }
-
-    private static class EdnVisitor implements TransactionOperation.Visitor<IPersistentVector> {
-        private static final Keyword PUT = Keyword.intern("xtdb.api/put");
-        private static final Keyword DELETE = Keyword.intern("xtdb.api/delete");
-        private static final Keyword EVICT = Keyword.intern("xtdb.api/evict");
-        private static final Keyword MATCH = Keyword.intern("xtdb.api/match");
-        private static final Keyword FN = Keyword.intern("xtdb.api/fn");
-
-        @Override
-        public IPersistentVector visit(PutOperation operation) {
-            IPersistentVector toAdd = PersistentVector.EMPTY
-                    .cons(PUT)
-                    .cons(operation.getDocument().toMap());
-
-            Date startValidTime = operation.getStartValidTime();
-            if (startValidTime == null) {
-                return toAdd;
-            }
-
-            toAdd = toAdd.cons(startValidTime);
-
-            Date endValidTime = operation.getEndValidTime();
-            if (endValidTime == null) {
-                return toAdd;
-            }
-
-            return toAdd.cons(endValidTime);
-        }
-
-        @Override
-        public IPersistentVector visit(DeleteOperation operation) {
-            IPersistentVector toAdd = PersistentVector.EMPTY
-                    .cons(DELETE)
-                    .cons(operation.getId());
-
-            Date startValidTime = operation.getStartValidTime();
-            if (startValidTime == null) {
-                return toAdd;
-            }
-
-            toAdd = toAdd.cons(startValidTime);
-
-            Date endValidTime = operation.getEndValidTime();
-            if (endValidTime == null) {
-                return toAdd;
-            }
-
-            return toAdd.cons(endValidTime);
-        }
-
-        @Override
-        public IPersistentVector visit(EvictOperation operation) {
-            return PersistentVector.EMPTY
-                    .cons(EVICT)
-                    .cons(operation.getId());
-        }
-
-        @Override
-        public IPersistentVector visit(MatchOperation operation) {
-            IPersistentVector toAdd = PersistentVector.EMPTY
-                    .cons(MATCH)
-                    .cons(operation.getId());
-
-            XtdbDocument document = operation.getDocument();
-            if (document == null) {
-                toAdd = toAdd.cons(null);
-            }
-            else {
-                toAdd = toAdd.cons(document.toMap());
-            }
-
-            Date atValidTime = operation.getAtValidTime();
-            if (atValidTime == null) {
-                return toAdd;
-            }
-
-            return toAdd.cons(atValidTime);
-        }
-
-        @Override
-        public IPersistentVector visit(InvokeFunctionOperation operation) {
-            IPersistentVector toAdd = PersistentVector.EMPTY
-                    .cons(FN)
-                    .cons(operation.getId());
-
-            for (Object argument: operation.getArguments()) {
-                toAdd = toAdd.cons(argument);
-            }
-
-            return toAdd;
-        }
-    }
-
-    public final IPersistentVector toVector() {
-        return PersistentVector.create(accept(new EdnVisitor()));
-    }
-
-    public <E> List<E> accept(TransactionOperation.Visitor<E> visitor) {
-        return operations.stream().map(it -> it.accept(visitor)).collect(Collectors.toList());
     }
 
     @Override
@@ -263,11 +182,11 @@ public final class Transaction {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Transaction that = (Transaction) o;
-        return operations.equals(that.operations);
+        return operations.equals(that.operations) && Objects.equals(txTime, that.txTime);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(operations);
+        return Objects.hash(operations, txTime);
     }
 }
