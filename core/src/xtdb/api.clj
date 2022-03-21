@@ -244,11 +244,8 @@
                                             :xtdb/secondary-indices 'xtdb.tx/->secondary-indices}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]
-    (when (and (nil? @xio/malloc-arena-max)
-               (xio/glibc?))
-      (defonce warn-on-malloc-arena-max
-        (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for XTDB is 2")))
     (reset! (get-in system [:xtdb/node :!system]) system)
+
     (-> (:xtdb/node system)
         (assoc :close-fn #(.close ^AutoCloseable system)))))
 
