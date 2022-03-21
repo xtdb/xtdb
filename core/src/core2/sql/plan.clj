@@ -25,23 +25,10 @@
     x))
 
 (defn- id-symbol [table table-id column]
-  (with-meta
-    (symbol (str table relation-id-delimiter table-id relation-prefix-delimiter column))
-    {:column-reference {:table-id table-id
-                        :correlation-name table
-                        :column column}}))
-
-(defn- unqualified-id-symbol
-  ([column] (unqualified-id-symbol nil column))
-  ([table-id column]
-   (with-meta column
-     {:column-reference (cond-> {:column column}
-                          table-id (assoc :table-id table-id))})))
+  (symbol (str table relation-id-delimiter table-id relation-prefix-delimiter column)))
 
 (defn unqualified-projection-symbol [{:keys [identifier ^long index] :as projection}]
-  (let [{:keys [table]} (meta projection)
-        column (symbol (or identifier (str "$column_" (inc index) "$")))]
-    (unqualified-id-symbol (:id table) column)))
+  (symbol (or identifier (str "$column_" (inc index) "$"))))
 
 (defn qualified-projection-symbol [{:keys [qualified-column original-index] :as projection}]
   (let [{derived-column :ref table :table} (meta projection)]
@@ -58,18 +45,14 @@
     (id-symbol table table-id column)))
 
 (defn- table-reference-symbol [correlation-name id]
-  (with-meta
-    (symbol (str correlation-name relation-id-delimiter id))
-    {:table-reference {:table-id id
-                       :correlation-name correlation-name}}))
+  (symbol (str correlation-name relation-id-delimiter id)))
 
 (defn- aggregate-symbol [prefix z]
   (let [query-id (sem/id (sem/scope-element z))]
-    (unqualified-id-symbol query-id
-     (symbol (str "$" prefix relation-id-delimiter query-id relation-prefix-delimiter (sem/id z) "$")))))
+    (symbol (str "$" prefix relation-id-delimiter query-id relation-prefix-delimiter (sem/id z) "$"))))
 
 (defn- exists-symbol [qe]
-  (vary-meta (id-symbol "subquery" (sem/id qe) "$exists$") assoc :exists? true))
+  (id-symbol "subquery" (sem/id qe) "$exists$"))
 
 (defn- subquery-reference-symbol [qe]
   (table-reference-symbol "subquery" (sem/id qe)))
@@ -173,10 +156,7 @@
   (->> (for [{:keys [^long table-scope-id] :as column-reference} (sem/all-column-references qe)
              :when (<= table-scope-id scope-id)
              :let [column-reference-symbol (column-reference-symbol column-reference)
-                   param-symbol (with-meta
-                                  (symbol (str "?" column-reference-symbol))
-                                  {:correlated-column-reference
-                                   (:column-reference (meta column-reference-symbol))})]]
+                   param-symbol (symbol (str "?" column-reference-symbol))]]
          [(if (= table-scope-id scope-id)
             column-reference-symbol
             param-symbol)
@@ -372,8 +352,7 @@
                                               :asc)]
                               [(if-let [idx (sem/order-by-index z)]
                                  {:spec {(unqualified-projection-symbol (nth projection idx)) direction}}
-                                 (let [column (->> (symbol (str "$order_by" relation-id-delimiter query-id relation-prefix-delimiter (r/child-idx z) "$"))
-                                                   (unqualified-id-symbol query-id))]
+                                 (let [column (symbol (str "$order_by" relation-id-delimiter query-id relation-prefix-delimiter (r/child-idx z) "$"))]
                                    {:spec {column direction}
                                     :projection {column (expr (r/$ z 1))}}))])
 
@@ -437,10 +416,8 @@
         [unwind-column ordinality-column] (map qualified-projection-symbol (first (sem/projected-columns tp)))
         cdt (r/$ tp 1)
         cve (r/$ cdt 2)
-        unwind-symbol (unqualified-id-symbol id (symbol (str "$unwind" relation-id-delimiter id "$")))]
-    [:unwind (with-meta {unwind-column unwind-symbol}
-               {:table-reference {:table-id id
-                                  :correlation-name correlation-name}})
+        unwind-symbol (symbol (str "$unwind" relation-id-delimiter id "$"))]
+    [:unwind {unwind-column unwind-symbol}
      (cond-> {}
        ordinality-column (assoc :ordinality-column ordinality-column))
      [:map [{unwind-symbol (expr cve)}] nil]]))
@@ -754,7 +731,7 @@
 (def ^:private ^:dynamic *name-counter* (atom 0))
 
 (defn- next-name []
-  (symbol (str 'x (swap! *name-counter* inc))))
+  (with-meta (symbol (str 'x (swap! *name-counter* inc))) {:column? true}))
 
 (defn- remove-names-step [relation]
   (letfn [(->column [column-or-expr]
@@ -872,23 +849,23 @@
       (with-smap [:intersect lhs (w/postwalk-replace (zipmap (relation-columns rhs)
                                                              (relation-columns lhs))
                                                      rhs)]
-        (merge (->smap lhs) (->smap rhs)))
+        (->smap lhs))
 
       [:difference lhs rhs]
       (with-smap [:difference lhs (w/postwalk-replace (zipmap (relation-columns rhs)
                                                               (relation-columns lhs))
                                                       rhs)]
-        (merge (->smap lhs) (->smap rhs)))
+        (->smap lhs))
 
       [:union-all lhs rhs]
       (with-smap [:union-all lhs (w/postwalk-replace (zipmap (relation-columns rhs)
                                                              (relation-columns lhs))
                                                      rhs)]
-        (merge (->smap lhs) (->smap rhs)))
+        (->smap lhs))
 
       [:apply mode columns dependent-column-names independent-relation dependent-relation]
       (let [params (zipmap (filter #(str/starts-with? (name %) "?") (vals columns))
-                           (map #(symbol (str "?" %)) (repeatedly next-name)))]
+                           (map #(with-meta (symbol (str "?" %)) {:correlated-column? true}) (repeatedly next-name)))]
         (with-smap [:apply mode
                     (w/postwalk-replace (merge params (->smap independent-relation)) columns)
                     (w/postwalk-replace (->smap dependent-relation) dependent-column-names)
@@ -928,50 +905,38 @@
         relation]]
       {:column->name smap})))
 
-(defn- reconstruct-names [relation]
-  (let [smap (:column->name (meta relation))]
-    (w/postwalk-replace (set/map-invert smap) relation)))
+(defn reconstruct-names [relation]
+  (let [smap (:column->name (meta relation))
+        relation (w/postwalk-replace (set/map-invert smap) relation)]
+    (or (r/zmatch relation
+          [:rename rename-map relation]
+          ;;=>
+          (when-let [rename-map (and (map? rename-map)
+                                     (->> (for [[k v] rename-map
+                                                :when (not= k v)]
+                                            [k v])
+                                          (into {})))]
+            (if (empty? rename-map)
+              relation
+              [:rename rename-map relation])))
 
-(defn- table-references-in-subtree [op]
-  (set (r/collect-stop
-        (fn [z]
-          (r/zmatch z
-            [:rename prefix _]
-            (when-let [table-reference (:table-reference (meta prefix))]
-              [table-reference])
-            [:unwind cve _ _]
-            (when-let [table-reference (:table-reference (meta cve))]
-              [table-reference])))
-        (z/vector-zip op))))
-
-(defn- table-ids-in-subtree [op]
-  (->> (table-references-in-subtree op)
-       (map :table-id)
-       (set)))
+        relation)))
 
 (defn expr-symbols [expr]
   (set (for [x (flatten (if (coll? expr)
                           (seq expr)
                           [expr]))
-             :when (:column-reference (meta x))]
+             :when (and (symbol? x)
+                        (:column? (meta x)))]
          x)))
 
 (defn expr-correlated-symbols [expr]
   (set (for [x (flatten (if (coll? expr)
                           (seq expr)
                           [expr]))
-             :when (:correlated-column-reference (meta x))]
+             :when (and (symbol? x)
+                        (:correlated-column? (meta x)))]
          x)))
-
-(defn- expr-column-references [expr]
-  (->> (expr-symbols expr)
-       (map (comp :column-reference meta))
-       (set)))
-
-(defn- expr-table-ids [expr]
-  (->> (expr-column-references expr)
-       (keep :table-id)
-       (set)))
 
 (defn- equals-predicate? [predicate]
   (r/zmatch predicate
@@ -994,23 +959,15 @@
 
     false))
 
-(defn- exists-predicate? [predicate]
-  (if (symbol? predicate)
-    (:exists? (meta predicate))
-    (and (not-predicate? predicate)
-         (exists-predicate? (second predicate)))))
-
 (defn- build-join-map [predicate lhs rhs]
   (when (equals-predicate? predicate)
     (let [[_ x y] predicate
-          {x-table-id :table-id} (:column-reference (meta x))
-          {y-table-id :table-id} (:column-reference (meta y))
           [lhs-v rhs-v] (for [side [lhs rhs]
-                              :let [table-ids (table-ids-in-subtree side)]]
+                              :let [projection (set (relation-columns side))]]
                           (cond
-                            (contains? table-ids x-table-id)
+                            (contains? projection x)
                             x
-                            (contains? table-ids y-table-id)
+                            (contains? projection y)
                             y))]
       (when (and lhs-v rhs-v)
         {lhs-v rhs-v}))))
@@ -1041,21 +998,18 @@
 
 (defn- promote-selection-to-join [z]
   (r/zmatch z
-     [:select predicate
-      [join-op {} lhs rhs]]
-     ;;=>
-     (when-let [join-map (build-join-map predicate lhs rhs)]
-       [join-op join-map lhs rhs])))
+    [:select predicate
+     [join-op {} lhs rhs]]
+    ;;=>
+    (when-let [join-map (build-join-map predicate lhs rhs)]
+      [join-op join-map lhs rhs])))
 
 (defn- push-selection-down-past-apply [z]
   (r/zmatch z
     [:select predicate
      [:apply mode columns dependent-column-names independent-relation dependent-relation]]
     ;;=>
-    (when (and (empty? (set/intersection (expr-table-ids predicate)
-                                         (expr-table-ids dependent-column-names)))
-               (empty? (set/intersection (expr-symbols predicate)
-                                         (set (relation-columns dependent-relation)))))
+    (when (empty? (set/intersection (expr-symbols predicate) dependent-column-names))
       [:apply
        mode
        columns
@@ -1069,19 +1023,7 @@
      [:rename columns
       relation]]
     ;;=>
-    (cond
-      (and (symbol? columns)
-           (set/subset? (expr-table-ids predicate)
-                        (table-ids-in-subtree [:rename columns relation])))
-      (let [column->unqualified-column (->> (for [c (expr-symbols predicate)]
-                                              [c (with-meta (symbol (get-in (meta c) [:column-reference :column]))
-                                                   (meta c))])
-                                            (into {}))]
-        [:rename columns
-         [:select (w/postwalk-replace column->unqualified-column predicate)
-          relation]])
-
-      (map? columns)
+    (when (map? columns)
       [:rename columns
        [:select (w/postwalk-replace (set/map-invert columns) predicate)
         relation]])))
@@ -1124,11 +1066,11 @@
 
 (defn- push-selection-down-past-join [z]
   (letfn [(push-selection-down [predicate lhs rhs]
-            (let [expr-table-ids (expr-table-ids predicate)
-                  lhs-table-ids (table-ids-in-subtree lhs)
-                  rhs-table-ids (table-ids-in-subtree rhs)
-                  on-lhs? (set/subset? expr-table-ids lhs-table-ids)
-                  on-rhs? (set/subset? expr-table-ids rhs-table-ids)]
+            (let [syms (expr-symbols predicate)
+                  lhs-projection (set (relation-columns lhs))
+                  rhs-projection (set (relation-columns rhs))
+                  on-lhs? (set/subset? syms lhs-projection)
+                  on-rhs? (set/subset? syms rhs-projection)]
               (cond
                 (and on-rhs? (not on-lhs?))
                 [lhs [:select predicate rhs]]
@@ -1155,8 +1097,8 @@
       relation]]
     ;;=>
     (when (and (not (equals-predicate? predicate-2))
-               (< (count (expr-table-ids predicate-1))
-                  (count (expr-table-ids predicate-2))))
+               (< (count (expr-symbols predicate-1))
+                  (count (expr-symbols predicate-2))))
       [:select predicate-2
        [:select predicate-1
         relation]])))
@@ -1173,59 +1115,63 @@
        [:select predicate-1
         relation]])))
 
-(defn- merge-selections-with-same-variables [z]
-  (r/zmatch z
-    [:select predicate-1
-     [:select predicate-2
-      relation]]
-    ;;=>
-    (when (= (expr-table-ids predicate-1) (expr-table-ids predicate-2))
-      [:select (merge-conjunctions predicate-1 predicate-2) relation])))
-
-(defn- merge-renames [z]
-  (r/zmatch z
-    [:rename columns-1
-     [:rename columns-2
-      relation]]
-    ;;=>
-    (when (and (map? columns-1) (map? columns-2))
-      (let [rename-map (reduce-kv
-                        (fn [acc k v]
-                          (assoc acc k (get columns-1 v v)))
-                        (apply dissoc columns-1 (vals columns-2))
-                        columns-2)]
-        [:rename (with-meta rename-map (meta columns-2)) relation]))))
-
 (defn- remove-superseded-projects [z]
   (r/zmatch z
     [:project projections-1
-     [:rename prefix-or-columns
-      [:project projections-2
-       relation]]]
+     [:project projections-2
+      relation]]
     ;;=>
-    (when (every? symbol? projections-2)
-      [:project projections-1
-       [:rename prefix-or-columns
-        relation]])
+    (cond
+      (and (every? symbol? projections-2)
+           (<= (count projections-1) (count projections-2)))
+      [:project projections-1 relation]
+
+      (and (every? symbol? projections-1)
+           (not (every? symbol? projections-2))
+           (= (count projections-1) (count projections-2)))
+      [:project projections-2 relation])
 
     [:project projections
-     [:rename prefix
-      [:scan columns]]]
+     relation]
     ;;=>
     (when (and (every? symbol? projections)
-               (symbol? prefix)
-               (= (count projections) (count columns)))
-      [:rename prefix
-       [:scan columns]])))
+               (= (count projections) (count (relation-columns relation))))
+      relation)))
+
+(defn- remove-inverted-renames [z]
+  (r/zmatch z
+    [:rename rename-map-1
+     [:rename rename-map-2
+      relation]]
+    ;;=>
+    (when (and (map? rename-map-1)
+               (map? rename-map-2)
+               (= rename-map-1 (set/map-invert rename-map-2)))
+      relation)))
+
+(defn- merge-selections-around-scan [z]
+  (r/zmatch z
+    [:select predicate-1
+     [:select predicate-2
+      [:scan relation]]]
+    ;;=>
+    [:select (merge-conjunctions predicate-1 predicate-2) [:scan relation]]))
 
 (defn- add-selection-to-scan-predicate [z]
   (r/zmatch z
     [:select predicate
      [:scan columns]]
     ;;=>
-    (let [new-columns (reduce
+    (let [scan-columns (set (for [c columns]
+                              (if (map? c)
+                                (key (first c))
+                                c)))
+          new-columns (reduce
                        (fn [acc predicate]
-                         (let [expr-symbols (expr-symbols predicate)]
+                         (let [expr-symbols (set/intersection scan-columns
+                                                              (set (flatten (if (coll? predicate)
+                                                                              (seq predicate)
+                                                                              [predicate]))))]
                            (if-let [single-symbol (when (= 1 (count expr-symbols))
                                                     (first expr-symbols))]
                              (vec (for [column-or-select acc
@@ -1356,40 +1302,30 @@
                 (set (relation-columns [:group-by group-by-columns nil]))))
       [:select predicate
        [:group-by group-by-columns
-        relation]])
-
-    [:rename columns
-     [:select predicate
-      relation]]
-    ;;=>
-    (when (not-empty (expr-correlated-symbols predicate))
-      (cond
-        (map? columns)
-        [:select (w/postwalk-replace columns predicate)
-         [:rename columns
-          relation]]
-
-        (symbol? columns)
-        (let [{:keys [table-id correlation-name]} (:table-reference (meta columns))
-              column->qualified-column (->> (for [c (expr-symbols predicate)]
-                                              [c (id-symbol correlation-name table-id c)])
-                                            (into {}))]
-          [:select (w/postwalk-replace column->qualified-column predicate)
-           [:rename columns
-            relation]])))))
+        relation]])))
 
 (defn- remove-unused-correlated-columns [columns dependent-relation]
   (->> columns
        (filter (comp (expr-correlated-symbols dependent-relation) val))
        (into {})))
 
-(defn- group-by-after-apply-rename-map [rename-columns post-group-by-projection]
-  (if (map? rename-columns)
-    rename-columns
-    (let [{:keys [table-id correlation-name]} (:table-reference (meta rename-columns))]
-      (->> (for [c (relation-columns [:project post-group-by-projection nil])]
-             [c (id-symbol correlation-name table-id c)])
-           (into {})))))
+(defn- build-group-by-over-apply [post-group-by-projection group-by-columns pre-group-by-projection
+                                  apply-mode columns dependent-column-names independent-relation dependent-relation]
+  (let [independent-projection (relation-columns independent-relation)
+        smap (set/map-invert columns)
+        row-number-sym '$row_number$]
+    (cond->> [:group-by (vec (concat independent-projection
+                                     [row-number-sym]
+                                     (w/postwalk-replace smap group-by-columns)))
+              (cond->> (let [columns (remove-unused-correlated-columns columns dependent-relation)]
+                         [:apply apply-mode columns dependent-column-names
+                          [:map [{row-number-sym '(row-number)}]
+                           independent-relation]
+                          dependent-relation])
+                (not-empty pre-group-by-projection) (conj [:map (w/postwalk-replace smap pre-group-by-projection)]))]
+      (some? post-group-by-projection) (conj [:map (vec (w/postwalk-replace
+                                                         smap
+                                                         post-group-by-projection))]))))
 
 ;; Rule 3, 4, 8 and 9.
 (defn- decorrelate-apply [z]
@@ -1416,52 +1352,73 @@
 
     ;; Rule 8.
     [:apply :cross-join columns dependent-column-names independent-relation
-     [:rename rename-columns
+     [:project post-group-by-projection
+      [:group-by group-by-columns
+       [:map pre-group-by-projection
+        dependent-relation]]]]
+    ;;=>
+    (build-group-by-over-apply post-group-by-projection group-by-columns pre-group-by-projection
+                               :cross-join columns dependent-column-names independent-relation dependent-relation)
+
+    [:apply :cross-join columns dependent-column-names independent-relation
+     [:group-by group-by-columns
+      [:map pre-group-by-projection
+       dependent-relation]]]
+    ;;=>
+    (build-group-by-over-apply nil group-by-columns pre-group-by-projection
+                               :cross-join columns dependent-column-names independent-relation dependent-relation)
+
+    [:apply :cross-join columns dependent-column-names independent-relation
+     [:project post-group-by-projection
+      [:group-by group-by-columns
+       dependent-relation]]]
+    ;;=>
+    (build-group-by-over-apply post-group-by-projection group-by-columns nil
+                               :cross-join columns dependent-column-names independent-relation dependent-relation)
+
+    [:apply :cross-join columns dependent-column-names independent-relation
+     [:group-by group-by-columns
+      dependent-relation]]
+    ;;=>
+    (build-group-by-over-apply nil group-by-columns nil
+                               :cross-join columns dependent-column-names independent-relation dependent-relation)
+
+    ;; Rule 9.
+    [:apply :cross-join columns dependent-column-names independent-relation
+     [:max-1-row
       [:project post-group-by-projection
        [:group-by group-by-columns
         [:map pre-group-by-projection
          dependent-relation]]]]]
     ;;=>
-    (let [independent-projection (relation-columns independent-relation)
-          smap (set/map-invert columns)
-          row-number-sym (unqualified-id-symbol '$row_number$)]
-      [:rename (group-by-after-apply-rename-map rename-columns post-group-by-projection)
-       [:project (vec (concat independent-projection
-                              (w/postwalk-replace smap post-group-by-projection)))
-        [:group-by (vec (concat independent-projection
-                                [row-number-sym]
-                                (w/postwalk-replace smap group-by-columns)))
-         [:map (w/postwalk-replace smap pre-group-by-projection)
-          (let [columns (remove-unused-correlated-columns columns dependent-relation)]
-            [:apply :cross-join columns dependent-column-names
-             [:map [{row-number-sym '(row-number)}]
-              independent-relation]
-             dependent-relation])]]]])
+    (build-group-by-over-apply post-group-by-projection group-by-columns pre-group-by-projection
+                               :left-outer-join columns dependent-column-names independent-relation dependent-relation)
 
-    ;; Rule 9.
     [:apply :cross-join columns dependent-column-names independent-relation
      [:max-1-row
-      [:rename rename-columns
-       [:project post-group-by-projection
-        [:group-by group-by-columns
-         [:map pre-group-by-projection
-          dependent-relation]]]]]]
+      [:group-by group-by-columns
+       [:map pre-group-by-projection
+        dependent-relation]]]]
     ;;=>
-    (let [independent-projection (relation-columns independent-relation)
-          smap (set/map-invert columns)
-          row-number-sym (unqualified-id-symbol '$row_number$)]
-      [:rename (group-by-after-apply-rename-map rename-columns post-group-by-projection)
-       [:project (vec (concat independent-projection
-                              (w/postwalk-replace smap post-group-by-projection)))
-        [:group-by (vec (concat independent-projection
-                                [row-number-sym]
-                                (w/postwalk-replace smap group-by-columns)))
-         [:map (w/postwalk-replace smap pre-group-by-projection)
-          (let [columns (remove-unused-correlated-columns columns dependent-relation)]
-            [:apply :left-outer-join columns dependent-column-names
-             [:map [{row-number-sym '(row-number)}]
-              independent-relation]
-             dependent-relation])]]]])))
+    (build-group-by-over-apply nil group-by-columns pre-group-by-projection
+                               :left-outer-join columns dependent-column-names independent-relation dependent-relation)
+
+    [:apply :cross-join columns dependent-column-names independent-relation
+     [:max-1-row
+      [:project post-group-by-projection
+       [:group-by group-by-columns
+        dependent-relation]]]]
+    ;;=>
+    (build-group-by-over-apply post-group-by-projection group-by-columns nil
+                               :left-outer-join columns dependent-column-names independent-relation dependent-relation)
+
+    [:apply :cross-join columns dependent-column-names independent-relation
+     [:max-1-row
+      [:group-by group-by-columns
+       dependent-relation]]]
+    ;;=>
+    (build-group-by-over-apply nil group-by-columns nil
+                               :left-outer-join columns dependent-column-names independent-relation dependent-relation)))
 
 (defn- promote-apply-mode [z]
   (r/zmatch z
@@ -1469,7 +1426,7 @@
      [:select predicate-2
       relation]]
     ;;=>
-    (when (exists-predicate? predicate-1)
+    (when (symbol? predicate-1)
       [:select predicate-2
        [:select predicate-1
         relation]])
@@ -1484,13 +1441,12 @@
     ;;=>
     (cond
       (and (symbol? predicate)
-           (= #{predicate} dependent-column-names)
-           (exists-predicate? predicate))
+           (= #{predicate} dependent-column-names))
       [:apply :semi-join columns #{} independent-relation dependent-relation]
 
       (and (not-predicate? predicate)
-           (= #{(second predicate)} dependent-column-names)
-           (exists-predicate? predicate))
+           (symbol? (second predicate))
+           (= #{(second predicate)} dependent-column-names))
       [:apply :anti-join columns #{} independent-relation dependent-relation])))
 
 ;; Rule 1 and 2.
@@ -1534,9 +1490,9 @@
            push-selection-down-past-group-by
            push-selections-with-fewer-variables-down
            push-selections-with-equals-down
-           merge-selections-with-same-variables
-           merge-renames
            remove-superseded-projects
+           remove-inverted-renames
+           merge-selections-around-scan
            add-selection-to-scan-predicate))
 
 ;; Logical plan API
@@ -1557,7 +1513,9 @@
       (let [ag (z/vector-zip query)]
         (if-let [errs (not-empty (sem/errs ag))]
           {:errs errs}
-          {:plan (let [plan (->> (z/vector-zip (plan ag))
+          {:plan (let [plan (->> (plan ag)
+                                 (remove-names)
+                                 (z/vector-zip)
                                  (r/innermost (r/mono-tp decorrelate-plan))
                                  (r/innermost (r/mono-tp optimize-plan))
                                  (z/node))]
