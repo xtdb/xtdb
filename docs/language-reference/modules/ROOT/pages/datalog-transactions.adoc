@@ -414,6 +414,33 @@ XTDB automatically indexes the top-level fields across all documents as Entity-A
 
 When you submit a transaction, the current time will be the Transaction Time.
 
+You can override the transaction time for a transaction (e.g. for importing data into XTDB from another bitemporal database) so long as:
+
+* the transaction time provided is no earlier than any other transaction currently in the system - i.e. transaction times must be increasing.
+* the transaction time is no later than the clock on the transaction log (e.g. Kafka) - i.e. transactions cannot be inserted into the future.
+
+[tabs]
+====
+Java::
++
+[source,java]
+----
+buildTx(tx -> {
+  tx.put(document);
+  tx.withTxTime(txTime);
+});
+----
+
+Clojure::
++
+[source,clojure]
+----
+(xt/submit-tx node
+              [[::xt/put {:xt/id :foo}]]
+              {::xt/tx-time #inst "2020"})
+----
+====
+
 [#valid-times]
 == Valid Times
 
