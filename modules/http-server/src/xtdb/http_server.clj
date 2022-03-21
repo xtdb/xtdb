@@ -98,12 +98,15 @@
              [->submit-json-decoder])))
 
 (s/def ::tx-ops vector?)
-(s/def ::submit-tx-spec (s/keys :req-un [::tx-ops]))
+
+(s/def ::submit-tx-spec
+  (s/keys :req-un [::tx-ops]
+          :opt [::xt/submit-tx-opts]))
 
 (defn- submit-tx [xtdb-node]
   (fn [req]
-    (let [tx-ops (get-in req [:parameters :body :tx-ops])
-          {::xt/keys [tx-time] :as submitted-tx} (xt/submit-tx xtdb-node tx-ops)]
+    (let [{:keys [tx-ops ::xt/submit-tx-opts]} (get-in req [:parameters :body])
+          {::xt/keys [tx-time] :as submitted-tx} (xt/submit-tx xtdb-node tx-ops submit-tx-opts)]
       (-> {:status 202
            :body submitted-tx}
           (add-last-modified tx-time)))))

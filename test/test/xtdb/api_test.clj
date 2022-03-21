@@ -560,3 +560,68 @@
       (t/is (= [#:film {:name "Skyfall", :year "2012"}
                 #:film {:name "Spectre", :year "2015"}]
                (xt/pull-many db [:film/name :film/year] #{:skyfall :spectre}))))))
+
+(t/deftest can-override-tx-time
+  (let [tx0-id (let [{::xt/keys [tx-id tx-time], :as tx} (xt/submit-tx *api* [[::xt/put {:xt/id :foo}]] {::xt/tx-time #inst "2020"})]
+                 (t/is (= #inst "2020" tx-time))
+                 (xt/await-tx *api* tx)
+
+                 (t/is (= {:xt/id :foo}
+                          (xt/entity (xt/db *api* {::xt/tx-time #inst "2020"}) :foo)))
+
+                 (t/is (= [#::xt{:tx-time #inst "2020-01-01T00:00:00.000-00:00",
+                                 :tx-id tx-id,
+                                 :valid-time #inst "2020-01-01T00:00:00.000-00:00",
+                                 :content-hash (c/new-id {:crux.db/id :foo})}]
+                          (xt/entity-history (xt/db *api*) :foo :desc)))
+
+                 (t/is (= [#::xt{:tx-id tx-id,
+                                 :tx-time #inst "2020-01-01T00:00:00.000-00:00",
+                                 :tx-ops [[:xtdb.api/put {:xt/id :foo}]]}]
+                          (with-open [log (xt/open-tx-log *api* nil true)]
+                            (vec (iterator-seq log)))))
+
+                 tx-id)]
+
+    (t/testing "fails earlier tx-time"
+      (let [tx (xt/submit-tx *api* [[::xt/put {:xt/id :foo, :last-updated :the-past}]] {::xt/tx-time #inst "2019"})]
+        (xt/await-tx *api* tx)
+
+        (t/is (false? (xt/tx-committed? *api* tx)))))
+
+    (t/testing "fails tx-time after tx-log clock"
+      (let [tx (xt/submit-tx *api* [[::xt/put {:xt/id :foo, :last-updated :the-future}]] {::xt/tx-time #inst "3000"})]
+        (xt/await-tx *api* tx)
+
+        (t/is (false? (xt/tx-committed? *api* tx)))))
+
+    (t/testing "can continue on indexing despite errors"
+      (let [{tx3-id ::xt/tx-id, :as tx} (xt/submit-tx *api* [[::xt/put {:xt/id :foo, :last-updated :just-now}]])
+            just-now (::xt/tx-time tx)]
+        (xt/await-tx *api* tx)
+
+        (t/is (= {:xt/id :foo}
+                 (xt/entity (xt/db *api* {::xt/tx-time #inst "2020"}) :foo)))
+
+        (t/is (= {:xt/id :foo, :last-updated :just-now}
+                 (xt/entity (xt/db *api*) :foo)))
+
+        (t/is (= [#::xt{:tx-time just-now
+                        :tx-id tx3-id,
+                        :valid-time just-now
+                        :content-hash (c/new-id {:crux.db/id :foo, :last-updated :just-now})}
+
+                  #::xt{:tx-time #inst "2020-01-01T00:00:00.000-00:00",
+                        :tx-id tx0-id,
+                        :valid-time #inst "2020-01-01T00:00:00.000-00:00",
+                        :content-hash (c/new-id {:crux.db/id :foo})}]
+                 (xt/entity-history (xt/db *api*) :foo :desc)))
+
+        (t/is (= [#::xt{:tx-id tx0-id,
+                        :tx-time #inst "2020-01-01T00:00:00.000-00:00",
+                        :tx-ops [[:xtdb.api/put {:xt/id :foo}]]}
+                  #::xt{:tx-id tx3-id,
+                        :tx-time just-now
+                        :tx-ops [[:xtdb.api/put {:xt/id :foo, :last-updated :just-now}]]}]
+                 (with-open [log (xt/open-tx-log *api* nil true)]
+                   (vec (iterator-seq log)))))))))

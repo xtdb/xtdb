@@ -14,7 +14,8 @@
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
             [xtdb.tx.conform :as txc]
-            [xtdb.tx.event :as txe])
+            [xtdb.tx.event :as txe]
+            [clojure.spec.alpha :as s])
   (:import [java.io Closeable Writer]
            [java.time Duration Instant]
            java.util.concurrent.locks.StampedLock
@@ -202,7 +203,14 @@
       (map qs/->QueryState (:slowest running-queries))))
 
   xt/PXtdbSubmitClient
-  (submit-tx-async [this tx-ops]
+  (submit-tx-async [this tx-ops] (xt/submit-tx-async this tx-ops {}))
+
+  (submit-tx-async [this tx-ops opts]
+    (when (and opts (not (s/valid? ::xt/submit-tx-opts opts)))
+      (throw (err/illegal-arg :invalid-submit-tx-opts
+                              (into {::err/message "Invalid opts passed to submit-tx"}
+                                    (s/explain-data ::xt/submit-tx-opts opts)))))
+
     (let [tx-ops (xt/conform-tx-ops tx-ops)
           conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
       (xio/with-read-lock lock
@@ -210,10 +218,10 @@
         (db/submit-docs document-store (->> conformed-tx-ops
                                             (into {} (comp (mapcat :docs)))
                                             (xio/map-vals c/xt->crux)))
-        (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))
+        (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops) opts))))
 
-  (submit-tx [this tx-ops]
-    @(xt/submit-tx-async this tx-ops))
+  (submit-tx [this tx-ops] @(xt/submit-tx-async this tx-ops))
+  (submit-tx [this tx-ops opts] @(xt/submit-tx-async this tx-ops opts))
 
   (open-tx-log ^xtdb.api.ICursor [this after-tx-id with-ops?]
     (let [with-ops? (boolean with-ops?)]
@@ -229,6 +237,9 @@
                 tx-log (->> (iterator-seq tx-log-iterator)
                             (remove #(db/tx-failed? index-store (::xt/tx-id %)))
                             (take-while (comp #(<= % latest-completed-tx-id) ::xt/tx-id))
+                            (map (fn [{{::xt/keys [tx-time]} ::xt/submit-tx-opts, :as tx-log-entry}]
+                                   (-> (dissoc tx-log-entry ::xt/submit-tx-opts)
+                                       (cond-> tx-time (assoc ::xt/tx-time tx-time)))))
                             (map (if with-ops?
                                    (fn [{:keys [xtdb.tx.event/tx-events] :as tx-log-entry}]
                                      (-> tx-log-entry

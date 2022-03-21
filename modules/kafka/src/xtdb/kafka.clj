@@ -8,6 +8,7 @@
             [xtdb.io :as xio]
             [xtdb.status :as status]
             [xtdb.system :as sys]
+            [xtdb.tx.event :as txe]
             [xtdb.tx.subscribe :as tx-sub])
   (:import clojure.lang.MapEntry
            [xtdb.kafka.nippy NippyDeserializer NippySerializer]
@@ -133,9 +134,9 @@
     (assert (= 1 (count (.partitions ^TopicDescription (get name->description tx-topic)))))))
 
 (defn- tx-record->tx-log-entry [^ConsumerRecord record]
-  {:xtdb.tx.event/tx-events (.value record)
-   ::xt/tx-id (.offset record)
-   ::xt/tx-time (Date. (.timestamp record))})
+  (xio/conform-tx-log-entry {::xt/tx-id (.offset record)
+                             ::xt/tx-time (Date. (.timestamp record))}
+                            (.value record)))
 
 (defn- open-consumer ^org.apache.kafka.clients.consumer.KafkaConsumer [{:keys [kafka-config tx-topic]} after-tx-id]
   (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}]
@@ -172,12 +173,16 @@
                        ^Duration poll-wait-duration
                        ^Closeable consumer]
   db/TxLog
-  (submit-tx [_ tx-events]
-    (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil tx-events))]
+  (submit-tx [this tx-events] (db/submit-tx this tx-events {}))
+
+  (submit-tx [_ tx-events opts]
+    (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil {::txe/tx-events tx-events
+                                                                        ::xt/submit-tx-opts opts}))]
       (delay
         (let [record-meta ^RecordMetadata @tx-send-future]
           {::xt/tx-id (.offset record-meta)
-           ::xt/tx-time (Date. (.timestamp record-meta))}))))
+           ::xt/tx-time (or (::xt/tx-time opts)
+                            (Date. (.timestamp record-meta)))}))))
 
   (open-tx-log [this after-tx-id]
     (let [consumer (open-consumer this after-tx-id)]

@@ -13,7 +13,8 @@
             [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx.event :as txe]
-            [xtdb.tx.subscribe :as tx-sub])
+            [xtdb.tx.subscribe :as tx-sub]
+            [xtdb.tx :as tx])
   (:import (clojure.lang MapEntry)
            (com.zaxxer.hikari HikariConfig HikariDataSource)
            (java.io Closeable)
@@ -64,10 +65,16 @@
 
     (->HikariConnectionPool pool dialect)))
 
+(defn- row->log-entry [row dialect]
+  (xio/conform-tx-log-entry {::xt/tx-id (long (:event_offset row))
+                             ::xt/tx-time (-> (:tx_time row) (->date dialect))}
+                            (-> (:v row)
+                                (<-blob dialect))))
+
 ;; TODO to multimethod?
 (defn- tx-result->tx-data [tx-result pool dialect]
   (let [tx-result (condp contains? (db-type dialect)
-                    #{:sqlite :mysql}
+                    #{:h2 :sqlite :mysql}
                     (let [id (first (vals tx-result))]
                       (jdbc/execute-one! pool ["SELECT * FROM tx_events WHERE EVENT_OFFSET = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
@@ -83,8 +90,8 @@
                       (jdbc/execute-one! pool ["SELECT * FROM tx_events WHERE ROWID = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
                     tx-result)]
-    {::xt/tx-id (long (:event_offset tx-result))
-     ::xt/tx-time (-> (:tx_time tx-result) (->date dialect))}))
+    (-> (row->log-entry tx-result dialect)
+        (dissoc ::txe/tx-events))))
 
 (defmulti doc-exists-sql
   (fn [dialect doc-id]
@@ -141,12 +148,17 @@
 
 (defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
   db/TxLog
-  (submit-tx [_ tx-events]
+  (submit-tx [this tx-events] (db/submit-tx this tx-events {}))
+
+  (submit-tx [_ tx-events opts]
     (jdbc/with-transaction [tx pool]
       (ensure-serializable-identity-seq! dialect tx "tx_events")
-      (let [tx-data (-> (insert-event! tx nil tx-events "txs")
+      (let [tx-data (-> (insert-event! tx nil {::txe/tx-events tx-events, ::xt/submit-tx-opts opts} "txs")
                         (tx-result->tx-data tx dialect))]
-        (delay tx-data))))
+        (delay
+          {::xt/tx-id (::xt/tx-id tx-data)
+           ::xt/tx-time (or (::xt/tx-time opts)
+                            (::xt/tx-time tx-data))}))))
 
   (open-tx-log [_ after-tx-id]
     (let [conn (jdbc/get-connection pool)
@@ -156,10 +168,7 @@
           rs (.executeQuery stmt)]
       (xio/->cursor #(run! xio/try-close [rs stmt conn])
                     (->> (resultset-seq rs)
-                         (map (fn [y]
-                                {::xt/tx-id (long (:event_offset y))
-                                 ::xt/tx-time (-> (:tx_time y) (->date dialect))
-                                 ::txe/tx-events (-> (:v y) (<-blob dialect))}))))))
+                         (map #(row->log-entry % dialect))))))
 
   (subscribe [this after-tx-id f]
     (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))

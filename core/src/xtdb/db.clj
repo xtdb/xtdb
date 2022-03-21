@@ -58,7 +58,7 @@
   (open-nested-index-snapshot ^java.io.Closeable [this]))
 
 (defprotocol TxLog
-  (submit-tx [this tx-events])
+  (submit-tx [this tx-events] [this tx-events opts])
   (open-tx-log ^xtdb.api.ICursor [this after-tx-id])
   (latest-submitted-tx [this])
   (^java.util.concurrent.CompletableFuture subscribe [_ after-tx-id f]

@@ -37,7 +37,7 @@
   (when-let [tx-id (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id)]
     {::xt/tx-id tx-id}))
 
-(defn- submit-tx [tx-events {:keys [^ExecutorService tx-submit-executor kv-store fsync? subscriber-handler]}]
+(defn- submit-tx [tx-events {:keys [^ExecutorService tx-submit-executor kv-store fsync? subscriber-handler]} opts]
   (if (.isShutdown tx-submit-executor)
     ::closed
 
@@ -46,7 +46,8 @@
           tx-id (inc (or (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id) -1))
           next-tx {::xt/tx-id tx-id, ::xt/tx-time tx-time}]
       (kv/store kv-store [[(encode-tx-event-key-to nil next-tx)
-                           (mem/->nippy-buffer tx-events)]
+                           (mem/->nippy-buffer {:xtdb.tx.event/tx-events tx-events
+                                                ::xt/submit-tx-opts opts})]
                           (kvi/meta-kv :crux.kv-tx-log/latest-submitted-tx-id tx-id)])
 
       (when fsync?
@@ -54,7 +55,8 @@
 
       (tx-sub/notify-tx! subscriber-handler next-tx)
 
-      next-tx)))
+      {::xt/tx-id tx-id
+       ::xt/tx-time (or (::xt/tx-time opts) tx-time)})))
 
 (defn- txs-after [{:keys [kv-store]} after-tx-id {:keys [limit], :or {limit 100}}]
   (with-open [snapshot (kv/new-snapshot kv-store)
@@ -62,8 +64,8 @@
     (letfn [(tx-log [k]
               (lazy-seq
                (when (some-> k (tx-event-key?))
-                 (cons (assoc (decode-tx-event-key-from k)
-                              :xtdb.tx.event/tx-events (mem/<-nippy-buffer (kv/value iterator)))
+                 (cons (xio/conform-tx-log-entry (decode-tx-event-key-from k)
+                                                 (mem/<-nippy-buffer (kv/value iterator)))
                        (tx-log (kv/next iterator))))))]
       (let [after-tx-id (or (some-> after-tx-id (+ 1)) 0)]
         (->> (tx-log (kv/seek iterator (encode-tx-event-key-to nil {::xt/tx-id after-tx-id})))
@@ -74,10 +76,13 @@
                     kv-store fsync? subscriber-handler]
   db/TxLog
   (submit-tx [this tx-events]
+    (db/submit-tx this tx-events {}))
+
+  (submit-tx [this tx-events opts]
     (when (.isShutdown tx-submit-executor)
       (throw (IllegalStateException. "TxLog is closed.")))
 
-    (let [!submitted-tx (.submit tx-submit-executor ^Callable #(submit-tx tx-events this))]
+    (let [!submitted-tx (.submit tx-submit-executor ^Callable #(submit-tx tx-events this opts))]
       (delay
         (let [submitted-tx @!submitted-tx]
           (when (= ::closed submitted-tx)
