@@ -176,33 +176,23 @@ SQL queries do not currently support bases.
 
 Core2 is a mono-repo - we develop it from the root directory of the git repository.
 
-- First time: `clojure -X:deps prep`
-- `clojure -X:deps prep :force true` to re-run `javac` if you change Java classes
-- Start and connect to a REPL at the top-level of the project - this starts a REPL with all of the modules available.
+* First time: `./bin/prep.sh`
+* `./bin/re-prep.sh` to re-run `javac` if you change Java classes
+* Start and connect to a REPL at the top-level of the project - this starts a REPL with all of the modules available.
 +
 For Emacs/CIDER:
-+
-[source,clojure]
-----
-;; ~/.clojure/deps.edn
-{:aliases {:repl/cider {:extra-deps {nrepl/nrepl {:mvn/version "0.9.0"}
-                                     cider/cider-nrepl {:mvn/version "0.28.2"}
-                                     refactor-nrepl/refactor-nrepl {:mvn/version "3.2.0"}}
+* grab the `:lib/kaocha` and `:repl/cider-refactor` aliases from https://github.com/practicalli/clojure-deps-edn/blob/live/deps.edn[John's deps.edn]
+* then `./bin/cider.sh`, and `cider-connect-clj` (`, s c j` in Spacemacs)
 
-                        :main-opts ["-m" "nrepl.cmdline"
-                                    "--middleware" "[refactor-nrepl.middleware/wrap-refactor,cider.nrepl/cider-middleware]"]}}}
-
-;; then `clojure -M:repl/cider`, and `cider-connect-clj`
-----
-- `(dev)`
-- `(go)`
-- `node` is then bound to a started node, using `dev/dev-node` as a persistent data directory
+* `(dev)`
+* `(go)`
+* `node` is then bound to a started node, using `dev/dev-node` as a persistent data directory
 
 === Links
 
-- https://github.com/xtdb/core2/projects/1[Kanban board]
-- https://app.circleci.com/pipelines/github/xtdb/core2[Continuous Integration (CircleCI)]
-- link:bibliography.org[bibliography.org] - a list of light bedtime reading.
+* https://github.com/xtdb/core2/projects/1[Kanban board]
+* https://app.circleci.com/pipelines/github/xtdb/core2[Continuous Integration (CircleCI)]
+* link:bibliography.org[bibliography.org] - a list of light bedtime reading.
 
 === Testing
 
