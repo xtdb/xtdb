@@ -1,33 +1,33 @@
 SELECT
-  c_name,
-  c_custkey,
-  o_orderkey,
-  o_orderdate,
-  o_totalprice,
-  SUM(l_quantity)
+  c.c_name,
+  c.c_custkey,
+  o.o_orderkey,
+  o.o_orderdate,
+  o.o_totalprice,
+  SUM(l.l_quantity)
 FROM
-  customer,
-  orders,
-  lineitem
+  customer AS c,
+  orders AS o,
+  lineitem AS l
 WHERE
-  o_orderkey IN (
-    SELECT l_orderkey
+  o.o_orderkey IN (
+    SELECT l.l_orderkey
     FROM
-      lineitem
+      lineitem AS l
     GROUP BY
-      l_orderkey
+      l.l_orderkey
     HAVING
-      SUM(l_quantity) > 300
+      SUM(l.l_quantity) > 300
   )
-  AND c_custkey = o_custkey
-  AND o_orderkey = l_orderkey
+  AND c.c_custkey = o.o_custkey
+  AND o.o_orderkey = l.l_orderkey
 GROUP BY
-  c_name,
-  c_custkey,
-  o_orderkey,
-  o_orderdate,
-  o_totalprice
+  c.c_name,
+  c.c_custkey,
+  o.o_orderkey,
+  o.o_orderdate,
+  o.o_totalprice
 ORDER BY
-  o_totalprice DESC,
-  o_orderdate
+  o.o_totalprice DESC,
+  o.o_orderdate
 FETCH FIRST 100 ROWS ONLY

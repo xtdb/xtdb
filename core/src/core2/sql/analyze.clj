@@ -491,24 +491,22 @@
                     projection))
 
                 :derived_column
-                [(let [identifier (identifier ag)
-                       qualified-column (when (r/ctor? :column_reference (r/$ ag 1))
-                                          (identifiers (r/$ ag 1)))]
-                   (with-meta
+                (let [identifier (identifier ag)
+                      qualified-column (when (r/ctor? :column_reference (r/$ ag 1))
+                                         (identifiers (r/$ ag 1)))]
+                  [(with-meta
                      (cond-> {:normal-form (z/node (r/$ ag 1))}
                        identifier (assoc :identifier identifier)
                        qualified-column (assoc :qualified-column qualified-column))
-                     {:ref ag}))]
-
-                :subquery
-                []
+                     {:ref ag})])
 
                 nil))]
-      [(reduce
-        (fn [acc projection]
-          (conj acc (assoc projection :index (count acc))))
-        []
-        (r/collect-stop calculate-select-list ag))])
+      (let [sl (r/$ ag -2)]
+        [(reduce
+          (fn [acc projection]
+            (conj acc (assoc projection :index (count acc))))
+          []
+          (r/collect-stop calculate-select-list sl))]))
 
     :query_expression
     (let [query-expression-body (if (r/ctor? :with_clause (r/$ ag 1))

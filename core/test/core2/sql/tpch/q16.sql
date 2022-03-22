@@ -1,29 +1,29 @@
 SELECT
-  p_brand,
-  p_type,
-  p_size,
-  COUNT(DISTINCT ps_suppkey) AS supplier_cnt
+  p.p_brand,
+  p.p_type,
+  p.p_size,
+  COUNT(DISTINCT ps.ps_suppkey) AS supplier_cnt
 FROM
-  partsupp,
-  part
+  partsupp AS ps,
+  part AS p
 WHERE
-  p_partkey = ps_partkey
-  AND p_brand <> 'Brand#45'
-  AND p_type NOT LIKE 'MEDIUM POLISHED%'
-  AND p_size IN (49, 14, 23, 45, 19, 3, 36, 9)
-  AND ps_suppkey NOT IN (
-    SELECT s_suppkey
+  p.p_partkey = ps.ps_partkey
+  AND p.p_brand <> 'Brand#45'
+  AND p.p_type NOT LIKE 'MEDIUM POLISHED%'
+  AND p.p_size IN (49, 14, 23, 45, 19, 3, 36, 9)
+  AND ps.ps_suppkey NOT IN (
+    SELECT s.s_suppkey
     FROM
-      supplier
+      supplier AS s
     WHERE
-      s_comment LIKE '%Customer%Complaints%'
+      s.s_comment LIKE '%Customer%Complaints%'
   )
 GROUP BY
-  p_brand,
-  p_type,
-  p_size
+  p.p_brand,
+  p.p_type,
+  p.p_size
 ORDER BY
   supplier_cnt DESC,
-  p_brand,
-  p_type,
-  p_size
+  p.p_brand,
+  p.p_type,
+  p.p_size

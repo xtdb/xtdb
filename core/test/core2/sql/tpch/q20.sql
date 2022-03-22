@@ -1,32 +1,32 @@
 SELECT
-  s_name,
-  s_address
+  s.s_name,
+  s.s_address
 FROM
-  supplier, nation
+  supplier AS s, nation AS n
 WHERE
-  s_suppkey IN (
-    SELECT ps_suppkey
+  s.s_suppkey IN (
+    SELECT ps.ps_suppkey
     FROM
-      partsupp
+      partsupp AS ps
     WHERE
-      ps_partkey IN (
-        SELECT p_partkey
+      ps.ps_partkey IN (
+        SELECT p.p_partkey
         FROM
-          part
+          part AS p
         WHERE
-          p_name LIKE 'forest%'
+          p.p_name LIKE 'forest%'
       )
-      AND ps_availqty > (
-        SELECT 0.5 * SUM(l_quantity)
+      AND ps.ps_availqty > (
+        SELECT 0.5 * SUM(l.l_quantity)
         FROM
-          lineitem
+          lineitem AS l
         WHERE
-          l_partkey = ps_partkey
-          AND l_suppkey = ps_suppkey
-          AND l_shipdate >= DATE '1994-01-01'
-          AND l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR
+          l.l_partkey = ps.ps_partkey
+          AND l.l_suppkey = ps.ps_suppkey
+          AND l.l_shipdate >= DATE '1994-01-01'
+          AND l.l_shipdate < DATE '1994-01-01' + INTERVAL '1' YEAR
 )
 )
-AND s_nationkey = n_nationkey
-AND n_name = 'CANADA'
-ORDER BY s_name
+AND s.s_nationkey = n.n_nationkey
+AND n.n_name = 'CANADA'
+ORDER BY s.s_name

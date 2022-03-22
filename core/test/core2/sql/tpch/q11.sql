@@ -1,27 +1,27 @@
 SELECT
-  ps_partkey,
-  SUM(ps_supplycost * ps_availqty) AS value
+  ps.ps_partkey,
+  SUM(ps.ps_supplycost * ps.ps_availqty) AS value
 FROM
-  partsupp,
-  supplier,
-  nation
+  partsupp AS ps,
+  supplier AS s,
+  nation AS n
 WHERE
-  ps_suppkey = s_suppkey
-  AND s_nationkey = n_nationkey
-  AND n_name = 'GERMANY'
+  ps.ps_suppkey = s.s_suppkey
+  AND s.s_nationkey = n.n_nationkey
+  AND n.n_name = 'GERMANY'
 GROUP BY
-  ps_partkey
+  ps.ps_partkey
 HAVING
-  SUM(ps_supplycost * ps_availqty) > (
-    SELECT SUM(ps_supplycost * ps_availqty) * 0.0001
+  SUM(ps.ps_supplycost * ps.ps_availqty) > (
+    SELECT SUM(ps.ps_supplycost * ps.ps_availqty) * 0.0001
     FROM
-      partsupp,
-      supplier,
-      nation
+      partsupp AS ps,
+      supplier AS s,
+      nation AS n
     WHERE
-      ps_suppkey = s_suppkey
-      AND s_nationkey = n_nationkey
-      AND n_name = 'GERMANY'
+      ps.ps_suppkey = s.s_suppkey
+      AND s.s_nationkey = n.n_nationkey
+      AND n.n_name = 'GERMANY'
   )
 ORDER BY
   value DESC
