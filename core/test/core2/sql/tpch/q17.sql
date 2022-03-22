@@ -1,4 +1,4 @@
-SELECT sum(l_extendedprice) / 7.0 AS avg_yearly
+SELECT SUM(l_extendedprice) / 7.0 AS avg_yearly
 FROM
   lineitem,
   part
@@ -7,7 +7,7 @@ WHERE
   AND p_brand = 'Brand#23'
   AND p_container = 'MED BOX'
   AND l_quantity < (
-    SELECT 0.2 * avg(l_quantity)
+    SELECT 0.2 * AVG(l_quantity)
     FROM
       lineitem
     WHERE

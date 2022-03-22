@@ -4,7 +4,7 @@ SELECT
   o_orderkey,
   o_orderdate,
   o_totalprice,
-  sum(l_quantity)
+  SUM(l_quantity)
 FROM
   customer,
   orders,
@@ -17,7 +17,7 @@ WHERE
     GROUP BY
       l_orderkey
     HAVING
-      sum(l_quantity) > 300
+      SUM(l_quantity) > 300
   )
   AND c_custkey = o_custkey
   AND o_orderkey = l_orderkey
@@ -30,4 +30,4 @@ GROUP BY
 ORDER BY
   o_totalprice DESC,
   o_orderdate
-LIMIT 100
+FETCH FIRST 100 ROWS ONLY

@@ -2,7 +2,7 @@ SELECT
   p_brand,
   p_type,
   p_size,
-  count(DISTINCT ps_suppkey) AS supplier_cnt
+  COUNT(DISTINCT ps_suppkey) AS supplier_cnt
 FROM
   partsupp,
   part

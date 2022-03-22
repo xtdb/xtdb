@@ -1,7 +1,7 @@
 SELECT
   c_custkey,
   c_name,
-  sum(l_extendedprice * (1 - l_discount)) AS revenue,
+  SUM(l_extendedprice * (1 - l_discount)) AS revenue,
   c_acctbal,
   n_name,
   c_address,
@@ -29,4 +29,4 @@ GROUP BY
   c_comment
 ORDER BY
   revenue DESC
-LIMIT 20
+FETCH FIRST 10 ROWS ONLY

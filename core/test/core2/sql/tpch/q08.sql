@@ -1,13 +1,13 @@
 SELECT
   o_year,
-  sum(CASE
+  SUM(CASE
       WHEN nation = 'BRAZIL'
         THEN volume
       ELSE 0
-      END) / sum(volume) AS mkt_share
+      END) / SUM(volume) AS mkt_share
 FROM (
        SELECT
-         extract(YEAR FROM o_orderdate)     AS o_year,
+         EXTRACT(YEAR FROM o_orderdate)     AS o_year,
          l_extendedprice * (1 - l_discount) AS volume,
          n2.n_name                          AS nation
        FROM

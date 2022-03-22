@@ -1,10 +1,10 @@
 SELECT
   c_count,
-  count(*) AS custdist
+  COUNT(*) AS custdist
 FROM (
        SELECT
          c_custkey,
-         count(o_orderkey)
+         COUNT(o_orderkey)
        FROM
          customer
          LEFT OUTER JOIN orders ON

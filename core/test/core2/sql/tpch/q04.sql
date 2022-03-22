@@ -1,6 +1,6 @@
 SELECT
   o_orderpriority,
-  count(*) AS order_count
+  COUNT(*) AS order_count
 FROM orders
 WHERE
   o_orderdate >= DATE '1993-07-01'

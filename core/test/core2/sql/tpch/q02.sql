@@ -22,7 +22,7 @@ WHERE
   AND n_regionkey = r_regionkey
   AND r_name = 'EUROPE'
   AND ps_supplycost = (
-    SELECT min(ps_supplycost)
+    SELECT MIN(ps_supplycost)
     FROM
       partsupp, supplier,
       nation, region
@@ -38,4 +38,4 @@ ORDER BY
   n_name,
   s_name,
   p_partkey
-LIMIT 100
+FETCH FIRST 100 ROWS ONLY
