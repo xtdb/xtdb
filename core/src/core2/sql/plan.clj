@@ -79,7 +79,7 @@
      ;;=>
      (list 'and (expr bt) (expr bf))
 
-     [:boolean_factor _ ^:z bt]
+     [:boolean_factor "NOT" ^:z bt]
      ;;=>
      (list 'not (expr bt))
 
@@ -1420,13 +1420,19 @@
     (decorrelate-group-by-apply nil group-by-columns nil
                                 :left-outer-join columns dependent-column-names independent-relation dependent-relation)))
 
+(defn- potential-exists-predicate? [predicate]
+  (or (symbol? predicate)
+      (and (not-predicate? predicate)
+           (symbol? (second predicate)))))
+
 (defn- promote-apply-mode [z]
   (r/zmatch z
     [:select predicate-1
      [:select predicate-2
       relation]]
     ;;=>
-    (when (symbol? predicate-1)
+    (when (and (potential-exists-predicate? predicate-1)
+               (not (potential-exists-predicate? predicate-2)))
       [:select predicate-2
        [:select predicate-1
         relation]])
