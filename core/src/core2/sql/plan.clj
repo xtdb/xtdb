@@ -255,7 +255,7 @@
    [:union-all
     [:project [{exists-column true}]
      relation]
-    [:table [{(keyword exists-column) false}]]]])
+    [:table [{exists-column false}]]]])
 
 (defn- flip-comparison [co]
   (case co
@@ -560,7 +560,7 @@
                (r/zcase z
                  :in_value_list nil
                  (when-not (= :in_value_list (z/node z))
-                   [{(keyword (first ks)) (expr z)}])))
+                   [{(first ks) (expr z)}])))
              ivl)]))
 
 (defn- plan [z]
@@ -875,15 +875,12 @@
       [:table explicit-column-names table]
       (let [smap (zipmap explicit-column-names
                          (repeatedly next-name))]
-        (with-smap [:table (w/postwalk-replace smap explicit-column-names) table] smap))
+        (with-smap (w/postwalk-replace smap [:table explicit-column-names table]) smap))
 
       [:table table]
       (let [smap (zipmap (map symbol (keys (first table)))
                          (repeatedly next-name))]
-        (with-smap [:table (w/postwalk-replace (->> (for [[v k] smap]
-                                                      [(keyword v) k])
-                                                    (into {}))
-                                               table)]
+        (with-smap [:table (w/postwalk-replace smap table)]
           smap))
 
       [:scan columns]
