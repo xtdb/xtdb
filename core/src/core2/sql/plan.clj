@@ -8,7 +8,8 @@
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
             [instaparse.core :as insta])
-  (:import clojure.lang.IObj))
+  (:import clojure.lang.IObj
+           [java.time LocalDate Period]))
 
 ;; Attribute grammar for transformation into logical plan.
 
@@ -69,6 +70,7 @@
    z
    (r/zmatch z
      [:column_reference _]
+     ;;=>
      (column-reference-symbol (sem/column-reference z))
 
      [:boolean_value_expression ^:z bve _ ^:z bt]
@@ -84,6 +86,7 @@
      (list 'not (expr bt))
 
      [:boolean_test ^:z bp]
+     ;;=>
      (expr bp)
 
      [:comparison_predicate ^:z rvp-1 [:comparison_predicate_part_2 [_ co] ^:z rvp-2]]
@@ -91,25 +94,79 @@
      (list (symbol co) (expr rvp-1) (expr rvp-2))
 
      [:numeric_value_expression ^:z nve [_ op] ^:z t]
+     ;;=>
      (list (symbol op) (expr nve) (expr t))
 
      [:term ^:z t [_ op] ^:z f]
+     ;;=>
      (list (symbol op) (expr t) (expr f))
 
      [:signed_numeric_literal ^:z unl]
+     ;;=>
      (expr unl)
 
      [:exact_numeric_literal ^:z ui]
+     ;;=>
      (expr ui)
+
+     [:exact_numeric_literal ^:z ui-1 ^:z ui-2]
+     ;;=>
+     (Double/parseDouble (str (expr ui-1) "." (expr ui-2)))
 
      [:unsigned_integer lexeme]
      ;;=>
      (Long/parseLong lexeme)
 
      [:character_string_literal lexeme]
+     ;;=>
      (subs lexeme 1 (dec (count lexeme)))
 
+     [:date_literal _
+      [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]
+     ;;=>
+     (LocalDate/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day))
+
+     [:interval_literal _
+      [:interval_string [:unquoted_interval_string
+                         [_ [:unsigned_integer year-month-literal]]]]
+      [:interval_qualifier
+       [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]]
+     ;;=>
+     (case datetime-field
+       "DAY" (Period/ofDays (Long/parseLong year-month-literal))
+       "MONTH" (Period/ofMonths (Long/parseLong year-month-literal))
+       "YEAR" (Period/ofYears (Long/parseLong year-month-literal)))
+
+     [:character_like_predicate ^:z rvp [:character_like_predicate_part_2 "LIKE" ^:z cp]]
+     ;;=>
+     (list 'like (expr rvp) (expr cp))
+
+     [:character_like_predicate ^:z rvp [:character_like_predicate_part_2 "NOT" "LIKE" ^:z cp]]
+     ;;=>
+     (list 'not (list 'like (expr rvp) (expr cp)))
+
+     ;; TODO: this is called substr in expression engine.
+     [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp "FOR" ^:z sl]
+     ;;=>
+     (list 'substring (expr cve) (expr sp) (expr sl))
+
+     [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "BETWEEN" ^:z rvp-2 "AND" ^:z rvp-3]]
+     ;;=>
+     (list 'between (expr rvp-1) (expr rvp-2) (expr rvp-3))
+
+     [:extract_expression "EXTRACT"
+      [:primary_datetime_field [:non_second_primary_datetime_field extract-field]] "FROM" ^:z es]
+     ;;=>
+     (list 'extract extract-field (expr es))
+
+     [:searched_case "CASE"
+      [:searched_when_clause "WHEN" ^:z wol "THEN" [:result ^:z then]]
+      [:else_clause "ELSE" [:result ^:z else]] "END"]
+     ;;=>
+     (list 'if (expr wol) (expr then) (expr else))
+
      [:named_columns_join _ _]
+     ;;=>
      (reduce
       (fn [acc expr]
         (list 'and acc expr))
@@ -120,30 +177,50 @@
                (apply list '=)))))
 
      [:aggregate_function _]
+     ;;=>
      (aggregate-symbol "agg_out" z)
 
      [:aggregate_function "COUNT" [:asterisk "*"]]
+     ;;=>
+     (aggregate-symbol "agg_out" z)
+
+     [:aggregate_function _ _]
+     ;;=>
      (aggregate-symbol "agg_out" z)
 
      [:subquery ^:z qe]
+     ;;=>
      (let [subquery-type (sem/subquery-type z)]
        (case (:type subquery-type)
          :scalar_subquery (first (subquery-projection-symbols qe))))
 
      [:exists_predicate _
       [:subquery ^:z qe]]
+     ;;=>
      (exists-symbol qe)
 
      [:in_predicate _ [:in_predicate_part_2 _ [:in_predicate_value [:subquery ^:z qe]]]]
+     ;;=>
      (exists-symbol qe)
 
+     [:in_predicate _ [:in_predicate_part_2 _ [:in_predicate_value ^:z ivl]]]
+     ;;=>
+     (exists-symbol ivl)
+
      [:in_predicate _ [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]]
+     ;;=>
      (list 'not (exists-symbol qe))
 
+     [:in_predicate _ [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]]
+     ;;=>
+     (list 'not (exists-symbol ivl))
+
      [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:some _] [:subquery ^:z qe]]]
+     ;;=>
      (exists-symbol qe)
 
      [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:all _] [:subquery ^:z qe]]]
+     ;;=>
      (list 'not (exists-symbol qe))
 
      (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (z/node z))))))))
@@ -239,6 +316,12 @@
                     [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]
                     qe
 
+                    [:in_predicate_part_2 _ [:in_predicate_value ^:z ivl]]
+                    ivl
+
+                    [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]
+                    ivl
+
                     (throw (IllegalArgumentException. "unknown in type")))
                qe-id (sem/id qe)
                exists-symbol (exists-symbol qe)
@@ -324,17 +407,29 @@
                         {(aggregate-symbol "agg_out" aggregate)
                          (list (symbol (str/lower-case sf)) (aggregate-symbol "agg_in" aggregate))}
 
+                        ;; TODO: ensure we can generate right aggregation function in backend.
+                        [:aggregate_function [:general_set_function [:computational_operation sf] [:set_quantifier sq] _]]
+                        {(aggregate-symbol "agg_out" aggregate)
+                         (list (symbol (str/lower-case sf)) (aggregate-symbol "agg_in" aggregate))}
+
                         [:aggregate_function "COUNT" [:asterisk "*"]]
                         {(aggregate-symbol "agg_out" aggregate)
-                         (list 'count (aggregate-symbol "agg_in" aggregate))}))
+                         (list 'count (aggregate-symbol "agg_in" aggregate))}
+
+                        (throw (IllegalArgumentException. "unknown aggregation function"))))
                     (into grouping-columns))
      [:map (vec (for [aggregate aggregates]
                   (r/zmatch aggregate
                     [:aggregate_function [:general_set_function _ ^:z ve]]
                     {(aggregate-symbol "agg_in" aggregate) (expr ve)}
 
+                    [:aggregate_function [:general_set_function _ _ ^:z ve]]
+                    {(aggregate-symbol "agg_in" aggregate) (expr ve)}
+
                     [:aggregate_function "COUNT" [:asterisk "*"]]
-                    {(aggregate-symbol "agg_in" aggregate) 1})))
+                    {(aggregate-symbol "agg_in" aggregate) 1}
+
+                    (throw (IllegalArgumentException. "unknown aggregation function")))))
       relation]]))
 
 (defn- wrap-with-order-by [ssl relation]
@@ -464,6 +559,11 @@
         nil))
     trl)))
 
+;; TODO: figure out how to build this.
+(defn- build-in-value-list [ivl]
+  (let [ks (mapv unqualified-projection-symbol (first (sem/projected-columns ivl)))]
+    [:table []]))
+
 (defn- plan [z]
   (maybe-add-ref
    z
@@ -475,6 +575,10 @@
      (plan qeb)
 
      [:query_expression ^:z qeb [:order_by_clause _ _ ^:z ssl]]
+     (wrap-with-order-by ssl (plan qeb))
+
+     ;; TODO: Deal properly with WITH?
+     [:query_expression [:with_clause "WITH" _] ^:z qeb [:order_by_clause _ _ ^:z ssl]]
      (wrap-with-order-by ssl (plan qeb))
 
      [:query_expression ^:z qeb [:result_offset_clause _ rorc _]]
@@ -619,7 +723,9 @@
      ;;=>
      (build-table-reference-list trl)
 
-     (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (z/node z))))))))
+     (r/zcase z
+       :in_value_list (build-in-value-list z)
+       (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (z/node z)))))))))
 
 ;; Rewriting of logical plan.
 
@@ -756,10 +862,16 @@
                                         (if (= k v)
                                           k
                                           p))
-                                      p)))]
-              (with-smap (if (every? symbol? projection)
-                           relation
-                           [op projection relation]) smap)))]
+                                      p)))
+                  projection (if (= :map op)
+                               (filterv map? projection)
+                               projection)
+                  relation (if (every? symbol? projection)
+                             relation
+                             [op
+                              projection
+                              relation])]
+              (with-smap relation smap)))]
     (r/zmatch relation
       [:table explicit-column-names table]
       (let [smap (zipmap explicit-column-names

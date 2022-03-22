@@ -225,10 +225,10 @@
             correlation-name (or (correlation-name ag) table-name)
             cte (when table-name
                   (find-decl (cte-env ag) table-name))
-            subquery-element (when (nil? cte)
-                               (subquery-element ag))
-            subquery-scope-id (when (and subquery-element (not= :collection_derived_table (r/ctor subquery-element)))
-                                (id subquery-element))
+            sq-element (when (nil? cte)
+                         (subquery-element ag))
+            sq-scope-id (when (and sq-element (not= :collection_derived_table (r/ctor sq-element)))
+                          (id sq-element))
             derived-columns (or (derived-columns ag) (:columns cte))]
         (with-meta
           (cond-> {:correlation-name correlation-name
@@ -236,12 +236,12 @@
                    :scope-id (id (scope-element ag))}
             table-name (assoc :table-or-query-name table-name)
             derived-columns (assoc :derived-columns derived-columns)
-            subquery-scope-id (assoc :subquery-scope-id subquery-scope-id)
+            sq-scope-id (assoc :subquery-scope-id sq-scope-id)
             cte (assoc :cte-id (:id cte) :cte-scope-id (:scope-id cte)))
           (cond-> {:ref ag}
-            subquery-element (assoc :subquery-ref subquery-element)
+            sq-element (assoc :subquery-ref sq-element)
             cte (assoc :cte cte
-                       :subquery-ref (r/$ (:ref (meta cte)) -1))))))))
+                       :subquery-ref (subquery-element (r/$ (:ref (meta cte)) -1)))))))))
 
 (defn local-tables [ag]
   (r/collect-stop
@@ -527,7 +527,7 @@
     :table_value_constructor
     (projected-columns (r/$ ag 2))
 
-    :row_value_expression_list
+    (:row_value_expression_list :in_value_list)
     (r/collect-stop
      (fn [ag]
        (r/zcase ag
