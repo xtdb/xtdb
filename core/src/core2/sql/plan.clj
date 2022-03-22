@@ -400,37 +400,29 @@
                         :aggregate_function [z]
                         :subquery []
                         nil))
-                    (sem/scope-element te))]
-    [:group-by (->> (for [aggregate aggregates]
-                      (r/zmatch aggregate
-                        [:aggregate_function [:general_set_function [:computational_operation sf] _]]
-                        {(aggregate-symbol "agg_out" aggregate)
-                         (list (symbol (str/lower-case sf)) (aggregate-symbol "agg_in" aggregate))}
+                    (sem/scope-element te))
+        group-by (for [aggregate aggregates]
+                   (r/zmatch aggregate
+                     [:aggregate_function [:general_set_function [:computational_operation sf] ^:z ve]]
+                     {:in {(aggregate-symbol "agg_in" aggregate) (expr ve)}
+                      :out {(aggregate-symbol "agg_out" aggregate)
+                            (list (symbol (str/lower-case sf)) (aggregate-symbol "agg_in" aggregate))}}
 
-                        ;; TODO: ensure we can generate right aggregation function in backend.
-                        [:aggregate_function [:general_set_function [:computational_operation sf] [:set_quantifier sq] _]]
-                        {(aggregate-symbol "agg_out" aggregate)
-                         (list (symbol (str/lower-case sf)) (aggregate-symbol "agg_in" aggregate))}
+                     ;; TODO: ensure we can generate right aggregation function in backend.
+                     [:aggregate_function [:general_set_function [:computational_operation sf] [:set_quantifier sq] ^:z ve]]
+                     {:in {(aggregate-symbol "agg_in" aggregate) (expr ve)}
+                      :out {(aggregate-symbol "agg_out" aggregate)
+                            (list (symbol (str/lower-case sf)) (aggregate-symbol "agg_in" aggregate))}}
 
-                        [:aggregate_function "COUNT" [:asterisk "*"]]
-                        {(aggregate-symbol "agg_out" aggregate)
-                         (list 'count (aggregate-symbol "agg_in" aggregate))}
+                     [:aggregate_function "COUNT" [:asterisk "*"]]
+                     {:in {(aggregate-symbol "agg_in" aggregate) 1}
+                      :out {(aggregate-symbol "agg_out" aggregate)
+                            (list 'count (aggregate-symbol "agg_in" aggregate))}}
 
-                        (throw (IllegalArgumentException. "unknown aggregation function"))))
+                     (throw (IllegalArgumentException. "unknown aggregation function"))))]
+    [:group-by (->> (map :out group-by)
                     (into grouping-columns))
-     [:map (vec (for [aggregate aggregates]
-                  (r/zmatch aggregate
-                    [:aggregate_function [:general_set_function _ ^:z ve]]
-                    {(aggregate-symbol "agg_in" aggregate) (expr ve)}
-
-                    [:aggregate_function [:general_set_function _ _ ^:z ve]]
-                    {(aggregate-symbol "agg_in" aggregate) (expr ve)}
-
-                    [:aggregate_function "COUNT" [:asterisk "*"]]
-                    {(aggregate-symbol "agg_in" aggregate) 1}
-
-                    (throw (IllegalArgumentException. "unknown aggregation function")))))
-      relation]]))
+     [:map (mapv :in group-by) relation]]))
 
 (defn- wrap-with-order-by [ssl relation]
   (let [projection (first (sem/projected-columns ssl))
@@ -559,10 +551,17 @@
         nil))
     trl)))
 
-;; TODO: figure out how to build this.
 (defn- build-in-value-list [ivl]
   (let [ks (mapv unqualified-projection-symbol (first (sem/projected-columns ivl)))]
-    [:table []]))
+    (when (> (count ks) 1)
+      (throw (IllegalArgumentException. "cannot build row in value lists")))
+    [:table (r/collect-stop
+             (fn [z]
+               (r/zcase z
+                 :in_value_list nil
+                 (when-not (= :in_value_list (z/node z))
+                   [{(keyword (first ks)) (expr z)}])))
+             ivl)]))
 
 (defn- plan [z]
   (maybe-add-ref
