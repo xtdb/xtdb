@@ -5,18 +5,21 @@
             [clojure.zip :as z]))
 
 (t/deftest test-qgm
-  (t/is (= {:tree '[:qgm.box/select {:qgm.box.head/distinct? false
-                                     :qgm.box.body/distinct :qgm.box.body.distinct/permit
-                                     :qgm.box.head/columns [price]
-                                     :qgm.box.body/columns [q3__3_price]}
-
-                    [:qgm.quantifier/foreach {:qgm.quantifier/id q3__3
-                                              :qgm.quantifier/columns [price partno]}
-                     [:qgm.box/base-table {:qgm.box.base-table/name quotations
-                                           :qgm.box.head/columns [price partno]}]]]
-
-            :preds '{p4 {:qgm.predicate/expression (= q3__3_partno 1)
-                         :qgm.predicate/quantifiers #{q3__3}}}}
+  (t/is (= '{:tree
+             [:qgm.box/select
+              {:qgm.box.head/distinct? false,
+               :qgm.box.head/columns [price],
+               :qgm.box.body/columns [q3__28_price],
+               :qgm.box.body/distinct :qgm.box.body.distinct/permit}
+              [:qgm.quantifier/foreach
+               #:qgm.quantifier{:id q3__28, :columns [price partno]}
+               [:qgm.box/base-table
+                {:qgm.box.base-table/name quotations,
+                 :qgm.box.head/columns [price partno]}]]],
+             :preds
+             {p41
+              #:qgm.predicate{:expression (= q3__28_partno 1),
+                              :quantifiers #{q3__28}}}}
 
            (-> (sql/parse "SELECT q3.price FROM quotations q3 WHERE q3.partno = 1")
                (z/vector-zip)
@@ -24,25 +27,29 @@
 
         "simple query")
 
-  (t/is (= {:tree '[:qgm.box/select {:qgm.box.head/distinct? true
-                                     :qgm.box.body/distinct :qgm.box.body.distinct/enforce
-                                     :qgm.box.head/columns [partno descr suppno]
-                                     :qgm.box.body/columns [q1__3_partno q1__3_descr q2__4_suppno]}
-                    [:qgm.quantifier/foreach {:qgm.quantifier/id q1__3
-                                              :qgm.quantifier/columns [partno descr]}
-                     [:qgm.box/base-table {:qgm.box.base-table/name inventory
-                                           :qgm.box.head/columns [partno descr]}]]
-
-                    [:qgm.quantifier/foreach {:qgm.quantifier/id q2__4
-                                              :qgm.quantifier/columns [suppno partno]}
-                     [:qgm.box/base-table {:qgm.box.base-table/name quotations
-                                           :qgm.box.head/columns [suppno partno]}]]]
-
-            :preds '{p5 {:qgm.predicate/expression (= q1__3_partno q2__4_partno)
-                         :qgm.predicate/quantifiers #{q1__3 q2__4}}
-
-                     p6 {:qgm.predicate/expression (= q1__3_descr "engine")
-                         :qgm.predicate/quantifiers #{q1__3}}}}
+  (t/is (= '{:tree
+             [:qgm.box/select
+              {:qgm.box.head/distinct? true,
+               :qgm.box.head/columns [partno descr suppno],
+               :qgm.box.body/columns [q1__55_partno q1__55_descr q2__63_suppno],
+               :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
+              [:qgm.quantifier/foreach
+               #:qgm.quantifier{:id q1__55, :columns [partno descr]}
+               [:qgm.box/base-table
+                {:qgm.box.base-table/name inventory,
+                 :qgm.box.head/columns [partno descr]}]]
+              [:qgm.quantifier/foreach
+               #:qgm.quantifier{:id q2__63, :columns [suppno partno]}
+               [:qgm.box/base-table
+                {:qgm.box.base-table/name quotations,
+                 :qgm.box.head/columns [suppno partno]}]]],
+             :preds
+             {p78
+              #:qgm.predicate{:expression (= q1__55_partno q2__63_partno),
+                              :quantifiers #{q2__63 q1__55}},
+              p108
+              #:qgm.predicate{:expression (= q1__55_descr "engine"),
+                              :quantifiers #{q1__55}}}}
 
            (-> (sql/parse "
 SELECT DISTINCT q1.partno, q1.descr, q2.suppno
@@ -53,43 +60,47 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'")
 
         "add a join")
 
-  (t/is (= {:tree '[:qgm.box/select {:qgm.box.head/distinct? true,
-                                     :qgm.box.head/columns [partno descr suppno],
-                                     :qgm.box.body/columns [q1__3_partno q1__3_descr q2__4_suppno],
-                                     :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
-
-                    [:qgm.quantifier/foreach {:qgm.quantifier/id q1__3
-                                              :qgm.quantifier/columns [partno descr]}
-                     [:qgm.box/base-table {:qgm.box.base-table/name inventory
-                                           :qgm.box.head/columns [partno descr]}]]
-
-                    [:qgm.quantifier/foreach {:qgm.quantifier/id q2__4
-                                              :qgm.quantifier/columns [suppno partno price]}
-                     [:qgm.box/base-table {:qgm.box.base-table/name quotations
-                                           :qgm.box.head/columns [suppno partno price]}]]
-
-                    [:qgm.quantifier/all {:qgm.quantifier/id q8
-                                          :qgm.quantifier/columns [price]}
-                     [:qgm.box/select {:qgm.box.head/distinct? false,
-                                       :qgm.box.head/columns [price],
-                                       :qgm.box.body/columns [q3__9_price],
-                                       :qgm.box.body/distinct :qgm.box.body.distinct/permit}
-                      [:qgm.quantifier/foreach {:qgm.quantifier/id q3__9
-                                                :qgm.quantifier/columns [price partno]}
-                       [:qgm.box/base-table {:qgm.box.base-table/name quotations
-                                             :qgm.box.head/columns [price partno]}]]]]]
-
-            :preds '{p5 {:qgm.predicate/expression (= q1__3_partno q2__4_partno),
-                         :qgm.predicate/quantifiers #{q2__4 q1__3}},
-
-                     p6 {:qgm.predicate/expression (= q1__3_descr "engine"),
-                         :qgm.predicate/quantifiers #{q1__3}}
-
-                     p10 {:qgm.predicate/expression (= q2__4_partno q3__9_partno),
-                          :qgm.predicate/quantifiers #{q3__9 q2__4}}
-
-                     hack_qp1 {:qgm.predicate/expression (<= q2__4_price q8__price)
-                               :qgm.predicate/quantifiers #{q2__4 q8}}}}
+  (t/is (= '{:tree
+             [:qgm.box/select
+              {:qgm.box.head/distinct? true,
+               :qgm.box.head/columns [partno descr suppno],
+               :qgm.box.body/columns [q1__55_partno q1__55_descr q2__63_suppno],
+               :qgm.box.body/distinct :qgm.box.body.distinct/enforce}
+              [:qgm.quantifier/foreach
+               #:qgm.quantifier{:id q1__55, :columns [partno descr]}
+               [:qgm.box/base-table
+                {:qgm.box.base-table/name inventory,
+                 :qgm.box.head/columns [partno descr]}]]
+              [:qgm.quantifier/foreach
+               #:qgm.quantifier{:id q2__63, :columns [suppno partno price]}
+               [:qgm.box/base-table
+                {:qgm.box.base-table/name quotations,
+                 :qgm.box.head/columns [suppno partno price]}]]
+              [:qgm.quantifier/all
+               #:qgm.quantifier{:id q157, :columns [price]}
+               [:qgm.box/select
+                {:qgm.box.head/distinct? false,
+                 :qgm.box.head/columns [price],
+                 :qgm.box.body/columns [q3__181_price],
+                 :qgm.box.body/distinct :qgm.box.body.distinct/permit}
+                [:qgm.quantifier/foreach
+                 #:qgm.quantifier{:id q3__181, :columns [price partno]}
+                 [:qgm.box/base-table
+                  {:qgm.box.base-table/name quotations,
+                   :qgm.box.head/columns [price partno]}]]]]],
+             :preds
+             {p80
+              #:qgm.predicate{:expression (= q1__55_partno q2__63_partno),
+                              :quantifiers #{q2__63 q1__55}},
+              p110
+              #:qgm.predicate{:expression (= q1__55_descr "engine"),
+                              :quantifiers #{q1__55}},
+              p194
+              #:qgm.predicate{:expression (= q2__63_partno q3__181_partno),
+                              :quantifiers #{q2__63 q3__181}},
+              hack_qp1
+              #:qgm.predicate{:expression (<= q2__63_price q157__price),
+                              :quantifiers #{q157 q2__63}}}}
 
            (-> (sql/parse "
 SELECT DISTINCT q1.partno, q1.descr, q2.suppno
@@ -102,31 +113,39 @@ WHERE q1.partno = q2.partno AND q1.descr= 'engine'
 
         "all correlated sub-query")
 
-  (t/is (= {:tree '[:qgm.box/select {:qgm.box.head/distinct? false,
-                                     :qgm.box.head/columns [partno price order_qty],
-                                     :qgm.box.body/columns [q1__3_partno q1__3_price q1__3_order_qty],
-                                     :qgm.box.body/distinct :qgm.box.body.distinct/permit}
-                    [:qgm.quantifier/foreach {:qgm.quantifier/id q1__3
-                                              :qgm.quantifier/columns [partno price order_qty]}
-                     [:qgm.box/base-table {:qgm.box.base-table/name quotations
-                                           :qgm.box.head/columns [partno price order_qty]}]],
-                    [:qgm.quantifier/existential {:qgm.quantifier/id q5
-                                                  :qgm.quantifier/columns [partno]}
-                     [:qgm.box/select {:qgm.box.head/distinct? false,
-                                       :qgm.box.head/columns [partno],
-                                       :qgm.box.body/columns [q3__6_partno],
-                                       :qgm.box.body/distinct :qgm.box.body.distinct/permit}
-                      [:qgm.quantifier/foreach {:qgm.quantifier/id q3__6
-                                                :qgm.quantifier/columns [partno onhand_qty type]}
-                       [:qgm.box/base-table {:qgm.box.base-table/name inventory
-                                             :qgm.box.head/columns [partno onhand_qty type]}]]]]]
-
-            :preds '{p7 {:qgm.predicate/expression (< q3__6_onhand_qty q1__3_order_qty),
-                         :qgm.predicate/quantifiers #{q3__6 q1__3}},
-                     p8 {:qgm.predicate/expression (= q3__6_type "CPU"),
-                         :qgm.predicate/quantifiers #{q3__6}}
-                     hack_qp1 {:qgm.predicate/expression (= q1__3_partno q5__partno),
-                               :qgm.predicate/quantifiers #{q1__3 q5}}}}
+  (t/is (= '{:tree
+             [:qgm.box/select
+              {:qgm.box.head/distinct? false,
+               :qgm.box.head/columns [partno price order_qty],
+               :qgm.box.body/columns [q1__52_partno q1__52_price q1__52_order_qty],
+               :qgm.box.body/distinct :qgm.box.body.distinct/permit}
+              [:qgm.quantifier/foreach
+               #:qgm.quantifier{:id q1__52, :columns [partno price order_qty]}
+               [:qgm.box/base-table
+                {:qgm.box.base-table/name quotations,
+                 :qgm.box.head/columns [partno price order_qty]}]]
+              [:qgm.quantifier/existential
+               #:qgm.quantifier{:id q86, :columns [partno]}
+               [:qgm.box/select
+                {:qgm.box.head/distinct? false,
+                 :qgm.box.head/columns [partno],
+                 :qgm.box.body/columns [q3__110_partno],
+                 :qgm.box.body/distinct :qgm.box.body.distinct/permit}
+                [:qgm.quantifier/foreach
+                 #:qgm.quantifier{:id q3__110, :columns [partno onhand_qty type]}
+                 [:qgm.box/base-table
+                  {:qgm.box.base-table/name inventory,
+                   :qgm.box.head/columns [partno onhand_qty type]}]]]]],
+             :preds
+             {p125
+              #:qgm.predicate{:expression (< q3__110_onhand_qty q1__52_order_qty),
+                              :quantifiers #{q3__110 q1__52}},
+              p155
+              #:qgm.predicate{:expression (= q3__110_type "CPU"),
+                              :quantifiers #{q3__110}},
+              hack_qp1
+              #:qgm.predicate{:expression (= q1__52_partno q86__partno),
+                              :quantifiers #{q86 q1__52}}}}
 
            (-> (sql/parse "
 SELECT q1.partno, q1.price, q1.order_qty

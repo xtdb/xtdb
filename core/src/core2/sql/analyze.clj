@@ -74,20 +74,7 @@
 ;; Ids
 
 (defn ^:dynamic id [ag]
-  (r/zcase ag
-    :table_primary
-    (if (r/ctor? :qualified_join ag)
-      (id (z/prev ag))
-      (inc ^long (id (z/prev ag))))
-
-    (:query_expression
-     :query_specification
-     :with_list_element
-     :aggregate_function
-     :comparison_predicate)
-    (inc ^long (id (z/prev ag)))
-
-    (or (some-> (z/prev ag) (id)) 0)))
+  (or (some-> (z/prev ag) (id) (inc)) 0))
 
 ;; Identifiers
 

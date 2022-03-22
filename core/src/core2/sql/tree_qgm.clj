@@ -533,6 +533,8 @@
             {:qgm qgm
              :plan (->> (plan-qgm qgm)
                         (z/vector-zip)
-                        (r/innermost (r/mono-tp plan/optimize-plan))
+                        ;; NOTE: this optimize-plan step expects plans
+                        ;; without names now.
+                        #_(r/innermost (r/mono-tp plan/optimize-plan))
                         (z/node)
                         (s/assert ::lp/logical-plan))}))))))
