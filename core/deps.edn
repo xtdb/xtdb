@@ -30,4 +30,5 @@
                    :extra-paths ["dev"]
                    :ns-default build}
 
-           :generate-sql-parser {:main-opts ["-m" "core2.sql.parser-generator"]}}}
+           :generate-sql-parser {:extra-paths ["dev"]
+                                 :main-opts ["-m" "core2.sql.parser-generator"]}}}
