@@ -726,6 +726,14 @@
        :in_value_list (build-in-value-list z)
        (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (z/node z)))))))))
 
+(defn- extend-projection? [column-or-expr]
+  (map? column-or-expr))
+
+(defn- ->projected-column [column-or-expr]
+  (if (extend-projection? column-or-expr)
+    (key (first column-or-expr))
+    column-or-expr))
+
 ;; Rewriting of logical plan.
 
 ;; NOTE: might be better to try do this via projected-columns and meta
@@ -737,92 +745,88 @@
 ;; to deduct this, fail, and keep Apply is also an option, say by
 ;; returning nil instead of throwing an exception like now.
 (defn- relation-columns [relation]
-  (letfn [(->column [column-or-expr]
-            (if (map? column-or-expr)
-              (first (keys column-or-expr))
-              column-or-expr))]
-    (r/zmatch relation
-      [:table explicit-column-names _]
-      (vec explicit-column-names)
+  (r/zmatch relation
+    [:table explicit-column-names _]
+    (vec explicit-column-names)
 
-      [:table table]
-      (mapv symbol (keys (first table)))
+    [:table table]
+    (mapv symbol (keys (first table)))
 
-      [:scan columns]
-      (mapv ->column columns)
+    [:scan columns]
+    (mapv ->projected-column columns)
 
-      [:join _ lhs rhs]
-      (vec (mapcat relation-columns [lhs rhs]))
+    [:join _ lhs rhs]
+    (vec (mapcat relation-columns [lhs rhs]))
 
-      [:cross-join lhs rhs]
-      (vec (mapcat relation-columns [lhs rhs]))
+    [:cross-join lhs rhs]
+    (vec (mapcat relation-columns [lhs rhs]))
 
-      [:left-outer-join _ lhs rhs]
-      (vec (mapcat relation-columns [lhs rhs]))
+    [:left-outer-join _ lhs rhs]
+    (vec (mapcat relation-columns [lhs rhs]))
 
-      [:semi-join _ lhs _]
-      (relation-columns lhs)
+    [:semi-join _ lhs _]
+    (relation-columns lhs)
 
-      [:anti-join _ lhs _]
-      (relation-columns lhs)
+    [:anti-join _ lhs _]
+    (relation-columns lhs)
 
-      [:rename prefix-or-columns relation]
-      (if (symbol? prefix-or-columns)
-        (vec (for [c (relation-columns relation)]
-               (symbol (str prefix-or-columns relation-prefix-delimiter  c))))
-        (replace prefix-or-columns (relation-columns relation)))
+    [:rename prefix-or-columns relation]
+    (if (symbol? prefix-or-columns)
+      (vec (for [c (relation-columns relation)]
+             (symbol (str prefix-or-columns relation-prefix-delimiter  c))))
+      (replace prefix-or-columns (relation-columns relation)))
 
-      [:project projection _]
-      (mapv ->column projection)
+    [:project projection _]
+    (mapv ->projected-column projection)
 
-      [:map projection relation]
-      (into (relation-columns relation) (map ->column projection))
+    [:map projection relation]
+    (into (relation-columns relation) (map ->projected-column projection))
 
-      [:group-by columns _]
-      (mapv ->column columns)
+    [:group-by columns _]
+    (mapv ->projected-column columns)
 
-      [:select _ relation]
-      (relation-columns relation)
+    [:select _ relation]
+    (relation-columns relation)
 
-      [:order-by _ relation]
-      (relation-columns relation)
+    [:order-by _ relation]
+    (relation-columns relation)
 
-      [:top _ relation]
-      (relation-columns relation)
+    [:top _ relation]
+    (relation-columns relation)
 
-      [:distinct relation]
-      (relation-columns relation)
+    [:distinct relation]
+    (relation-columns relation)
 
-      [:intersect lhs _]
-      (relation-columns lhs)
+    [:intersect lhs _]
+    (relation-columns lhs)
 
-      [:difference lhs _]
-      (relation-columns lhs)
+    [:difference lhs _]
+    (relation-columns lhs)
 
-      [:union-all lhs _]
-      (relation-columns lhs)
+    [:union-all lhs _]
+    (relation-columns lhs)
 
-      [:fixpoint _ base _]
-      (relation-columns base)
+    [:fixpoint _ base _]
+    (relation-columns base)
 
-      [:unwind columns opts relation]
-      (cond-> (conj (relation-columns relation) (val (first columns)))
-        (:ordinality-column opts) (conj (:ordinality-column opts)))
+    [:unwind columns opts relation]
+    (cond-> (conj (relation-columns relation) (val (first columns)))
+      (:ordinality-column opts) (conj (:ordinality-column opts)))
 
-      [:assign _ relation]
-      (relation-columns relation)
+    [:assign _ relation]
+    (relation-columns relation)
 
-      [:apply mode _ dependent-column-names independent-relation _]
-      (-> (relation-columns independent-relation)
-          (concat (case mode
-                    (:cross-join :left-outer-join) dependent-column-names
-                    []))
-          (vec))
+    [:apply mode _ dependent-column-names independent-relation _]
+    (-> (relation-columns independent-relation)
+        (concat (case mode
+                  (:cross-join :left-outer-join) dependent-column-names
+                  []))
+        (vec))
 
-      [:max-1-row relation]
-      (relation-columns relation)
+    [:max-1-row relation]
+    (relation-columns relation)
 
-      (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation)))))))
+    (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation))))))
 
 ;; Attempt to clean up tree, removing names internally and only add
 ;; them back at the top. Scan still needs explicit names to access the
@@ -834,11 +838,7 @@
   (with-meta (symbol (str 'x (swap! *name-counter* inc))) {:column? true}))
 
 (defn- remove-names-step [relation]
-  (letfn [(->column [column-or-expr]
-            (if (map? column-or-expr)
-              (first (keys column-or-expr))
-              column-or-expr))
-          (with-smap [relation smap]
+  (letfn [(with-smap [relation smap]
             (vary-meta relation assoc :smap smap))
           (->smap [relation]
             (:smap (meta relation)))
@@ -847,7 +847,7 @@
                   projection (w/postwalk-replace smap projection)
                   smap (reduce
                         (fn [acc p]
-                          (if (map? p)
+                          (if (extend-projection? p)
                             (let [[k v] (first p)]
                               (if (symbol? v)
                                 (assoc acc k v)
@@ -856,7 +856,7 @@
                         smap
                         projection)
                   projection (vec (for [p (w/postwalk-replace smap projection)]
-                                    (if (map? p)
+                                    (if (extend-projection? p)
                                       (let [[k v] (first p)]
                                         (if (= k v)
                                           k
@@ -884,7 +884,7 @@
           smap))
 
       [:scan columns]
-      (let [smap (zipmap (map ->column columns)
+      (let [smap (zipmap (map ->projected-column columns)
                          (repeatedly next-name))]
         (with-smap [:rename smap [:scan columns]] smap))
 
@@ -930,7 +930,7 @@
       [:group-by columns relation]
       (let [smap (->smap relation)
             columns (w/postwalk-replace smap columns)
-            smap (merge smap (zipmap (map ->column (filter map? columns))
+            smap (merge smap (zipmap (map ->projected-column (filter map? columns))
                                      (repeatedly next-name)))]
         (with-smap [:group-by (w/postwalk-replace smap columns) relation] smap))
 
@@ -1241,10 +1241,7 @@
 
       (and (every? symbol? projections-1)
            (not (every? symbol? projections-2))
-           (= projections-1 (for [p projections-2]
-                              (if (map? p)
-                                (key (first p))
-                                p))))
+           (= projections-1 (mapv ->projected-column projections-2)))
       [:project projections-2 relation])
 
     [:project projections
@@ -1267,10 +1264,7 @@
     [:select predicate
      [:scan columns]]
     ;;=>
-    (let [scan-columns (set (for [c columns]
-                              (if (map? c)
-                                (key (first c))
-                                c)))
+    (let [scan-columns (set (map ->projected-column columns))
           new-columns (reduce
                        (fn [acc predicate]
                          (let [expr-symbols (set/intersection scan-columns
@@ -1280,11 +1274,9 @@
                            (if-let [single-symbol (when (= 1 (count expr-symbols))
                                                     (first expr-symbols))]
                              (vec (for [column-or-select acc
-                                        :let [column (if (map? column-or-select)
-                                                       (key (first column-or-select))
-                                                       column-or-select)]]
+                                        :let [column (->projected-column column-or-select)]]
                                     (if (= single-symbol column)
-                                      (if (map? column-or-select)
+                                      (if (extend-projection? column-or-select)
                                         (update column-or-select column (partial merge-conjunctions predicate))
                                         {column predicate})
                                       column-or-select)))
