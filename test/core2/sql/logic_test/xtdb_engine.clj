@@ -6,6 +6,7 @@
             [core2.rewrite :as r]
             [core2.snapshot :as snap]
             [core2.sql :as sql]
+            [core2.sql.plan :as plan]
             [core2.sql.logic-test.runner :as slt]
             [core2.operator :as op]
             [core2.test-util :as tu]
@@ -26,30 +27,7 @@
     :create-table (create-table node record)
     :create-view (create-view node record)))
 
-;; TODO: this is a temporary hack.
-(defn- normalize-literal [x]
-  (if (vector? x)
-    (case (first x)
-      :boolean_literal (= "TRUE" (second x))
-      ;; TODO: is parsing NULL as an identifier correct?
-      :regular_identifier (if (= "NULL" (str/upper-case (second x)))
-                            nil
-                            x)
-      :character_string_literal (let [s (second x)]
-                                  (subs s 1 (dec (count s))))
-      :exact_numeric_literal (let [x (second x)]
-                               (if (str/includes? x ".")
-                                 (Double/parseDouble x)
-                                 (Long/parseLong x)))
-      ;; TODO: should this parse as signed_numeric_literal?
-      :factor (if (and (= 2 (count (rest x)))
-                       (= [:minus_sign "-"] (second x)))
-                (- (first (filter number? (flatten x))))
-                x)
-      x)
-    x))
-
-(defn insert->doc [tables insert-statement]
+(defn insert->docs [tables insert-statement]
   (let [[_ _ _ insertion-target insert-columns-and-source] insert-statement
         table (first (filter string? (flatten insertion-target)))
         from-subquery insert-columns-and-source
@@ -59,18 +37,16 @@
                     (->> (flatten insert-column-list)
                          (filter string?))))
         query-expression (last from-subquery)
-        [_ values] (->> query-expression
-                        (w/postwalk normalize-literal)
-                        (flatten)
-                        (filter (some-fn number? string? boolean? nil?))
-                        (split-with #{"VALUES"}))]
-    (merge {:_table table} (zipmap (map keyword columns) values))))
+        [_ docs] (plan/plan query-expression)]
+    (for [doc docs
+          :let [vs (map doc (sort (keys doc)))]]
+      (into {:_table table} (zipmap (map keyword columns) vs)))))
 
 (defn- insert-statement [{:keys [tables] :as node} insert-statement]
-  (let [doc (insert->doc tables insert-statement)]
-    (-> (c2/submit-tx node [[:put (merge {:_id (UUID/randomUUID)} doc)]])
-        (tu/then-await-tx node))
-    node))
+  (-> (c2/submit-tx node (vec (for [doc (insert->docs tables insert-statement)]
+                                [:put (merge {:_id (UUID/randomUUID)} doc)])))
+      (tu/then-await-tx node))
+  node)
 
 (defn skip-statement? [^String x]
   (boolean (re-find #"(?is)^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(\w+)\s+ON\s+(\w+)\s*\((.+)\)\s*$" x)))

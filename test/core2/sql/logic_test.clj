@@ -93,10 +93,10 @@ CREATE UNIQUE INDEX t1i0 ON t1(
 
 (t/deftest test-insert->doc
   (let [tables {"t1" ["a" "b" "c" "d" "e"]}]
-    (t/is (= {:e 103 :c 102 :b 100 :d 101 :a 104 :_table "t1"}
-             (xtdb-engine/insert->doc tables (sql/parse "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :insert_statement))))
-    (t/is (= {:a nil :b -102 :c true :d "101" :e 104.5 :_table "t1"}
-             (xtdb-engine/insert->doc tables (sql/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement))))))
+    (t/is (= [{:e 103 :c 102 :b 100 :d 101 :a 104 :_table "t1"}]
+             (xtdb-engine/insert->docs tables (sql/parse "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :insert_statement))))
+    (t/is (= [{:a nil :b -102 :c true :d "101" :e 104.5 :_table "t1"}]
+             (xtdb-engine/insert->docs tables (sql/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement))))))
 
 (comment
   (dotimes [n 5]

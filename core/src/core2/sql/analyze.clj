@@ -527,18 +527,21 @@
     :table_value_constructor
     (projected-columns (r/$ ag 2))
 
-    (:row_value_expression_list :in_value_list)
+    (:row_value_expression_list :contextually_typed_row_value_expression_list :in_value_list)
     (r/collect-stop
      (fn [ag]
        (r/zcase ag
-         :row_value_expression_list
+         (:row_value_expression_list
+          :contextually_typed_row_value_expression_list)
          nil
 
-         :explicit_row_value_constructor
+         (:explicit_row_value_constructor
+          :contextually_typed_row_value_constructor)
          (let [degree (r/collect-stop
                        (fn [ag]
                          (r/zcase ag
-                           :row_value_constructor_element
+                           (:row_value_constructor_element
+                            :contextually_typed_row_value_constructor_element)
                            1
 
                            :subquery
@@ -549,6 +552,7 @@
                        ag)]
            [(vec (for [n (range degree)]
                    {:index n}))])
+
 
          :subquery
          (projected-columns (r/$ ag 1))

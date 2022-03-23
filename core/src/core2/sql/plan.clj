@@ -89,6 +89,15 @@
      ;;=>
      (expr bp)
 
+     [:boolean_literal bl]
+     (case bl
+       "TRUE" true
+       "FALSE" false
+       "UNKNOWN" nil)
+
+     [:null_specification _]
+     nil
+
      [:comparison_predicate ^:z rvp-1 [:comparison_predicate_part_2 [_ co] ^:z rvp-2]]
      ;;=>
      (list (symbol co) (expr rvp-1) (expr rvp-2))
@@ -114,6 +123,11 @@
      [:unsigned_integer lexeme]
      ;;=>
      (Long/parseLong lexeme)
+
+     [:factor [_ sign] ^:z np]
+     (if (= "-" sign)
+       (- (expr np))
+       (expr np))
 
      [:character_string_literal lexeme]
      ;;=>
@@ -549,19 +563,37 @@
         nil))
     trl)))
 
-(defn- build-in-value-list [ivl]
-  (let [ks (mapv unqualified-projection-symbol (first (sem/projected-columns ivl)))]
-    (when (> (count ks) 1)
-      (throw (IllegalArgumentException. "cannot build row in value lists")))
+(defn- build-values-list [z]
+  (let [ks (mapv unqualified-projection-symbol (first (sem/projected-columns z)))]
     [:table (r/collect-stop
              (fn [z]
                (r/zcase z
-                 :in_value_list nil
-                 (when-not (= :in_value_list (z/node z))
-                   [{(first ks) (expr z)}])))
-             ivl)]))
+                 (:row_value_expression_list
+                  :contextually_typed_row_value_expression_list
+                  :in_value_list)
+                 nil
 
-(defn- plan [z]
+                 (:explicit_row_value_constructor
+                  :contextually_typed_row_value_constructor)
+                 (let [vs (r/collect-stop
+                           (fn [z]
+                             (r/zcase z
+                               (:row_value_constructor_element
+                                :contextually_typed_row_value_constructor_element)
+                               [(expr (r/$ z 1))]
+
+                               :subquery
+                               [(expr z)]
+
+                               nil))
+                           z)]
+                   [(zipmap ks vs)])
+
+                 (when (r/ctor z)
+                   [{(first ks) (expr z)}])))
+             z)]))
+
+(defn plan [z]
   (maybe-add-ref
    z
    (r/zmatch z
@@ -720,8 +752,14 @@
      ;;=>
      (build-table-reference-list trl)
 
+     [:table_value_constructor _ ^:z rvel]
+     (build-values-list rvel)
+
+     [:contextually_typed_table_value_constructor _ ^:z cttvl]
+     (build-values-list cttvl)
+
      (r/zcase z
-       :in_value_list (build-in-value-list z)
+       :in_value_list (build-values-list z)
        (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (z/node z)))))))))
 
 (defn- extend-projection? [column-or-expr]
@@ -1173,7 +1211,6 @@
       [:group-by group-by-columns
        [:select predicate
         relation]])))
-
 
 (defn- push-selection-down-past-join [z]
   (letfn [(push-selection-down [predicate lhs rhs]

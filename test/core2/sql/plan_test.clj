@@ -203,7 +203,15 @@
           '[:rename {x1 films, x3 $column_2$, x4 $column_3$}
             [:project [x1 x3 x4]
              [:unwind {x3 x1} {:ordinality-column x4}
-              [:rename {films x1} [:scan [films]]]]]]))
+              [:rename {films x1} [:scan [films]]]]]])
+
+  (valid? "VALUES (1, 2), (3, 4)"
+          '[:rename {x1 $column_1$, x2 $column_2$}
+            [:table [{x1 1, x2 2} {x1 3, x2 4}]]])
+
+  (valid? "VALUES 1, 2"
+          '[:rename {x1 $column_1$}
+            [:table [{x1 1} {x1 2}]]]))
 
 ;; TODO: sanity check semantic analysis for correlation both inside
 ;; and outside MAX, gives errors in both cases, are these correct?
@@ -276,7 +284,14 @@
               [:project [x1]
                [:semi-join {x2 x4}
                 [:rename {y x1, z x2} [:scan [y z]]]
-                [:rename {z x4} [:scan [z]]]]]]))
+                [:rename {z x4} [:scan [z]]]]]])
+
+    (valid? "SELECT x.y FROM x WHERE x.z IN (1, 2)"
+            '[:rename {x1 y}
+              [:project [x1]
+               [:semi-join {x2 x4}
+                [:rename {y x1, z x2} [:scan [y z]]]
+                [:table [{x4 1} {x4 2}]]]]]))
 
   (t/testing "NOT IN in WHERE"
     (valid? "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.z FROM y)"

@@ -78,9 +78,9 @@
     :else
     (throw (IllegalArgumentException. (str "No zipper constructor for: " (type x))))))
 
-(defmacro zmatch {:style/indent 1} [loc & [pattern expr & clauses]]
+(defmacro zmatch {:style/indent 1} [loc & [pattern expr & clauses :as all-clauses]]
   (when pattern
-    (if expr
+    (if (> (count all-clauses) 1)
       (let [vars (if (symbol? pattern)
                    #{pattern}
                    (->> (flatten pattern)
