@@ -37,10 +37,10 @@
                             x)
       :character_string_literal (let [s (second x)]
                                   (subs s 1 (dec (count s))))
-      :exact_numeric_literal (let [s (str/join "." (remove keyword? (flatten x)))]
-                               (if (= 1 (count (rest x)))
-                                 (Long/parseLong s)
-                                 (Double/parseDouble s)))
+      :exact_numeric_literal (let [x (second x)]
+                               (if (str/includes? x ".")
+                                 (Double/parseDouble x)
+                                 (Long/parseLong x)))
       ;; TODO: should this parse as signed_numeric_literal?
       :factor (if (and (= 2 (count (rest x)))
                        (= [:minus_sign "-"] (second x)))
@@ -103,7 +103,7 @@
          [:regular_identifier column]])
 
       [:sort_specification
-       [:exact_numeric_literal [:unsigned_integer ordinal]]]
+       [:exact_numeric_literal ordinal]]
       ;;=>
       [:sort_specification
        [:column_reference
