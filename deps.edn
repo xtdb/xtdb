@@ -25,14 +25,9 @@
 
  :paths ["dev"
          "dev-resources"
-         "api/test"
-         "core/test"
-         "core/test-resources"
-         "server/test"
-         "modules/datasets/data"
-         "modules/s3/test"
-         "modules/jdbc/test"
-         "modules/kafka/test"]
+         "test"
+         "test-resources"
+         "modules/datasets/data"]
 
  :jvm-opts ["-Xmx2G"
             "-XX:MaxDirectMemorySize=2G"
@@ -46,29 +41,29 @@
             #_"-Darrow.enable_unsafe_memory_access=true"]
 
  :aliases {:test {:exec-fn cognitect.test-runner.api/test
-                  :exec-args {:dirs ["api/test" "core/test" "server/test"]
-                              :excludes [:integration :timescale]}}
+                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc]}}
 
            :integration-test {:exec-fn cognitect.test-runner.api/test
-                              :exec-args {:dirs ["api/test" "core/test" "server/test"]
-                                          :includes [:integration]}}
+                              :exec-args {:includes [:integration]}}
 
            :timescale-test {:exec-fn cognitect.test-runner.api/test
-                            :exec-args {:dirs ["api/test" "core/test" "server/test"]
-                                        :includes [:timescale]}}
+                            :exec-args {:includes [:timescale]}}
 
            :s3-test {:exec-fn cognitect.test-runner.api/test
-                     :exec-args {:dirs ["modules/s3/test"]}}
+                     :exec-args {:includes [:s3]}}
 
            :kafka-test {:exec-fn cognitect.test-runner.api/test
-                        :exec-args {:dirs ["modules/kafka/test"]}}
+                        :exec-args {:includes [:kafka]}}
 
            :jdbc-test {:exec-fn cognitect.test-runner.api/test
-                       :exec-args {:dirs ["modules/jdbc/test"]}}
+                       :exec-args {:includes [:jdbc]}}
 
            :uberjar {:deps {io.github.seancorfield/build-clj {:git/tag "v0.6.7" :git/sha "22c2d09"}}
                      :replace-paths []
                      :exec-fn org.corfield.build/uber
                      :exec-args {:main core2.main
                                  :ns-compile [core2.main]
-                                 :uber-file "core2-standalone.jar"}}}}
+                                 :uber-file "core2-standalone.jar"}}
+
+           :generate-sql-parser {;; should this be in `test`?
+                                 :main-opts ["-m" "core2.sql.parser-generator"]}}}

@@ -14,7 +14,7 @@
       (finally
         (ig/halt! sys)))))
 
-(ost/def-obj-store-tests ^:requires-docker jdbc-postgres [f]
+(ost/def-obj-store-tests ^:requires-docker ^:jdbc jdbc-postgres [f]
   (let [db-spec {:user "postgres", :password "postgres", :database "core2test"}]
     (with-open [conn (jdbc/get-connection (merge db-spec {:dbtype "postgresql"}))]
       (jdbc/execute! conn ["DROP DATABASE IF EXISTS core2test"])

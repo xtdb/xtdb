@@ -24,9 +24,5 @@
                  :alias :build
                  :fn build/prep}
 
- :aliases {:generate-sql-parser {:extra-paths ["test"]
-                                 ;; should this be in `test`?
-                                 :main-opts ["-m" "core2.sql.parser-generator"]}
-
-           :build {:deps {io.github.clojure/tools.build {:git/tag "v0.7.7" :git/sha "1474ad6"}}
+ :aliases {:build {:deps {io.github.clojure/tools.build {:git/tag "v0.7.7" :git/sha "1474ad6"}}
                    :ns-default build}}}
