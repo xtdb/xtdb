@@ -4,7 +4,8 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.writer :as vw])
-  (:import [core2.vector.extensions KeywordVector UuidVector]
+  (:import [core2.vector.extensions KeywordVector UuidVector UriVector]
+           java.net.URI
            java.nio.ByteBuffer
            [java.time Instant OffsetDateTime ZonedDateTime ZoneId ZoneOffset]
            [org.apache.arrow.vector BigIntVector BitVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector]
@@ -69,8 +70,8 @@
                (test-round-trip vs))
             "nested types"))
 
-    (let [vs [:foo :foo/bar #uuid "97a392d5-5e3f-406f-9651-a828ee79b156"]]
+    (let [vs [:foo :foo/bar #uuid "97a392d5-5e3f-406f-9651-a828ee79b156" (URI/create "https://xtdb.com")]]
       (t/is (= {:vs vs
-                :vec-types [KeywordVector KeywordVector UuidVector]}
+                :vec-types [KeywordVector KeywordVector UuidVector UriVector]}
                (test-round-trip vs))
             "extension types"))))

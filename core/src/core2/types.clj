@@ -4,7 +4,7 @@
   (:import clojure.lang.Keyword
            [core2.types LegType LegType$StructLegType]
            [core2.vector IDenseUnionWriter IVectorWriter]
-           [core2.vector.extensions KeywordType KeywordVector UuidType UuidVector]
+           [core2.vector.extensions KeywordType KeywordVector UuidType UuidVector UriType]
            java.io.Writer
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
@@ -16,7 +16,8 @@
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType]
-           org.apache.arrow.vector.util.Text))
+           org.apache.arrow.vector.util.Text
+           java.net.URI))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -175,6 +176,7 @@
 
 (def ^:private ^core2.types.LegType keyword-leg-type (LegType. KeywordType/INSTANCE))
 (def ^:private ^core2.types.LegType uuid-leg-type (LegType. UuidType/INSTANCE))
+(def ^:private ^core2.types.LegType uri-leg-type (LegType. UriType/INSTANCE))
 
 (extend-protocol ArrowWriteable
   Keyword
@@ -191,7 +193,12 @@
                (.putLong (.getLeastSignificantBits uuid)))]
       (.setSafe ^FixedSizeBinaryVector (.getVector underlying-writer)
                 (.getPosition underlying-writer)
-                (.array bb)))))
+                (.array bb))))
+
+  URI
+  (value->leg-type [_] uri-leg-type)
+  (write-value! [^URI uri ^IVectorWriter writer]
+    (write-value! (str uri) (.getUnderlyingWriter (.asExtension writer)))))
 
 (defprotocol VectorType
   (^java.lang.Class arrow-type->vector-type [^ArrowType arrow-type]))
