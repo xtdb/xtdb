@@ -1001,12 +1001,21 @@
                    (z/node (r/bottomup (r/adhoc-tp r/id-tp remove-names-step) (r/->zipper relation))))
         smap (:smap (meta relation))
         rename-map (select-keys smap projection)
-        projection (replace smap projection)]
-    (with-meta
-      [:rename (set/map-invert rename-map)
-       [:project projection
-        relation]]
-      {:column->name smap})))
+        projection (replace smap projection)
+        add-projection-fn (fn [relation]
+                            (let [relation (if (= projection (relation-columns relation))
+                                             relation
+                                             [:project projection
+                                              relation])
+                                  relation (or (r/zmatch relation
+                                                 [:rename rename-map-2 relation]
+                                                 ;;=>
+                                                 (when (= rename-map rename-map-2)
+                                                   relation))
+                                               [:rename (set/map-invert rename-map) relation])]
+                              (with-meta relation {:column->name smap})))]
+    (with-meta relation {:column->name smap
+                         :add-projection-fn add-projection-fn})))
 
 (defn reconstruct-names [relation]
   (let [smap (:column->name (meta relation))
@@ -1231,25 +1240,17 @@
 
       (and (every? symbol? projections-1)
            (not (every? symbol? projections-2))
-           (= (count projections-1) (count projections-2)))
+           (= projections-1 (for [p projections-2]
+                              (if (map? p)
+                                (key (first p))
+                                p))))
       [:project projections-2 relation])
 
     [:project projections
      relation]
     ;;=>
     (when (and (every? symbol? projections)
-               (= (count projections) (count (relation-columns relation))))
-      relation)))
-
-(defn- remove-inverted-renames [z]
-  (r/zmatch z
-    [:rename rename-map-1
-     [:rename rename-map-2
-      relation]]
-    ;;=>
-    (when (and (map? rename-map-1)
-               (map? rename-map-2)
-               (= rename-map-1 (set/map-invert rename-map-2)))
+               (= (set projections) (set (relation-columns relation))))
       relation)))
 
 (defn- merge-selections-around-scan [z]
@@ -1417,7 +1418,8 @@
   (let [independent-projection (relation-columns independent-relation)
         smap (set/map-invert columns)
         row-number-sym '$row_number$
-        columns (remove-unused-correlated-columns columns dependent-relation)]
+        columns (remove-unused-correlated-columns columns dependent-relation)
+        post-group-by-projection (remove symbol? post-group-by-projection)]
     (cond->> [:apply apply-mode columns dependent-column-names
               [:map [{row-number-sym '(row-number)}]
                independent-relation]
@@ -1605,7 +1607,6 @@
            push-selections-with-fewer-variables-down
            push-selections-with-equals-down
            remove-superseded-projects
-           remove-inverted-renames
            merge-selections-around-scan
            add-selection-to-scan-predicate))
 
@@ -1627,12 +1628,14 @@
       (let [ag (z/vector-zip query)]
         (if-let [errs (not-empty (sem/errs ag))]
           {:errs errs}
-          {:plan (let [plan (->> (plan ag)
-                                 (remove-names)
+          {:plan (let [plan (remove-names (plan ag))
+                       add-projection-fn (:add-projection-fn (meta plan))
+                       plan (->> plan
                                  (z/vector-zip)
                                  (r/innermost (r/mono-tp decorrelate-plan))
                                  (r/innermost (r/mono-tp optimize-plan))
-                                 (z/node))]
+                                 (z/node)
+                                 (add-projection-fn))]
                    (if (s/invalid? (s/conform ::lp/logical-plan plan))
                      (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
                      plan))})))))

@@ -196,12 +196,14 @@
 
   (valid? "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film"
           '[:rename {x1 films, x3 $column_2$}
-            [:unwind {x3 x1} {} [:rename {films x1} [:scan [films]]]]])
+            [:project [x1 x3]
+             [:unwind {x3 x1} {} [:rename {films x1} [:scan [films]]]]]])
 
   (valid? "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film"
           '[:rename {x1 films, x3 $column_2$, x4 $column_3$}
-            [:unwind {x3 x1} {:ordinality-column x4}
-             [:rename {films x1} [:scan [films]]]]]))
+            [:project [x1 x3 x4]
+             [:unwind {x3 x1} {:ordinality-column x4}
+              [:rename {films x1} [:scan [films]]]]]]))
 
 ;; TODO: sanity check semantic analysis for correlation both inside
 ;; and outside MAX, gives errors in both cases, are these correct?
