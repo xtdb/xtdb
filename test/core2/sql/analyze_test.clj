@@ -11,206 +11,206 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
    AND t1.a > t1.b
  GROUP BY t1.d, t1.e
  ORDER BY b, t1.c")]
-    (t/is (= {:scopes
-              [{:id 2,
-                :dependent-columns #{},
-                :projected-columns
-                [{:identifier "a", :index 0} {:identifier "b", :index 1}],
-                :type :query-expression,
-                :ctes
-                {"foo"
-                 {:query-name "foo", :id 10, :scope-id 2, :subquery-scope-id 18}},
-                :order-by-indexes [1 nil]}
-               {:id 18,
-                :dependent-columns #{},
-                :projected-columns [{:index 0}],
-                :parent-id 2,
-                :type :query-expression,
-                :ctes {}}
-               {:id 20,
-                :dependent-columns #{},
-                :projected-columns [{:index 0}],
-                :parent-id 18,
-                :tables
-                {"bar"
-                 {:correlation-name "bar",
-                  :id 39,
-                  :scope-id 20,
-                  :table-or-query-name "foo",
-                  :cte-id 10,
-                  :cte-scope-id 2,
-                  :used-columns #{}}},
-                :columns #{},
-                :type :query-specification}
-               {:id 48,
-                :dependent-columns #{},
-                :projected-columns
-                [{:identifier "a", :index 0} {:identifier "b", :index 1}],
-                :parent-id 2,
-                :tables
-                {"t1"
-                 {:correlation-name "t1",
-                  :id 118,
-                  :scope-id 48,
-                  :table-or-query-name "t1",
-                  :used-columns
-                  #{["t1" "e"] ["t1" "a"] ["t1" "b"] ["t1" "c"] ["t1" "d"]}},
-                 "baz"
-                 {:correlation-name "baz",
-                  :id 123,
-                  :scope-id 48,
-                  :table-or-query-name "foo",
-                  :cte-id 10,
-                  :cte-scope-id 2,
-                  :used-columns #{}}},
-                :columns
-                #{{:identifiers ["t1" "d"],
-                   :type :group-invariant,
-                   :scope-id 48,
-                   :table-id 118,
-                   :table-scope-id 48}
-                  {:identifiers ["t1" "a"],
-                   :type :within-group-varying,
-                   :scope-id 48,
-                   :table-id 118,
-                   :table-scope-id 48}
-                  {:identifiers ["t1" "e"],
-                   :type :group-invariant,
-                   :scope-id 48,
-                   :table-id 118,
-                   :table-scope-id 48}
-                  {:identifiers ["t1" "d"],
-                   :type :ordinary,
-                   :scope-id 48,
-                   :table-id 118,
-                   :table-scope-id 48}
-                  {:identifiers ["t1" "a"],
-                   :type :ordinary,
-                   :scope-id 48,
-                   :table-id 118,
-                   :table-scope-id 48}
-                  {:identifiers ["t1" "e"],
-                   :type :ordinary,
-                   :scope-id 48,
-                   :table-id 118,
-                   :table-scope-id 48}
-                  {:identifiers ["t1" "b"],
-                   :type :ordinary,
-                   :scope-id 48,
-                   :table-id 118,
-                   :table-scope-id 48}},
-                :type :query-specification,
-                :grouping-columns [["t1" "d"] ["t1" "e"]]}
-               {:id 144,
-                :dependent-columns
-                #{{:identifiers ["t1" "b"],
-                   :type :outer,
-                   :scope-id 232,
-                   :table-id 118,
-                   :table-scope-id 48}
-                  {:identifiers ["t1" "c"],
-                   :type :outer,
-                   :scope-id 146,
-                   :table-id 118,
-                   :table-scope-id 48}},
-                :projected-columns [{:index 0}],
-                :parent-id 48,
-                :type :query-expression,
-                :ctes {}}
-               {:id 146,
-                :dependent-columns
-                #{{:identifiers ["t1" "b"],
-                   :type :outer,
-                   :scope-id 232,
-                   :table-id 118,
-                   :table-scope-id 48}
-                  {:identifiers ["t1" "c"],
-                   :type :outer,
-                   :scope-id 146,
-                   :table-id 118,
-                   :table-scope-id 48}},
-                :projected-columns [{:index 0}],
-                :parent-id 144,
-                :tables
-                {"x"
-                 {:correlation-name "x",
-                  :id 165,
-                  :scope-id 146,
-                  :table-or-query-name "t1",
-                  :used-columns #{["x" "b"]}}},
-                :columns
-                #{{:identifiers ["x" "b"],
-                   :type :ordinary,
-                   :scope-id 146,
-                   :table-id 165,
-                   :table-scope-id 146}
-                  {:identifiers ["t1" "c"],
-                   :type :outer,
-                   :scope-id 146,
-                   :table-id 118,
-                   :table-scope-id 48}},
-                :type :query-specification}
-               {:id 230,
-                :dependent-columns
-                #{{:identifiers ["t1" "b"],
-                   :type :outer,
-                   :scope-id 232,
-                   :table-id 118,
-                   :table-scope-id 48}},
-                :projected-columns [{:identifier "b", :index 0}],
-                :parent-id 146,
-                :type :query-expression,
-                :ctes {}}
-               {:id 232,
-                :dependent-columns
-                #{{:identifiers ["t1" "b"],
-                   :type :outer,
-                   :scope-id 232,
-                   :table-id 118,
-                   :table-scope-id 48}},
-                :projected-columns
-                [{:identifier "b", :qualified-column ["t1" "b"], :index 0}],
-                :parent-id 230,
-                :tables
-                {"t2"
-                 {:correlation-name "t2",
-                  :id 256,
-                  :scope-id 232,
-                  :subquery-scope-id 260,
-                  :used-columns #{["t2" "b"]}}},
-                :columns
-                #{{:identifiers ["t1" "b"],
-                   :type :outer,
-                   :scope-id 232,
-                   :table-id 118,
-                   :table-scope-id 48}
-                  {:identifiers ["t2" "b"],
-                   :type :ordinary,
-                   :scope-id 232,
-                   :table-id 256,
-                   :table-scope-id 232}},
-                :type :query-specification}
-               {:id 260,
-                :dependent-columns #{},
-                :projected-columns [{:identifier "b", :index 0}],
-                :parent-id 232,
-                :type :query-expression,
-                :ctes {}}
-               {:id 262,
-                :dependent-columns #{},
-                :projected-columns [{:identifier "b", :index 0}],
-                :parent-id 260,
-                :tables
-                {"boz"
-                 {:correlation-name "boz",
-                  :id 287,
-                  :scope-id 262,
-                  :table-or-query-name "boz",
-                  :used-columns #{}}},
-                :columns #{},
-                :type :query-specification}],
-              :errs []}
-             (sem/analyze-query tree)))))
+    (t/is (=  {:scopes
+               [{:id 2,
+                 :dependent-columns #{},
+                 :projected-columns
+                 [{:identifier "a", :index 0} {:identifier "b", :index 1}],
+                 :type :query-expression,
+                 :ctes
+                 {"foo"
+                  {:query-name "foo", :id 10, :scope-id 2, :subquery-scope-id 18}},
+                 :order-by-indexes [1 nil]}
+                {:id 18,
+                 :dependent-columns #{},
+                 :projected-columns [{:index 0}],
+                 :parent-id 2,
+                 :type :query-expression,
+                 :ctes {}}
+                {:id 20,
+                 :dependent-columns #{},
+                 :projected-columns [{:index 0}],
+                 :parent-id 18,
+                 :tables
+                 {"bar"
+                  {:correlation-name "bar",
+                   :id 37,
+                   :scope-id 20,
+                   :table-or-query-name "foo",
+                   :cte-id 10,
+                   :cte-scope-id 2,
+                   :used-columns #{}}},
+                 :columns #{},
+                 :type :query-specification}
+                {:id 46,
+                 :dependent-columns #{},
+                 :projected-columns
+                 [{:identifier "a", :index 0} {:identifier "b", :index 1}],
+                 :parent-id 2,
+                 :tables
+                 {"t1"
+                  {:correlation-name "t1",
+                   :id 116,
+                   :scope-id 46,
+                   :table-or-query-name "t1",
+                   :used-columns
+                   #{["t1" "e"] ["t1" "a"] ["t1" "b"] ["t1" "c"] ["t1" "d"]}},
+                  "baz"
+                  {:correlation-name "baz",
+                   :id 121,
+                   :scope-id 46,
+                   :table-or-query-name "foo",
+                   :cte-id 10,
+                   :cte-scope-id 2,
+                   :used-columns #{}}},
+                 :columns
+                 #{{:identifiers ["t1" "b"],
+                    :type :ordinary,
+                    :scope-id 46,
+                    :table-id 116,
+                    :table-scope-id 46}
+                   {:identifiers ["t1" "d"],
+                    :type :group-invariant,
+                    :scope-id 46,
+                    :table-id 116,
+                    :table-scope-id 46}
+                   {:identifiers ["t1" "d"],
+                    :type :ordinary,
+                    :scope-id 46,
+                    :table-id 116,
+                    :table-scope-id 46}
+                   {:identifiers ["t1" "e"],
+                    :type :group-invariant,
+                    :scope-id 46,
+                    :table-id 116,
+                    :table-scope-id 46}
+                   {:identifiers ["t1" "e"],
+                    :type :ordinary,
+                    :scope-id 46,
+                    :table-id 116,
+                    :table-scope-id 46}
+                   {:identifiers ["t1" "a"],
+                    :type :ordinary,
+                    :scope-id 46,
+                    :table-id 116,
+                    :table-scope-id 46}
+                   {:identifiers ["t1" "a"],
+                    :type :within-group-varying,
+                    :scope-id 46,
+                    :table-id 116,
+                    :table-scope-id 46}},
+                 :type :query-specification,
+                 :grouping-columns [["t1" "d"] ["t1" "e"]]}
+                {:id 142,
+                 :dependent-columns
+                 #{{:identifiers ["t1" "b"],
+                    :type :outer,
+                    :scope-id 228,
+                    :table-id 116,
+                    :table-scope-id 46}
+                   {:identifiers ["t1" "c"],
+                    :type :outer,
+                    :scope-id 144,
+                    :table-id 116,
+                    :table-scope-id 46}},
+                 :projected-columns [{:index 0}],
+                 :parent-id 46,
+                 :type :query-expression,
+                 :ctes {}}
+                {:id 144,
+                 :dependent-columns
+                 #{{:identifiers ["t1" "b"],
+                    :type :outer,
+                    :scope-id 228,
+                    :table-id 116,
+                    :table-scope-id 46}
+                   {:identifiers ["t1" "c"],
+                    :type :outer,
+                    :scope-id 144,
+                    :table-id 116,
+                    :table-scope-id 46}},
+                 :projected-columns [{:index 0}],
+                 :parent-id 142,
+                 :tables
+                 {"x"
+                  {:correlation-name "x",
+                   :id 161,
+                   :scope-id 144,
+                   :table-or-query-name "t1",
+                   :used-columns #{["x" "b"]}}},
+                 :columns
+                 #{{:identifiers ["x" "b"],
+                    :type :ordinary,
+                    :scope-id 144,
+                    :table-id 161,
+                    :table-scope-id 144}
+                   {:identifiers ["t1" "c"],
+                    :type :outer,
+                    :scope-id 144,
+                    :table-id 116,
+                    :table-scope-id 46}},
+                 :type :query-specification}
+                {:id 226,
+                 :dependent-columns
+                 #{{:identifiers ["t1" "b"],
+                    :type :outer,
+                    :scope-id 228,
+                    :table-id 116,
+                    :table-scope-id 46}},
+                 :projected-columns [{:identifier "b", :index 0}],
+                 :parent-id 144,
+                 :type :query-expression,
+                 :ctes {}}
+                {:id 228,
+                 :dependent-columns
+                 #{{:identifiers ["t1" "b"],
+                    :type :outer,
+                    :scope-id 228,
+                    :table-id 116,
+                    :table-scope-id 46}},
+                 :projected-columns
+                 [{:identifier "b", :qualified-column ["t1" "b"], :index 0}],
+                 :parent-id 226,
+                 :tables
+                 {"t2"
+                  {:correlation-name "t2",
+                   :id 252,
+                   :scope-id 228,
+                   :subquery-scope-id 256,
+                   :used-columns #{["t2" "b"]}}},
+                 :columns
+                 #{{:identifiers ["t1" "b"],
+                    :type :outer,
+                    :scope-id 228,
+                    :table-id 116,
+                    :table-scope-id 46}
+                   {:identifiers ["t2" "b"],
+                    :type :ordinary,
+                    :scope-id 228,
+                    :table-id 252,
+                    :table-scope-id 228}},
+                 :type :query-specification}
+                {:id 256,
+                 :dependent-columns #{},
+                 :projected-columns [{:identifier "b", :index 0}],
+                 :parent-id 228,
+                 :type :query-expression,
+                 :ctes {}}
+                {:id 258,
+                 :dependent-columns #{},
+                 :projected-columns [{:identifier "b", :index 0}],
+                 :parent-id 256,
+                 :tables
+                 {"boz"
+                  {:correlation-name "boz",
+                   :id 281,
+                   :scope-id 258,
+                   :table-or-query-name "boz",
+                   :used-columns #{}}},
+                 :columns #{},
+                 :type :query-specification}],
+               :errs []}
+              (sem/analyze-query tree)))))
 
 (defmacro ^:private invalid? [re q]
   `(let [[err# :as errs#] (:errs (sem/analyze-query (sql/parse ~q)))

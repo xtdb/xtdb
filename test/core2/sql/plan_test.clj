@@ -242,11 +242,11 @@
                  [:project [{x5 (= x3 ?x6)}] [:rename {bar x3} [:scan [bar]]]]]]]]))
 
   (t/testing "EXISTS in WHERE"
-    (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"
+    (valid? "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10.0"
             '[:rename {x1 y}
               [:project [x1]
                [:semi-join {x1 x4}
-                [:rename {y x1, z x2} [:select (= z 10) [:scan [y {z (= z 10)}]]]]
+                [:rename {y x1, z x2} [:select (= z 10.0) [:scan [y {z (= z 10.0)}]]]]
                 [:rename {z x4} [:scan [z]]]]]]))
 
   (t/testing "EXISTS as expression in SELECT"

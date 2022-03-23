@@ -682,10 +682,9 @@
 (defn- check-unsigned-integer [label ag]
   (when-not (r/zmatch ag
               [:signed_numeric_literal
-               [:exact_numeric_literal
-                [:unsigned_integer _]]]
+               [:exact_numeric_literal lexeme]]
               ;;=>
-              true
+              (not (str/includes? lexeme "."))
 
               [:host_parameter_name _]
               ;;=>

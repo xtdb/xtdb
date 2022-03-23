@@ -105,13 +105,11 @@
      ;;=>
      (expr unl)
 
-     [:exact_numeric_literal ^:z ui]
+     [:exact_numeric_literal lexeme]
      ;;=>
-     (expr ui)
-
-     [:exact_numeric_literal ^:z ui-1 ^:z ui-2]
-     ;;=>
-     (Double/parseDouble (str (expr ui-1) "." (expr ui-2)))
+     (if (str/includes? lexeme ".")
+       (Double/parseDouble lexeme)
+       (Long/parseLong lexeme))
 
      [:unsigned_integer lexeme]
      ;;=>
