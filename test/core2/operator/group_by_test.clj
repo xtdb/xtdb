@@ -101,3 +101,18 @@
         (t/is (= [12.0] (tu/<-column (.finish sum-spec))))
         (finally
           (util/try-close sum-spec))))))
+
+(t/deftest test-array-agg
+  (with-open [gm0 (tu/->mono-vec "gm0" types/int-type (map int [0 1 0]))
+              k0 (tu/->mono-vec "k" types/bigint-type [1 2 3])
+
+              gm1 (tu/->mono-vec "gm1" types/int-type (map int [1 2 0]))
+              k1 (tu/->mono-vec "k" types/bigint-type [4 5 6])]
+    (let [agg-spec (-> (group-by/->aggregate-factory :array-agg "k" "vs")
+                       (.build tu/*allocator*))]
+      (try
+        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k0)]) gm0)
+        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k1)]) gm1)
+        (t/is (= [[1 3 6] [2 4] [5]] (tu/<-column (.finish agg-spec))))
+        (finally
+          (util/try-close agg-spec))))))

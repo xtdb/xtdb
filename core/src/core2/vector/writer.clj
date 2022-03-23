@@ -330,6 +330,10 @@
      :else
      (ScalarWriter. dest-vec pos))))
 
+(defn ^core2.vector.IVectorWriter ->vec-writer [^BufferAllocator allocator, ^String col-name]
+  (vec->writer (-> (types/->field col-name types/dense-union-type false)
+                   (.createVector allocator))))
+
 (defn ->rel-writer ^core2.vector.IRelationWriter [^BufferAllocator allocator]
   (let [writers (LinkedHashMap.)]
     (reify IRelationWriter
@@ -337,8 +341,7 @@
         (.computeIfAbsent writers col-name
                           (reify Function
                             (apply [_ col-name]
-                              (vec->writer (-> (types/->field col-name types/dense-union-type false)
-                                               (.createVector allocator)))))))
+                              (->vec-writer allocator col-name)))))
 
       (iterator [_]
         (.iterator (.values writers)))

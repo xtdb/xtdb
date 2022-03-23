@@ -3,16 +3,19 @@
             [core2.expression.map :as emap]
             [core2.types :as types]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
-  (:import core2.expression.map.IRelationMap
-           core2.ICursor
-           core2.vector.IIndirectVector
-           java.io.Closeable
-           [java.util LinkedList List Spliterator]
-           java.util.function.Consumer
-           org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector ValueVector]
-           org.apache.arrow.vector.types.pojo.FieldType))
+            [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw])
+  (:import (core2 ICursor)
+           (core2.expression.map IRelationMap)
+           (core2.vector IIndirectVector IVectorWriter)
+           (java.io Closeable)
+           (java.util ArrayList LinkedList List Spliterator)
+           (java.util.function Consumer IntConsumer)
+           (java.util.stream IntStream IntStream$Builder)
+           (org.apache.arrow.memory BufferAllocator)
+           (org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector ValueVector)
+           (org.apache.arrow.vector.complex ListVector)
+           (org.apache.arrow.vector.types.pojo FieldType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -123,6 +126,61 @@
 
             Closeable
             (close [_] (.close out-vec))))))))
+
+(deftype ArrayAggAggregateSpec [^BufferAllocator allocator
+                                ^String from-name, ^String to-name
+                                ^IVectorWriter in-col
+                                ^:unsynchronized-mutable ^ListVector out-vec
+                                ^:unsynchronized-mutable ^long base-idx
+                                ^List group-idxmaps]
+  IAggregateSpec
+  (aggregate [this in-rel group-mapping]
+    (let [row-count (.rowCount in-rel)]
+      (vw/append-vec in-col (.vectorForName in-rel from-name))
+
+      (dotimes [idx row-count]
+        (let [group-idx (.get group-mapping idx)]
+          (while (<= (.size group-idxmaps) group-idx)
+            (.add group-idxmaps (IntStream/builder)))
+          (.add ^IntStream$Builder (.get group-idxmaps group-idx)
+                (+ base-idx idx))))
+
+      (set! (.base-idx this) (+ base-idx row-count))))
+
+  (finish [this]
+    (let [out-vec (-> (types/->field to-name types/list-type false (.getField (.getVector in-col)))
+                      (.createVector allocator))]
+      (set! (.out-vec this) out-vec)
+
+      (let [list-writer (.asList (vw/vec->writer out-vec))
+            data-writer (.getDataWriter list-writer)
+            row-copier (.rowCopier data-writer (.getVector in-col))]
+        (doseq [^IntStream$Builder isb group-idxmaps]
+          (.startValue list-writer)
+          (.forEach (.build isb)
+                    (reify IntConsumer
+                      (accept [_ idx]
+                        (.startValue data-writer)
+                        (.copyRow row-copier idx)
+                        (.endValue data-writer))))
+          (.endValue list-writer))
+
+        (.setValueCount out-vec (.size group-idxmaps))
+        (iv/->direct-vec out-vec))))
+
+  Closeable
+  (close [_]
+    (util/try-close in-col)
+    (util/try-close out-vec)))
+
+(defmethod ->aggregate-factory :array-agg [_ ^String from-name, ^String to-name]
+  (reify IAggregateSpecFactory
+    (getColumnName [_] to-name)
+
+    (build [_ al]
+      (ArrayAggAggregateSpec. al from-name to-name
+                              (vw/->vec-writer al to-name)
+                              nil 0 (ArrayList.)))))
 
 (definterface IPromotableVector
   (^org.apache.arrow.vector.ValueVector getVector [])
@@ -344,27 +402,32 @@
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
                         ^IGroupMapper group-mapper
-                        ^List aggregate-specs]
+                        ^List aggregate-specs
+                        ^:unsynchronized-mutable ^boolean done?]
   ICursor
-  (tryAdvance [_ c]
-    (try
-      (.forEachRemaining in-cursor
-                         (reify Consumer
-                           (accept [_ in-rel]
-                             (with-open [group-mapping (.groupMapping group-mapper in-rel)]
-                               (doseq [^IAggregateSpec agg-spec aggregate-specs]
-                                 (.aggregate agg-spec in-rel group-mapping))))))
+  (tryAdvance [this c]
+    (boolean
+     (when-not done?
+       (set! (.done? this) true)
 
-      (let [out-rel (iv/->indirect-rel (concat (.finish group-mapper)
-                                               (map #(.finish ^IAggregateSpec %) aggregate-specs)))]
-        (if (pos? (.rowCount out-rel))
-          (do
-            (.accept c out-rel)
-            true)
-          false))
-      (finally
-        (util/try-close group-mapper)
-        (run! util/try-close aggregate-specs))))
+       (try
+         (.forEachRemaining in-cursor
+                            (reify Consumer
+                              (accept [_ in-rel]
+                                (with-open [group-mapping (.groupMapping group-mapper in-rel)]
+                                  (doseq [^IAggregateSpec agg-spec aggregate-specs]
+                                    (.aggregate agg-spec in-rel group-mapping))))))
+
+         (let [out-rel (iv/->indirect-rel (concat (.finish group-mapper)
+                                                  (map #(.finish ^IAggregateSpec %) aggregate-specs)))]
+           (if (pos? (.rowCount out-rel))
+             (do
+               (.accept c out-rel)
+               true)
+             false))
+         (finally
+           (util/try-close group-mapper)
+           (run! util/try-close aggregate-specs))))))
 
   (characteristics [_]
     (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE))
@@ -382,7 +445,10 @@
       (doseq [^IAggregateSpecFactory factory agg-factories]
         (.add agg-specs (.build factory allocator)))
 
-      (GroupByCursor. allocator in-cursor (->group-mapper allocator group-col-names) (vec agg-specs))
+      (GroupByCursor. allocator in-cursor
+                      (->group-mapper allocator group-col-names)
+                      (vec agg-specs)
+                      false)
 
       (catch Exception e
         (run! util/try-close agg-specs)

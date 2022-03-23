@@ -8,10 +8,10 @@
             [core2.operator :as op]
             [core2.snapshot :as snap]
             [core2.test-util :as tu])
-  (:import core2.indexer.IChunkManager
-           core2.metadata.IMetadataManager
-           core2.snapshot.ISnapshotFactory
-           org.roaringbitmap.RoaringBitmap))
+  (:import (core2.indexer IChunkManager)
+           (core2.metadata IMetadataManager)
+           (core2.snapshot ISnapshotFactory)
+           (org.roaringbitmap RoaringBitmap)))
 
 (t/deftest test-find-gt-ivan
   (with-open [node (node/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
@@ -356,3 +356,16 @@
                           [:table $a]]
 
                         {'$a [{:a 12} {:a 0} {:a 100}]}))))
+
+(t/deftest test-array-agg
+  (t/is (= [{:a 1, :bs [1 3 6]}
+            {:a 2, :bs [2 4]}
+            {:a 3, :bs [5]}]
+           (op/query-ra '[:group-by [a {bs (array-agg b)}]
+                          [:table $ab]]
+                        {'$ab [{:a 1, :b 1}
+                               {:a 2, :b 2}
+                               {:a 1, :b 3}
+                               {:a 2, :b 4}
+                               {:a 3, :b 5}
+                               {:a 1, :b 6}]}))))
