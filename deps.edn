@@ -27,6 +27,7 @@
          "dev-resources"
          "test"
          "test-resources"
+         "core/dev"
          "modules/datasets/data"]
 
  :jvm-opts ["-Xmx2G"
@@ -63,7 +64,4 @@
                      :exec-fn org.corfield.build/uber
                      :exec-args {:main core2.main
                                  :ns-compile [core2.main]
-                                 :uber-file "core2-standalone.jar"}}
-
-           :generate-sql-parser {;; should this be in `test`?
-                                 :main-opts ["-m" "core2.sql.parser-generator"]}}}
+                                 :uber-file "core2-standalone.jar"}}}}
