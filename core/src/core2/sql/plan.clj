@@ -1007,12 +1007,13 @@
                                              relation
                                              [:project projection
                                               relation])
+                                  smap-inv (set/map-invert rename-map)
                                   relation (or (r/zmatch relation
                                                  [:rename rename-map-2 relation]
                                                  ;;=>
-                                                 (when (= rename-map rename-map-2)
+                                                 (when (= smap-inv (set/map-invert rename-map-2))
                                                    relation))
-                                               [:rename (set/map-invert rename-map) relation])]
+                                               [:rename smap-inv relation])]
                               (with-meta relation {:column->name smap})))]
     (with-meta relation {:column->name smap
                          :add-projection-fn add-projection-fn})))
