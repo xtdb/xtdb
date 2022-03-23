@@ -1,5 +1,5 @@
-{:deps {com.xtdb.labs/core2-api {:local/root "../../api"}
-        com.xtdb.labs/core2-core {:local/root "../../core"}
+{:deps {com.xtdb.labs/core2-api {:local/root "../api"}
+        com.xtdb.labs/core2-core {:local/root "../core"}
 
         ring/ring-core {:mvn/version "1.9.4"}
         info.sunng/ring-jetty9-adapter {:mvn/version "0.15.2"}
