@@ -16,4 +16,5 @@ pom.xml.asc
 build
 
 *.iml
+.idea/
 .cpcache/
