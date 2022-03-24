@@ -116,3 +116,25 @@
         (t/is (= [[1 3 6] [2 4] [5]] (tu/<-column (.finish agg-spec))))
         (finally
           (util/try-close agg-spec))))))
+
+(t/deftest test-bool-aggs
+  (with-open [in-cursor (tu/->cursor (Schema. [(types/->field "k" types/varchar-type false)
+                                               (types/->field "v" types/bool-type true)])
+                                     [[{:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
+                                       {:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
+                                       {:k "tn", :v true} {:k "tn", :v nil} {:k "tn", :v true}
+                                       {:k "fn", :v false} {:k "fn", :v nil} {:k "fn", :v false}
+                                       {:k "tf", :v true} {:k "tf", :v false} {:k "tf", :v true}
+                                       {:k "tfn", :v true} {:k "tfn", :v false} {:k "tfn", :v nil}]])
+              group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor
+                                                          ["k"]
+                                                          [(group-by/->aggregate-factory :all "v" "all-vs")
+                                                           (group-by/->aggregate-factory :any "v" "any-vs")])]
+    (t/is (= #{{:k "t", :all-vs true, :any-vs true}
+               {:k "f", :all-vs false, :any-vs false}
+               {:k "n", :all-vs nil, :any-vs nil}
+               {:k "fn", :all-vs false, :any-vs nil}
+               {:k "tn", :all-vs nil, :any-vs true}
+               {:k "tf", :all-vs false, :any-vs true}
+               {:k "tfn", :all-vs false, :any-vs true}}
+             (set (first (tu/<-cursor group-by-cursor)))))))

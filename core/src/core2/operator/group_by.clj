@@ -13,9 +13,9 @@
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector ValueVector)
+           (org.apache.arrow.vector BigIntVector BitVector Float8Vector IntVector NullVector ValueVector)
            (org.apache.arrow.vector.complex ListVector)
-           (org.apache.arrow.vector.types.pojo FieldType)))
+           (org.apache.arrow.vector.types.pojo ArrowType$FloatingPoint ArrowType$Int ArrowType$Null FieldType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -75,15 +75,17 @@
                     ^org.apache.arrow.vector.IntVector groupMapping])
   (^core2.vector.IIndirectVector finish []))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IAggregateSpecFactory
   (^String getColumnName [])
   (^core2.operator.group_by.IAggregateSpec build [^org.apache.arrow.memory.BufferAllocator allocator]))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^core2.operator.group_by.IAggregateSpecFactory ->aggregate-factory
   (fn [f from-name to-name]
     (keyword (name f))))
 
-(defn- emit-agg [from-var from-val-types emit-step]
+(defn- emit-agg [from-var from-val-types, emit-init-group, emit-step]
   (let [acc-sym (gensym 'acc)
         group-mapping-sym (gensym 'group-mapping)
         group-idx-sym (gensym 'group-idx)]
@@ -95,37 +97,44 @@
         ~(let [{continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {}) {:var->types {from-var from-val-types}})]
            `(dotimes [~expr/idx-sym (.getValueCount ~from-var)]
               (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
-                (when-not (> (.getValueCount ~acc-sym) ~group-idx-sym)
-                  (.setValueCount ~acc-sym (inc ~group-idx-sym)))
+                (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)
+                  (.setValueCount ~acc-sym (inc ~group-idx-sym))
+                  ~(emit-init-group acc-sym group-idx-sym))
                 ~(continue-var (fn [var-type val-code]
                                  (emit-step var-type acc-sym group-idx-sym val-code))))))))))
 
-(defn- emit-count-step [var-type acc-sym group-idx-sym _val-code]
-  `(let [~(-> acc-sym (expr/with-tag BigIntVector)) ~acc-sym]
-     (.setIndexDefined ~acc-sym ~group-idx-sym)
-     (when-not ~(= var-type types/null-type)
-       (.set ~acc-sym ~group-idx-sym
-             (inc (.get ~acc-sym ~group-idx-sym))))))
-
-(defmethod ->aggregate-factory :count [_ ^String from-name, ^String to-name]
+(defn- monomorphic-agg-factory {:style/indent 2} [^String from-name, ^String to-name, ->out-vec, emit-init-group, emit-step]
   (let [from-var (symbol from-name)]
     (reify IAggregateSpecFactory
       (getColumnName [_] to-name)
 
       (build [_ al]
-        (let [out-vec (BigIntVector. to-name al)]
+        (let [^ValueVector out-vec (->out-vec al)]
           (reify
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
               (let [in-vec (.vectorForName in-rel (name from-var))
                     from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
-                    f (emit-agg from-var from-val-types emit-count-step)]
+                    f (emit-agg from-var from-val-types emit-init-group emit-step)]
                 (f out-vec in-vec group-mapping)))
 
             (finish [_] (iv/->direct-vec out-vec))
 
             Closeable
             (close [_] (.close out-vec))))))))
+
+(defmethod ->aggregate-factory :count [_ ^String from-name, ^String to-name]
+  (monomorphic-agg-factory from-name to-name #(BigIntVector. to-name ^BufferAllocator %)
+    (fn emit-init-count-group [acc-sym group-idx-sym]
+      `(let [~(-> acc-sym (expr/with-tag BigIntVector)) ~acc-sym]
+         (.setIndexDefined ~acc-sym ~group-idx-sym)
+         (.set ~acc-sym ~group-idx-sym 0)))
+
+    (fn emit-count-step [var-type acc-sym group-idx-sym _val-code]
+      `(let [~(-> acc-sym (expr/with-tag BigIntVector)) ~acc-sym]
+         (when-not ~(= var-type types/null-type)
+           (.set ~acc-sym ~group-idx-sym
+                 (inc (.get ~acc-sym ~group-idx-sym))))))))
 
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
                                 ^String from-name, ^String to-name
@@ -182,6 +191,7 @@
                               (vw/->vec-writer al to-name)
                               nil 0 (ArrayList.)))))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IPromotableVector
   (^org.apache.arrow.vector.ValueVector getVector [])
   (^org.apache.arrow.vector.ValueVector maybePromote [valueTypes]))
@@ -239,7 +249,7 @@
 
       new-vec)))
 
-(defn- promotable-agg-factory [^String from-name, ^String to-name, emit-step]
+(defn- promotable-agg-factory {:style/indent 2} [^String from-name, ^String to-name, emit-init-group, emit-step]
   (let [from-var (symbol from-name)]
     (reify IAggregateSpecFactory
       (getColumnName [_] to-name)
@@ -253,8 +263,10 @@
                 (let [in-vec (.vectorForName in-rel (name from-var))
                       from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
                       out-vec (.maybePromote out-pvec from-val-types)
+                      acc-type (.getType (.getField out-vec))
                       f (emit-agg from-var from-val-types
-                                  (partial emit-step (.getType (.getField out-vec))))]
+                                  (partial emit-init-group acc-type)
+                                  (partial emit-step acc-type))]
                   (f out-vec in-vec group-mapping))))
 
             (finish [_] (iv/->direct-vec (.getVector out-pvec)))
@@ -264,16 +276,24 @@
 
 (defmethod ->aggregate-factory :sum [_ ^String from-name, ^String to-name]
   (promotable-agg-factory from-name to-name
-                          (fn emit-sum-step [acc-type var-type acc-sym group-idx-sym val-code]
-                            ;; TODO `DoubleSummaryStatistics` uses 'Kahan's summation algorithm'
-                            ;; to compensate for rounding errors - should we?
-                            (let [{:keys [continue-call]} (expr/codegen-call {:op :call, :f :+, :arg-types [acc-type var-type]})]
-                              `(let [~(-> acc-sym (expr/with-tag (types/arrow-type->vector-type acc-type))) ~acc-sym]
-                                 (.setIndexDefined ~acc-sym ~group-idx-sym)
-                                 ~(continue-call (fn [arrow-type res-code]
-                                                   (expr/set-value-form arrow-type acc-sym group-idx-sym res-code))
-                                                 [(expr/get-value-form var-type acc-sym group-idx-sym)
-                                                  val-code]))))))
+    (fn emit-sum-init [acc-type acc-sym group-idx-sym]
+      (let [vec-type (types/arrow-type->vector-type acc-type)]
+        `(let [~(-> acc-sym (expr/with-tag vec-type)) ~acc-sym]
+           (.setIndexDefined ~acc-sym ~group-idx-sym)
+           (.set ~acc-sym ~group-idx-sym
+                 ~(cond
+                    (instance? ArrowType$Int acc-type) 0
+                    (instance? ArrowType$FloatingPoint acc-type) 0.0)))))
+
+    (fn emit-sum-step [acc-type var-type acc-sym group-idx-sym val-code]
+      ;; TODO `DoubleSummaryStatistics` uses 'Kahan's summation algorithm'
+      ;; to compensate for rounding errors - should we?
+      (let [{:keys [continue-call]} (expr/codegen-call {:op :call, :f :+, :arg-types [acc-type var-type]})]
+        `(let [~(-> acc-sym (expr/with-tag (types/arrow-type->vector-type acc-type))) ~acc-sym]
+           ~(continue-call (fn [arrow-type res-code]
+                             (expr/set-value-form arrow-type acc-sym group-idx-sym res-code))
+                           [(expr/get-value-form var-type acc-sym group-idx-sym)
+                            val-code]))))))
 
 (defmethod ->aggregate-factory :avg [_ ^String from-name, ^String to-name]
   (let [sum-agg (->aggregate-factory :sum from-name "sum")
@@ -381,23 +401,62 @@
 
   ;; TODO: this still only works for fixed-width values, but it's reasonable to want (e.g.) `(min <string-col>)`
   (promotable-agg-factory from-name to-name
-                          (fn emit-min-max-step [acc-type var-type acc-sym group-idx-sym val-code]
-                            (let [{:keys [continue-call]} (expr/codegen-call {:op :call, :f update-if-f-kw,
-                                                                              :arg-types [var-type acc-type]})
-                                  val-sym (gensym 'val)]
-                              `(let [~(-> acc-sym (expr/with-tag (types/arrow-type->vector-type acc-type))) ~acc-sym
-                                     ~val-sym ~val-code]
-                                 (if (.isNull ~acc-sym ~group-idx-sym)
-                                   ~(expr/set-value-form acc-type acc-sym group-idx-sym val-sym)
+    (fn emit-min-max-init [_acc-type _acc-sym _group-idx-sym]
+      ;; no init here
+      )
 
-                                   ~(continue-call (fn [_arrow-type res-code]
-                                                     `(when ~res-code
-                                                        ~(expr/set-value-form acc-type acc-sym group-idx-sym val-sym)))
-                                                   [val-sym
-                                                    (expr/get-value-form var-type acc-sym group-idx-sym)])))))))
+    (fn emit-min-max-step [acc-type var-type acc-sym group-idx-sym val-code]
+      (let [{:keys [continue-call]} (expr/codegen-call {:op :call, :f update-if-f-kw,
+                                                        :arg-types [var-type acc-type]})
+            val-sym (gensym 'val)]
+        `(let [~(-> acc-sym (expr/with-tag (types/arrow-type->vector-type acc-type))) ~acc-sym
+               ~val-sym ~val-code]
+           (if (.isNull ~acc-sym ~group-idx-sym)
+             ~(expr/set-value-form acc-type acc-sym group-idx-sym val-sym)
+
+             ~(continue-call (fn [_arrow-type res-code]
+                               `(when ~res-code
+                                  ~(expr/set-value-form acc-type acc-sym group-idx-sym val-sym)))
+                             [val-sym
+                              (expr/get-value-form var-type acc-sym group-idx-sym)])))))))
 
 (defmethod ->aggregate-factory :min [_ from-name to-name] (min-max-factory from-name to-name :<))
 (defmethod ->aggregate-factory :max [_ from-name to-name] (min-max-factory from-name to-name :>))
+
+;; TODO this doesn't short-circuit yet.
+(defn- bool-agg-factory [^String from-name, ^String to-name, zero-value step-f-kw]
+  (monomorphic-agg-factory from-name to-name #(BitVector. to-name ^BufferAllocator %)
+    (fn emit-bool-agg-init [acc-sym group-idx-sym]
+      `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym]
+         (.setIndexDefined ~acc-sym ~group-idx-sym)
+         ~(expr/set-value-form types/bool-type acc-sym group-idx-sym zero-value)))
+
+    (fn emit-bool-agg-step [var-type acc-sym group-idx-sym val-code]
+      (let [null-call (expr/codegen-call {:op :call, :f step-f-kw
+                                          :arg-types [types/null-type var-type]})
+
+            bool-call (expr/codegen-call {:op :call, :f step-f-kw
+                                          :arg-types [types/bool-type var-type]})
+
+            val-sym (gensym 'val)
+
+            emit-set-res (fn [arrow-type res-code]
+                           (if (= arrow-type ArrowType$Null/INSTANCE)
+                             `(.setNull ~acc-sym ~group-idx-sym)
+                             `(do
+                                (.setIndexDefined ~acc-sym ~group-idx-sym)
+                                ~(expr/set-value-form arrow-type acc-sym group-idx-sym res-code))))]
+
+        `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym
+               ~val-sym ~val-code]
+           (if (.isNull ~acc-sym ~group-idx-sym)
+             ~((:continue-call null-call) emit-set-res [nil val-sym])
+             ~((:continue-call bool-call) emit-set-res [(expr/get-value-form types/bool-type acc-sym group-idx-sym) val-sym])))))))
+
+(defmethod ->aggregate-factory :all [_ ^String from-name, ^String to-name] (bool-agg-factory from-name to-name true :and))
+(defmethod ->aggregate-factory :every [_ ^String from-name, ^String to-name] (->aggregate-factory :all from-name to-name))
+(defmethod ->aggregate-factory :any [_ ^String from-name, ^String to-name] (bool-agg-factory from-name to-name false :or))
+(defmethod ->aggregate-factory :some [_ ^String from-name, ^String to-name] (->aggregate-factory :any from-name to-name))
 
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
