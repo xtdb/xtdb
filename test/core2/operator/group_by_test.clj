@@ -138,3 +138,21 @@
                {:k "tf", :all-vs false, :any-vs true}
                {:k "tfn", :all-vs false, :any-vs true}}
              (set (first (tu/<-cursor group-by-cursor)))))))
+
+(t/deftest test-distinct
+  (with-open [in-cursor (tu/->cursor (Schema. [(types/->field "k" types/keyword-type false)
+                                               (types/->field "v" types/bigint-type true)])
+                                     [[{:k :a, :v 10}
+                                       {:k :b, :v 12}
+                                       {:k :b, :v 15}
+                                       {:k :b, :v 15}
+                                       {:k :b, :v 10}]
+                                      [{:k :a, :v 12}
+                                       {:k :a, :v 10}]])
+              group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor
+                                                          ["k"]
+                                                          [#_(group-by/->aggregate-factory :sum-distinct "v" "sum")
+                                                           #_(group-by/->aggregate-factory :avg-distinct "v" "avg")
+                                                           (group-by/->aggregate-factory :count-distinct "v" "cnt")])]
+    (t/is (= #{}
+             (set (first (tu/<-cursor group-by-cursor)))))))

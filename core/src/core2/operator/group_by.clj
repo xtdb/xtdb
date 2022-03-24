@@ -4,7 +4,8 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [integrant.core :as i])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
@@ -137,6 +138,40 @@
          (when-not ~(= var-type types/null-type)
            (.set ~acc-sym ~group-idx-sym
                  (inc (.get ~acc-sym ~group-idx-sym))))))))
+
+(defmethod ->aggregate-factory :count-distinct [_ from-name to-name]
+  (let [count-agg-factory (->aggregate-factory :count from-name to-name)]
+    (reify IAggregateSpecFactory
+      (getToColumnName [_] (.getToColumnName count-agg-factory))
+
+      (build [_ al]
+        (let [count-agg (.build count-agg-factory al)
+              rel-map (emap/->relation-map al {:key-col-names [from-name]})]
+          (reify
+            IAggregateSpec
+            (getFromColumnName [_] (.getFromColumnName count-agg))
+
+            (aggregate [_ in-vec group-mapping]
+              ;; TODO now to do this per-group...
+              (let [builder (.buildFromRelation rel-map (iv/->indirect-rel [in-vec]))
+                    distinct-idxs (IntStream/builder)]
+                (dotimes [idx (.getValueCount in-vec)]
+                  (when (neg? (.addIfNotPresent builder idx))
+                    (.add distinct-idxs idx)))
+                (let [distinct-idxs (.toArray (.build distinct-idxs))]
+                  (with-open [distinct-gm (-> (iv/->direct-vec group-mapping)
+                                              (.select distinct-idxs)
+                                              (.copy al))]
+                    (.aggregate count-agg
+                                (.select in-vec distinct-idxs)
+                                (.getVector distinct-gm))))))
+
+            (finish [_] (.finish count-agg))
+
+            Closeable
+            (close [_]
+              (util/try-close count-agg)
+              (util/try-close rel-map))))))))
 
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
                                 ^String from-name, ^String to-name
