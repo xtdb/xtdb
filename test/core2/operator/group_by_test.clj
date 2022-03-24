@@ -96,8 +96,8 @@
     (let [sum-spec (-> (group-by/->aggregate-factory :sum "v" "vsum")
                        (.build tu/*allocator*))]
       (try
-        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v0)]) group-mapping)
-        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v1)]) group-mapping)
+        (.aggregate sum-spec (iv/->direct-vec v0) group-mapping)
+        (.aggregate sum-spec (iv/->direct-vec v1) group-mapping)
         (t/is (= [12.0] (tu/<-column (.finish sum-spec))))
         (finally
           (util/try-close sum-spec))))))
@@ -111,8 +111,8 @@
     (let [agg-spec (-> (group-by/->aggregate-factory :array-agg "k" "vs")
                        (.build tu/*allocator*))]
       (try
-        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k0)]) gm0)
-        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k1)]) gm1)
+        (.aggregate agg-spec (iv/->direct-vec k0) gm0)
+        (.aggregate agg-spec (iv/->direct-vec k1) gm1)
         (t/is (= [[1 3 6] [2 4] [5]] (tu/<-column (.finish agg-spec))))
         (finally
           (util/try-close agg-spec))))))
