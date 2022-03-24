@@ -1,5 +1,6 @@
 (ns core2.sql.plan
   (:require [clojure.set :as set]
+            [clojure.main]
             [clojure.string :as str]
             [clojure.walk :as w]
             [clojure.zip :as z]
@@ -1159,12 +1160,22 @@
      [:apply mode columns dependent-column-names independent-relation dependent-relation]]
     ;;=>
     (when (empty? (set/intersection (expr-symbols predicate) dependent-column-names))
-      [:apply
-       mode
-       columns
-       dependent-column-names
-       [:select predicate independent-relation]
-       dependent-relation])))
+      (cond
+        (set/superset? (set (relation-columns independent-relation)) (expr-symbols predicate))
+        [:apply
+         mode
+         columns
+         dependent-column-names
+         [:select predicate independent-relation]
+         dependent-relation]
+
+        (set/superset? (set (relation-columns dependent-relation)) (expr-symbols predicate))
+        [:apply
+         mode
+         columns
+         dependent-column-names
+         independent-relation
+         [:select predicate dependent-relation]]))))
 
 (defn- push-selection-down-past-rename [z]
   (r/zmatch z
@@ -1442,13 +1453,13 @@
        (into {})))
 
 (defn- decorrelate-group-by-apply [post-group-by-projection group-by-columns pre-group-by-projection
-                                   apply-mode columns dependent-column-names independent-relation dependent-relation]
+                                   apply-mode columns independent-relation dependent-relation]
   (let [independent-projection (relation-columns independent-relation)
         smap (set/map-invert columns)
         row-number-sym '$row_number$
         columns (remove-unused-correlated-columns columns dependent-relation)
         post-group-by-projection (remove symbol? post-group-by-projection)]
-    (cond->> [:apply apply-mode columns dependent-column-names
+    (cond->> [:apply apply-mode columns (set (relation-columns dependent-relation))
               [:map [{row-number-sym '(row-number)}]
                independent-relation]
               dependent-relation]
@@ -1471,9 +1482,10 @@
     ;; Rule 3.
     [:apply mode columns dependent-column-names independent-relation [:select predicate dependent-relation]]
     ;;=>
-    (when (or (= :cross-join mode)
-              (equals-predicate? predicate)
-              (all-predicate? predicate))
+    (when (and (or (= :cross-join mode)
+                   (equals-predicate? predicate)
+                   (all-predicate? predicate))
+               (seq (expr-correlated-symbols predicate))) ;; select predicate is correlated
       [:select (w/postwalk-replace (set/map-invert columns) (if (all-predicate? predicate)
                                                               (second predicate)
                                                               predicate))
@@ -1489,40 +1501,40 @@
        [:apply mode columns dependent-column-names independent-relation dependent-relation])]
 
     ;; Rule 8.
-    [:apply :cross-join columns dependent-column-names independent-relation
+    [:apply :cross-join columns _ independent-relation
      [:project post-group-by-projection
       [:group-by group-by-columns
        [:map pre-group-by-projection
         dependent-relation]]]]
     ;;=>
     (decorrelate-group-by-apply post-group-by-projection group-by-columns pre-group-by-projection
-                                :cross-join columns dependent-column-names independent-relation dependent-relation)
+                                :cross-join columns independent-relation dependent-relation)
 
-    [:apply :cross-join columns dependent-column-names independent-relation
+    [:apply :cross-join columns _ independent-relation
      [:group-by group-by-columns
       [:map pre-group-by-projection
        dependent-relation]]]
     ;;=>
     (decorrelate-group-by-apply nil group-by-columns pre-group-by-projection
-                                :cross-join columns dependent-column-names independent-relation dependent-relation)
+                                :cross-join columns independent-relation dependent-relation)
 
-    [:apply :cross-join columns dependent-column-names independent-relation
+    [:apply :cross-join columns _ independent-relation
      [:project post-group-by-projection
       [:group-by group-by-columns
        dependent-relation]]]
     ;;=>
     (decorrelate-group-by-apply post-group-by-projection group-by-columns nil
-                                :cross-join columns dependent-column-names independent-relation dependent-relation)
+                                :cross-join columns independent-relation dependent-relation)
 
-    [:apply :cross-join columns dependent-column-names independent-relation
+    [:apply :cross-join columns _ independent-relation
      [:group-by group-by-columns
       dependent-relation]]
     ;;=>
     (decorrelate-group-by-apply nil group-by-columns nil
-                                :cross-join columns dependent-column-names independent-relation dependent-relation)
+                                :cross-join columns independent-relation dependent-relation)
 
     ;; Rule 9.
-    [:apply :cross-join columns dependent-column-names independent-relation
+    [:apply :cross-join columns _ independent-relation
      [:max-1-row
       [:project post-group-by-projection
        [:group-by group-by-columns
@@ -1530,33 +1542,33 @@
          dependent-relation]]]]]
     ;;=>
     (decorrelate-group-by-apply post-group-by-projection group-by-columns pre-group-by-projection
-                                :left-outer-join columns dependent-column-names independent-relation dependent-relation)
+                                :left-outer-join columns independent-relation dependent-relation)
 
-    [:apply :cross-join columns dependent-column-names independent-relation
+    [:apply :cross-join columns _ independent-relation
      [:max-1-row
       [:group-by group-by-columns
        [:map pre-group-by-projection
         dependent-relation]]]]
     ;;=>
     (decorrelate-group-by-apply nil group-by-columns pre-group-by-projection
-                                :left-outer-join columns dependent-column-names independent-relation dependent-relation)
+                                :left-outer-join columns independent-relation dependent-relation)
 
-    [:apply :cross-join columns dependent-column-names independent-relation
+    [:apply :cross-join columns _ independent-relation
      [:max-1-row
       [:project post-group-by-projection
        [:group-by group-by-columns
         dependent-relation]]]]
     ;;=>
     (decorrelate-group-by-apply post-group-by-projection group-by-columns nil
-                                :left-outer-join columns dependent-column-names independent-relation dependent-relation)
+                                :left-outer-join columns independent-relation dependent-relation)
 
-    [:apply :cross-join columns dependent-column-names independent-relation
+    [:apply :cross-join columns _ independent-relation
      [:max-1-row
       [:group-by group-by-columns
        dependent-relation]]]
     ;;=>
     (decorrelate-group-by-apply nil group-by-columns nil
-                                :left-outer-join columns dependent-column-names independent-relation dependent-relation)))
+                                :left-outer-join columns independent-relation dependent-relation)))
 
 (defn- potential-exists-predicate? [predicate]
   (or (symbol? predicate)
@@ -1618,25 +1630,6 @@
     (when-let [join-map (build-join-map predicate independent-relation dependent-relation)]
       [:left-outer-join join-map independent-relation dependent-relation])))
 
-(def decorrelate-plan
-  (some-fn pull-correlated-selection-up-towards-apply
-           decorrelate-apply
-           promote-apply-mode
-           remove-uncorrelated-apply))
-
-(def optimize-plan
-  (some-fn promote-selection-cross-join-to-join
-           promote-selection-to-join
-           push-selection-down-past-join
-           push-selection-down-past-apply
-           push-selection-down-past-rename
-           push-selection-down-past-project
-           push-selection-down-past-group-by
-           push-selections-with-fewer-variables-down
-           push-selections-with-equals-down
-           remove-superseded-projects
-           merge-selections-around-scan
-           add-selection-to-scan-predicate))
 
 ;; Logical plan API
 
@@ -1656,14 +1649,48 @@
       (let [ag (z/vector-zip query)]
         (if-let [errs (not-empty (sem/errs ag))]
           {:errs errs}
-          {:plan (let [plan (remove-names (plan ag))
-                       add-projection-fn (:add-projection-fn (meta plan))
-                       plan (->> plan
-                                 (z/vector-zip)
-                                 (r/innermost (r/mono-tp decorrelate-plan))
-                                 (r/innermost (r/mono-tp optimize-plan))
-                                 (z/node)
-                                 (add-projection-fn))]
-                   (if (s/invalid? (s/conform ::lp/logical-plan plan))
-                     (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
-                     plan))})))))
+          (let [fired-rules (atom [])
+                instrument-rules (fn [rules]
+                                   (apply
+                                     some-fn
+                                     (map (fn [f]
+                                            (fn [z]
+                                              (when-let [successful-rewrite (f z)]
+                                                (swap!
+                                                  fired-rules
+                                                  #(conj
+                                                     %
+                                                     (second
+                                                       (str/split (clojure.main/demunge (str f)) #"/|@"))))
+                                                successful-rewrite)))
+                                          rules)))
+                optimize-plan [promote-selection-cross-join-to-join
+                               promote-selection-to-join
+                               push-selection-down-past-join
+                               push-selection-down-past-apply
+                               push-selection-down-past-rename
+                               push-selection-down-past-project
+                               push-selection-down-past-group-by
+                               push-selections-with-fewer-variables-down
+                               push-selections-with-equals-down
+                               remove-superseded-projects
+                               merge-selections-around-scan
+                               add-selection-to-scan-predicate]
+                decorrelate-plan [pull-correlated-selection-up-towards-apply
+                                  push-selection-down-past-apply
+                                  decorrelate-apply
+                                  promote-apply-mode
+                                  remove-uncorrelated-apply]
+                plan (remove-names (plan ag))
+                add-projection-fn (:add-projection-fn (meta plan))
+                plan (->> plan
+                          (z/vector-zip)
+                          (r/innermost (r/mono-tp (instrument-rules decorrelate-plan)))
+                          (r/innermost (r/mono-tp (instrument-rules optimize-plan)))
+                          (z/node)
+                          (add-projection-fn))]
+
+            (if (s/invalid? (s/conform ::lp/logical-plan plan))
+              (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
+              {:plan plan
+               :fired-rules @fired-rules})))))))

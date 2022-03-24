@@ -420,7 +420,7 @@ FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp
                [:select (>= x8 x17)
                 [:map [{x17 (+ x15 1)}]
                  [:group-by [x1 x2 x3 x4 x6 x7 x8 $row_number$ {x15 (avg x10)}]
-                  [:apply :left-outer-join {x2 ?x18, x3 ?x19, x4 ?x20} #{x17}
+                  [:apply :left-outer-join {x2 ?x18, x3 ?x19, x4 ?x20} #{x10 x11 x12 x13}
                    [:map [{$row_number$ (row-number)}]
                     [:join {x2 x7}
                      [:rename {name x1, id x2, major x3, year x4}
