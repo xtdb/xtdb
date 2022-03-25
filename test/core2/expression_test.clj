@@ -190,32 +190,29 @@
     (t/is (true? (run-test '< 1 2 4)))
     (t/is (false? (run-test '> 4 1 2)))))
 
+(defn- project-mono-value [f-sym val vector-type]
+  (with-open [rel (open-rel [(tu/->mono-vec "s" vector-type [val])])]
+    (-> (run-projection rel (list f-sym 's))
+        :res
+        first)))
+
 (t/deftest test-character-length
-  (letfn [(len [s f vec-type]
-            (with-open [rel (open-rel [(tu/->mono-vec "s" vec-type [s])])]
-              (-> (run-projection rel (list f 's))
-                  :res
-                  first)))]
+  (letfn [(len [s vec-type] (project-mono-value 'character-length s vec-type))]
     (t/are [s]
-      (= (count s)
-         (len s 'character-length types/varchar-type)
-         (len s 'character-length types/varbinary-type))
+      (= (count s) (len s types/varchar-type))
       ""
       "a"
       "hello"
       "😀")))
 
 (t/deftest test-octet-length
-  (t/are [s]
-    (= (alength (.getBytes s "utf-8"))
-       (with-open [rel (open-rel [(tu/->mono-vec "x" types/varchar-type [s])])]
-         (-> (run-projection rel '(octet-length s))
-             :res
-             first)))
-    ""
-    "a"
-    "hello"
-    "😀"))
+  (letfn [(len [s vec-type] (project-mono-value 'octet-length s vec-type))]
+    (t/are [s]
+      (= (alength (.getBytes s "utf-8")) (len s types/varchar-type) (len s types/varbinary-type))
+      ""
+      "a"
+      "hello"
+      "😀")))
 
 (t/deftest test-min-max
   (letfn [(run-test [form vecs]
