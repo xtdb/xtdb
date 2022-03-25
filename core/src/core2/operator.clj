@@ -255,7 +255,7 @@
               (fn [_inner-col-names]
                 {:col-names (set/union (set group-cols)
                                        (->> agg-factories
-                                            (into #{} (map #(.getColumnName ^IAggregateSpecFactory %)))))
+                                            (into #{} (map #(.getToColumnName ^IAggregateSpecFactory %)))))
                  :->cursor (fn [{:keys [allocator]} inner]
                              (group-by/->group-by-cursor allocator inner group-cols agg-factories))}))))
 
