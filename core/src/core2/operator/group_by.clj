@@ -138,120 +138,6 @@
            (.set ~acc-sym ~group-idx-sym
                  (inc (.get ~acc-sym ~group-idx-sym))))))))
 
-(defn- wrap-distinct [^IAggregateSpecFactory agg-factory]
-  (reify IAggregateSpecFactory
-    (getToColumnName [_] (.getToColumnName agg-factory))
-
-    (build [_ al]
-      (let [agg-spec (.build agg-factory al)
-            rel-maps (ArrayList.)
-            from-name (.getFromColumnName agg-spec)]
-        (reify
-          IAggregateSpec
-          (getFromColumnName [_] from-name)
-
-          (aggregate [_ in-vec group-mapping]
-            (let [builders (ArrayList. (.size rel-maps))
-                  distinct-idxs (IntStream/builder)]
-              (dotimes [idx (.getValueCount in-vec)]
-                (let [group-idx (.get group-mapping idx)]
-                  (while (<= (.size rel-maps) group-idx)
-                    (.add rel-maps (emap/->relation-map al {:key-col-names [from-name]})))
-                  (let [^IRelationMap rel-map (nth rel-maps group-idx)]
-                    (while (<= (.size builders) group-idx)
-                      (.add builders nil))
-
-                    (let [^IRelationMapBuilder
-                          builder (or (nth builders group-idx)
-                                      (let [builder (.buildFromRelation rel-map (iv/->indirect-rel [in-vec]))]
-                                        (.set builders group-idx builder)
-                                        builder))]
-                      (when (neg? (.addIfNotPresent builder idx))
-                        (.add distinct-idxs idx))))))
-              (let [distinct-idxs (.toArray (.build distinct-idxs))]
-                (with-open [distinct-gm (-> (iv/->direct-vec group-mapping)
-                                            (.select distinct-idxs)
-                                            (.copy al))]
-                  (.aggregate agg-spec
-                              (.select in-vec distinct-idxs)
-                              (.getVector distinct-gm))))))
-
-          (finish [_] (.finish agg-spec))
-
-          Closeable
-          (close [_]
-            (util/try-close agg-spec)
-            (run! util/try-close rel-maps)))))))
-
-(defmethod ->aggregate-factory :count-distinct [_ from-name to-name]
-  (-> (->aggregate-factory :count from-name to-name)
-      (wrap-distinct)))
-
-(defmethod ->aggregate-factory :sum-distinct [_ from-name to-name]
-  (-> (->aggregate-factory :sum from-name to-name)
-      (wrap-distinct)))
-
-(defmethod ->aggregate-factory :avg-distinct [_ from-name to-name]
-  (-> (->aggregate-factory :avg from-name to-name)
-      (wrap-distinct)))
-
-(deftype ArrayAggAggregateSpec [^BufferAllocator allocator
-                                ^String from-name, ^String to-name
-                                ^IVectorWriter acc-col
-                                ^:unsynchronized-mutable ^ListVector out-vec
-                                ^:unsynchronized-mutable ^long base-idx
-                                ^List group-idxmaps]
-  IAggregateSpec
-  (getFromColumnName [_] from-name)
-
-  (aggregate [this in-vec group-mapping]
-    (let [row-count (.getValueCount in-vec)]
-      (vw/append-vec acc-col in-vec)
-
-      (dotimes [idx row-count]
-        (let [group-idx (.get group-mapping idx)]
-          (while (<= (.size group-idxmaps) group-idx)
-            (.add group-idxmaps (IntStream/builder)))
-          (.add ^IntStream$Builder (.get group-idxmaps group-idx)
-                (+ base-idx idx))))
-
-      (set! (.base-idx this) (+ base-idx row-count))))
-
-  (finish [this]
-    (let [out-vec (-> (types/->field to-name types/list-type false (.getField (.getVector acc-col)))
-                      (.createVector allocator))]
-      (set! (.out-vec this) out-vec)
-
-      (let [list-writer (.asList (vw/vec->writer out-vec))
-            data-writer (.getDataWriter list-writer)
-            row-copier (.rowCopier data-writer (.getVector acc-col))]
-        (doseq [^IntStream$Builder isb group-idxmaps]
-          (.startValue list-writer)
-          (.forEach (.build isb)
-                    (reify IntConsumer
-                      (accept [_ idx]
-                        (.startValue data-writer)
-                        (.copyRow row-copier idx)
-                        (.endValue data-writer))))
-          (.endValue list-writer))
-
-        (.setValueCount out-vec (.size group-idxmaps))
-        (iv/->direct-vec out-vec))))
-
-  Closeable
-  (close [_]
-    (util/try-close acc-col)
-    (util/try-close out-vec)))
-
-(defmethod ->aggregate-factory :array-agg [_ ^String from-name, ^String to-name]
-  (reify IAggregateSpecFactory
-    (getToColumnName [_] to-name)
-
-    (build [_ al]
-      (ArrayAggAggregateSpec. al from-name to-name
-                              (vw/->vec-writer al to-name)
-                              nil 0 (ArrayList.)))))
-
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IPromotableVector
   (^org.apache.arrow.vector.ValueVector getVector [])
@@ -490,6 +376,124 @@
 
 (defmethod ->aggregate-factory :min [_ from-name to-name] (min-max-factory from-name to-name :<))
 (defmethod ->aggregate-factory :max [_ from-name to-name] (min-max-factory from-name to-name :>))
+
+(defn- wrap-distinct [^IAggregateSpecFactory agg-factory]
+  (reify IAggregateSpecFactory
+    (getToColumnName [_] (.getToColumnName agg-factory))
+
+    (build [_ al]
+      (let [agg-spec (.build agg-factory al)
+            rel-maps (ArrayList.)
+            from-name (.getFromColumnName agg-spec)]
+        (reify
+          IAggregateSpec
+          (getFromColumnName [_] from-name)
+
+          (aggregate [_ in-vec group-mapping]
+            (let [builders (ArrayList. (.size rel-maps))
+                  distinct-idxs (IntStream/builder)]
+              (dotimes [idx (.getValueCount in-vec)]
+                (let [group-idx (.get group-mapping idx)]
+                  (while (<= (.size rel-maps) group-idx)
+                    (.add rel-maps (emap/->relation-map al {:key-col-names [from-name]})))
+                  (let [^IRelationMap rel-map (nth rel-maps group-idx)]
+                    (while (<= (.size builders) group-idx)
+                      (.add builders nil))
+
+                    (let [^IRelationMapBuilder
+                          builder (or (nth builders group-idx)
+                                      (let [builder (.buildFromRelation rel-map (iv/->indirect-rel [in-vec]))]
+                                        (.set builders group-idx builder)
+                                        builder))]
+                      (when (neg? (.addIfNotPresent builder idx))
+                        (.add distinct-idxs idx))))))
+              (let [distinct-idxs (.toArray (.build distinct-idxs))]
+                (with-open [distinct-gm (-> (iv/->direct-vec group-mapping)
+                                            (.select distinct-idxs)
+                                            (.copy al))]
+                  (.aggregate agg-spec
+                              (.select in-vec distinct-idxs)
+                              (.getVector distinct-gm))))))
+
+          (finish [_] (.finish agg-spec))
+
+          Closeable
+          (close [_]
+            (util/try-close agg-spec)
+            (run! util/try-close rel-maps)))))))
+
+(defmethod ->aggregate-factory :count-distinct [_ from-name to-name]
+  (-> (->aggregate-factory :count from-name to-name)
+      (wrap-distinct)))
+
+(defmethod ->aggregate-factory :sum-distinct [_ from-name to-name]
+  (-> (->aggregate-factory :sum from-name to-name)
+      (wrap-distinct)))
+
+(defmethod ->aggregate-factory :avg-distinct [_ from-name to-name]
+  (-> (->aggregate-factory :avg from-name to-name)
+      (wrap-distinct)))
+
+(deftype ArrayAggAggregateSpec [^BufferAllocator allocator
+                                ^String from-name, ^String to-name
+                                ^IVectorWriter acc-col
+                                ^:unsynchronized-mutable ^ListVector out-vec
+                                ^:unsynchronized-mutable ^long base-idx
+                                ^List group-idxmaps]
+  IAggregateSpec
+  (getFromColumnName [_] from-name)
+
+  (aggregate [this in-vec group-mapping]
+    (let [row-count (.getValueCount in-vec)]
+      (vw/append-vec acc-col in-vec)
+
+      (dotimes [idx row-count]
+        (let [group-idx (.get group-mapping idx)]
+          (while (<= (.size group-idxmaps) group-idx)
+            (.add group-idxmaps (IntStream/builder)))
+          (.add ^IntStream$Builder (.get group-idxmaps group-idx)
+                (+ base-idx idx))))
+
+      (set! (.base-idx this) (+ base-idx row-count))))
+
+  (finish [this]
+    (let [out-vec (-> (types/->field to-name types/list-type false (.getField (.getVector acc-col)))
+                      (.createVector allocator))]
+      (set! (.out-vec this) out-vec)
+
+      (let [list-writer (.asList (vw/vec->writer out-vec))
+            data-writer (.getDataWriter list-writer)
+            row-copier (.rowCopier data-writer (.getVector acc-col))]
+        (doseq [^IntStream$Builder isb group-idxmaps]
+          (.startValue list-writer)
+          (.forEach (.build isb)
+                    (reify IntConsumer
+                      (accept [_ idx]
+                        (.startValue data-writer)
+                        (.copyRow row-copier idx)
+                        (.endValue data-writer))))
+          (.endValue list-writer))
+
+        (.setValueCount out-vec (.size group-idxmaps))
+        (iv/->direct-vec out-vec))))
+
+  Closeable
+  (close [_]
+    (util/try-close acc-col)
+    (util/try-close out-vec)))
+
+(defmethod ->aggregate-factory :array-agg [_ ^String from-name, ^String to-name]
+  (reify IAggregateSpecFactory
+    (getToColumnName [_] to-name)
+
+    (build [_ al]
+      (ArrayAggAggregateSpec. al from-name to-name
+                              (vw/->vec-writer al to-name)
+                              nil 0 (ArrayList.)))))
+
+(defmethod ->aggregate-factory :array-agg-distinct [_ from-name to-name]
+  (-> (->aggregate-factory :array-agg from-name to-name)
+      (wrap-distinct)))
 
 ;; TODO this doesn't short-circuit yet.
 (defn- bool-agg-factory [^String from-name, ^String to-name, zero-value step-f-kw]

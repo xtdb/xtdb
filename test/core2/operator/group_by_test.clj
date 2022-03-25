@@ -156,13 +156,17 @@
                                                            (group-by/->aggregate-factory :sum "v" "sum")
                                                            (group-by/->aggregate-factory :sum-distinct "v" "sum-distinct")
                                                            (group-by/->aggregate-factory :avg "v" "avg")
-                                                           (group-by/->aggregate-factory :avg-distinct "v" "avg-distinct")])]
+                                                           (group-by/->aggregate-factory :avg-distinct "v" "avg-distinct")
+                                                           (group-by/->aggregate-factory :array-agg "v" "array-agg")
+                                                           (group-by/->aggregate-factory :array-agg-distinct "v" "array-agg-distinct")])]
     (t/is (= #{{:k :a,
                 :cnt 3, :cnt-distinct 2,
                 :sum 32, :sum-distinct 22,
-                :avg 10.666666666666666, :avg-distinct 11.0}
+                :avg 10.666666666666666, :avg-distinct 11.0
+                :array-agg [10 12 10], :array-agg-distinct [10 12]}
                {:k :b,
                 :cnt 4, :cnt-distinct 3,
                 :sum 52, :sum-distinct 37,
-                :avg 13.0, :avg-distinct 12.333333333333334}}
+                :avg 13.0, :avg-distinct 12.333333333333334
+                :array-agg [12 15 15 10], :array-agg-distinct [12 15 10]}}
              (set (first (tu/<-cursor group-by-cursor)))))))
