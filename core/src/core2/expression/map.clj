@@ -4,13 +4,13 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import [core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter]
-           java.lang.AutoCloseable
-           [java.util HashMap List Map]
-           java.util.function.Function
-           org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.memory.util.hash.MurmurHasher
-           [org.roaringbitmap IntConsumer RoaringBitmap]))
+  (:import (core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter)
+           (java.lang AutoCloseable)
+           (java.util HashMap List)
+           (java.util.function Function)
+           (org.apache.arrow.memory BufferAllocator)
+           (org.apache.arrow.memory.util.hash MurmurHasher)
+           (org.roaringbitmap IntConsumer RoaringBitmap)))
 
 (def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
   (MurmurHasher.))
@@ -119,10 +119,12 @@
   (cond-> returned-idx
     (neg? returned-idx) (-> inc -)))
 
-(defn ->relation-map [^BufferAllocator allocator,
-                      {:keys [key-col-names build-key-col-names probe-key-col-names store-col-names]
-                       :or {build-key-col-names key-col-names
-                            probe-key-col-names key-col-names}}]
+(defn ^core2.expression.map.IRelationMap ->relation-map
+  [^BufferAllocator allocator,
+   {:keys [key-col-names build-key-col-names probe-key-col-names store-col-names]
+    :or {build-key-col-names key-col-names
+         probe-key-col-names key-col-names}}]
+
   (let [hash->bitmap (HashMap.)
         out-rel (vw/->rel-writer allocator)]
     (doseq [col-name build-key-col-names]

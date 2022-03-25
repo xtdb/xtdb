@@ -34,6 +34,7 @@
 (def dense-union-type (ArrowType$Union. UnionMode/Dense (int-array 0)))
 (def list-type (.getType Types$MinorType/LIST))
 (def map-type (ArrowType$Map. false))
+(def keyword-type KeywordType/INSTANCE)
 
 (defprotocol ArrowWriteable
   (^core2.types.LegType value->leg-type [v])

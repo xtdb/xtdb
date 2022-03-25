@@ -96,8 +96,8 @@
     (let [sum-spec (-> (group-by/->aggregate-factory :sum "v" "vsum")
                        (.build tu/*allocator*))]
       (try
-        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v0)]) group-mapping)
-        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v1)]) group-mapping)
+        (.aggregate sum-spec (iv/->direct-vec v0) group-mapping)
+        (.aggregate sum-spec (iv/->direct-vec v1) group-mapping)
         (t/is (= [12.0] (tu/<-column (.finish sum-spec))))
         (finally
           (util/try-close sum-spec))))))
@@ -111,8 +111,8 @@
     (let [agg-spec (-> (group-by/->aggregate-factory :array-agg "k" "vs")
                        (.build tu/*allocator*))]
       (try
-        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k0)]) gm0)
-        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k1)]) gm1)
+        (.aggregate agg-spec (iv/->direct-vec k0) gm0)
+        (.aggregate agg-spec (iv/->direct-vec k1) gm1)
         (t/is (= [[1 3 6] [2 4] [5]] (tu/<-column (.finish agg-spec))))
         (finally
           (util/try-close agg-spec))))))
@@ -137,4 +137,36 @@
                {:k "tn", :all-vs nil, :any-vs true}
                {:k "tf", :all-vs false, :any-vs true}
                {:k "tfn", :all-vs false, :any-vs true}}
+             (set (first (tu/<-cursor group-by-cursor)))))))
+
+(t/deftest test-distinct
+  (with-open [in-cursor (tu/->cursor (Schema. [(types/->field "k" types/keyword-type false)
+                                               (types/->field "v" types/bigint-type true)])
+                                     [[{:k :a, :v 10}
+                                       {:k :b, :v 12}
+                                       {:k :b, :v 15}
+                                       {:k :b, :v 15}
+                                       {:k :b, :v 10}]
+                                      [{:k :a, :v 12}
+                                       {:k :a, :v 10}]])
+              group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor
+                                                          ["k"]
+                                                          [(group-by/->aggregate-factory :count "v" "cnt")
+                                                           (group-by/->aggregate-factory :count-distinct "v" "cnt-distinct")
+                                                           (group-by/->aggregate-factory :sum "v" "sum")
+                                                           (group-by/->aggregate-factory :sum-distinct "v" "sum-distinct")
+                                                           (group-by/->aggregate-factory :avg "v" "avg")
+                                                           (group-by/->aggregate-factory :avg-distinct "v" "avg-distinct")
+                                                           (group-by/->aggregate-factory :array-agg "v" "array-agg")
+                                                           (group-by/->aggregate-factory :array-agg-distinct "v" "array-agg-distinct")])]
+    (t/is (= #{{:k :a,
+                :cnt 3, :cnt-distinct 2,
+                :sum 32, :sum-distinct 22,
+                :avg 10.666666666666666, :avg-distinct 11.0
+                :array-agg [10 12 10], :array-agg-distinct [10 12]}
+               {:k :b,
+                :cnt 4, :cnt-distinct 3,
+                :sum 52, :sum-distinct 37,
+                :avg 13.0, :avg-distinct 12.333333333333334
+                :array-agg [12 15 15 10], :array-agg-distinct [12 15 10]}}
              (set (first (tu/<-cursor group-by-cursor)))))))
