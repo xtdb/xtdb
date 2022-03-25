@@ -2,8 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [core2.error :as err]
-            [core2.sql.qgm :as qgm])
+            [core2.error :as err])
   (:import clojure.lang.MapEntry))
 
 (s/def ::logic-var
@@ -364,81 +363,3 @@
                            [?e1 :age ?a1]
                            [?e2 :age ?a2]]}
                  [:db]))
-
-(comment
-  (defn datalog->qgm [query]
-    (letfn [(->col-id [{:keys [e a]}]
-              (symbol (format "q_%s.%s" (subs (str e) 1) (symbol a))))
-            (->qid [e]
-              (symbol (str "q_" (subs (str e) 1))))
-            (->eid [e]
-              (symbol (str "e_" (subs (str e) 1))))]
-      (let [conformed-query (conform-query query)
-            root-id 'root
-
-            triple-clauses (->> (:where conformed-query)
-                                (into #{} (comp (filter (comp #{:triple} first))
-                                                (map second)
-                                                (map (fn [clause]
-                                                       (letfn [(un-lv [lv]
-                                                                 (cond-> lv
-                                                                   (= :logic-var (first lv)) second))]
-                                                         (-> clause
-                                                             (update :e un-lv)
-                                                             (update :v un-lv))))))))
-
-            e->clauses (group-by :e triple-clauses)
-            v->clauses (group-by :v triple-clauses)
-            find-head-cols (mapv second (:find conformed-query))
-            find-body-cols (for [lv find-head-cols]
-                             (or (when-let [{:keys [e]} (first (e->clauses lv))]
-                                   (->col-id {:e e, :a :_id}))
-                                 (when-let [clause (first (v->clauses lv))]
-                                   (->col-id clause))
-                                 (throw (IllegalArgumentException.
-                                         (str "can't find var: " lv)))))]
-
-        (letfn [(->pred [c1 c2]
-                  (let [pid (gensym 'p)]
-                    [[pid :qgm.predicate/expression (list '= (->col-id c1) (->col-id c2))]
-                     [pid :qgm.predicate/quantifiers (->qid (:e c1))]
-                     [pid :qgm.predicate/quantifiers (->qid (:e c2))]]))]
-          (concat [[root-id :qgm.box/root? true]
-                   [root-id :qgm.box/type :qgm.box.type/select]
-
-                   [root-id :qgm.box.head/distinct? false]
-                   [root-id :qgm.box.head/columns find-head-cols]
-                   [root-id :qgm.box.body/columns find-body-cols]
-                   [root-id :qgm.box.body/distinct :qgm.box.body.distinct/preserve]]
-
-                  (->> (for [e (keys e->clauses)
-                             :let [q (->qid e)
-                                   e-id (->eid e)]]
-                         (concat [[e-id :qgm.box/type :qgm.box.type/base-table]
-                                  [e-id :qgm.box.base-table/name (subs (str e) 1)]
-
-                                  [root-id :qgm.box.body/quantifiers q]
-
-                                  [q :qgm.quantifier/type :qgm.quantifier.type/foreach]
-                                  [q :qgm.quantifier/ranges-over e-id]]
-                                 (->> (for [v-clause (v->clauses e)]
-                                        (->pred v-clause {:e e, :a :_id}))
-                                      (apply concat))))
-                       (apply concat))
-
-                  (->> (for [[v clauses] v->clauses
-                             :when (not (contains? e->clauses v))
-                             [c1 c2] (partition-all 2 1 clauses)
-                             :when (and c1 c2)]
-                         (->pred c1 c2))
-                       (apply concat)))))))
-
-  (let [q '{:find [?n1 ?n2 ?a]
-            :where [[?e1 :name ?n1]
-                    [?e2 :name ?n2]
-                    [?e1 :age ?a]
-                    [?e2 :age ?a]]}
-        qgm (datalog->qgm q)]
-    (-> (qgm/qgm->dot (pr-str q) qgm)
-        (qgm/dot->file "png" "target/datalog-qgm.png"))
-    (qgm/qgm->entities qgm)))
