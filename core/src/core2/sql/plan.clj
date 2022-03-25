@@ -1310,28 +1310,39 @@
     [:select predicate
      [:scan columns]]
     ;;=>
-    (let [scan-columns (set (map ->projected-column columns))
-          new-columns (reduce
-                       (fn [acc predicate]
-                         (let [expr-symbols (set/intersection scan-columns
-                                                              (set (flatten (if (coll? predicate)
-                                                                              (seq predicate)
-                                                                              [predicate]))))]
-                           (if-let [single-symbol (when (= 1 (count expr-symbols))
-                                                    (first expr-symbols))]
-                             (vec (for [column-or-select acc
-                                        :let [column (->projected-column column-or-select)]]
-                                    (if (= single-symbol column)
-                                      (if (extend-projection? column-or-select)
-                                        (update column-or-select column (partial merge-conjunctions predicate))
-                                        {column predicate})
-                                      column-or-select)))
-                             acc)))
-                       columns
-                       (conjunction-clauses predicate))]
-      (when-not (= columns new-columns)
-        [:select predicate
-         [:scan new-columns]]))))
+    (let [underlying-scan-columns (set (map ->projected-column columns))
+          {:keys [scan-columns new-select-predicate]}
+          (reduce
+            (fn [{:keys [scan-columns new-select-predicate] :as acc} predicate]
+              (let [expr-columns-also-in-scan-columns
+                    (set/intersection underlying-scan-columns
+                                      (set (flatten (if (coll? predicate)
+                                                      (seq predicate)
+                                                      [predicate]))))]
+                (if-let [single-column (when (= 1 (count expr-columns-also-in-scan-columns))
+                                         (first expr-columns-also-in-scan-columns))]
+                  {:scan-columns
+                   (vec (for [column-or-select-expr scan-columns
+                              :let [column (->projected-column column-or-select-expr)]]
+                          (if (= single-column column)
+                            (if (extend-projection? column-or-select-expr)
+                              (update column-or-select-expr column (partial merge-conjunctions predicate))
+                              {column predicate})
+                            column-or-select-expr)))
+                   :new-select-predicate new-select-predicate}
+                  (update
+                    acc
+                    :new-select-predicate
+                    #(if %
+                       (merge-conjunctions % predicate)
+                       predicate)))))
+            {:scan-columns columns :new-select-predicate nil}
+            (conjunction-clauses predicate))]
+      (when-not (= columns scan-columns)
+        (if new-select-predicate
+          [:select new-select-predicate
+           [:scan scan-columns]]
+          [:scan scan-columns])))))
 
 ;; Decorrelation rules.
 
