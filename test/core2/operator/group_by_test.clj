@@ -151,8 +151,18 @@
                                        {:k :a, :v 10}]])
               group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor
                                                           ["k"]
-                                                          [#_(group-by/->aggregate-factory :sum-distinct "v" "sum")
-                                                           #_(group-by/->aggregate-factory :avg-distinct "v" "avg")
-                                                           (group-by/->aggregate-factory :count-distinct "v" "cnt")])]
-    (t/is (= #{}
+                                                          [(group-by/->aggregate-factory :count "v" "cnt")
+                                                           (group-by/->aggregate-factory :count-distinct "v" "cnt-distinct")
+                                                           (group-by/->aggregate-factory :sum "v" "sum")
+                                                           (group-by/->aggregate-factory :sum-distinct "v" "sum-distinct")
+                                                           (group-by/->aggregate-factory :avg "v" "avg")
+                                                           (group-by/->aggregate-factory :avg-distinct "v" "avg-distinct")])]
+    (t/is (= #{{:k :a,
+                :cnt 3, :cnt-distinct 2,
+                :sum 32, :sum-distinct 22,
+                :avg 10.666666666666666, :avg-distinct 11.0}
+               {:k :b,
+                :cnt 4, :cnt-distinct 3,
+                :sum 52, :sum-distinct 37,
+                :avg 13.0, :avg-distinct 12.333333333333334}}
              (set (first (tu/<-cursor group-by-cursor)))))))

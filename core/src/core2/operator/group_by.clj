@@ -4,10 +4,9 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw]
-            [integrant.core :as i])
+            [core2.vector.writer :as vw])
   (:import (core2 ICursor)
-           (core2.expression.map IRelationMap)
+           (core2.expression.map IRelationMap IRelationMapBuilder)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (java.io Closeable)
            (java.util ArrayList LinkedList List Spliterator)
@@ -139,39 +138,62 @@
            (.set ~acc-sym ~group-idx-sym
                  (inc (.get ~acc-sym ~group-idx-sym))))))))
 
+(defn- wrap-distinct [^IAggregateSpecFactory agg-factory]
+  (reify IAggregateSpecFactory
+    (getToColumnName [_] (.getToColumnName agg-factory))
+
+    (build [_ al]
+      (let [agg-spec (.build agg-factory al)
+            rel-maps (ArrayList.)
+            from-name (.getFromColumnName agg-spec)]
+        (reify
+          IAggregateSpec
+          (getFromColumnName [_] from-name)
+
+          (aggregate [_ in-vec group-mapping]
+            (let [builders (ArrayList. (.size rel-maps))
+                  distinct-idxs (IntStream/builder)]
+              (dotimes [idx (.getValueCount in-vec)]
+                (let [group-idx (.get group-mapping idx)]
+                  (while (<= (.size rel-maps) group-idx)
+                    (.add rel-maps (emap/->relation-map al {:key-col-names [from-name]})))
+                  (let [^IRelationMap rel-map (nth rel-maps group-idx)]
+                    (while (<= (.size builders) group-idx)
+                      (.add builders nil))
+
+                    (let [^IRelationMapBuilder
+                          builder (or (nth builders group-idx)
+                                      (let [builder (.buildFromRelation rel-map (iv/->indirect-rel [in-vec]))]
+                                        (.set builders group-idx builder)
+                                        builder))]
+                      (when (neg? (.addIfNotPresent builder idx))
+                        (.add distinct-idxs idx))))))
+              (let [distinct-idxs (.toArray (.build distinct-idxs))]
+                (with-open [distinct-gm (-> (iv/->direct-vec group-mapping)
+                                            (.select distinct-idxs)
+                                            (.copy al))]
+                  (.aggregate agg-spec
+                              (.select in-vec distinct-idxs)
+                              (.getVector distinct-gm))))))
+
+          (finish [_] (.finish agg-spec))
+
+          Closeable
+          (close [_]
+            (util/try-close agg-spec)
+            (run! util/try-close rel-maps)))))))
+
 (defmethod ->aggregate-factory :count-distinct [_ from-name to-name]
-  (let [count-agg-factory (->aggregate-factory :count from-name to-name)]
-    (reify IAggregateSpecFactory
-      (getToColumnName [_] (.getToColumnName count-agg-factory))
+  (-> (->aggregate-factory :count from-name to-name)
+      (wrap-distinct)))
 
-      (build [_ al]
-        (let [count-agg (.build count-agg-factory al)
-              rel-map (emap/->relation-map al {:key-col-names [from-name]})]
-          (reify
-            IAggregateSpec
-            (getFromColumnName [_] (.getFromColumnName count-agg))
+(defmethod ->aggregate-factory :sum-distinct [_ from-name to-name]
+  (-> (->aggregate-factory :sum from-name to-name)
+      (wrap-distinct)))
 
-            (aggregate [_ in-vec group-mapping]
-              ;; TODO now to do this per-group...
-              (let [builder (.buildFromRelation rel-map (iv/->indirect-rel [in-vec]))
-                    distinct-idxs (IntStream/builder)]
-                (dotimes [idx (.getValueCount in-vec)]
-                  (when (neg? (.addIfNotPresent builder idx))
-                    (.add distinct-idxs idx)))
-                (let [distinct-idxs (.toArray (.build distinct-idxs))]
-                  (with-open [distinct-gm (-> (iv/->direct-vec group-mapping)
-                                              (.select distinct-idxs)
-                                              (.copy al))]
-                    (.aggregate count-agg
-                                (.select in-vec distinct-idxs)
-                                (.getVector distinct-gm))))))
-
-            (finish [_] (.finish count-agg))
-
-            Closeable
-            (close [_]
-              (util/try-close count-agg)
-              (util/try-close rel-map))))))))
+(defmethod ->aggregate-factory :avg-distinct [_ from-name to-name]
+  (-> (->aggregate-factory :avg from-name to-name)
+      (wrap-distinct)))
 
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
                                 ^String from-name, ^String to-name
