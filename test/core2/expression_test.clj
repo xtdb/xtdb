@@ -190,6 +190,33 @@
     (t/is (true? (run-test '< 1 2 4)))
     (t/is (false? (run-test '> 4 1 2)))))
 
+(t/deftest test-character-length
+  (letfn [(len [s f vec-type]
+            (with-open [rel (open-rel [(tu/->mono-vec "s" vec-type [s])])]
+              (-> (run-projection rel (list f 's))
+                  :res
+                  first)))]
+    (t/are [s]
+      (= (count s)
+         (len s 'character-length types/varchar-type)
+         (len s 'character-length types/varbinary-type))
+      ""
+      "a"
+      "hello"
+      "😀")))
+
+(t/deftest test-octet-length
+  (t/are [s]
+    (= (alength (.getBytes s "utf-8"))
+       (with-open [rel (open-rel [(tu/->mono-vec "x" types/varchar-type [s])])]
+         (-> (run-projection rel '(octet-length s))
+             :res
+             first)))
+    ""
+    "a"
+    "hello"
+    "😀"))
+
 (t/deftest test-min-max
   (letfn [(run-test [form vecs]
             (with-open [rel (open-rel vecs)]

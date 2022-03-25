@@ -22,7 +22,8 @@
            [org.apache.arrow.vector BitVector DurationVector FieldVector ValueVector]
            [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]))
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
+           (java.nio.charset CharsetDecoder)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -616,6 +617,15 @@
                     (f ArrowType$Utf8/INSTANCE
                        `(ByteBuffer/wrap (.getBytes (subs (resolve-string ~x) (dec ~start) (+ (dec ~start) ~length))
                                                     StandardCharsets/UTF_8))))})
+
+(defmethod codegen-call [:character-length ArrowType$Utf8] [_]
+  (mono-fn-call types/int-type #(do `(.length (.decode StandardCharsets/UTF_8 ~@%)))))
+
+(defmethod codegen-call [:character-length ArrowType$Binary] [_]
+  (mono-fn-call types/int-type #(do `(.length (.decode StandardCharsets/UTF_8 ~@%)))))
+
+(defmethod codegen-call [:octet-length ArrowType$Utf8] [_]
+  (mono-fn-call types/int-type #(do `(.limit ~@%))))
 
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]
   {:return-types #{types/bigint-type}
