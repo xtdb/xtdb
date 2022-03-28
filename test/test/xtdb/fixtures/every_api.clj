@@ -33,7 +33,8 @@
                                    (with-meta {::embedded-kafka? true}))}
       #_(select-keys [:local-standalone])
       #_(select-keys [:local-standalone :remote])
-      #_(select-keys [:local-standalone :h2 :sqlite :remote])))
+      #_(select-keys [:local-standalone :h2 :sqlite :remote])
+      #_(select-keys [:local-kafka])))
 
 (def ^:dynamic *node-type*)
 

@@ -16,6 +16,8 @@
 (s/def ::tx-time date?)
 (s/def ::tx (s/keys :opt [::tx-id ::tx-time]))
 
+(s/def ::submit-tx-opts (s/keys :opt [::tx-time]))
+
 (s/def :crux.db/id c/valid-id?)
 (s/def :xt/id c/valid-id?)
 (s/def ::evicted? boolean?)
@@ -97,17 +99,31 @@
 
 (defprotocol PXtdbSubmitClient
   "Provides API access to XTDB transaction submission."
-  (submit-tx-async [node tx-ops]
+  (submit-tx-async
+    [node tx-ops]
+    [node tx-ops opts]
     "Writes transactions to the log for processing tx-ops datalog
   style transactions. Non-blocking.  Returns a deref with map with
   details about the submitted transaction, including tx-time and
-  tx-id.")
+  tx-id.
 
-  (submit-tx [node tx-ops]
+  opts (map):
+  - ::tx-time
+    overrides tx-time for the transaction.
+    mustn't be earlier than any previous tx-time, and mustn't be later than the tx-log's clock.")
+
+  (submit-tx
+    [node tx-ops]
+    [node tx-ops opts]
     "Writes transactions to the log for processing
   tx-ops datalog style transactions.
   Returns a map with details about the submitted transaction,
-  including tx-time and tx-id.")
+  including tx-time and tx-id.
+
+  opts (map):
+   - ::tx-time
+     overrides tx-time for the transaction.
+     mustn't be earlier than any previous tx-time, and mustn't be later than the tx-log's clock.")
 
   (open-tx-log ^java.io.Closeable [this after-tx-id with-ops?]
     "Reads the transaction log. Optionally includes

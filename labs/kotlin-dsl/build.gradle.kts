@@ -17,6 +17,7 @@ java {
 
 repositories {
     mavenCentral()
+    mavenLocal()
 }
 
 publishing {
@@ -76,7 +77,7 @@ dependencies {
     implementation(platform("org.jetbrains.kotlin:kotlin-bom"))
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 
-    api("com.xtdb:xtdb-core:1.20.0") {
+    api("com.xtdb:xtdb-core:${version}") {
         isTransitive = true
     }
 
@@ -84,7 +85,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.6.0")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.6.0")
     testImplementation("com.natpryce:hamkrest:1.8.0.1")
-    testImplementation("com.xtdb:xtdb-rocksdb:1.20.0")
+    testImplementation("com.xtdb:xtdb-rocksdb:${version}")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.6.0")
 }
 

@@ -2,19 +2,18 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http]
+            [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.error :as err]
             [xtdb.io :as xio]
-            [xtdb.query-state :as qs]
-            [xtdb.tx :as tx]
-            [xtdb.api :as xt]
-            [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http])
-  (:import com.nimbusds.jwt.SignedJWT
-           [xtdb.api RemoteClientOptions]
-           [java.io Closeable InputStreamReader IOException PushbackReader]
-           java.time.Instant
+            [xtdb.query-state :as qs])
+  (:import (com.nimbusds.jwt SignedJWT)
+           (java.io Closeable InputStreamReader IOException PushbackReader)
+           (java.time Instant)
            (java.util Date)
-           java.util.function.Supplier))
+           (java.util.function Supplier)
+           (xtdb.api RemoteClientOptions)))
 
 (defn- edn-list->lazy-seq [in]
   (let [in (PushbackReader. (InputStreamReader. in))]
@@ -114,7 +113,7 @@
     (doseq [stream @streams-state]
       (.close ^Closeable stream))))
 
-(defn- temporal-qps [{:keys [valid-time tx-time tx-id] :as db}]
+(defn- temporal-qps [{:keys [valid-time tx-time tx-id] :as _db}]
   {:valid-time (some-> valid-time (xio/format-rfc3339-date))
    :tx-time (some-> tx-time (xio/format-rfc3339-date))
    :tx-id tx-id})
@@ -208,11 +207,11 @@
        (xio/->cursor #(.close ^java.io.Closeable in) (edn-list->lazy-seq in))
        xio/empty-cursor)))
 
-  (valid-time [this] valid-time)
+  (valid-time [_] valid-time)
 
-  (transaction-time [this] tx-time)
+  (transaction-time [_] tx-time)
 
-  (db-basis [this]
+  (db-basis [_]
     {::xt/valid-time valid-time
      ::xt/tx {::xt/tx-time tx-time
              ::xt/tx-id tx-id}}))
@@ -254,12 +253,12 @@
   (open-db [this valid-time tx-time] (xt/db this valid-time tx-time))
 
   xt/PXtdb
-  (status [this]
+  (status [_]
     (api-request-sync (str url "/_xtdb/status")
                       {:http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
 
-  (tx-committed? [this submitted-tx]
+  (tx-committed? [_ submitted-tx]
     (-> (api-request-sync (str url "/_xtdb/tx-committed")
                           {:http-opts {:method :get
                                        :query-params {:tx-id (::xt/tx-id submitted-tx)}}
@@ -268,7 +267,7 @@
 
   (sync [this] (xt/sync this nil))
 
-  (sync [this timeout]
+  (sync [_ timeout]
    (-> (api-request-sync (str url "/_xtdb/sync")
                          {:http-opts {:method :get
                                       :query-params {:timeout (some-> timeout (xio/format-duration-millis))}}
@@ -281,7 +280,7 @@
    (xt/await-tx-time this tx-time timeout))
 
   (await-tx [this submitted-tx] (xt/await-tx this submitted-tx nil))
-  (await-tx [this submitted-tx timeout]
+  (await-tx [_ submitted-tx timeout]
     (api-request-sync (str url "/_xtdb/await-tx")
                       {:http-opts {:method :get
                                    :query-params {:tx-id (::xt/tx-id submitted-tx)
@@ -289,7 +288,7 @@
                        :->jwt-token ->jwt-token}))
 
   (await-tx-time [this tx-time] (xt/await-tx-time this tx-time nil))
-  (await-tx-time [this tx-time timeout]
+  (await-tx-time [_ tx-time timeout]
     (-> (api-request-sync (str url "/_xtdb/await-tx-time" )
                           {:http-opts {:method :get
                                        :query-params {:tx-time (xio/format-rfc3339-date tx-time)
@@ -297,50 +296,51 @@
                            :->jwt-token ->jwt-token})
         (get ::xt/tx-time)))
 
-  (listen [this event-opts f]
+  (listen [_ _event-opts _f]
     (throw (UnsupportedOperationException. "'listen' not supported on remote clients")))
 
-  (latest-completed-tx [this]
+  (latest-completed-tx [_]
     (api-request-sync (str url "/_xtdb/latest-completed-tx")
                       {:http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
 
-
-
-  (latest-submitted-tx [this]
+  (latest-submitted-tx [_]
     (api-request-sync (str url "/_xtdb/latest-submitted-tx")
                       {:http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
 
-  (attribute-stats [this]
+  (attribute-stats [_]
     (api-request-sync (str url "/_xtdb/attribute-stats")
                       {:http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
 
-  (active-queries [this]
+  (active-queries [_]
     (->> (api-request-sync (str url "/_xtdb/active-queries")
                            {:http-opts {:method :get}
                             :->jwt-token ->jwt-token})
          (map qs/->QueryState)))
 
-  (recent-queries [this]
+  (recent-queries [_]
     (->> (api-request-sync (str url "/_xtdb/recent-queries")
                            {:http-opts {:method :get}
                             :->jwt-token ->jwt-token})
          (map qs/->QueryState)))
 
-  (slowest-queries [this]
+  (slowest-queries [_]
     (->> (api-request-sync (str url "/_xtdb/slowest-queries")
                            {:http-opts {:method :get}
                             :->jwt-token ->jwt-token})
          (map qs/->QueryState)))
 
   xt/PXtdbSubmitClient
-  (submit-tx [this tx-ops]
+  (submit-tx [this tx-ops] (xt/submit-tx this tx-ops {}))
+
+  (submit-tx [_ tx-ops opts]
     (let [tx-ops (xt/conform-tx-ops tx-ops)]
       (try
         (api-request-sync (str url "/_xtdb/submit-tx")
-                          {:body {:tx-ops tx-ops}
+                          {:body {:tx-ops tx-ops
+                                  ::xt/submit-tx-opts opts}
                            :->jwt-token ->jwt-token})
         (catch Exception e
           (let [data (ex-data e)]
@@ -349,7 +349,7 @@
               (throw (UnsupportedOperationException. "read-only HTTP node")))
             (throw e))))))
 
-  (open-tx-log ^xtdb.api.ICursor [this after-tx-id with-ops?]
+  (open-tx-log ^xtdb.api.ICursor [_ after-tx-id with-ops?]
     (let [with-ops? (boolean with-ops?)
           in (api-request-sync (str url "/_xtdb/tx-log")
                                {:http-opts {:method :get

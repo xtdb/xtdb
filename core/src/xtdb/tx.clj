@@ -11,7 +11,8 @@
             [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx.conform :as txc]
-            [xtdb.tx.event :as txe])
+            [xtdb.tx.event :as txe]
+            [xtdb.tx :as tx])
   (:import clojure.lang.MapEntry
            xtdb.codec.EntityTx
            java.io.Closeable
@@ -479,10 +480,31 @@
                               latest-xtdb-tx-id
                               (fn [_fut tx]
                                 (try
-                                  (let [in-flight-tx (db/begin-tx tx-indexer
+                                  (let [[tx committing?] (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
+                                                           (let [tx-log-time (::xt/tx-time tx)
+                                                                 {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
+                                                             (cond
+                                                               (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
+                                                               (do
+                                                                 (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
+                                                                           (pr-str {:latest-completed-tx lctx
+                                                                                    :new-tx (dissoc tx ::txe/tx-events)}))
+                                                                 [tx false])
+
+                                                               (neg? (compare tx-log-time tx-time-override))
+                                                               (do
+                                                                 (log/warn "overridden tx-time after tx-log clock time, aborting tx"
+                                                                           (pr-str {:tx-log-time tx-log-time
+                                                                                    :new-tx (dissoc tx ::txe/tx-events)}))
+                                                                 [tx false])
+
+                                                               :else [(assoc tx ::xt/tx-time tx-time-override) true]))
+
+                                                           [tx true])
+                                        in-flight-tx (db/begin-tx tx-indexer
                                                                   (select-keys tx [::xt/tx-time ::xt/tx-id])
                                                                   nil)
-                                        committing? (db/index-tx-events in-flight-tx (::txe/tx-events tx))]
+                                        committing? (and committing? (db/index-tx-events in-flight-tx (::txe/tx-events tx)))]
                                     (process-tx-f in-flight-tx (assoc tx :committing? committing?))
 
                                     (if committing?

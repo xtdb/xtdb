@@ -21,7 +21,8 @@
                 (let [result (iterator-seq tx-log-iterator)]
                   (t/is (not (realized? result)))
                   (t/is (= [(assoc submitted-tx
-                                   :xtdb.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"})]])]
+                                   :xtdb.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"})]]
+                                   ::xt/submit-tx-opts {})]
                            result))
                   (t/is (realized? result))))
               submitted-tx))]

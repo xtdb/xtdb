@@ -1,13 +1,48 @@
 (ns xtdb.api.java
   (:refer-clojure :exclude [sync])
-  (:require [xtdb.api :as xt])
-  (:import clojure.lang.IDeref
-           [xtdb.api XtdbDocument DBBasis IXtdb IXtdbSubmitClient IXtdbDatasource TransactionInstant]
-           xtdb.api.tx.Transaction
-           java.time.Duration
-           [java.util Date List Map]
-           java.util.concurrent.CompletableFuture
-           java.util.function.Supplier))
+  (:require [xtdb.api :as xt]
+            [xtdb.tx.event :as txe])
+  (:import (clojure.lang IDeref)
+           (java.time Duration)
+           (java.util Date List Map)
+           (java.util.concurrent CompletableFuture)
+           (java.util.function Supplier)
+           (xtdb.api DBBasis IXtdb IXtdbDatasource IXtdbSubmitClient TransactionInstant XtdbDocument)
+           (xtdb.api.tx DeleteOperation EvictOperation InvokeFunctionOperation MatchOperation PutOperation Transaction TransactionOperation TransactionOperation$Visitor)))
+
+(def tx-op-edn-visitor
+  (reify TransactionOperation$Visitor
+    (visit [_ ^PutOperation op]
+      (let [start-vt (.getStartValidTime op)
+            end-vt (.getEndValidTime op)]
+        (cond-> [::xt/put (.toMap (.getDocument op))]
+          start-vt (conj start-vt)
+          end-vt (conj end-vt))))
+
+    (visit [_ ^DeleteOperation op]
+      (let [start-vt (.getStartValidTime op)
+            end-vt (.getEndValidTime op)]
+        (cond-> [::xt/delete (.getId op)]
+          start-vt (conj start-vt)
+          end-vt (conj end-vt))))
+
+    (visit [_ ^MatchOperation op]
+      (let [at-vt (.getAtValidTime op)]
+        (cond-> [::xt/match (.getId op) (some-> (.getDocument op) (.toMap))]
+          at-vt (conj at-vt))))
+
+    (visit [_ ^EvictOperation op]
+      [::xt/evict (.getId op)])
+
+    (visit [_ ^InvokeFunctionOperation op]
+      (into [::xt/fn (.getId op)] (.getArguments op)))))
+
+(defn- tx->edn [^Transaction tx]
+  {::txe/tx-events (->> (.getOperations tx)
+                        (mapv (fn [^TransactionOperation tx-op]
+                                (.accept tx-op tx-op-edn-visitor))))
+   ::xt/submit-tx-opts (->> {::xt/tx-time (.getTxTime tx)}
+                            (into {} (remove (comp nil? val))))})
 
 (defrecord JXtdbDatasource [^java.io.Closeable datasource]
   IXtdbDatasource
@@ -23,7 +58,7 @@
   (validTime [_] (xt/valid-time datasource))
   (transactionTime [_] (xt/transaction-time datasource))
   (dbBasis [_] (DBBasis/factory (xt/db-basis datasource)))
-  (^IXtdbDatasource withTx [_ ^Transaction tx] (->JXtdbDatasource (xt/with-tx datasource (.toVector tx))))
+  (^IXtdbDatasource withTx [_ ^Transaction tx] (->JXtdbDatasource (xt/with-tx datasource (::txe/tx-events (tx->edn tx)))))
   (^IXtdbDatasource withTx [_ ^List tx-ops] (->JXtdbDatasource (xt/with-tx datasource tx-ops)))
   (close [_] (.close datasource)))
 
@@ -47,7 +82,10 @@
   (attributeStats [_] (xt/attribute-stats node))
 
   (^Map submitTx [_ ^List tx] (xt/submit-tx node tx))
-  (^TransactionInstant submitTx [_ ^Transaction tx] (TransactionInstant/factory ^Map (xt/submit-tx node (.toVector tx))))
+
+  (^TransactionInstant submitTx [_ ^Transaction tx]
+   (let [{:keys [::txe/tx-events ::xt/submit-tx-opts]} (tx->edn tx)]
+     (TransactionInstant/factory ^Map (xt/submit-tx node tx-events submit-tx-opts))))
 
   (^boolean hasTxCommitted [_ ^Map transaction] (xt/tx-committed? node transaction))
   (^boolean hasTxCommitted [_ ^TransactionInstant transaction] (xt/tx-committed? node (.toMap transaction)))
@@ -69,7 +107,10 @@
 
 (defrecord JXtdbSubmitClient [^java.io.Closeable client]
   IXtdbSubmitClient
-  (^TransactionInstant submitTx [_ ^Transaction tx] (TransactionInstant/factory ^Map (xt/submit-tx client (.toVector tx))))
+  (^TransactionInstant submitTx [_ ^Transaction tx]
+   (let [{:keys [::txe/tx-events ::xt/submit-tx-opts]} (tx->edn tx)]
+     (TransactionInstant/factory ^Map (xt/submit-tx client tx-events submit-tx-opts))))
+
   (^Map submitTx [_ ^List tx] (xt/submit-tx client tx))
 
   (openTxLog [_ after-tx-id with-ops?] (xt/open-tx-log client after-tx-id with-ops?))
@@ -78,7 +119,8 @@
    (CompletableFuture/supplyAsync
     (reify Supplier
       (get [_]
-        (TransactionInstant/factory ^Map @(xt/submit-tx-async client (.toVector tx)))))))
+        (let [{:keys [::txe/tx-events ::xt/submit-tx-opts]} (tx->edn tx)]
+          (TransactionInstant/factory ^Map @(xt/submit-tx-async client tx-events submit-tx-opts)))))))
 
   (^IDeref submitTxAsync [_ ^List tx-ops] (xt/submit-tx-async client tx-ops))
 

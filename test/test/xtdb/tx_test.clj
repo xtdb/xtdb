@@ -542,11 +542,13 @@
         (t/is (not (realized? log)))
         (t/is (= [{::xt/tx-id tx1-id
                    ::xt/tx-time tx1-tx-time
-                   :xtdb.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc tx1-ivan) tx1-valid-time]]}
+                   :xtdb.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc tx1-ivan) tx1-valid-time]]
+                   ::xt/submit-tx-opts {}}
                   {::xt/tx-id tx2-id
                    ::xt/tx-time tx2-tx-time
                    :xtdb.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc tx2-ivan) tx2-valid-time]
-                                             [:crux.tx/put (c/new-id :petr) (c/hash-doc tx2-petr) tx2-valid-time]]}]
+                                             [:crux.tx/put (c/new-id :petr) (c/hash-doc tx2-petr) tx2-valid-time]]
+                   ::xt/submit-tx-opts {}}]
                  log))))))
 
 (t/deftest migrates-unhashed-tx-log-eids

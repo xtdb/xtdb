@@ -5,8 +5,8 @@ import xtdb.api.query.domain.XtdbDocumentSerde
 import xtdb.api.underware.BuilderContext
 import java.util.*
 
-class TransactionContext private constructor(): BuilderContext<Transaction> {
-    companion object: BuilderContext.Companion<Transaction, TransactionContext>(::TransactionContext)
+class TransactionContext private constructor() : BuilderContext<Transaction> {
+    companion object : BuilderContext.Companion<Transaction, TransactionContext>(::TransactionContext)
 
     private val builder = Transaction.builder()
 
@@ -38,18 +38,18 @@ class TransactionContext private constructor(): BuilderContext<Transaction> {
     infix fun <T> T.by(serde: XtdbDocumentSerde<T>) = serde.toDocument(this)
 
     fun put(document: XtdbDocument) = +PutOperation.create(document)
-    fun put(data: DocWithValidTime) = +data.run{PutOperation.create(document, validTime)}
-    fun put(data: DocWithValidTimes) = +data.run{PutOperation.create(document, validTime, endValidTime)}
+    fun put(data: DocWithValidTime) = +data.run { PutOperation.create(document, validTime) }
+    fun put(data: DocWithValidTimes) = +data.run { PutOperation.create(document, validTime, endValidTime) }
 
     fun delete(id: Any) = +DeleteOperation.create(id)
-    fun delete(data: IdWithValidTime) = +data.run{DeleteOperation.create(id, validTime)}
-    fun delete(data: IdWithValidTimes) = +data.run{DeleteOperation.create(id, validTime, endValidTime)}
+    fun delete(data: IdWithValidTime) = +data.run { DeleteOperation.create(id, validTime) }
+    fun delete(data: IdWithValidTimes) = +data.run { DeleteOperation.create(id, validTime, endValidTime) }
 
     fun match(document: XtdbDocument) = +MatchOperation.create(document)
-    fun match(data: DocAtValidTime) = +data.run{MatchOperation.create(document, validTime)}
+    fun match(data: DocAtValidTime) = +data.run { MatchOperation.create(document, validTime) }
 
     fun notExists(id: Any) = +MatchOperation.create(id)
-    fun notExists(data: IdAtValidTime) = +data.run{MatchOperation.create(id, validTime)}
+    fun notExists(data: IdAtValidTime) = +data.run { MatchOperation.create(id, validTime) }
 
     fun evict(id: Any) = +EvictOperation.create(id)
 
@@ -59,10 +59,10 @@ class TransactionContext private constructor(): BuilderContext<Transaction> {
         infix fun Any.until(endValidTime: Date) = IdWithEndValidTime(this, endValidTime)
 
         fun put(document: XtdbDocument) = +PutOperation.create(document, validTime)
-        fun put(data: DocWithEndValidTime) = +data.run{PutOperation.create(document, validTime, endValidTime)}
+        fun put(data: DocWithEndValidTime) = +data.run { PutOperation.create(document, validTime, endValidTime) }
 
         fun delete(id: Any) = +DeleteOperation.create(id, validTime)
-        fun delete(data: IdWithEndValidTime) = +data.run{DeleteOperation.create(id, validTime, endValidTime)}
+        fun delete(data: IdWithEndValidTime) = +data.run { DeleteOperation.create(id, validTime, endValidTime) }
     }
 
     fun from(validTime: Date, block: FromValidTimeContext.() -> Unit) = FromValidTimeContext(validTime).apply(block)
@@ -74,6 +74,10 @@ class TransactionContext private constructor(): BuilderContext<Transaction> {
 
     fun between(validTime: Date, endValidTime: Date, block: BetweenTimesContext.() -> Unit) =
         BetweenTimesContext(validTime, endValidTime).apply(block)
+
+    fun setTxTime(txTime: Date) {
+        builder.withTxTime(txTime)
+    }
 
     override fun build(): Transaction = builder.build()
 }

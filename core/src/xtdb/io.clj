@@ -5,22 +5,21 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
-            [clojure.set :as set])
-  (:import clojure.lang.MapEntry
-           xtdb.api.ICursor
-           [java.io DataInputStream DataOutputStream File IOException Reader]
-           java.lang.AutoCloseable
-           [java.lang.management BufferPoolMXBean ManagementFactory]
-           [java.lang.ref PhantomReference ReferenceQueue]
-           java.net.ServerSocket
-           [java.nio.file Files FileVisitResult SimpleFileVisitor]
-           java.nio.file.attribute.FileAttribute
-           java.text.SimpleDateFormat
-           java.time.Duration
-           [java.util Collections Comparator Date IdentityHashMap Iterator Map PriorityQueue Properties]
-           java.util.concurrent.locks.StampedLock
-           java.util.concurrent.ThreadFactory))
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+  (:import (clojure.lang MapEntry)
+           (java.io DataInputStream DataOutputStream File IOException Reader)
+           (java.lang AutoCloseable)
+           (java.lang.management BufferPoolMXBean ManagementFactory)
+           (java.lang.ref PhantomReference ReferenceQueue)
+           (java.net ServerSocket)
+           (java.nio.file Files FileVisitResult SimpleFileVisitor)
+           (java.nio.file.attribute FileAttribute)
+           (java.text SimpleDateFormat)
+           (java.time Duration)
+           (java.util Collections Comparator Date IdentityHashMap Iterator Map PriorityQueue Properties)
+           (java.util.concurrent ThreadFactory)
+           (java.util.concurrent.locks StampedLock)
+           (xtdb.api ICursor)))
 
 (s/def ::port (s/int-in 1 65536))
 
@@ -347,3 +346,10 @@
    (->> m
         (into {} (map (fn [v]
                         (MapEntry/create (key v) (f (val v)))))))))
+
+(defn conform-tx-log-entry [tx entry]
+  (into tx
+        (cond
+          (vector? entry) {:xtdb.tx.event/tx-events entry}
+          (map? entry) entry
+          :else (throw (IllegalStateException. (format "unexpected value on tx-log: '%s'" (pr-str entry)))))))

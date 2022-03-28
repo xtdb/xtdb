@@ -1,18 +1,19 @@
 package xtdb.api;
 
 import clojure.lang.Keyword;
+import org.junit.*;
+import xtdb.api.tx.Transaction;
 
-import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
-import xtdb.api.tx.*;
-
-import org.junit.*;
-
-import static xtdb.api.TestUtils.*;
 import static org.junit.Assert.*;
+import static xtdb.api.TestUtils.*;
 
 public class TransactionTest {
     private static XtdbDocument personDocument(String id, String name, String lastName, long version) {
@@ -93,7 +94,7 @@ public class TransactionTest {
 
     @Test
     public void putDifferentVersions() {
-        submitTx (false,  tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1));
             tx.put(pablo(1), time(3));
         });
@@ -108,7 +109,7 @@ public class TransactionTest {
 
     @Test
     public void deleteNow() {
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1));
             tx.delete(pabloId);
         });
@@ -121,7 +122,7 @@ public class TransactionTest {
 
     @Test
     public void deleteAtSpecificTime() {
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1));
             tx.delete(pabloId, time(3));
         });
@@ -136,7 +137,7 @@ public class TransactionTest {
 
     @Test
     public void deleteWithEndTime() {
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1));
             tx.delete(pabloId, time(3), time(5));
         });
@@ -153,7 +154,7 @@ public class TransactionTest {
 
     @Test
     public void deleteWithSubsequentChange() {
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1));
             tx.put(pablo(1), time(5));
         });
@@ -199,13 +200,13 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulMatchNow() {
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0));
         });
 
         assertPabloVersion(0);
 
-        submitTx (true, tx -> {
+        submitTx(true, tx -> {
             tx.match(pablo(2));
             tx.put(pablo(3));
         });
@@ -215,7 +216,7 @@ public class TransactionTest {
 
     @Test
     public void successfulMatchWithValidTime() {
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1), time(3));
         });
 
@@ -226,7 +227,7 @@ public class TransactionTest {
         assertNoPablo(4);
         assertNoPablo();
 
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.match(pablo(0), time(2));
             tx.put(pablo(1), time(3));
         });
@@ -241,7 +242,7 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulMatchWithValidTime() {
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1), time(3));
         });
 
@@ -252,7 +253,7 @@ public class TransactionTest {
         assertNoPablo(4);
         assertNoPablo();
 
-        submitTx (true, tx -> {
+        submitTx(true, tx -> {
             tx.match(pablo(0), time(4));
             tx.put(pablo(1), time(3));
         });
@@ -269,7 +270,7 @@ public class TransactionTest {
     public void successfulEmptyMatch() {
         assertNoPablo();
 
-        submitTx (false,  tx -> {
+        submitTx(false, tx -> {
             tx.matchNotExists(pabloId);
             tx.put(pablo(0));
         });
@@ -279,13 +280,13 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulEmptyMatch() {
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0));
         });
 
         assertPabloVersion(0);
 
-        submitTx (true, tx -> {
+        submitTx(true, tx -> {
             tx.matchNotExists(pabloId);
             tx.put(pablo(0));
         });
@@ -295,7 +296,7 @@ public class TransactionTest {
 
     @Test
     public void successfulEmptyMatchAtTime() {
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1), time(3));
         });
 
@@ -306,7 +307,7 @@ public class TransactionTest {
         assertNoPablo(4);
         assertNoPablo();
 
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.matchNotExists(pabloId, time(3));
             tx.put(pablo(1), time(3));
         });
@@ -321,7 +322,7 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulEmptyMatchAtTime() {
-        submitTx (false, tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1), time(3));
         });
 
@@ -332,7 +333,7 @@ public class TransactionTest {
         assertNoPablo(4);
         assertNoPablo();
 
-        submitTx (true, tx -> {
+        submitTx(true, tx -> {
             tx.matchNotExists(pabloId, time(2));
             tx.put(pablo(1), time(3));
         });
@@ -374,7 +375,7 @@ public class TransactionTest {
 
     @Test
     public void evictTest() {
-        submitTx (false,  tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1));
             tx.put(pablo(1), time(3));
         });
@@ -386,8 +387,8 @@ public class TransactionTest {
         assertPabloVersion(1, 4);
         assertPabloVersion(1);
 
-        submitTx (false, tx -> {
-           tx.evict(pabloId);
+        submitTx(false, tx -> {
+            tx.evict(pabloId);
         });
 
         assertNoPablo(0);
@@ -435,15 +436,29 @@ public class TransactionTest {
     }
 
     @Test
-    @SuppressWarnings({"unchecked", "deprecation"})
-    public void testLegacyMethods() {
-        Map<Keyword, ?> submitted = node.submitTx((List<List<?>>) Transaction.builder().put(pablo(0)).build().toVector());
+    public void testOverrideTxTime() {
+        submitTx(false, tx -> {
+            tx.withTxTime(Date.from(ZonedDateTime.parse("2020-01-01T00:00:00Z").toInstant()));
+            tx.put(pablo(0));
+        });
 
-        node.awaitTx(submitted, Duration.ofSeconds(1));
+        submitTx(true, tx -> {
+            tx.withTxTime(Date.from(ZonedDateTime.parse("2019-01-01T00:00:00Z").toInstant()));
+            tx.put(pablo(1));
+        });
 
-        assertTrue(node.hasTxCommitted(submitted));
+        submitTx(true, tx -> {
+            tx.withTxTime(Date.from(ZonedDateTime.parse("3000-01-01T00:00:00Z").toInstant()));
+            tx.put(pablo(2));
+        });
 
-        assertEquals(pablo(0), node.db(submitted).entity(pabloId));
+        assertPabloVersion(0);
+
+        submitTx(false, tx -> {
+            tx.put(pablo(3));
+        });
+
+        assertPabloVersion(3);
     }
 
     private void submitTx(boolean shouldAbort, Consumer<Transaction.Builder> f) {
@@ -489,8 +504,7 @@ public class TransactionTest {
         XtdbDocument fromDb;
         if (validTime == null) {
             fromDb = node.db().entity(pabloId);
-        }
-        else {
+        } else {
             fromDb = node.db(validTime).entity(pabloId);
         }
 
@@ -521,8 +535,7 @@ public class TransactionTest {
         Object result;
         if (validTime == null) {
             result = node.db().entity(pabloId);
-        }
-        else {
+        } else {
             result = node.db(validTime).entity(pabloId);
         }
 
