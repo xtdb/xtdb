@@ -500,7 +500,7 @@
               [:scan [p_type p_partkey]]]]]]]])
      (pt/plan-sql (slurp-tpch-query 14)))))
 
-(t/deftest test-q14-promotion-effect
+(t/deftest test-q15-top-supplier
   (t/is
     (=
      (w/postwalk-replace
@@ -543,5 +543,316 @@
                    l_discount
                    {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}]]]]]]]]]]])
      (pt/plan-sql (slurp-tpch-query 15)))))
+
+(t/deftest test-q16-part-supplier-relationship
+  (t/is
+    (=
+     '[:rename
+       {x4 p_brand, x5 p_type, x6 p_size, x24 supplier_cnt}
+       [:order-by
+        [{x24 :desc} {x4 :asc} {x5 :asc} {x6 :asc}]
+        [:group-by
+         [x4 x5 x6 {x24 (count x1)}]
+         [:anti-join
+          {x1 x16}
+          [:semi-join
+           {x6 x9}
+           [:join
+            {x2 x7}
+            [:rename {ps_suppkey x1, ps_partkey x2}
+             [:scan [ps_suppkey ps_partkey]]]
+            [:rename {p_brand x4, p_type x5, p_size x6, p_partkey x7}
+             [:scan [{p_brand (<> p_brand "Brand#45")} {p_type (not (like p_type "MEDIUM POLISHED%"))} p_size p_partkey]]]]
+           [:table [{x9 49} {x9 14} {x9 23} {x9 45} {x9 19} {x9 3} {x9 36} {x9 9}]]]
+          [:rename {s_suppkey x16, s_comment x17}
+           [:scan [s_suppkey {s_comment (like s_comment "%Customer%Complaints%")}]]]]]]]
+     (pt/plan-sql (slurp-tpch-query 16)))))
+
+(t/deftest test-q17-small-quantity-order-revenue ;;TODO looks quite different to hand written plan, needs further inspection
+  (t/is
+    (=
+     '[:rename
+       {x19 avg_yearly}
+       [:project
+        [{x19 (/ x17 7.0)}]
+        [:group-by
+         [{x17 (sum x1)}]
+         [:select
+          (< x3 x14)
+          [:map
+           [{x14 (* 0.2 x12)}]
+           [:group-by
+            [x1 x2 x3 x5 x6 x7 $row_number$ {x12 (avg x9)}]
+            [:left-outer-join
+             {x5 x10}
+             [:map
+              [{$row_number$ (row-number)}]
+              [:join
+               {x2 x5}
+               [:rename {l_extendedprice x1, l_partkey x2, l_quantity x3}
+                [:scan [l_extendedprice l_partkey l_quantity]]]
+               [:rename {p_partkey x5, p_brand x6, p_container x7}
+                [:scan [p_partkey {p_brand (= p_brand "Brand#23")} {p_container (= p_container "MED BOX")}]]]]]
+             [:rename {l_quantity x9, l_partkey x10}
+              [:scan [l_quantity l_partkey]]]]]]]]]]
+     (pt/plan-sql (slurp-tpch-query 17)))))
+
+(t/deftest test-q18-large-volume-customer
+  (t/is
+    (=
+     '[:rename
+       {x1 c_name, x2 c_custkey, x4 o_orderkey, x5 o_orderdate, x6 o_totalprice, x22 $column_6$}
+       [:top
+        {:limit 100}
+        [:order-by
+         [{x6 :desc} {x5 :asc}]
+         [:group-by
+          [x1 x2 x4 x5 x6 {x22 (sum x9)}]
+          [:semi-join
+           {x4 x12}
+           [:join
+            {x4 x10}
+            [:join {x2 x7}
+             [:rename {c_name x1, c_custkey x2}
+              [:scan [c_name c_custkey]]]
+             [:rename {o_orderkey x4, o_orderdate x5, o_totalprice x6, o_custkey x7}
+              [:scan [o_orderkey o_orderdate o_totalprice o_custkey]]]]
+            [:rename {l_quantity x9, l_orderkey x10}
+             [:scan [l_quantity l_orderkey]]]]
+           [:select (> x15 300)
+            [:group-by [x12 {x15 (sum x13)}]
+             [:rename {l_orderkey x12, l_quantity x13}
+              [:scan [l_orderkey l_quantity]]]]]]]]]]
+     (pt/plan-sql (slurp-tpch-query 18)))))
+
+(t/deftest test-q19-discounted-revenue ;;TODO check if AND can take multi args, also looks like we failed to deccorilate this
+  (t/is
+    (=
+     '[:rename
+       {x56 revenue}
+       [:group-by
+        [{x56 (sum x55)}]
+        [:map
+         [{x55 (* x1 (- 1 x2))}]
+         [:select
+          (or
+            (or
+              (and (and (and (and (and (and (and (= x8 x3) (= x9 "Brand#12")) x15) (>= x4 1)) (<= x4 (+ 1 10))) (between x11 1 5)) x22) (= x6 "DELIVER IN PERSON"))
+              (and (and (and (and (and (and (and (= x8 x3) (= x9 "Brand#23")) x29) (>= x4 10)) (<= x4 (+ 10 10))) (between x11 1 10)) x36) (= x6 "DELIVER IN PERSON")))
+            (and (and (and (and (and (and (and (= x8 x3) (= x9 "Brand#34")) x43) (>= x4 20)) (<= x4 (+ 20 10))) (between x11 1 15)) x50) (= x6 "DELIVER IN PERSON")))
+          [:apply
+           :cross-join
+           {x5 ?x53}
+           #{x50}
+           [:apply
+            :cross-join
+            {x10 ?x46}
+            #{x43}
+            [:apply
+             :cross-join
+             {x5 ?x39}
+             #{x36}
+             [:apply
+              :cross-join
+              {x10 ?x32}
+              #{x29}
+              [:apply
+               :cross-join
+               {x5 ?x25}
+               #{x22}
+               [:apply
+                :cross-join
+                {x10 ?x18}
+                #{x15}
+                [:cross-join
+                 [:rename {l_extendedprice x1, l_discount x2, l_partkey x3, l_quantity x4, l_shipmode x5, l_shipinstruct x6}
+                  [:scan [l_extendedprice l_discount l_partkey l_quantity l_shipmode l_shipinstruct]]]
+                 [:rename {p_partkey x8, p_brand x9, p_container x10, p_size x11}
+                  [:scan [p_partkey p_brand p_container p_size]]]]
+                [:top {:limit 1}
+                 [:union-all
+                  [:project [{x15 true}]
+                   [:select (= ?x18 x13)
+                    [:table [{x13 "SM CASE"} {x13 "SM BOX"} {x13 "SM PACK"} {x13 "SM PKG"}]]]]
+                  [:table [{x15 false}]]]]]
+               [:top {:limit 1}
+                [:union-all
+                 [:project [{x22 true}]
+                  [:select (= ?x25 x20)
+                   [:table [{x20 "AIR"} {x20 "AIR REG"}]]]]
+                 [:table [{x22 false}]]]]]
+              [:top {:limit 1}
+               [:union-all
+                [:project [{x29 true}]
+                 [:select (= ?x32 x27)
+                  [:table [{x27 "MED BAG"} {x27 "MED BOX"} {x27 "MED PKG"} {x27 "MED PACK"}]]]]
+                [:table [{x29 false}]]]]]
+             [:top {:limit 1}
+              [:union-all
+               [:project [{x36 true}]
+                [:select (= ?x39 x34)
+                 [:table [{x34 "AIR"} {x34 "AIR REG"}]]]]
+               [:table [{x36 false}]]]]]
+            [:top {:limit 1}
+             [:union-all
+              [:project [{x43 true}]
+               [:select (= ?x46 x41)
+                [:table [{x41 "LG CASE"} {x41 "LG BOX"} {x41 "LG PACK"} {x41 "LG PKG"}]]]]
+              [:table [{x43 false}]]]]]
+           [:top {:limit 1}
+            [:union-all
+             [:project [{x50 true}]
+              [:select (= ?x53 x48)
+               [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
+             [:table [{x50 false}]]]]]]]]]
+     (pt/plan-sql (slurp-tpch-query 19)))))
+
+(t/deftest test-q20-potential-part-promotion ;;TODO failed to deccorilate
+  (t/is
+    (=
+     (w/postwalk-replace
+       {'?date (LocalDate/parse "1994-01-01")
+        '?period (Period/parse "P1Y")}
+       '[:rename
+         {x1 s_name, x2 s_address}
+         [:project
+          [x1 x2]
+          [:order-by
+           [{x1 :asc}]
+           [:semi-join
+            {x3 x9}
+            [:join {x4 x6}
+             [:rename {s_name x1, s_address x2, s_suppkey x3, s_nationkey x4}
+              [:scan [s_name s_address s_suppkey s_nationkey]]]
+             [:rename {n_nationkey x6, n_name x7}
+              [:scan [n_nationkey {n_name (= n_name "CANADA")}]]]]
+            [:select
+             (> x11 x28)
+             [:map
+              [{x28 (* 0.5 x26)}]
+              [:group-by
+               [x9 x10 x11 x16 $row_number$ {x26 (sum x21)}]
+               [:select
+                x16
+                [:select
+                 (= x23 x9)
+                 [:left-outer-join
+                  {x10 x22}
+                  [:map
+                   [{$row_number$ (row-number)}]
+                   [:apply
+                    :cross-join
+                    {x10 ?x19}
+                    #{x16}
+                    [:rename {ps_suppkey x9, ps_partkey x10, ps_availqty x11}
+                     [:scan [ps_suppkey ps_partkey ps_availqty]]]
+                    [:top {:limit 1}
+                     [:union-all
+                      [:project [{x16 true}]
+                       [:rename {p_partkey x13, p_name x14}
+                        [:scan [{p_partkey (= ?x19 p_partkey)} {p_name (like p_name "forest%")}]]]]
+                      [:table [{x16 false}]]]]]]
+                  [:rename
+                   {l_quantity x21, l_partkey x22, l_suppkey x23, l_shipdate x24}
+                   [:scan
+                    [l_quantity l_partkey l_suppkey {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}]]]]]]]]]]]]])
+     (pt/plan-sql (slurp-tpch-query 20)))))
+
+(t/deftest test-q21-suppliers-who-kept-orders-waiting ;;TODO failed to deccorilate
+  (t/is
+    (=
+     '[:rename
+       {x1 s_name, x37 numwait}
+       [:top
+        {:limit 100}
+        [:order-by
+         [{x37 :desc} {x1 :asc}]
+         [:group-by
+          [x1 {x37 (count x36)}]
+          [:map
+           [{x36 1}]
+           [:select
+            (= x14 "SAUDI ARABIA")
+            [:select
+             (= x3 x13)
+             [:select
+              (= x25 x6)
+              [:apply
+               :anti-join
+               {x5 ?x34}
+               #{}
+               [:select
+                (= x16 x6)
+                [:apply
+                 :semi-join
+                 {x5 ?x23}
+                 #{}
+                 [:cross-join
+                  [:join
+                   {x6 x10}
+                   [:join
+                    {x2 x5}
+                    [:rename {s_name x1, s_suppkey x2, s_nationkey x3}
+                     [:scan [s_name s_suppkey s_nationkey]]]
+                    [:rename {l_suppkey x5, l_orderkey x6, l_receiptdate x7, l_commitdate x8}
+                     [:select (> l_receiptdate l_commitdate)
+                      [:scan [l_suppkey l_orderkey l_receiptdate l_commitdate]]]]]
+                   [:rename {o_orderkey x10, o_orderstatus x11}
+                    [:scan [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]]
+                  [:rename {n_nationkey x13, n_name x14}
+                   [:scan [n_nationkey n_name]]]]
+                 [:rename {l_orderkey x16, l_suppkey x17}
+                  [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x23)}]]]]]
+               [:rename {l_orderkey x25, l_suppkey x26, l_receiptdate x27, l_commitdate x28}
+                [:select (> l_receiptdate l_commitdate)
+                 [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x34)} l_receiptdate l_commitdate]]]]]]]]]]]]]
+     (pt/plan-sql (slurp-tpch-query 21)))))
+
+(t/deftest test-q22-global-sales-opportunity ;;TODO failed to deccorilate
+  (t/is
+    (=
+     '[:rename
+       {x31 cntrycode, x33 numcust, x34 totacctbal}
+       [:order-by
+        [{x31 :asc}]
+        [:group-by
+         [x31 {x33 (count x32)} {x34 (sum x2)}]
+         [:map
+          [{x32 1}]
+          [:project
+           [{x31 (substring x1 1 2)} x2]
+           [:select
+            (> x2 x15)
+            [:anti-join
+             {x3 x24}
+             [:cross-join
+              [:select
+               x7
+               [:apply
+                :cross-join
+                {x1 ?x10}
+                #{x7}
+                [:rename {c_phone x1, c_acctbal x2, c_custkey x3}
+                 [:scan [c_phone c_acctbal c_custkey]]]
+                [:top {:limit 1}
+                 [:union-all
+                  [:project [{x7 true}]
+                   [:select (= (substring ?x10 1 2) x5)
+                    [:table [{x5 "13"} {x5 "31"} {x5 "23"} {x5 "29"} {x5 "30"} {x5 "18"} {x5 "17"}]]]]
+                  [:table [{x7 false}]]]]]]
+              [:max-1-row
+               [:group-by
+                [{x22 (avg x12)}]
+                [:select (= (substring x13 1 2) x15)
+                 [:apply
+                  :semi-join
+                  {}
+                  #{}
+                  [:rename {c_acctbal x12, c_phone x13}
+                   [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
+                  [:table [{x15 "13"} {x15 "31"} {x15 "23"} {x15 "29"} {x15 "30"} {x15 "18"} {x15 "17"}]]]]]]]
+             [:rename {o_custkey x24}
+              [:scan [o_custkey]]]]]]]]]]
+     (pt/plan-sql (slurp-tpch-query 22)))))
 
 
