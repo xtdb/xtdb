@@ -23,7 +23,7 @@
    (=
     (w/postwalk-replace
       {'?date (LocalDate/parse "1998-12-01")
-       '?delta (Period/parse "P90D")}
+       '?period (Period/parse "P90D")}
       '[:rename
         {x1 l_returnflag, x13 sum_base_price, x2 l_linestatus, x12 sum_qty, x14 sum_disc_price, x17 avg_price, x15 sum_charge, x16 avg_qty, x18 avg_disc, x19 count_order}
         [:order-by
@@ -34,7 +34,7 @@
            [{x9 (* x4 (- 1 x5))} {x10 (* (* x4 (- 1 x5)) (+ 1 x6))} {x11 1}]
            [:rename
             {l_returnflag x1, l_linestatus x2, l_quantity x3, l_extendedprice x4, l_discount x5, l_tax x6, l_shipdate x7}
-            [:scan [l_returnflag l_linestatus l_quantity l_extendedprice l_discount l_tax {l_shipdate (<= l_shipdate (- ?date ?delta))}]]]]]]])
+            [:scan [l_returnflag l_linestatus l_quantity l_extendedprice l_discount l_tax {l_shipdate (<= l_shipdate (- ?date ?period))}]]]]]]])
     (pt/plan-sql (slurp-tpch-query 1)))))
 
 (t/deftest test-q2-minimum-cost-supplier
@@ -224,7 +224,7 @@
           [:group-by
            [x16 x19 x22 {x24 (sum x23)}]
            [:project
-            [x16 x19 {x22 (extract "YEAR" x4)} {x23 (* x5 (- 1 x6))}] ;;TODO extract
+            [x16 x19 {x22 (extract "YEAR" x4)} {x23 (* x5 (- 1 x6))}]
             [:select
              (or (and (= x16 "FRANCE") (= x19 "GERMANY")) (and (= x16 "GERMANY") (= x19 "FRANCE")))
              [:join
@@ -246,4 +246,302 @@
                [:rename {n_name x16, n_nationkey x17} [:scan [n_name n_nationkey]]]]
               [:rename {n_name x19, n_nationkey x20} [:scan [n_name n_nationkey]]]]]]]]])
      (pt/plan-sql (slurp-tpch-query 7)))))
+
+(t/deftest test-q8-national-market-share
+  (t/is
+    (=
+     (w/postwalk-replace
+       {'?date (LocalDate/parse "1995-01-01")
+        '?date2  (LocalDate/parse "1996-12-31")}
+       '[:rename
+         {x29 o_year, x35 mkt_share}
+         [:order-by
+          [{x29 :asc}]
+          [:project
+           [x29 {x35 (/ x32 x33)}]
+           [:group-by
+            [x29 {x32 (sum x31)} {x33 (sum x30)}]
+            [:map
+             [{x31 (if (= x23 "BRAZIL") x30 0)}]
+             [:project
+              [{x29 (extract "YEAR" x13)} {x30 (* x7 (- 1 x8))} x23]
+              [:join
+               {x21 x26}
+               [:join
+                {x5 x24}
+                [:join
+                 {x18 x20}
+                 [:join
+                  {x15 x17}
+                  [:join
+                   {x11 x14}
+                   [:select
+                    (= x2 "ECONOMY ANODIZED STEEL")
+                    [:select
+                     (= x4 x10)
+                     [:join
+                      {x1 x9}
+                      [:cross-join
+                       [:rename {p_partkey x1, p_type x2}
+                        [:scan [p_partkey p_type]]]
+                       [:rename {s_suppkey x4, s_nationkey x5}
+                        [:scan [s_suppkey s_nationkey]]]]
+                      [:rename {l_extendedprice x7, l_discount x8, l_partkey x9, l_suppkey x10, l_orderkey x11}
+                       [:scan [l_extendedprice l_discount l_partkey l_suppkey l_orderkey]]]]]]
+                   [:rename {o_orderdate x13, o_orderkey x14, o_custkey x15}
+                    [:scan [{o_orderdate (between o_orderdate ?date ?date2)} o_orderkey o_custkey]]]]
+                  [:rename {c_custkey x17, c_nationkey x18}
+                   [:scan [c_custkey c_nationkey]]]]
+                 [:rename {n_nationkey x20, n_regionkey x21}
+                  [:scan [n_nationkey n_regionkey]]]]
+                [:rename {n_name x23, n_nationkey x24}
+                 [:scan [n_name n_nationkey]]]]
+               [:rename {r_regionkey x26, r_name x27}
+              [:scan [r_regionkey {r_name (= r_name "AMERICA")}]]]]]]]]]])
+     (pt/plan-sql (slurp-tpch-query 8)))))
+
+(t/deftest test-q9-product-type-profit-measure
+  (t/is
+    (=
+     '[:rename
+       {x21 nation, x24 o_year, x26 sum_profit}
+       [:order-by
+        [{x21 :asc} {x24 :desc}]
+        [:group-by
+         [x21 x24 {x26 (sum x25)}]
+         [:project
+          [x21 {x24 (extract "YEAR" x18)} {x25 (- (* x7 (- 1 x8)) (* x14 x9))}]
+          [:join
+           {x5 x22}
+           [:join
+            {x12 x19}
+            [:select
+             (like x2 "%green%")
+             [:select
+              (= x1 x11)
+              [:select
+               (= x16 x11)
+               [:join
+                {x10 x15}
+                [:join
+                 {x4 x10}
+                 [:cross-join ;;TODO crossjoin here, probably could be an equi-join with different join order
+                  [:rename {p_partkey x1, p_name x2}
+                   [:scan [p_partkey p_name]]]
+                  [:rename {s_suppkey x4, s_nationkey x5}
+                   [:scan [s_suppkey s_nationkey]]]]
+                 [:rename {l_extendedprice x7, l_discount x8, l_quantity x9, l_suppkey x10, l_partkey x11, l_orderkey x12}
+                  [:scan [l_extendedprice l_discount l_quantity l_suppkey l_partkey l_orderkey]]]]
+                [:rename {ps_supplycost x14, ps_suppkey x15, ps_partkey x16}
+                 [:scan [ps_supplycost ps_suppkey ps_partkey]]]]]]]
+            [:rename {o_orderdate x18, o_orderkey x19}
+             [:scan [o_orderdate o_orderkey]]]]
+           [:rename {n_name x21, n_nationkey x22}
+            [:scan [n_name n_nationkey]]]]]]]]
+     (pt/plan-sql (slurp-tpch-query 9)))))
+
+(t/deftest test-q10-returned-item-reporting
+  (t/is
+    (=
+     (w/postwalk-replace
+       {'?date (LocalDate/parse "1993-10-01")
+        '?period (Period/parse "P3M")}
+       '[:rename
+         {x1 c_custkey, x2 c_name, x22 revenue, x3 c_acctbal, x18 n_name, x4 c_address, x5 c_phone, x6 c_comment}
+         [:project
+          [x1 x2 x22 x3 x18 x4 x5 x6]
+          [:top
+           {:limit 20}
+           [:order-by
+            [{x22 :desc}]
+            [:group-by
+             [x1 x2 x3 x18 x4 x5 x6 {x22 (sum x21)}]
+             [:map
+              [{x21 (* x13 (- 1 x14))}]
+              [:join
+               {x7 x19}
+               [:join
+                {x10 x15}
+                [:join
+                 {x1 x9}
+                 [:rename {c_custkey x1, c_name x2, c_acctbal x3, c_address x4, c_phone x5, c_comment x6, c_nationkey x7}
+                  [:scan [c_custkey c_name c_acctbal c_address c_phone c_comment c_nationkey]]]
+                 [:rename
+                  {o_custkey x9, o_orderkey x10, o_orderdate x11}
+                  [:scan [o_custkey o_orderkey {o_orderdate (and (< o_orderdate (+ ?date ?period)) (>= o_orderdate ?date))}]]]]
+                [:rename {l_extendedprice x13, l_discount x14, l_orderkey x15, l_returnflag x16}
+                 [:scan [l_extendedprice l_discount l_orderkey {l_returnflag (= l_returnflag "R")}]]]]
+               [:rename {n_name x18, n_nationkey x19} [:scan [n_name n_nationkey]]]]]]]]]])
+     (pt/plan-sql (slurp-tpch-query 10)))))
+
+(t/deftest test-q11-important-stock-identification
+  (t/is
+    (=
+     '[:rename
+       {x1 ps_partkey, x14 value}
+       [:project
+        [x1 x14]
+        [:order-by
+         [{x14 :desc}]
+         [:select
+          (> x15 x30)
+          [:cross-join
+           [:group-by
+            [x1 {x14 (sum x12)} {x15 (sum x13)}]
+            [:map
+             [{x12 (* x2 x3)} {x13 (* x2 x3)}]
+             [:join
+              {x7 x9}
+              [:join
+               {x4 x6}
+               [:rename {ps_partkey x1, ps_supplycost x2, ps_availqty x3, ps_suppkey x4}
+                [:scan [ps_partkey ps_supplycost ps_availqty ps_suppkey]]]
+               [:rename {s_suppkey x6, s_nationkey x7}
+                [:scan [s_suppkey s_nationkey]]]]
+              [:rename {n_nationkey x9, n_name x10}
+               [:scan [n_nationkey {n_name (= n_name "GERMANY")}]]]]]]
+           [:max-1-row
+            [:project
+             [{x30 (* x28 1.0E-4)}]
+             [:group-by
+              [{x28 (sum x27)}]
+              [:map
+               [{x27 (* x17 x18)}]
+               [:join
+                {x22 x24}
+                [:join
+                 {x19 x21}
+                 [:rename {ps_supplycost x17, ps_availqty x18, ps_suppkey x19}
+                  [:scan [ps_supplycost ps_availqty ps_suppkey]]]
+                 [:rename {s_suppkey x21, s_nationkey x22}
+                  [:scan [s_suppkey s_nationkey]]]]
+                [:rename {n_nationkey x24, n_name x25}
+                 [:scan [n_nationkey {n_name (= n_name "GERMANY")}]]]]]]]]]]]]]
+     (pt/plan-sql (slurp-tpch-query 11)))))
+
+(t/deftest test-q12-shipping-modes-and-order-priority
+  (t/is
+    (=
+     (w/postwalk-replace
+       {'?date (LocalDate/parse "1994-01-01")
+        '?period (Period/parse "P1Y")}
+       '[:rename
+         {x4 l_shipmode, x19 high_line_count, x20 low_line_count}
+         [:order-by
+          [{x4 :asc}]
+          [:group-by
+           [x4 {x19 (sum x17)} {x20 (sum x18)}]
+           [:map
+            [{x17 (if (or (= x1 "1-URGENT") (= x1 "2-HIGH"))
+                    1
+                    0)}
+             {x18 (if (and (<> x1 "1-URGENT") (<> x1 "2-HIGH")) ;;TODO != or <>
+                    1
+                    0)}]
+            [:semi-join
+             {x4 x10}
+             [:join
+              {x2 x5}
+              [:rename {o_orderpriority x1, o_orderkey x2}
+               [:scan [o_orderpriority o_orderkey]]]
+              [:rename
+               {l_shipmode x4, l_orderkey x5, l_commitdate x6, l_receiptdate x7, l_shipdate x8}
+               [:select
+                (and (< l_commitdate l_receiptdate) (< l_shipdate l_commitdate))
+                [:scan
+                 [l_shipmode
+                  l_orderkey
+                  l_commitdate
+                  {l_receiptdate (and (< l_receiptdate (+ ?date ?period)) (>= l_receiptdate ?date))}
+                  l_shipdate]]]]]
+             [:table [{x10 "MAIL"} {x10 "SHIP"}]]]]]]])
+     (pt/plan-sql (slurp-tpch-query 12)))))
+
+(t/deftest test-q13-customer-distribution
+  (t/is
+    (=
+     '[:rename
+      {x7 c_count, x10 custdist}
+      [:order-by
+       [{x10 :desc} {x7 :desc}]
+       [:group-by
+        [x7 {x10 (count x9)}]
+        [:map
+         [{x9 1}]
+         [:group-by [x1 {x7 (count x3)}]
+          [:left-outer-join {x1 x4}
+           [:rename {c_custkey x1}
+            [:scan [c_custkey]]]
+           [:rename {o_orderkey x3, o_custkey x4, o_comment x5}
+            [:scan [o_orderkey o_custkey {o_comment (not (like o_comment "%special%requests%"))}]]]]]]]]]
+     (pt/plan-sql (slurp-tpch-query 13)))))
+
+(t/deftest test-q14-promotion-effect
+  (t/is
+    (=
+     (w/postwalk-replace
+       {'?date (LocalDate/parse "1995-09-01")
+        '?period (Period/parse "P1M")}
+       '[:rename
+         {x14 promo_revenue}
+         [:project
+          [{x14 (/ (* 100.0 x11) x12)}]
+          [:group-by
+           [{x11 (sum x9)} {x12 (sum x10)}]
+           [:map
+            [{x9 (if (like x6 "PROMO%") (* x1 (- 1 x2)) 0)} {x10 (* x1 (- 1 x2))}]
+            [:join
+             {x3 x7}
+             [:rename
+              {l_extendedprice x1, l_discount x2, l_partkey x3, l_shipdate x4}
+              [:scan
+               [l_extendedprice l_discount l_partkey {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}]]]
+             [:rename {p_type x6, p_partkey x7}
+              [:scan [p_type p_partkey]]]]]]]])
+     (pt/plan-sql (slurp-tpch-query 14)))))
+
+(t/deftest test-q14-promotion-effect
+  (t/is
+    (=
+     (w/postwalk-replace
+       {'?date (LocalDate/parse "1996-01-01")
+        '?period (Period/parse "P3M")}
+       '[:rename
+         {x1 s_suppkey, x2 s_name, x3 s_address, x4 s_phone, x12 total_revenue}
+         [:project
+          [x1 x2 x3 x4 x12]
+          [:order-by
+           [{x1 :asc}]
+           [:join
+            {x12 x22}
+            [:join
+             {x1 x6}
+             [:rename {s_suppkey x1, s_name x2, s_address x3, s_phone x4} [:scan [s_suppkey s_name s_address s_phone]]]
+             [:group-by
+              [x6 {x12 (sum x11)}]
+              [:map
+               [{x11 (* x7 (- 1 x8))}]
+               [:rename
+                {l_suppkey x6, l_extendedprice x7, l_discount x8, l_shipdate x9}
+                [:scan
+                 [l_suppkey
+                  l_extendedprice
+                  l_discount
+                  {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}]]]]]]
+            [:max-1-row
+             [:group-by
+              [{x22 (max x20)}]
+              [:group-by
+               [x14 {x20 (sum x19)}]
+               [:map
+                [{x19 (* x15 (- 1 x16))}]
+                [:rename
+                 {l_suppkey x14, l_extendedprice x15, l_discount x16, l_shipdate x17}
+                 [:scan
+                  [l_suppkey
+                   l_extendedprice
+                   l_discount
+                   {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}]]]]]]]]]]])
+     (pt/plan-sql (slurp-tpch-query 15)))))
+
 
