@@ -232,16 +232,16 @@
          [:semi-join join/->left-semi-equi-join-cursor (fn [l _r] l)]
          [:anti-join join/->left-anti-semi-equi-join-cursor (fn [l _r] l)]]]
 
-  (defmethod emit-op join-op-k [{:keys [columns left right]} srcs]
-    (let [[left-col] (keys columns)
-          [right-col] (vals columns)]
+  (defmethod emit-op join-op-k [{:keys [key-columns left right]} srcs]
+    (let [left-key-cols (map first key-columns)
+          right-key-cols (map second key-columns)]
       (binary-op left right srcs
                  (fn [left-col-names right-col-names]
                    {:col-names (->col-names left-col-names right-col-names)
                     :->cursor (fn [{:keys [allocator]} left right]
                                 (->join-cursor allocator
-                                               left (name left-col) left-col-names
-                                               right (name right-col) right-col-names))})))))
+                                               left (map name left-key-cols) left-col-names
+                                               right (map name right-key-cols) right-col-names))})))))
 
 (defmethod emit-op :group-by [{:keys [columns relation]} srcs]
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)

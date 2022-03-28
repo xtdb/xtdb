@@ -221,7 +221,7 @@
              (op/query-ra '[:fixpoint Path
                             [:table $table]
                             [:project [x y]
-                             [:join {z z}
+                             [:join [{z z}]
                               [:rename {y z} Path]
                               [:rename {x z} Path]]]]
                           {'$table [{:x "a" :y "b"}
@@ -234,14 +234,14 @@
   (t/is (= [{:a 1 :b 1}]
            (op/query-ra '[:assign [X [:table $x]
                                    Y [:table $y]]
-                          [:join {a b} X Y]]
+                          [:join [{a b}] X Y]]
                         '{$x [{:a 1}]
                           $y [{:b 1}]})))
 
   (t/testing "can see earlier assignments"
     (t/is (= [{:a 1 :b 1}]
              (op/query-ra '[:assign [X [:table $x]
-                                     Y [:join {a b} X [:table $y]]
+                                     Y [:join [{a b}] X [:table $y]]
                                      X Y]
                             X]
                           '{$x [{:a 1}]
