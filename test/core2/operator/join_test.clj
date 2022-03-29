@@ -2,7 +2,8 @@
   (:require [clojure.test :as t]
             [core2.operator.join :as join]
             [core2.test-util :as tu]
-            [core2.types :as ty])
+            [core2.types :as ty]
+            [core2.expression :as expr])
   (:import (core2 ICursor)
            (org.apache.arrow.vector.types.pojo Field Schema)))
 
@@ -20,8 +21,8 @@
 
   ([->join-cursor left-blocks right-blocks
     {:keys [left-fields right-fields
-            left-join-cols
-            right-join-cols]
+            left-join-cols right-join-cols
+            theta-expr]
      :or {left-fields [a-field], right-fields [b-field]
           left-join-cols ["a"], right-join-cols ["b"]}}]
 
@@ -31,12 +32,13 @@
                  right-cursor (tu/->cursor (Schema. right-fields) right-blocks)
                  ^ICursor join-cursor (->join-cursor tu/*allocator*
                                                      left-cursor left-join-cols left-col-names
-                                                     right-cursor right-join-cols right-col-names)]
+                                                     right-cursor right-join-cols right-col-names
+                                                     (some-> theta-expr (expr/->expression-relation-selector {})))]
 
        (vec (tu/<-cursor join-cursor))))))
 
 (t/deftest test-cross-join
-  (letfn [(->cross-join-cursor [al lc _ljc _lcns rc _rjc _rcns]
+  (letfn [(->cross-join-cursor [al lc _ljc _lcns rc _rjc _rcns _predicate]
             (join/->cross-join-cursor al lc rc))]
     (t/is (= [{{:a 12, :b 10, :c 1} 2,
                {:a 12, :b 15, :c 2} 2,
@@ -115,6 +117,35 @@
                                      :left-join-cols ["a" "b"], :right-join-cols ["c" "d"]})
                      (mapv frequencies))))))
 
+(defn- quick-join [join-op left right conditions]
+  (let [left-keys (set (mapcat keys left))
+        right-keys (set (mapcat keys right))
+        ->field (fn ->field [k] (ty/->field (name k) ty/bigint-type false))
+        [equi theta] ((juxt filter remove) map? conditions)
+        left-join-keys (map ffirst equi)
+        right-join-keys (map (comp val first) equi)
+        theta (when (seq theta) (if (= (count theta) 1) (first theta) (list* 'and theta)))]
+    (->> (run-join-test join-op [left] [right] {:left-fields (mapv ->field left-keys)
+                                                :right-fields (mapv ->field right-keys)
+                                                :left-join-cols (mapv name left-join-keys)
+                                                :right-join-cols (mapv name right-join-keys)
+                                                :theta-expr theta})
+         (mapcat identity)
+         frequencies)))
+
+(t/deftest test-theta-inner-join
+  (letfn [(j [left right & conditions] (quick-join join/->equi-join-cursor left right conditions))]
+    (t/is (= {{:a 12, :b 44, :c 12, :d 43} 1}
+             (j [{:a 12, :b 42}
+                 {:a 12, :b 44}
+                 {:a 10, :b 42}]
+
+                [{:c 12, :d 43}
+                 {:c 11, :d 42}]
+
+                {:a :c}
+                '(> b d))))))
+
 (t/deftest test-semi-equi-join
   (t/is (= [{{:a 12} 2} {{:a 100} 1}]
            (->> (run-join-test join/->left-semi-equi-join-cursor
@@ -164,6 +195,21 @@
                                     {:left-fields [a-field b-field], :right-fields [c-field d-field]
                                      :left-join-cols ["a" "b"], :right-join-cols ["c" "d"]})
                      (mapv frequencies))))))
+
+;; todo semi equi theta
+
+(t/deftest test-theta-semi-join
+  (t/is (= [{{:a 12, :b 44} 1}]
+           (->> (run-join-test join/->left-semi-equi-join-cursor
+                               [[{:a 12, :b 42}
+                                 {:a 12, :b 44}
+                                 {:a 10, :b 42}]]
+                               [[{:c 12, :d 43}
+                                 {:c 11, :d 42}]]
+                               {:left-fields [a-field b-field], :right-fields [c-field d-field]
+                                :left-join-cols ["a"], :right-join-cols ["c"]
+                                :theta-expr '(> b d)})
+                (mapv frequencies)))))
 
 (t/deftest test-left-equi-join
   (t/is (= [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0, :b nil, :c nil} 1}
@@ -218,6 +264,35 @@
                                     {:left-fields [a-field b-field], :right-fields [c-field d-field e-field]
                                      :left-join-cols ["a" "b"], :right-join-cols ["c" "d"]})
                      (mapv frequencies))))))
+
+(t/deftest test-left-theta-join
+  (let [left [{:a 12, :b 42}
+              {:a 12, :b 44}
+              {:a 10, :b 42}
+              {:a 10, :b 42}]
+        right [{:c 12, :d 43}
+               {:c 11, :d 42}]
+        j (fn j [& conditions] (quick-join join/->left-outer-equi-join-cursor left right conditions))]
+
+    (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
+              {:a 12, :b 44, :c 12, :d 43} 1
+              {:a 10, :b 42, :c nil, :d nil} 2}
+             (j {:a :c} '(> b d))))
+
+    (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
+              {:a 12, :b 44, :c nil, :d nil} 1
+              {:a 10, :b 42, :c nil, :d nil} 2}
+             (j {:a :c} '(> b d) '(= c -1))))
+
+    (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
+              {:a 12, :b 44, :c nil, :d nil} 1
+              {:a 10, :b 42, :c nil, :d nil} 2}
+             (j {:a :c} '(and (= c -1) (> b d)))))
+
+    (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
+              {:a 12, :b 44, :c nil, :d nil} 1
+              {:a 10, :b 42, :c nil, :d nil} 2}
+             (j {:a :c} {:b :d} '(= c -1))))))
 
 (t/deftest test-full-outer-join
   (t/testing "missing on both sides"
@@ -304,6 +379,29 @@
                                      :left-join-cols ["a" "b"], :right-join-cols ["c" "d"]})
                      (mapv frequencies))))))
 
+(t/deftest test-full-outer-join-theta
+  (let [left [{:a 12, :b 42}
+              {:a 12, :b 44}
+              {:a 10, :b 42}
+              {:a 10, :b 42}]
+        right [{:c 12, :d 43}
+               {:c 11, :d 42}]
+        j (fn j [& conditions] (quick-join join/->full-outer-equi-join-cursor left right conditions))]
+
+    (t/is (= {{:a 12, :b 42, :c 12, :d 43} 1
+              {:a 12, :b 44, :c nil, :d nil} 1
+              {:a 10, :b 42, :c nil, :d nil} 2
+              {:a nil, :b nil, :c 11, :d 42} 1}
+
+             (j {:a :c} '(not (= b 44)))))
+
+    (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
+              {:a 12, :b 44, :c nil, :d nil} 1
+              {:a 10, :b 42, :c nil :d nil} 2
+              {:a nil, :b nil, :c 12, :d 43} 1
+              {:a nil, :b nil, :c 11, :d 42} 1}
+             (j {:a :c} false)))))
+
 (t/deftest test-anti-equi-join
   (t/is (= [{{:a 0} 2}]
            (->> (run-join-test join/->left-anti-semi-equi-join-cursor
@@ -352,3 +450,22 @@
                                     {:left-fields [a-field b-field], :right-fields [c-field d-field e-field]
                                      :left-join-cols ["a" "b"], :right-join-cols ["c" "d"]})
                      (mapv frequencies))))))
+
+(t/deftest test-anti-join-theta
+  (let [left [{:a 12, :b 42}
+              {:a 12, :b 44}
+              {:a 10, :b 42}
+              {:a 10, :b 42}]
+        right [{:c 12, :d 43}
+               {:c 11, :d 42}]
+        j (fn j [& conditions] (quick-join join/->left-anti-semi-equi-join-cursor left right conditions))]
+
+    (t/is (= {{:a 12, :b 44} 1
+              {:a 10, :b 42} 2}
+
+             (j {:a :c} '(not (= b 44)))))
+
+    (t/is (= {{:a 12, :b 42} 1
+              {:a 12, :b 44} 1
+              {:a 10, :b 42} 2}
+             (j {:a :c} false)))))

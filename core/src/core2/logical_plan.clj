@@ -137,43 +137,51 @@
          :left ::ra-expression
          :right ::ra-expression))
 
-(s/def ::equi-join-columns
+(s/def ::join-equi-clause (s/map-of ::column ::column :conform-keys true :count 1))
+
+(s/def ::join-condition-clause
+  (s/or :equi-condition ::join-equi-clause
+        :pred-expr ::expression))
+
+(s/def ::join-condition
   (s/and
-    (s/or :map-seq-form (s/coll-of (s/map-of ::column ::column :conform-keys true :count 1) :kind vector? :min-count 1)
+    (s/or :vec-form (s/and (s/coll-of ::join-condition-clause :kind vector? :min-count 1)
+                           ;; at least one clause must be an equi condition (for now).
+                           (fn [tagged] (some (comp #{:equi-condition} first) tagged)))
           :legacy-single-map-form (s/map-of ::column ::column :conform-keys true :count 1))
     (s/conformer
       (fn [[tag val]]
         (case tag
-          :map-seq-form (mapcat identity val)
-          :legacy-single-map-form val)))))
+          :vec-form val
+          :legacy-single-map-form [[:equi-condition val]])))))
 
 (defmethod ra-expr :join [_]
   (s/cat :op #{:⋈ :join}
-         :key-columns ::equi-join-columns
+         :condition ::join-condition
          :left ::ra-expression
          :right ::ra-expression))
 
 (defmethod ra-expr :left-outer-join [_]
   (s/cat :op #{:⟕ :left-outer-join}
-         :key-columns ::equi-join-columns
+         :condition ::join-condition
          :left ::ra-expression
          :right ::ra-expression))
 
 (defmethod ra-expr :full-outer-join [_]
   (s/cat :op #{:⟗ :full-outer-join}
-         :key-columns ::equi-join-columns
+         :condition ::join-condition
          :left ::ra-expression
          :right ::ra-expression))
 
 (defmethod ra-expr :semi-join [_]
   (s/cat :op #{:⋉ :semi-join}
-         :key-columns ::equi-join-columns
+         :condition ::join-condition
          :left ::ra-expression
          :right ::ra-expression))
 
 (defmethod ra-expr :anti-join [_]
   (s/cat :op #{:▷ :anti-join}
-         :key-columns ::equi-join-columns
+         :condition ::join-condition
          :left ::ra-expression
          :right ::ra-expression))
 

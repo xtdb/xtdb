@@ -232,16 +232,27 @@
          [:semi-join join/->left-semi-equi-join-cursor (fn [l _r] l)]
          [:anti-join join/->left-anti-semi-equi-join-cursor (fn [l _r] l)]]]
 
-  (defmethod emit-op join-op-k [{:keys [key-columns left right]} srcs]
-    (let [left-key-cols (map first key-columns)
-          right-key-cols (map second key-columns)]
+  (defmethod emit-op join-op-k [{:keys [condition left right]} srcs]
+    (let [equi-pairs (keep (fn [[tag val]]
+                             (when (= :equi-condition tag)
+                               (first val)))
+                           condition)
+          left-key-cols (map first equi-pairs)
+          right-key-cols (map second equi-pairs)
+          predicates (keep (fn [[tag val]]
+                             (when (= :predicate tag)
+                               val))
+                           condition)
+          theta-selector (when (seq predicates)
+                           (expr/->expression-relation-selector (list* 'and predicates) {}))]
       (binary-op left right srcs
                  (fn [left-col-names right-col-names]
                    {:col-names (->col-names left-col-names right-col-names)
                     :->cursor (fn [{:keys [allocator]} left right]
                                 (->join-cursor allocator
                                                left (map name left-key-cols) left-col-names
-                                               right (map name right-key-cols) right-col-names))})))))
+                                               right (map name right-key-cols) right-col-names
+                                               theta-selector))})))))
 
 (defmethod emit-op :group-by [{:keys [columns relation]} srcs]
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)

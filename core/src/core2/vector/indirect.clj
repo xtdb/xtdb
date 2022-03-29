@@ -9,7 +9,8 @@
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType$Struct ArrowType$Union Field]))
+           [org.apache.arrow.vector.types.pojo ArrowType$Struct ArrowType$Union Field]
+           [core2.operator IRelationSelector]))
 
 (declare ^core2.vector.IIndirectVector ->direct-vec
          ->IndirectVector)
@@ -142,6 +143,24 @@
   (structReader [_] (->StructReader v))
   (listReader [_] (->list-reader v)))
 
+(defn compose-selection
+  "Returns the composition of the selections sel1, sel2 which when applied to a vector will be the same as (select (select iv sel1) sel2).
+
+  Use to avoid intermediate vector allocations.
+
+  A selection looks like this: [3, 1, 2, 0] which when applied to a vector, will yield a new vector [vec[3], vec[1], vec[2], vec[0]].
+
+  Selections are composed to form a new selection.
+
+  composing [3, 1, 2, 0] and [2, 2, 0] => [1, 1, 3]
+
+  See also: IIndirectVector .select"
+  ^ints [^ints sel1 ^ints sel2]
+  (let [new-left (int-array (alength sel2))]
+    (dotimes [idx (alength sel2)]
+      (aset new-left idx (aget sel1 (aget sel2 idx))))
+    new-left))
+
 (defrecord IndirectVector [^ValueVector v, ^String col-name, ^ints idxs]
   IIndirectVector
   (getVector [_] v)
@@ -151,13 +170,8 @@
 
   (withName [_ col-name] (IndirectVector. v col-name idxs))
 
-  (select [this idxs]
-    (let [^ints old-idxs (.idxs this)
-          new-idxs (IntStream/builder)]
-      (dotimes [idx (alength idxs)]
-        (.add new-idxs (aget old-idxs (aget idxs idx))))
-
-      (IndirectVector. v col-name (.toArray (.build new-idxs)))))
+  (select [this new-idxs]
+    (IndirectVector. v col-name (compose-selection (.idxs this) new-idxs)))
 
   (copyTo [_ out-vec]
     (.clear out-vec)
