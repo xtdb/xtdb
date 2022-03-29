@@ -8,7 +8,8 @@
             [xtdb.kv :as kv]
             [xtdb.kv.index-store :as kvi]
             [xtdb.memory :as mem]
-            [xtdb.system :as sys])
+            [xtdb.system :as sys]
+            [xtdb.io :as xio])
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
            [java.nio.file Files Path]
@@ -214,7 +215,7 @@
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
 
-(defrecord LMDBKv [db-dir env env-flags dbi ^StampedLock mapsize-lock sync?]
+(defrecord LMDBKv [db-dir env env-flags dbi ^StampedLock mapsize-lock sync? cp-job]
   kv/KvStore
   (new-snapshot [_]
     (let [tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]
@@ -263,7 +264,8 @@
       (try
         (env-close env)
         (finally
-          (.unlock mapsize-lock stamp))))))
+          (.unlock mapsize-lock stamp))))
+    (xio/try-close cp-job)))
 
 (def ^:private cp-format
   {:index-version c/index-version
