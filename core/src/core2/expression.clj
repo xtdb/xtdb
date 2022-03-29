@@ -15,14 +15,14 @@
            java.lang.reflect.Method
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
-           [java.time Duration Instant ZonedDateTime ZoneId ZoneOffset]
+           [java.time Duration Instant ZonedDateTime ZoneId ZoneOffset LocalDate]
            [java.time.temporal ChronoField ChronoUnit]
            [java.util Date HashMap LinkedList]
            java.util.stream.IntStream
            [org.apache.arrow.vector BitVector DurationVector FieldVector ValueVector]
            [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector]
-           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType]
+           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType DateUnit]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Date]
            (java.nio.charset CharsetDecoder)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -238,6 +238,13 @@
 (defmethod get-value-form ArrowType$Utf8 [_ vec-sym idx-sym] `(util/element->nio-buffer ~vec-sym ~idx-sym))
 (defmethod get-value-form ArrowType$Binary [_ vec-sym idx-sym] `(util/element->nio-buffer ~vec-sym ~idx-sym))
 (defmethod get-value-form ArrowType$FixedSizeBinary [_ vec-sym idx-sym] `(util/element->nio-buffer ~vec-sym ~idx-sym))
+
+;; will unify both possible vector representations
+;; as an epoch int, do not think it is worth branching for both cases in all date functions.
+(defmethod get-value-form ArrowType$Date [^ArrowType$Date type vec-sym idx-sym]
+  (util/case-enum (.getUnit type)
+    DateUnit/DAY `(.get ~vec-sym ~idx-sym)
+    DateUnit/MILLISECOND `(int (quot (.get ~vec-sym ~idx-sym) 86400000))))
 
 (defmethod get-value-form ArrowType$ExtensionType
   [^ArrowType$ExtensionType arrow-type vec-sym idx-sym]
@@ -639,6 +646,18 @@
                                  "HOUR" `ChronoField/HOUR_OF_DAY
                                  "MINUTE" `ChronoField/MINUTE_OF_HOUR))))})
 
+(defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Date] [{[{field :literal} _] :args}]
+  {:return-types  #{types/int-type}
+   :continue-call (fn [f [_ epoch-day-code]]
+                    (f types/int-type
+                       (case field
+                         ;; we could inline the math here, but looking at sources, there is some nuance.
+                         "YEAR" `(.getYear (LocalDate/ofEpochDay ~epoch-day-code))
+                         "MONTH" `(.getMonthValue (LocalDate/ofEpochDay ~epoch-day-code))
+                         "DAY" `(.getDayOfMonth (LocalDate/ofEpochDay ~epoch-day-code))
+                         "HOUR" 0
+                         "MINUTE" 0)))})
+
 (defmethod codegen-call [:date-trunc ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args, [_ date-type] :arg-types}]
   {:return-types #{date-type}
    :continue-call (fn [f [_ x]]
@@ -658,6 +677,17 @@
                                                                        "MILLISECOND" `ChronoUnit/MILLIS
                                                                        "MICROSECOND" `ChronoUnit/MICROS)))
                                                   (.toInstant)))))})
+
+(defmethod codegen-call [:date-trunc ArrowType$Utf8 ArrowType$Date] [{[{field :literal} _] :args}]
+  {:return-types #{types/date-day-type}
+   :continue-call (fn [f [_ epoch-day-code]]
+                    (f types/date-day-type
+                       (case field
+                         "YEAR" `(-> ~epoch-day-code LocalDate/ofEpochDay (.withDayOfYear 1) .toEpochDay)
+                         "MONTH" `(-> ~epoch-day-code LocalDate/ofEpochDay (.withDayOfMonth 1) .toEpochDay)
+                         "DAY" epoch-day-code
+                         "HOUR" epoch-day-code
+                         "MINUTE" epoch-day-code)))})
 
 (def ^:private type->arrow-type
   {Double/TYPE types/float8-type
@@ -712,6 +742,10 @@
 (defmethod set-value-form ArrowType$Duration [_ out-vec-sym idx-sym code]
   `(.set ~out-vec-sym ~idx-sym ~code))
 
+(defmethod set-value-form ArrowType$Date [_ out-vec-sym idx-sym code]
+  ;; assuming we are writing to a date day vector, as that is the canonical representation
+  `(.set ~out-vec-sym ~idx-sym ~code))
+
 (def ^:private out-vec-sym (gensym 'out-vec))
 (def ^:private out-writer-sym (gensym 'out-writer-sym))
 
@@ -733,6 +767,9 @@
         "TIMESTAMPNANOTZ" (timestamp-type-literal `TimeUnit/NANOSECOND)
 
         "EXTENSIONTYPE" `~(extension-type-literal-form arrow-type)
+
+        "DATEDAY" `(ArrowType$Date. DateUnit/DAY)
+        "DATEMILLI" `(ArrowType$Date. DateUnit/MILLISECOND)
 
         ;; TODO there are other minor types that don't have a single corresponding ArrowType
         `(.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name))))))

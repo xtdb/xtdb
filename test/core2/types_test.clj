@@ -7,28 +7,34 @@
   (:import [core2.vector.extensions KeywordVector UuidVector UriVector]
            java.net.URI
            java.nio.ByteBuffer
-           [java.time Instant OffsetDateTime ZonedDateTime ZoneId ZoneOffset]
-           [org.apache.arrow.vector BigIntVector BitVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector]
-           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]))
+           [java.time Instant OffsetDateTime ZonedDateTime ZoneId ZoneOffset LocalDate]
+           [org.apache.arrow.vector BigIntVector BitVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector DateDayVector DateMilliVector]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
+           [core2.types LegType]
+           [org.apache.arrow.vector.types.pojo ArrowType$Date]
+           [org.apache.arrow.vector.types DateUnit]
+           [core2.vector IVectorWriter]))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest round-trips-values
-  (letfn [(test-round-trip [vs]
+  (letfn [(test-read [leg-type-fn write-fn vs]
             (with-open [duv (DenseUnionVector/empty "" tu/*allocator*)]
               (let [duv-writer (.asDenseUnion (vw/vec->writer duv))]
                 (doseq [v vs]
                   (.startValue duv-writer)
-                  (doto (.writerForType duv-writer (types/value->leg-type v))
+                  (doto (.writerForType duv-writer (leg-type-fn v))
                     (.startValue)
-                    (->> (types/write-value! v))
+                    (write-fn v)
                     (.endValue))
                   (.endValue duv-writer)))
-
               {:vs (vec (for [idx (range (count vs))]
                           (types/get-object duv idx)))
                :vec-types (vec (for [idx (range (count vs))]
-                                 (class (.getVectorByType duv (.getTypeId duv idx)))))}))]
+                                 (class (.getVectorByType duv (.getTypeId duv idx)))))}))
+
+          (test-round-trip [vs]
+            (test-read types/value->leg-type #(types/write-value! %2 %1) vs))]
 
     (t/is (= {:vs [false nil 2 1 6 4 3.14 2.0]
               :vec-types [BitVector NullVector BigIntVector TinyIntVector SmallIntVector IntVector Float8Vector Float4Vector]}
@@ -74,4 +80,16 @@
       (t/is (= {:vs vs
                 :vec-types [KeywordVector KeywordVector UuidVector UriVector]}
                (test-round-trip vs))
-            "extension types"))))
+            "extension types"))
+
+    (let [vs [(LocalDate/of 2007 12 11)]]
+      (->> "LocalDate can be round tripped through DAY date vectors"
+           (t/is (= {:vs vs
+                     :vec-types [DateDayVector]}
+                    (test-round-trip vs))))
+
+      (->> "LocalDate can be read from MILLISECOND date vectors"
+           (t/is (= vs (:vs (test-read (constantly (LegType. (ArrowType$Date. DateUnit/MILLISECOND)))
+                                       (fn [^IVectorWriter w ^LocalDate v]
+                                         (.setSafe ^DateMilliVector (.getVector w) (.getPosition w) (long (* 86400000 (.toEpochDay v)))))
+                                       vs))))))))

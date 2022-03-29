@@ -1,6 +1,5 @@
 (ns core2.expression-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
             [core2.expression :as expr]
             [core2.expression.temporal :as expr.temp]
             [core2.local-node :as node]
@@ -11,7 +10,7 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import core2.types.LegType
-           [java.time Duration ZonedDateTime ZoneId]
+           [java.time Duration ZonedDateTime ZoneId LocalDate]
            [org.apache.arrow.vector DurationVector TimeStampVector ValueVector]
            [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Timestamp ArrowType$Union FieldType]
            org.apache.arrow.vector.types.TimeUnit))
@@ -129,41 +128,87 @@
                               "_valid-time-end" '(> ?vt _vt-time-end)}
                              {'?tt (util/->instant #inst "2019",) '?vt (util/->instant #inst "2018")}))))))))
 
-(t/deftest test-date-trunc
+(defn project
+  "Use to test an expression on some example documents. See also, project1.
+
+  Usage: (project '(+ a b) [{:a 1, :b 2}, {:a 3, :b 4}]) ;; => [3, 7]"
+  [expr docs]
   (with-open [node (node/start-node {})]
-    (let [tx (c2/submit-tx node [[:put {:_id :foo,
-                                        :date (util/->instant #inst "2021-10-21T12:34:56Z")
-                                        :zdt (-> (util/->zdt #inst "2021-08-21T12:34:56Z")
-                                                 (.withZoneSameLocal (ZoneId/of "Europe/London")))}]])
-          db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx)]
-      (letfn [(simple-trunc [time-unit]
-                (-> (op/query-ra [:project [{'trunc (list 'date-trunc time-unit 'date)}]
-                                  '[:scan [date]]]
-                                 db)
-                    first :trunc))]
-        (t/is (= (util/->zdt #inst "2021-10-21") (simple-trunc "DAY")))
-        (t/is (= (util/->zdt #inst "2021-10-21T12:34") (simple-trunc "MINUTE")))
-        (t/is (= (util/->zdt #inst "2021-10-01") (simple-trunc "MONTH")))
-        (t/is (= (util/->zdt #inst "2021-01-01") (simple-trunc "YEAR"))))
+    (let [docs (map-indexed #(assoc %2 :_id %1) docs)
+          db (snap/snapshot (tu/component node ::snap/snapshot-factory))
+          lp [:project [{'ret expr}] [:table docs]]]
+      (mapv :ret (op/query-ra lp db)))))
 
-      (t/is (= [{:trunc (-> (util/->zdt #inst "2021-08-21")
+(defn project1 [expr doc] (first (project expr [doc])))
+
+(t/deftest test-date-trunc
+  (let [test-doc {:_id  :foo,
+                  :date (util/->instant #inst "2021-10-21T12:34:56Z")
+                  :zdt  (-> (util/->zdt #inst "2021-08-21T12:34:56Z")
                             (.withZoneSameLocal (ZoneId/of "Europe/London")))}]
-               (op/query-ra '[:project [{trunc (date-trunc "DAY" zdt)}]
-                              [:scan [zdt]]]
-                            db))
-            "timezone aware")
+    (letfn [(simple-trunc [time-unit] (project1 (list 'date-trunc time-unit 'date) test-doc))]
 
-      (t/is (= [{:trunc (util/->zdt #inst "2021-10-21")}]
-               (op/query-ra '[:select (> trunc #inst "2021")
-                              [:project [{trunc (date-trunc "DAY" date)}]
-                               [:scan [date]]]]
-                            db)))
+      (t/is (= (util/->zdt #inst "2021-10-21") (simple-trunc "DAY")))
+      (t/is (= (util/->zdt #inst "2021-10-21T12:34") (simple-trunc "MINUTE")))
+      (t/is (= (util/->zdt #inst "2021-10-01") (simple-trunc "MONTH")))
+      (t/is (= (util/->zdt #inst "2021-01-01") (simple-trunc "YEAR"))))
 
-      (t/is (= [{:trunc (util/->zdt #inst "2021-10-21")}]
-               (op/query-ra '[:project [{trunc (date-trunc "DAY" trunc)}]
-                              [:project [{trunc (date-trunc "MINUTE" date)}]
-                               [:scan [date]]]]
-                            db))))))
+    (t/is (= (-> (util/->zdt #inst "2021-08-21")
+                 (.withZoneSameLocal (ZoneId/of "Europe/London")))
+             (project1 '(date-trunc "DAY" zdt) test-doc))
+          "timezone aware")
+
+    (t/is (= (util/->zdt #inst "2021-10-21") (project1 '(date-trunc "DAY" date) test-doc)))
+
+    (t/is (= (util/->zdt #inst "2021-10-21") (project1 '(date-trunc "DAY" (date-trunc "MINUTE" date)) test-doc)))
+
+    (t/testing "java.time.LocalDate"
+      (let [ld (LocalDate/of 2022 3 29)
+            trunc #(project1 (list 'date-trunc % 'date) {:date ld})]
+        (t/is (= (LocalDate/of 2022 3 29) (trunc "DAY")))
+        (t/is (= (LocalDate/of 2022 3 1) (trunc "MONTH")))
+        (t/is (= (LocalDate/of 2022 1 1) (trunc "YEAR")))
+        (t/is (= (LocalDate/of 2022 1 1) (project1 '(date-trunc "YEAR" (date-trunc "MONTH" date)) {:date ld})))))))
+
+(t/deftest test-date-extract
+  ;; todo units below minute are not yet implemented for any type
+  (letfn [(extract [part date-like] (project1 (list 'extract part 'date) {:date date-like}))
+          (extract-all [part date-likes] (project (list 'extract part 'date) (map (partial array-map :date) date-likes)))]
+    (t/testing "java.time.Instant"
+      (let [inst (util/->instant #inst "2022-03-21T13:44:52.344")]
+        (t/is (= 44 (extract "MINUTE" inst)))
+        (t/is (= 13 (extract "HOUR" inst)))
+        (t/is (= 21 (extract "DAY" inst)))
+        (t/is (= 3 (extract "MONTH" inst)))
+        (t/is (= 2022 (extract "YEAR" inst)))))
+
+    (t/testing "java.time.ZonedDateTime"
+      (let [zdt (-> (util/->zdt #inst "2022-03-21T13:44:52.344")
+                    (.withZoneSameLocal (ZoneId/of "Europe/London")))]
+        (t/is (= 44 (extract "MINUTE" zdt)))
+        (t/is (= 13 (extract "HOUR" zdt)))
+        (t/is (= 21 (extract "DAY" zdt)))
+        (t/is (= 3 (extract "MONTH" zdt)))
+        (t/is (= 2022 (extract "YEAR" zdt)))))
+
+    (t/testing "java.time.LocalDate"
+      (let [ld (LocalDate/of 2022 03 21)]
+        (t/is (= 0 (extract "MINUTE" ld)))
+        (t/is (= 0 (extract "HOUR" ld)))
+        (t/is (= 21 (extract "DAY" ld)))
+        (t/is (= 3 (extract "MONTH" ld)))
+        (t/is (= 2022 (extract "YEAR" ld)))))
+
+    (t/testing "mixed types"
+      (let [dates [(util/->instant #inst "2022-03-22T13:44:52.344")
+                   (-> (util/->zdt #inst "2021-02-23T21:19:10.692")
+                       (.withZoneSameLocal (ZoneId/of "Europe/London")))
+                   (LocalDate/of 2020 04 18)]]
+        (t/is (= [44 19 0] (extract-all "MINUTE" dates)))
+        (t/is (= [13 21 0] (extract-all "HOUR" dates)))
+        (t/is (= [22 23 18] (extract-all "DAY" dates)))
+        (t/is (= [3 2 4] (extract-all "MONTH" dates)))
+        (t/is (= [2022 2021 2020] (extract-all "YEAR" dates)))))))
 
 (defn- run-projection [rel form]
   (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {})
