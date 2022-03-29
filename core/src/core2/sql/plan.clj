@@ -1154,6 +1154,9 @@
     (when-let [join-map (build-join-map predicate lhs rhs)]
       [join-op join-map lhs rhs])))
 
+(defn columns-in-predicate-present-in-relation? [relation predicate]
+  (set/superset? (set (relation-columns relation)) (expr-symbols predicate)))
+
 (defn- push-selection-down-past-apply [z]
   (r/zmatch z
     [:select predicate
@@ -1161,7 +1164,7 @@
     ;;=>
     (when (empty? (set/intersection (expr-symbols predicate) dependent-column-names))
       (cond
-        (set/superset? (set (relation-columns independent-relation)) (expr-symbols predicate))
+        (columns-in-predicate-present-in-relation? independent-relation predicate)
         [:apply
          mode
          columns
@@ -1169,7 +1172,7 @@
          [:select predicate independent-relation]
          dependent-relation]
 
-        (set/superset? (set (relation-columns dependent-relation)) (expr-symbols predicate))
+        (columns-in-predicate-present-in-relation? dependent-relation predicate)
         [:apply
          mode
          columns
@@ -1224,30 +1227,24 @@
         relation]])))
 
 (defn- push-selection-down-past-join [z]
-  (letfn [(push-selection-down [predicate lhs rhs]
-            (let [syms (expr-symbols predicate)
-                  lhs-projection (set (relation-columns lhs))
-                  rhs-projection (set (relation-columns rhs))
-                  on-lhs? (set/subset? syms lhs-projection)
-                  on-rhs? (set/subset? syms rhs-projection)]
-              (cond
-                (and on-rhs? (not on-lhs?))
-                [lhs [:select predicate rhs]]
+  (r/zmatch z
+    [:select predicate
+     [join-op join-map lhs rhs]]
+    ;;=>
+    (cond
+      (columns-in-predicate-present-in-relation? rhs predicate)
+      [join-op join-map lhs [:select predicate rhs]]
+      (columns-in-predicate-present-in-relation? lhs predicate)
+      [join-op join-map [:select predicate lhs] rhs])
 
-                (and on-lhs? (not on-rhs?))
-                [[:select predicate lhs] rhs])))]
-    (r/zmatch z
-      [:select predicate
-       [join-op join-map lhs rhs]]
-      ;;=>
-      (when-let [[lhs rhs] (push-selection-down predicate lhs rhs)]
-        [join-op join-map lhs rhs])
-
-      [:select predicate
-       [:cross-join lhs rhs]]
-      ;;=>
-      (when-let [[lhs rhs] (push-selection-down predicate lhs rhs)]
-        [:cross-join lhs rhs]))))
+    [:select predicate
+     [:cross-join lhs rhs]]
+    ;;=>
+    (cond
+      (columns-in-predicate-present-in-relation? rhs predicate)
+      [:cross-join lhs [:select predicate rhs]]
+      (columns-in-predicate-present-in-relation? lhs predicate)
+      [:cross-join [:select predicate lhs] rhs])))
 
 (defn- push-selections-with-fewer-variables-down [z]
   (r/zmatch z
