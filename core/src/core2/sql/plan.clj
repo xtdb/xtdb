@@ -1255,21 +1255,8 @@
      [:select predicate-2
       relation]]
     ;;=>
-    (when (and (not (equals-predicate? predicate-2))
-               (< (count (expr-symbols predicate-1))
-                  (count (expr-symbols predicate-2))))
-      [:select predicate-2
-       [:select predicate-1
-        relation]])))
-
-(defn- push-selections-with-equals-down [z]
-  (r/zmatch z
-    [:select predicate-1
-     [:select predicate-2
-      relation]]
-    ;;=>
-    (when (and (equals-predicate? predicate-1)
-               (not (equals-predicate? predicate-2)))
+    (when (< (count (expr-symbols predicate-1))
+             (count (expr-symbols predicate-2)))
       [:select predicate-2
        [:select predicate-1
         relation]])))
@@ -1683,7 +1670,6 @@
                                push-selection-down-past-project
                                push-selection-down-past-group-by
                                push-selections-with-fewer-variables-down
-                               push-selections-with-equals-down
                                remove-superseded-projects
                                merge-selections-around-scan
                                add-selection-to-scan-predicate]

@@ -61,20 +61,16 @@
                [:join
                 {x12 x19}
                 [:select
-                 (like x4 "%BRASS")
-                 [:select
-                  (= x3 15) ;;TODO selects not pushed down
-                  [:select
-                   (= x11 x15)
-                   [:join
-                    {x1 x14}
-                    [:cross-join
-                     [:rename {p_partkey x1, p_mfgr x2, p_size x3, p_type x4}
-                      [:scan [p_partkey p_mfgr p_size p_type]]]
-                     [:rename {s_acctbal x6, s_name x7, s_address x8, s_phone x9, s_comment x10, s_suppkey x11, s_nationkey x12}
-                      [:scan [s_acctbal s_name s_address s_phone s_comment s_suppkey s_nationkey]]]]
-                    [:rename {ps_partkey x14, ps_suppkey x15, ps_supplycost x16}
-                     [:scan [ps_partkey ps_suppkey ps_supplycost]]]]]]]
+                 (= x11 x15)
+                 [:join
+                  {x1 x14}
+                  [:cross-join
+                   [:rename {p_partkey x1, p_mfgr x2, p_size x3, p_type x4}
+                    [:scan [p_partkey p_mfgr {p_size (= p_size 15)} {p_type (like p_type "%BRASS")}]]]
+                   [:rename {s_acctbal x6, s_name x7, s_address x8, s_phone x9, s_comment x10, s_suppkey x11, s_nationkey x12}
+                    [:scan [s_acctbal s_name s_address s_phone s_comment s_suppkey s_nationkey]]]]
+                  [:rename {ps_partkey x14, ps_suppkey x15, ps_supplycost x16}
+                   [:scan [ps_partkey ps_suppkey ps_supplycost]]]]]
                 [:rename {n_name x18, n_nationkey x19, n_regionkey x20}
                  [:scan [n_name n_nationkey n_regionkey]]]]
                [:rename {r_regionkey x22, r_name x23}
@@ -165,25 +161,21 @@
             [:join
              {x14 x17}
              [:select
-              (< x6 (+ ?date ?period))
-              [:select
-               (>= x6 ?date) ;;TODO selects not pushed down
-               [:select
-                (= x2 x14)
+              (= x2 x14)
+              [:join
+               {x11 x13}
+               [:join
+                {x5 x10}
                 [:join
-                 {x11 x13}
-                 [:join
-                  {x5 x10}
-                  [:join
-                   {x1 x4}
-                   [:rename {c_custkey x1, c_nationkey x2}
-                    [:scan [c_custkey c_nationkey]]]
-                   [:rename {o_custkey x4, o_orderkey x5, o_orderdate x6}
-                    [:scan [o_custkey o_orderkey o_orderdate]]]]
-                  [:rename {l_extendedprice x8, l_discount x9, l_orderkey x10, l_suppkey x11}
-                   [:scan [l_extendedprice l_discount l_orderkey l_suppkey]]]]
-                 [:rename {s_suppkey x13, s_nationkey x14}
-                  [:scan [s_suppkey s_nationkey]]]]]]]
+                 {x1 x4}
+                 [:rename {c_custkey x1, c_nationkey x2}
+                  [:scan [c_custkey c_nationkey]]]
+                 [:rename {o_custkey x4, o_orderkey x5, o_orderdate x6}
+                  [:scan [o_custkey o_orderkey {o_orderdate (and (< o_orderdate (+ ?date ?period)) (>= o_orderdate ?date))}]]]]
+                [:rename {l_extendedprice x8, l_discount x9, l_orderkey x10, l_suppkey x11}
+                 [:scan [l_extendedprice l_discount l_orderkey l_suppkey]]]]
+               [:rename {s_suppkey x13, s_nationkey x14}
+                [:scan [s_suppkey s_nationkey]]]]]
              [:rename {n_name x16, n_nationkey x17, n_regionkey x18}
               [:scan [n_name n_nationkey n_regionkey]]]]
             [:rename {r_regionkey x20, r_name x21}
@@ -276,18 +268,16 @@
                   [:join
                    {x11 x14}
                    [:select
-                    (= x2 "ECONOMY ANODIZED STEEL")
-                    [:select
-                     (= x4 x10)
-                     [:join
-                      {x1 x9}
-                      [:cross-join
-                       [:rename {p_partkey x1, p_type x2}
-                        [:scan [p_partkey p_type]]]
-                       [:rename {s_suppkey x4, s_nationkey x5}
-                        [:scan [s_suppkey s_nationkey]]]]
-                      [:rename {l_extendedprice x7, l_discount x8, l_partkey x9, l_suppkey x10, l_orderkey x11}
-                       [:scan [l_extendedprice l_discount l_partkey l_suppkey l_orderkey]]]]]]
+                    (= x4 x10)
+                    [:join
+                     {x1 x9}
+                     [:cross-join
+                      [:rename {p_partkey x1, p_type x2}
+                       [:scan [p_partkey {p_type (= p_type "ECONOMY ANODIZED STEEL")}]]]
+                      [:rename {s_suppkey x4, s_nationkey x5}
+                       [:scan [s_suppkey s_nationkey]]]]
+                     [:rename {l_extendedprice x7, l_discount x8, l_partkey x9, l_suppkey x10, l_orderkey x11}
+                      [:scan [l_extendedprice l_discount l_partkey l_suppkey l_orderkey]]]]]
                    [:rename {o_orderdate x13, o_orderkey x14, o_custkey x15}
                     [:scan [{o_orderdate (between o_orderdate ?date ?date2)} o_orderkey o_custkey]]]]
                   [:rename {c_custkey x17, c_nationkey x18}
@@ -316,24 +306,22 @@
            [:join
             {x12 x19}
             [:select
-             (like x2 "%green%")
+             (= x1 x11)
              [:select
-              (= x1 x11)
-              [:select
-               (= x16 x11)
+              (= x16 x11)
+              [:join
+               {x10 x15}
                [:join
-                {x10 x15}
-                [:join
-                 {x4 x10}
-                 [:cross-join ;;TODO crossjoin here, probably could be an equi-join with different join order
-                  [:rename {p_partkey x1, p_name x2}
-                   [:scan [p_partkey p_name]]]
-                  [:rename {s_suppkey x4, s_nationkey x5}
-                   [:scan [s_suppkey s_nationkey]]]]
-                 [:rename {l_extendedprice x7, l_discount x8, l_quantity x9, l_suppkey x10, l_partkey x11, l_orderkey x12}
-                  [:scan [l_extendedprice l_discount l_quantity l_suppkey l_partkey l_orderkey]]]]
-                [:rename {ps_supplycost x14, ps_suppkey x15, ps_partkey x16}
-                 [:scan [ps_supplycost ps_suppkey ps_partkey]]]]]]]
+                {x4 x10}
+                [:cross-join ;;TODO crossjoin here, probably could be an equi-join with different join order
+                 [:rename {p_partkey x1, p_name x2}
+                  [:scan [p_partkey {p_name (like p_name "%green%")}]]]
+                 [:rename {s_suppkey x4, s_nationkey x5}
+                  [:scan [s_suppkey s_nationkey]]]]
+                [:rename {l_extendedprice x7, l_discount x8, l_quantity x9, l_suppkey x10, l_partkey x11, l_orderkey x12}
+                 [:scan [l_extendedprice l_discount l_quantity l_suppkey l_partkey l_orderkey]]]]
+               [:rename {ps_supplycost x14, ps_suppkey x15, ps_partkey x16}
+                [:scan [ps_supplycost ps_suppkey ps_partkey]]]]]]
             [:rename {o_orderdate x18, o_orderkey x19}
              [:scan [o_orderdate o_orderkey]]]]
            [:rename {n_name x21, n_nationkey x22}
@@ -733,13 +721,12 @@
               [:group-by
                [x9 x10 x11 x16 $row_number$ {x26 (sum x21)}]
                [:select
-                x16
-                [:select
-                 (= x23 x9)
-                 [:left-outer-join
-                  {x10 x22}
-                  [:map
-                   [{$row_number$ (row-number)}]
+                (= x23 x9)
+                [:left-outer-join
+                 {x10 x22}
+                 [:map
+                  [{$row_number$ (row-number)}]
+                  [:select x16
                    [:apply
                     :cross-join
                     {x10 ?x19}
@@ -751,11 +738,11 @@
                       [:project [{x16 true}]
                        [:rename {p_partkey x13, p_name x14}
                         [:scan [{p_partkey (= ?x19 p_partkey)} {p_name (like p_name "forest%")}]]]]
-                      [:table [{x16 false}]]]]]]
-                  [:rename
-                   {l_quantity x21, l_partkey x22, l_suppkey x23, l_shipdate x24}
-                   [:scan
-                    [l_quantity l_partkey l_suppkey {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}]]]]]]]]]]]]])
+                      [:table [{x16 false}]]]]]]]
+                 [:rename
+                  {l_quantity x21, l_partkey x22, l_suppkey x23, l_shipdate x24}
+                  [:scan
+                   [l_quantity l_partkey l_suppkey {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}]]]]]]]]]]]])
      (pt/plan-sql (slurp-tpch-query 20)))))
 
 (t/deftest test-q21-suppliers-who-kept-orders-waiting ;;TODO failed to deccorilate
@@ -772,40 +759,38 @@
           [:map
            [{x36 1}]
            [:select
-            (= x14 "SAUDI ARABIA")
+            (= x3 x13)
             [:select
-             (= x3 x13)
-             [:select
-              (= x25 x6)
-              [:apply
-               :anti-join
-               {x5 ?x34}
-               #{}
-               [:select
-                (= x16 x6)
-                [:apply
-                 :semi-join
-                 {x5 ?x23}
-                 #{}
-                 [:cross-join
+             (= x25 x6)
+             [:apply
+              :anti-join
+              {x5 ?x34}
+              #{}
+              [:select
+               (= x16 x6)
+               [:apply
+                :semi-join
+                {x5 ?x23}
+                #{}
+                [:cross-join
+                 [:join
+                  {x6 x10}
                   [:join
-                   {x6 x10}
-                   [:join
-                    {x2 x5}
-                    [:rename {s_name x1, s_suppkey x2, s_nationkey x3}
-                     [:scan [s_name s_suppkey s_nationkey]]]
-                    [:rename {l_suppkey x5, l_orderkey x6, l_receiptdate x7, l_commitdate x8}
-                     [:select (> l_receiptdate l_commitdate)
-                      [:scan [l_suppkey l_orderkey l_receiptdate l_commitdate]]]]]
-                   [:rename {o_orderkey x10, o_orderstatus x11}
-                    [:scan [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]]
-                  [:rename {n_nationkey x13, n_name x14}
-                   [:scan [n_nationkey n_name]]]]
-                 [:rename {l_orderkey x16, l_suppkey x17}
-                  [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x23)}]]]]]
-               [:rename {l_orderkey x25, l_suppkey x26, l_receiptdate x27, l_commitdate x28}
-                [:select (> l_receiptdate l_commitdate)
-                 [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x34)} l_receiptdate l_commitdate]]]]]]]]]]]]]
+                   {x2 x5}
+                   [:rename {s_name x1, s_suppkey x2, s_nationkey x3}
+                    [:scan [s_name s_suppkey s_nationkey]]]
+                   [:rename {l_suppkey x5, l_orderkey x6, l_receiptdate x7, l_commitdate x8}
+                    [:select (> l_receiptdate l_commitdate)
+                     [:scan [l_suppkey l_orderkey l_receiptdate l_commitdate]]]]]
+                  [:rename {o_orderkey x10, o_orderstatus x11}
+                   [:scan [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]]
+                 [:rename {n_nationkey x13, n_name x14}
+                  [:scan [n_nationkey {n_name (= n_name "SAUDI ARABIA")}]]]]
+                [:rename {l_orderkey x16, l_suppkey x17}
+                 [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x23)}]]]]]
+              [:rename {l_orderkey x25, l_suppkey x26, l_receiptdate x27, l_commitdate x28}
+               [:select (> l_receiptdate l_commitdate)
+                [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x34)} l_receiptdate l_commitdate]]]]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 21)))))
 
 (t/deftest test-q22-global-sales-opportunity ;;TODO failed to deccorilate
