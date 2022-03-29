@@ -1755,6 +1755,7 @@
                         (let [ordered-inputs (vec logic-vars)]
                           (MapEntry/create agg-sym
                                            {:inputs ordered-inputs
+                                            :logic-vars logic-vars
                                             :->result (eval `(fn [_db# ~@ordered-inputs]
                                                                ~code))
                                             :aggregate-fn aggregate-fn})))
@@ -1832,7 +1833,8 @@
         find-arg-types (into #{} (map :find-arg-type) find-args)]
 
     (when-let [unknown-vars (not-empty (->> find-args
-                                            (into #{} (comp (mapcat :logic-vars)
+                                            (into #{} (comp (mapcat (fn [{:keys [logic-vars aggregates]}]
+                                                                      (into logic-vars (mapcat :logic-vars) (vals aggregates))))
                                                             (remove var->bindings)))))]
       (throw (err/illegal-arg :find-unknown-vars
                               {::err/message (str "Find refers to unknown variables: " (pr-str unknown-vars))

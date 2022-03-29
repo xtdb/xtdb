@@ -386,6 +386,13 @@
            (xt/q (xt/db *api*) '{:find [bah]
                                  :where [[e :name]]})))
 
+    ;; #1729
+    (t/is (thrown-with-msg?
+           IllegalArgumentException
+           #"Find refers to unknown variables: #\{bah\}"
+           (xt/q (xt/db *api*) '{:find [(sum bah)]
+                                 :where [[e :name]]})))
+
     (t/is (thrown-with-msg?
            IllegalArgumentException
            #"Clause refers to unknown variable: bah"
