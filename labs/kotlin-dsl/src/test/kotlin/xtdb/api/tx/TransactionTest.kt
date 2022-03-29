@@ -279,46 +279,6 @@ class TransactionTest {
                 +document
             }
         }
-
-        val String.date get() = Date.from(ZonedDateTime.parse(this).toInstant())
-
-        @Test
-        internal fun `can override txTime`(): Unit = xtdb.run {
-            val doc1 = aDocument()
-            val doc2 = aDocument()
-            val doc3 = aDocument()
-            val doc4 = aDocument()
-
-
-            submitTx {
-                put(doc1)
-                setTxTime("2020-01-01T00:00:00Z".date)
-            }.await()
-
-            assert {
-                +doc1
-            }
-
-            val tx2 = submitTx {
-                put(doc2)
-                setTxTime("2019-01-01T00:00:00Z".date)
-            }.also { it.await() }
-
-            assertFalse(this.hasTxCommitted(tx2))
-
-            val tx3 = submitTx {
-                put(doc3)
-                setTxTime("3000-01-01T00:00:00Z".date)
-            }.also { it.await() }
-
-            assertFalse(this.hasTxCommitted(tx3))
-
-            val tx4 = submitTx {
-                put(doc4)
-            }.also { it.await() }
-
-            assertTrue(this.hasTxCommitted(tx4))
-        }
     }
 
     @Nested
