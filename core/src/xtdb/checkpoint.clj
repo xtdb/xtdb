@@ -115,7 +115,7 @@
   (doseq [^Path from-path (-> (Files/walk from-root-path Integer/MAX_VALUE (make-array FileVisitOption 0))
                               .iterator
                               iterator-seq)
-          :let [to-path (.resolve to-root-path (.relativize from-root-path from-path))]]
+          :let [to-path (.resolve to-root-path (str (.relativize from-root-path from-path)))]]
     (cond
       (Files/isDirectory from-path (make-array LinkOption 0))
       (Files/createDirectories to-path (make-array FileAttribute 0))
