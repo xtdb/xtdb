@@ -1477,11 +1477,17 @@
                             (normalize-clauses)
                             (group-clauses-by-type))
 
+          collected-vars (collect-vars type->clauses)
+
           known-vars (-> (set/union in-vars
-                                    (into #{} (mapcat (collect-vars type->clauses)) [:e-vars :v-vars]))
+                                    (into #{} (mapcat collected-vars) [:e-vars :v-vars]))
                          (add-pred-returns-bound-at-top-level (:pred type->clauses)))
 
           [type->clauses known-vars] (analyze-or-vars type->clauses known-vars)
+
+          ;; we add pred returns now, assume they're all available,
+          ;; and deal with potential cycles later
+          known-vars (into known-vars (:pred-return-vars collected-vars))
 
           _ (validate-existing-vars type->clauses known-vars)
 

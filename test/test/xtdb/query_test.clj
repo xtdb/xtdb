@@ -4130,3 +4130,15 @@
                    :where [[x :y y]
                            [x :value #{:v1 :v2}]
                            [y :value #{:v1 :v2}]]}))))
+
+(t/deftest test-pred-variable-resolution-error-1731
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo, :type :some-value}]])
+
+  (t/is (= #{[:foo]}
+           (xt/q (xt/db *api*)
+                 '{:find [?e]
+                   :where [[(get-attr ?e :type) [?type]]
+                           [(= ?type :some-value)]
+
+                           (or [?e :type :some-value]
+                               [?e :type :other])]}))))
