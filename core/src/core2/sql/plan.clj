@@ -1268,12 +1268,16 @@
 (defn columns-in-predicate-present-in-relation? [relation predicate]
   (set/superset? (set (relation-columns relation)) (expr-symbols predicate)))
 
+(defn no-correlated-columns? [predicate]
+  (empty? (expr-correlated-symbols predicate)))
+
 (defn- push-selection-down-past-apply [z]
   (r/zmatch z
     [:select predicate
      [:apply mode columns dependent-column-names independent-relation dependent-relation]]
     ;;=>
-    (when (empty? (set/intersection (expr-symbols predicate) dependent-column-names))
+    (when (and (no-correlated-columns? predicate)
+               (empty? (set/intersection (expr-symbols predicate) dependent-column-names)))
       (cond
         (columns-in-predicate-present-in-relation? independent-relation predicate)
         [:apply
@@ -1291,13 +1295,14 @@
          independent-relation
          [:select predicate dependent-relation]]))))
 
-(defn- push-selection-down-past-rename [z]
+(defn- push-selection-down-past-rename [push-correlated? z]
   (r/zmatch z
     [:select predicate
      [:rename columns
       relation]]
     ;;=>
-    (when (map? columns)
+    (when (and (or push-correlated? (no-correlated-columns? predicate))
+               (map? columns))
       [:rename columns
        [:select (w/postwalk-replace (set/map-invert columns) predicate)
         relation]])))
@@ -1306,13 +1311,14 @@
   (not (set/subset? (set (expr-symbols predicate))
                     (set (filter symbol? projection)))))
 
-(defn- push-selection-down-past-project [z]
+(defn- push-selection-down-past-project [push-correlated? z]
   (r/zmatch z
     [:select predicate
      [:project projection
       relation]]
     ;;=>
-    (when-not (predicate-depends-on-calculated-expression? predicate projection)
+    (when (and (or push-correlated? (no-correlated-columns? predicate))
+               (not (predicate-depends-on-calculated-expression? predicate projection)))
       [:project projection
        [:select predicate
         relation]])
@@ -1321,50 +1327,55 @@
      [:map projection
       relation]]
     ;;=>
-    (when-not (predicate-depends-on-calculated-expression? predicate (relation-columns relation))
+    (when (and (or push-correlated? (no-correlated-columns? predicate))
+               (not (predicate-depends-on-calculated-expression? predicate (relation-columns relation))))
       [:map projection
        [:select predicate
         relation]])))
 
-(defn- push-selection-down-past-group-by [z]
+(defn- push-selection-down-past-group-by [push-correlated? z]
   (r/zmatch z
     [:select predicate
      [:group-by group-by-columns
       relation]]
     ;;=>
-    (when-not (predicate-depends-on-calculated-expression? predicate group-by-columns)
+    (when (and (or push-correlated? (no-correlated-columns? predicate))
+               (not (predicate-depends-on-calculated-expression? predicate group-by-columns)))
       [:group-by group-by-columns
        [:select predicate
         relation]])))
 
-(defn- push-selection-down-past-join [z]
+(defn- push-selection-down-past-join [push-correlated? z]
   (r/zmatch z
     [:select predicate
      [join-op join-map lhs rhs]]
     ;;=>
-    (cond
-      (columns-in-predicate-present-in-relation? rhs predicate)
-      [join-op join-map lhs [:select predicate rhs]]
-      (columns-in-predicate-present-in-relation? lhs predicate)
-      [join-op join-map [:select predicate lhs] rhs])
+    (when (or push-correlated? (no-correlated-columns? predicate))
+      (cond
+        (columns-in-predicate-present-in-relation? rhs predicate)
+        [join-op join-map lhs [:select predicate rhs]]
+        (columns-in-predicate-present-in-relation? lhs predicate)
+        [join-op join-map [:select predicate lhs] rhs]))
 
     [:select predicate
      [:cross-join lhs rhs]]
     ;;=>
-    (cond
-      (columns-in-predicate-present-in-relation? rhs predicate)
-      [:cross-join lhs [:select predicate rhs]]
-      (columns-in-predicate-present-in-relation? lhs predicate)
-      [:cross-join [:select predicate lhs] rhs])))
+    (when (or push-correlated? (no-correlated-columns? predicate))
+      (cond
+        (columns-in-predicate-present-in-relation? rhs predicate)
+        [:cross-join lhs [:select predicate rhs]]
+        (columns-in-predicate-present-in-relation? lhs predicate)
+        [:cross-join [:select predicate lhs] rhs]))))
 
-(defn- push-selections-with-fewer-variables-down [z]
+(defn- push-selections-with-fewer-variables-down [push-correlated? z]
   (r/zmatch z
     [:select predicate-1
      [:select predicate-2
       relation]]
     ;;=>
-    (when (< (count (expr-symbols predicate-1))
-             (count (expr-symbols predicate-2)))
+    (when (and (or push-correlated? (no-correlated-columns? predicate-1))
+               (< (count (expr-symbols predicate-1))
+                  (count (expr-symbols predicate-2))))
       [:select predicate-2
        [:select predicate-1
         relation]])))
@@ -1736,6 +1747,17 @@
     (when-let [join-map (build-join-map predicate independent-relation dependent-relation)]
       [:left-outer-join join-map independent-relation dependent-relation])))
 
+(def push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
+(def push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
+(def push-correlated-selection-down-past-project (partial push-selection-down-past-project true))
+(def push-correlated-selection-down-past-group-by (partial push-selection-down-past-group-by true))
+(def push-correlated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down true))
+
+(def push-decorrelated-selection-down-past-join (partial push-selection-down-past-join false))
+(def push-decorrelated-selection-down-past-rename (partial push-selection-down-past-rename false))
+(def push-decorrelated-selection-down-past-project (partial push-selection-down-past-project false))
+(def push-decorrelated-selection-down-past-group-by (partial push-selection-down-past-group-by false))
+(def push-decorrelated-selections-with-fewer-variables-down (partial push-selections-with-fewer-variables-down false))
 
 ;; Logical plan API
 
@@ -1764,25 +1786,31 @@
                                               (when-let [successful-rewrite (f z)]
                                                 (swap!
                                                   fired-rules
-                                                  #(conj
+                                                  #(conj ;; could also capture z before the rewrite
                                                      %
-                                                     (second
-                                                       (str/split (clojure.main/demunge (str f)) #"/|@"))))
+                                                     [(second
+                                                       (str/split (clojure.main/demunge (str f)) #"/|@"))
+                                                      successful-rewrite]))
                                                 successful-rewrite)))
                                           rules)))
                 optimize-plan [promote-selection-cross-join-to-join
                                promote-selection-to-join
-                               push-selection-down-past-join
                                push-selection-down-past-apply
-                               push-selection-down-past-rename
-                               push-selection-down-past-project
-                               push-selection-down-past-group-by
-                               push-selections-with-fewer-variables-down
+                               push-correlated-selection-down-past-join
+                               push-correlated-selection-down-past-rename
+                               push-correlated-selection-down-past-project
+                               push-correlated-selection-down-past-group-by
+                               push-correlated-selections-with-fewer-variables-down
                                remove-superseded-projects
                                merge-selections-around-scan
                                add-selection-to-scan-predicate]
                 decorrelate-plan [pull-correlated-selection-up-towards-apply
                                   push-selection-down-past-apply
+                                  push-decorrelated-selection-down-past-join
+                                  push-decorrelated-selection-down-past-rename
+                                  push-decorrelated-selection-down-past-project
+                                  push-decorrelated-selection-down-past-group-by
+                                  push-decorrelated-selections-with-fewer-variables-down
                                   decorrelate-apply
                                   promote-apply-mode
                                   remove-uncorrelated-apply]

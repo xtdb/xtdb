@@ -5,9 +5,10 @@
 
 (defn plan-sql [sql]
   (let [tree (sql/parse sql)
-        {errs :errs plan :plan} (plan/plan-query tree)]
+        {errs :errs :as plan} (plan/plan-query tree)]
     (assert (empty? errs) errs)
-    plan))
+    #_(select-keys plan [:fired-rules :plan]) ;; Debug Tool
+    (:plan plan)))
 
 (t/deftest test-basic-queries
   (t/is (= '[:rename {x1 movieTitle}

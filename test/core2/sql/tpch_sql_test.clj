@@ -556,7 +556,7 @@
            [:scan [s_suppkey {s_comment (like s_comment "%Customer%Complaints%")}]]]]]]]
      (pt/plan-sql (slurp-tpch-query 16)))))
 
-(t/deftest test-q17-small-quantity-order-revenue ;;TODO looks quite different to hand written plan, needs further inspection
+(t/deftest test-q17-small-quantity-order-revenue
   (t/is
     (=
      '[:rename
@@ -613,7 +613,7 @@
               [:scan [l_orderkey l_quantity]]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 18)))))
 
-(t/deftest test-q19-discounted-revenue ;;TODO check if AND can take multi args, also looks like we failed to deccorilate this
+(t/deftest test-q19-discounted-revenue
   (t/is
     (=
      '[:rename
@@ -695,7 +695,7 @@
              [:table [{x50 false}]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 19)))))
 
-(t/deftest test-q20-potential-part-promotion ;;TODO failed to deccorilate
+(t/deftest test-q20-potential-part-promotion
   (t/is
     (=
      (w/postwalk-replace
@@ -726,19 +726,10 @@
                  {x10 x22}
                  [:map
                   [{$row_number$ (row-number)}]
-                  [:select x16
-                   [:apply
-                    :cross-join
-                    {x10 ?x19}
-                    #{x16}
-                    [:rename {ps_suppkey x9, ps_partkey x10, ps_availqty x11}
-                     [:scan [ps_suppkey ps_partkey ps_availqty]]]
-                    [:top {:limit 1}
-                     [:union-all
-                      [:project [{x16 true}]
-                       [:rename {p_partkey x13, p_name x14}
-                        [:scan [{p_partkey (= ?x19 p_partkey)} {p_name (like p_name "forest%")}]]]]
-                      [:table [{x16 false}]]]]]]]
+                  [:semi-join {x10 x13}
+                   [:rename {ps_suppkey x9, ps_partkey x10, ps_availqty x11}
+                    [:scan [ps_suppkey ps_partkey ps_availqty]]]
+                   [:rename {p_partkey x13, p_name x14} [:scan [p_partkey {p_name (like p_name "forest%")}]]]]]
                  [:rename
                   {l_quantity x21, l_partkey x22, l_suppkey x23, l_shipdate x24}
                   [:scan
@@ -787,13 +778,13 @@
                  [:rename {n_nationkey x13, n_name x14}
                   [:scan [n_nationkey {n_name (= n_name "SAUDI ARABIA")}]]]]
                 [:rename {l_orderkey x16, l_suppkey x17}
-                 [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x23)}]]]]]
+                 [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x23)}]]]]] ;;TODO This shouldn't be here
               [:rename {l_orderkey x25, l_suppkey x26, l_receiptdate x27, l_commitdate x28}
                [:select (> l_receiptdate l_commitdate)
                 [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x34)} l_receiptdate l_commitdate]]]]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 21)))))
 
-(t/deftest test-q22-global-sales-opportunity ;;TODO failed to deccorilate
+(t/deftest test-q22-global-sales-opportunity
   (t/is
     (=
      '[:rename
@@ -811,24 +802,18 @@
             [:anti-join
              {x3 x24}
              [:cross-join
-              [:select
-               x7
+              [:select (= (substring x1 1 2) x5)
                [:apply
-                :cross-join
-                {x1 ?x10}
-                #{x7}
+                :semi-join
+                {}
+                #{}
                 [:rename {c_phone x1, c_acctbal x2, c_custkey x3}
                  [:scan [c_phone c_acctbal c_custkey]]]
-                [:top {:limit 1}
-                 [:union-all
-                  [:project [{x7 true}]
-                   [:select (= (substring ?x10 1 2) x5)
-                    [:table [{x5 "13"} {x5 "31"} {x5 "23"} {x5 "29"} {x5 "30"} {x5 "18"} {x5 "17"}]]]]
-                  [:table [{x7 false}]]]]]]
+                [:table [{x5 "13"} {x5 "31"} {x5 "23"} {x5 "29"} {x5 "30"} {x5 "18"} {x5 "17"}]]]]
               [:max-1-row
                [:group-by
                 [{x22 (avg x12)}]
-                [:select (= (substring x13 1 2) x15)
+                [:select (= (substring x13 1 2) x15) ;;TODO apply can be removed by theta join
                  [:apply
                   :semi-join
                   {}
@@ -839,5 +824,3 @@
              [:rename {o_custkey x24}
               [:scan [o_custkey]]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 22)))))
-
-
