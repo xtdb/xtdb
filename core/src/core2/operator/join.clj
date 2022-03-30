@@ -160,7 +160,6 @@
                      ^ICursor build-cursor, build-key-column-names, build-column-names
                      ^ICursor probe-cursor, probe-key-column-names, probe-column-names
                      ^IRelationWriter rel-writer
-                     ^List build-rels
                      ^IRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
@@ -170,9 +169,7 @@
     (.forEachRemaining build-cursor
                        (reify Consumer
                          (accept [_ build-rel]
-                           (let [build-rel (iv/copy build-rel allocator)]
-                             (.add build-rels build-rel)
-                             (build-phase build-rel build-key-column-names rel-map pushdown-blooms)))))
+                           (build-phase build-rel build-key-column-names rel-map pushdown-blooms))))
 
     (let [yield-missing? (contains? #{:anti-semi :left-outer :full-outer} join-type)]
       (boolean
@@ -222,8 +219,6 @@
     (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
     (util/try-close rel-writer)
     (util/try-close rel-map)
-    (run! util/try-close build-rels)
-    (.clear build-rels)
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
@@ -244,7 +239,6 @@
                left-cursor left-key-column-names left-column-names
                right-cursor right-key-column-names right-column-names
                (vw/->rel-writer allocator)
-               (ArrayList.)
                (emap/->relation-map allocator {:build-key-col-names left-key-column-names
                                                :probe-key-col-names right-key-column-names})
                nil
@@ -258,7 +252,6 @@
                right-cursor right-key-column-names right-column-names
                left-cursor left-key-column-names left-column-names
                (vw/->rel-writer allocator)
-               (ArrayList.)
                (emap/->relation-map allocator {:build-key-col-names right-key-column-names
                                                :probe-key-col-names left-key-column-names})
                nil
@@ -272,7 +265,6 @@
                right-cursor right-key-column-names right-column-names
                left-cursor left-key-column-names left-column-names
                (vw/->rel-writer allocator)
-               (ArrayList.)
                (emap/->relation-map allocator {:build-key-col-names right-key-column-names
                                                :probe-key-col-names left-key-column-names})
                nil
@@ -286,7 +278,6 @@
                left-cursor left-key-column-names left-column-names
                right-cursor right-key-column-names right-column-names
                (vw/->rel-writer allocator)
-               (ArrayList.)
                (emap/->relation-map allocator {:build-key-col-names left-key-column-names
                                                :probe-key-col-names right-key-column-names})
                (RoaringBitmap.)
@@ -300,7 +291,6 @@
                right-cursor right-key-column-names right-column-names
                left-cursor left-key-column-names left-column-names
                (vw/->rel-writer allocator)
-               (ArrayList.)
                (emap/->relation-map allocator {:build-key-col-names right-key-column-names
                                                :probe-key-col-names left-key-column-names})
                nil
