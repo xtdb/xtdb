@@ -505,19 +505,25 @@
     [expr]))
 
 (defn- boolean-constraint-propagation [cnf-clauses]
-  (let [units (set (remove or-predicate? cnf-clauses))
-        new-clauses (->> (for [clause cnf-clauses
-                               :let [clause (if (or-predicate? clause)
-                                              (let [literals (flatten-expr or-predicate? clause)]
-                                                (when-not (some units literals)
-                                                  (cons 'or literals)))
-                                              clause)]
-                               :when (some? clause)]
-                           clause)
-                         (distinct))]
-    (if (= cnf-clauses new-clauses)
-      new-clauses
-      (recur new-clauses))))
+  (loop [clauses (distinct (for [clause cnf-clauses]
+                             (if (or-predicate? clause)
+                               (cons 'or (flatten-expr or-predicate? clause))
+                               clause)))]
+    (let [units (set (remove or-predicate? clauses))
+          not-units (set (for [u units]
+                           `(~'not ~u)))
+          new-clauses (->> (for [clause clauses
+                                 :let [clause (if (or-predicate? clause)
+                                                (let [literals (remove not-units (rest clause))]
+                                                  (when-not (some units literals)
+                                                    (cons 'or literals)))
+                                                clause)]
+                                 :when (some? clause)]
+                             clause)
+                           (distinct))]
+      (if (= clauses new-clauses)
+        new-clauses
+        (recur new-clauses)))))
 
 (defn- wrap-with-select [sc relation]
   (let [sc-expr (expr sc)]
@@ -1166,7 +1172,7 @@
 (defn- remove-names [relation]
   (let [projection (relation-columns relation)
         relation (binding [*name-counter* (atom 0)]
-                   (z/node (r/bottomup (r/adhoc-tp r/id-tp remove-names-step) (r/->zipper relation))))
+                   (z/node (r/bottomup (r/adhoc-tp r/id-tp remove-names-step) (z/vector-zip relation))))
         smap (:smap (meta relation))
         rename-map (select-keys smap projection)
         projection (replace smap projection)
