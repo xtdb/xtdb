@@ -363,17 +363,6 @@
         (.copyRow row-copier (.getIndex in-col src-idx))
         (.endValue vec-writer)))))
 
-(defn ->null-row-copier ^core2.vector.IRowCopier [^IVectorWriter out-writer]
-  (let [null-writer (-> out-writer
-                        (.asDenseUnion)
-                        (.writerForType LegType/NULL))]
-    (reify IRowCopier
-      (copyRow [_ _idx]
-        (.startValue out-writer)
-        (.startValue null-writer)
-        (.endValue null-writer)
-        (.endValue out-writer)))))
-
 (defn append-vec [^IVectorWriter vec-writer, ^IIndirectVector in-col]
   (let [row-copier (->row-copier vec-writer in-col)]
     (dotimes [src-idx (.getValueCount in-col)]
@@ -383,8 +372,3 @@
   (doseq [^IIndirectVector src-col src-rel
           :let [^IVectorWriter vec-writer (.writerForName dest-rel (.getName src-col))]]
     (append-vec vec-writer src-col)))
-
-(defn clear-rel [^IRelationWriter writer]
-  (doseq [^IVectorWriter vec-writer writer]
-    (.clear (.getVector vec-writer))
-    (.clear vec-writer)))
