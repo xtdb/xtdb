@@ -77,6 +77,28 @@
        :then {:op :local, :local local}
        :else {:op :call, :f :coalesce, :args (rest args)}})))
 
+;; SQL:2011 §8.3
+(defmethod macroexpand1-call :between [{[x left right :as args] :args, :as expr}]
+  (assert (= 3 (count args)) (format "`between` expects 3 args: '%s'" (pr-str expr)))
+
+  ;; TODO hiding `x` behind a local might mean we don't use metadata when we could.
+  (let [local (gensym 'between)
+        local-expr {:op :local, :local local}]
+    {:op :let, :local local, :expr x
+     :body {:op :call, :f :and
+            :args [{:op :call, :f :>=, :args [local-expr left]}
+                   {:op :call, :f :<=, :args [local-expr right]}]}}))
+
+(defmethod macroexpand1-call :between-symmetric [{[x left right :as args] :args, :as expr}]
+  (assert (= 3 (count args)) (format "`between-symmetric` expects 3 args: '%s'" (pr-str expr)))
+
+  (let [local (gensym 'between-symmetric)
+        local-expr {:op :local, :local local}]
+    {:op :let, :local local, :expr x
+     :body {:op :call, :f :or
+            :args [{:op :call, :f :between, :args [local-expr left right]}
+                   {:op :call, :f :between, :args [local-expr right left]}]}}))
+
 (defn macroexpand-expr [expr]
   (loop [{:keys [op] :as expr} expr]
     (if-not (= :call op)

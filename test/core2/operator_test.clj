@@ -369,3 +369,20 @@
                                {:a 2, :b 4}
                                {:a 3, :b 5}
                                {:a 1, :b 6}]}))))
+
+(t/deftest test-between
+  (t/is (= [[true true] [false true]
+            [true true] [false true]
+            [false false] [false false]
+            [false false] [false false]
+            [true true] [false true]]
+           (map (juxt :b :bs)
+                (op/query-ra '[:project [{b (between x l r)}
+                                         {bs (between-symmetric x l r)}]
+                               [:table $xlr]]
+                             {'$xlr (map #(zipmap [:x :l :r] %)
+                                         [[5 0 10] [5 10 0]
+                                          [0 0 10] [0 10 0]
+                                          [-1 0 10] [-1 10 0]
+                                          [11 0 10] [11 10 0]
+                                          [10 0 10] [10 10 0]])})))))
