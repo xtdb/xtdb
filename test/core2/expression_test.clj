@@ -133,11 +133,9 @@
 
   Usage: (project '(+ a b) [{:a 1, :b 2}, {:a 3, :b 4}]) ;; => [3, 7]"
   [expr docs]
-  (with-open [node (node/start-node {})]
-    (let [docs (map-indexed #(assoc %2 :_id %1) docs)
-          db (snap/snapshot (tu/component node ::snap/snapshot-factory))
-          lp [:project [{'ret expr}] [:table docs]]]
-      (mapv :ret (op/query-ra lp db)))))
+  (let [docs (map-indexed #(assoc %2 :_id %1) docs)
+        lp [:project [{'ret expr}] [:table docs]]]
+    (mapv :ret (op/query-ra lp {}))))
 
 (defn project1 [expr doc] (first (project expr [doc])))
 
