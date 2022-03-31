@@ -1,13 +1,13 @@
 (ns core2.operator.apply
-  (:require [clojure.set :as set]
-            [core2.util :as util]
+  (:require [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
   (:import (core2 ICursor)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (java.util.function Consumer)
            (java.util.stream IntStream)
-           (org.apache.arrow.memory BufferAllocator)))
+           (org.apache.arrow.memory BufferAllocator)
+           (org.apache.arrow.vector NullVector)))
 
 (definterface IDependentCursorFactory
   (^core2.ICursor openDependentCursor [^core2.vector.IIndirectRelation inRelation, ^int idx]))
@@ -48,10 +48,10 @@
                                         (.add idxs in-idx))))))))
           (when-not (aget match? 0)
             (.add idxs in-idx)
-            (doseq [col-name dependent-col-names]
-              (doto (-> (.writerForName dep-out-writer (name col-name))
-                        (vw/->null-row-copier))
-                (.copyRow -1)))))))
+            (doseq [^String col-name (map name dependent-col-names)]
+              (vw/append-vec (.writerForName dep-out-writer col-name)
+                             (iv/->direct-vec (doto (NullVector. col-name)
+                                                (.setValueCount 1)))))))))
 
     :semi-join
     (reify ModeStrategy
