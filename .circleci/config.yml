@@ -7,6 +7,9 @@ executors:
     docker:
       - image: clojure:openjdk-11-tools-deps
 
+orbs:
+  slack: circleci/slack@4.1
+
 jobs:
   setup:
     executor: clojure
@@ -16,6 +19,9 @@ jobs:
 
     steps:
       - checkout
+
+      # for Slack
+      - run: apt-get update && apt-get install -y curl
 
       - run: 'md5sum deps.edn */deps.edn modules/*/deps.edn > .circleci-cache-key'
 
@@ -41,6 +47,12 @@ jobs:
             - ~/.gitlibs
           key: v4-dependencies-{{ checksum ".circleci-cache-key" }}
 
+      - slack/notify:
+          branch_pattern: master
+          channel: xtdb-builds
+          event: fail
+          template: basic_fail_1
+
   test:
     executor: clojure
 
@@ -49,6 +61,12 @@ jobs:
           at: ~/
 
       - run: 'clojure -Srepro -X:test'
+
+      - slack/notify:
+          branch_pattern: master
+          channel: xtdb-builds
+          event: fail
+          template: basic_fail_1
 
   integration-test:
     executor: clojure
@@ -60,13 +78,22 @@ jobs:
       # TODO should test the other modules too
       - run: 'clojure -Srepro -X:integration-test'
 
+      - slack/notify:
+          branch_pattern: master
+          channel: xtdb-builds
+          event: fail
+          template: basic_fail_1
+
 workflows:
   build:
     jobs:
-      - setup
+      - setup:
+          context: slack-bot
       - test:
+          context: slack-bot
           requires:
             - setup
       - integration-test:
+          context: slack-bot
           requires:
             - setup
