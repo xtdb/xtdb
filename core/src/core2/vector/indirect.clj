@@ -169,12 +169,9 @@
         (dotimes [idx (alength idxs)]
           (let [src-idx (aget idxs idx)
                 type-id (.getTypeId from-duv src-idx)
-                dest-offset (DenseUnionUtil/writeTypeId to-duv idx type-id)]
-            (.copyFromSafe (.getVectorByType to-duv type-id)
-                           (.getOffset from-duv src-idx)
-                           dest-offset
-                           (.getVectorByType from-duv type-id)))))
-
+                dest-offset (DenseUnionUtil/writeTypeId to-duv idx type-id)
+                tp (.makeTransferPair (.getVectorByType from-duv type-id) (.getVectorByType to-duv type-id))]
+            (.copyValueSafe tp (.getOffset from-duv src-idx) dest-offset))))
       (let [tp (.makeTransferPair v out-vec)]
         (dotimes [idx (alength idxs)]
           (.copyValueSafe tp (aget idxs idx) idx))))
