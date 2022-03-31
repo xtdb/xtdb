@@ -436,7 +436,7 @@
 
     [:not [:or x y]]
     ;;=>
-    `(~'and (~'not x) (~'not y))))
+    `(~'and (~'not ~x) (~'not ~y))))
 
 (defn- prop-further-simplify [z]
   (r/zmatch z
