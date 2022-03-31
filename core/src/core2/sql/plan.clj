@@ -494,18 +494,38 @@
   (and (sequential? predicate)
        (= 'and (first predicate))))
 
+(defn- or-predicate? [predicate]
+  (and (sequential? predicate)
+       (= 'or (first predicate))))
+
+(defn- flatten-expr [pred expr]
+  (if (pred expr)
+    (concat (flatten-expr pred (nth expr 1))
+            (flatten-expr pred (nth expr 2)))
+    [expr]))
+
+(defn- boolean-constraint-propagation [cnf-clauses]
+  (let [units (set (remove or-predicate? cnf-clauses))
+        new-clauses (->> (for [clause cnf-clauses
+                               :let [clause (if (or-predicate? clause)
+                                              (let [literals (flatten-expr or-predicate? clause)]
+                                                (when-not (some units literals)
+                                                  (cons 'or literals)))
+                                              clause)]
+                               :when (some? clause)]
+                           clause)
+                         (distinct))]
+    (if (= cnf-clauses new-clauses)
+      new-clauses
+      (recur new-clauses))))
+
 (defn- wrap-with-select [sc relation]
   (let [sc-expr (expr sc)]
     (reduce
      (fn [acc predicate]
        [:select predicate acc])
      (wrap-with-apply sc relation)
-     ((fn step [sc-expr]
-        (if (and-predicate? sc-expr)
-          (concat (step (nth sc-expr 1))
-                  (step (nth sc-expr 2)))
-          [sc-expr]))
-      sc-expr))))
+     (flatten-expr and-predicate? sc-expr))))
 
 (defn- needs-group-by? [z]
   (boolean (:grouping-columns (sem/local-env (sem/group-env z)))))
