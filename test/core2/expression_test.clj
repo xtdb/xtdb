@@ -141,6 +141,25 @@
 
 (defn project1 [expr doc] (first (project expr [doc])))
 
+(t/deftest test-variadic-and-or-94
+  (t/is (= [true] (project '(and) [{}])))
+  (t/is (= [false] (project '(or) [{}])))
+
+  (t/is (= [true false] (project '(and x) [{:x true} {:x false}])))
+  (t/is (= [true false] (project '(or x) [{:x true} {:x false}])))
+
+  (t/is (= [true false false]
+           (project '(and x y z)
+                    [{:x true, :y true, :z true}
+                     {:x false, :y true, :z true}
+                     {:x true, :y true, :z false}])))
+
+  (t/is (= [false true true]
+           (project '(or x y z)
+                    [{:x false, :y false, :z false}
+                     {:x true, :y false, :z false}
+                     {:x false, :y false, :z true}]))))
+
 (t/deftest test-date-trunc
   (let [test-doc {:_id  :foo,
                   :date (util/->instant #inst "2021-10-21T12:34:56Z")

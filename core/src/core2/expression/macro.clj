@@ -26,19 +26,26 @@
 (doseq [f #{:+ :- :* :/ :min :max}]
   (defmethod macroexpand1-call f [expr] (macroexpand1l-call expr)))
 
-(doseq [f #{:and :or}]
-  (defmethod macroexpand1-call f [expr] (macroexpand1r-call expr)))
+(doseq [[f id] #{[:and true] [:or false]}]
+  (defmethod macroexpand1-call f [{:keys [args] :as expr}]
+    (case (count args)
+      0 {:op :literal, :literal id}
+      1 (first args)
+      2 expr
+      (macroexpand1r-call expr))))
 
 (doseq [f #{:< :<= := :!= :>= :>}]
   (defmethod macroexpand1-call f [{:keys [args] :as expr}]
-    (if (> (count args) 2)
+    (case (count args)
+      (0 1) {:op :literal, :literal (not= f :!=)}
+      2 expr
+
       {:op :call, :f :and
        :args (for [args (partition 2 1 args)]
-               {:op :call, :f f, :args args})}
-      expr)))
+               {:op :call, :f f, :args args})})))
 
 (def ^:private nil-literal
-  {:op :literal, :literal nil, :literal-type types/null-type})
+  {:op :literal, :literal nil})
 
 (defmethod macroexpand1-call :cond [{:keys [args]}]
   (case (count args)

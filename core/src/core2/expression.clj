@@ -7,23 +7,22 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import [clojure.lang Keyword MapEntry]
-           [core2.operator IProjectionSpec IRelationSelector]
-           core2.types.LegType
-           [core2.vector IIndirectRelation IIndirectVector IRowCopier]
-           [core2.vector.extensions KeywordType UuidType]
-           java.lang.reflect.Method
-           java.nio.ByteBuffer
-           java.nio.charset.StandardCharsets
-           [java.time Duration Instant ZonedDateTime ZoneId ZoneOffset LocalDate]
-           [java.time.temporal ChronoField ChronoUnit]
-           [java.util Date HashMap LinkedList]
-           java.util.stream.IntStream
-           [org.apache.arrow.vector BitVector DurationVector FieldVector ValueVector]
-           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector]
-           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType DateUnit]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Date]
-           (java.nio.charset CharsetDecoder)))
+  (:import (clojure.lang Keyword MapEntry)
+           (core2.operator IProjectionSpec IRelationSelector)
+           (core2.types LegType)
+           (core2.vector IIndirectRelation IIndirectVector IRowCopier)
+           (core2.vector.extensions KeywordType UuidType)
+           (java.lang.reflect Method)
+           (java.nio ByteBuffer)
+           (java.nio.charset StandardCharsets)
+           (java.time Duration Instant LocalDate ZonedDateTime ZoneId ZoneOffset)
+           (java.time.temporal ChronoField ChronoUnit)
+           (java.util Date HashMap LinkedList)
+           (java.util.stream IntStream)
+           (org.apache.arrow.vector BitVector DurationVector FieldVector ValueVector)
+           (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector)
+           (org.apache.arrow.vector.types DateUnit TimeUnit Types Types$MinorType)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -55,9 +54,7 @@
 
     (seq? form) (parse-list-form form env)
 
-    :else {:op :literal, :literal form
-           :literal-type (.arrowType (types/value->leg-type form))
-           :literal-class (class form)}))
+    :else {:op :literal, :literal form}))
 
 (defmethod parse-list-form 'if [[_ & args :as form] env]
   (when-not (= 3 (count args))
@@ -203,10 +200,11 @@
 
 (defn lit->param [{:keys [op] :as expr}]
   (if (= op :literal)
-    {:op :param, :param (gensym 'lit),
-     :literal (:literal expr)
-     :param-class (:literal-class expr)
-     :param-type (:literal-type expr)}
+    (let [{:keys [literal]} expr]
+      {:op :param, :param (gensym 'lit),
+       :literal literal
+       :param-class (class literal)
+       :param-type (.arrowType (types/value->leg-type literal))})
     expr))
 
 (defmethod with-batch-bindings :param [{:keys [param param-class] :as expr}]
