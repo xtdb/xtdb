@@ -379,6 +379,117 @@
      relation
      subqueries)))
 
+;; https://www.spoofax.dev/background/stratego/strategic-rewriting/term-rewriting/
+;; https://www.spoofax.dev/background/stratego/strategic-rewriting/limitations-of-rewriting/
+
+(defn- prop-eval-rules [z]
+  (r/zmatch z
+    [:not true]
+    ;;=>
+    false
+
+    [:not false]
+    ;;=>
+    true
+
+    [:and true x]
+    ;;=>
+    x
+
+    [:and x true]
+    ;;=>
+    x
+
+    [:and false x]
+    ;;=>
+    false
+
+    [:and x false]
+    ;;=>
+    false
+
+    [:or true x]
+    ;;=>
+    true
+
+    [:or x true]
+    ;;=>
+    true
+
+    [:or false x]
+    ;;=>
+    x
+
+    [:or x false]
+    ;;=>
+    x))
+
+(defn- prop-simplify [z]
+  (r/zmatch z
+    [:not [:not x]]
+    ;;=>
+    x
+
+    [:not [:and x y]]
+    ;;=>
+    `(~'or (~'not ~x) (~'not ~y))
+
+    [:not [:or x y]]
+    ;;=>
+    `(~'and (~'not x) (~'not y))))
+
+(defn- prop-further-simplify [z]
+  (r/zmatch z
+    [:and x x]
+    ;;=>
+    x
+
+    [:or x x]
+    ;;=>
+    x
+
+    [:and x [:or x y]]
+    ;;=>
+    x
+
+    [:or x [:and x y]]
+    ;;=>
+    x
+
+    [:and [:or x y] [:or y x]]
+    ;;=>
+    `(~'or ~x ~y)))
+
+(defn- prop-dnf [z]
+  (r/zmatch z
+    [:and [:or x y] z]
+    ;;=>
+    `(~'or (~'and ~x ~z) (~'and ~y ~z))
+
+    [:and z [:or x y]]
+    ;;=>
+    `(~'or (~'and ~z ~x) (~'and ~z ~y))))
+
+(defn- prop-cnf [z]
+  (r/zmatch z
+    [:or [:and x y] z]
+    ;;=>
+    `(~'and (~'or ~x ~z) (~'or ~y ~z))
+
+    [:or z [:and x y]]
+    ;;=>
+    `(~'and (~'or ~z ~x) (~'or ~z ~y))))
+
+(defn- dnf [predicate]
+  (->> (r/->zipper predicate)
+       (r/innermost (r/mono-tp (some-fn prop-eval-rules prop-simplify prop-further-simplify prop-dnf)))
+       (z/node)))
+
+(defn- cnf [predicate]
+  (->> (r/->zipper predicate)
+       (r/innermost (r/mono-tp (some-fn prop-eval-rules prop-simplify prop-further-simplify prop-cnf)))
+       (z/node)))
+
 (defn- and-predicate? [predicate]
   (and (sequential? predicate)
        (= 'and (first predicate))))
