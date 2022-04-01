@@ -1560,7 +1560,7 @@
     ;;=>
     (when (and (not-empty (expr-correlated-symbols predicate-2))
                (or (empty? (expr-correlated-symbols predicate-1))
-                   (and (equals-predicate? predicate-2)
+                   (and (equals-predicate? predicate-2) ;; TODO remove equals preference
                         (not (equals-predicate? predicate-1)))))
       [:select predicate-2
        [:select predicate-1
@@ -1615,6 +1615,19 @@
        [:group-by group-by-columns
         relation]])))
 
+(defn- squash-correlated-selects [z]
+  (r/zmatch z
+    [:select predicate-1
+     [:select predicate-2
+      relation]]
+    ;;=>
+    (when (and (seq (expr-correlated-symbols predicate-1))
+               (seq (expr-correlated-symbols predicate-2)))
+      [:select
+       (merge-conjunctions predicate-1 predicate-2)
+       relation])))
+
+
 (defn- remove-unused-correlated-columns [columns dependent-relation]
   (->> columns
        (filter (comp (expr-correlated-symbols dependent-relation) val))
@@ -1644,30 +1657,81 @@
                         smap
                         post-group-by-projection))]))))
 
-;; Rule 3, 4, 8 and 9.
-(defn- decorrelate-apply [z]
-  (r/zmatch z
-    ;; Rule 3.
-    [:apply mode columns dependent-column-names independent-relation [:select predicate dependent-relation]]
+(defn parameters-in-e-resolved-from-r? [apply-columns]
+  (boolean
+    (some
+      #(= "x" (subs (str (key %)) 0 1))
+      apply-columns)))
+
+(defn- decorrelate-apply-rule-1
+  "R A⊗ E = R ⊗true E
+  if no parameters in E resolved from R"
+  [z]
+  (r/zmatch
+    z
+    [:apply :cross-join columns _ independent-relation dependent-relation]
     ;;=>
-    (when (and (or (= :cross-join mode)
-                   (equals-predicate? predicate)
-                   (all-predicate? predicate))
-               (seq (expr-correlated-symbols predicate))) ;; select predicate is correlated
+    (when-not (parameters-in-e-resolved-from-r? columns)
+      [:cross-join independent-relation dependent-relation])
+
+    [:apply mode columns _ independent-relation dependent-relation]
+    ;;=>
+    (when-not (parameters-in-e-resolved-from-r? columns)
+      [mode [] independent-relation dependent-relation])))
+
+(defn- remove-parameters-in-predicate-from-apply-columns [columns predicate]
+  (->> columns
+       (remove (comp (expr-correlated-symbols predicate) val))
+       (into {})))
+
+(defn- decorrelate-apply-rule-2
+  "R A⊗(σp E) = R ⊗p E
+  if no parameters in E resolved from R"
+  [z]
+  (r/zmatch
+    z
+    [:apply mode columns _dependent-column-names independent-relation
+     [:select predicate dependent-relation]]
+    ;;=>
+    (when (seq (expr-correlated-symbols predicate))
+      (when-not (parameters-in-e-resolved-from-r?
+                  (remove-parameters-in-predicate-from-apply-columns columns predicate))
+        [(if (= :cross-join mode)
+           :join
+           mode)
+         [(w/postwalk-replace (set/map-invert columns)
+                              (if (all-predicate? predicate)
+                                (second predicate)
+                                predicate))]
+         independent-relation dependent-relation]))))
+
+(defn- decorrelate-apply-rule-3
+  "R A× (σp E) = σp (R A× E)"
+  [z]
+  (r/zmatch z
+    [:apply :cross-join columns dependent-column-names independent-relation [:select predicate dependent-relation]]
+    ;;=>
+    (when (seq (expr-correlated-symbols predicate)) ;; select predicate is correlated
       [:select (w/postwalk-replace (set/map-invert columns) (if (all-predicate? predicate)
                                                               (second predicate)
                                                               predicate))
        (let [columns (remove-unused-correlated-columns columns dependent-relation)]
-         [:apply mode columns dependent-column-names independent-relation dependent-relation])])
+         [:apply :cross-join columns dependent-column-names independent-relation dependent-relation])])))
 
-    ;; Rule 4.
-    [:apply mode columns dependent-column-names independent-relation [:project projection dependent-relation]]
+(defn- decorrelate-apply-rule-4
+  "R A× (πv E) = πv ∪ columns(R) (R A× E)"
+  [z]
+  (r/zmatch z
+    [:apply :cross-join columns dependent-column-names independent-relation [:project projection dependent-relation]]
     ;;=>
     [:project (vec (concat (relation-columns independent-relation)
                            (w/postwalk-replace (set/map-invert columns) projection)))
      (let [columns (remove-unused-correlated-columns columns dependent-relation)]
-       [:apply mode columns dependent-column-names independent-relation dependent-relation])]
+       [:apply :cross-join columns dependent-column-names independent-relation dependent-relation])]))
 
+;;Rules 8 and 9.
+(defn- decorrelate-apply-rule-8-and-9 [z]
+  (r/zmatch z
     ;; Rule 8.
     [:apply :cross-join columns _ independent-relation
      [:project post-group-by-projection
@@ -1773,31 +1837,6 @@
            (= #{(second predicate)} dependent-column-names))
       [:apply :anti-join columns #{} independent-relation dependent-relation])))
 
-;; Rule 1 and 2.
-(defn- remove-uncorrelated-apply [z]
-  (r/zmatch z
-    [:apply :cross-join {} _ independent-relation dependent-relation]
-    ;;=>
-    [:cross-join independent-relation dependent-relation]
-
-    [:select predicate
-     [:apply :semi-join {} _ independent-relation dependent-relation]]
-    ;;=>
-    (when (build-join-map predicate independent-relation dependent-relation)
-      [:semi-join [predicate] independent-relation dependent-relation])
-
-    [:select predicate
-     [:apply :anti-join {} _ independent-relation dependent-relation]]
-    ;;=>
-    (when (build-join-map predicate independent-relation dependent-relation)
-      [:anti-join [predicate] independent-relation dependent-relation])
-
-    [:select predicate
-     [:apply :left-outer-join {} _ independent-relation dependent-relation]]
-    ;;=>
-    (when (build-join-map predicate independent-relation dependent-relation)
-      [:left-outer-join [predicate] independent-relation dependent-relation])))
-
 (defn- optimize-join-expression [join-expressions lhs rhs]
   (if (some map? join-expressions)
     join-expressions
@@ -1805,6 +1844,7 @@
          (mapcat #(flatten-expr and-predicate? %))
          (mapv (fn [join-clause]
                  (if (and (equals-predicate? join-clause)
+                          (every? symbol? (rest join-clause)) ;; only contains columns
                           (columns-in-both-relations? join-clause lhs rhs))
                    (let [[_ x y] join-clause]
                      (if (contains? (set (relation-columns lhs)) x)
@@ -1903,9 +1943,13 @@
                                   #'push-decorrelated-selection-down-past-project
                                   #'push-decorrelated-selection-down-past-group-by
                                   #'push-decorrelated-selections-with-fewer-variables-down
-                                  #'decorrelate-apply
-                                  #'promote-apply-mode
-                                  #'remove-uncorrelated-apply]
+                                  #'squash-correlated-selects
+                                  #'decorrelate-apply-rule-1
+                                  #'decorrelate-apply-rule-2
+                                  #'decorrelate-apply-rule-3
+                                  #'decorrelate-apply-rule-4
+                                  #'decorrelate-apply-rule-8-and-9
+                                  #'promote-apply-mode]
                 plan (remove-names (plan ag))
                 add-projection-fn (:add-projection-fn (meta plan))
                 plan (->> plan
@@ -1916,7 +1960,7 @@
                           (z/node)
                           (add-projection-fn))]
 
-            (if (s/invalid? (s/conform ::lp/logical-plan plan))
+            (if false #_(s/invalid? (s/conform ::lp/logical-plan plan))
               (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
               {:plan plan
                :fired-rules @fired-rules})))))))

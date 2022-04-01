@@ -7,7 +7,7 @@
   (let [tree (sql/parse sql)
         {errs :errs :as plan} (plan/plan-query tree)]
     (assert (empty? errs) errs)
-    #_(select-keys plan [:fired-rules :plan]) ;; Debug Tool
+    #_(assoc (select-keys plan [:fired-rules :plan]) :tree tree) ;; Debug Tool
     (:plan plan)))
 
 (t/deftest test-basic-queries
@@ -297,19 +297,20 @@
   (t/testing "ALL in WHERE"
     (t/is (= '[:rename {x1 y}
                [:project [x1]
-                [:apply :anti-join {x2 ?x9} #{}
-                 [:rename {y x1, z x2} [:scan [y z]]]
-                 [:rename {z x4}
-                  [:scan [{z (or (<= ?x9 z) (nil? ?x9) (nil? z))}]]]]]]
-             (plan-sql "SELECT x.y FROM x WHERE x.z > ALL (SELECT y.z FROM y)"))))
+                [:anti-join [(or (<= x2 x4) (nil? x2) (nil? x4))]
+                 [:rename {y x1, z x2}
+                  [:scan [y z]]]
+                 [:rename {z x4} [:scan [z]]]]]]
+            (plan-sql "SELECT x.y FROM x WHERE x.z > ALL (SELECT y.z FROM y)"))))
 
   (t/testing "ANY in WHERE"
     (t/is (= '[:rename {x1 y}
                [:project [x1]
-                [:apply :semi-join {x2 ?x9} #{}
+                [:semi-join
+                 [(> (= x2 1) x4)]
                  [:rename {y x1, z x2} [:scan [y z]]]
                  [:rename {z x4}
-                  [:scan [{z (> (= ?x9 1) z)}]]]]]]
+                  [:scan [z]]]]]]
              (plan-sql "SELECT x.y FROM x WHERE (x.z = 1) > ANY (SELECT y.z FROM y)"))))
 
   (t/testing "ALL as expression in SELECT"
@@ -399,7 +400,8 @@
                 [:select (>= x8 x17)
                  [:map [{x17 (+ x15 1)}]
                   [:group-by [x1 x2 x3 x4 x6 x7 x8 $row_number$ {x15 (avg x10)}]
-                   [:apply :left-outer-join {x2 ?x18, x3 ?x19, x4 ?x20} #{x10 x11 x12 x13}
+                   [:left-outer-join
+                    [(or (= x2 x11) (and (= x12 x3) (> x4 x13)))]
                     [:map [{$row_number$ (row-number)}]
                      [:join [{x2 x7}]
                       [:rename {name x1, id x2, major x3, year x4}
@@ -407,8 +409,7 @@
                       [:rename {course x6, sid x7, grade x8}
                        [:scan [course sid grade]]]]]
                     [:rename {grade x10, sid x11, curriculum x12, date x13}
-                     [:select (or (= ?x18 sid) (and (= curriculum ?x19) (> ?x20 date)))
-                      [:scan [grade sid curriculum date]]]]]]]]]]
+                     [:scan [grade sid curriculum date]]]]]]]]]
              (plan-sql
                "SELECT s.name, e.course
                FROM students s, exams e
@@ -437,7 +438,7 @@
       (->> "correlated subquery"
            (t/is (= '[:rename {x1 a}
                       [:project [x1]
-                       [:semi-join [{x4 x7} {x3 x6}]
+                       [:semi-join [{x3 x6} {x4 x7}]
                         [:join []
                          [:rename {a x1}
                           [:scan [a]]]
@@ -478,3 +479,12 @@
                     {:$column_1$ (. ?subquery__1_$row$ a)
                      :$column_2$ (. ?subquery__1_$row$ b)}]]]
          (plan-sql "VALUES (1, 2), (SELECT x.a, x.b FROM x WHERE x.a = 10)"))))))
+
+(t/deftest parameters-in-e-resolved-from-r-test
+  (t/are [expected apply-columns]
+         (= expected (plan/parameters-in-e-resolved-from-r? apply-columns))
+         false {}
+         true {'x1 '?x2}
+         false {'?x3 '?x4}
+         true {'?x3 '?x3
+                'x4 '?x5}))

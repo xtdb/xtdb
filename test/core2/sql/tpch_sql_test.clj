@@ -195,7 +195,7 @@
             {l_extendedprice x1, l_discount x2, l_shipdate x3, l_quantity x4}
             [:scan
              [l_extendedprice
-              {l_discount (between l_discount (- 0.06 0.01) (+ 0.06 0.01))} ;;TODO assumes between fn exists
+              {l_discount (between l_discount (- 0.06 0.01) (+ 0.06 0.01))}
               {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}
               {l_quantity (< l_quantity 24)}]]]]]])
      (pt/plan-sql (slurp-tpch-query 6)))))
@@ -228,7 +228,7 @@
                  [:rename {s_suppkey x1, s_nationkey x2} [:scan [s_suppkey s_nationkey]]]
                  [:rename
                   {l_shipdate x4, l_extendedprice x5, l_discount x6, l_suppkey x7, l_orderkey x8}
-                  [:scan [{l_shipdate (between l_shipdate ?date ?date2)} l_extendedprice l_discount l_suppkey l_orderkey]]]] ;; TODO between
+                  [:scan [{l_shipdate (between l_shipdate ?date ?date2)} l_extendedprice l_discount l_suppkey l_orderkey]]]]
                 [:rename {o_orderkey x10, o_custkey x11} [:scan [o_orderkey o_custkey]]]]
                [:rename {c_custkey x13, c_nationkey x14} [:scan [c_custkey c_nationkey]]]]
               [:rename {n_name x16, n_nationkey x17} [:scan [n_name n_nationkey]]]]
@@ -603,7 +603,7 @@
               [:scan [l_orderkey l_quantity]]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 18)))))
 
-(t/deftest test-q19-discounted-revenue
+(t/deftest test-q19-discounted-revenue ;;TODO unable to decorr, select stuck under this top/union exists thing
   (t/is
     (=
      '[:rename
@@ -725,7 +725,7 @@
                   [l_quantity l_partkey l_suppkey {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}]]]]]]]]]]])
      (pt/plan-sql (slurp-tpch-query 20)))))
 
-(t/deftest test-q21-suppliers-who-kept-orders-waiting ;;TODO failed to deccorilate
+(t/deftest test-q21-suppliers-who-kept-orders-waiting
   (t/is
     (=
      '[:rename
@@ -738,42 +738,33 @@
           [x1 {x37 (count x36)}]
           [:map
            [{x36 1}]
-           [:select
-            (= x3 x13)
-            [:select
-             (= x25 x6)
-             [:apply
-              :anti-join
-              {x5 ?x34}
-              #{}
-              [:select
-               (= x16 x6)
-               [:apply
-                :semi-join
-                {x5 ?x23}
-                #{}
-                [:cross-join
-                 [:join
-                  [{x6 x10}]
-                  [:join
-                   [{x2 x5}]
-                   [:rename {s_name x1, s_suppkey x2, s_nationkey x3}
-                    [:scan [s_name s_suppkey s_nationkey]]]
-                   [:rename {l_suppkey x5, l_orderkey x6, l_receiptdate x7, l_commitdate x8}
-                    [:select (> l_receiptdate l_commitdate)
-                     [:scan [l_suppkey l_orderkey l_receiptdate l_commitdate]]]]]
-                  [:rename {o_orderkey x10, o_orderstatus x11}
-                   [:scan [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]]
-                 [:rename {n_nationkey x13, n_name x14}
-                  [:scan [n_nationkey {n_name (= n_name "SAUDI ARABIA")}]]]]
-                [:rename {l_orderkey x16, l_suppkey x17}
-                 [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x23)}]]]]] ;;TODO This shouldn't be here
-              [:rename {l_orderkey x25, l_suppkey x26, l_receiptdate x27, l_commitdate x28}
-               [:select (> l_receiptdate l_commitdate)
-                [:scan [l_orderkey {l_suppkey (<> l_suppkey ?x34)} l_receiptdate l_commitdate]]]]]]]]]]]]
+           [:anti-join
+            [(<> x26 x5) {x6 x25}]
+            [:semi-join
+             [(<> x17 x5) {x6 x16}]
+             [:join
+              [{x3 x13}]
+              [:join
+               [{x6 x10}]
+               [:join
+                [{x2 x5}]
+                [:rename {s_name x1, s_suppkey x2, s_nationkey x3}
+                 [:scan [s_name s_suppkey s_nationkey]]]
+                [:rename {l_suppkey x5, l_orderkey x6, l_receiptdate x7, l_commitdate x8}
+                 [:select (> l_receiptdate l_commitdate)
+                  [:scan [l_suppkey l_orderkey l_receiptdate l_commitdate]]]]]
+               [:rename {o_orderkey x10, o_orderstatus x11}
+                [:scan [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]]
+              [:rename {n_nationkey x13, n_name x14}
+               [:scan [n_nationkey {n_name (= n_name "SAUDI ARABIA")}]]]]
+             [:rename {l_orderkey x16, l_suppkey x17}
+              [:scan [l_orderkey l_suppkey]]]]
+            [:rename {l_orderkey x25, l_suppkey x26, l_receiptdate x27, l_commitdate x28}
+             [:select (> l_receiptdate l_commitdate)
+              [:scan [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 21)))))
 
-(t/deftest test-q22-global-sales-opportunity ;; TODO very broken
+(t/deftest test-q22-global-sales-opportunity
   (t/is
     (=
      '[:rename
@@ -791,25 +782,19 @@
             [:anti-join
              [{x3 x24}]
              [:cross-join
-              [:select (= (substring x1 1 2) x5)
-               [:apply
-                :semi-join
-                {}
-                #{}
-                [:rename {c_phone x1, c_acctbal x2, c_custkey x3}
-                 [:scan [c_phone c_acctbal c_custkey]]]
-                [:table [{x5 "13"} {x5 "31"} {x5 "23"} {x5 "29"} {x5 "30"} {x5 "18"} {x5 "17"}]]]]
+              [:semi-join
+               [(= (substring x1 1 2) x5)]
+               [:rename {c_phone x1, c_acctbal x2, c_custkey x3}
+                [:scan [c_phone c_acctbal c_custkey]]]
+               [:table [{x5 "13"} {x5 "31"} {x5 "23"} {x5 "29"} {x5 "30"} {x5 "18"} {x5 "17"}]]]
               [:max-1-row
                [:group-by
                 [{x22 (avg x12)}]
-                [:select (= (substring x13 1 2) x15)
-                 [:apply
-                  :semi-join
-                  {}
-                  #{}
-                  [:rename {c_acctbal x12, c_phone x13}
-                   [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
-                  [:table [{x15 "13"} {x15 "31"} {x15 "23"} {x15 "29"} {x15 "30"} {x15 "18"} {x15 "17"}]]]]]]]
+                [:semi-join
+                 [(= (substring x13 1 2) x15)]
+                 [:rename {c_acctbal x12, c_phone x13}
+                  [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
+                 [:table [{x15 "13"} {x15 "31"} {x15 "23"} {x15 "29"} {x15 "30"} {x15 "18"} {x15 "17"}]]]]]]
              [:rename {o_custkey x24}
               [:scan [o_custkey]]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 22)))))
