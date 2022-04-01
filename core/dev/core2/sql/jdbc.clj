@@ -5,8 +5,7 @@
             [core2.api :as c2]
             [core2.local-node :as node]
             [core2.rewrite :as r]
-            [clojure.zip :as z]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
+            [clojure.zip :as z])
   (:import [java.sql Connection Driver DriverManager DriverPropertyInfo
             ResultSet ResultSetMetaData PreparedStatement SQLException SQLFeatureNotSupportedException]))
 
@@ -105,6 +104,7 @@
   (DriverManager/registerDriver xtdb-jdbc-driver))
 
 (comment
+  (require '[juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
   (with-open [conn (jdbc/get-connection "jdbc:xtdb:mem")]
     (jdbc/execute! conn ["SELECT * FROM (VALUES 1, 2) AS x (a), (VALUES 3, 4) AS y (b)"]))
   ;;=>
