@@ -18,3 +18,4 @@ build
 *.iml
 .idea/
 .cpcache/
+.lsp/.cache/

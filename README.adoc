@@ -188,6 +188,10 @@ For Emacs/CIDER:
 * `(go)`
 * `node` is then bound to a started node, using `dev/dev-node` as a persistent data directory
 
+Linting:
+* `clojure -Xlint` - runs clojure-lsp's `diagnostics`.
+* `clojure -Xlint :namespace '[core2.foo]` - same, for given namespaces.
+
 === Links
 
 * https://github.com/xtdb/core2/projects/1[Kanban board]
