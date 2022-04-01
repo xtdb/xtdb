@@ -190,7 +190,7 @@ For Emacs/CIDER:
 
 Linting:
 * `clojure -Xlint` - runs clojure-lsp's `diagnostics`.
-* `clojure -Xlint :namespace '[core2.foo]` - same, for given namespaces.
+* `clojure -Xlint :namespace '[core2.foo]'` - same, for given namespaces.
 
 === Links
 
