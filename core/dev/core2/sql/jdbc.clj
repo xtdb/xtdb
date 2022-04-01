@@ -96,6 +96,8 @@
     (getPropertyInfo [_ url info]
       (make-array DriverPropertyInfo 0))
 
+    (jdbcCompliant [_] false)
+
     (getParentLogger [_]
       (throw (SQLFeatureNotSupportedException.)))))
 
