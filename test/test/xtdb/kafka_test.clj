@@ -1,6 +1,5 @@
 (ns xtdb.kafka-test
-  (:require [clojure.java.io :as io]
-            [clojure.test :as t]
+  (:require [clojure.test :as t]
             [xtdb.api :as xt]
             [xtdb.db :as db]
             [xtdb.fixtures :as fix :refer [*api*]]
@@ -78,11 +77,11 @@
               (t/is (= after-evict-doc (xt/entity (xt/db *api*) :after-evict))))))))))
 
 (t/deftest test-consumer-seeks-after-restart
-  (fix/with-tmp-dir "xtdb-tmp" [tmp]
+  (fix/with-tmp-dirs #{tmp-indices tmp-docs}
     (let [with-fixtures (t/join-fixtures [fk/with-cluster-tx-log-opts
                                           fk/with-cluster-doc-store-opts
-                                          (fix/with-opts {:xtdb/index-store {:kv-store {:xtdb/module `xtdb.rocksdb/->kv-store, :db-dir (io/file tmp "indexes")}}
-                                                          :xtdb/document-store {:local-document-store {:kv-store {:xtdb/module `xtdb.rocksdb/->kv-store, :db-dir (io/file tmp "docs")}}}})])]
+                                          (fix/with-opts {:xtdb/index-store {:kv-store {:xtdb/module `xtdb.rocksdb/->kv-store, :db-dir tmp-indices}}
+                                                          :xtdb/document-store {:local-document-store {:kv-store {:xtdb/module `xtdb.rocksdb/->kv-store, :db-dir tmp-docs}}}})])]
       (with-fixtures
         (fn []
           (fix/with-node

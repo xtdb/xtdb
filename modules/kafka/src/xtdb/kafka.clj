@@ -11,17 +11,17 @@
             [xtdb.tx.event :as txe]
             [xtdb.tx.subscribe :as tx-sub])
   (:import clojure.lang.MapEntry
-           [xtdb.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
            java.nio.file.Path
            java.time.Duration
            [java.util Collection Date Map UUID]
            [java.util.concurrent CompletableFuture ExecutionException]
-           [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
+           [org.apache.kafka.clients.admin AdminClient ListOffsetsResult ListOffsetsResult$ListOffsetsResultInfo NewTopic OffsetSpec TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
-           [org.apache.kafka.common PartitionInfo TopicPartition]
-           [org.apache.kafka.common.errors InterruptException TopicExistsException]))
+           [org.apache.kafka.common TopicPartitionInfo TopicPartition]
+           [org.apache.kafka.common.errors InterruptException TopicExistsException]
+           [xtdb.kafka.nippy NippyDeserializer NippySerializer]))
 
 (defn ->kafka-config {::sys/args {:bootstrap-servers {:spec ::sys/string
                                                       :doc "URL for connecting to Kafka, eg \"kafka-cluster-kafka-brokers.xtdb.svc.cluster.local:9092\""
@@ -270,12 +270,12 @@
           doc-records))
 
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
-                               ^KafkaConsumer end-offset-consumer
+                               ^AdminClient list-offset-client
                                local-document-store index-store
                                ^Thread indexing-thread !indexing-error]
   Closeable
   (close [_]
-    (xio/try-close end-offset-consumer)
+    (xio/try-close list-offset-client)
     (xio/try-close producer)
     (.interrupt indexing-thread)
     (.join indexing-thread))
@@ -292,13 +292,21 @@
 
   (fetch-docs [_ ids]
     (let [ids (set ids)
-
-          ;; ideally we'd use AdminClient.listOffsets for this, but it was only introduced in 2.5.0
-          ;; which may be a bit recent (April 2020) for XTDB folks
           !end-offsets (delay
-                         (.endOffsets end-offset-consumer
-                                      (for [^PartitionInfo partition-info (.partitionsFor end-offset-consumer doc-topic)]
-                                        (TopicPartition. doc-topic (.partition partition-info)))))]
+                        (let [^TopicDescription topic-desc (-> @(.all (.describeTopics list-offset-client [doc-topic]))
+                                                               (get doc-topic))
+
+                              ^ListOffsetsResult
+                              offsets-result (-> (.listOffsets list-offset-client
+                                                               (->> (for [^TopicPartitionInfo tp-info (.partitions topic-desc)]
+                                                                      [(TopicPartition. doc-topic (.partition tp-info)) (OffsetSpec/latest)])
+                                                                    (into {})))
+                                                 (.all)
+                                                 deref)]
+
+                          (->> (for [[tp ^ListOffsetsResult$ListOffsetsResultInfo lori] offsets-result]
+                                 [tp (.offset lori)])
+                               (into {}))))]
 
       (loop [doc-offsets (read-doc-offsets index-store)
              docs (db/fetch-docs local-document-store ids)]
@@ -369,13 +377,13 @@
                                     :poll-wait-duration {:spec ::sys/duration
                                                          :required? true
                                                          :doc "How long to wait when polling Kafka"
-                                                         :default (Duration/ofSeconds 1)}} }
+                                                         :default (Duration/ofSeconds 1)}}}
   [{:keys [index-store local-document-store kafka-config doc-topic-opts] :as opts}]
   (ensure-doc-topic-exists opts)
 
   (let [!indexing-error (atom nil)]
     (map->KafkaDocumentStore {:producer (->producer {:kafka-config kafka-config})
-                              :end-offset-consumer (->consumer {:kafka-config kafka-config})
+                              :list-offset-client (->admin-client {:kafka-config kafka-config})
                               :doc-topic (:topic-name doc-topic-opts)
                               :index-store index-store
                               :local-document-store local-document-store
