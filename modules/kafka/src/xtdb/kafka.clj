@@ -381,7 +381,7 @@
                               :local-document-store local-document-store
                               :!indexing-error !indexing-error
                               :indexing-thread (doto (Thread. #(index-doc-log (assoc opts :!indexing-error !indexing-error)))
-                                                 (.setName "crux-doc-consumer")
+                                                 (.setName "xtdb-doc-consumer")
                                                  (.start))})))
 
 (defrecord SubmitOnlyDocumentStore [^KafkaProducer producer doc-topic]
