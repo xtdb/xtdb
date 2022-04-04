@@ -205,6 +205,7 @@
                                  {:a 12, :b 44}
                                  {:a 10, :b 42}]]
                                [[{:c 12, :d 43}
+                                 {:c 12, :d 43}
                                  {:c 11, :d 42}]]
                                {:left-fields [a-field b-field], :right-fields [c-field d-field]
                                 :left-join-cols ["a"], :right-join-cols ["c"]
@@ -578,3 +579,39 @@
                {:a 0, :b 12} 1,
                {:a 0, :b 2} 1}]
              (run-foj true true true)))))
+
+(t/deftest test-semi-join-on-true
+  (letfn [(run-semi [left? right? theta-expr]
+            (->> (run-join-test join/->left-semi-equi-join-cursor
+                                (if left? [[{:a 12}, {:a 0}]] [])
+                                (if right? [[{:b 12}, {:b 2}]] [])
+                                {:left-join-cols [], :right-join-cols []
+                                 :theta-expr theta-expr})
+                 (mapv frequencies)))]
+    (t/is (= [] (run-semi true false nil)))
+    (t/is (= [] (run-semi true false true)))
+    (t/is (= [] (run-semi false true nil)))
+    (t/is (= [] (run-semi false true true)))
+    (t/is (= [] (run-semi true true false)))
+
+    (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-semi true true nil)))
+    (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-semi true true true)))))
+
+(t/deftest test-anti-join-on-true
+  (letfn [(run-anti [left? right? theta-expr]
+            (->> (run-join-test join/->left-anti-semi-equi-join-cursor
+                                (if left? [[{:a 12}, {:a 0}]] [])
+                                (if right? [[{:b 12}, {:b 2}]] [])
+                                {:left-join-cols [], :right-join-cols []
+                                 :theta-expr theta-expr})
+                 (mapv frequencies)))]
+    (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true false nil)))
+    (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true false true)))
+
+    (t/is (= [] (run-anti false true nil)))
+    (t/is (= [] (run-anti false true true)))
+
+    (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true true false)))
+
+    (t/is (= [] (run-anti true true nil)))
+    (t/is (= [] (run-anti true true true)))))

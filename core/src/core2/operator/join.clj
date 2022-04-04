@@ -12,7 +12,6 @@
            (java.util.function Consumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
-           [org.apache.arrow.vector NullVector]
            (org.roaringbitmap IntConsumer RoaringBitmap)
            (org.roaringbitmap.buffer MutableRoaringBitmap)))
 
@@ -128,17 +127,6 @@
     (iv/->indirect-rel (concat (iv/select built-rel build-sel)
                                (iv/select probe-rel probe-sel)))))
 
-(defn- probe-semi-join-select-fast-path
-  "Do not call me directly, use probe-semi-join-select. Only works for semi-join without theta predicates."
-  ^ints [^IIndirectRelation probe-rel
-         ^IRelationMap rel-map]
-  (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
-        matching-probe-idxs (IntStream/builder)]
-    (dotimes [probe-idx (.rowCount probe-rel)]
-      (when (<= 0 (.indexOf rel-map-prober probe-idx))
-        (.add matching-probe-idxs probe-idx)))
-    (.toArray (.build matching-probe-idxs))))
-
 (defn- distinct-selection [^ints sel]
   (.toArray (RoaringBitmap/bitmapOf sel)))
 
@@ -148,16 +136,22 @@
          ^IRelationMap rel-map
          ^BufferAllocator allocator
          ^IRelationSelector theta-selector]
-  (if (nil? theta-selector)
-    (probe-semi-join-select-fast-path probe-rel rel-map)
-    (let [probe-semi-sel (probe-semi-join-select-fast-path probe-rel rel-map)
-          probe-filtered-rel (iv/select probe-rel probe-semi-sel)
-          selection-pair (probe-inner-join-select probe-filtered-rel rel-map)
+  (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
+        probe-semi-sel (let [matching-probe-idxs (IntStream/builder)]
+                         (dotimes [probe-idx (.rowCount probe-rel)]
+                           (when-not (neg? (.indexOf rel-map-prober probe-idx))
+                             (.add matching-probe-idxs probe-idx)))
+                         (.toArray (.build matching-probe-idxs)))]
+    (if (nil? theta-selector)
+      probe-semi-sel
 
-          theta-base-rel (join-rels probe-filtered-rel rel-map selection-pair)
-          theta-sel (.select theta-selector allocator theta-base-rel)]
-      (-> (iv/compose-selection probe-semi-sel theta-sel)
-          (distinct-selection)))))
+      (let [probe-filtered-rel (iv/select probe-rel probe-semi-sel)
+            [probe-join-sel _build-join-sel :as sel-pair] (probe-inner-join-select probe-filtered-rel rel-map)
+
+            theta-base-rel (join-rels probe-filtered-rel rel-map sel-pair)
+            theta-sel (.select theta-selector allocator theta-base-rel)]
+        (-> (reduce iv/compose-selection [probe-semi-sel probe-join-sel theta-sel])
+            (distinct-selection))))))
 
 (defmethod probe-phase ::inner-join
   [_join-type
