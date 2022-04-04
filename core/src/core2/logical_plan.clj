@@ -145,15 +145,13 @@
 
 (s/def ::join-condition
   (s/and
-    (s/or :vec-form (s/and (s/coll-of ::join-condition-clause :kind vector? :min-count 1)
-                           ;; at least one clause must be an equi condition (for now).
-                           (fn [tagged] (some (comp #{:equi-condition} first) tagged)))
+    (s/or :vec-form (s/coll-of ::join-condition-clause :kind vector?)
           :legacy-single-map-form (s/map-of ::column ::column :conform-keys true :count 1))
     (s/conformer
-      (fn [[tag val]]
-        (case tag
-          :vec-form val
-          :legacy-single-map-form [[:equi-condition val]])))))
+     (fn [[tag val]]
+       (case tag
+         :vec-form val
+         :legacy-single-map-form [[:equi-condition val]])))))
 
 (defmethod ra-expr :join [_]
   (s/cat :op #{:⋈ :join}

@@ -1,22 +1,20 @@
 (ns core2.operator.join
-  (:require [clojure.set :as set]
-            [core2.bloom :as bloom]
+  (:require [core2.bloom :as bloom]
             [core2.expression.map :as emap]
             [core2.operator.scan :as scan]
             [core2.util :as util]
-            [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.indirect :as iv])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap)
            (core2.operator IRelationSelector)
-           (core2.vector IIndirectRelation IIndirectVector IRelationWriter IRowCopier)
+           (core2.vector IIndirectRelation)
            (java.util ArrayList Iterator List)
            (java.util.function Consumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
+           [org.apache.arrow.vector NullVector]
            (org.roaringbitmap IntConsumer RoaringBitmap)
-           (org.roaringbitmap.buffer MutableRoaringBitmap)
-           [org.apache.arrow.vector NullVector]))
+           (org.roaringbitmap.buffer MutableRoaringBitmap)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -200,9 +198,6 @@
                      (.toArray (.build anti-stream)))]
     (iv/select probe-rel anti-sel)))
 
-(derive ::full-outer-join ::outer-join)
-(derive ::left-outer-join ::outer-join)
-
 (defn- int-array-concat
   ^ints [^ints arr1 ^ints arr2]
   (let [ret-arr (int-array (+ (alength arr1) (alength arr2)))]
@@ -227,9 +222,7 @@
         _ (dotimes [idx (.rowCount probe-rel)]
             (when-not (.contains probe-bm idx)
               (.add probe-int-stream idx)
-              ;; position 0 represents the row we added to the build-rel using `add-nil-row!`.
-              ;; sorry for the hack, cheapest thing to do now.
-              (.add build-int-stream 0)))
+              (.add build-int-stream emap/nil-row-idx)))
 
         extra-probe-sel (.toArray (.build probe-int-stream))
         extra-build-sel (.toArray (.build build-int-stream))
@@ -238,6 +231,9 @@
         full-build-sel (int-array-concat theta-build-sel extra-build-sel)]
 
     [full-probe-sel full-build-sel]))
+
+(derive ::full-outer-join ::outer-join)
+(derive ::left-outer-join ::outer-join)
 
 (defmethod probe-phase ::outer-join
   [_join-type
@@ -249,15 +245,6 @@
    ^IRelationSelector theta-selector]
   (->> (probe-outer-join-select probe-rel rel-map allocator matched-build-idxs theta-selector)
        (join-rels probe-rel rel-map)))
-
-(defn- ->nil-rel
-  "Returns a single row relation where all columns are nil. (Useful for outer joins)."
-  [col-names]
-  (iv/->indirect-rel (for [col-name col-names]
-                       (iv/->direct-vec (doto (NullVector. (name col-name))
-                                          (.setValueCount 1))))))
-
-(def ^:private nil-row-idx 0)
 
 (deftype JoinCursor [^BufferAllocator allocator
                      ^ICursor build-cursor, build-key-column-names, build-column-names
@@ -297,13 +284,13 @@
               (let [build-rel (.getBuiltRelation rel-map)
                     build-row-count (long (.rowCount build-rel))
                     unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
-                (.remove unmatched-build-idxs nil-row-idx)
+                (.remove unmatched-build-idxs emap/nil-row-idx)
 
                 (when-not (.isEmpty unmatched-build-idxs)
                   ;; this means .isEmpty will be true on the next iteration (we flip the bitmap)
                   (.add matched-build-idxs 0 build-row-count)
 
-                  (let [nil-rel (->nil-rel probe-column-names)
+                  (let [nil-rel (emap/->nil-rel probe-column-names)
                         build-sel (.toArray unmatched-build-idxs)
                         probe-sel (int-array (alength build-sel))]
                     (.accept c (join-rels nil-rel rel-map [probe-sel build-sel]))
@@ -343,16 +330,6 @@
                ::semi-join
                theta-selector))
 
-(defn- add-nil-row!
-  "Due to lack of no-copy append support for vectors / relations, we take advantage of the fact we are already
-  copying into our rel-map to add a nil-row, that can be used with selections of the build-rel for outer-joins."
-  [^IRelationMap rel-map col-names]
-
-  (doto (.buildFromRelation rel-map (->nil-rel col-names))
-    (.add nil-row-idx))
-
-  rel-map)
-
 (defn ->left-outer-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
                                                     ^ICursor left-cursor, left-key-column-names, left-column-names
                                                     ^ICursor right-cursor, right-key-column-names, right-column-names
@@ -360,9 +337,10 @@
   (JoinCursor. allocator
                right-cursor right-key-column-names right-column-names
                left-cursor left-key-column-names left-column-names
-               (doto (emap/->relation-map allocator {:build-key-col-names right-key-column-names
-                                                     :probe-key-col-names left-key-column-names})
-                 (add-nil-row! right-column-names))
+               (emap/->relation-map allocator {:build-key-col-names right-key-column-names
+                                               :probe-key-col-names left-key-column-names
+                                               :store-col-names (mapv name right-column-names)
+                                               :with-nil-row? true})
                nil
                (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
                ::left-outer-join
@@ -375,9 +353,10 @@
   (JoinCursor. allocator
                left-cursor left-key-column-names left-column-names
                right-cursor right-key-column-names right-column-names
-               (doto (emap/->relation-map allocator {:build-key-col-names left-key-column-names
-                                                     :probe-key-col-names right-key-column-names})
-                 (add-nil-row! left-column-names))
+               (emap/->relation-map allocator {:build-key-col-names left-key-column-names
+                                               :probe-key-col-names right-key-column-names
+                                               :store-col-names (mapv name left-column-names)
+                                               :with-nil-row? true})
                (RoaringBitmap.)
                (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
                ::full-outer-join

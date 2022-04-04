@@ -469,3 +469,112 @@
               {:a 12, :b 44} 1
               {:a 10, :b 42} 2}
              (j {:a :c} false)))))
+
+(t/deftest test-join-on-true
+  (letfn [(run-join [left? right? theta-expr]
+            (->> (run-join-test join/->equi-join-cursor
+                                (if left? [[{:a 12}, {:a 0}]] [])
+                                (if right? [[{:b 12}, {:b 2}]] [])
+                                {:left-join-cols [], :right-join-cols []
+                                 :theta-expr theta-expr})
+                 (mapv frequencies)))]
+    (t/is (= []
+             (run-join true false nil)))
+
+    (t/is (= []
+             (run-join true false true)))
+
+    (t/is (= []
+             (run-join true true false)))
+
+    (t/is (= [{{:a 12, :b 12} 1,
+               {:a 12, :b 2} 1,
+               {:a 0, :b 12} 1,
+               {:a 0, :b 2} 1}]
+             (run-join true true nil)))
+
+    (t/is (= [{{:a 12, :b 12} 1,
+               {:a 12, :b 2} 1,
+               {:a 0, :b 12} 1,
+               {:a 0, :b 2} 1}]
+             (run-join true true true)))))
+
+(t/deftest test-loj-on-true
+  (letfn [(run-loj [left? right? theta-expr]
+            (->> (run-join-test join/->left-outer-equi-join-cursor
+                                (if left? [[{:a 12}, {:a 0}]] [])
+                                (if right? [[{:b 12}, {:b 2}]] [])
+                                {:left-join-cols [], :right-join-cols []
+                                 :theta-expr theta-expr})
+                 (mapv frequencies)))]
+    (t/is (= [{{:a 12, :b nil} 1,
+               {:a 0, :b nil} 1}]
+             (run-loj true false nil)))
+
+    (t/is (= [{{:a 12, :b nil} 1,
+               {:a 0, :b nil} 1}]
+             (run-loj true false true)))
+
+    (t/is (= []
+             (run-loj false true nil)))
+
+    (t/is (= []
+             (run-loj false true true)))
+
+    (t/is (= [{{:a 12, :b nil} 1,
+               {:a 0, :b nil} 1}]
+             (run-loj true true false)))
+
+    (t/is (= [{{:a 12, :b 12} 1,
+               {:a 12, :b 2} 1,
+               {:a 0, :b 12} 1,
+               {:a 0, :b 2} 1}]
+             (run-loj true true nil)))
+
+    (t/is (= [{{:a 12, :b 12} 1,
+               {:a 12, :b 2} 1,
+               {:a 0, :b 12} 1,
+               {:a 0, :b 2} 1}]
+             (run-loj true true true)))))
+
+(t/deftest test-foj-on-true
+  (letfn [(run-foj [left? right? theta-expr]
+            (->> (run-join-test join/->full-outer-equi-join-cursor
+                                (if left? [[{:a 12}, {:a 0}]] [])
+                                (if right? [[{:b 12}, {:b 2}]] [])
+                                {:left-join-cols [], :right-join-cols []
+                                 :theta-expr theta-expr})
+                 (mapv frequencies)))]
+    (t/is (= [{{:a 12, :b nil} 1,
+               {:a 0, :b nil} 1}]
+             (run-foj true false nil)))
+
+    (t/is (= [{{:a 12, :b nil} 1,
+               {:a 0, :b nil} 1}]
+             (run-foj true false true)))
+
+    (t/is (= [{{:a nil, :b 12} 1,
+               {:a nil, :b 2} 1}]
+             (run-foj false true nil)))
+
+    (t/is (= [{{:a nil, :b 12} 1,
+               {:a nil, :b 2} 1}]
+             (run-foj false true true)))
+
+    (t/is (= [{{:a nil, :b 12} 1,
+               {:a nil, :b 2} 1}
+              {{:a 12, :b nil} 1,
+               {:a 0, :b nil} 1}]
+             (run-foj true true false)))
+
+    (t/is (= [{{:a 12, :b 12} 1,
+               {:a 12, :b 2} 1,
+               {:a 0, :b 12} 1,
+               {:a 0, :b 2} 1}]
+             (run-foj true true nil)))
+
+    (t/is (= [{{:a 12, :b 12} 1,
+               {:a 12, :b 2} 1,
+               {:a 0, :b 12} 1,
+               {:a 0, :b 2} 1}]
+             (run-foj true true true)))))

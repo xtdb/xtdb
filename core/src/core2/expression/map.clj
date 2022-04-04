@@ -4,12 +4,13 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import (core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter)
+  (:import (core2.vector IIndirectVector IRowCopier IVectorWriter)
            (java.lang AutoCloseable)
            (java.util HashMap List)
            (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher)
+           org.apache.arrow.vector.NullVector
            (org.roaringbitmap IntConsumer RoaringBitmap)))
 
 (def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
@@ -119,9 +120,18 @@
   (cond-> returned-idx
     (neg? returned-idx) (-> inc -)))
 
+(defn ->nil-rel
+  "Returns a single row relation where all columns are nil. (Useful for outer joins)."
+  [col-names]
+  (iv/->indirect-rel (for [col-name col-names]
+                       (iv/->direct-vec (doto (NullVector. (name col-name))
+                                          (.setValueCount 1))))))
+
+(def nil-row-idx 0)
+
 (defn ^core2.expression.map.IRelationMap ->relation-map
   [^BufferAllocator allocator,
-   {:keys [key-col-names build-key-col-names probe-key-col-names store-col-names]
+   {:keys [key-col-names build-key-col-names probe-key-col-names store-col-names with-nil-row?]
     :or {build-key-col-names key-col-names
          probe-key-col-names key-col-names}}]
 
@@ -129,6 +139,11 @@
         out-rel (vw/->rel-writer allocator)]
     (doseq [col-name build-key-col-names]
       (.writerForName out-rel col-name))
+
+    (when with-nil-row?
+      (assert store-col-names "supply `:store-col-names` with `:with-nil-row? true`")
+
+      (vw/append-rel out-rel (->nil-rel store-col-names)))
 
     (letfn [(compute-hash-bitmap [row-hash]
               (.computeIfAbsent hash->bitmap row-hash
