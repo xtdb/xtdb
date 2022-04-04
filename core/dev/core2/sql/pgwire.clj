@@ -70,42 +70,42 @@
                           (fn [out]
                             (write-c-string out command))))
 
-(def ^:private message-code->type '{\P :parse
-                                    \B :bind
-                                    \Q :query
-                                    \S :sync
-                                    \X :terminate
-                                    \D :describe
-                                    \E :execute})
+(def ^:private message-code->type '{\P :pgwire/parse
+                                    \B :pgwire/bind
+                                    \Q :pgwire/query
+                                    \S :pgwire/sync
+                                    \X :pgwire/terminate
+                                    \D :pgwire/describe
+                                    \E :pgwire/execute})
 
 (defmulti ^:private parse-message (fn [message-type in] message-type))
 
-(defmethod parse-message :parse [_ ^DataInputStream in]
-  {:parse/prepared-statement (read-c-string in)
-   :parse/query-string (read-c-string in)
-   :parse/parameters (vec (repeatedly (.readShort in) #(.readInt in)))})
+(defmethod parse-message :pgwire/parse [_ ^DataInputStream in]
+  {:pgwire.parse/prepared-statement (read-c-string in)
+   :pgwire.parse/query-string (read-c-string in)
+   :pgwire.parse/parameters (vec (repeatedly (.readShort in) #(.readInt in)))})
 
-(defmethod parse-message :bind [_ ^DataInputStream in]
-  {:bind/portal (read-c-string in)
-   :bind/prepared-statement (read-c-string in)
-   :bind/parameter-format-codes (vec (repeatedly (.readShort in) #(.readInt in)))
-   :bind/parameters (vec (repeatedly (.readShort in)
-                                     #(let [body (byte-array (.readInt in))]
-                                        (.readFully in body)
-                                        body)))
-   :bind/parameter-result-codes (vec (repeatedly (.readShort in) #(.readShort in)))})
+(defmethod parse-message :pgwire/bind [_ ^DataInputStream in]
+  {:pgwire.bind/portal (read-c-string in)
+   :pgwire.bind/prepared-statement (read-c-string in)
+   :pgwire.bind/parameter-format-codes (vec (repeatedly (.readShort in) #(.readInt in)))
+   :pgwire.bind/parameters (vec (repeatedly (.readShort in)
+                                            #(let [body (byte-array (.readInt in))]
+                                               (.readFully in body)
+                                               body)))
+   :pgwire.bind/parameter-result-codes (vec (repeatedly (.readShort in) #(.readShort in)))})
 
-(defmethod parse-message :query [_ ^DataInputStream in]
-  {:query/query-string (read-c-string in)})
+(defmethod parse-message :pgwire/query [_ ^DataInputStream in]
+  {:pgwire.query/query-string (read-c-string in)})
 
-(defmethod parse-message :execute [_ ^DataInputStream in]
-  {:execute/portal (read-c-string in)
-   :execute/max-rows (.readInt in)})
+(defmethod parse-message :pgwire/execute [_ ^DataInputStream in]
+  {:pgwire.execute/portal (read-c-string in)
+   :pgwire.execute/max-rows (.readInt in)})
 
-(defmethod parse-message :describe [_ ^DataInputStream in]
+(defmethod parse-message :pgwire/describe [_ ^DataInputStream in]
   (case (char (.readByte in))
-    \P {:describe/portal (read-c-string in)}
-    \S {:describe/statement (read-c-string in)}))
+    \P {:pgwire.describe/portal (read-c-string in)}
+    \S {:pgwire.describe/statement (read-c-string in)}))
 
 (defmethod parse-message :default [_ _]
   {})
@@ -113,16 +113,16 @@
 (defmulti handle-message (fn [message out]
                            (:pgwire/type message)))
 
-(defmethod handle-message :parse [message out]
+(defmethod handle-message :pgwire/parse [message out]
   (send-parse-complete out))
 
-(defmethod handle-message :bind [message out]
+(defmethod handle-message :pgwire/bind [message out]
   (send-bind-complete out))
 
-(defmethod handle-message :terminate [message out]
+(defmethod handle-message :pgwire/terminate [message out]
   (util/try-close out))
 
-(defmethod handle-message :execute [message out]
+(defmethod handle-message :pgwire/execute [message out]
   (send-command-complete out "SET"))
 
 (defmethod handle-message :default [message _])
@@ -145,7 +145,7 @@
          acc {}]
     (let [x (.read in)]
       (if (zero? x)
-        {:startup-message/parameters acc}
+        {:pgwire.startup-message/parameters acc}
         (do (.unread in (byte x))
             (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
 
@@ -180,7 +180,7 @@
               out (DataOutputStream. (.getOutputStream socket))]
     (let [startup-message (pg-establish-connection server socket in out)]
       (prn startup-message)
-      (pg-message-exchange server (:startup-message/parameters startup-message) socket in out))))
+      (pg-message-exchange server (:pgwire.startup-message/parameters startup-message) socket in out))))
 
 (defn- pg-accept [{:keys [^ServerSocket server-socket ^ExecutorService pool] :as server}]
   (while (not (.isClosed server-socket))
