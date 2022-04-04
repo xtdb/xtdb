@@ -153,7 +153,7 @@
 (def ^:private gssenc-request 80877104)
 (def ^:private startup-message 196608)
 
-(defn- pg-establish-connection [{:keys [parameters] :as server} ^Socket socket ^DataInputStream in ^DataOutputStream out]
+(defn- pg-establish-connection [{:keys [parameters] :as server} ^DataInputStream in ^DataOutputStream out]
   (loop []
     (let [size (- (.readInt in) (* 2 Integer/BYTES))
           handshake (.readInt in)]
@@ -178,7 +178,7 @@
 (defn- pg-conn [server ^Socket socket]
   (with-open [in (DataInputStream. (.getInputStream socket))
               out (DataOutputStream. (.getOutputStream socket))]
-    (let [startup-message (pg-establish-connection server socket in out)]
+    (let [startup-message (pg-establish-connection server in out)]
       (prn startup-message)
       (pg-message-exchange server (:pgwire.startup-message/parameters startup-message) socket in out))))
 
