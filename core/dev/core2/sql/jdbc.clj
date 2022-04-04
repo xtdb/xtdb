@@ -85,8 +85,9 @@
     (acceptsURL [_ url]
       (= "jdbc:xtdb:mem" url))
 
-    (connect [_ url info]
-      ((resolve '->xtdb-memory-connection) url info))
+    (connect [this url info]
+      (when (.acceptsURL this url)
+        ((resolve '->xtdb-memory-connection) url info)))
 
     (getMajorVersion [_] 2)
 
