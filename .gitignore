@@ -17,7 +17,7 @@ target/
 /.testing-mysql.edn
 docs/build/
 .calva/
-.lsp/
+.lsp/.cache
 
 xtdb-javadoc/
 
@@ -26,4 +26,3 @@ redoc/
 package-lock.json
 package.json
 swagger.json
-
