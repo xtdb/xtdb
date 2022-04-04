@@ -134,7 +134,7 @@
 
     (let [message-code (char (.readByte in))]
       (if-let [message-type (get message-code->type message-code)]
-        (let [size (.readInt in)
+        (let [size (- (.readInt in) Integer/BYTES)
               message (assoc (parse-message message-type in) :pgwire/type message-type)]
           (prn message)
           (handle-message message out))
