@@ -25,22 +25,37 @@
   (let [baos (ByteArrayOutputStream.)
         _ (build-message-fn (DataOutputStream. baos))
         message (.toByteArray baos)]
-    (.writeByte out (byte message-type))
-    (.writeInt out (+ Integer/BYTES (alength message)))
-    (.write out message)))
+    (doto out
+      (.writeByte (byte message-type))
+      (.writeInt (+ Integer/BYTES (alength message)))
+      (.write message)
+      (.flush))))
+
+(defn- send-authentication-ok [^DataOutputStream out]
+  (doto out
+    (.writeByte (byte \R))
+    (.writeInt 8)
+    (.writeInt 0)
+    (.flush)))
 
 (defn- send-ready-for-query [^DataOutputStream out ^long status]
-  (.writeByte out (byte \Z))
-  (.writeInt out 5)
-  (.writeByte out (byte status)))
+  (doto out
+    (.writeByte (byte \Z))
+    (.writeInt 5)
+    (.writeByte (byte status))
+    (.flush)))
 
 (defn- send-parse-complete [^DataOutputStream out]
-  (.writeByte out (byte \1))
-  (.writeInt out 4))
+  (doto out
+    (.writeByte (byte \1))
+    (.writeInt 4)
+    (.flush)))
 
 (defn- send-bind-complete [^DataOutputStream out]
-  (.writeByte out (byte \2))
-  (.writeInt out 4))
+  (doto out
+    (.writeByte (byte \2))
+    (.writeInt 4)
+    (.flush)))
 
 (defn- send-parameter-status [^DataOutputStream out ^String k ^String v]
   (send-message-with-body out
@@ -124,11 +139,6 @@
           (prn message)
           (handle-message message out))
         (throw (IllegalArgumentException. (str "unknown message code: " message-code)))))))
-
-(defn- send-authentication-ok [^DataOutputStream out]
-  (.writeByte out (byte \R))
-  (.writeInt out 8)
-  (.writeInt out 0))
 
 (defn- parse-startup-message [^DataInputStream in]
   (loop [in (PushbackInputStream. in)
