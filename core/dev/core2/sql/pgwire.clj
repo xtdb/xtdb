@@ -187,9 +187,7 @@
     (try
       (let [socket (.accept server-socket)]
         (try
-          (.submit pool ^Runnable (fn pg-handle []
-                                    (with-open [socket socket]
-                                      (pg-conn server socket))))
+          (.submit pool ^Runnable #(pg-conn server socket))
           (catch Throwable t
             (util/try-close socket)
             (throw t))))
