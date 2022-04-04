@@ -3,9 +3,8 @@
             [clojure.string :as str]
             [core2.util :as util]))
 
-;; Partly based on
-;; https://dbis-uibk.github.io/relax/help#relalg-reference
 ;; See also:
+;; https://dbis-uibk.github.io/relax/help#relalg-reference
 ;; https://calcite.apache.org/javadocAggregate/org/apache/calcite/tools/RelBuilder.html
 ;; https://github.com/apache/arrow/blob/master/rust/datafusion/src/logical_plan/plan.rs
 
