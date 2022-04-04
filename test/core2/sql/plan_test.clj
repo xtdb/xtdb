@@ -13,7 +13,7 @@
 (t/deftest test-basic-queries
   (t/is (= '[:rename {x1 movieTitle}
              [:project [x1]
-              [:join {x2 x4}
+              [:join [{x2 x4}]
                [:rename {movieTitle x1, starName x2} [:scan [movieTitle starName]]]
                [:rename {name x4, birthdate x5}
                 [:scan [name {birthdate (= birthdate 1960)}]]]]]]
@@ -21,7 +21,7 @@
 
   (t/is (= '[:rename {x1 movieTitle}
              [:project [x1]
-              [:join {x2 x4}
+              [:join [{x2 x4}]
                [:rename {movieTitle x1, starName x2} [:scan [movieTitle starName]]]
                [:rename {name x4, birthdate x5}
                 [:scan [name {birthdate (and (< birthdate 1960) (> birthdate 1950))}]]]]]]
@@ -29,7 +29,7 @@
 
   (t/is (= '[:rename {x1 movieTitle}
              [:project [x1]
-              [:join {x2 x4}
+              [:join [{x2 x4}]
                [:rename {movieTitle x1, starName x2} [:scan [movieTitle starName]]]
                [:rename {name x4, birthdate x5}
                 [:scan [{name (= name "Foo")} {birthdate (< birthdate 1960)}]]]]]]
@@ -37,7 +37,7 @@
 
   (t/is (= '[:rename {x1 movieTitle}
              [:project [x1]
-              [:join {x2 x4}
+              [:join [{x2 x4}]
                [:rename {movieTitle x1, starName x2} [:scan [movieTitle starName]]]
                [:rename {name x4, birthdate x5}
                 [:scan [name {birthdate (= birthdate 1960)}]]]]]]
@@ -45,30 +45,28 @@
 
   (t/is (= '[:rename {x4 movieTitle}
              [:project [x4]
-              [:select (= x5 x2)
-               [:join {x1 x4}
-                [:rename {title x1, movieYear x2} [:scan [title movieYear]]]
-                [:rename {movieTitle x4, year x5} [:scan [movieTitle year]]]]]]]
+              [:join [{x1 x4} {x2 x5}]
+               [:rename {title x1, movieYear x2} [:scan [title movieYear]]]
+               [:rename {movieTitle x4, year x5} [:scan [movieTitle year]]]]]]
            (plan-sql "SELECT si.movieTitle FROM Movie AS m JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")))
 
   (t/is (= '[:rename {x4 movieTitle}
              [:project [x4]
-              [:select (= x5 x2)
-               [:left-outer-join {x1 x4}
-                [:rename {title x1, movieYear x2} [:scan [title movieYear]]]
-                [:rename {movieTitle x4, year x5} [:scan [movieTitle year]]]]]]]
+              [:left-outer-join [{x1 x4} {x2 x5}]
+               [:rename {title x1, movieYear x2} [:scan [title movieYear]]]
+               [:rename {movieTitle x4, year x5} [:scan [movieTitle year]]]]]]
            (plan-sql "SELECT si.movieTitle FROM Movie AS m LEFT JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")))
 
   (t/is (= '[:rename {x3 title}
              [:project [x3]
-              [:join {x1 x3}
+              [:join [{x1 x3}]
                [:rename {title x1} [:scan [title]]]
                [:rename {title x3} [:scan [title]]]]]]
            (plan-sql "SELECT si.title FROM Movie AS m JOIN StarsIn AS si USING (title)")))
 
   (t/is (= '[:rename {x1 title}
              [:project [x1]
-              [:left-outer-join {x1 x3}
+              [:left-outer-join [{x1 x3}]
                [:rename {title x1} [:scan [title]]]
                [:rename {title x3} [:scan [title]]]]]]
            (plan-sql "SELECT si.title FROM Movie AS m RIGHT OUTER JOIN StarsIn AS si USING (title)")))
@@ -77,7 +75,7 @@
              [:project [x1 x8]
               [:select (< x9 1930)
                [:group-by [x1 {x8 (sum x4)} {x9 (min x6)}]
-                [:join {x2 x5}
+                [:join [{x2 x5}]
                  [:rename {name x1, cert x2} [:scan [name cert]]]
                  [:rename {length x4, producer x5, year x6}
                   [:scan [length producer year]]]]]]]]
@@ -228,7 +226,7 @@
   (t/testing "Scalar subquery in WHERE"
     (t/is (= '[:rename {x1 some_column}
                [:project [x1]
-                [:join {x1 x5}
+                [:join [{x1 x5}]
                  [:rename {y x1} [:scan [y]]]
                  [:max-1-row
                   [:group-by [{x5 (max x3)}]
@@ -247,7 +245,7 @@
   (t/testing "EXISTS in WHERE"
     (t/is (= '[:rename {x1 y}
                [:project [x1]
-                [:semi-join {x1 x4}
+                [:semi-join [{x1 x4}]
                  [:rename {y x1, z x2} [:scan [y {z (= z 10.0)}]]]
                  [:rename {z x4} [:scan [z]]]]]]
              (plan-sql "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10.0"))))
@@ -268,7 +266,7 @@
   (t/testing "NOT EXISTS in WHERE"
     (t/is (= '[:rename {x1 y}
                [:project [x1]
-                [:anti-join {x1 x4}
+                [:anti-join [{x1 x4}]
                  [:rename {y x1, z x2} [:scan [y {z (= z 10)}]]]
                  [:rename {z x4} [:scan [z]]]]]]
              (plan-sql "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"))))
@@ -276,14 +274,14 @@
   (t/testing "IN in WHERE"
     (t/is (= '[:rename {x1 y}
                [:project [x1]
-                [:semi-join {x2 x4}
+                [:semi-join [{x2 x4}]
                  [:rename {y x1, z x2} [:scan [y z]]]
                  [:rename {z x4} [:scan [z]]]]]]
              (plan-sql "SELECT x.y FROM x WHERE x.z IN (SELECT y.z FROM y)")))
 
     (t/is (= '[:rename {x1 y}
                [:project [x1]
-                [:semi-join {x2 x4}
+                [:semi-join [{x2 x4}]
                  [:rename {y x1, z x2} [:scan [y z]]]
                  [:table [{x4 1} {x4 2}]]]]]
              (plan-sql "SELECT x.y FROM x WHERE x.z IN (1, 2)"))))
@@ -291,7 +289,7 @@
   (t/testing "NOT IN in WHERE"
     (t/is (= '[:rename {x1 y}
                [:project [x1]
-                [:anti-join {x2 x4}
+                [:anti-join [{x2 x4}]
                  [:rename {y x1, z x2} [:scan [y z]]]
                  [:rename {z x4} [:scan [z]]]]]]
              (plan-sql "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.z FROM y)"))))
@@ -329,7 +327,7 @@
 
   (t/testing "LATERAL derived table"
     (t/is (= '[:rename {x1 y, x3 z}
-               [:join {x1 x3}
+               [:join [{x1 x3}]
                 [:rename {y x1} [:scan [y]]]
                 [:rename {z x3} [:scan [z]]]]]
              (plan-sql "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y")))
@@ -343,7 +341,7 @@
                [:project [x1]
                 [:select (< 1000000 x6)
                  [:group-by [x1 $row_number$ {x6 (sum x3)}]
-                  [:left-outer-join {x1 x4}
+                  [:left-outer-join [{x1 x4}]
                    [:map [{$row_number$ (row-number)}]
                     [:rename {custkey x1} [:scan [custkey]]]]
                    [:rename {totalprice x3, custkey x4}
@@ -353,7 +351,7 @@
 
     ;; https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf "Parameterized Queries and Nesting Equivalences"
     (t/is (= '[:rename {x1 country, x2 custno}
-               [:semi-join {x2 x4}
+               [:semi-join [{x2 x4}]
                 [:rename {country x1, custno x2}
                  [:scan [{country (= country "Mexico")} custno]]]
                 [:rename {custno x4} [:scan [custno]]]]]
@@ -367,9 +365,9 @@
                [:project [x1 x15]
                 [:group-by [x1 x2 x3 $row_number$ {x15 (count x14)}]
                  [:map [{x14 1}]
-                  [:left-outer-join {x2 x12}
+                  [:left-outer-join [{x2 x12}]
                    [:map [{$row_number$ (row-number)}]
-                    [:anti-join {x3 x5}
+                    [:anti-join [{x3 x5}]
                      [:rename {name x1, custno x2, country x3}
                       [:scan [name custno country]]]
                      [:rename {country x5} [:scan [country]]]]]
@@ -382,9 +380,9 @@
                [:project [x1 x4]
                 [:select (= x6 x11)
                  [:group-by [x1 x2 x4 x5 x6 $row_number$ {x11 (min x8)}]
-                  [:left-outer-join {x2 x9}
+                  [:left-outer-join [{x2 x9}]
                    [:map [{$row_number$ (row-number)}]
-                    [:join {x2 x5}
+                    [:join [{x2 x5}]
                      [:rename {name x1, id x2} [:scan [name id]]]
                      [:rename {course x4, sid x5, grade x6}
                       [:scan [course sid grade]]]]]
@@ -403,7 +401,7 @@
                   [:group-by [x1 x2 x3 x4 x6 x7 x8 $row_number$ {x15 (avg x10)}]
                    [:apply :left-outer-join {x2 ?x18, x3 ?x19, x4 ?x20} #{x10 x11 x12 x13}
                     [:map [{$row_number$ (row-number)}]
-                     [:join {x2 x7}
+                     [:join [{x2 x7}]
                       [:rename {name x1, id x2, major x3, year x4}
                        [:scan [name id {major (or (= major "CS") (= major "Games Eng"))} year]]]
                       [:rename {course x6, sid x7, grade x8}
@@ -420,7 +418,47 @@
                FROM exams e2
                WHERE s.id = e2.sid OR
                (e2.curriculum = s.major AND
-               s.year > e2.date))"))))
+               s.year > e2.date))")))
+
+
+    (t/testing "Subqueries in join conditions"
+
+      (->> "uncorrelated subquery"
+           (t/is (= '[:rename {x1 a}
+                      [:project [x1]
+                       [:join [{x3 x5}]
+                        [:join []
+                         [:rename {a x1} [:scan [a]]]
+                         [:rename {c x3} [:scan [c]]]]
+                        [:max-1-row
+                         [:rename {b x5} [:scan [b]]]]]]]
+                    (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo)"))))
+
+      (->> "correlated subquery"
+           (t/is (= '[:rename {x1 a}
+                      [:project [x1]
+                       [:semi-join [{x4 x7} {x3 x6}]
+                        [:join []
+                         [:rename {a x1}
+                          [:scan [a]]]
+                         [:rename {c x3, b x4} [:scan [c b]]]]
+                        [:rename {b x6, a x7} [:scan [b a]]]]]]
+                    (plan-sql "select foo.a from foo join bar on bar.c in (select foo.b from foo where foo.a = bar.b)"))))
+
+      (->> "correlated equalty subquery" ;;TODO unable to decorr, need to be able to pull the select over the max-1-row
+           (t/is (= '[:rename {x1 a}
+                      [:project [x1]
+                       [:select (= x3 x6)
+                        [:apply :cross-join
+                         {x4 ?x9}
+                         #{x6}
+                         [:join []
+                          [:rename {a x1} [:scan [a]]]
+                          [:rename {c x3, b x4} [:scan [c b]]]]
+                         [:max-1-row
+                          [:rename {b x6, a x7}
+                           [:scan [b {a (= a ?x9)}]]]]]]]]
+                    (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)"))))))
 
   (comment
 

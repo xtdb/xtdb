@@ -866,25 +866,25 @@
 
      [:qualified_join ^:z lhs _ ^:z rhs [:join_condition _ ^:z sc]]
      ;;=>
-     (wrap-with-select sc [:join {} (plan lhs) (plan rhs)])
+     (wrap-with-select sc [:join [] (plan lhs) (plan rhs)])
 
      [:qualified_join ^:z lhs ^:z jt _ ^:z rhs [:join_condition _ ^:z sc]]
      ;;=>
      (wrap-with-select sc (case (sem/join-type jt)
-                            "LEFT" [:left-outer-join {} (plan lhs) (plan rhs)]
-                            "RIGHT" [:left-outer-join {} (plan rhs) (plan lhs)]
-                            "INNER" [:join {} (plan lhs) (plan rhs)]))
+                            "LEFT" [:left-outer-join [] (plan lhs) (plan rhs)]
+                            "RIGHT" [:left-outer-join [] (plan rhs) (plan lhs)]
+                            "INNER" [:join [] (plan lhs) (plan rhs)]))
 
      [:qualified_join ^:z lhs _ ^:z rhs ^:z ncj]
      ;;=>
-     (wrap-with-select ncj [:join {} (plan lhs) (plan rhs)])
+     (wrap-with-select ncj [:join [] (plan lhs) (plan rhs)])
 
      [:qualified_join ^:z lhs ^:z jt _ ^:z rhs ^:z ncj]
      ;;=>
      (wrap-with-select ncj (case (sem/join-type jt)
-                             "LEFT" [:left-outer-join {} (plan lhs) (plan rhs)]
-                             "RIGHT" [:left-outer-join {} (plan rhs) (plan lhs)]
-                             "INNER" [:join {} (plan lhs) (plan rhs)]))
+                             "LEFT" [:left-outer-join [] (plan lhs) (plan rhs)]
+                             "RIGHT" [:left-outer-join [] (plan rhs) (plan lhs)]
+                             "INNER" [:join [] (plan lhs) (plan rhs)]))
 
      [:from_clause _ ^:z trl]
      ;;=>
@@ -1259,6 +1259,14 @@
       (when (and lhs-v rhs-v)
         {lhs-v rhs-v}))))
 
+(defn- columns-in-both-relations? [predicate lhs rhs]
+  (let [predicate-columns (expr-symbols predicate)]
+    (and
+      (some predicate-columns
+            (relation-columns lhs))
+      (some predicate-columns
+            (relation-columns rhs)))))
+
 (defn- conjunction-clauses [predicate]
   (if (and-predicate? predicate)
     (rest predicate)
@@ -1280,16 +1288,33 @@
     [:select predicate
      [:cross-join lhs rhs]]
     ;;=>
-    (when-let [join-map (build-join-map predicate lhs rhs)]
-      [:join join-map lhs rhs])))
+    [:join [predicate] lhs rhs]))
 
 (defn- promote-selection-to-join [z]
   (r/zmatch z
     [:select predicate
-     [join-op {} lhs rhs]]
+     [:join join-condition lhs rhs]]
     ;;=>
-    (when-let [join-map (build-join-map predicate lhs rhs)]
-      [join-op join-map lhs rhs])))
+    (when (columns-in-both-relations? predicate lhs rhs)
+      [:join (conj join-condition predicate) lhs rhs])
+
+    [:select predicate
+     [:left-outer-join join-condition lhs rhs]]
+    ;;=>
+    (when (columns-in-both-relations? predicate lhs rhs)
+      [:left-outer-join (conj join-condition predicate) lhs rhs])
+
+    [:select predicate
+     [:anti-join join-condition lhs rhs]]
+    ;;=>
+    (when (columns-in-both-relations? predicate lhs rhs)
+      [:anti-join (conj join-condition predicate) lhs rhs])
+
+    [:select predicate
+     [:semi-join join-condition lhs rhs]]
+    ;;=>
+    (when (columns-in-both-relations? predicate lhs rhs)
+      [:semi-join (conj join-condition predicate) lhs rhs])))
 
 (defn columns-in-predicate-present-in-relation? [relation predicate]
   (set/superset? (set (relation-columns relation)) (expr-symbols predicate)))
@@ -1758,20 +1783,62 @@
     [:select predicate
      [:apply :semi-join {} _ independent-relation dependent-relation]]
     ;;=>
-    (when-let [join-map (build-join-map predicate independent-relation dependent-relation)]
-      [:semi-join join-map independent-relation dependent-relation])
+    (when (build-join-map predicate independent-relation dependent-relation)
+      [:semi-join [predicate] independent-relation dependent-relation])
 
     [:select predicate
      [:apply :anti-join {} _ independent-relation dependent-relation]]
     ;;=>
-    (when-let [join-map (build-join-map predicate independent-relation dependent-relation)]
-      [:anti-join join-map independent-relation dependent-relation])
+    (when (build-join-map predicate independent-relation dependent-relation)
+      [:anti-join [predicate] independent-relation dependent-relation])
 
     [:select predicate
      [:apply :left-outer-join {} _ independent-relation dependent-relation]]
     ;;=>
-    (when-let [join-map (build-join-map predicate independent-relation dependent-relation)]
-      [:left-outer-join join-map independent-relation dependent-relation])))
+    (when (build-join-map predicate independent-relation dependent-relation)
+      [:left-outer-join [predicate] independent-relation dependent-relation])))
+
+(defn- optimize-join-expression [join-expressions lhs rhs]
+  (if (some map? join-expressions)
+    join-expressions
+    (->> join-expressions
+         (mapcat #(flatten-expr and-predicate? %))
+         (mapv (fn [join-clause]
+                 (if (and (equals-predicate? join-clause)
+                          (columns-in-both-relations? join-clause lhs rhs))
+                   (let [[_ x y] join-clause]
+                     (if (contains? (set (relation-columns lhs)) x)
+                       {x y}
+                       {y x}))
+                   join-clause))))))
+
+(defn- rewrite-equals-predicates-in-join-as-equi-join-map [z]
+  (r/zmatch z
+    [:join join-expressions lhs rhs]
+    ;;=>
+    (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
+      (when (not= new-join-expressions join-expressions)
+        [:join new-join-expressions lhs rhs]))
+
+    [:semi-join join-expressions lhs rhs]
+    ;;=>
+    (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
+      (when (not= new-join-expressions join-expressions)
+        [:semi-join new-join-expressions lhs rhs]))
+
+
+    [:anti-join join-expressions lhs rhs]
+    ;;=>
+    (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
+      (when (not= new-join-expressions join-expressions)
+        [:anti-join new-join-expressions lhs rhs]))
+
+
+    [:left-outer-join join-expressions lhs rhs]
+    ;;=>
+    (let [new-join-expressions (optimize-join-expression join-expressions lhs rhs)]
+      (when (not= new-join-expressions join-expressions)
+        [:left-outer-join new-join-expressions lhs rhs]))))
 
 (def push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
@@ -1814,38 +1881,38 @@
                                                   fired-rules
                                                   #(conj ;; could also capture z before the rewrite
                                                      %
-                                                     [(second
-                                                       (str/split (clojure.main/demunge (str f)) #"/|@"))
+                                                     [(name (.toSymbol f))
                                                       successful-rewrite]))
                                                 successful-rewrite)))
                                           rules)))
-                optimize-plan [promote-selection-cross-join-to-join
-                               promote-selection-to-join
-                               push-selection-down-past-apply
-                               push-correlated-selection-down-past-join
-                               push-correlated-selection-down-past-rename
-                               push-correlated-selection-down-past-project
-                               push-correlated-selection-down-past-group-by
-                               push-correlated-selections-with-fewer-variables-down
-                               remove-superseded-projects
-                               merge-selections-around-scan
-                               add-selection-to-scan-predicate]
-                decorrelate-plan [pull-correlated-selection-up-towards-apply
-                                  push-selection-down-past-apply
-                                  push-decorrelated-selection-down-past-join
-                                  push-decorrelated-selection-down-past-rename
-                                  push-decorrelated-selection-down-past-project
-                                  push-decorrelated-selection-down-past-group-by
-                                  push-decorrelated-selections-with-fewer-variables-down
-                                  decorrelate-apply
-                                  promote-apply-mode
-                                  remove-uncorrelated-apply]
+                optimize-plan [#'promote-selection-cross-join-to-join
+                               #'promote-selection-to-join
+                               #'push-selection-down-past-apply
+                               #'push-correlated-selection-down-past-join
+                               #'push-correlated-selection-down-past-rename
+                               #'push-correlated-selection-down-past-project
+                               #'push-correlated-selection-down-past-group-by
+                               #'push-correlated-selections-with-fewer-variables-down
+                               #'remove-superseded-projects
+                               #'merge-selections-around-scan
+                               #'add-selection-to-scan-predicate]
+                decorrelate-plan [#'pull-correlated-selection-up-towards-apply
+                                  #'push-selection-down-past-apply
+                                  #'push-decorrelated-selection-down-past-join
+                                  #'push-decorrelated-selection-down-past-rename
+                                  #'push-decorrelated-selection-down-past-project
+                                  #'push-decorrelated-selection-down-past-group-by
+                                  #'push-decorrelated-selections-with-fewer-variables-down
+                                  #'decorrelate-apply
+                                  #'promote-apply-mode
+                                  #'remove-uncorrelated-apply]
                 plan (remove-names (plan ag))
                 add-projection-fn (:add-projection-fn (meta plan))
                 plan (->> plan
                           (z/vector-zip)
                           (r/innermost (r/mono-tp (instrument-rules decorrelate-plan)))
                           (r/innermost (r/mono-tp (instrument-rules optimize-plan)))
+                          (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
                           (z/node)
                           (add-projection-fn))]
 
