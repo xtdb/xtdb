@@ -196,8 +196,6 @@
                                      :left-join-cols ["a" "b"], :right-join-cols ["c" "d"]})
                      (mapv frequencies))))))
 
-;; todo semi equi theta
-
 (t/deftest test-theta-semi-join
   (t/is (= [{{:a 12, :b 44} 1}]
            (->> (run-join-test join/->left-semi-equi-join-cursor
