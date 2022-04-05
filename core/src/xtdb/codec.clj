@@ -15,7 +15,7 @@
            [java.net MalformedURLException URI URL]
            [java.nio ByteBuffer ByteOrder]
            java.nio.charset.StandardCharsets
-           [java.time LocalDate LocalTime LocalDateTime Instant Duration]
+           [java.time LocalDate LocalTime LocalDateTime Instant Duration ZonedDateTime]
            [java.util Base64 Date Map Set UUID]
            java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
@@ -739,39 +739,77 @@
 (defn base64-writer ^String [^bytes bytes]
   (.encodeToString (Base64/getEncoder) bytes))
 
+(defn duration-reader [s] (Duration/parse s))
+(defn instant-reader [s] (Instant/parse s))
+(defn zdt-reader [s] (ZonedDateTime/parse s))
+(defn local-date-reader [s] (LocalDate/parse s))
+(defn local-time-reader [s] (LocalTime/parse s))
+(defn local-date-time-reader [s] (LocalDateTime/parse s))
+
+(when (or (System/getenv "XTDB_ENABLE_JAVA_TIME_PRINT_METHODS")
+          (System/getProperty "xtdb.enable-java-time-print-methods"))
+  (defmethod print-dup Duration [^Duration d, ^Writer w]
+    (.write w (format "#xtdb/duration \"%s\"" d)))
+
+  (defmethod print-dup Instant [^Instant i, ^Writer w]
+    (.write w (format "#xtdb/instant \"%s\"" i)))
+
+  (defmethod print-dup ZonedDateTime [^ZonedDateTime zdt, ^Writer w]
+    (.write w (format "#xtdb/zdt \"%s\"" zdt)))
+
+  (defmethod print-dup LocalDate [^LocalDateTime ld, ^Writer w]
+    (.write w (format "#xtdb/local-date \"%s\"" ld)))
+
+  (defmethod print-dup LocalTime [^LocalTime lt, ^Writer w]
+    (.write w (format "#xtdb/local-time \"%s\"" lt)))
+
+  (defmethod print-dup LocalDateTime [^LocalDateTime ldt, ^Writer w]
+    (.write w (format "#xtdb/local-date-time \"%s\"" ldt)))
+
+  (defmethod print-method Duration [d w] (print-dup d w))
+  (defmethod print-method Instant [i w] (print-dup i w))
+  (defmethod print-method ZonedDateTime [zdt w] (print-dup zdt w))
+  (defmethod print-method LocalDate [ld w] (print-dup ld w))
+  (defmethod print-method LocalTime [lt w] (print-dup lt w))
+  (defmethod print-method LocalDateTime [ldt w] (print-dup ldt w)))
+
 (defn read-edn-string-with-readers [s]
   (edn/read-string {:readers {'crux/id id-edn-reader
                               'xtdb/id id-edn-reader
                               'crux/base64 base64-reader
                               'xtdb/base64 base64-reader
+
+                              'xtdb/duration duration-reader
+                              'xtdb/instant instant-reader
+                              'xtdb/zdt zdt-reader
+                              'xtdb/local-date local-date-reader
+                              'xtdb/local-time local-time-reader
+                              'xtdb/local-date-time local-date-time-reader
+
                               'crux/query-state cqs/->QueryState
                               'xtdb/query-state cqs/->QueryState
                               'crux/query-error cqs/->QueryError
                               'xtdb/query-error cqs/->QueryError}}
                    s))
 
-(def ^:const ^:private base64-print-method-enabled?
-  (Boolean/parseBoolean (System/getenv "XTDB_ENABLE_BASE64_PRINT_METHOD")))
+(when (or (Boolean/parseBoolean (System/getenv "XTDB_ENABLE_BASE64_PRINT_METHOD"))
+          (Boolean/parseBoolean (System/getProperty "xtdb.enable-base64-print-method")))
+      (defmethod print-dup (class (byte-array 0)) [^bytes b ^Writer w]
+        (.write w "#xtdb/base64 ")
+        (.write w (xio/pr-edn-str (base64-writer b))))
 
-(when base64-print-method-enabled?
-  (defmethod print-method (class (byte-array 0)) [^bytes b ^Writer w]
-    (.write w "#xtdb/base64 ")
-    (.write w (xio/pr-edn-str (base64-writer b))))
-
-  (defmethod print-dup (class (byte-array 0)) [^bytes b ^Writer w]
-    (.write w "#xtdb/base64 ")
-    (.write w (xio/pr-edn-str (base64-writer b)))))
+      (defmethod print-method (class (byte-array 0)) [^bytes b ^Writer w]
+        (print-dup b w)))
 
 (defn edn-id->original-id [^EDNId id]
   (str (or (.original-id id) (.hex id))))
 
-(defmethod print-method EDNId [^EDNId id ^Writer w]
-  (.write w "#xtdb/id ")
-  (.write w (xio/pr-edn-str (edn-id->original-id id))))
-
 (defmethod print-dup EDNId [^EDNId id ^Writer w]
   (.write w "#xtdb/id ")
   (.write w (xio/pr-edn-str (edn-id->original-id id))))
+
+(defmethod print-method EDNId [^EDNId id ^Writer w]
+  (print-dup id w))
 
 (nippy/extend-freeze
  EDNId

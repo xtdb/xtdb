@@ -6,6 +6,7 @@
 * xref:_query_engine[Query Engine]
 * xref:_upgrading[Upgrading]
 * xref:_writing_custom_modules[Writing Custom Modules]
+* xref:_environment_variables[Environment Variables]
 
 == Modules
 
@@ -442,3 +443,20 @@ You can also use refs - for example, to depend on the XTDB node:
 ;; start your server
 )
 ----
+
+== Environment Variables
+
+[cols="1m,1m,2"]
+|===
+| Environment variable | JVM property | Description
+
+| XTDB_ENABLE_JAVA_TIME_PRINT_METHODS | xtdb.enable-java-time-print-methods | Adds `print-method`/`print-dup` support for common `java.time` classes
+| XTDB_ENABLE_BASE64_PRINT_METHOD | xtdb.enable-base64-print-method | Adds `print-method`/`print-dup` support for Java byte arrays
+
+| MALLOC_ARENA_MAX | | If you're using RocksDB and seeing out-of-memory issues, we recommend setting the environment variable `MALLOC_ARENA_MAX=2` - see link:https://github.com/facebook/rocksdb/issues/4112[this issue] for more details.
+
+| XTDB_ENABLE_BYTEUTILS_SHA1 | | Set to use XT's Java SHA1 implementation rather than system libraries.
+| XTDB_DISABLE_LIBCRYPTO | | Set to disable use of libcrypto (OpenSSL) for SHA1 hashing
+| XTDB_DISABLE_LIBGCRYPT | | Set to disable use of libgcrypt for SHA1 hashing.
+
+|===
