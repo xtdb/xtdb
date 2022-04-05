@@ -239,17 +239,18 @@
         session))))
 
 (defmethod handle-message :pgwire/query [session message out]
-  (let [query-string (:pgwire.query/query-string message)]
+  (let [query-string (:pgwire.query/query-string message)
+        null-out (DataOutputStream. (ByteArrayOutputStream.))]
     (-> session
         (handle-message {:pgwire/type :parse
                          :pgwire.parse/query-string query-string
                          :pgwire.parse/prepared-statement ""
                          :pgwire.parse/parameters []}
-                        out)
+                        null-out)
         (handle-message {:pgwire/type :bind
                          :pgwire.bind/portal ""
                          :pgwire.bind/prepared-statement ""}
-                        out)
+                        null-out)
         (handle-message {:pgwire/type :execute
                          :pgwire.execute/portal ""}))))
 
