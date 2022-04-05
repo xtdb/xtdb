@@ -70,7 +70,7 @@
                                                       listener)))]
         (-> fut
             (.whenComplete (reify BiConsumer
-                             (accept [_ res e]
+                             (accept [_ _res _e]
                                (.close listener))))))))
 
   (listen [_ {::xt/keys [event-types], ::keys [executor]} f]
@@ -108,12 +108,11 @@
   Closeable
   (close [_]
     (close-executor await-solo-pool)
+    ;; bus listeners closed earlier
+    ))
 
-    (doseq [{:keys [executor close-executor?]} (->> @!listeners (mapcat val))]
-      (when close-executor?
-        (close-executor executor)))))
-
-(defn ->bus {::sys/args {:sync? {:doc "Send bus messages on caller thread"
+(defn ->bus {:tag EventBus
+             ::sys/args {:sync? {:doc "Send bus messages on caller thread"
                                  :default false
                                  :spec ::sys/boolean}}}
   ([] (->bus {}))
@@ -121,3 +120,17 @@
    (->EventBus (atom {})
                (Executors/newSingleThreadExecutor (xio/thread-factory "xtdb-bus-await-thread"))
                sync?)))
+
+;; while the bus doesn't depend on the node, many of its listeners do,
+;; so we close the listeners before the node. see #1730
+;; we add the 'node' dep as a `::sys/before` in `:xtdb/node` and `:xtdb/submit-client`; we can't just depend on `:xtdb/node` here
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
+(defn ->bus-stop {:tag Closeable
+                  ::sys/deps {:bus :xtdb/bus}}
+  [{{:keys [!listeners]} :bus}]
+
+  (reify Closeable
+    (close [_]
+      (doseq [{:keys [executor close-executor?]} (->> @!listeners (mapcat val))]
+        (when close-executor?
+          (close-executor executor))))))

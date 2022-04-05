@@ -7,7 +7,8 @@
 
 (t/deftest test-bus
   (let [!events (atom [])]
-    (with-open [bus ^Closeable (bus/->bus)]
+    (with-open [bus ^Closeable (bus/->bus)
+                _ (bus/->bus-stop {:bus bus})]
       (bus/send bus {::xt/event-type :foo, :value 1})
 
       (with-open [_ (bus/listen bus {::xt/event-types #{:foo :baz}} #(swap! !events conj %))]
@@ -30,7 +31,8 @@
 (defmethod bus/event-spec ::baz [_] (s/keys))
 
 (t/deftest test-await
-  (let [bus (bus/->bus {})]
+  (with-open [bus (bus/->bus {})
+              _ (bus/->bus-stop {:bus bus})]
     (t/testing "ready already"
       (t/is (= ::ready @(bus/await bus {::xt/event-types #{::foo}
                                         :->result (fn [] ::ready)}))))

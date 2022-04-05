@@ -250,6 +250,7 @@
   (let [system (-> (sys/prep-system (into [{:xtdb/node 'xtdb.node/->node
                                             :xtdb/index-store 'xtdb.kv.index-store/->kv-index-store
                                             :xtdb/bus 'xtdb.bus/->bus
+                                            :xtdb.bus/bus-stop 'xtdb.bus/->bus-stop
                                             :xtdb/tx-ingester 'xtdb.tx/->tx-ingester
                                             :xtdb/tx-indexer 'xtdb.tx/->tx-indexer
                                             :xtdb/document-store 'xtdb.kv.document-store/->document-store

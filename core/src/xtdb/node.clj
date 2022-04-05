@@ -330,7 +330,8 @@
                                                    :spec ::sys/nat-int}
                           :slow-queries-min-threshold {:doc "Minimum threshold for a query to be considered slow."
                                                        :default (Duration/ofMinutes 1)
-                                                       :spec ::sys/duration}}}
+                                                       :spec ::sys/duration}}
+              ::sys/before [[:xtdb.bus/bus-stop]]}
   [opts]
   (map->XtdbNode (merge opts
                         {:!running-queries (doto (atom {:in-progress {} :completed '()})

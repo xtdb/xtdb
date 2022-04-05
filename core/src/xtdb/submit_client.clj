@@ -36,13 +36,15 @@
 (defmethod pp/simple-dispatch XtdbSubmitClient [it] (print-method it *out*))
 
 (defn ->submit-client {::sys/deps {:tx-log :xtdb/tx-log
-                                   :document-store :xtdb/document-store}}
+                                   :document-store :xtdb/document-store}
+                       ::sys/before [[:xtdb.bus/bus-stop]]}
   [{:keys [tx-log document-store]}]
   (->XtdbSubmitClient tx-log document-store nil))
 
 (defn open-submit-client ^xtdb.submit_client.XtdbSubmitClient [options]
   (let [system (-> (sys/prep-system (into [{:xtdb/submit-client `->submit-client
                                             :xtdb/bus 'xtdb.bus/->bus
+                                            :xtdb.bus/bus-stop 'xtdb.bus/->bus-stop
                                             :xtdb/document-store 'xtdb.kv.document-store/->document-store
                                             :xtdb/tx-log 'xtdb.kv.tx-log/->tx-log}]
                                           (cond-> options (not (vector? options)) vector)))
