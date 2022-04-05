@@ -244,7 +244,8 @@
             result (c2/sql-query node (:pgwire.parse/query-string parse-message))]
         (doseq [row result]
           (send-data-row out (for [column (mapv row projection)]
-                               (.getBytes (str column) StandardCharsets/UTF_8))))
+                               (when (some? column)
+                                 (.getBytes (pr-str column) StandardCharsets/UTF_8)))))
         (send-command-complete out (str (statement-command parse-message) " " (count result)))
         session))))
 
@@ -372,5 +373,5 @@
                                             :port 5432
                                             :num-threads 16})]
         (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
-          (vec (for [row (jdbc/execute! c ["SELECT * FROM (VALUES 1, 2) AS x (a), (VALUES 3, 4) AS y (b)"])]
+          (vec (for [row (jdbc/execute! c ["SELECT * FROM (VALUES 1, true) AS x (a), (VALUES 3.14, 'foo') AS y (b)"])]
                  (update-vals row (comp json/parse-string str))))))))
