@@ -1,5 +1,6 @@
 (ns core2.sql.pgwire
-  (:require [core2.util :as util])
+  (:require [clojure.string :as str]
+            [core2.util :as util])
   (:import java.nio.charset.StandardCharsets
            [java.io Closeable ByteArrayOutputStream
             DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream]
@@ -110,35 +111,55 @@
 (defmethod parse-message :default [_ _]
   {})
 
-(defmulti handle-message (fn [message out]
+(defmulti handle-message (fn [session message out]
                            (:pgwire/type message)))
 
-(defmethod handle-message :pgwire/parse [message out]
-  (send-parse-complete out))
+(defmethod handle-message :pgwire/parse [session message out]
+  (send-parse-complete out)
+  (assoc-in session [:prepared-statements (get message :pgwire.parse/prepared-statement)] message))
 
-(defmethod handle-message :pgwire/bind [message out]
-  (send-bind-complete out))
+(defmethod handle-message :pgwire/bind [session message out]
+  (send-bind-complete out)
+  (assoc-in session [:portals (get message :pgwire.bind/portal)] message))
 
-(defmethod handle-message :pgwire/terminate [message out]
-  (util/try-close out))
+(defmethod handle-message :pgwire/terminate [session message out]
+  (util/try-close out)
+  session)
 
-(defmethod handle-message :pgwire/execute [message out]
-  (send-command-complete out "SET"))
+(defmethod handle-message :pgwire/describe [session message out]
+  (cond
+    (:pgwire.describe/portal message)
+    (let [bind-message (get-in session [:portals (:pgwire.describe/portal message)])]
+      session)
 
-(defmethod handle-message :default [message _])
+    (:pgwire.describe/statement message)
+    (let [parse-message (get-in session [:prepared-statements (:pgwire.describe/statement message)])]
+      session)))
 
-(defn- pg-message-exchange [server parameters ^Socket socket ^DataInputStream in ^DataOutputStream out]
-  (prn server)
-  (while (not (.isClosed socket))
-    (send-ready-for-query out (byte \I))
+(defmethod handle-message :pgwire/execute [session message out]
+  (let [bind-message (get-in session [:portals (:pgwire.execute/portal message)])
+        parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement bind-message)])
+        command (first (str/split (:pgwire.parse/query-string parse-message) #"\s+"))]
+    (send-command-complete out command)
+    session))
 
-    (let [message-code (char (.readByte in))]
-      (if-let [message-type (get message-code->type message-code)]
-        (let [size (- (.readInt in) Integer/BYTES)
-              message (assoc (parse-message message-type in) :pgwire/type message-type)]
-          (prn message)
-          (handle-message message out))
-        (throw (IllegalArgumentException. (str "unknown message code: " message-code)))))))
+(defmethod handle-message :default [session message _]
+  session)
+
+(defn- pg-message-exchange [session ^Socket socket ^DataInputStream in ^DataOutputStream out]
+  (loop [session session]
+    (if (.isClosed socket)
+      session
+      (do (prn session)
+          (send-ready-for-query out (byte \I))
+
+          (let [message-code (char (.readByte in))]
+            (if-let [message-type (get message-code->type message-code)]
+              (let [size (- (.readInt in) Integer/BYTES)
+                    message (assoc (parse-message message-type in) :pgwire/type message-type)]
+                (prn message)
+                (recur (handle-message session message out)))
+              (throw (IllegalArgumentException. (str "unknown message code: " message-code)))))))))
 
 (defn- parse-startup-message [^DataInputStream in]
   (loop [in (PushbackInputStream. in)
@@ -153,7 +174,7 @@
 (def ^:private gssenc-request 80877104)
 (def ^:private startup-message 196608)
 
-(defn- pg-establish-connection [{:keys [parameters] :as server} ^DataInputStream in ^DataOutputStream out]
+(defn- pg-establish-connection [{:keys [parameters] :as session} ^DataInputStream in ^DataOutputStream out]
   (loop []
     (let [size (- (.readInt in) (* 2 Integer/BYTES))
           handshake (.readInt in)]
@@ -165,12 +186,13 @@
 
         (= startup-message handshake)
         (let [startup-message (parse-startup-message in)]
+          (prn startup-message)
           (send-authentication-ok out)
 
           (doseq [[k v] parameters]
             (send-parameter-status out k v))
 
-          startup-message)
+          (update session :parameters merge (:pgwire.startup-message/parameters startup-message)))
 
         :else
         (throw (IllegalArgumentException. (str "unknown handshake: " handshake)))))))
@@ -178,15 +200,18 @@
 (defn- pg-conn [server ^Socket socket]
   (with-open [in (DataInputStream. (.getInputStream socket))
               out (DataOutputStream. (.getOutputStream socket))]
-    (let [startup-message (pg-establish-connection server in out)]
-      (prn startup-message)
-      (pg-message-exchange server (:pgwire.startup-message/parameters startup-message) socket in out))))
+    (let [session {:parameters (:parameters server)
+                   :prepared-statements {}
+                   :portals {}}
+          session (pg-establish-connection session in out)]
+      (pg-message-exchange session socket in out))))
 
 (defn- pg-accept [{:keys [^ServerSocket server-socket ^ExecutorService pool] :as server}]
   (while (not (.isClosed server-socket))
     (try
       (let [socket (.accept server-socket)]
         (try
+          (.setTcpNoDelay socket true)
           (.submit pool ^Runnable #(pg-conn server socket))
           (catch Throwable t
             (util/try-close socket)
