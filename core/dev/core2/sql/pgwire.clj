@@ -6,6 +6,7 @@
             [core2.rewrite :as r]
             [core2.local-node :as node]
             [core2.util :as util]
+            [instaparse.core :as insta]
             [clojure.string :as str])
   (:import java.nio.charset.StandardCharsets
            [java.io Closeable ByteArrayOutputStream
@@ -43,11 +44,15 @@
     (.writeInt 8)
     (.writeInt 0)))
 
-(defn- send-ready-for-query [^DataOutputStream out ^long status]
+(def ^:private backend-status->indicator-code {:idle \I
+                                               :transaction \T
+                                               :failed-transaction \E})
+
+(defn- send-ready-for-query [^DataOutputStream out status]
   (doto out
     (.writeByte (byte \Z))
     (.writeInt 5)
-    (.writeByte (byte status))))
+    (.writeByte (byte (get backend-status->indicator-code status)))))
 
 (defn- send-message-without-body [^DataOutputStream out ^long message-type]
   (doto out
@@ -104,6 +109,22 @@
                           (byte \C)
                           (fn [out]
                             (write-c-string out command))))
+
+(def ^:private field-type->field-code {:localized-severity \S
+                                       :severity \V
+                                       :sql-state \C
+                                       :message \M
+                                       :detail \D
+                                       :position \P})
+
+(defn- send-error-response [^DataOutputStream out field-type->field-value]
+  (send-message-with-body out
+                          (byte \E)
+                          (fn [^DataOutputStream out]
+                            (doseq [[k v] field-type->field-value]
+                              (.writeByte out (byte (get field-type->field-code k)))
+                              (write-c-string out v))
+                            (.writeByte out 0))))
 
 (def ^:private ^:const ^long text-format-code 0)
 
@@ -179,13 +200,24 @@
 (defmulti handle-message (fn [session message out]
                            (:pgwire/type message)))
 
+(def ^:private sql-state-syntax-error "42601")
+
 (defmethod handle-message :pgwire/parse [session message out]
-  (send-parse-complete out)
-  (assoc-in session
-            [:prepared-statements (get message :pgwire.parse/prepared-statement)]
-            (if (= "SET" (statement-command message))
-              message
-              (with-meta message {:tree (sql/parse (:pgwire.parse/query-string message))}))))
+  (let [message (if (= "SET" (statement-command message))
+                  message
+                  (with-meta message {:tree (sql/parse (:pgwire.parse/query-string message))}))]
+    (if-let [parse-failure (insta/get-failure (:tree (meta message)))]
+      (do (send-error-response out {:severity "ERROR"
+                                    :localized-severity "ERROR"
+                                    :sql-state sql-state-syntax-error
+                                    :message (first (str/split-lines (pr-str parse-failure)))
+                                    :detail (prn-str parse-failure)
+                                    :position (str (inc (:index parse-failure)))})
+          session)
+      (do (send-parse-complete out)
+          (assoc-in session
+                    [:prepared-statements (get message :pgwire.parse/prepared-statement)]
+                    message)))))
 
 (defmethod handle-message :pgwire/bind [session message out]
   (send-bind-complete out)
@@ -201,7 +233,7 @@
   session)
 
 (defmethod handle-message :pgwire/sync [session message ^DataOutputStream out]
-  (send-ready-for-query out (byte \I))
+  (send-ready-for-query out :idle)
   session)
 
 (defmethod handle-message :pgwire/terminate [session message out]
@@ -312,7 +344,7 @@
           (doseq [[k v] parameters]
             (send-parameter-status out k v))
 
-          (send-ready-for-query out (byte \I))
+          (send-ready-for-query out :idle)
 
           (update session :parameters merge (:pgwire.startup-message/parameters startup-message)))
 
