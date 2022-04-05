@@ -197,13 +197,17 @@
 (defn- statement-command [parse-message]
   (first (str/split (:pgwire.parse/query-string parse-message) #"\s+")))
 
+(defn- empty-query? [parse-message]
+  (str/blank? (:pgwire.parse/query-string parse-message)))
+
 (defmulti handle-message (fn [session message out]
                            (:pgwire/type message)))
 
 (def ^:private sql-state-syntax-error "42601")
 
 (defmethod handle-message :pgwire/parse [session message out]
-  (let [message (if (= "SET" (statement-command message))
+  (let [message (if (or (empty-query? message)
+                        (= "SET" (statement-command message)))
                   message
                   (with-meta message {:tree (sql/parse (:pgwire.parse/query-string message))}))]
     (if-let [parse-failure (insta/get-failure (:tree (meta message)))]
@@ -224,7 +228,8 @@
   (let [parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement message)])]
     (assoc-in session
               [:portals (get message :pgwire.bind/portal)]
-              (if (= "SET" (statement-command parse-message))
+              (if (or (empty-query? message)
+                      (= "SET" (statement-command parse-message)))
                 message
                 (with-meta message (plan/plan-query (:tree (meta parse-message))))))))
 
@@ -266,11 +271,18 @@
 (defmethod handle-message :pgwire/execute [session message out]
   (let [bind-message (get-in session [:portals (:pgwire.execute/portal message)])
         parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement bind-message)])]
-    (if  (= "SET" (statement-command parse-message))
+    (cond
+      (empty-query? parse-message)
+      (do (send-empty-query-response out)
+          session)
+
+      (= "SET" (statement-command parse-message))
       (let [[_ k v] (re-find #"SET\s+(\w+)\s*=\s*'?(.*)'?" (:pgwire.parse/query-string parse-message))]
         (send-command-complete out (statement-command parse-message))
         (assoc-in session [:parameters k] v))
 
+
+      :else
       (let [node (:node (meta session))
             projection (mapv keyword (query-projection (:tree (meta parse-message))))
             result (c2/sql-query node (:pgwire.parse/query-string parse-message))]
@@ -281,21 +293,33 @@
         (send-command-complete out (str (statement-command parse-message) " " (count result)))
         session))))
 
-(defmethod handle-message :pgwire/query [session message out]
+(defmethod handle-message :pgwire/query [session message ^DataOutputStream out]
   (let [query-string (:pgwire.query/query-string message)
-        null-out (DataOutputStream. (ByteArrayOutputStream.))]
-    (-> session
-        (handle-message {:pgwire/type :parse
-                         :pgwire.parse/query-string query-string
-                         :pgwire.parse/prepared-statement ""
-                         :pgwire.parse/parameters []}
-                        null-out)
-        (handle-message {:pgwire/type :bind
-                         :pgwire.bind/portal ""
-                         :pgwire.bind/prepared-statement ""}
-                        null-out)
-        (handle-message {:pgwire/type :execute
-                         :pgwire.execute/portal ""}))))
+        baos (ByteArrayOutputStream.)
+        null-out (DataOutputStream. baos)
+        parse-message {:pgwire/type :pgwire/parse
+                       :pgwire.parse/query-string query-string
+                       :pgwire.parse/prepared-statement ""
+                       :pgwire.parse/parameters []}
+        session (handle-message session parse-message null-out)]
+    (if (and (pos? (alength (.toByteArray baos)))
+             (= \E (char (aget (.toByteArray baos) 0))))
+      (do (.write out (.toByteArray baos))
+          (send-ready-for-query out :idle)
+          session)
+      (let [session (cond-> (handle-message session
+                                            {:pgwire/type :pgwire/bind
+                                             :pgwire.bind/portal ""
+                                             :pgwire.bind/prepared-statement ""}
+                                            null-out)
+                      (= "SELECT" (statement-command parse-message)) (handle-message {:pgwire/type :pgwire/describe
+                                                                                      :pgwire.describe/portal ""}
+                                                                                     out)
+                      true (handle-message {:pgwire/type :pgwire/execute
+                                            :pgwire.execute/portal ""}
+                                           out))]
+        (send-ready-for-query out :idle)
+        session))))
 
 (defmethod handle-message :default [session message _]
   session)
