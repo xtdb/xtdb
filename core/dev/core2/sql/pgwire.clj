@@ -239,7 +239,6 @@
         (send-command-complete out (statement-command parse-message))
         (assoc-in session [:parameters k] v))
 
-      ;; HACK: not running query and returning the data.
       (let [node (:node (meta session))
             projection (mapv keyword (query-projection (:tree (meta parse-message))))
             result (c2/sql-query node (:pgwire.parse/query-string parse-message))]
@@ -323,9 +322,11 @@
   (try
     (with-open [in (DataInputStream. (.getInputStream socket))
                 out (DataOutputStream. (.getOutputStream socket))]
-      (let [session (with-meta {:parameters (:parameters server)
-                                :prepared-statements {}
-                                :portals {}} {:node (:node server)})
+      (let [session (with-meta
+                      {:parameters (:parameters server)
+                       :prepared-statements {}
+                       :portals {}}
+                      {:node (:node server)})
             session (pg-establish-connection session in out)]
         (pg-message-exchange session socket in out)))
     (catch Throwable t
@@ -346,16 +347,16 @@
         (when-not (.isClosed server-socket)
           (throw e))))))
 
-(defrecord PgWireServer [parameters node ^ServerSocket server-socket ^ExecutorService pool]
+(defrecord PgWireServer [node ^ServerSocket server-socket ^ExecutorService pool parameters]
   Closeable
   (close [_]
-    (util/try-close server-socket)
-    (util/shutdown-pool pool)))
+    (util/shutdown-pool pool)
+    (util/try-close server-socket)))
 
-(defn ->pg-wire-server ^core2.sql.pgwire.PgWireServer [parameters node ^long port ^long num-threads]
+(defn ->pg-wire-server ^core2.sql.pgwire.PgWireServer [node {:keys [server-parameters ^long port ^long num-threads]}]
   (let [server-socket (ServerSocket. port)
         pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
-        server (->PgWireServer parameters node server-socket pool)]
+        server (->PgWireServer node server-socket pool server-parameters)]
     (doto (Thread. #(pg-accept server))
       (.start))
     server))
@@ -364,12 +365,12 @@
   (do (require '[juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
       (require '[cheshire.core :as json])
       (with-open [node (node/start-node {})
-                  server (->pg-wire-server {"server_version" "14"
-                                            "server_encoding" "UTF8"
-                                            "TimeZone" "UTC"}
-                                           node
-                                           5432
-                                           16)]
+                  server (->pg-wire-server node
+                                           {:server-parameters {"server_version" "14"
+                                                                "server_encoding" "UTF8"
+                                                                "TimeZone" "UTC"}
+                                            :port 5432
+                                            :num-threads 16})]
         (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
           (vec (for [row (jdbc/execute! c ["SELECT * FROM (VALUES 1, 2) AS x (a), (VALUES 3, 4) AS y (b)"])]
                  (update-vals row (comp json/parse-string str))))))))
