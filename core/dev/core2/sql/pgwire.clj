@@ -115,7 +115,8 @@
                                        :sql-state \C
                                        :message \M
                                        :detail \D
-                                       :position \P})
+                                       :position \P
+                                       :where \W})
 
 (defn- send-error-response [^DataOutputStream out field-type->field-value]
   (send-message-with-body out
@@ -229,14 +230,22 @@
                     message)))))
 
 (defmethod handle-message :pgwire/bind [session message out]
-  (send-bind-complete out)
-  (let [parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement message)])]
-    (assoc-in session
-              [:portals (get message :pgwire.bind/portal)]
-              (if (or (empty-query? message)
-                      (= "SET" (statement-command parse-message)))
-                message
-                (with-meta message (plan/plan-query (:tree (meta parse-message))))))))
+  (let [parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement message)])
+        message (if (or (empty-query? parse-message)
+                        (= "SET" (statement-command parse-message)))
+                  message
+                  (with-meta message (plan/plan-query (:tree (meta parse-message)))))]
+    (if-let [error (first (:errs (meta message)))]
+      (do (send-error-response out {:severity "ERROR"
+                                    :localized-severity "ERROR"
+                                    :sql-state sql-state-syntax-error
+                                    :message (first (str/split-lines error))
+                                    :detail error})
+          session)
+      (do (send-bind-complete out)
+          (assoc-in session
+                    [:portals (get message :pgwire.bind/portal)]
+                    message)))))
 
 (defmethod handle-message :pgwire/flush [session message ^DataOutputStream out]
   (.flush out)
@@ -298,6 +307,10 @@
         (send-command-complete out (str (statement-command parse-message) " " (count result)))
         session))))
 
+(defn- error-message-buffer? [^bytes message]
+  (and (pos? (alength message))
+       (= \E (char (aget message 0)))))
+
 (defmethod handle-message :pgwire/query [session message ^DataOutputStream out]
   (let [query-string (:pgwire.query/query-string message)
         baos (ByteArrayOutputStream.)
@@ -307,40 +320,60 @@
                        :pgwire.parse/prepared-statement ""
                        :pgwire.parse/parameters []}
         session (handle-message session parse-message null-out)]
-    (if (and (pos? (alength (.toByteArray baos)))
-             (= \E (char (aget (.toByteArray baos) 0))))
+    (if (error-message-buffer? (.toByteArray baos))
       (do (.write out (.toByteArray baos))
           (send-ready-for-query out :idle)
           session)
-      (let [session (cond-> (handle-message session
-                                            {:pgwire/type :pgwire/bind
-                                             :pgwire.bind/portal ""
-                                             :pgwire.bind/prepared-statement ""}
-                                            null-out)
-                      (= "SELECT" (statement-command parse-message)) (handle-message {:pgwire/type :pgwire/describe
-                                                                                      :pgwire.describe/portal ""}
-                                                                                     out)
-                      true (handle-message {:pgwire/type :pgwire/execute
-                                            :pgwire.execute/portal ""}
-                                           out))]
-        (send-ready-for-query out :idle)
-        session))))
+      (let [baos (ByteArrayOutputStream.)
+            null-out (DataOutputStream. baos)
+            bind-message {:pgwire/type :pgwire/bind
+                          :pgwire.bind/portal ""
+                          :pgwire.bind/prepared-statement ""}
+            session (handle-message session bind-message null-out)]
+        (if (error-message-buffer? (.toByteArray baos))
+          (do (.write out (.toByteArray baos))
+              (send-ready-for-query out :idle)
+              session)
+          (let [session (cond-> session
+                          (= "SELECT" (statement-command parse-message)) (handle-message {:pgwire/type :pgwire/describe
+                                                                                          :pgwire.describe/portal ""}
+                                                                                         out)
+                          true (handle-message {:pgwire/type :pgwire/execute
+                                                :pgwire.execute/portal ""}
+                                               out))]
+            (send-ready-for-query out :idle)
+            session))))))
 
 (defmethod handle-message :default [session message _]
   session)
+
+(def ^:private sql-state-internal-error "XX000")
 
 (defn- pg-message-exchange [session ^Socket socket ^DataInputStream in ^DataOutputStream out]
   (loop [session session]
     (if (.isClosed socket)
       session
       (do (prn session)
-          (let [message-code (char (.readByte in))]
-            (if-let [message-type (get message-code->type message-code)]
-              (let [size (- (.readInt in) Integer/BYTES)
-                    message (assoc (parse-message message-type in) :pgwire/type message-type)]
-                (prn message)
-                (recur (handle-message session message out)))
-              (throw (IllegalArgumentException. (str "unknown message code: " message-code)))))))))
+          (recur (try
+                   (let [message-code (char (.readByte in))]
+                     (if-let [message-type (get message-code->type message-code)]
+                       (let [size (- (.readInt in) Integer/BYTES)
+                             message (assoc (parse-message message-type in) :pgwire/type message-type)]
+                         (prn message)
+                         (handle-message session message out))
+                       (throw (IllegalArgumentException. (str "unknown message code: " message-code)))))
+                   (catch Exception e
+                     (prn e)
+                     (send-error-response out {:severity "ERROR"
+                                               :localized-severity "ERROR"
+                                               :sql-state sql-state-internal-error
+                                               :message (first (str/split-lines (or (.getMessage e) "")))
+                                               :detail (str e)
+                                               :where (with-out-str
+                                                        (binding [*err* *out*]
+                                                          (.printStackTrace e)))})
+                     (send-ready-for-query out :idle)
+                     session)))))))
 
 (defn- parse-startup-message [^DataInputStream in]
   (loop [in (PushbackInputStream. in)
