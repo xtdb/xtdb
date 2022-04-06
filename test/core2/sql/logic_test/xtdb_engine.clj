@@ -6,6 +6,7 @@
             [core2.rewrite :as r]
             [core2.snapshot :as snap]
             [core2.sql :as sql]
+            [core2.sql.analyze :as sem]
             [core2.sql.plan :as plan]
             [core2.sql.logic-test.runner :as slt]
             [core2.operator :as op]
@@ -121,7 +122,8 @@
         (if (insta/failure? tree)
           (if-let [record (or (parse-create-table statement)
                               (parse-create-view statement))]
-            (execute-record this record))
+            (execute-record this record)
+            (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
           (let [direct-sql-data-statement-tree (second tree)]
             (execute-statement this direct-sql-data-statement-tree))))))
 
@@ -131,6 +133,12 @@
           db (snap/snapshot snapshot-factory)]
       (when (insta/failure? tree)
         (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
-      (let [tree (normalize-query (:tables this) tree)]
-        (->> (op/query-ra '[:scan [_id]] db)
-             (mapv (comp vec keys)))))))
+      (let [tree (normalize-query (:tables this) tree)
+            projection (->> (sem/projected-columns (r/$ (r/->zipper tree) 1))
+                            (first)
+                            (mapv (comp keyword name plan/unqualified-projection-symbol)))
+            {:keys [errs plan]} (plan/plan-query tree)]
+        (if-let [err (first errs)]
+          (throw (IllegalArgumentException. err))
+          (vec (for [row (op/query-ra plan {'$ db})]
+                 (mapv row projection))))))))

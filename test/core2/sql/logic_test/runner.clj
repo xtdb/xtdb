@@ -151,8 +151,8 @@
     (let [result-str (cond->> result
                        (and result-set-md5sum max-result-set-size) (take max-result-set-size)
                        true (format-result-str sort-mode))]
-      #_(when result-set
-          (t/is (= (str/join "\n" result-set) result-str)))
+      (when result-set
+        (t/is (= (str/join "\n" result-set) result-str)))
       (when result-set-md5sum
         (t/is (= result-set-md5sum (md5 result-str))))))
   ctx)
