@@ -200,6 +200,11 @@
 (defn- empty-query? [parse-message]
   (str/blank? (:pgwire.parse/query-string parse-message)))
 
+;; TODO: should really just use direct_sql_statement rule, but that
+;; requires some hacks.
+(defn- strip-query-semi-colon [sql]
+  (str/replace sql #";\s*$" ""))
+
 (defmulti handle-message (fn [session message out]
                            (:pgwire/type message)))
 
@@ -209,7 +214,7 @@
   (let [message (if (or (empty-query? message)
                         (= "SET" (statement-command message)))
                   message
-                  (with-meta message {:tree (sql/parse (:pgwire.parse/query-string message))}))]
+                  (with-meta message {:tree (sql/parse (strip-query-semi-colon (:pgwire.parse/query-string message)))}))]
     (if-let [parse-failure (insta/get-failure (:tree (meta message)))]
       (do (send-error-response out {:severity "ERROR"
                                     :localized-severity "ERROR"
@@ -277,7 +282,7 @@
           session)
 
       (= "SET" (statement-command parse-message))
-      (let [[_ k v] (re-find #"SET\s+(\w+)\s*=\s*'?(.*)'?" (:pgwire.parse/query-string parse-message))]
+      (let [[_ k v] (re-find #"SET\s+(\w+)\s*=\s*'?(.*)'?" (strip-query-semi-colon (:pgwire.parse/query-string parse-message)))]
         (send-command-complete out (statement-command parse-message))
         (assoc-in session [:parameters k] v))
 
@@ -285,7 +290,7 @@
       :else
       (let [node (:node (meta session))
             projection (mapv keyword (query-projection (:tree (meta parse-message))))
-            result (c2/sql-query node (:pgwire.parse/query-string parse-message))]
+            result (c2/sql-query node (strip-query-semi-colon (:pgwire.parse/query-string parse-message)))]
         (doseq [row result]
           (send-data-row out (for [column (mapv row projection)]
                                (when (some? column)
