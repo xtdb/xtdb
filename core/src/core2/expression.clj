@@ -22,7 +22,7 @@
            (org.apache.arrow.vector BitVector DurationVector FieldVector ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector)
            (org.apache.arrow.vector.types DateUnit TimeUnit Types Types$MinorType)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType)))
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Time)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -243,6 +243,14 @@
   (util/case-enum (.getUnit type)
     DateUnit/DAY `(.get ~vec-sym ~idx-sym)
     DateUnit/MILLISECOND `(int (quot (.get ~vec-sym ~idx-sym) 86400000))))
+
+;; unifies to nanos (of day) long
+(defmethod get-value-form ArrowType$Time [^ArrowType$Time type vec-sym idx-sym]
+  (util/case-enum (.getUnit type)
+    TimeUnit/NANOSECOND `(.get ~vec-sym ~idx-sym)
+    TimeUnit/MICROSECOND `(* 1e3 (.get ~vec-sym ~idx-sym))
+    TimeUnit/MILLISECOND `(* 1e6 (long (get ~vec-sym ~idx-sym)))
+    TimeUnit/SECOND `(* 1e9 (long (get ~vec-sym ~idx-sym)))))
 
 (defmethod get-value-form ArrowType$ExtensionType
   [^ArrowType$ExtensionType arrow-type vec-sym idx-sym]
@@ -744,6 +752,9 @@
   ;; assuming we are writing to a date day vector, as that is the canonical representation
   `(.set ~out-vec-sym ~idx-sym ~code))
 
+(defmethod set-value-form ArrowType$Time [_ out-vec-sym idx-sym code]
+  `(.set ~out-vec-sym ~idx-sym ~code))
+
 (def ^:private out-vec-sym (gensym 'out-vec))
 (def ^:private out-writer-sym (gensym 'out-writer-sym))
 
@@ -768,6 +779,11 @@
 
         "DATEDAY" `(ArrowType$Date. DateUnit/DAY)
         "DATEMILLI" `(ArrowType$Date. DateUnit/MILLISECOND)
+
+        "TIMENANO" `(ArrowType$Time. TimeUnit/NANOSECOND 64)
+        "TIMEMICRO" `(ArrowType$Time. TimeUnit/MICROSECOND 64)
+        "TIMEMILLI" `(ArrowType$Time. TimeUnit/MILLISECOND 32)
+        "TIMESEC" `(ArrowType$Time. TimeUnit/SECOND 32)
 
         ;; TODO there are other minor types that don't have a single corresponding ArrowType
         `(.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name))))))

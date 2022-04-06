@@ -19,6 +19,7 @@ public class LegType {
     public static final LegType TIMESTAMPMICROTZ = new LegType(new ArrowType.Timestamp(TimeUnit.MICROSECOND, "UTC"));
     public static final LegType DURATIONMICRO = new LegType(new ArrowType.Duration(TimeUnit.MICROSECOND));
     public static final LegType DATEDAY = new LegType(new ArrowType.Date(DateUnit.DAY));
+    public static final LegType TIMENANO = new LegType(new ArrowType.Time(TimeUnit.NANOSECOND, 64));
     public static final LegType BINARY = new LegType(ArrowType.Binary.INSTANCE);
     public static final LegType UTF8 = new LegType(ArrowType.Utf8.INSTANCE);
     public static final LegType LIST = new LegType(ArrowType.List.INSTANCE);

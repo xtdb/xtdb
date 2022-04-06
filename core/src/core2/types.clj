@@ -8,14 +8,14 @@
            java.io.Writer
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
-           [java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId LocalDate]
+           [java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId LocalDate LocalTime]
            [java.util Date List Map UUID]
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector DateDayVector DateMilliVector]
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeMilliVector TimeMicroVector TimeSecVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types TimeUnit Types Types$MinorType UnionMode DateUnit]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType ArrowType$Date]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType ArrowType$Date ArrowType$Time]
            org.apache.arrow.vector.util.Text
            java.net.URI))
 
@@ -113,7 +113,12 @@
   LocalDate
   (value->leg-type [_] LegType/DATEDAY)
   (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^DateDayVector (.getVector writer) (.getPosition writer) (.toEpochDay v))))
+    (.setSafe ^DateDayVector (.getVector writer) (.getPosition writer) (.toEpochDay v)))
+
+  LocalTime
+  (value->leg-type [_] LegType/TIMENANO)
+  (write-value! [v ^IVectorWriter writer]
+    (.setSafe ^TimeNanoVector (.getVector writer) (.getPosition writer) (.toNanoOfDay v))))
 
 (extend-protocol ArrowWriteable
   (Class/forName "[B")
@@ -253,7 +258,16 @@
       (util/case-enum (.getUnit arrow-type)
         DateUnit/DAY DateDayVector
         DateUnit/MILLISECOND DateMilliVector
-        (throw (UnsupportedOperationException.))))))
+        (throw (UnsupportedOperationException.)))))
+
+  ArrowType$Time
+  (arrow-type->vector-type [arrow-type]
+    (let [^ArrowType$Time arrow-type arrow-type]
+      (util/case-enum (.getUnit arrow-type)
+        TimeUnit/NANOSECOND TimeNanoVector
+        TimeUnit/MICROSECOND TimeMicroVector
+        TimeUnit/MILLISECOND TimeMilliVector
+        TimeUnit/SECOND TimeSecVector))))
 
 (extend-protocol VectorType
   KeywordType (arrow-type->vector-type [_] KeywordVector)
@@ -317,6 +331,20 @@
   DateMilliVector
   (get-object [this idx]
     (LocalDate/ofEpochDay (quot (.get this idx) 86400000))))
+
+(extend-protocol ArrowReadable
+  TimeNanoVector
+  (get-object [this idx]
+    (LocalTime/ofNanoOfDay (.get this idx)))
+  TimeMicroVector
+  (get-object [this idx]
+    (LocalTime/ofNanoOfDay (* (.get this idx) 1e3)))
+  TimeMilliVector
+  (get-object [this idx]
+    (LocalTime/ofNanoOfDay (* (long (.get this idx)) 1e6)))
+  TimeSecVector
+  (get-object [this idx]
+    (LocalTime/ofSecondOfDay (.get this idx))))
 
 (extend-protocol ArrowReadable
   ListVector
@@ -405,6 +433,7 @@
                                      (str/replace #"[/:]" "_")))
       "extensiontype" (.extensionName ^ArrowType$ExtensionType arrow-type)
       "date" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Date arrow-type))))
+      "time" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Time arrow-type))))
       minor-type-name)))
 
 (defn field->leg-type [^Field field]
