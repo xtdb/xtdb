@@ -21,8 +21,8 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector BitVector DurationVector FieldVector ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector)
-           (org.apache.arrow.vector.types DateUnit TimeUnit Types Types$MinorType)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Time)))
+           (org.apache.arrow.vector.types DateUnit TimeUnit Types Types$MinorType IntervalUnit)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Time ArrowType$Interval)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -251,6 +251,10 @@
     TimeUnit/MICROSECOND `(* 1e3 (.get ~vec-sym ~idx-sym))
     TimeUnit/MILLISECOND `(* 1e6 (long (get ~vec-sym ~idx-sym)))
     TimeUnit/SECOND `(* 1e9 (long (get ~vec-sym ~idx-sym)))))
+
+;; we will box for simplicity given bigger than a long in worst case, may later change to a more primitive
+(defmethod get-value-form ArrowType$Interval [_type vec-sym idx-sym]
+  `(types/get-object ~vec-sym ~idx-sym))
 
 (defmethod get-value-form ArrowType$ExtensionType
   [^ArrowType$ExtensionType arrow-type vec-sym idx-sym]
@@ -755,6 +759,12 @@
 (defmethod set-value-form ArrowType$Time [_ out-vec-sym idx-sym code]
   `(.set ~out-vec-sym ~idx-sym ~code))
 
+(defmethod set-value-form ArrowType$Interval [_ out-vec-sym idx-sym code]
+  `(let [period-duration# ~code
+         period# (.getPeriod period-duration#)
+         duration# (.getDuration period-duration#)]
+     (.set ~out-vec-sym ~idx-sym (.toTotalMonths period#) (.getDays period#) (.toNanos duration#))))
+
 (def ^:private out-vec-sym (gensym 'out-vec))
 (def ^:private out-writer-sym (gensym 'out-writer-sym))
 
@@ -784,6 +794,10 @@
         "TIMEMICRO" `(ArrowType$Time. TimeUnit/MICROSECOND 64)
         "TIMEMILLI" `(ArrowType$Time. TimeUnit/MILLISECOND 32)
         "TIMESEC" `(ArrowType$Time. TimeUnit/SECOND 32)
+
+        "INTERVALMONTHDAYNANO" `(ArrowType$Interval. IntervalUnit/MONTH_DAY_NANO)
+        "INTERVALYEAR" `(ArrowType$Interval. IntervalUnit/YEAR_MONTH)
+        "INTERVALDAY" `(ArrowType$Interval. IntervalUnit/DAY_TIME)
 
         ;; TODO there are other minor types that don't have a single corresponding ArrowType
         `(.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name))))))

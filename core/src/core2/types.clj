@@ -8,16 +8,17 @@
            java.io.Writer
            [java.nio ByteBuffer CharBuffer]
            java.nio.charset.StandardCharsets
-           [java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId LocalDate LocalTime]
+           [java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId LocalDate LocalTime Period]
            [java.util Date List Map UUID]
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeMilliVector TimeMicroVector TimeSecVector]
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeMilliVector TimeMicroVector TimeSecVector IntervalMonthDayNanoVector IntervalDayVector IntervalYearVector PeriodDuration]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType UnionMode DateUnit]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType ArrowType$Date ArrowType$Time]
+           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType UnionMode DateUnit IntervalUnit]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType ArrowType$Date ArrowType$Time ArrowType$Interval]
            org.apache.arrow.vector.util.Text
-           java.net.URI))
+           java.net.URI
+           [org.apache.arrow.vector.holders NullableIntervalDayHolder NullableIntervalYearHolder]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -118,7 +119,15 @@
   LocalTime
   (value->leg-type [_] LegType/TIMENANO)
   (write-value! [v ^IVectorWriter writer]
-    (.setSafe ^TimeNanoVector (.getVector writer) (.getPosition writer) (.toNanoOfDay v))))
+    (.setSafe ^TimeNanoVector (.getVector writer) (.getPosition writer) (.toNanoOfDay v)))
+
+  ;; allow the use of PeriodDuration for more precision
+  PeriodDuration
+  (value->leg-type [_] LegType/INTERVALMONTHDAYNANO)
+  (write-value! [v ^IVectorWriter writer]
+    (let [period (.getPeriod v)
+          duration (.getDuration v)]
+      (.setSafe ^IntervalMonthDayNanoVector (.getVector writer) (.getPosition writer) (.toTotalMonths period) (.getDays period) (.toNanos duration)))))
 
 (extend-protocol ArrowWriteable
   (Class/forName "[B")
@@ -267,7 +276,15 @@
         TimeUnit/NANOSECOND TimeNanoVector
         TimeUnit/MICROSECOND TimeMicroVector
         TimeUnit/MILLISECOND TimeMilliVector
-        TimeUnit/SECOND TimeSecVector))))
+        TimeUnit/SECOND TimeSecVector)))
+
+  ArrowType$Interval
+  (arrow-type->vector-type [arrow-type]
+    (let [^ArrowType$Interval arrow-type arrow-type]
+      (util/case-enum (.getUnit arrow-type)
+        IntervalUnit/DAY_TIME IntervalDayVector
+        IntervalUnit/YEAR_MONTH IntervalYearVector
+        IntervalUnit/MONTH_DAY_NANO IntervalMonthDayNanoVector))))
 
 (extend-protocol VectorType
   KeywordType (arrow-type->vector-type [_] KeywordVector)
@@ -345,6 +362,20 @@
   TimeSecVector
   (get-object [this idx]
     (LocalTime/ofSecondOfDay (.get this idx))))
+
+(extend-protocol ArrowReadable
+  ;; we are going to override the get-object function
+  ;; to unify the representation on read for non nanovectors
+  IntervalDayVector
+  (get-object [this idx]
+    (let [holder (NullableIntervalDayHolder.)
+          _ (.get this idx holder)
+          period (Period/ofDays (.-days holder))
+          duration (Duration/ofMillis (.-milliseconds holder))]
+      (PeriodDuration. period duration)))
+  IntervalYearVector
+  (get-object [this idx]
+    (PeriodDuration. (Period/ofMonths (.get this idx)) Duration/ZERO)))
 
 (extend-protocol ArrowReadable
   ListVector
@@ -434,6 +465,7 @@
       "extensiontype" (.extensionName ^ArrowType$ExtensionType arrow-type)
       "date" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Date arrow-type))))
       "time" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Time arrow-type))))
+      "interval" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Interval arrow-type))))
       minor-type-name)))
 
 (defn field->leg-type [^Field field]

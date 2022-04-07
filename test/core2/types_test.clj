@@ -7,12 +7,12 @@
   (:import [core2.vector.extensions KeywordVector UuidVector UriVector]
            java.net.URI
            java.nio.ByteBuffer
-           [java.time Instant OffsetDateTime ZonedDateTime ZoneId ZoneOffset LocalDate LocalTime]
-           [org.apache.arrow.vector BigIntVector BitVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeSecVector TimeMilliVector TimeMicroVector]
+           [java.time Instant OffsetDateTime ZonedDateTime ZoneId ZoneOffset LocalDate LocalTime Period Duration]
+           [org.apache.arrow.vector BigIntVector BitVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeSecVector TimeMilliVector TimeMicroVector PeriodDuration IntervalMonthDayNanoVector IntervalYearVector IntervalDayVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [core2.types LegType]
-           [org.apache.arrow.vector.types.pojo ArrowType$Date ArrowType$Time]
-           [org.apache.arrow.vector.types DateUnit TimeUnit]
+           [org.apache.arrow.vector.types.pojo ArrowType$Date ArrowType$Time ArrowType$Interval]
+           [org.apache.arrow.vector.types DateUnit TimeUnit IntervalUnit]
            [core2.vector IVectorWriter]))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -126,3 +126,35 @@
                                             (fn [^IVectorWriter w, ^LocalTime v]
                                               (.setSafe ^TimeMicroVector (.getVector w) (.getPosition w) (long (quot (.toNanoOfDay v) 1e3))))
                                             micros+))))))))
+
+(t/deftest interval-vector-test
+  ;; need to normalize for round trip poses a problem
+  ;; will need to consider a canonical vector that preserves every component in PeriodDuration
+  ;; for years/months we lose the years as a separate component, it has to be folded into months.
+  (let [npd (fn [years months days nanos] (PeriodDuration. (.normalized (Period/of years months days)) (Duration/ofNanos nanos)))
+        renorm (fn [^PeriodDuration pd] (PeriodDuration. (.normalized (.getPeriod pd)) (.getDuration pd)))
+        renorm-rt (fn [{:keys [vs] :as result}] (assoc result :vs (mapv renorm vs)))
+
+        full-period (npd 0 33 244 3444443)
+        period-year-month (npd 1 23 0 0)
+        period-day-ms (npd 0 0 1434 23e6)
+
+        test-round-trip (comp renorm-rt test-round-trip)
+        test-read (comp renorm-rt test-read)]
+
+    (->> "(normalized) PeriodDuration objects can be round tripped"
+         (t/is (= {:vs [full-period]
+                   :vec-types [IntervalMonthDayNanoVector]}
+                  (test-round-trip [full-period]))))
+
+    (->> "PeriodDuration can be read from YEAR vectors"
+         (t/is (= [period-year-month] (:vs (test-read (constantly (LegType. (ArrowType$Interval. IntervalUnit/YEAR_MONTH)))
+                                                   (fn [^IVectorWriter w, ^PeriodDuration v]
+                                                     (.setSafe ^IntervalYearVector (.getVector w) (.getPosition w) (.toTotalMonths (.getPeriod v))))
+                                                   [period-year-month])))))
+
+    (->> "PeriodDuration can be read from DAY vectors"
+         (t/is (= [period-day-ms] (:vs (test-read (constantly (LegType. (ArrowType$Interval. IntervalUnit/DAY_TIME)))
+                                                   (fn [^IVectorWriter w, ^PeriodDuration v]
+                                                     (.setSafe ^IntervalDayVector (.getVector w) (.getPosition w) (.getDays (.getPeriod v)) (.toMillis (.getDuration v))))
+                                                   [period-day-ms])))))))

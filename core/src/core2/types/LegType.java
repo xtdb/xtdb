@@ -1,6 +1,7 @@
 package core2.types;
 
 import org.apache.arrow.vector.types.DateUnit;
+import org.apache.arrow.vector.types.IntervalUnit;
 import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.ArrowType;
@@ -20,6 +21,7 @@ public class LegType {
     public static final LegType DURATIONMICRO = new LegType(new ArrowType.Duration(TimeUnit.MICROSECOND));
     public static final LegType DATEDAY = new LegType(new ArrowType.Date(DateUnit.DAY));
     public static final LegType TIMENANO = new LegType(new ArrowType.Time(TimeUnit.NANOSECOND, 64));
+    public static final LegType INTERVALMONTHDAYNANO = new LegType(new ArrowType.Interval(IntervalUnit.MONTH_DAY_NANO));
     public static final LegType BINARY = new LegType(ArrowType.Binary.INSTANCE);
     public static final LegType UTF8 = new LegType(ArrowType.Utf8.INSTANCE);
     public static final LegType LIST = new LegType(ArrowType.List.INSTANCE);
