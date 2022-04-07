@@ -1,1 +1,2 @@
-{:hooks {:analyze-call {crux.fixtures/with-tmp-dirs hooks.xtdb/with-tmp-dirs}}}
+{:hooks {:analyze-call {crux.fixtures/with-tmp-dirs hooks.xtdb/with-tmp-dirs}}
+ :lint-as {xtdb.api-test/with-dbs clojure.core/let}}
