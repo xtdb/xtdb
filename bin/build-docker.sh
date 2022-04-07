@@ -5,9 +5,8 @@ set -e
     cd $(dirname $0)/..
 
     if [ "$1" == "--clean" ] || ! [ -e target/core2-standalone.jar ]; then
-        echo Building uberjar...
-        ./lein-sub do clean, install
-        lein uberjar
+        ./bin/re-prep.sh
+        clojure -Xuberjar
     fi
 
     echo Building Docker image...

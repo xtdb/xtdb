@@ -232,12 +232,8 @@ Core2 artifacts are deployed to Maven Central.
 
 ==== Uberjar
 
-TODO: migrate from Lein
-
-* `./lein-sub do clean, install`
-* `lein uberjar` => `target/core2-standalone.jar`
-
-* `java -jar target/core2-standalone [--help]`
+* `clojure -Xuberjar` => `target/core2-standalone.jar`
+* `java -jar target/core2-standalone.jar [--help]`
 
 ==== Docker
 

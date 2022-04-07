@@ -64,7 +64,7 @@
                      :exec-fn org.corfield.build/uber
                      :exec-args {:main core2.main
                                  :ns-compile [core2.main]
-                                 :uber-file "core2-standalone.jar"}}
+                                 :uber-file "target/core2-standalone.jar"}}
 
            :lint {:replace-paths []
                   :replace-deps {org.clojure/clojure {:mvn/version "1.11.0"}
