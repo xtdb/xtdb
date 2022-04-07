@@ -10,7 +10,8 @@
             [core2.sql.analyze :as sem]
             [instaparse.core :as insta])
   (:import clojure.lang.IObj
-           [java.time LocalDate Period]))
+           [java.time LocalDate Period Duration]
+           [org.apache.arrow.vector PeriodDuration]))
 
 ;; Attribute grammar for transformation into logical plan.
 
@@ -146,9 +147,9 @@
        [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]]
      ;;=>
      (case datetime-field
-       "DAY" (Period/ofDays (Long/parseLong year-month-literal))
-       "MONTH" (Period/ofMonths (Long/parseLong year-month-literal))
-       "YEAR" (Period/ofYears (Long/parseLong year-month-literal)))
+       "DAY" (PeriodDuration. (Period/ofDays (Long/parseLong year-month-literal)) Duration/ZERO)
+       "MONTH" (PeriodDuration. (Period/ofMonths (Long/parseLong year-month-literal)) Duration/ZERO)
+       "YEAR" (PeriodDuration. (Period/ofYears (Long/parseLong year-month-literal)) Duration/ZERO))
 
      [:character_like_predicate ^:z rvp [:character_like_predicate_part_2 "LIKE" ^:z cp]]
      ;;=>

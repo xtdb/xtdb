@@ -5,7 +5,8 @@
             [clojure.walk :as w]
             [clojure.java.io :as io]
             [clojure.test :as t])
-  (:import [java.time LocalDate Period]))
+  (:import [java.time LocalDate Period Duration]
+           [org.apache.arrow.vector PeriodDuration]))
 
 (t/deftest test-parse-tpch-queries
   (doseq [q (range 22)
@@ -23,7 +24,7 @@
    (=
     (w/postwalk-replace
       {'?date (LocalDate/parse "1998-12-01")
-       '?period (Period/parse "P90D")}
+       '?period (PeriodDuration. (Period/parse "P90D") Duration/ZERO)}
       '[:rename
         {x1 l_returnflag, x13 sum_base_price, x2 l_linestatus, x12 sum_qty, x14 sum_disc_price, x17 avg_price, x15 sum_charge, x16 avg_qty, x18 avg_disc, x19 count_order}
         [:order-by

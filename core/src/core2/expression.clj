@@ -15,12 +15,12 @@
            (java.lang.reflect Method)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Duration Instant LocalDate ZonedDateTime ZoneId ZoneOffset)
+           (java.time Duration Instant LocalDate ZonedDateTime ZoneId ZoneOffset Period)
            (java.time.temporal ChronoField ChronoUnit)
            (java.util Date HashMap LinkedList)
            (java.util.function IntUnaryOperator)
            (java.util.stream IntStream)
-           (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector ValueVector)
+           (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector ValueVector PeriodDuration)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector)
            (org.apache.arrow.vector.types DateUnit TimeUnit Types Types$MinorType IntervalUnit)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Time ArrowType$Interval)))
@@ -195,11 +195,15 @@
 
 (defmethod emit-value Keyword [_ code] (emit-value String `(str (symbol ~code))))
 
+(defmethod emit-value LocalDate [_ code] (.toEpochDay code))
+(defmethod emit-value PeriodDuration [_ code] `(PeriodDuration. (Period/parse ~(str (.getPeriod code))) (Duration/ofNanos ~(.toNanos (.getDuration code)))))
+
 (defmethod codegen-expr :literal [{:keys [literal]} _]
-  (let [return-type (.arrowType (types/value->leg-type literal))]
+  (let [return-type (.arrowType (types/value->leg-type literal))
+        literal-type (class literal)]
     {:return-types #{return-type}
      :continue (fn [f]
-                 (f return-type (emit-value literal)))
+                 (f return-type (emit-value literal-type literal)))
      :literal literal}))
 
 (defn lit->param [{:keys [op] :as expr}]
@@ -459,7 +463,7 @@
                     [:>= #(do `(not (neg? ~%)))]]
         :let [f-sym (symbol (name f-kw))]]
 
-  (doseq [arrow-type #{::types/Number ArrowType$Timestamp ArrowType$Duration}]
+  (doseq [arrow-type #{::types/Number ArrowType$Timestamp ArrowType$Duration ArrowType$Date}]
     (defmethod codegen-call [f-kw arrow-type arrow-type] [_]
       (mono-fn-call types/bool-type #(do `(~f-sym ~@%)))))
 

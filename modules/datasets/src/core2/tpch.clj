@@ -3,7 +3,7 @@
             [clojure.tools.logging :as log]
             [core2.api :as c2])
   (:import [io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable]
-           [java.time Instant Period]
+           [java.time Instant Period LocalDate]
            java.util.Date))
 
 (def table->pkey
@@ -29,7 +29,7 @@
                       TpchColumnType$Base/DOUBLE
                       (.getDouble c b)
                       TpchColumnType$Base/DATE
-                      (Date/from (.plus Instant/EPOCH (Period/ofDays (.getDate c b)))))])
+                      (LocalDate/ofEpochDay (.getDate c b)))])
                  (into {}))
         table-name (.getTableName t)
         pkey-columns (get table->pkey table-name)
