@@ -322,11 +322,11 @@
 
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/hash-doc ivan2))]
                (db/entity-history index-snapshot :ivan :desc {:start-valid-time t
-                                                              :start-tx-id 2})))
+                                                              :start-tx {::xt/tx-id 2}})))
 
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 1 (c/hash-doc ivan1))]
                (db/entity-history index-snapshot :ivan :desc {:start-valid-time t
-                                                              :start-tx-id 1})))
+                                                              :start-tx {::xt/tx-id 1}})))
 
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/hash-doc ivan2))]
                (db/entity-history index-snapshot :ivan :asc {:start-valid-time t}))))))
@@ -358,31 +358,31 @@
           (t/testing "start is inclusive"
             (t/is (= [etx-v2-t2
                       etx-v1-t2]
-                     (history-desc {:start-tx-id 2, :start-valid-time t2})))
+                     (history-desc {:start-tx {::xt/tx-id 2} :start-valid-time t2})))
 
             (t/is (= [etx-v1-t2]
                      (history-desc {:start-valid-time t1})))
 
             (t/is (= [etx-v1-t2 etx-v2-t2]
-                     (history-asc {:start-tx-id 2})))
+                     (history-asc {:start-tx {::xt/tx-id 2}})))
 
             (t/is (= [etx-v1-t1 etx-v1-t2 etx-v2-t2]
-                     (history-asc {:start-tx-id 1, :start-valid-time t1
+                     (history-asc {:start-tx {::xt/tx-id 1} :start-valid-time t1
                                    :with-corrections? true}))))
 
           (t/testing "end is exclusive"
             (t/is (= [etx-v2-t2]
-                     (history-desc {:start-valid-time t2, :start-tx-id 2
-                                    :end-valid-time t1, :end-tx-id 1})))
+                     (history-desc {:start-valid-time t2, :start-tx {::xt/tx-id 2}
+                                    :end-valid-time t1, :end-tx {::xt/tx-id 1}})))
 
             (t/is (= []
                      (history-desc {:end-valid-time t2})))
 
             (t/is (= [etx-v1-t1]
-                     (history-asc {:end-tx-id 2})))
+                     (history-asc {:end-tx {::xt/tx-id 2}})))
 
             (t/is (= []
-                     (history-asc {:start-valid-time t1, :end-tx-id 1})))))))))
+                     (history-asc {:start-valid-time t1, :end-tx {::xt/tx-id 1}})))))))))
 
 (t/deftest test-put-delete-range-semantics
   (t/are [txs history] (let [eid (keyword (gensym "ivan"))

@@ -1949,24 +1949,22 @@
         (c/crux->xt))))
 
 (defn- with-history-bounds [{:keys [sort-order start-tx end-tx] :as opts}
-                            {:keys [^long tx-id ^Date valid-time]}
-                            index-snapshot]
-  (letfn [(with-upper-bound [v match-sort-order upper-bound]
-            (if (and (= sort-order match-sort-order)
-                     (or (nil? v) (pos? (compare v upper-bound))))
+                            {:keys [^long tx-id ^Date valid-time]}]
+  (letfn [(with-upper-bound [v upper-bound]
+            (if (or (nil? v) (pos? (compare v upper-bound)))
               upper-bound
               v))]
     (-> opts
-        (update :start-valid-time with-upper-bound :desc valid-time)
-        (assoc :start-tx-id (-> (some->> start-tx (db/resolve-tx index-snapshot))
-                                ::xt/tx-id
-                                (with-upper-bound :desc tx-id)))
+        (cond-> (= sort-order :desc) (update :start-valid-time with-upper-bound valid-time))
+        (assoc :start-tx {::xt/tx-id (cond-> (::xt/tx-id start-tx)
+                                       (= sort-order :desc) (with-upper-bound tx-id))
+                          ::xt/tx-time (::xt/tx-time start-tx)})
 
-        (update :end-valid-time with-upper-bound :asc (Date. (inc (.getTime valid-time))))
-        (assoc :end-tx-id (-> (some->> end-tx (db/resolve-tx index-snapshot))
-                              ::xt/tx-id
-                              (with-upper-bound :asc (inc tx-id))))
-        (dissoc :start-tx :end-tx))))
+        (cond-> (= sort-order :asc) (update :end-valid-time with-upper-bound (Date. (inc (.getTime valid-time)))))
+
+        (assoc :end-tx {::xt/tx-id (cond-> (::xt/tx-id end-tx)
+                                     (= sort-order :asc) (with-upper-bound (inc tx-id)))
+                        ::xt/tx-time (::xt/tx-time end-tx)}))))
 
 (defrecord QueryDatasource [document-store index-store bus tx-indexer
                             ^Date valid-time ^Date tx-time ^Long tx-id
@@ -2079,7 +2077,7 @@
       xio/empty-cursor
       (let [opts (assoc opts :sort-order sort-order)
             index-snapshot (open-index-snapshot this)
-            {:keys [with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))]
+            {:keys [with-docs?] :as opts} (with-history-bounds opts this)]
         (xio/->cursor #(.close index-snapshot)
                       (->> (for [history-batch (->> (db/entity-history index-snapshot eid sort-order opts)
                                                     (partition-all 100))

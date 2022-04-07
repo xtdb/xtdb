@@ -4142,3 +4142,14 @@
 
                            (or [?e :type :some-value]
                                [?e :type :other])]}))))
+
+(t/deftest handles-start-tx-time-between-txs-1732
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo, :v 0}]])
+  (Thread/sleep 10)
+  (let [{::xt/keys [^Date tx-time]} (fix/submit+await-tx [[::xt/put {:xt/id :foo, :v 1}]])]
+    (t/is (= [{::xt/tx-id 1,
+               ::xt/doc {:v 1, :xt/id :foo}}]
+             (->> (xt/entity-history (xt/db *api*) :foo :asc,
+                                     {:with-docs? true, :with-corrections? true
+                                      :start-tx {::xt/tx-time (Date. (dec (.getTime tx-time)))}})
+                  (map #(select-keys % [::xt/tx-id ::xt/doc])))))))

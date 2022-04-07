@@ -1,5 +1,6 @@
 (ns ^:no-doc xtdb.fork
   (:require [clojure.set :as set]
+            [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.io :as xio]
@@ -64,10 +65,10 @@
                          (case sort-order
                            :asc (-> opts
                                     (cond-> capped-valid-time (update :end-valid-time date-min (inc-date capped-valid-time)))
-                                    (update :end-tx-id long-min (inc capped-tx-id)))
+                                    (update-in [:end-tx ::xt/tx-id] long-min (inc capped-tx-id)))
                            :desc (-> opts
                                      (cond-> capped-valid-time (update :start-valid-time date-min capped-valid-time))
-                                     (update :start-tx-id long-min capped-tx-id))))))
+                                     (update-in [:start-tx ::xt/tx-id] long-min capped-tx-id))))))
 
   (resolve-tx [_ tx] (db/resolve-tx index-snapshot tx))
 
@@ -127,7 +128,7 @@
               (.content-hash)
               c/->id-buffer)))
 
-  (entity-as-of [this eid valid-time tx-id]
+  (entity-as-of [_ eid valid-time tx-id]
     (->> [(when-not (contains? (into #{} (map #(c/->id-buffer %)) evicted-eids) (c/->id-buffer eid))
             (db/entity-as-of persistent-index-snapshot eid valid-time tx-id))
           (db/entity-as-of transient-index-snapshot eid valid-time tx-id)]
@@ -135,7 +136,7 @@
          (sort-by (juxt #(.vt ^EntityTx %) #(.tx-id ^EntityTx %)))
          last))
 
-  (entity-history [this eid sort-order opts]
+  (entity-history [_ eid sort-order opts]
     (merge-seqs (when-not (contains? evicted-eids eid)
                   (db/entity-history persistent-index-snapshot eid sort-order opts))
                 (db/entity-history transient-index-snapshot eid sort-order opts)

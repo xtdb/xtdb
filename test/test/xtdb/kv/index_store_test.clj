@@ -112,9 +112,9 @@
                                          actual (->> (db/entity-history index-snapshot
                                                                         eid :desc
                                                                         {:start-valid-time start-vt
-                                                                         :start-tx-id start-tid
+                                                                         :start-tx {::xt/tx-id start-tid}
                                                                          :end-valid-time end-vt
-                                                                         :end-tx-id end-tid})
+                                                                         :end-tx {::xt/tx-id end-tid}})
                                                      (set))]]
                                (= expected actual))
                              (every? true?))))))))
@@ -134,7 +134,7 @@
                                          actual (->> (db/entity-history index-snapshot
                                                                         eid :desc
                                                                         {:start-valid-time valid-time
-                                                                         :start-tx-id tx-id})
+                                                                         :start-tx {::xt/tx-id tx-id}})
                                                      (set))]]
                                (= expected actual))
                              (every? true?))))))))
@@ -154,7 +154,7 @@
                                          actual (->> (db/entity-history index-snapshot
                                                                         eid :desc
                                                                         {:end-valid-time valid-time
-                                                                         :end-tx-id tx-id})
+                                                                         :end-tx {::xt/tx-id tx-id}})
                                                      (set))]]
                                (= expected actual))
                              (every? true?))))))))
