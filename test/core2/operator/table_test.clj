@@ -35,3 +35,17 @@
                  (op/query-ra '[:table #{'a} $table]
                               {'$table [{:a 12, :b "foo"}]}))
         "doesn't match provided col-names"))
+
+(t/deftest test-table-handles-exprs
+  (t/is (= [{:a 3, :b false}
+            {:a nil, :b 24}
+            {:a 3, :b 4}]
+           (op/query-ra '[:table [{:a (+ 1 2), :b (> 3 4)}
+                                  {:a nil, :b (* 3 8)}
+                                  {:a 3, :b 4}]]
+                        {})))
+
+  (t/is (= [{:a 1, :b 2}, {:a 3, :b 4}]
+           (op/query-ra '[:table [{:a ?p1, :b ?p2}
+                                  {:a ?p3, :b ?p4}]]
+                        {'?p1 1, '?p2 2, '?p3 3, '?p4 4}))))

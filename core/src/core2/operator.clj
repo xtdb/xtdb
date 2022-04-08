@@ -98,7 +98,7 @@
 
     {:col-names col-names
      :->cursor (fn [{:keys [allocator]}]
-                 (table/->table-cursor allocator rows))}))
+                 (table/->table-cursor allocator col-names rows srcs))}))
 
 (defmethod emit-op :csv [{:keys [path col-types]} _srcs]
   (fn [{:keys [allocator]}]

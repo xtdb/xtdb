@@ -1140,3 +1140,24 @@
               (when (= 1 (.get sel-vec (.getIndex selection idx)))
                 (.add res idx)))
             (.toArray (.build res))))))))
+
+(defn eval-scalar-value [form params]
+  (let [expr (form->expr form {:params params})]
+    (case (:op expr)
+      :literal form
+      :param (get params (:param expr))
+
+      (let [expr (->> expr
+                      (macro/macroexpand-all)
+                      (walk/postwalk-expr (comp with-batch-bindings lit->param)))
+
+            ;; TODO this won't work yet for composite types, as these are all
+            ;; currently implemented as per-block operations. needs further thought.
+            {:keys [continue]} (codegen-expr expr {})
+
+            expr-fn (eval
+                     `(fn [~params-sym]
+                        (let [~@(batch-bindings expr)]
+                          ~(continue (fn [_ code] code)))))]
+
+        (expr-fn params)))))
