@@ -47,12 +47,12 @@
 
 (s/def ::csv-col-type #{:bit :bigint :float8 :varchar :varbinary :timestamp-milli :duration-milli})
 
-(s/def ::csv
+(defmethod ra-expr :csv [_]
   (s/cat :op #{:csv}
          :path ::util/path
          :col-types (s/? (s/map-of ::column ::csv-col-type))))
 
-(s/def ::arrow
+(defmethod ra-expr :arrow [_]
   (s/cat :op #{:arrow}
          :path ::util/path))
 
