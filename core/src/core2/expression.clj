@@ -26,6 +26,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti parse-list-form
   (fn [[f & args] env]
     f)
@@ -155,6 +156,7 @@
 (defmulti with-batch-bindings :op, :default ::default)
 (defmethod with-batch-bindings ::default [expr] expr)
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti codegen-expr
   "Returns a map containing
     * `:return-types` (set)
@@ -176,6 +178,7 @@
     (string? x)
     x))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti emit-value
   (fn [val-class code] val-class)
   :default ::default)
@@ -222,6 +225,7 @@
                      (f param-type param))}
         (select-keys expr #{:literal})))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti get-value-form
   (fn [arrow-type vec-sym idx-sym]
     (class arrow-type))
@@ -717,6 +721,7 @@
 
 (defmethod codegen-call [:sqrt ArrowType$Null] [_] call-returns-null)
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti set-value-form
   (fn [arrow-type out-vec-sym idx-sym code]
     (class arrow-type)))
@@ -895,6 +900,7 @@
 
     (.getFieldType field)))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti emit-expr
   (fn [{:keys [op]} col-name {:keys [var-fields] :as opts}]
     op)
