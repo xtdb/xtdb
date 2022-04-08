@@ -124,7 +124,7 @@
     (=
      (w/postwalk-replace
        {'?date (LocalDate/parse "1993-07-01")
-        '?period (Period/parse "P3M")}
+        '?period (PeriodDuration. (Period/parse "P3M") Duration/ZERO)}
        '[:rename
          {x1 o_orderpriority, x15 order_count}
          [:order-by
@@ -147,7 +147,7 @@
     (=
      (w/postwalk-replace
        {'?date (LocalDate/parse "1994-01-01")
-        '?period (Period/parse "P1Y")}
+        '?period (PeriodDuration. (Period/parse "P1Y") Duration/ZERO)}
        '[:rename
         {x16 n_name, x24 revenue}
         [:order-by
@@ -185,7 +185,7 @@
     (=
      (w/postwalk-replace
        {'?date (LocalDate/parse "1994-01-01")
-        '?period (Period/parse "P1Y")}
+        '?period (PeriodDuration. (Period/parse "P1Y") Duration/ZERO)}
        '[:rename
          {x7 revenue}
          [:group-by
@@ -324,7 +324,7 @@
     (=
      (w/postwalk-replace
        {'?date (LocalDate/parse "1993-10-01")
-        '?period (Period/parse "P3M")}
+        '?period (PeriodDuration. (Period/parse "P3M") Duration/ZERO)}
        '[:rename
          {x1 c_custkey, x2 c_name, x22 revenue, x3 c_acctbal, x18 n_name, x4 c_address, x5 c_phone, x6 c_comment}
          [:project
@@ -402,7 +402,7 @@
     (=
      (w/postwalk-replace
        {'?date (LocalDate/parse "1994-01-01")
-        '?period (Period/parse "P1Y")}
+        '?period (PeriodDuration. (Period/parse "P1Y") Duration/ZERO)}
        '[:rename
          {x4 l_shipmode, x19 high_line_count, x20 low_line_count}
          [:order-by
@@ -459,7 +459,7 @@
     (=
      (w/postwalk-replace
        {'?date (LocalDate/parse "1995-09-01")
-        '?period (Period/parse "P1M")}
+        '?period (PeriodDuration. (Period/parse "P1M") Duration/ZERO)}
        '[:rename
          {x14 promo_revenue}
          [:project
@@ -483,7 +483,7 @@
     (=
      (w/postwalk-replace
        {'?date (LocalDate/parse "1996-01-01")
-        '?period (Period/parse "P3M")}
+        '?period (PeriodDuration. (Period/parse "P3M") Duration/ZERO)}
        '[:rename
          {x1 s_suppkey, x2 s_name, x3 s_address, x4 s_phone, x12 total_revenue}
          [:project
@@ -751,7 +751,7 @@
     (=
      (w/postwalk-replace
        {'?date (LocalDate/parse "1994-01-01")
-        '?period (Period/parse "P1Y")}
+        '?period (PeriodDuration. (Period/parse "P1Y") Duration/ZERO)}
        '[:rename
          {x1 s_name, x2 s_address}
          [:project
@@ -838,24 +838,12 @@
           [{x32 1}]
           [:project
            [{x31 (substring x1 1 2)} x2]
-           [:select
-            (> x2 x15)
-            [:anti-join
-             [{x3 x24}]
-             [:cross-join
-              [:semi-join
-               [(= (substring x1 1 2) x5)]
-               [:rename {c_phone x1, c_acctbal x2, c_custkey x3}
-                [:scan [c_phone c_acctbal c_custkey]]]
-               [:table [{x5 "13"} {x5 "31"} {x5 "23"} {x5 "29"} {x5 "30"} {x5 "18"} {x5 "17"}]]]
-              [:max-1-row
-               [:group-by
-                [{x22 (avg x12)}]
-                [:semi-join
-                 [(= (substring x13 1 2) x15)]
-                 [:rename {c_acctbal x12, c_phone x13}
-                  [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
-                 [:table [{x15 "13"} {x15 "31"} {x15 "23"} {x15 "29"} {x15 "30"} {x15 "18"} {x15 "17"}]]]]]]
-             [:rename {o_custkey x24}
-              [:scan [o_custkey]]]]]]]]]]
+           [:anti-join
+            [{x3 x24}]
+            [:join
+             [(> x2 x22)]
+             [:semi-join [(= (substring x1 1 2) x5)] [:rename {c_phone x1, c_acctbal x2, c_custkey x3} [:scan [c_phone c_acctbal c_custkey]]] [:table [{x5 "13"} {x5 "31"} {x5 "23"} {x5 "29"} {x5 "30"} {x5 "18"} {x5 "17"}]]]
+             [:max-1-row
+              [:group-by [{x22 (avg x12)}] [:semi-join [(= (substring x13 1 2) x15)] [:rename {c_acctbal x12, c_phone x13} [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]] [:table [{x15 "13"} {x15 "31"} {x15 "23"} {x15 "29"} {x15 "30"} {x15 "18"} {x15 "17"}]]]]]]
+            [:rename {o_custkey x24} [:scan [o_custkey]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 22)))))

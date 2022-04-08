@@ -1041,18 +1041,19 @@
             (:smap (meta relation)))
           (remove-projection-names [op projection relation]
             (let [smap (->smap relation)
+                  new-smap (reduce
+                             (fn [acc p]
+                               (if (extend-projection? p)
+                                 (let [[k v] (first p)]
+                                   (if (symbol? v)
+                                     (assoc acc k (smap v))
+                                     (assoc acc k (next-name))))
+                                 (assoc acc p (smap p))))
+                             (if (= op :map) smap {})
+                             projection)
                   projection (w/postwalk-replace smap projection)
-                  smap (reduce
-                        (fn [acc p]
-                          (if (extend-projection? p)
-                            (let [[k v] (first p)]
-                              (if (symbol? v)
-                                (assoc acc k v)
-                                (assoc acc k (next-name))))
-                            acc))
-                        smap
-                        projection)
-                  projection (vec (for [p (w/postwalk-replace smap projection)]
+
+                  projection (vec (for [p (w/postwalk-replace new-smap projection)]
                                     (if (extend-projection? p)
                                       (let [[k v] (first p)]
                                         (if (= k v)
@@ -1067,7 +1068,7 @@
                              [op
                               projection
                               relation])]
-              (with-smap relation smap)))]
+              (with-smap relation new-smap)))]
     (r/zmatch relation
       [:table explicit-column-names table]
       (let [smap (zipmap explicit-column-names
@@ -1108,15 +1109,11 @@
           (->smap lhs)))
 
       [:rename prefix-or-columns relation]
-      (let [smap (->smap relation)
-            columns (if (symbol? prefix-or-columns)
-                      (->> (for [c (keys smap)]
-                             [c (symbol (str prefix-or-columns relation-prefix-delimiter c))])
-                           (into {}))
-                      prefix-or-columns)]
-        (with-smap relation (->> (for [[k v] columns]
-                                   [v (get smap k)])
-                                 (into smap))))
+      (let [smap (->smap relation)]
+        (with-smap relation
+          (if (symbol? prefix-or-columns)
+            (update-keys smap #(symbol (str prefix-or-columns relation-prefix-delimiter %)))
+            (set/rename-keys smap prefix-or-columns))))
 
       [:project projection relation]
       (remove-projection-names :project projection relation)
@@ -1752,10 +1749,8 @@
      (let [columns (remove-unused-correlated-columns columns dependent-relation)]
        [:apply :cross-join columns dependent-column-names independent-relation dependent-relation])]))
 
-;;Rules 8 and 9.
-(defn- decorrelate-apply-rule-8-and-9 [z]
+(defn- decorrelate-apply-rule-8 [z]
   (r/zmatch z
-    ;; Rule 8.
     [:apply :cross-join columns _ independent-relation
      [:project post-group-by-projection
       [:group-by group-by-columns
@@ -1786,9 +1781,10 @@
       dependent-relation]]
     ;;=>
     (decorrelate-group-by-apply nil group-by-columns nil
-                                :cross-join columns independent-relation dependent-relation)
+                                :cross-join columns independent-relation dependent-relation)))
 
-    ;; Rule 9.
+(defn- decorrelate-apply-rule-9 [z]
+  (r/zmatch z
     [:apply :cross-join columns _ independent-relation
      [:max-1-row
       [:project post-group-by-projection
@@ -1943,9 +1939,9 @@
                                                 (swap!
                                                   fired-rules
                                                   #(conj ;; could also capture z before the rewrite
-                                                     %
-                                                     [(name (.toSymbol f))
-                                                      successful-rewrite]))
+                                                         %
+                                                         [(name (.toSymbol f))
+                                                          successful-rewrite]))
                                                 successful-rewrite)))
                                           rules)))
                 optimize-plan [#'promote-selection-cross-join-to-join
@@ -1971,7 +1967,8 @@
                                   #'decorrelate-apply-rule-2
                                   #'decorrelate-apply-rule-3
                                   #'decorrelate-apply-rule-4
-                                  #'decorrelate-apply-rule-8-and-9
+                                  #'decorrelate-apply-rule-8
+                                  #'decorrelate-apply-rule-9
                                   #'promote-apply-mode]
                 plan (remove-names (plan ag))
                 add-projection-fn (:add-projection-fn (meta plan))
