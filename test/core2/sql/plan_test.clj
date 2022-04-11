@@ -1,5 +1,5 @@
 (ns core2.sql.plan-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [core2.sql :as sql]
             [core2.sql.plan :as plan]))
 
@@ -488,6 +488,79 @@
          false {'?x3 '?x4}
          true {'?x3 '?x3
                 'x4 '?x5}))
+
+
+(deftest non-semi-join-subquery-optimizations-test
+  (t/is
+    (=
+     '[:rename {x1 a}
+       [:project [x1]
+        [:select (or x6 (= x2 42))
+         [:apply
+          :cross-join
+          {x1 ?x9}
+          #{x6}
+          [:rename {a x1, b x2} [:scan [a b]]]
+          [:top {:limit 1}
+           [:union-all
+            [:project [{x6 true}]
+             [:select (= ?x9 x4) [:table [{x4 1} {x4 2}]]]]
+            [:table [{x6 false}]]]]]]]]
+       (plan-sql "select f.a from foo f where f.a in (1,2) or f.b = 42"))
+    "should not be decorrelated")
+  (t/is
+    (=
+     '[:rename {x1 a}
+       [:project [x1]
+        [:cross-join
+         [:rename {a x1} [:scan [a]]]
+         [:select (= true x5)
+          [:top {:limit 1}
+           [:union-all
+            [:project [{x5 true}]
+             [:rename {c x3} [:scan [c]]]]
+            [:table [{x5 false}]]]]]]]]
+     (plan-sql "select f.a from foo f where true = (EXISTS (SELECT foo.c from foo))"))
+    "should be decorrelated as a cross join, not a semi/anti join"))
+
+(deftest multiple-ins-in-where-clause
+  (t/is
+    (=
+     '[:rename {x1 a}
+       [:project [x1]
+        [:semi-join [{x2 x11}]
+         [:semi-join [{x1 x4}]
+          [:rename {a x1, b x2}
+           [:scan [{a (= a 42)} b]]]
+          [:table [{x4 1} {x4 2}]]]
+         [:table [{x11 3} {x11 4}]]]]]
+     (plan-sql "select f.a from foo f where f.a in (1,2) AND f.a = 42 AND f.b in (3,4)"))))
+
+
+(deftest deeply-nested-correlated-query ;;TODO broken
+  (t/is
+    (=
+     '[:rename
+       {x1 A, x2 B}
+       [:project
+        [x1 x2]
+        [:apply :semi-join {x2 ?x21, x4 ?x22} #{}
+         [:cross-join
+          [:rename {A x1, B x2} [:scan [A B]]]
+          [:rename {C x4} [:scan [C]]]]
+         [:semi-join [(= x10 ?x16) {x7 x9}]
+          [:rename {A x6, B x7}
+           [:scan [{A (= A ?x21)} B]]]
+          [:rename {A x9, B x10} [:scan [A B]]]]]]]
+     (plan-sql "SELECT R1.A, R1.B
+               FROM R R1, S
+               WHERE EXISTS
+               (SELECT R2.A, R2.B
+               FROM R R2
+               WHERE R2.A = R1.B AND EXISTS
+               (SELECT R3.A, R3.B
+               FROM R R3
+               WHERE R3.A = R2.B AND R3.B = S.C))"))))
 
 (t/deftest test-array-element-reference-107
   (t/is (= '[:rename {x3 first_el}
