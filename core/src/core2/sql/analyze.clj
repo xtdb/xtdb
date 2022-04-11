@@ -591,7 +591,8 @@
     :sort_specification
     (first (for [{:keys [normal-form index identifier]} (first (projected-columns ag))
                  :when (or (= normal-form (r/lexeme ag 1))
-                           (= identifier (->src-str (r/$ ag 1))))]
+                           (and (r/ctor? :column_reference (r/$ ag 1))
+                                (= identifier (str/join "." (identifiers (r/$ ag 1))))))]
              index))
 
     (r/inherit ag)))
