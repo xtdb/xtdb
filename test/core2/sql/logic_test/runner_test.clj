@@ -101,7 +101,7 @@ CREATE UNIQUE INDEX t1i0 ON t1(
 (comment
   (dotimes [n 5]
     (time
-     (let [f (format "core2/sql/logic_test/sqlite/select%d.test" (inc n))
+     (let [f (format "core2/sql/logic_test/sqlite_test/select%d.test" (inc n))
            records (slt/parse-script (slurp (io/resource f)))]
        (println f (count records))
        (doseq [{:keys [type statement query] :as record} records
