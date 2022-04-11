@@ -1,4 +1,4 @@
-(ns core2.sql.logic-test
+(ns core2.sql.logic-test.runner-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [core2.sql :as sql]
