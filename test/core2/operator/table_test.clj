@@ -38,10 +38,10 @@
 
 (t/deftest test-table-handles-exprs
   (t/is (= [{:a 3, :b false}
-            {:a nil, :b 24}
+            {:a nil, :b [24 24]}
             {:a 3, :b 4}]
            (op/query-ra '[:table [{:a (+ 1 2), :b (> 3 4)}
-                                  {:a nil, :b (* 3 8)}
+                                  {:a nil, :b [24 (* 3 8)]}
                                   {:a 3, :b 4}]]
                         {})))
 

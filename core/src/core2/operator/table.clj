@@ -56,6 +56,6 @@
                   (->> (for [col-name col-names
                              :let [col-k (keyword col-name)]]
                          [col-name (vec (for [row rows]
-                                          (expr/eval-scalar-value (get row col-k) srcs)))])
+                                          (expr/eval-scalar-value allocator (get row col-k) srcs)))])
                        (into {})))
                 false))
