@@ -42,10 +42,13 @@
             #_"-Darrow.enable_unsafe_memory_access=true"]
 
  :aliases {:test {:exec-fn cognitect.test-runner.api/test
-                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc]}}
+                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt]}}
 
            :integration-test {:exec-fn cognitect.test-runner.api/test
                               :exec-args {:includes [:integration]}}
+
+           :slt-test {:exec-fn cognitect.test-runner.api/test
+                      :exec-args {:includes [:slt]}}
 
            :timescale-test {:exec-fn cognitect.test-runner.api/test
                             :exec-args {:includes [:timescale]}}

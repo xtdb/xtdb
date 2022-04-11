@@ -1,7 +1,9 @@
 (ns core2.sql.logic-test.runner
-  (:require [clojure.test :as t]
+  (:require [clojure.java.io :as io]
+            [clojure.test :as t]
             [clojure.string :as str])
   (:import java.nio.charset.StandardCharsets
+           java.io.File
            java.security.MessageDigest
            java.sql.Connection))
 
@@ -146,18 +148,19 @@
                                   {:keys [query type-string sort-mode label
                                           result-set-size result-set result-set-md5sum]}]
 
-  (let [result (execute-query db-engine query)]
-    #_(validate-type-string type-string result)
-    (when-let [row (first result)]
-      (t/is (count type-string) (count row)))
-    (t/is (= result-set-size (count result)))
-    (let [result-str (cond->> result
-                       (and result-set-md5sum max-result-set-size) (take max-result-set-size)
-                       true (format-result-str sort-mode))]
-      (when result-set
-        (t/is (= (str/join "\n" result-set) result-str)))
-      (when result-set-md5sum
-        (t/is (= result-set-md5sum (md5 result-str))))))
+  (let [result (t/is (execute-query db-engine query))]
+    (when (vector? result)
+      (validate-type-string type-string result)
+      (when-let [row (first result)]
+        (t/is (count type-string) (count row)))
+      (t/is (= result-set-size (count result)))
+      (let [result-str (cond->> result
+                         (and result-set-md5sum max-result-set-size) (take max-result-set-size)
+                         true (format-result-str sort-mode))]
+        (when result-set
+          (t/is (= (str/join "\n" result-set) result-str)))
+        (when result-set-md5sum
+          (t/is (= result-set-md5sum (md5 result-str)))))))
   ctx)
 
 (defn- skip-record? [db-engine-name {:keys [skipif onlyif]
@@ -165,7 +168,38 @@
   (or (= db-engine-name skipif)
       (not= db-engine-name onlyif)) )
 
+(def ^:private ^:dynamic *current-record* nil)
+
 (defn execute-records [db-engine records]
-  (->> (remove (partial skip-record? (get-engine-name db-engine)) records)
-       (reduce execute-record {:db-engine db-engine})
-       :db-engine))
+  (with-redefs [clojure.test/do-report
+                (fn [m]
+                  (t/report (merge m (select-keys *current-record* [:file :line]))))]
+    (->> (remove (partial skip-record? (get-engine-name db-engine)) records)
+         (reduce (fn [db-engine record]
+                   (binding [*current-record* record]
+                     (execute-record db-engine record)))
+                 {:db-engine db-engine})
+         :db-engine)))
+
+(defn- namespace-dir ^java.io.File [ns]
+  (let [ns-clj-file (str (str/replace (namespace-munge (ns-name ns)) "." "/") ".clj")
+        ns-file (File. (.toURI (io/resource ns-clj-file)))
+        ns-dir (str/replace (.getAbsolutePath ns-file) #"\.clj$" "")]
+    (File. ns-dir)))
+
+(defn- slt-files-below-ns [ns]
+  (->> (namespace-dir ns)
+       (file-seq)
+       (sort)
+       (filter #(str/ends-with? % ".test"))))
+
+(defmacro generate-ns-slt-tests! []
+  `(do ~@(for [f (take 1 (slt-files-below-ns *ns*))
+               :let [path (.getAbsolutePath f)
+                     test-symbol (with-meta (symbol (clojure.string/replace (.getName f) #"\.test$" "")) {:slt true})]]
+           `(alter-meta!
+             (t/deftest ~test-symbol
+               (let [path# ~path
+                     file# (File. path#)]
+                 (core2.sql.logic-test.runner/execute-records tu/*node* (core2.sql.logic-test.runner/parse-script path# (slurp file#)))))
+             assoc :file ~path))))
