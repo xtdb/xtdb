@@ -1960,7 +1960,7 @@
                           (z/node)
                           (add-projection-fn))]
 
-            (if false #_(s/invalid? (s/conform ::lp/logical-plan plan))
+            (if (s/invalid? (s/conform ::lp/logical-plan plan))
               (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
               {:plan plan
                :fired-rules @fired-rules})))))))
