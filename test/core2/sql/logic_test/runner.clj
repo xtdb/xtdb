@@ -83,12 +83,15 @@
     {:type :hash-threshold
      :max-result-set-size (Long/parseLong max-result-set-size)}))
 
-(defn parse-script [script]
-  (->> (str/split-lines script)
-       (map #(str/replace % #"\s*#.+$" ""))
-       (partition-by str/blank?)
-       (remove #(every? str/blank? %))
-       (mapv parse-record)))
+(defn parse-script
+  ([script] (parse-script "" script))
+  ([file-name script]
+   (vec (for [idx+lines (->> (for [[idx line] (map-indexed vector (str/split-lines script))]
+                               [idx (str/replace line #"\s*#.+$" "")])
+                             (partition-by (comp str/blank? second))
+                             (remove #(every? (comp str/blank? second) %)))]
+          (assoc (parse-record (map second idx+lines))
+                 :line (inc (ffirst idx+lines)) :file file-name)))))
 
 ;; Runner
 
