@@ -146,7 +146,7 @@
                                             [(MapEntry/create (get table-keys (set binding))
                                                               (case rel-type
                                                                 :maps rel
-                                                                :vecs (mapv #(zipmap binding %) rel)))])))))
+                                                                :vecs (mapv #(zipmap (mapv keyword binding) %) rel)))])))))
                         in-bindings
                         args)
                 (into {}))

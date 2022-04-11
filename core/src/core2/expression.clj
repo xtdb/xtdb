@@ -1001,24 +1001,23 @@
                 out-writer (.asList (vw/vec->writer out-vec))
                 out-data-writer (.getDataWriter out-writer)]
             (try
-              (when (seq elements)
-                (let [child-row-count (.getValueCount ^ValueVector (first els))
-                      copiers (mapv (fn [res]
-                                      (.rowCopier out-data-writer res))
-                                    els)]
-                  (.setValueCount out-vec child-row-count)
+              (let [child-row-count (.rowCount in-rel)
+                    copiers (mapv (fn [res]
+                                    (.rowCopier out-data-writer res))
+                                  els)]
+                (.setValueCount out-vec child-row-count)
 
-                  (dotimes [idx child-row-count]
-                    (.setNotNull out-vec idx)
-                    (.startValue out-writer)
+                (dotimes [idx child-row-count]
+                  (.setNotNull out-vec idx)
+                  (.startValue out-writer)
 
-                    (dotimes [el-idx el-count]
-                      (.startValue out-data-writer)
-                      (doto ^IRowCopier (nth copiers el-idx)
-                        (.copyRow idx))
-                      (.endValue out-data-writer))
+                  (dotimes [el-idx el-count]
+                    (.startValue out-data-writer)
+                    (doto ^IRowCopier (nth copiers el-idx)
+                      (.copyRow idx))
+                    (.endValue out-data-writer))
 
-                    (.endValue out-writer))))
+                  (.endValue out-writer)))
 
               out-vec
               (catch Throwable e
@@ -1094,7 +1093,7 @@
               (let [in-rel (-> (concat in-rel (for [[variable sub-expr-vec] evald-sub-exprs]
                                                 (-> (iv/->direct-vec sub-expr-vec)
                                                     (.withName (name variable)))))
-                               iv/->indirect-rel)]
+                               (iv/->indirect-rel (.rowCount in-rel)))]
 
                 (expr-fn out-vec in-rel params))
 
@@ -1140,3 +1139,14 @@
               (when (= 1 (.get sel-vec (.getIndex selection idx)))
                 (.add res idx)))
             (.toArray (.build res))))))))
+
+(defn eval-scalar-value [al form params]
+  (let [expr (form->expr form {:params params})]
+    (case (:op expr)
+      :literal form
+      :param (get params (:param expr))
+
+      ;; this is probably quite heavyweight to calculate a single value...
+      (let [projection-spec (->expression-projection-spec "_scalar" form params)]
+        (with-open [out-vec (.project projection-spec al (iv/->indirect-rel [] 1))]
+          (types/get-object (.getVector out-vec) (.getIndex out-vec 0)))))))
