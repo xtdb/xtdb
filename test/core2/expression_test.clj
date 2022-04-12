@@ -635,6 +635,10 @@
   (t/testing "IOOBE"
     (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])])]
       (t/is (thrown? IndexOutOfBoundsException
+                     (run-projection rel '(nth [x] -1)))))
+
+    (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])])]
+      (t/is (thrown? IndexOutOfBoundsException
                      (run-projection rel '(nth [x] 1))))))
 
   (t/testing "might not be lists"

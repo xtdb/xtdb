@@ -80,14 +80,13 @@
               (reify IListReader
                 (isPresent [_ _] true)
                 (elementCopier [_ w]
-                  (let [copier (.rowCopier data-vec w)
-                        !null-writer (delay (.writerForType (.asDenseUnion w) LegType/NULL))]
+                  (let [copier (.rowCopier data-vec w)]
                     (reify IListElementCopier
                       (copyElement [_ idx n]
                         (let [copy-idx (+ (.getElementStartIndex v idx) n)]
-                          (if (< copy-idx (.getElementEndIndex v idx))
-                            (.copyRow copier copy-idx)
-                            (throw (IndexOutOfBoundsException.)))))))))))]
+                          (if (or (neg? n) (>= copy-idx (.getElementEndIndex v idx)))
+                            (throw (IndexOutOfBoundsException.))
+                            (.copyRow copier copy-idx))))))))))]
     (cond
 
       (instance? ListVector v)
