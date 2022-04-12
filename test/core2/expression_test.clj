@@ -77,6 +77,13 @@
         (t/is (= 500 (select-relation '(>= a ?a) {'?a 500})))
         (t/is (= 500 (select-relation '(>= e ?e) {'?e "0500"})))))))
 
+(t/deftest nil-selection-doesnt-yield-the-row
+  (t/is (= 0
+           (-> (.select (expr/->expression-relation-selector '(and true nil) {})
+                        tu/*allocator*
+                        (iv/->indirect-rel [] 1))
+               (alength)))))
+
 (t/deftest can-extract-min-max-range-from-expression
   (let [μs-2018 (util/instant->micros (util/->instant #inst "2018"))
         μs-2019 (util/instant->micros (util/->instant #inst "2019"))]

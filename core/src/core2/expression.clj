@@ -542,6 +542,15 @@
   (defmethod codegen-call [f ::types/Object] [_]
     (mono-fn-call types/bool-type (constantly false))))
 
+(defmethod codegen-call [:boolean ArrowType$Null] [_]
+  (mono-fn-call types/bool-type (constantly false)))
+
+(defmethod codegen-call [:boolean ArrowType$Bool] [_]
+  (mono-fn-call types/bool-type first))
+
+(defmethod codegen-call [:boolean ::types/Object] [_]
+  (mono-fn-call types/bool-type (constantly true)))
+
 (defn- with-math-integer-cast
   "java.lang.Math's functions only take int or long, so we introduce an up-cast if need be"
   [^ArrowType$Int arrow-type emitted-args]
@@ -1129,7 +1138,7 @@
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))
 
 (defn ->expression-relation-selector ^core2.operator.IRelationSelector [form params]
-  (let [projector (->expression-projection-spec "select" form params)]
+  (let [projector (->expression-projection-spec "select" (list 'boolean form) params)]
     (reify IRelationSelector
       (select [_ al in-rel]
         (with-open [selection (.project projector al in-rel)]
