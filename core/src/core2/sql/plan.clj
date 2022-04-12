@@ -525,13 +525,32 @@
         new-clauses
         (recur new-clauses)))))
 
+(defn- predicate-conjunctive-clauses [predicate]
+  (if (or-predicate? predicate)
+    (let [disjuncts (->> (flatten-expr or-predicate? predicate)
+                         (map predicate-conjunctive-clauses))
+          common-disjuncts (->> (map set disjuncts)
+                                (reduce set/intersection))
+          disjuncts (for [disjunct disjuncts
+                          :let [disjunct (remove common-disjuncts disjunct)]
+                          :when (seq disjunct)]
+                      (if (= 1 (count disjunct))
+                        (first disjunct)
+                        (cons 'and disjunct)))
+          disjuncts (if (> (count disjuncts) 1)
+                      (cons 'or disjuncts)
+                      (first disjuncts))]
+      (cond-> (seq common-disjuncts)
+        disjuncts (concat [disjuncts])))
+    (flatten-expr and-predicate? predicate)))
+
 (defn- wrap-with-select [sc relation]
   (let [sc-expr (expr sc)]
     (reduce
      (fn [acc predicate]
        [:select predicate acc])
      (wrap-with-apply sc relation)
-     (flatten-expr and-predicate? sc-expr))))
+     (predicate-conjunctive-clauses sc-expr))))
 
 (defn- needs-group-by? [z]
   (boolean (:grouping-columns (sem/local-env (sem/group-env z)))))
