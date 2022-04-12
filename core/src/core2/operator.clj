@@ -43,7 +43,7 @@
 
 (alter-meta! #'emit-op assoc :private true)
 
-(defmethod emit-op :scan [{:keys [source columns]} {:keys [srcs params]}]
+(defmethod emit-op :scan [{:keys [source columns]} {:keys [src-keys params]}]
   (let [col-names (distinct (for [[col-type arg] columns]
                               (str (case col-type
                                      :column arg
@@ -62,14 +62,17 @@
                                    (vals selects)))
         metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) params)
 
-        ^ISnapshot db (or (get srcs (or source '$))
-                          (throw (err/illegal-arg :unknown-db
-                                                  {::err/message "Query refers to unknown db"
-                                                   :db source
-                                                   :srcs (keys srcs)})))]
+        src-key (or source '$)]
+
+    (when-not (contains? src-keys src-key)
+      (throw (err/illegal-arg :unknown-src
+                              {::err/message "Query refers to unknown source"
+                               :db source
+                               :src-keys src-keys})))
     {:col-names col-names
-     :->cursor (fn [{:keys [allocator default-valid-time]}]
-                 (let [[^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects srcs)]
+     :->cursor (fn [{:keys [allocator srcs default-valid-time]}]
+                 (let [^ISnapshot db (get srcs src-key)
+                       [^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects srcs)]
                    (when-not (or (contains? col-preds "_valid-time-start")
                                  (contains? col-preds "_valid-time-end"))
                      (expr.temp/apply-constraint temporal-min-range temporal-max-range
@@ -79,33 +82,40 @@
 
                    (.scan db allocator col-names metadata-pred col-preds temporal-min-range temporal-max-range)))}))
 
-(defmethod emit-op :table [{[table-type table-arg] :table, :keys [explicit-col-names]} {:keys [srcs params]}]
-  (let [rows (case table-type
-               :rows table-arg
-               :source (or (get srcs table-arg)
-                           (throw (err/illegal-arg :unknown-table
-                                                   {::err/message "Query refers to unknown table"
-                                                    :table table-arg
-                                                    :srcs (keys srcs)}))))
-        col-names (or explicit-col-names
-                      (into #{} (map symbol) (keys (first rows))))]
+(defn- table->keys [rows]
+  (letfn [(row-keys [row]
+            (into #{} (map symbol) (keys row)))]
+    (let [col-names (row-keys (first rows))]
+      (when-not (every? #(= col-names (row-keys %)) rows)
+        (throw (err/illegal-arg :mismatched-keys-in-table
+                                {::err/message "Mismatched keys in table"
+                                 :expected col-names
+                                 :key-sets (into #{} (map row-keys) rows)})))
+      col-names)))
 
-    (when-not (every? #(= col-names (into #{} (map symbol) (keys %))) rows)
-      (throw (err/illegal-arg :mismatched-keys-in-table
-                              {::err/message "Mismatched keys in table"
-                               :expected col-names
-                               :key-sets (into #{} (map keys) rows)})))
-
+(defmethod emit-op :table [{[table-type table-arg] :table, :keys [explicit-col-names]} {:keys [src-keys table-keys params]}]
+  (when (and (= table-type :source) (not (contains? src-keys table-arg)))
+    (throw (err/illegal-arg :unknown-table
+                            {::err/message "Query refers to unknown table"
+                             :table table-arg
+                             :src-keys src-keys})))
+  (let [col-names (or explicit-col-names
+                      (case table-type
+                        :rows (table->keys table-arg)
+                        :source (get table-keys table-arg)))]
     {:col-names col-names
-     :->cursor (fn [{:keys [allocator]}]
-                 (table/->table-cursor allocator col-names rows params))}))
+     :->cursor (fn [{:keys [allocator srcs]}]
+                 (let [rows (case table-type
+                              :rows table-arg
+                              :source (get srcs table-arg))]
+                   (table/->table-cursor allocator col-names rows params)))}))
 
 (defmethod emit-op :csv [{:keys [path col-types]} _args]
   (fn [{:keys [allocator]}]
     (csv/->csv-cursor allocator path
                       (into {} (map (juxt (comp name key) val)) col-types))))
 
-(defmethod emit-op :arrow [{:keys [path]} _srcs]
+(defmethod emit-op :arrow [{:keys [path]} _args]
   (fn [{:keys [allocator]}]
     (arrow/->arrow-cursor allocator path)))
 
@@ -361,8 +371,8 @@
                                    independent-relation dependent-relation]}
                            args]
   ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
-  ;; TODO: shouldn't re-emit the op each time - required though because emit-op still takes srcs,
-  ;;       and not just the keys to those srcs
+  ;; TODO: shouldn't re-emit the op each time - required though because emit-op still takes params,
+  ;;       and not just the keys to those params
 
   (unary-op independent-relation args
             (fn [independent-col-names]
@@ -425,7 +435,12 @@
     (try
       (let [{:keys [srcs params]} (args->srcs+params args)
             {:keys [->cursor]} (emit-op (s/conform ::lp/logical-plan query)
-                                        {:srcs srcs, :params params})
+                                        {:src-keys (set (keys srcs)),
+                                         :table-keys (->> (for [[src-k src-v] srcs
+                                                                :when (sequential? src-v)]
+                                                            [src-k (table->keys src-v)])
+                                                          (into {}))
+                                         :params params})
             cursor (->cursor (-> (merge {:default-valid-time (Instant/now)
                                          :srcs srcs
                                          :params params}
