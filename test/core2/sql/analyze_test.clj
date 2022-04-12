@@ -568,6 +568,13 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
            (->> (valid? "SELECT foo.* FROM x, UNNEST(x.a) WITH ORDINALITY AS foo (a, b)")
                 (map :projected-columns))))
 
+  (t/is (= [[{:identifier "a", :index 0}]
+            [{:identifier "a", :qualified-column ["a" "a"], :index 0}]
+            [{:identifier "a", :index 0}]
+            [{:identifier "a", :qualified-column ["foo" "a"], :index 0}]]
+           (->> (valid? "SELECT a.a FROM (SELECT foo.a a FROM foo) a")
+                (map :projected-columns))))
+
   (invalid? #"Derived columns has to have same degree as table"
             "SELECT * FROM x, UNNEST(x.a) WITH ORDINALITY AS foo (a)")
   (invalid? #"Derived columns has to have same degree as table"
