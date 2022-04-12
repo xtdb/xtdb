@@ -54,8 +54,11 @@
   (TableCursor. allocator
                 (when (seq rows)
                   (->> (for [col-name col-names
-                             :let [col-k (keyword col-name)]]
+                             :let [col-k (keyword col-name)
+                                   col-s (symbol col-name)]]
                          [col-name (vec (for [row rows]
-                                          (expr/eval-scalar-value allocator (get row col-k) params)))])
+                                          (expr/eval-scalar-value allocator (or (get row col-k)
+                                                                                (get row col-s))
+                                                                  params)))])
                        (into {})))
                 false))

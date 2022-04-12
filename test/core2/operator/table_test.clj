@@ -49,3 +49,31 @@
            (op/query-ra '[:table [{:a ?p1, :b ?p2}
                                   {:a ?p3, :b ?p4}]]
                         {'?p1 1, '?p2 2, '?p3 3, '?p4 4}))))
+
+(t/deftest test-table-handles-symbols
+  (t/is (= '[{:x50 true}]
+           (op/query-ra '[:top {:limit 1}
+                          [:union-all
+                           [:project
+                            [{x50 true}]
+                            [:select (= ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
+                           [:table [{x50 false}]]]]
+                        {'?x53 "AIR"})))
+
+  (t/is (= '[{:x50 true}]
+           (op/query-ra '[:top {:limit 1}
+                          [:union-all
+                           [:project
+                            [{x50 true}]
+                            [:select (= ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
+                           [:table [{x50 false}]]]]
+                        {'?x53 "AIR REG"})))
+
+  (t/is (= '[{:x50 false}]
+           (op/query-ra '[:top {:limit 1}
+                          [:union-all
+                           [:project
+                            [{x50 true}]
+                            [:select (= ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
+                           [:table [{x50 false}]]]]
+                        {'?x53 "RAIL"}))))
