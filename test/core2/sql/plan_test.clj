@@ -488,3 +488,16 @@
          false {'?x3 '?x4}
          true {'?x3 '?x3
                 'x4 '?x5}))
+
+(t/deftest test-array-element-reference-107
+  (t/is (= '[:rename {x3 first_el}
+             [:project [{x3 (nth x1 0)}]
+              [:rename {a x1}
+               [:scan [a]]]]]
+           (plan-sql "SELECT u.a[0] AS first_el FROM u")))
+
+  (t/is (= '[:rename {x4 dyn_idx}
+             [:project [{x4 (nth x1 (nth x2 0))}]
+              [:rename {b x1, a x2}
+               [:scan [b a]]]]]
+           (plan-sql "SELECT u.b[u.a[0]] AS dyn_idx FROM u"))))

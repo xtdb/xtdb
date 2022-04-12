@@ -87,7 +87,7 @@
                         (let [copy-idx (+ (.getElementStartIndex v idx) n)]
                           (if (< copy-idx (.getElementEndIndex v idx))
                             (.copyRow copier copy-idx)
-                            (doto ^IVectorWriter @!null-writer (.startValue) (.endValue)))))))))))]
+                            (throw (IndexOutOfBoundsException.)))))))))))]
     (cond
 
       (instance? ListVector v)

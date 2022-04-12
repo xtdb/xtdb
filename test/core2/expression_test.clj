@@ -618,12 +618,24 @@
                 :nullable? false}
                (run-projection rel '[x y 10.0])))
 
-      (t/is (= {:res [[1.2 3.4 nil] [3.4 8.25 nil]]
-                :leg-type (LegType. (ArrowType$FixedSizeList. 3))
+      (t/is (= {:res [[1.2 3.4] [3.4 8.25]]
+                :leg-type (LegType. (ArrowType$FixedSizeList. 2))
                 :nullable? false}
                (run-projection rel '[(nth [x y] 0)
-                                     (nth [x y] 1)
-                                     (nth [x y] 2)])))))
+                                     (nth [x y] 1)])))))
+
+  (t/testing "nil idxs"
+    (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])
+                               (tu/->mono-vec "y" (FieldType/nullable types/bigint-type) [0 nil])])]
+      (t/is (= {:res [1.2 nil]
+                :leg-type #{LegType/NULL LegType/FLOAT8}
+                :nullable? true}
+               (run-projection rel '(nth [x] y))))))
+
+  (t/testing "IOOBE"
+    (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])])]
+      (t/is (thrown? IndexOutOfBoundsException
+                     (run-projection rel '(nth [x] 1))))))
 
   (t/testing "might not be lists"
     (with-open [rel (open-rel [(tu/->duv "x"
@@ -631,10 +643,10 @@
                                           [1 2 3]
                                           [4 5]
                                           "foo"])])]
-      (t/is (= {:res [nil 3 nil nil]
+      (t/is (= {:res [nil 2 5 nil]
                 :leg-type #{LegType/BIGINT LegType/NULL}
                 :nullable? false}
-               (run-projection rel '(nth x 2)))))))
+               (run-projection rel '(nth x 1)))))))
 
 (t/deftest test-mixing-prims-with-non-prims
   (with-open [rel (open-rel [(tu/->mono-vec "x" types/struct-type

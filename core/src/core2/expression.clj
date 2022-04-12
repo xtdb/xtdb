@@ -10,7 +10,7 @@
   (:import (clojure.lang Keyword MapEntry)
            (core2.operator IProjectionSpec IRelationSelector)
            (core2.types LegType)
-           (core2.vector IIndirectRelation IIndirectVector IRowCopier)
+           (core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter)
            (core2.vector.extensions KeywordType UuidType)
            (java.lang.reflect Method)
            (java.nio ByteBuffer)
@@ -19,7 +19,7 @@
            (java.time.temporal ChronoField ChronoUnit)
            (java.util Date HashMap LinkedList)
            (java.util.stream IntStream)
-           (org.apache.arrow.vector BitVector DurationVector FieldVector ValueVector)
+           (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector)
            (org.apache.arrow.vector.types DateUnit TimeUnit Types Types$MinorType IntervalUnit)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Time ArrowType$Interval)))
@@ -1054,6 +1054,51 @@
                 (.startValue out-writer)
                 (.copyElement copier idx n)
                 (.endValue out-writer))
+              out-vec)
+            (catch Throwable e
+              (.close out-vec)
+              (throw e))))))))
+
+(definterface IntIntFunction
+  (^long apply [^int x]))
+
+(defn- long-getter ^core2.expression.IntIntFunction [n-res]
+  (condp = (class n-res)
+    IntVector (reify IntIntFunction
+                (apply [_ idx]
+                  (.get ^IntVector n-res idx)))
+    BigIntVector (reify IntIntFunction
+                   (apply [_ idx]
+                     (.get ^BigIntVector n-res idx)))))
+
+(defmethod emit-expr :nth [{:keys [coll-expr n-expr]} col-name opts]
+  (let [eval-coll (emit-expr coll-expr "nth-coll" opts)
+        eval-n (emit-expr n-expr "nth-n" opts)]
+    (fn [in-rel al params]
+      (with-open [^FieldVector coll-res (eval-coll in-rel al params)
+                  ^FieldVector n-res (eval-n in-rel al params)]
+        (let [list-rdr (.listReader (iv/->direct-vec coll-res))
+              coll-count (.getValueCount coll-res)
+              out-vec (-> (types/->field col-name types/dense-union-type
+                                         (or (.isNullable (.getField coll-res))
+                                             (.isNullable (.getField n-res))))
+                          (.createVector al))]
+          (try
+            (let [out-writer (vw/vec->writer out-vec)
+                  copier (.elementCopier list-rdr out-writer)
+                  !null-writer (delay (.writerForType (.asDenseUnion out-writer) LegType/NULL))]
+
+              (.setValueCount out-vec coll-count)
+
+              (let [->n (long-getter n-res)]
+                (dotimes [idx coll-count]
+                  (.startValue out-writer)
+                  (if (.isNull n-res idx)
+                    (doto ^IVectorWriter @!null-writer
+                      (.startValue)
+                      (.endValue))
+                    (.copyElement copier idx (.apply ->n idx)))
+                  (.endValue out-writer)))
               out-vec)
             (catch Throwable e
               (.close out-vec)

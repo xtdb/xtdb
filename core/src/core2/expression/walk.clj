@@ -17,7 +17,7 @@
 (defmethod direct-child-exprs :dot [e] (map e [:struct-expr :field-expr]))
 (defmethod direct-child-exprs :list [e] (:elements e))
 (defmethod direct-child-exprs :nth-const-n [e] (map e [:coll-expr]))
-(defmethod direct-child-exprs :nth [e] (map e (map e [:coll-expr :n-expr])))
+(defmethod direct-child-exprs :nth [e] (map e [:coll-expr :n-expr]))
 
 (defn expr-seq [expr]
   (lazy-seq

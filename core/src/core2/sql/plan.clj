@@ -236,6 +236,9 @@
      ;;=>
      (list 'not (exists-symbol qe))
 
+     [:array_element_reference ^:z ave ^:z nve]
+     (list 'nth (expr ave) (expr nve))
+
      (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (z/node z))))))))
 
 ;; Logical plan.
