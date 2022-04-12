@@ -88,7 +88,7 @@
           [:scan [l_returnflag l_linestatus
                   {l_shipdate (<= l_shipdate ?ship-date)}
                   l_quantity l_extendedprice l_discount l_tax]]]]]
-      (with-params {'?ship-date #inst "1998-09-02"})))
+      (with-params {'?ship-date (LocalDate/parse "1998-09-02")})))
 
 (def tpch-q2-minimum-cost-supplier
   (-> '[:assign [PartSupp [:join {s_suppkey ps_suppkey}
@@ -129,7 +129,7 @@
             [:scan [l_orderkey l_extendedprice l_discount
                     {l_shipdate (> l_shipdate ?date)}]]]]]]]
       (with-params {'?segment "BUILDING"
-                    '?date #inst "1995-03-15"})))
+                    '?date (LocalDate/parse "1995-03-15")})))
 
 (def tpch-q4-order-priority-checking
   (-> '[:order-by [{o_orderpriority :asc}]
@@ -139,28 +139,30 @@
                                     (< o_orderdate ?end-date))} o_orderpriority o_orderkey]]
           [:select (< l_commitdate l_receiptdate)
            [:scan [l_orderkey l_commitdate l_receiptdate]]]]]]
-      (with-params {'?start-date #inst "1993-07-01"
+      (with-params {'?start-date (LocalDate/parse "1993-07-01")
                     ;; in the spec this is one date with `+ INTERVAL 3 MONTHS`
-                    '?end-date #inst "1993-10-01"})))
+                    '?end-date (LocalDate/parse "1993-10-01")})))
 
 (def tpch-q5-local-supplier-volume
-  '[:order-by [{revenue :desc}]
-    [:group-by [n_name {revenue (sum disc_price)}]
-     [:project [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]
-      [:select (= l_suppkey s_suppkey)
-       [:join {o_orderkey l_orderkey}
-        [:join {s_nationkey c_nationkey}
-         [:join {n_nationkey s_nationkey}
-          [:join {r_regionkey n_regionkey}
-           [:scan [{r_name (= r_name "ASIA")} r_regionkey]]
-           [:scan [n_name n_nationkey n_regionkey]]]
-          [:scan [s_suppkey s_nationkey]]]
-         [:join {o_custkey c_custkey}
-          [:scan [o_orderkey o_custkey
-                  {o_orderdate (and (>= o_orderdate #inst "1994-01-01")
-                                    (< o_orderdate #inst "1995-01-01"))}]]
-          [:scan [c_custkey c_nationkey]]]]
-        [:scan [l_orderkey l_extendedprice l_discount l_suppkey]]]]]]])
+  (-> '[:order-by [{revenue :desc}]
+        [:group-by [n_name {revenue (sum disc_price)}]
+         [:project [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]
+          [:select (= l_suppkey s_suppkey)
+           [:join {o_orderkey l_orderkey}
+            [:join {s_nationkey c_nationkey}
+             [:join {n_nationkey s_nationkey}
+              [:join {r_regionkey n_regionkey}
+               [:scan [{r_name (= r_name "ASIA")} r_regionkey]]
+               [:scan [n_name n_nationkey n_regionkey]]]
+              [:scan [s_suppkey s_nationkey]]]
+             [:join {o_custkey c_custkey}
+              [:scan [o_orderkey o_custkey
+                      {o_orderdate (and (>= o_orderdate ?start-date)
+                                        (< o_orderdate ?end-date))}]]
+              [:scan [c_custkey c_nationkey]]]]
+            [:scan [l_orderkey l_extendedprice l_discount l_suppkey]]]]]]]
+      (with-params {'?start-date (LocalDate/parse "1994-01-01")
+                    '?end-date (LocalDate/parse "1995-01-01")})))
 
 (def tpch-q6-forecasting-revenue-change
   (-> '[:group-by [{revenue (sum disc_price)}]
@@ -171,8 +173,8 @@
                  {l_discount (and (>= l_discount ?min-discount)
                                   (<= l_discount ?max-discount))}
                  {l_quantity (< l_quantity 24.0)}]]]]
-      (with-params {'?start-date #inst "1994-01-01"
-                    '?end-date #inst "1995-01-01"
+      (with-params {'?start-date (LocalDate/parse "1994-01-01")
+                    '?end-date (LocalDate/parse "1995-01-01")
                     '?min-discount 0.05
                     '?max-discount 0.07})))
 
@@ -194,8 +196,8 @@
                 [:join {s_suppkey l_suppkey}
                  [:scan [s_suppkey s_nationkey]]
                  [:scan [l_orderkey l_extendedprice l_discount l_suppkey
-                         {l_shipdate (and (>= l_shipdate #inst "1995-01-01")
-                                          (<= l_shipdate #inst "1996-12-31"))}]]]
+                         {l_shipdate (and (>= l_shipdate ?start-date)
+                                          (<= l_shipdate ?end-date))}]]]
                 [:scan [o_orderkey o_custkey]]]
                [:rename n1
                 [:scan [{n_name (or (= n_name ?nation1) (= n_name ?nation2))} n_nationkey]]]]
@@ -203,7 +205,9 @@
              [:rename n2
               [:scan [{n_name (or (= n_name ?nation1) (= n_name ?nation2))} n_nationkey]]]]]]]]]
       (with-params {'?nation1 "FRANCE"
-                    '?nation2 "GERMANY"})))
+                    '?nation2 "GERMANY"
+                    '?start-date (LocalDate/parse "1995-01-01")
+                    '?end-date (LocalDate/parse "1996-12-31")})))
 
 (def tpch-q8-national-market-share
   (-> '[:order-by [{o_year :asc}]
@@ -226,8 +230,8 @@
                   [:scan [l_orderkey l_extendedprice l_discount l_suppkey l_partkey]]]
                  [:scan [s_suppkey s_nationkey]]]
                 [:scan [o_orderkey o_custkey
-                        {o_orderdate (and (>= o_orderdate #inst "1995-01-01")
-                                          (<= o_orderdate #inst "1996-12-31"))}]]]
+                        {o_orderdate (and (>= o_orderdate ?start-date)
+                                          (<= o_orderdate ?end-date))}]]]
                [:scan [c_custkey c_nationkey]]]
               [:join {r_regionkey n1_n_regionkey}
                [:scan [r_regionkey {r_name (= r_name ?region)}]]
@@ -237,7 +241,9 @@
               [:scan [n_name n_nationkey]]]]]]]]]
       (with-params {'?nation "BRAZIL"
                     '?region "AMERICA"
-                    '?type "ECONOMY ANODIZED STEEL"})))
+                    '?type "ECONOMY ANODIZED STEEL"
+                    '?start-date (LocalDate/parse "1995-01-01")
+                    '?end-date (LocalDate/parse "1996-12-31")})))
 
 (def tpch-q9-product-type-profit-measure
   (-> '[:order-by [{nation :asc} {o_year :desc}]
@@ -278,8 +284,8 @@
                                         (< o_orderdate ?end-date))}]]]
              [:scan [l_orderkey {l_returnflag (= l_returnflag "R")} l_extendedprice l_discount]]]
             [:scan [n_nationkey n_name]]]]]]]
-      (with-params {'?start-date #inst "1993-10-01"
-                    '?end-date #inst "1994-01-01"})))
+      (with-params {'?start-date (LocalDate/parse "1993-10-01")
+                    '?end-date (LocalDate/parse "1994-01-01")})))
 
 (def tpch-q11-important-stock-identification
   (-> '[:assign [PartSupp [:project [ps_partkey {value (* ps_supplycost ps_availqty)}]
@@ -325,8 +331,8 @@
                                         (< l_receiptdate ?end-date))}]]]]]]]
       (with-params {'?ship-mode1 "MAIL"
                     '?ship-mode2 "SHIP"
-                    '?start-date #inst "1994-01-01"
-                    '?end-date #inst "1995-01-01"})))
+                    '?start-date (LocalDate/parse "1994-01-01")
+                    '?end-date (LocalDate/parse "1995-01-01")})))
 
 (def tpch-q13-customer-distribution
   (-> '[:order-by [{custdist :desc} {c_count :desc}]
@@ -352,8 +358,8 @@
            [:scan [l_partkey l_extendedprice l_discount
                    {l_shipdate (and (>= l_shipdate ?start-date)
                                     (< l_shipdate ?end-date))}]]]]]]
-      (with-params {'?start-date #inst "1995-09-01"
-                    '?end-date #inst "1995-10-01"})))
+      (with-params {'?start-date (LocalDate/parse "1995-09-01")
+                    '?end-date (LocalDate/parse "1995-10-01")})))
 
 (def tpch-q15-top-supplier
   (-> '[:assign [Revenue [:group-by [supplier_no {total_revenue (sum disc_price)}]
@@ -371,8 +377,8 @@
             [:scan [s_suppkey s_name s_address s_phone]]]
            [:group-by [{max_total_revenue (max total_revenue)}]
             Revenue]]]]]
-      (with-params {'?start-date #inst "1996-01-01"
-                    '?end-date #inst "1996-04-01"})))
+      (with-params {'?start-date (LocalDate/parse "1996-01-01")
+                    '?end-date (LocalDate/parse "1996-04-01")})))
 
 (def tpch-q16-part-supplier-relationship
   (-> '[:order-by [{supplier_cnt :desc} {p_brand :asc} {p_type :asc} {p_size :asc}]
@@ -481,8 +487,8 @@
                       {l_shipdate (and (>= l_shipdate ?start-date)
                                        (< l_shipdate ?end-date))}]]]]]]]]]
       (with-params {;'?color "forest"
-                    '?start-date #inst "1994-01-01"
-                    '?end-date #inst "1995-01-01"
+                    '?start-date (LocalDate/parse "1994-01-01")
+                    '?end-date (LocalDate/parse "1995-01-01")
                     '?nation "CANADA"})))
 
 (def tpch-q21-suppliers-who-kept-orders-waiting

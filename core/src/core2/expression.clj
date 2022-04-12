@@ -195,7 +195,12 @@
 
 (defmethod emit-value Keyword [_ code] (emit-value String `(str (symbol ~code))))
 
-(defmethod emit-value LocalDate [_ code] (.toEpochDay code))
+(defmethod emit-value LocalDate [_ code]
+  ;; if literal, we can just yield a long directly
+  (if (instance? LocalDate code)
+    (.toEpochDay code)
+    `(.toEpochDay ~code)))
+
 (defmethod emit-value PeriodDuration [_ code] `(PeriodDuration. (Period/parse ~(str (.getPeriod code))) (Duration/ofNanos ~(.toNanos (.getDuration code)))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
