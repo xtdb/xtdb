@@ -257,15 +257,13 @@
           param-symbol])
        (into {})))
 
-(defn- build-apply [column->param projected-dependent-columns independent-relation dependent-relation]
-  (if (empty? column->param)
-    [:cross-join independent-relation dependent-relation]
-    [:apply
-     :cross-join
-     column->param
-     projected-dependent-columns
-     independent-relation
-     (w/postwalk-replace column->param dependent-relation)]))
+(defn- build-apply [apply-mode column->param projected-dependent-columns independent-relation dependent-relation]
+  [:apply
+   apply-mode
+   column->param
+   projected-dependent-columns
+   independent-relation
+   (w/postwalk-replace column->param dependent-relation)])
 
 (defn- wrap-with-exists [exists-column relation]
   [:top {:limit 1}
@@ -283,105 +281,119 @@
     = '<>
     <> '=))
 
+(defn- and-predicate? [predicate]
+  (and (sequential? predicate)
+       (= 'and (first predicate))))
+
+(defn- or-predicate? [predicate]
+  (and (sequential? predicate)
+       (= 'or (first predicate))))
+
+(defn- flatten-expr [pred expr]
+  (if (pred expr)
+    (concat (flatten-expr pred (nth expr 1))
+            (flatten-expr pred (nth expr 2)))
+    [expr]))
+
+(defn- interpret-subquery [sq]
+  (let [scope-id (sem/id (sem/scope-element sq))]
+    (r/zmatch sq
+      [:subquery ^:z qe]
+      (let [subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
+            column->param (correlated-column->param qe scope-id)
+            subquery-type (sem/subquery-type sq)
+            projected-columns (set (subquery-projection-symbols qe))]
+        {:type :subquery
+         :plan (case (:type subquery-type)
+                 (:scalar_subquery
+                   :row_subquery) [:max-1-row subquery-plan]
+                 subquery-plan)
+         :projected-columns projected-columns
+         :column->param column->param})
+
+      [:exists_predicate _
+       [:subquery ^:z qe]]
+      (let [exists-symbol (exists-symbol qe)
+            subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
+            column->param (correlated-column->param qe scope-id)
+            projected-columns #{exists-symbol}]
+        {:type :exists
+         :plan subquery-plan
+         :projected-columns projected-columns
+         :column->param column->param
+         :sym exists-symbol})
+
+      [:in_predicate ^:z rvp ^:z ipp2]
+      (let [qe (r/zmatch ipp2
+                 [:in_predicate_part_2 _ [:in_predicate_value [:subquery ^:z qe]]]
+                 qe
+
+                 [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]
+                 qe
+
+                 [:in_predicate_part_2 _ [:in_predicate_value ^:z ivl]]
+                 ivl
+
+                 [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]
+                 ivl
+
+                 (throw (IllegalArgumentException. "unknown in type")))
+            exists-symbol (exists-symbol qe)
+            predicate (list '= (expr rvp) (first (subquery-projection-symbols qe)))
+            subquery-plan [:select predicate [:rename (subquery-reference-symbol qe) (plan qe)]]
+            column->param (merge (correlated-column->param qe scope-id)
+                                 (correlated-column->param rvp scope-id))
+            projected-columns #{exists-symbol}]
+        {:type :exists
+         :plan subquery-plan
+         :projected-columns projected-columns
+         :column->param column->param
+         :sym exists-symbol})
+
+      [:quantified_comparison_predicate ^:z rvp [:quantified_comparison_predicate_part_2 [_ co] [quantifier _] [:subquery ^:z qe]]]
+      (let [exists-symbol (exists-symbol qe)
+            projection-symbol (first (subquery-projection-symbols qe))
+            predicate (case quantifier
+                        :all `(~'or (~(flip-comparison (symbol co))
+                                      ~(expr rvp)
+                                      ~projection-symbol)
+                                (~'nil? ~(expr rvp))
+                                (~'nil? ~projection-symbol))
+                        :some (list (symbol co) (expr rvp) projection-symbol))
+            subquery-plan [:select predicate [:rename (subquery-reference-symbol qe) (plan qe)]]
+            column->param (merge (correlated-column->param qe scope-id)
+                                 (correlated-column->param rvp scope-id))
+            projected-columns #{exists-symbol}]
+        {:type :exists
+         :plan subquery-plan
+         :projected-columns projected-columns
+         :column->param column->param
+         :sym exists-symbol})
+
+      (throw (IllegalArgumentException. "unknown subquery type")))))
+
+(defn- apply-subquery [relation subquery-info]
+  (let [{:keys [type plan projected-columns column->param sym]} subquery-info]
+    (case type
+      :exists (build-apply :cross-join column->param projected-columns relation (wrap-with-exists sym plan))
+      (build-apply :cross-join column->param projected-columns relation plan))))
+
+(defn- apply-predicative-subquery [relation subquery-info predicate-set]
+  (let [{:keys [type plan column->param sym]} subquery-info]
+    (cond
+      (not= :exists type) [(apply-subquery relation subquery-info) predicate-set]
+      (predicate-set sym) [(build-apply :semi-join column->param #{} relation plan) (disj predicate-set sym)]
+      (predicate-set (list 'not sym)) [(build-apply :anti-join column->param #{} relation plan) (disj predicate-set (list 'not sym))]
+      :else [(apply-subquery relation subquery-info) predicate-set])))
+
+(defn- find-sub-queries [z]
+  (r/collect-stop
+    (fn [z] (r/zcase z (:subquery :exists_predicate :in_predicate :quantified_comparison_predicate) [z] nil))
+    z))
+
 ;; TODO: deal with row subqueries.
 (defn- wrap-with-apply [z relation]
-  (let [subqueries (r/collect-stop
-                    (fn [z]
-                      (r/zcase z
-                        (:subquery
-                         :exists_predicate
-                         :in_predicate
-                         :quantified_comparison_predicate) [z]
-                        nil))
-                    z)
-        scope-id (sem/id (sem/scope-element z))]
-    (reduce
-     (fn [relation sq]
-       (r/zmatch sq
-         [:subquery ^:z qe]
-         (let [subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
-               column->param (correlated-column->param qe scope-id)
-               subquery-type (sem/subquery-type sq)
-               projected-columns (set (subquery-projection-symbols qe))]
-           (build-apply
-            column->param
-            projected-columns
-            relation
-            (case (:type subquery-type)
-              (:scalar_subquery
-               :row_subquery) [:max-1-row subquery-plan]
-              subquery-plan)))
-         [:exists_predicate _
-          [:subquery ^:z qe]]
-         (let [exists-symbol (exists-symbol qe)
-               subquery-plan (wrap-with-exists
-                              exists-symbol
-                              [:rename (subquery-reference-symbol qe) (plan qe)])
-               column->param (correlated-column->param qe scope-id)
-               projected-columns #{exists-symbol}]
-           (build-apply
-            column->param
-            projected-columns
-            relation
-            subquery-plan))
-
-         [:in_predicate ^:z rvp ^:z ipp2]
-         (let [qe (r/zmatch ipp2
-                    [:in_predicate_part_2 _ [:in_predicate_value [:subquery ^:z qe]]]
-                    qe
-
-                    [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]
-                    qe
-
-                    [:in_predicate_part_2 _ [:in_predicate_value ^:z ivl]]
-                    ivl
-
-                    [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]
-                    ivl
-
-                    (throw (IllegalArgumentException. "unknown in type")))
-               qe-id (sem/id qe)
-               exists-symbol (exists-symbol qe)
-               predicate (list '= (expr rvp) (first (subquery-projection-symbols qe)))
-               subquery-plan (wrap-with-exists
-                              exists-symbol
-                              [:select predicate
-                               [:rename (subquery-reference-symbol qe) (plan qe)]])
-               column->param (merge (correlated-column->param qe scope-id)
-                                    (correlated-column->param rvp scope-id))
-               projected-columns #{exists-symbol}]
-           (build-apply
-            column->param
-            projected-columns
-            relation
-            subquery-plan))
-
-         [:quantified_comparison_predicate ^:z rvp [:quantified_comparison_predicate_part_2 [_ co] [quantifier _] [:subquery ^:z qe]]]
-         (let [exists-symbol (exists-symbol qe)
-               projection-symbol (first (subquery-projection-symbols qe))
-               predicate (case quantifier
-                           :all `(~'or (~(flip-comparison (symbol co))
-                                        ~(expr rvp)
-                                        ~projection-symbol)
-                                  (~'nil? ~(expr rvp))
-                                  (~'nil? ~projection-symbol))
-                           :some (list (symbol co) (expr rvp) projection-symbol))
-               subquery-plan (wrap-with-exists
-                              exists-symbol
-                              [:select predicate
-                               [:rename (subquery-reference-symbol qe) (plan qe)]])
-               column->param (merge (correlated-column->param qe scope-id)
-                                    (correlated-column->param rvp scope-id))
-               projected-columns #{exists-symbol}]
-           (build-apply
-            column->param
-            projected-columns
-            relation
-            subquery-plan))
-
-         (throw (IllegalArgumentException. "unknown subquery type"))))
-     relation
-     subqueries)))
+  (reduce (fn [relation sq] (apply-subquery relation (interpret-subquery sq))) relation (find-sub-queries z)))
 
 ;; https://www.spoofax.dev/background/stratego/strategic-rewriting/term-rewriting/
 ;; https://www.spoofax.dev/background/stratego/strategic-rewriting/limitations-of-rewriting/
@@ -494,20 +506,6 @@
        (r/innermost (r/mono-tp (some-fn prop-eval-rules prop-simplify prop-further-simplify prop-cnf)))
        (z/node)))
 
-(defn- and-predicate? [predicate]
-  (and (sequential? predicate)
-       (= 'and (first predicate))))
-
-(defn- or-predicate? [predicate]
-  (and (sequential? predicate)
-       (= 'or (first predicate))))
-
-(defn- flatten-expr [pred expr]
-  (if (pred expr)
-    (concat (flatten-expr pred (nth expr 1))
-            (flatten-expr pred (nth expr 2)))
-    [expr]))
-
 (defn- boolean-constraint-propagation [cnf-clauses]
   (loop [clauses (distinct (for [clause cnf-clauses]
                              (if (or-predicate? clause)
@@ -549,12 +547,21 @@
     (flatten-expr and-predicate? predicate)))
 
 (defn- wrap-with-select [sc relation]
-  (let [sc-expr (expr sc)]
+  (let [sc-expr (expr sc)
+        predicates (predicate-conjunctive-clauses sc-expr)
+        predicate-set (set predicates)
+        [new-relation predicate-set]
+        (reduce
+          (fn [[new-relation predicate-set] sq]
+            (apply-predicative-subquery new-relation (interpret-subquery sq) predicate-set))
+          [relation predicate-set]
+          (find-sub-queries sc))
+        unused-predicates (filter predicate-set predicates)]
     (reduce
-     (fn [acc predicate]
-       [:select predicate acc])
-     (wrap-with-apply sc relation)
-     (predicate-conjunctive-clauses sc-expr))))
+      (fn [acc predicate]
+        [:select predicate acc])
+      new-relation
+      unused-predicates)))
 
 (defn- needs-group-by? [z]
   (boolean (:grouping-columns (sem/local-env (sem/group-env z)))))
@@ -697,7 +704,7 @@
         relation (build-table-primary tp)]
     (if (every? true? (map = (keys column->param) (vals column->param)))
       relation
-      (build-apply column->param projected-columns nil relation))))
+      (build-apply :cross-join column->param projected-columns nil relation))))
 
 ;; TODO: both UNNEST and LATERAL are only dealt with on top-level in
 ;; FROM. UNNEST also needs to take potential subqueries in cve into
@@ -1821,41 +1828,6 @@
     (decorrelate-group-by-apply nil group-by-columns nil
                                 :left-outer-join columns independent-relation dependent-relation)))
 
-(defn- potential-exists-predicate? [predicate]
-  (or (symbol? predicate)
-      (and (not-predicate? predicate)
-           (symbol? (second predicate)))))
-
-(defn- promote-apply-mode [z]
-  (r/zmatch z
-    [:select predicate-1
-     [:select predicate-2
-      relation]]
-    ;;=>
-    (when (and (potential-exists-predicate? predicate-1)
-               (not (potential-exists-predicate? predicate-2)))
-      [:select predicate-2
-       [:select predicate-1
-        relation]])
-
-    [:select predicate
-     [:apply :cross-join columns dependent-column-names independent-relation
-      [:top {:limit 1}
-       [:union-all
-        [:project [_]
-         dependent-relation]
-        [:table [_]]]]]]
-    ;;=>
-    (cond
-      (and (symbol? predicate)
-           (= #{predicate} dependent-column-names))
-      [:apply :semi-join columns #{} independent-relation dependent-relation]
-
-      (and (not-predicate? predicate)
-           (symbol? (second predicate))
-           (= #{(second predicate)} dependent-column-names))
-      [:apply :anti-join columns #{} independent-relation dependent-relation])))
-
 (defn- optimize-join-expression [join-expressions lhs rhs]
   (if (some map? join-expressions)
     join-expressions
@@ -1968,8 +1940,7 @@
                                   #'decorrelate-apply-rule-3
                                   #'decorrelate-apply-rule-4
                                   #'decorrelate-apply-rule-8
-                                  #'decorrelate-apply-rule-9
-                                  #'promote-apply-mode]
+                                  #'decorrelate-apply-rule-9]
                 plan (remove-names (plan ag))
                 add-projection-fn (:add-projection-fn (meta plan))
                 plan (->> plan

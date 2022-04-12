@@ -126,13 +126,13 @@
        {'?date (LocalDate/parse "1993-07-01")
         '?period (PeriodDuration. (Period/parse "P3M") Duration/ZERO)}
        '[:rename
-         {x1 o_orderpriority, x15 order_count}
+         {x1 o_orderpriority, x12 order_count}
          [:order-by
           [{x1 :asc}]
           [:group-by
-           [x1 {x15 (count x14)}]
+           [x1 {x12 (count x11)}]
            [:map
-            [{x14 1}]
+            [{x11 1}]
             [:semi-join
              [{x3 x5}]
              [:rename {o_orderpriority x1, o_orderdate x2, o_orderkey x3}
@@ -404,16 +404,16 @@
        {'?date (LocalDate/parse "1994-01-01")
         '?period (PeriodDuration. (Period/parse "P1Y") Duration/ZERO)}
        '[:rename
-         {x4 l_shipmode, x19 high_line_count, x20 low_line_count}
+         {x4 l_shipmode, x16 high_line_count, x17 low_line_count}
          [:order-by
           [{x4 :asc}]
           [:group-by
-           [x4 {x19 (sum x17)} {x20 (sum x18)}]
+           [x4 {x16 (sum x14)} {x17 (sum x15)}]
            [:map
-            [{x17 (if (or (= x1 "1-URGENT") (= x1 "2-HIGH"))
+            [{x14 (if (or (= x1 "1-URGENT") (= x1 "2-HIGH"))
                     1
                     0)}
-             {x18 (if (and (<> x1 "1-URGENT") (<> x1 "2-HIGH")) ;;TODO != or <>
+             {x15 (if (and (<> x1 "1-URGENT") (<> x1 "2-HIGH")) ;;TODO != or <>
                     1
                     0)}]
             [:semi-join
@@ -526,13 +526,13 @@
   (t/is
     (=
      '[:rename
-       {x4 p_brand, x5 p_type, x6 p_size, x24 supplier_cnt}
+       {x4 p_brand, x5 p_type, x6 p_size, x18 supplier_cnt}
        [:order-by
-        [{x24 :desc} {x4 :asc} {x5 :asc} {x6 :asc}]
+        [{x18 :desc} {x4 :asc} {x5 :asc} {x6 :asc}]
         [:group-by
-         [x4 x5 x6 {x24 (count x1)}]
+         [x4 x5 x6 {x18 (count x1)}]
          [:anti-join
-          [{x1 x16}]
+          [{x1 x13}]
           [:semi-join
            [{x6 x9}]
            [:join
@@ -542,7 +542,7 @@
             [:rename {p_brand x4, p_type x5, p_size x6, p_partkey x7}
              [:scan [{p_brand (<> p_brand "Brand#45")} {p_type (not (like p_type "MEDIUM POLISHED%"))} p_size p_partkey]]]]
            [:table [{x9 49} {x9 14} {x9 23} {x9 45} {x9 19} {x9 3} {x9 36} {x9 9}]]]
-          [:rename {s_suppkey x16, s_comment x17}
+          [:rename {s_suppkey x13, s_comment x14}
            [:scan [s_suppkey {s_comment (like s_comment "%Customer%Complaints%")}]]]]]]]
      (pt/plan-sql (slurp-tpch-query 16)))))
 
@@ -579,13 +579,13 @@
   (t/is
     (=
      '[:rename
-       {x1 c_name, x2 c_custkey, x4 o_orderkey, x5 o_orderdate, x6 o_totalprice, x22 $column_6$}
+       {x1 c_name, x2 c_custkey, x4 o_orderkey, x5 o_orderdate, x6 o_totalprice, x19 $column_6$}
        [:top
         {:limit 100}
         [:order-by
          [{x6 :desc} {x5 :asc}]
          [:group-by
-          [x1 x2 x4 x5 x6 {x22 (sum x9)}]
+          [x1 x2 x4 x5 x6 {x19 (sum x9)}]
           [:semi-join
            [{x4 x12}]
            [:join
@@ -767,13 +767,13 @@
              [:rename {n_nationkey x6, n_name x7}
               [:scan [n_nationkey {n_name (= n_name "CANADA")}]]]]
             [:select
-             (> x11 x28)
+             (> x11 x25)
              [:map
-              [{x28 (* 0.5 x26)}]
+              [{x25 (* 0.5 x23)}]
               [:group-by
-               [x9 x10 x11 x16 $row_number$ {x26 (sum x21)}]
+               [x9 x10 x11 $row_number$ {x23 (sum x18)}]
                [:left-outer-join
-                [{x10 x22} {x9 x23}]
+                [{x10 x19} {x9 x20}]
                 [:map
                  [{$row_number$ (row-number)}]
                  [:semi-join [{x10 x13}]
@@ -781,7 +781,7 @@
                    [:scan [ps_suppkey ps_partkey ps_availqty]]]
                   [:rename {p_partkey x13, p_name x14} [:scan [p_partkey {p_name (like p_name "forest%")}]]]]]
                 [:rename
-                 {l_quantity x21, l_partkey x22, l_suppkey x23, l_shipdate x24}
+                 {l_quantity x18, l_partkey x19, l_suppkey x20, l_shipdate x21}
                  [:scan
                   [l_quantity l_partkey l_suppkey {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}]]]]]]]]]]])
      (pt/plan-sql (slurp-tpch-query 20)))))
@@ -790,17 +790,17 @@
   (t/is
     (=
      '[:rename
-       {x1 s_name, x37 numwait}
+       {x1 s_name, x31 numwait}
        [:top
         {:limit 100}
         [:order-by
-         [{x37 :desc} {x1 :asc}]
+         [{x31 :desc} {x1 :asc}]
          [:group-by
-          [x1 {x37 (count x36)}]
+          [x1 {x31 (count x30)}]
           [:map
-           [{x36 1}]
+           [{x30 1}]
            [:anti-join
-            [(<> x26 x5) {x6 x25}]
+            [(<> x23 x5) {x6 x22}]
             [:semi-join
              [(<> x17 x5) {x6 x16}]
              [:join
@@ -820,7 +820,7 @@
                [:scan [n_nationkey {n_name (= n_name "SAUDI ARABIA")}]]]]
              [:rename {l_orderkey x16, l_suppkey x17}
               [:scan [l_orderkey l_suppkey]]]]
-            [:rename {l_orderkey x25, l_suppkey x26, l_receiptdate x27, l_commitdate x28}
+            [:rename {l_orderkey x22, l_suppkey x23, l_receiptdate x24, l_commitdate x25}
              [:select (> l_receiptdate l_commitdate)
               [:scan [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 21)))))
@@ -829,21 +829,21 @@
   (t/is
     (=
      '[:rename
-       {x31 cntrycode, x33 numcust, x34 totacctbal}
+       {x23 cntrycode, x25 numcust, x26 totacctbal}
        [:order-by
-        [{x31 :asc}]
+        [{x23 :asc}]
         [:group-by
-         [x31 {x33 (count x32)} {x34 (sum x2)}]
+         [x23 {x25 (count x24)} {x26 (sum x2)}]
          [:map
-          [{x32 1}]
+          [{x24 1}]
           [:project
-           [{x31 (substring x1 1 2)} x2]
+           [{x23 (substring x1 1 2)} x2]
            [:anti-join
-            [{x3 x24}]
+            [{x3 x19}]
             [:join
-             [(> x2 x22)]
+             [(> x2 x16)]
              [:semi-join [(= (substring x1 1 2) x5)] [:rename {c_phone x1, c_acctbal x2, c_custkey x3} [:scan [c_phone c_acctbal c_custkey]]] [:table [{x5 "13"} {x5 "31"} {x5 "23"} {x5 "29"} {x5 "30"} {x5 "18"} {x5 "17"}]]]
              [:max-1-row
-              [:group-by [{x22 (avg x12)}] [:semi-join [(= (substring x13 1 2) x15)] [:rename {c_acctbal x12, c_phone x13} [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]] [:table [{x15 "13"} {x15 "31"} {x15 "23"} {x15 "29"} {x15 "30"} {x15 "18"} {x15 "17"}]]]]]]
-            [:rename {o_custkey x24} [:scan [o_custkey]]]]]]]]]
+              [:group-by [{x16 (avg x9)}] [:semi-join [(= (substring x10 1 2) x12)] [:rename {c_acctbal x9, c_phone x10} [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]] [:table [{x12 "13"} {x12 "31"} {x12 "23"} {x12 "29"} {x12 "30"} {x12 "18"} {x12 "17"}]]]]]]
+            [:rename {o_custkey x19} [:scan [o_custkey]]]]]]]]]
      (pt/plan-sql (slurp-tpch-query 22)))))
