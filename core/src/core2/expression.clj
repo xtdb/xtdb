@@ -652,10 +652,10 @@
   (mono-fn-call types/int-type #(do `(.length (.decode StandardCharsets/UTF_8 ~@%)))))
 
 (defmethod codegen-call [:octet-length ArrowType$Utf8] [_]
-  (mono-fn-call types/int-type #(do `(.limit ~@%))))
+  (mono-fn-call types/int-type #(do `(.limit ^ByteBuffer ~@%))))
 
 (defmethod codegen-call [:octet-length ArrowType$Binary] [_]
-  (mono-fn-call types/int-type #(do `(.limit ~@%))))
+  (mono-fn-call types/int-type #(do `(.limit ^ByteBuffer ~@%))))
 
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]
   {:return-types #{types/bigint-type}
