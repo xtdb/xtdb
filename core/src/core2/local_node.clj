@@ -33,22 +33,19 @@
                  !system
                  close-fn]
   api/PClient
-  (-open-datalog-async [_ query params]
+  (-open-datalog-async [_ query args]
     (let [{:keys [basis ^Duration basis-timeout]} query
           {:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
       (-> (snap/snapshot-async snapshot-factory tx)
           (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
           (util/then-apply
             (fn [db]
-              (let [{:keys [query srcs]} (-> (dissoc query :basis :basis-timeout)
-                                             (d/compile-query params))]
-                (op/open-ra query (merge srcs {'$ db}) {:default-valid-time default-valid-time})))))))
+              (let [{:keys [query args]} (-> (dissoc query :basis :basis-timeout)
+                                             (d/compile-query args))]
+                (op/open-ra query (merge args {'$ db}) {:default-valid-time default-valid-time})))))))
 
-  (-open-sql-async [_ query params]
-    ;; TODO not supporting the bitemp params from `-open-datalog-async` yet
-    ;; HACK basis won't really work in the same way in SQL - we just expect it as the first and only param for now
-    (let [[{:core2/keys [basis ^Duration basis-timeout]}] params
-          {:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
+  (-open-sql-async [_ query {:core2/keys [basis ^Duration basis-timeout]}]
+    (let [{:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
       (-> (snap/snapshot-async snapshot-factory tx)
           (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
           (util/then-apply

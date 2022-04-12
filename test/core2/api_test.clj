@@ -4,11 +4,10 @@
             [core2.client :as client]
             [core2.log :as log]
             [core2.test-util :as tu :refer [*node*]]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [core2.util :as util])
+            [core2.util :as util]
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import java.time.Duration
-           java.util.concurrent.ExecutionException
-           core2.api.TransactionInstant))
+           java.util.concurrent.ExecutionException))
 
 (defmethod ig/init-key ::clock [_ _]
   (tu/->mock-clock))

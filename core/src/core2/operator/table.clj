@@ -50,12 +50,12 @@
 
   (close [_]))
 
-(defn ->table-cursor ^core2.ICursor [^BufferAllocator allocator, col-names, ^List rows, srcs]
+(defn ->table-cursor ^core2.ICursor [^BufferAllocator allocator, col-names, ^List rows, params]
   (TableCursor. allocator
                 (when (seq rows)
                   (->> (for [col-name col-names
                              :let [col-k (keyword col-name)]]
                          [col-name (vec (for [row rows]
-                                          (expr/eval-scalar-value allocator (get row col-k) srcs)))])
+                                          (expr/eval-scalar-value allocator (get row col-k) params)))])
                        (into {})))
                 false))

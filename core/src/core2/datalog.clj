@@ -104,7 +104,7 @@
                                :explain (s/explain-data ::query query)})))
     conformed-query))
 
-(defn- compile-srcs [{in-bindings :in} args]
+(defn- compile-args [{in-bindings :in} args]
   (when (not= (count in-bindings) (count args))
     (throw (err/illegal-arg :in-arity-exception {::err/message ":in arity mismatch"
                                                  :expected (s/unform ::in in-bindings)
@@ -117,7 +117,8 @@
                                            :collection (MapEntry/create #{(first binding-arg)}
                                                                         (gensym "$in"))
                                            nil)))))]
-    {:srcs (->> (mapcat (fn [[binding-type binding-arg] arg]
+
+    {:args (->> (mapcat (fn [[binding-type binding-arg] arg]
                           (case binding-type
                             (:source :scalar) [(MapEntry/create binding-arg arg)]
                             :tuple (map (fn [logic-var arg]
@@ -138,9 +139,9 @@
                             :relation (let [conformed-arg (s/conform ::relation-arg arg)]
                                         (if (s/invalid? conformed-arg)
                                           (throw (err/illegal-arg :bad-relation
-                                                                  :binding (first binding-arg)
-                                                                  :relation arg
-                                                                  :explain-data (s/explain-data ::relation-arg arg)))
+                                                                  {:binding (first binding-arg)
+                                                                   :relation arg
+                                                                   :explain-data (s/explain-data ::relation-arg arg)}))
                                           (let [[rel-type rel] conformed-arg
                                                 binding (first binding-arg)]
                                             [(MapEntry/create (get table-keys (set binding))
@@ -150,7 +151,6 @@
                         in-bindings
                         args)
                 (into {}))
-
      :table-keys table-keys}))
 
 (defn- ->rel-expr [rel-clauses {:keys [in-scalars v-vars find-vars eid-srcs]}]
@@ -311,7 +311,7 @@
     [:project (mapv second find-args)
      plan]
 
-    [:group-by (vec (for [[arg-type arg :as find-arg] find-args]
+    [:group-by (vec (for [[arg-type arg] find-args]
                       (case arg-type
                         :logic-var arg
                         :aggregate {(aggregate-logic-var-name arg)
@@ -348,13 +348,13 @@
 
 (defn compile-query [query args]
   (let [conformed-query (conform-query query)
-        {:keys [srcs table-keys]} (compile-srcs conformed-query args)]
+        {:keys [args table-keys]} (compile-args conformed-query args)]
     {:query (-> (compile-where conformed-query {:table-keys table-keys})
                 (with-group-by conformed-query)
                 (with-order-by conformed-query)
                 (with-top conformed-query)
                 (with-renamed-find-vars conformed-query))
-     :srcs srcs}))
+     :args args}))
 
 (comment
   (compile-query '{:find [?e1 ?e2 ?a1 ?a2]

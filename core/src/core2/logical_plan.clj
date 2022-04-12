@@ -15,9 +15,11 @@
 (s/def ::relation simple-symbol?)
 (s/def ::column simple-symbol?)
 
+(defn source-sym? [sym]
+  (str/starts-with? (name sym) "$"))
+
 (s/def ::source
-  (s/and simple-symbol?
-         (comp #(str/starts-with? % "$") name)))
+  (s/and simple-symbol? source-sym?))
 
 (defmulti ra-expr
   (fn [expr]
