@@ -280,6 +280,10 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   (valid? "SELECT foo.b FROM (SELECT x.b FROM x UNION SELECT y.a FROM y) AS foo")
   (valid? "SELECT foo.a FROM (SELECT x.b FROM x UNION SELECT y.a FROM y) AS foo (a)")
 
+  (valid? "SELECT a.a FROM (SELECT 42 a FROM foo) a")
+  (valid? "SELECT a.a FROM (SELECT foo.a a FROM foo) a")
+  (valid? "SELECT a.a FROM (SELECT foo.b a FROM foo) a")
+
   (valid? "SELECT x.a FROM x UNION SELECT y.a FROM y ORDER BY a")
   (invalid? #"XTDB requires fully-qualified columns: b"
             "SELECT x.a FROM x UNION SELECT y.a FROM y ORDER BY b")

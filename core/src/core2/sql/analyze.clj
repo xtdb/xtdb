@@ -98,6 +98,10 @@
       ;;=>
       as
 
+      [:derived_column _ [:as_clause [:regular_identifier as]]]
+      ;;=>
+      as
+
       [:derived_column
        [:column_reference
         [:identifier_chain _ [:regular_identifier column]]]]
