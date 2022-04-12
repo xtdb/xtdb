@@ -988,7 +988,7 @@
 (defmethod emit-expr :list [{:keys [elements]} ^String col-name opts]
   (let [el-count (count elements)
         emitted-els (mapv #(emit-expr % "list-el" opts) elements)]
-    (fn [in-rel al params]
+    (fn [^IIndirectRelation in-rel al params]
       (let [els (LinkedList.)]
         (try
           (doseq [eval-expr emitted-els]
@@ -1074,7 +1074,7 @@
                                (into {}))]
 
     ;; TODO what are we going to do about needing to close over locals?
-    (fn [in-rel al params]
+    (fn [^IIndirectRelation in-rel al params]
       (let [evald-sub-exprs (HashMap.)]
         (try
           (doseq [[variable eval-expr] emitted-sub-exprs]
