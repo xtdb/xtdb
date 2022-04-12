@@ -6,4 +6,12 @@
 
 (t/use-fixtures :each tu/with-node)
 
-(slt/generate-ns-slt-tests!)
+(slt/deftest select1)
+
+(slt/deftest select2)
+
+(slt/deftest select3)
+
+(slt/deftest select4)
+
+(slt/deftest select5)
