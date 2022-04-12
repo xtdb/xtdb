@@ -250,7 +250,7 @@
           left-key-cols (map first equi-pairs)
           right-key-cols (map second equi-pairs)
           predicates (keep (fn [[tag val]]
-                             (when (= :predicate tag)
+                             (when (= :pred-expr tag)
                                val))
                            condition)
           theta-selector (when (seq predicates)
