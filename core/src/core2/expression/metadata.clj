@@ -47,7 +47,7 @@
               :f 'or
               ;; TODO this seems like it could make better use
               ;; of the polymorphic expr patterns?
-              :args (vec (for [arrow-type (if (isa? types/arrow-type-hierarchy param-type ::types/Number)
+              :args (vec (for [arrow-type (if (isa? types/arrow-type-hierarchy (class param-type) ::types/Number)
                                             [types/bigint-type types/float8-type]
                                             [param-type])]
                            (into {:op :metadata-vp-call,
