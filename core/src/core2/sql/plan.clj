@@ -278,7 +278,8 @@
                  (:case_abbreviation nil) nil
                  [(expr z)]))
              z)
-            (cons 'coalesce))
+            (cons (case (r/lexeme z 1)
+                    "COALESCE" 'coalesce)))
 
        :searched_case
        (->> (r/collect-stop
