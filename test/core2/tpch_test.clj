@@ -7,7 +7,7 @@
             [core2.util :as util]
             [core2.operator :as op]
             [core2.snapshot :as snap])
-  (:import [java.nio.file Files LinkOption Path]
+  (:import [java.nio.file Files LinkOption Path CopyOption]
            [java.time Clock Duration ZoneId]))
 
 (def ^:dynamic *node*)
@@ -30,22 +30,56 @@
         (binding [*node* node, *db* db]
           (f))))))
 
-(defn- test-tpch-ingest [scale-factor expected-objects]
-  (let [node-dir (util/->path (format "target/can-submit-tpch-docs-%s" scale-factor))
-        objects-dir (.resolve node-dir "objects")]
-    (with-tpch-data {:node-dir node-dir
-                     :scale-factor scale-factor
-                     :clock (Clock/fixed (util/->instant #inst "2021-04-01") (ZoneId/of "UTC"))}
-      (fn []
-        (t/is (= expected-objects
-                 (count (iterator-seq (.iterator (Files/list objects-dir))))))
-        (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
+(defn- tpch-node-dir ^Path [scale-factor]
+  (util/->path (format "target/can-submit-tpch-docs-%s" scale-factor)))
 
-        (let [expected-dir (.toPath (io/as-file (io/resource (format "can-submit-tpch-docs-%s/" scale-factor))))]
-          (doseq [expected-path (iterator-seq (.iterator (Files/list expected-dir)))
-                  :let [actual-path (.resolve objects-dir (.relativize expected-dir expected-path))]]
-            (t/is (Files/exists actual-path (make-array LinkOption 0)))
-            (tu/check-json-file expected-path actual-path)))))))
+(defn- tpch-test-dir ^Path [scale-factor]
+  (.toPath (io/as-file (io/resource (format "can-submit-tpch-docs-%s/" scale-factor)))))
+
+(defn- object-files [^Path node-dir]
+  (iterator-seq (.iterator (Files/list (.resolve node-dir "objects")))))
+
+(defn- paired-paths
+  "Seq of pairs of files [test-file, written-file] where test-file is a file in the test-resources/can-submit-tpch-docs-xxxx
+  dir, and written-file is the matching file in the node-dir.
+
+  Useful to compare or replace expected .json with the ingest output."
+  [scale-factor node-dir]
+  (let [objects-dir (.resolve node-dir "objects")
+        test-dir (tpch-test-dir scale-factor)]
+    (for [test-path (iterator-seq (.iterator (Files/list test-dir)))
+          :let [written-object-path (.resolve objects-dir (.relativize test-dir test-path))]]
+      [test-path written-object-path])))
+
+(defn- regen-tpch-test-files
+  "Regenerates the test .json files in target/can-submit-tpch-docs-xxxx.
+
+  Use if you know you have changed the arrow representation of the tpch dataset.
+  e.g changing the type of one of the generated fields."
+  [scale-factor]
+  (let [node-dir (tpch-node-dir scale-factor)]
+    (with-tpch-data
+      {:node-dir node-dir
+       :scale-factor scale-factor
+       :clock (Clock/fixed (util/->instant #inst "2021-04-01") (ZoneId/of "UTC"))}
+      (fn []
+        (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
+        (doseq [[test-path written-object-path] (paired-paths scale-factor node-dir)]
+          (Files/delete test-path)
+          (Files/copy written-object-path test-path (make-array CopyOption 0)))))))
+
+(defn- test-tpch-ingest [scale-factor expected-objects]
+  (let [node-dir (tpch-node-dir scale-factor)]
+    (with-tpch-data
+      {:node-dir node-dir
+       :scale-factor scale-factor
+       :clock (Clock/fixed (util/->instant #inst "2021-04-01") (ZoneId/of "UTC"))}
+      (fn []
+        (t/is (= expected-objects (count (object-files node-dir))))
+        (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
+        (doseq [[expected-path actual-path] (paired-paths scale-factor node-dir)]
+          (t/is (Files/exists actual-path (make-array LinkOption 0)))
+          (tu/check-json-file expected-path actual-path))))))
 
 (defn run-query
   ([q] (run-query q {}))

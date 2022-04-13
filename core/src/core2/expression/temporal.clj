@@ -8,8 +8,9 @@
             [core2.types :as types]
             [core2.util :as util])
   (:import java.time.Instant
-           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Int ArrowType$Timestamp]
-           org.apache.arrow.vector.types.TimeUnit))
+           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Int ArrowType$Timestamp ArrowType$Interval ArrowType$Date]
+           org.apache.arrow.vector.types.TimeUnit
+           [java.time LocalDate]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -111,6 +112,12 @@
                          `(Math/addExact ~(-> x-arg (with-conversion x-unit res-unit))
                                          ~(-> y-arg (with-conversion y-unit res-unit)))))}))
 
+(defmethod expr/codegen-call [:+ ArrowType$Date ArrowType$Interval] [{[^ArrowType$Date x-type, ^ArrowType$Interval y-type] :arg-types}]
+  (let [return-type x-type]
+    {:return-types #{return-type}
+     :continue-call (fn [f [x-arg y-arg]]
+                      (f return-type `(.toEpochDay (.plus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg)))))}))
+
 (defmethod expr/codegen-call [:- ArrowType$Timestamp ArrowType$Timestamp] [{[^ArrowType$Timestamp x-type, ^ArrowType$Timestamp y-type] :arg-types}]
   (let [x-unit (.getUnit x-type)
         y-unit (.getUnit y-type)
@@ -143,6 +150,12 @@
                       (f return-type
                          `(Math/subtractExact ~(-> x-arg (with-conversion x-unit res-unit))
                                               ~(-> y-arg (with-conversion y-unit res-unit)))))}))
+
+(defmethod expr/codegen-call [:- ArrowType$Date ArrowType$Interval] [{[^ArrowType$Date x-type, ^ArrowType$Interval y-type] :arg-types}]
+  (let [return-type x-type]
+    {:return-types #{return-type}
+     :continue-call (fn [f [x-arg y-arg]]
+                      (f return-type `(.toEpochDay (.minus (LocalDate/ofEpochDay ~x-arg) (.getPeriod ~y-arg)))))}))
 
 (defmethod expr/codegen-call [:* ArrowType$Duration ArrowType$Int] [{[x-type _y-type] :arg-types}]
   {:continue-call (fn [f emitted-args]

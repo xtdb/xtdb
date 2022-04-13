@@ -2,7 +2,7 @@
   (:require [core2.expression :as expr]
             [core2.types :as types]
             [core2.util :as util])
-  (:import [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Int ArrowType$Timestamp ArrowType$Utf8]))
+  (:import [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Int ArrowType$Timestamp ArrowType$Utf8 ArrowType$Date]))
 
 (set! *unchecked-math* :warn-on-boxed)
 

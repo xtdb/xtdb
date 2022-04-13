@@ -1,5 +1,5 @@
 (ns core2.sql.plan-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [core2.sql :as sql]
             [core2.sql.plan :as plan]))
 
@@ -213,8 +213,8 @@
 
 (t/deftest test-subqueries
   (t/testing "Scalar subquery in SELECT"
-    (t/is (= '[:rename {x7 some_column}
-               [:project [{x7 (= 1 x5)}]
+    (t/is (= '[:rename {x8 some_column}
+               [:project [{x8 (= 1 x5)}]
                 [:cross-join
                  [:rename {y x1}
                   [:scan [{y (= y 1)}]]]
@@ -362,17 +362,17 @@
 
     ;; NOTE: these below simply check what's currently being produced,
     ;; not necessarily what should be produced.
-    (t/is (= '[:rename {x1 name, x15 $column_2$}
-               [:project [x1 x15]
-                [:group-by [x1 x2 x3 $row_number$ {x15 (count x14)}]
-                 [:map [{x14 1}]
-                  [:left-outer-join [{x2 x12}]
+    (t/is (= '[:rename {x1 name, x12 $column_2$}
+               [:project [x1 x12]
+                [:group-by [x1 x2 x3 $row_number$ {x12 (count x11)}]
+                 [:map [{x11 1}]
+                  [:left-outer-join [{x2 x9}]
                    [:map [{$row_number$ (row-number)}]
                     [:anti-join [{x3 x5}]
                      [:rename {name x1, custno x2, country x3}
                       [:scan [name custno country]]]
                      [:rename {country x5} [:scan [country]]]]]
-                   [:rename {custno x12} [:scan [custno]]]]]]]]
+                   [:rename {custno x9} [:scan [custno]]]]]]]]
              (plan-sql "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
                        FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)")))
 
@@ -488,6 +488,78 @@
          false {'?x3 '?x4}
          true {'?x3 '?x3
                 'x4 '?x5}))
+
+
+(deftest non-semi-join-subquery-optimizations-test
+  (t/is
+    (=
+     '[:rename {x1 a}
+       [:project [x1]
+        [:select (or x6 (= x2 42))
+         [:apply
+          :cross-join
+          {x1 ?x9}
+          #{x6}
+          [:rename {a x1, b x2} [:scan [a b]]]
+          [:top {:limit 1}
+           [:union-all
+            [:project [{x6 true}]
+             [:select (= ?x9 x4) [:table [{x4 1} {x4 2}]]]]
+            [:table [{x6 false}]]]]]]]]
+       (plan-sql "select f.a from foo f where f.a in (1,2) or f.b = 42"))
+    "should not be decorrelated")
+  (t/is
+    (=
+     '[:rename {x1 a}
+       [:project [x1]
+        [:cross-join
+         [:rename {a x1} [:scan [a]]]
+         [:select (= true x5)
+          [:top {:limit 1}
+           [:union-all
+            [:project [{x5 true}]
+             [:rename {c x3} [:scan [c]]]]
+            [:table [{x5 false}]]]]]]]]
+     (plan-sql "select f.a from foo f where true = (EXISTS (SELECT foo.c from foo))"))
+    "should be decorrelated as a cross join, not a semi/anti join"))
+
+(deftest multiple-ins-in-where-clause
+  (t/is
+    (=
+     '[:rename {x1 a}
+       [:project [x1]
+        [:semi-join [{x2 x8}]
+         [:semi-join [{x1 x4}]
+          [:rename {a x1, b x2}
+           [:scan [{a (= a 42)} b]]]
+          [:table [{x4 1} {x4 2}]]]
+         [:table [{x8 3} {x8 4}]]]]]
+     (plan-sql "select f.a from foo f where f.a in (1,2) AND f.a = 42 AND f.b in (3,4)"))))
+
+(deftest deeply-nested-correlated-query ;;TODO broken
+  (t/is
+    (=
+     '[:rename
+       {x1 A, x2 B}
+       [:project
+        [x1 x2]
+        [:apply :semi-join {x2 ?x15, x4 ?x16} #{}
+         [:cross-join
+          [:rename {A x1, B x2} [:scan [A B]]]
+          [:rename {C x4} [:scan [C]]]]
+         [:semi-join [(= x10 ?x13) {x7 x9}]
+          [:rename {A x6, B x7}
+           [:scan [{A (= A ?x15)} B]]]
+          [:rename {A x9, B x10} [:scan [A B]]]]]]]
+     (plan-sql "SELECT R1.A, R1.B
+               FROM R R1, S
+               WHERE EXISTS
+               (SELECT R2.A, R2.B
+               FROM R R2
+               WHERE R2.A = R1.B AND EXISTS
+               (SELECT R3.A, R3.B
+               FROM R R3
+               WHERE R3.A = R2.B AND R3.B = S.C))"))))
 
 (t/deftest test-array-element-reference-107
   (t/is (= '[:rename {x3 first_el}
