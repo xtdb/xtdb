@@ -34,7 +34,15 @@
   (t/is (thrown? IllegalArgumentException
                  (op/query-ra '[:table #{'a} $table]
                               {'$table [{:a 12, :b "foo"}]}))
-        "doesn't match provided col-names"))
+        "doesn't match provided col-names")
+
+  #_ ; FIXME #143
+  (t/is (= [{} {} {} {} {} {}]
+           (op/query-ra '[:cross-join
+                          [:table [{} {} {}]]
+                          [:table [{} {}]]]
+                        {}))
+        "table with no cols"))
 
 (t/deftest test-table-handles-exprs
   (t/is (= [{:a 3, :b false}
