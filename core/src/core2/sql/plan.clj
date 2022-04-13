@@ -168,10 +168,33 @@
      ;;=>
      (list 'between (expr rvp-1) (expr rvp-2) (expr rvp-3))
 
+     [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "NOT" "BETWEEN" ^:z rvp-2 "AND" ^:z rvp-3]]
+     ;;=>
+     (list 'not (list 'between (expr rvp-1) (expr rvp-2) (expr rvp-3)))
+
+     [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "BETWEEN" mode ^:z rvp-2 "AND" ^:z rvp-3]]
+     ;;=>
+     (let [f (case mode
+               "SYMMETRIC" 'between-symmetric
+               "ASYMMETRIC" 'between)]
+       (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))
+       (list f (expr rvp-1) (expr rvp-2) (expr rvp-3)))
+
+     [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "NOT" "BETWEEN" mode ^:z rvp-2 "AND" ^:z rvp-3]]
+     ;;=>
+     (let [f (case mode
+               "SYMMETRIC" 'between-symmetric
+               "ASYMMETRIC" 'between)]
+       (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3)))
+       (list 'not (list f (expr rvp-1) (expr rvp-2) (expr rvp-3))))
+
      [:extract_expression "EXTRACT"
       [:primary_datetime_field [:non_second_primary_datetime_field extract-field]] "FROM" ^:z es]
      ;;=>
      (list 'extract extract-field (expr es))
+
+     [:absolute_value_expression "ABS" ^:z nve]
+     (list 'abs (expr nve))
 
      [:searched_case "CASE"
       [:searched_when_clause "WHEN" ^:z wol "THEN" [:result ^:z then]]
