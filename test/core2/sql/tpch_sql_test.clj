@@ -196,7 +196,7 @@
             {l_extendedprice x1, l_discount x2, l_shipdate x3, l_quantity x4}
             [:scan
              [l_extendedprice
-              {l_discount (between l_discount (- 0.06 0.01) (+ 0.06 0.01))}
+              {l_discount (between l_discount 0.05 0.07)}
               {l_shipdate (and (< l_shipdate (+ ?date ?period)) (>= l_shipdate ?date))}
               {l_quantity (< l_quantity 24)}]]]]]])
      (pt/plan-sql (slurp-tpch-query 6)))))

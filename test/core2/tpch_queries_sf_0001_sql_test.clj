@@ -112,11 +112,7 @@
   (t/is (= []
            (actually-run-query (slurp-tpch-query 5)))))
 
-;; fails due to floating point constant arithmetic columns to not pass the
-;; between clause
-;; and l_quantity is a float, and we don't have casting rules yet
-;; so in qry would need to be float
-#_(deftest test-q6-forecasting-revenue-change
+(deftest test-q6-forecasting-revenue-change
   (t/is (= [{:revenue 77949.9186}]
            (actually-run-query (slurp-tpch-query 6)))))
 
