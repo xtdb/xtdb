@@ -18,6 +18,7 @@
            (java.time Duration Instant LocalDate ZonedDateTime ZoneId ZoneOffset)
            (java.time.temporal ChronoField ChronoUnit)
            (java.util Date HashMap LinkedList)
+           (java.util.function IntUnaryOperator)
            (java.util.stream IntStream)
            (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector)
@@ -1059,17 +1060,14 @@
               (.close out-vec)
               (throw e))))))))
 
-(definterface IntIntFunction
-  (^long apply [^int x]))
-
-(defn- long-getter ^core2.expression.IntIntFunction [n-res]
+(defn- long-getter ^java.util.function.IntUnaryOperator [n-res]
   (condp = (class n-res)
-    IntVector (reify IntIntFunction
-                (apply [_ idx]
+    IntVector (reify IntUnaryOperator
+                (applyAsInt [_ idx]
                   (.get ^IntVector n-res idx)))
-    BigIntVector (reify IntIntFunction
-                   (apply [_ idx]
-                     (.get ^BigIntVector n-res idx)))))
+    BigIntVector (reify IntUnaryOperator
+                   (applyAsInt [_ idx]
+                     (int (.get ^BigIntVector n-res idx))))))
 
 (defmethod emit-expr :nth [{:keys [coll-expr n-expr]} col-name opts]
   (let [eval-coll (emit-expr coll-expr "nth-coll" opts)
@@ -1097,7 +1095,7 @@
                     (doto ^IVectorWriter @!null-writer
                       (.startValue)
                       (.endValue))
-                    (.copyElement copier idx (.apply ->n idx)))
+                    (.copyElement copier idx (.applyAsInt ->n idx)))
                   (.endValue out-writer)))
               out-vec)
             (catch Throwable e
