@@ -32,6 +32,7 @@
            (core2.operator.set ICursorFactory IFixpointCursorFactory)
            (core2.snapshot ISnapshot)
            (java.time Instant)
+           java.time.Clock
            (java.util Iterator)
            (java.util.function Consumer)
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
@@ -393,21 +394,22 @@
 
                              (apply/->apply-operator allocator mode independent-cursor dependent-column-names dependent-cursor-factory)))})))
 
-;; we have to use our own class (rather than `Spliterators.iterator`) because we
-;; need to call rel->rows eagerly - the rel may have been reused/closed after
-;; the tryAdvance returns.
 (deftype CursorResultSet [^BufferAllocator allocator
                           ^ICursor cursor
+                          ^Clock clock
                           ^:unsynchronized-mutable ^Iterator next-values]
   IResultSet
   (hasNext [res]
     (boolean
      (or (and next-values (.hasNext next-values))
-         (and (.tryAdvance cursor
-                           (reify Consumer
-                             (accept [_ rel]
-                               (set! (.-next-values res)
-                                     (.iterator (iv/rel->rows rel))))))
+         (and (binding [expr/*clock* clock]
+                ;; need to call rel->rows eagerly - the rel may have been reused/closed after
+                ;; the tryAdvance returns.
+                (.tryAdvance cursor
+                             (reify Consumer
+                               (accept [_ rel]
+                                 (set! (.-next-values res)
+                                       (.iterator (iv/rel->rows rel)))))))
               next-values
               (.hasNext next-values)))))
 
@@ -424,7 +426,7 @@
     (-> (group-by #(if (lp/source-sym? (key %)) :srcs :params) args)
         (update-vals #(into {} %)))))
 
-(defn open-ra ^core2.IResultSet [query args query-opts]
+(defn open-ra ^core2.IResultSet [query args {:keys [default-valid-time default-tz] :as query-opts}]
   (when-not (s/valid? ::lp/logical-plan query)
     (throw (err/illegal-arg :malformed-query
                             {:plan query
@@ -433,20 +435,25 @@
 
   (let [allocator (RootAllocator.)]
     (try
-      (let [{:keys [srcs params]} (args->srcs+params args)
-            {:keys [->cursor]} (emit-op (s/conform ::lp/logical-plan query)
-                                        {:src-keys (set (keys srcs)),
-                                         :table-keys (->> (for [[src-k src-v] srcs
-                                                                :when (sequential? src-v)]
-                                                            [src-k (table->keys src-v)])
-                                                          (into {}))
-                                         :params params})
-            cursor (->cursor (-> (merge {:default-valid-time (Instant/now)
-                                         :srcs srcs
-                                         :params params}
-                                        query-opts)
-                                 (assoc :allocator allocator)))]
-        (CursorResultSet. allocator cursor nil))
+      (let [default-valid-time (or default-valid-time (.instant expr/*clock*))
+            ;; will later be provided as part of the 'SQL session' (see §6.32)
+            default-tz (or default-tz (.getZone expr/*clock*))
+            clock (Clock/fixed default-valid-time default-tz)]
+
+        (binding [expr/*clock* clock]
+          (let [{:keys [srcs params]} (args->srcs+params args)
+                {:keys [->cursor]} (emit-op (s/conform ::lp/logical-plan query)
+                                            {:src-keys (set (keys srcs)),
+                                             :table-keys (->> (for [[src-k src-v] srcs
+                                                                    :when (sequential? src-v)]
+                                                                [src-k (table->keys src-v)])
+                                                              (into {}))
+                                             :params params})
+                cursor (->cursor (into query-opts
+                                       {:srcs srcs, :params params
+                                        :default-valid-time default-valid-time
+                                        :allocator allocator}))]
+            (CursorResultSet. allocator cursor clock nil))))
       (catch Throwable t
         (util/try-close allocator)
         (throw t)))))

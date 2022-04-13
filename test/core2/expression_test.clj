@@ -8,7 +8,7 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import core2.types.LegType
-           [java.time Duration ZonedDateTime ZoneId LocalDate]
+           [java.time Clock Duration ZonedDateTime ZoneId LocalDate]
            [org.apache.arrow.vector DurationVector TimeStampVector ValueVector]
            [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Timestamp ArrowType$Union FieldType]
            org.apache.arrow.vector.types.TimeUnit))
@@ -704,3 +704,16 @@
               :leg-type #{LegType/BIGINT LegType/NULL}
               :nullable? false}
              (run-projection rel '(. x a))))))
+
+(t/deftest test-current-times-111
+  (binding [expr/*clock* (Clock/fixed (util/->instant #inst "2022"), (ZoneId/of "UTC"))]
+    (t/is (= {:res [#c2/zdt "2022-01-01T00:00Z[UTC]"]
+              :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/NANOSECOND "UTC"))
+              :nullable? false}
+             (run-projection (iv/->indirect-rel [] 1) '(current-timestamp)))))
+
+  (binding [expr/*clock* (Clock/fixed (util/->instant #inst "2022"), (ZoneId/of "America/Los_Angeles"))]
+    (t/is (= {:res [#c2/zdt "2021-12-31T16:00-08:00[America/Los_Angeles]"]
+              :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/NANOSECOND "America/Los_Angeles"))
+              :nullable? false}
+             (run-projection (iv/->indirect-rel [] 1) '(current-timestamp))))))

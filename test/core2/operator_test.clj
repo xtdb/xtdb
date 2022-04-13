@@ -405,3 +405,11 @@
                           [:table [{x3 "13"} {x3 "31"}]]
                           [:table [{x4 "13"} {x4 "31"}]]]
                         {}))))
+
+(t/deftest test-current-times-111
+  (t/is (= 1
+           (->> (op/query-ra '[:project [{ts (current-timestamp)}]
+                               [:table [{:a nil} {:a nil} {:a nil}]]]
+                             {})
+                (into #{} (map :ts))
+                count))))
