@@ -476,13 +476,13 @@
 (defmethod codegen-call [:= ::types/Object ::types/Object] [_]
   (mono-fn-call types/bool-type #(do `(= ~@%))))
 
-(defmethod codegen-call [:!= ::types/Number ::types/Number] [_]
+(defmethod codegen-call [:<> ::types/Number ::types/Number] [_]
   (mono-fn-call types/bool-type #(do `(not (== ~@%)))))
 
-(defmethod codegen-call [:!= ::types/Object ::types/Object] [_]
+(defmethod codegen-call [:<> ::types/Object ::types/Object] [_]
   (mono-fn-call types/bool-type #(do `(not= ~@%))))
 
-(doseq [f-kw #{:= :!= :< :<= :> :>=}]
+(doseq [f-kw #{:= :< :<= :> :>= :<>}]
   (defmethod codegen-call [f-kw ::types/Object ArrowType$Null] [_] call-returns-null)
   (defmethod codegen-call [f-kw ArrowType$Null ::types/Object] [_] call-returns-null)
   (defmethod codegen-call [f-kw ArrowType$Null ArrowType$Null] [_] call-returns-null))
@@ -643,6 +643,13 @@
                                           (resolve-string ~haystack-code)))))})
 
 (defmethod codegen-call [:substr ::types/Object ArrowType$Int ArrowType$Int] [_]
+  {:return-types #{ArrowType$Utf8/INSTANCE}
+   :continue-call (fn [f [x start length]]
+                    (f ArrowType$Utf8/INSTANCE
+                       `(ByteBuffer/wrap (.getBytes (subs (resolve-string ~x) (dec ~start) (+ (dec ~start) ~length))
+                                                    StandardCharsets/UTF_8))))})
+
+(defmethod codegen-call [:substring ::types/Object ArrowType$Int ArrowType$Int] [_]
   {:return-types #{ArrowType$Utf8/INSTANCE}
    :continue-call (fn [f [x start length]]
                     (f ArrowType$Utf8/INSTANCE

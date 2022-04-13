@@ -93,7 +93,7 @@
 
 (defn meta-expr [{:keys [op] :as expr}]
   (case op
-    (:literal :param) nil
+    (:literal :param :let) nil
     :variable (meta-fallback-expr expr)
     :if {:op :call
          :f 'and

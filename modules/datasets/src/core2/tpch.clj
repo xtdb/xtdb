@@ -310,8 +310,8 @@
                                        (= o_orderpriority "2-HIGH"))
                                  1
                                  0)}
-                    {low_line (if (and (!= o_orderpriority "1-URGENT")
-                                       (!= o_orderpriority "2-HIGH"))
+                    {low_line (if (and (<> o_orderpriority "1-URGENT")
+                                       (<> o_orderpriority "2-HIGH"))
                                 1
                                 0)}]
           [:join {o_orderkey l_orderkey}
@@ -381,7 +381,7 @@
           [:project [p_brand p_type p_size ps_suppkey]
            [:join {p_partkey ps_partkey}
             [:semi-join {p_size p_size}
-             [:scan [p_partkey {p_brand (!= p_brand ?brand)} {p_type (not (like p_type "MEDIUM POLISHED%"))} p_size]]
+             [:scan [p_partkey {p_brand (<> p_brand ?brand)} {p_type (not (like p_type "MEDIUM POLISHED%"))} p_size]]
              [:table $sizes]]
             [:anti-join {ps_suppkey s_suppkey}
              [:scan [ps_partkey ps_suppkey]]
@@ -486,7 +486,7 @@
                     '?nation "CANADA"})))
 
 (def tpch-q21-suppliers-who-kept-orders-waiting
-  (-> '[:assign [L1 [:select (!= l1_l_suppkey l2_l_suppkey)
+  (-> '[:assign [L1 [:select (<> l1_l_suppkey l2_l_suppkey)
                      [:join {l1_l_orderkey l2_l_orderkey}
                       [:join {l1_l_suppkey s_suppkey}
                        [:select (> l1_l_receiptdate l1_l_commitdate)
@@ -506,7 +506,7 @@
             [:project [s_name l1_l_orderkey]
              [:anti-join {l1_l_orderkey l3_l_orderkey}
               L1
-              [:select (!= l3_l_suppkey l1_l_suppkey)
+              [:select (<> l3_l_suppkey l1_l_suppkey)
                [:join {l1_l_orderkey l3_l_orderkey}
                 L1
                 [:select (> l3_l_receiptdate l3_l_commitdate)
