@@ -205,7 +205,15 @@
 
   (t/is (= '[:rename {x1 $column_1$}
              [:table [{x1 1} {x1 2}]]]
-           (plan-sql "VALUES 1, 2"))))
+           (plan-sql "VALUES 1, 2")))
+
+  (t/is (= '[:rename
+             {x7 $column_1$, x8 $column_2$}
+             [:project [{x7 (case (+ x1 1) x2 111 x3 222 x4 333 x5 444 555)}
+                        {x8 (cond (< x1 (- x2 3)) 111 (<= x1 x2) 222 (< x1 (+ x2 3)) 333 444)}]
+              [:rename {a x1, b x2, c x3, d x4, e x5} [:scan [a b c d e]]]]]
+           (plan-sql "SELECT CASE t1.a + 1 WHEN t1.b THEN 111 WHEN t1.c THEN 222 WHEN t1.d THEN 333 WHEN t1.e THEN 444 ELSE 555 END,
+                             CASE WHEN t1.a < t1.b - 3 THEN 111 WHEN t1.a <= t1.b THEN 222 WHEN t1.a < t1.b+3 THEN 333 ELSE 444 END FROM t1"))))
 
 ;; TODO: sanity check semantic analysis for correlation both inside
 ;; and outside MAX, gives errors in both cases, are these correct?
@@ -459,26 +467,7 @@
                          [:max-1-row
                           [:rename {b x6, a x7}
                            [:scan [b {a (= a ?x9)}]]]]]]]]
-                    (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)"))))))
-
-  (comment
-
-    (t/testing "Row subquery"
-      ;; Row subquery (won't work in execution layer, needs expression
-      ;; support in table)
-      (t/is
-        (=
-         '[:apply :cross-join {subquery__1_$row$ ?subquery__1_$row$} #{}
-           [:project [{subquery__1_$row$ {:a a :b b}}]
-            [:rename {x__3_a a, x__3_b b}
-             [:project [x__3_a x__3_b]
-              [:select (= x__3_a 10)
-               [:rename x__3 [:scan [{a (= a 10)} b]]]]]]]
-           [:table [{:$column_1$ 1
-                     :$column_2$ 2}
-                    {:$column_1$ (. ?subquery__1_$row$ a)
-                     :$column_2$ (. ?subquery__1_$row$ b)}]]]
-         (plan-sql "VALUES (1, 2), (SELECT x.a, x.b FROM x WHERE x.a = 10)"))))))
+                    (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)")))))))
 
 (t/deftest parameters-in-e-resolved-from-r-test
   (t/are [expected apply-columns]

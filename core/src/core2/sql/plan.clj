@@ -196,12 +196,6 @@
      [:absolute_value_expression "ABS" ^:z nve]
      (list 'abs (expr nve))
 
-     [:searched_case "CASE"
-      [:searched_when_clause "WHEN" ^:z wol "THEN" [:result ^:z then]]
-      [:else_clause "ELSE" [:result ^:z else]] "END"]
-     ;;=>
-     (list 'if (expr wol) (expr then) (expr else))
-
      [:named_columns_join _ _]
      ;;=>
      (reduce
@@ -261,9 +255,42 @@
      (list 'not (exists-symbol qe))
 
      [:array_element_reference ^:z ave ^:z nve]
+     ;;=>
      (list 'nth (expr ave) (expr nve))
 
-     (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (z/node z))))))))
+     [:when_operand_list ^:z wo]
+     ;;=>
+     (expr wo)
+
+     (r/zcase z
+       :searched_case
+       (->> (r/collect-stop
+             (fn [z]
+               (r/zmatch z
+                 [:searched_when_clause "WHEN" ^:z sc "THEN" [:result ^:z then]]
+                 [(expr sc) (expr then)]
+
+                 [:else_clause "ELSE" [:result ^:z else]]
+                 [(expr else)]))
+             z)
+            (cons 'cond))
+
+       :simple_case
+       (->> (r/collect-stop
+             (fn [z]
+               (r/zmatch z
+                 [:case_operand ^:z rvp]
+                 [(expr rvp)]
+
+                 [:simple_when_clause "WHEN" ^:z wol "THEN" [:result ^:z then]]
+                 [(expr wol) (expr then)]
+
+                 [:else_clause "ELSE" [:result ^:z else]]
+                 [(expr else)]))
+             z)
+            (cons 'case))
+
+       (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (z/node z)))))))))
 
 ;; Logical plan.
 

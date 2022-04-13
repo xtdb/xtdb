@@ -251,7 +251,7 @@
            [:group-by
             [x29 {x32 (sum x31)} {x33 (sum x30)}]
             [:map
-             [{x31 (if (= x23 "BRAZIL") x30 0)}]
+             [{x31 (cond (= x23 "BRAZIL") x30 0)}]
              [:project
               [{x29 (extract "YEAR" x13)} {x30 (* x7 (- 1 x8))} x23]
               [:join
@@ -410,10 +410,10 @@
           [:group-by
            [x4 {x16 (sum x14)} {x17 (sum x15)}]
            [:map
-            [{x14 (if (or (= x1 "1-URGENT") (= x1 "2-HIGH"))
+            [{x14 (cond (or (= x1 "1-URGENT") (= x1 "2-HIGH"))
                     1
                     0)}
-             {x15 (if (and (<> x1 "1-URGENT") (<> x1 "2-HIGH")) ;;TODO != or <>
+             {x15 (cond (and (<> x1 "1-URGENT") (<> x1 "2-HIGH")) ;;TODO != or <>
                     1
                     0)}]
             [:semi-join
@@ -467,7 +467,7 @@
           [:group-by
            [{x11 (sum x9)} {x12 (sum x10)}]
            [:map
-            [{x9 (if (like x6 "PROMO%") (* x1 (- 1 x2)) 0)} {x10 (* x1 (- 1 x2))}]
+            [{x9 (cond (like x6 "PROMO%") (* x1 (- 1 x2)) 0)} {x10 (* x1 (- 1 x2))}]
             [:join
              [{x3 x7}]
              [:rename
