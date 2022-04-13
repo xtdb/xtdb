@@ -104,6 +104,14 @@
      ;;=>
      (list (symbol co) (expr rvp-1) (expr rvp-2))
 
+     [:null_predicate ^:z rvp [:null_predicate_part_2 "IS" "NULL"]]
+     ;;=>
+     (list 'nil? (expr rvp))
+
+     [:null_predicate ^:z rvp [:null_predicate_part_2 "IS" "NOT" "NULL"]]
+     ;;=>
+     (list 'not (list 'nil? (expr rvp)))
+
      [:numeric_value_expression ^:z nve [_ op] ^:z t]
      ;;=>
      (list (symbol op) (expr nve) (expr t))
@@ -263,6 +271,15 @@
      (expr wo)
 
      (r/zcase z
+       :case_abbreviation
+       (->> (r/collect-stop
+             (fn [z]
+               (r/zcase z
+                 (:case_abbreviation nil) nil
+                 [(expr z)]))
+             z)
+            (cons 'coalesce))
+
        :searched_case
        (->> (r/collect-stop
              (fn [z]

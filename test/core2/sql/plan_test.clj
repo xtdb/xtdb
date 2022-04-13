@@ -213,7 +213,17 @@
                         {x8 (cond (< x1 (- x2 3)) 111 (<= x1 x2) 222 (< x1 (+ x2 3)) 333 444)}]
               [:rename {a x1, b x2, c x3, d x4, e x5} [:scan [a b c d e]]]]]
            (plan-sql "SELECT CASE t1.a + 1 WHEN t1.b THEN 111 WHEN t1.c THEN 222 WHEN t1.d THEN 333 WHEN t1.e THEN 444 ELSE 555 END,
-                             CASE WHEN t1.a < t1.b - 3 THEN 111 WHEN t1.a <= t1.b THEN 222 WHEN t1.a < t1.b+3 THEN 333 ELSE 444 END FROM t1"))))
+                             CASE WHEN t1.a < t1.b - 3 THEN 111 WHEN t1.a <= t1.b THEN 222 WHEN t1.a < t1.b+3 THEN 333 ELSE 444 END FROM t1")))
+
+  (t/is (= '[:scan [{a (nil? a)}]]
+           (plan-sql "SELECT * FROM t1 WHERE t1.a IS NULL")))
+  (t/is (= '[:scan [{a (not (nil? a))}]]
+           (plan-sql "SELECT * FROM t1 WHERE t1.a IS NOT NULL")))
+
+  (t/is (= '[:rename {x5 $column_1$}
+             [:project [{x5 (coalesce x1 x2 x3)}]
+              [:rename {a x1, b x2, c x3} [:scan [a b c]]]]]
+        (plan-sql "SELECT COALESCE(t1.a, t1.b, t1.c) FROM t1"))))
 
 ;; TODO: sanity check semantic analysis for correlation both inside
 ;; and outside MAX, gives errors in both cases, are these correct?
