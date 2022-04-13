@@ -295,7 +295,27 @@
             (flatten-expr pred (nth expr 2)))
     [expr]))
 
-(defn- interpret-subquery [sq]
+;; subquery anti/semi optimisation
+;; EXISTS - type subqueries can be optimised in certain cases to semi/anti joins.
+
+;; A decision was taken to optimise when we build the initial plan, rather than as a rewrite rule
+;; due to the possibility of inter node dependence on the pre-optimised cross apply:
+
+;; imagine a node [:select $exists [:apply :cross-join ...]] we may chose to optimise this away into [:apply :semi-join ...]
+;; a problem arises in that the projected column set of the previous relation contains columns that are not returned by the :semi-join.
+;; Namely the $exists column. This can interfere with other rules and introduce ordering dependencies between rules.
+
+;; e.g decorrelation rule-9 caused a problem in this case as it introduced a dependency in the group-by on the $exists column - only to later find
+;; that column had been rewritten away by the semi/anti join apply rule.
+
+(defn- interpret-subquery
+  "Returns a map of data about the given subquery AST zipper.
+
+  Many sub queries can be treated as different exists checks, for example ANY / ALL/ IN / EXISTS / NOT EXISTS can be
+  optimised in a similar way to semi/anti join applies.
+
+  Returns a 'subquery info' map. See its usage in apply-subqery/apply-predicative-subquery."
+  [sq]
   (let [scope-id (sem/id (sem/scope-element sq))]
     (r/zmatch sq
       [:subquery ^:z qe]
@@ -372,13 +392,37 @@
 
       (throw (IllegalArgumentException. "unknown subquery type")))))
 
-(defn- apply-subquery [relation subquery-info]
+(defn- apply-subquery
+  "Ensures the subquery projection is available on the outer relation. Used in the general case when we are using
+  the subqueries projected column in a predicate, or as part of a projection itself.
+
+   e.g select foo.a from foo where foo.a = (select bar.a from bar where bar.c = a.c)
+
+   See (interpret-subquery) for 'subquery info'."
+  [relation subquery-info]
   (let [{:keys [type plan projected-columns column->param sym]} subquery-info]
     (case type
       :exists (build-apply :cross-join column->param projected-columns relation (wrap-with-exists sym plan))
       (build-apply :cross-join column->param projected-columns relation plan))))
 
-(defn- apply-predicative-subquery [relation subquery-info predicate-set]
+(defn- apply-predicative-subquery
+  "In certain situations, we are able to optimise subqueries into semi or anti joins, and simplify the resulting plan.
+
+  The predicate-set is a set of all top level conjunctive predicates for the WHERE / ON clause. e.g `where a = b and c = 42` would give the predicate set `#{(= a b), (= c 42)}`.
+
+  In order to apply a subquery with the semi/anti join apply mode the following has to be true:
+
+  - the subquery is an EXISTS / NOT EXISTS check, or can be viewed as one. e.g IN/ANY/ALL also count as EXISTS checks.
+  - we are using the subquery in a setting such as in an ON clause, or a WHERE clause where all we are trying to do is filter rows.
+  - The top level predicate that tests the query result must be 'simple' e.g $exists / (not $exists) are ok, but (or $exists (= 42 c)) is not. (this is why we need the predicate set).
+
+  Returns a pair of new [relation, predicate-set]. The returned relation will then be wrapped in an [:apply ...] whose apply mode
+  is dependent on whether or not a semi/anti optimisation can be applied.
+
+  The returned predicate set contains only those predicates that still need to be tested in some outer [:select] or theta join predicate.
+
+  See also (wrap-with-select)."
+  [relation subquery-info predicate-set]
   (let [{:keys [type plan column->param sym]} subquery-info]
     (cond
       (not= :exists type) [(apply-subquery relation subquery-info) predicate-set]
