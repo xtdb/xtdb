@@ -283,3 +283,12 @@
            (xt/q (xt/db *api*)
                  '{:find [(pull ?it [{:ref [:xt/id]}])]
                    :where [[?it :xt/id :foo]]}))))
+
+(t/deftest test-missing-forward-join-collection-error-handling-1710
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo :ref '(:bar :baz)}]
+                        [::xt/put {:xt/id :bar}]])
+  #_ ; FIXME
+  (t/is (= #{[{}]}
+           (xt/q (xt/db *api*)
+                 '{:find [(pull ?it [{:ref [:xt/id]}])]
+                   :where [[?it :xt/id :foo]]}))))
