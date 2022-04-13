@@ -32,7 +32,10 @@ jobs:
             - v4-dependencies-
 
       - run: 'clojure -Srepro -X:deps prep'
-      - run: 'clojure -P'
+
+      # https://clojure.atlassian.net/browse/TDEPS-153
+      # can remove `-Sthreads 1` when the Docker image updates to 1.11.0.1100 or later.
+      - run: 'clojure -P -Sthreads 1'
 
       - persist_to_workspace:
           root: ~/
