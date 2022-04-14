@@ -11,6 +11,7 @@
   (:import (core2.indexer IChunkManager)
            (core2.metadata IMetadataManager)
            (core2.snapshot ISnapshotFactory)
+           (java.time LocalTime)
            (org.roaringbitmap RoaringBitmap)))
 
 (t/deftest test-find-gt-ivan
@@ -418,7 +419,18 @@
 (t/deftest test-current-times-111
   (t/is (= 1
            (->> (op/query-ra '[:project [{ts (current-timestamp)}]
-                               [:table [{:a nil} {:a nil} {:a nil}]]]
+                               [:table [{} {} {}]]]
                              {})
                 (into #{} (map :ts))
-                count))))
+                count)))
+
+  (let [times (->> (op/query-ra '[:project [{ts (local-time 1)}]
+                                  [:table [{}]]]
+                                {})
+                   (into #{} (map :ts)))]
+    (t/is (= 1 (count times)))
+
+    (let [nanos (.toNanoOfDay ^LocalTime (first times))
+          modulus (long 1e8)]
+      (t/is (= nanos (* modulus (quot nanos modulus)))
+            "check rounding"))))

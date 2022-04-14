@@ -5,8 +5,8 @@
             [core2.operator.scan :as scan]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import [core2.indexer IChunkManager TransactionIndexer]
-           core2.api.TransactionInstant
+  (:import core2.api.TransactionInstant
+           [core2.indexer IChunkManager TransactionIndexer]
            java.time.Duration
            [java.util.concurrent CompletableFuture TimeUnit]))
 

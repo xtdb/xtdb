@@ -8,10 +8,10 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import core2.types.LegType
-           (java.time Clock Duration Instant LocalDate LocalDateTime LocalTime ZonedDateTime ZoneId ZoneOffset)
+           (java.time Clock Duration Instant LocalDate LocalTime ZonedDateTime ZoneId)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Timestamp ArrowType$Union FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Time ArrowType$Timestamp ArrowType$Union FieldType)
            org.apache.arrow.vector.types.TimeUnit))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -791,4 +791,31 @@
                     :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/MICROSECOND nil))
                     :nullable? false}
                    (project-fn '(local-timestamp)))
-                "local-timestamp"))))))
+                "local-timestamp")))
+
+      (binding [expr/*clock* (Clock/fixed inst, (ZoneId/of "America/Los_Angeles"))]
+        (t/testing "timestamp precision"
+          (t/is (= {:res [(-> la-zdt (.minusNanos 45))]
+                    :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/NANOSECOND "America/Los_Angeles"))
+                    :nullable? false}
+                   (run-projection (iv/->indirect-rel [] 1) '(current-timestamp 7)))
+                "current-timestamp")
+
+          (t/is (= {:res [(-> la-zdt-micros (.truncatedTo ChronoUnit/SECONDS) (.toLocalDateTime))]
+                    :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/SECOND nil))
+                    :nullable? false}
+                   (project-fn '(local-timestamp 0)))
+                "local-timestamp"))
+
+        (t/testing "time precision"
+          (t/is (= {:res [(-> utc-zdt (.truncatedTo ChronoUnit/MILLIS) (.toLocalTime))]
+                    :leg-type (LegType. (ArrowType$Time. TimeUnit/MILLISECOND 32))
+                    :nullable? false}
+                   (project-fn '(current-time 3)))
+                "current-time")
+
+          (t/is (= {:res [(-> la-zdt (.truncatedTo ChronoUnit/MILLIS) (.minusNanos 8e6) (.toLocalTime))]
+                    :leg-type (LegType. (ArrowType$Time. TimeUnit/MILLISECOND 32))
+                    :nullable? false}
+                   (project-fn '(local-time 2)))
+                "local-time"))))))

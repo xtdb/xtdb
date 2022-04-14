@@ -650,6 +650,7 @@
   "Like `case`, but explicitly dispatch on Java enum ordinals.
 
   See: https://stackoverflow.com/questions/16777814/is-it-possible-to-use-clojures-case-form-with-a-java-enum"
+  {:style/indent 1}
   [e & clauses]
   (letfn [(enum-ordinal [e] `(let [^Enum e# ~e] (.ordinal e#)))]
     `(case ~(enum-ordinal e)

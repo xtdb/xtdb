@@ -12,7 +12,6 @@
            (core2.types LegType)
            (core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter)
            (core2.vector.extensions KeywordType UuidType)
-           (java.lang.reflect Method)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId ZoneOffset Period)
@@ -748,15 +747,45 @@
 
 (def ^:dynamic ^java.time.Clock *clock* (Clock/systemDefaultZone))
 
-(defmethod codegen-call [:current-timestamp] [_]
-  (let [zone-id (.getZone *clock*)
-        ret-type (ArrowType$Timestamp. TimeUnit/MICROSECOND (str zone-id))]
+(defn- bound-precision ^long [^long precision]
+  (-> precision (max 0) (min 9)))
+
+(def ^:private precision-timeunits
+  [TimeUnit/SECOND
+   TimeUnit/MILLISECOND TimeUnit/MILLISECOND TimeUnit/MILLISECOND
+   TimeUnit/MICROSECOND TimeUnit/MICROSECOND TimeUnit/MICROSECOND
+   TimeUnit/NANOSECOND TimeUnit/NANOSECOND TimeUnit/NANOSECOND])
+
+(def ^:private seconds-multiplier (mapv long [1e0 1e3 1e3 1e3 1e6 1e6 1e6 1e9 1e9 1e9]))
+(def ^:private nanos-divisor (mapv long [1e9 1e6 1e6 1e6 1e3 1e3 1e3 1e0 1e0 1e0]))
+(def ^:private precision-modulus (mapv long [1e0 1e2 1e1 1e0 1e2 1e1 1e0 1e2 1e1 1e0]))
+
+(defn- truncate-for-precision [code precision]
+  (let [^long modulus (precision-modulus precision)]
+    (if (= modulus 1)
+      code
+      `(* ~modulus (quot ~code ~modulus)))))
+
+(defn- current-timestamp [^long precision]
+  (let [precision (bound-precision precision)
+        zone-id (.getZone *clock*)
+        ret-type (ArrowType$Timestamp. (precision-timeunits precision) (str zone-id))]
     {:return-types #{ret-type}
      :continue-call (fn [f _]
                       (f ret-type
-                         `(long (let [inst# (.instant *clock*)]
-                                  (+ (* 1e6 (.getEpochSecond inst#))
-                                     (quot (.getNano inst#) 1e3))))))}))
+                         (-> `(long (let [inst# (.instant *clock*)]
+                                      (+ (* ~(seconds-multiplier precision) (.getEpochSecond inst#))
+                                         (quot (.getNano inst#) ~(nanos-divisor precision)))))
+                             (truncate-for-precision precision))))}))
+
+(def ^:private default-time-precision 6)
+
+(defmethod codegen-call [:current-timestamp] [_]
+  (current-timestamp default-time-precision))
+
+(defmethod codegen-call [:current-timestamp ArrowType$Int] [{[{precision :literal}] :args}]
+  (assert (integer? precision) "precision must be literal for now")
+  (current-timestamp precision))
 
 (defmethod codegen-call [:current-date] [_]
   ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
@@ -769,36 +798,73 @@
                                   (.toLocalDate)
                                   (.toEpochDay)))))})
 
-(defmethod codegen-call [:current-time] [_]
+(def timeunit->bitwidth
+  {TimeUnit/SECOND 32
+   TimeUnit/MILLISECOND 32
+   TimeUnit/MICROSECOND 64
+   TimeUnit/NANOSECOND 64})
+
+(defn- current-time [^long precision]
   ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
   ;; but Arrow expects Times to be in UTC.
-  ;; we then turn TimeNanos into LocalTimes, which confuses things further.
-  {:return-types #{types/time-micros-type}
-   :continue-call (fn [f _]
-                    (f types/time-micros-type
-                       `(long (-> (ZonedDateTime/ofInstant (.instant *clock*) ZoneOffset/UTC)
-                                  (.toLocalTime)
-                                  (.toNanoOfDay)
-                                  (quot 1e3)))))})
-
-(defmethod codegen-call [:local-timestamp] [_]
-  (let [ret-type (ArrowType$Timestamp. TimeUnit/MICROSECOND nil)]
+  ;; we then turn times into LocalTimes, which confuses things further.
+  (let [precision (bound-precision precision)
+        time-unit (precision-timeunits precision)
+        ret-type (ArrowType$Time. time-unit (timeunit->bitwidth time-unit))]
     {:return-types #{ret-type}
      :continue-call (fn [f _]
                       (f ret-type
-                         `(let [ldt# (-> (ZonedDateTime/ofInstant (.instant *clock*) (.getZone *clock*))
-                                         (.toLocalDateTime))]
-                            (long (+ (* 1e6 (.toEpochSecond ldt# ZoneOffset/UTC))
-                                     (quot (.getNano ldt#) 1e3))))))}))
+                         (-> `(long (-> (ZonedDateTime/ofInstant (.instant *clock*) ZoneOffset/UTC)
+                                        (.toLocalTime)
+                                        (.toNanoOfDay)
+                                        (quot ~(nanos-divisor precision))))
+                             (truncate-for-precision precision))))}))
+
+(defmethod codegen-call [:current-time] [_]
+  (current-time default-time-precision))
+
+(defmethod codegen-call [:current-time ArrowType$Int] [{[{precision :literal}] :args}]
+  (assert (integer? precision) "precision must be literal for now")
+  (current-time precision))
+
+(defn- local-timestamp [^long precision]
+  (let [precision (bound-precision precision)
+        ret-type (ArrowType$Timestamp. (precision-timeunits precision) nil)]
+    {:return-types #{ret-type}
+     :continue-call (fn [f _]
+                      (f ret-type
+                         (-> `(long (let [ldt# (-> (ZonedDateTime/ofInstant (.instant *clock*) (.getZone *clock*))
+                                                   (.toLocalDateTime))]
+                                      (+ (* (.toEpochSecond ldt# ZoneOffset/UTC) ~(seconds-multiplier precision))
+                                         (quot (.getNano ldt#) ~(nanos-divisor precision)))))
+                             (truncate-for-precision precision))))}))
+
+(defmethod codegen-call [:local-timestamp] [_]
+  (local-timestamp default-time-precision))
+
+(defmethod codegen-call [:local-timestamp ArrowType$Int] [{[{precision :literal}] :args}]
+  (assert (integer? precision) "precision must be literal for now")
+  (local-timestamp precision))
+
+(defn- local-time [^long precision]
+  (let [precision (bound-precision precision)
+        time-unit (precision-timeunits precision)
+        ret-type (ArrowType$Time. time-unit (timeunit->bitwidth time-unit))]
+    {:return-types #{ret-type}
+     :continue-call (fn [f _]
+                      (f ret-type
+                         (-> `(long (-> (ZonedDateTime/ofInstant (.instant *clock*) (.getZone *clock*))
+                                        (.toLocalTime)
+                                        (.toNanoOfDay)
+                                        (quot ~(nanos-divisor precision))))
+                             (truncate-for-precision precision))))}))
 
 (defmethod codegen-call [:local-time] [_]
-  {:return-types #{types/time-micros-type}
-   :continue-call (fn [f _]
-                    (f types/time-micros-type
-                       `(long (-> (ZonedDateTime/ofInstant (.instant *clock*) (.getZone *clock*))
-                                  (.toLocalTime)
-                                  (.toNanoOfDay)
-                                  (quot 1e3)))))})
+  (local-time default-time-precision))
+
+(defmethod codegen-call [:local-time ArrowType$Int] [{[{precision :literal}] :args}]
+  (assert (integer? precision) "precision must be literal for now")
+  (local-time precision))
 
 (defmethod codegen-call [:abs ::types/Number] [{[numeric-type] :arg-types}]
   {:return-types #{numeric-type}
