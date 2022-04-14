@@ -5,6 +5,7 @@
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
   (:import (core2 ICursor)
+           (core2.vector IIndirectRelation)
            (java.util LinkedList List)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.complex DenseUnionVector)))
@@ -12,6 +13,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype TableCursor [^BufferAllocator allocator
+                      ^long row-count
                       cols
                       ^:unsynchronized-mutable done?]
   ICursor
@@ -44,7 +46,7 @@
               (run! util/try-close out-cols)
               (throw e)))
 
-          (with-open [out-rel (iv/->indirect-rel out-cols)]
+          (with-open [^IIndirectRelation out-rel (iv/->indirect-rel out-cols row-count)]
             (.accept c out-rel)
             true)))))
 
@@ -52,6 +54,7 @@
 
 (defn ->table-cursor ^core2.ICursor [^BufferAllocator allocator, col-names, ^List rows, params]
   (TableCursor. allocator
+                (count rows)
                 (when (seq rows)
                   (->> (for [col-name col-names
                              :let [col-k (keyword col-name)

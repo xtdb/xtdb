@@ -59,7 +59,15 @@
                                  [[{:a 12}, {:a 0}]
                                   [{:a 100}]]
                                  []))
-          "empty input and output")))
+          "empty input and output")
+
+    (t/is (= [[{} {} {} {} {} {}]]
+             (run-join-test ->cross-join-cursor
+                            [[{} {} {}]]
+                            [[{} {}]]
+                          {:left-fields []
+                           :right-fields []}))
+          "tables with no cols")))
 
 (t/deftest test-equi-join
   (t/is (= [#{{:a 12, :b 12}}

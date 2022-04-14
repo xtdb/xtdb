@@ -36,11 +36,8 @@
                               {'$table [{:a 12, :b "foo"}]}))
         "doesn't match provided col-names")
 
-  #_ ; FIXME #143
-  (t/is (= [{} {} {} {} {} {}]
-           (op/query-ra '[:cross-join
-                          [:table [{} {} {}]]
-                          [:table [{} {}]]]
+  (t/is (= [{} {} {}]
+           (op/query-ra [:table [{} {} {}]]
                         {}))
         "table with no cols"))
 

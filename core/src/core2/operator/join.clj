@@ -31,7 +31,8 @@
                                           (let [idxs (int-array row-count)]
                                             (dotimes [idx row-count]
                                               (aset idxs idx ^long (rem idx right-row-count)))
-                                            idxs))))))
+                                            idxs)))
+                       row-count)))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
                           ^ICursor left-cursor

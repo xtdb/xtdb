@@ -240,7 +240,8 @@
 
 (defn copy ^core2.vector.IIndirectRelation [^IIndirectRelation in-rel, ^BufferAllocator allocator]
   (->indirect-rel (for [^IIndirectVector in-col in-rel]
-                    (.copy in-col allocator))))
+                    (.copy in-col allocator))
+                  (.rowCount in-rel)))
 
 (defn rel->rows ^java.lang.Iterable [^IIndirectRelation rel]
   (let [ks (for [^IIndirectVector col rel]
