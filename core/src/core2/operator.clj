@@ -45,10 +45,12 @@
 (alter-meta! #'emit-op assoc :private true)
 
 (defmethod emit-op :scan [{:keys [source columns]} {:keys [src-keys params]}]
-  (let [col-names (distinct (for [[col-type arg] columns]
-                              (str (case col-type
-                                     :column arg
-                                     :select (key (first arg))))))
+  (let [ordered-col-names (->> columns
+                               (map (fn [[col-type arg]]
+                                      (str (case col-type
+                                             :column arg
+                                             :select (key (first arg))))))
+                               (distinct))
         selects (->> (for [[col-type arg] columns
                            :when (= col-type :select)]
                        (first arg))
@@ -57,7 +59,7 @@
                          (MapEntry/create (name col-name)
                                           (expr/->expression-relation-selector select-form params)))
                        (into {}))
-        metadata-args (vec (concat (for [col-name col-names
+        metadata-args (vec (concat (for [col-name ordered-col-names
                                          :when (not (contains? col-preds col-name))]
                                      (symbol col-name))
                                    (vals selects)))
@@ -70,7 +72,7 @@
                               {::err/message "Query refers to unknown source"
                                :db source
                                :src-keys src-keys})))
-    {:col-names col-names
+    {:col-names (set ordered-col-names)
      :->cursor (fn [{:keys [allocator srcs default-valid-time]}]
                  (let [^ISnapshot db (get srcs src-key)
                        [^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects srcs)]
@@ -81,11 +83,11 @@
                      (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                                  '> "_valid-time-end" default-valid-time))
 
-                   (.scan db allocator col-names metadata-pred col-preds temporal-min-range temporal-max-range)))}))
+                   (.scan db allocator ordered-col-names metadata-pred col-preds temporal-min-range temporal-max-range)))}))
 
 (defn- table->keys [rows]
   (letfn [(row-keys [row]
-            (into #{} (map symbol) (keys row)))]
+            (into #{} (map name) (keys row)))]
     (let [col-names (row-keys (first rows))]
       (when-not (every? #(= col-names (row-keys %)) rows)
         (throw (err/illegal-arg :mismatched-keys-in-table
@@ -173,7 +175,7 @@
                                                  :extend (let [[col-name form] (first arg)]
                                                            (expr/->expression-projection-spec (name col-name) form params)))))]
                 {:col-names (->> projection-specs
-                                 (into #{} (map #(symbol (.getColumnName ^IProjectionSpec %)))))
+                                 (into #{} (map #(.getColumnName ^IProjectionSpec %))))
                  :->cursor (fn [{:keys [allocator]} inner]
                              (project/->project-cursor allocator inner projection-specs))}))))
 
@@ -248,8 +250,8 @@
                              (when (= :equi-condition tag)
                                (first val)))
                            condition)
-          left-key-cols (map first equi-pairs)
-          right-key-cols (map second equi-pairs)
+          left-key-cols (map (comp name first) equi-pairs)
+          right-key-cols (map (comp name second) equi-pairs)
           predicates (keep (fn [[tag val]]
                              (when (= :pred-expr tag)
                                val))
@@ -261,8 +263,8 @@
                    {:col-names (->col-names left-col-names right-col-names)
                     :->cursor (fn [{:keys [allocator]} left right]
                                 (->join-cursor allocator
-                                               left (map name left-key-cols) left-col-names
-                                               right (map name right-key-cols) right-col-names
+                                               left left-key-cols left-col-names
+                                               right right-key-cols right-col-names
                                                theta-selector))})))))
 
 (defmethod emit-op :group-by [{:keys [columns relation]} args]

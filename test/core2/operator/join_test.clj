@@ -26,8 +26,8 @@
      :or {left-fields [a-field], right-fields [b-field]
           left-join-cols ["a"], right-join-cols ["b"]}}]
 
-   (let [left-col-names (->> left-fields (into #{} (map (comp symbol #(.getName ^Field %)))))
-         right-col-names (->> right-fields (into #{} (map (comp symbol #(.getName ^Field %)))))]
+   (let [left-col-names (->> left-fields (into #{} (map #(.getName ^Field %))))
+         right-col-names (->> right-fields (into #{} (map #(.getName ^Field %))))]
      (with-open [left-cursor (tu/->cursor (Schema. left-fields) left-blocks)
                  right-cursor (tu/->cursor (Schema. right-fields) right-blocks)
                  ^ICursor join-cursor (->join-cursor tu/*allocator*
