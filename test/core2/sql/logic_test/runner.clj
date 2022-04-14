@@ -153,12 +153,13 @@
       (validate-type-string type-string result)
       (when-let [row (first result)]
         (t/is (count type-string) (count row)))
-      (t/is (= result-set-size (count result)))
+      (t/is (= result-set-size (* (count result) (count (first result)))))
       (let [result-str (cond->> result
                          (and result-set-md5sum max-result-set-size) (take max-result-set-size)
-                         true (format-result-str sort-mode))]
+                         true (format-result-str sort-mode))
+            result-str (str result-str "\n")]
         (when result-set
-          (t/is (= (str/join "\n" result-set) result-str)))
+          (t/is (= (str (str/join "\n" result-set) "\n") result-str)))
         (when result-set-md5sum
           (t/is (= result-set-md5sum (md5 result-str)))))))
   ctx)
@@ -166,7 +167,7 @@
 (defn- skip-record? [db-engine-name {:keys [skipif onlyif]
                                      :or {onlyif db-engine-name}}]
   (or (= db-engine-name skipif)
-      (not= db-engine-name onlyif)) )
+      (not= db-engine-name onlyif)))
 
 (def ^:private ^:dynamic *current-record* nil)
 

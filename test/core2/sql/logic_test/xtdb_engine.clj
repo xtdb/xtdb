@@ -139,6 +139,6 @@
                             (mapv (comp keyword name plan/unqualified-projection-symbol)))
             {:keys [errs plan]} (plan/plan-query tree)]
         (if-let [err (first errs)]
-          (throw (IllegalArgumentException. err))
+          (throw (IllegalArgumentException. ^String err))
           (vec (for [row (op/query-ra plan {'$ db})]
                  (mapv row projection))))))))
