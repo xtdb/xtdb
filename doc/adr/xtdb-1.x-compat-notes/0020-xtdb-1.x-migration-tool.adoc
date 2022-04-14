@@ -1,4 +1,4 @@
-= 20 Classic Migration Tool
+= 20 XTDB 1.x Migration Tool
 
 Date: 2021-09-14
 

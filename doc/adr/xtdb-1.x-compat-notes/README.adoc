@@ -1,3 +1,3 @@
-= Classic compatibility
+= XTDB 1.x compatibility
 
 These files are in this directory because they were originally written in the style of ADRs, but (AFAIK) there haven't been any decisions made about them as yet - the files are more brain dumps of what might be required when we do.

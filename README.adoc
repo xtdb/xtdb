@@ -17,13 +17,13 @@
 * First time: `clojure -X:deps prep`
 * When you bump the version: `clojure -X:deps prep :force true`
 
-==  Usage - differences to Classic
+==  Usage - differences to XTDB 1.x
 
 === Architecture
 
-Where Classic has a transaction log, document store and query indices, Core2 has a transaction log and an object store.
+Where XTDB 1.x has a transaction log, document store and query indices, Core2 has a transaction log and an object store.
 
-* Classic transactions are split up into 'tx-events' and documents, with the former going on the tx-log and the latter to the doc-store.
+* XTDB 1.x transactions are split up into 'tx-events' and documents, with the former going on the tx-log and the latter to the doc-store.
   In Core2, the transaction log doesn't need to have infinite retention, so we no longer need this split - transactions go straight on to the log, and the document store is obsolete.
 * Rather than each node having its own query indices, Core2 shares these between nodes in a cluster via the object store.
   The object store is hence _the_ golden store, thanks to the transience of the transaction log.
@@ -67,11 +67,11 @@ For a Kafka/JDBC node:
   )
 ----
 
-The CLI parameters, and EDN/JSON configuration file formats are the same as Classic.
+The CLI parameters, and EDN/JSON configuration file formats are the same as XTDB 1.x.
 
 === Transactions
 
-Transactions are slightly different to Classic:
+Transactions are slightly different to XTDB 1.x:
 
 - `[:xtdb.api/put <doc>]` -> `[:put <doc>]`. Put and delete supported thus far.
 - `:xt/id` -> `:_id`. Valid ID types currently strings, numbers, dates.

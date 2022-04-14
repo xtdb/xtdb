@@ -1,4 +1,4 @@
-= 19 Classic Advanced Datalog
+= 19 XTDB 1.x Advanced Datalog
 
 Date: 2021-09-14
 
@@ -23,6 +23,6 @@ Datalog would compile these bindings to a combination of project/unwrap.
 
 === Calcite and other modules compiling to Datalog
 
-These may 'just work', or if they rely on complicated parts of the classic engine, require rework.
+These may 'just work', or if they rely on complicated parts of the XTDB 1.x engine, require rework.
 
 == Consequences

@@ -1,4 +1,4 @@
-= 15 Classic Clojure Predicates
+= 15 XTDB 1.x Clojure Predicates
 
 Date: 2021-09-14
 

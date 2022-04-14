@@ -1,4 +1,4 @@
-= 18 Classic Datalog Rules
+= 18 XTDB 1.x Datalog Rules
 
 Date: 2021-09-14
 

@@ -68,7 +68,7 @@ This entire scheme is similar to the Versioned Eviction proposal above, except t
 Files in Delta Lake are smaller than the chunks we manage in C2, and may only contain a few rows as the result of a single transaction.
 For this reason they also suggest using compaction operations via the log itself, which merges together a bunch of smaller files, removing them and adding the combined result.
 
-==== Write up of classic comparison (originally in ADR-0003)
+==== Write up of XTDB 1.x comparison (originally in ADR-0003)
 
 Doesn’t exist in c2 yet, but is somewhat orthogonal.
 Can be built in various ways.

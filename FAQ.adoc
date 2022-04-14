@@ -1,0 +1,58 @@
+= Frequently Asked Questions
+
+== Are you abandoning XTDB 1.x (1.21+)?
+
+No. Not only do we have enterprise customers who use the stable XTDB 1.x series, we aren't rash people.
+Any software we build should be stable.
+It should last a long time.
+This is especially true of a database.
+XTDB 1.x will continue to receive performance improvements and bug fixes.
+We may add new features to XTDB 1.x (and we have done so recently) but we will do so cautiously.
+
+== Should I try to switch to XTDB "Core 2"?
+
+No. Core2 is not a database (yet).
+It is a series of experiments we are using to design and build the features we hope to include in XTDB 2.x.
+Unless you are curious about those experiments, you should probably just ignore the Core2 repository entirely.
+
+== Is "Core 2" the same as XTDB 2.x?
+
+No. Core2 is a series of experiments.
+Many of these experiments will find their way into XTDB 2.x -- but only once they have proven themselves.
+Core2 exists today for experimentation and development.
+XTDB 2.x is the future vision of the XTDB team.
+
+== When will XTDB 2.x be ready?
+
+We don't know.
+Building a database is a job we take very seriously.
+We don't want to give anyone a product that isn't rock-solid.
+The transition from experiments to production-quality code will be methodical.
+We aren't rushing anything.
+
+== What will the upgrade path to XTDB 2.x look like?
+
+We will provide tools to upgrade XTDB 1.x to 2.x once XTDB 2.x exists.
+The upgrade to XTDB 2.x is likely to be more involved than a regular 1.x => 1.x upgrade.
+Because of this, we will ensure there is a long 1.x => 2.x upgrade window.
+It is also possible XTDB 1.x may be supported indefinitely if some customers decide it is their preferred database.
+
+== I see a lot of SQL in "Core 2". Are you abandoning Datalog?
+
+No. Although XTDB https://docs.xtdb.com/language-reference/sql-queries/[already has SQL queries], they are built on Apache Calcite and compile into Datalog queries under the hood.
+There is a lot of the SQL spec we currently lack.
+We have learned from our customers that SQL support in XTDB really needs to be first-class.
+This means building our own SQL engine.
+
+SQL is big and complicated.
+The spec is massive.
+No one would look at the SQL spec and say "sure, that looks easy."
+Because SQL itself is such a risk, we are trying to mitigate that risk by tackling it head-on.
+
+The role and shape of Datalog in XTDB 2.x is undecided.
+We love Datalog just as much as you do and we intend to make the upgrade path to XTDB 2.x as smooth as possible, once it's ready.
+
+== You didn't answer my question
+
+Please email us at mailto:hello@xtdb.com[hello@xtdb.com] with your question.
+We'll be happy to answer it and, if it seems useful, include it in this FAQ.

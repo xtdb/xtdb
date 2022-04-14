@@ -6,12 +6,12 @@
   (:import java.util.concurrent.TimeUnit))
 
 (comment
-  ;; run in Core1's crux.bench.watdiv-crux.
+  ;; run in XTDB 1.x's crux.bench.watdiv-crux.
 
   ;; had to temporarily replace a few calls to `keyword` within crux-rdf with just `str` too -
-  ;; Core2 doesn't like URLs as keywords (well, Classic shouldn't either, but that's another story.)
+  ;; Core2 doesn't like URLs as keywords (well, XTDB 1.x shouldn't either, but that's another story.)
 
-  ;; (JH, 2022-03-18) this ^^ might be better since I re-did a lot of Core1's WatDiv bench recently
+  ;; (JH, 2022-03-18) this ^^ might be better since I re-did a lot of XTDB 1.x's WatDiv bench recently
 
   (with-open [in (io/input-stream "crux-bench/data/watdiv.10M.nt")
               out (io/writer (io/file "/tmp/watdiv-10M.edn"))]

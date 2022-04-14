@@ -17,11 +17,11 @@ A transaction is composed of a series of operations executed in order.
 
 Options:
 
-. EDN (classic): put/delete/evict and integrity checks via match + find.
+. EDN (XTDB 1.x): put/delete/evict and integrity checks via match + find.
 . SQL DML: insert/update/delete/evict and integrity checks via select.
 
 Operations also need to be able to do bitemporal corrections.
-SQL:2011 always assumes start/end time for corrections, while classic supports calculating the end time if not given.
+SQL:2011 always assumes start/end time for corrections, while XTDB 1.x supports calculating the end time if not given.
 
 See also link:0027-sql-basic-dml.adoc[ADR-0027].
 

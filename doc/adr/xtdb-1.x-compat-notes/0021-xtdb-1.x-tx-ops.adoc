@@ -1,4 +1,4 @@
-= 21 Classic Tx Ops
+= 21 XTDB 1.x Tx Ops
 
 Date: 2021-09-14
 

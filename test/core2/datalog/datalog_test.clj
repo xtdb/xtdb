@@ -1,4 +1,10 @@
-(ns core2.datalog-test
+;; THIRD-PARTY SOFTWARE NOTICE
+;; This file is derivative of test files found in the DataScript
+;; project. The Datascript license is copied verbatim in this
+;; directory as `LICENSE`.
+;; https://github.com/tonsky/datascript
+
+(ns core2.datalog.datalog-test
   (:require [core2.james-bond :as bond]
             [clojure.test :as t]
             [core2.test-util :as tu]

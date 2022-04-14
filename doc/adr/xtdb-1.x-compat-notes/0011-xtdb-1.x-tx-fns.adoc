@@ -1,4 +1,4 @@
-= 11. Classic tx-fn
+= 11. XTDB 1.x tx-fn
 
 Date: 2021-09-14
 
@@ -8,7 +8,7 @@ Proposed
 
 == Context
 
-Provide classic-like functionality for tx-fns.
+Provide XTDB 1.x-like functionality for tx-fns.
 
 Currently users can submit/trigger tx-fns via HTTP or the peer-like API, therefore this ADR expects to maintain this.
 
@@ -20,4 +20,4 @@ Transaction functions were not originally to be supported in XTDB SQL as it requ
 
 == Consequences
 
-There may be some confusion/tension/discussion around a clean/pure remote-first API supporting what is minimally needed by SQL & Datalog users, and where the boundary lies between supporting classic like functionality exclusively for Clojure/Datalog users.
+There may be some confusion/tension/discussion around a clean/pure remote-first API supporting what is minimally needed by SQL & Datalog users, and where the boundary lies between supporting XTDB 1.x like functionality exclusively for Clojure/Datalog users.

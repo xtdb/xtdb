@@ -1,4 +1,4 @@
-= 17 Classic Arbitrary Types
+= 17 XTDB 1.x Arbitrary Types
 
 Date: 2021-09-14
 

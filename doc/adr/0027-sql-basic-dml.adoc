@@ -22,7 +22,7 @@ What constitutes a table will be defined in link:0025-sql-tables.adoc[SQL Tables
 * We split ingest into two layers, SQL and firehose.
 * Queries, general logic etc. are available at the SQL layer.
 * Firehose layer has the current operations: put/delete/evict. There's no logic at this layer.
-* SQL layer takes slightly more control - like the begin/end Transaction API in Core1 - and generates put/delete/evict but may also rollback and fail for logic reasons.
+* SQL layer takes slightly more control - like the begin/end Transaction API in XTDB 1.x - and generates put/delete/evict but may also rollback and fail for logic reasons.
 * Assertions (constraint checks) are run pre-commit, and triggers post-commit at the SQL layer. At the firehose layer is also a possibility, there are some pros cons (like it having to know about SQL).
 * Log archiving into object store use the firehose layer as currently.
 * Firehose layer might also be seen / used as a CDC feature between clusters.

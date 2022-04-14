@@ -1,6 +1,6 @@
 = Bench
 
-A rudimentary bench adapted from Classic. It currently only runs TPC-H, and only runs it ad-hoc (on Fargate) - it doesn't have any of the daily scheduling.
+A rudimentary bench adapted from XTDB 1.x. It currently only runs TPC-H, and only runs it ad-hoc (on Fargate) - it doesn't have any of the daily scheduling.
 
 Dependencies:
 

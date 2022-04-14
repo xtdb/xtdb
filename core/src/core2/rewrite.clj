@@ -94,8 +94,8 @@
 
 ;; Attribute Grammar spike.
 
-;; See:
-;; https://inkytonik.github.io/kiama/Attribution
+;; See related literature:
+;; https://inkytonik.github.io/kiama/Attribution (no code is borrowed)
 ;; https://arxiv.org/pdf/2110.07902.pdf
 ;; https://haslab.uminho.pt/prmartins/files/phd.pdf
 ;; https://github.com/christoff-buerger/racr
