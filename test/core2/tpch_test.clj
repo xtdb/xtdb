@@ -51,23 +51,6 @@
           :let [written-object-path (.resolve objects-dir (.relativize test-dir test-path))]]
       [test-path written-object-path])))
 
-(defn- regen-tpch-test-files
-  "Regenerates the test .json files in target/can-submit-tpch-docs-xxxx.
-
-  Use if you know you have changed the arrow representation of the tpch dataset.
-  e.g changing the type of one of the generated fields."
-  [scale-factor]
-  (let [node-dir (tpch-node-dir scale-factor)]
-    (with-tpch-data
-      {:node-dir node-dir
-       :scale-factor scale-factor
-       :clock (Clock/fixed (util/->instant #inst "2021-04-01") (ZoneId/of "UTC"))}
-      (fn []
-        (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
-        (doseq [[test-path written-object-path] (paired-paths scale-factor node-dir)]
-          (Files/delete test-path)
-          (Files/copy written-object-path test-path (make-array CopyOption 0)))))))
-
 (defn- test-tpch-ingest [scale-factor expected-objects]
   (let [node-dir (tpch-node-dir scale-factor)]
     (with-tpch-data
