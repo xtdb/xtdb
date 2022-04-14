@@ -307,7 +307,8 @@
                left-cursor left-key-column-names left-column-names
                right-cursor right-key-column-names right-column-names
                (emap/->relation-map allocator {:build-key-col-names left-key-column-names
-                                               :probe-key-col-names right-key-column-names})
+                                               :probe-key-col-names right-key-column-names
+                                               :store-col-names (mapv name left-column-names)})
                nil
                (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
                ::inner-join
@@ -321,7 +322,8 @@
                right-cursor right-key-column-names right-column-names
                left-cursor left-key-column-names left-column-names
                (emap/->relation-map allocator {:build-key-col-names right-key-column-names
-                                               :probe-key-col-names left-key-column-names})
+                                               :probe-key-col-names left-key-column-names
+                                               :store-col-names (mapv name right-column-names)})
                nil
                (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
                ::semi-join
@@ -367,7 +369,8 @@
                right-cursor right-key-column-names right-column-names
                left-cursor left-key-column-names left-column-names
                (emap/->relation-map allocator {:build-key-col-names right-key-column-names
-                                               :probe-key-col-names left-key-column-names})
+                                               :probe-key-col-names left-key-column-names
+                                               :store-col-names (mapv name right-column-names)})
                nil
                (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
                ::anti-semi-join

@@ -137,7 +137,7 @@
 
   (let [hash->bitmap (HashMap.)
         out-rel (vw/->rel-writer allocator)]
-    (doseq [col-name build-key-col-names]
+    (doseq [col-name (set/union (set build-key-col-names) (set store-col-names))]
       (.writerForName out-rel col-name))
 
     (when with-nil-row?
