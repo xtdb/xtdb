@@ -352,8 +352,7 @@
              :c_comment "ously final packages haggle blithely after the express deposits. furiou"}]
            (q (tpch-test/slurp-query 10)))))
 
-;; crash due to group-by col not being visible to join
-#_(deftest test-q11-important-stock-identification
+(deftest test-q11-important-stock-identification
     (t/is (= [] (q (tpch-test/slurp-query 11)))))
 
 (deftest test-q12-shipping-modes-and-order-priority
