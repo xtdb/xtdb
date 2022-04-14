@@ -293,7 +293,7 @@
   (t/is (= [2.1760912590556813 nil]
            (project '(log10 x) [{:x 150} {:x nil}])))
   (t/is (= [4.0 nil nil nil]
-           (project '(log x y) [{:x 16 :y 2} {:x nil :y 2} {:x 16 :y nil} {:x nil :y nil}])))
+           (project '(log y x) [{:x 16 :y 2} {:x nil :y 2} {:x 16 :y nil} {:x nil :y nil}])))
   (t/is (= [2.772588722239781 nil]
            (project '(ln x) [{:x 16} {:x nil}]))))
 

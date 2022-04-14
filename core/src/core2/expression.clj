@@ -642,7 +642,7 @@
   (mono-fn-call types/float8-type #(do `(Math/pow ~@%))))
 
 (defmethod codegen-call [:log ::types/Number ::types/Number] [_]
-  (mono-fn-call types/float8-type (fn [[x base]]
+  (mono-fn-call types/float8-type (fn [[base x]]
                                     `(/ (Math/log ~x) (Math/log ~base)))))
 
 (doseq [f #{:+ :- :* :/ :mod :min :max :power :log}]
