@@ -236,11 +236,11 @@
                             (join/->cross-join-cursor allocator left right))})))
 
 (doseq [[join-op-k ->join-cursor ->col-names]
-        [[:join join/->equi-join-cursor set/union]
-         [:left-outer-join join/->left-outer-equi-join-cursor set/union]
-         [:full-outer-join join/->full-outer-equi-join-cursor set/union]
-         [:semi-join join/->left-semi-equi-join-cursor (fn [l _r] l)]
-         [:anti-join join/->left-anti-semi-equi-join-cursor (fn [l _r] l)]]]
+        [[:join #'join/->equi-join-cursor set/union]
+         [:left-outer-join #'join/->left-outer-equi-join-cursor set/union]
+         [:full-outer-join #'join/->full-outer-equi-join-cursor set/union]
+         [:semi-join #'join/->left-semi-equi-join-cursor (fn [l _r] l)]
+         [:anti-join #'join/->left-anti-semi-equi-join-cursor (fn [l _r] l)]]]
 
   (defmethod emit-op join-op-k [{:keys [condition left right]} args]
     (let [equi-pairs (keep (fn [[tag val]]
