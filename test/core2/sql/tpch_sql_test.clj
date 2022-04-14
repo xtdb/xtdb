@@ -530,7 +530,7 @@
        [:order-by
         [{x18 :desc} {x4 :asc} {x5 :asc} {x6 :asc}]
         [:group-by
-         [x4 x5 x6 {x18 (count x1)}]
+         [x4 x5 x6 {x18 (count-distinct x1)}]
          [:anti-join
           [{x1 x13}]
           [:semi-join
