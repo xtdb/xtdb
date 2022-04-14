@@ -2,21 +2,20 @@
   (:require [clojure.test :as t :refer [deftest]]
             [core2.tpch-test :as tpch-test]
             [core2.util :as util]
-            [core2.sql.plan-test :as pt]
-            [core2.operator :as op]
-            [clojure.java.io :as io])
+            [core2.sql.plan-test :as pt])
   (:import [java.time LocalDate]))
 
-(t/use-fixtures :once (partial tpch-test/with-tpch-data
-                               {:scale-factor 0.001
-                                :node-dir (util/->path "target/tpch-queries-sf-0001")}))
+(def scaffold
+  (partial tpch-test/with-tpch-data
+           {:scale-factor 0.001
+            :node-dir (util/->path "target/tpch-queries-sf-0001")}))
 
-(defn slurp-tpch-query [query-no]
-  (slurp (io/resource (str "core2/sql/tpch/" (format "q%02d.sql" query-no)))))
+(t/use-fixtures :once #'scaffold)
 
-(defn actually-run-query [sql-str]
-  ;; get db
-  (op/query-ra (pt/plan-sql sql-str) {'$ tpch-test/*db*}))
+(defn q [sql-str]
+  (if tpch-test/*db*
+    (tpch-test/run-query (pt/plan-sql sql-str))
+    (scaffold (fn [] (q sql-str)))))
 
 (deftest test-q1-pricing-summary-report
   (t/is (= [{:l_returnflag "A"
@@ -59,11 +58,11 @@
              :avg_price 25100.09693891558
              :avg_disc 0.050027453671928686
              :count_order 1457}]
-           (actually-run-query (slurp-tpch-query 1)))))
+           (q (tpch-test/slurp-query 1)))))
 
 (deftest test-q2-minimum-cost-supplier
   (t/is (= []
-           (actually-run-query (slurp-tpch-query 2)))))
+           (q (tpch-test/slurp-query 2)))))
 
 (deftest test-q3-shipping-priority
   (t/is (= [{:l_orderkey "orderkey_1637"
@@ -98,7 +97,7 @@
              :revenue 3055.9365,
              :o_orderdate (LocalDate/parse "1995-02-17")
              :o_shippriority 0}]
-           (actually-run-query (slurp-tpch-query 3)))))
+           (q (tpch-test/slurp-query 3)))))
 
 (deftest test-q4-order-priority-checking
   (t/is (= [{:o_orderpriority "1-URGENT", :order_count 9}
@@ -106,24 +105,24 @@
             {:o_orderpriority "3-MEDIUM", :order_count 9}
             {:o_orderpriority "4-NOT SPECIFIED", :order_count 8}
             {:o_orderpriority "5-LOW", :order_count 12}]
-           (actually-run-query (slurp-tpch-query 4)))))
+           (q (tpch-test/slurp-query 4)))))
 
 (deftest test-q5-local-supplier-volume
   (t/is (= []
-           (actually-run-query (slurp-tpch-query 5)))))
+           (q (tpch-test/slurp-query 5)))))
 
 (deftest test-q6-forecasting-revenue-change
   (t/is (= [{:revenue 77949.9186}]
-           (actually-run-query (slurp-tpch-query 6)))))
+           (q (tpch-test/slurp-query 6)))))
 
 (deftest test-q7-volume-shipping
   (t/is (= []
-           (actually-run-query (slurp-tpch-query 7)))))
+           (q (tpch-test/slurp-query 7)))))
 
 (deftest test-q8-national-market-share
   (t/is (= [{:o_year 1995, :mkt_share 0.0}
             {:o_year 1996, :mkt_share 0.0}]
-           (actually-run-query (slurp-tpch-query 8)))))
+           (q (tpch-test/slurp-query 8)))))
 
 (deftest test-q9-product-type-profit-measure
   ;; on 0.001 there are duplicate ids generated in the partsupp table
@@ -188,7 +187,7 @@
             {:nation "UNITED STATES", :o_year 1994, :sum_profit 31671.2}
             {:nation "UNITED STATES", :o_year 1993, :sum_profit 55057.469}
             {:nation "UNITED STATES", :o_year 1992, :sum_profit 51970.23}]
-           (actually-run-query (slurp-tpch-query 9)))))
+           (q (tpch-test/slurp-query 9)))))
 
 (deftest test-q10-returned-item-reporting
   (t/is (= [{:c_custkey "custkey_121"
@@ -351,11 +350,11 @@
              :n_name "ARGENTINA"
              :c_address "zLOCP0wh92OtBihgspOGl4"
              :c_comment "ously final packages haggle blithely after the express deposits. furiou"}]
-           (actually-run-query (slurp-tpch-query 10)))))
+           (q (tpch-test/slurp-query 10)))))
 
 ;; crash due to group-by col not being visible to join
 #_(deftest test-q11-important-stock-identification
-  (t/is (= [] (actually-run-query (slurp-tpch-query 11)))))
+    (t/is (= [] (q (tpch-test/slurp-query 11)))))
 
 (deftest test-q12-shipping-modes-and-order-priority
   (t/is (= [{:l_shipmode "MAIL"
@@ -364,7 +363,7 @@
             {:l_shipmode "SHIP"
              :high_line_count 5
              :low_line_count 10}]
-           (actually-run-query (slurp-tpch-query 12)))))
+           (q (tpch-test/slurp-query 12)))))
 
 (deftest test-q13-customer-distribution
   (t/is (= [{:c_count 0 :custdist 50}
@@ -394,10 +393,10 @@
             {:c_count 28 :custdist 1}
             {:c_count 25 :custdist 1}
             {:c_count 3 :custdist 1}]
-           (actually-run-query (slurp-tpch-query 13)))))
+           (q (tpch-test/slurp-query 13)))))
 
 (deftest test-q14-promotion-effect
-  (t/is (= [{:promo_revenue 15.230212611597251}] (actually-run-query (slurp-tpch-query 14)))))
+  (t/is (= [{:promo_revenue 15.230212611597251}] (q (tpch-test/slurp-query 14)))))
 
 (deftest test-q15-top-supplier
   (t/is (= [{:total_revenue 797313.3838
@@ -405,7 +404,7 @@
              :s_name "Supplier#000000010"
              :s_address "Saygah3gYWMp72i PY"
              :s_phone "34-852-489-8585"}]
-           (actually-run-query (slurp-tpch-query 15)))))
+           (q (tpch-test/slurp-query 15)))))
 
 (deftest test-q16-part-supplier-relationship
   (t/is (= [{:p_brand "Brand#11" :p_type "PROMO ANODIZED TIN" :p_size 45 :supplier_cnt 4}
@@ -442,27 +441,27 @@
             {:p_brand "Brand#51" :p_type "ECONOMY POLISHED STEEL" :p_size 49 :supplier_cnt 1}
             {:p_brand "Brand#53" :p_type "LARGE BURNISHED NICKEL" :p_size 23 :supplier_cnt 1}
             {:p_brand "Brand#54" :p_type "ECONOMY ANODIZED BRASS" :p_size 9 :supplier_cnt 1}]
-           (actually-run-query (slurp-tpch-query 16)))))
+           (q (tpch-test/slurp-query 16)))))
 
 (deftest test-q17-small-quantity-order-revenue
   (t/is (= []
-           (actually-run-query (slurp-tpch-query 17)))))
+           (q (tpch-test/slurp-query 17)))))
 
 (deftest test-q18-large-volume-customer
   (t/is (= []
-           (actually-run-query (slurp-tpch-query 18)))))
+           (q (tpch-test/slurp-query 18)))))
 
 #_(deftest test-q19-discounted-revenue ;; too slow
-  (t/is (= []
-           (actually-run-query (slurp-tpch-query 19)))))
+    (t/is (= []
+             (q (tpch-test/slurp-query 19)))))
 
 (deftest test-q20-potential-part-promotion ;; group-by decorr null pointer
   (t/is (= []
-           (actually-run-query (slurp-tpch-query 20)))))
+           (q (tpch-test/slurp-query 20)))))
 
 (deftest test-q21-suppliers-who-kept-orders-waiting
   (t/is (= []
-           (actually-run-query (slurp-tpch-query 21)))))
+           (q (tpch-test/slurp-query 21)))))
 
 (deftest test-q22-global-sales-opportunity ;; group-by deccor IAE
   (t/is (= [{:cntrycode "13"
@@ -486,4 +485,4 @@
             {:cntrycode "31"
              :numcust 1
              :totacctbal 9331.13}]
-           (actually-run-query (slurp-tpch-query 22)))))
+           (q (tpch-test/slurp-query 22)))))

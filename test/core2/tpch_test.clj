@@ -10,8 +10,8 @@
   (:import [java.nio.file Files LinkOption Path CopyOption]
            [java.time Clock Duration ZoneId]))
 
-(def ^:dynamic *node*)
-(def ^:dynamic *db*)
+(def ^:dynamic *node* nil)
+(def ^:dynamic *db* nil)
 
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 1)))
 
@@ -87,6 +87,9 @@
    (op/query-ra q (merge {'$ *db*}
                          (::tpch/params (meta q))
                          args))))
+
+(defn slurp-query [query-no]
+  (slurp (io/resource (str "core2/sql/tpch/" (format "q%02d.sql" query-no)))))
 
 (t/deftest ^:integration can-submit-tpch-docs-0.01
   (test-tpch-ingest 0.01 67))
