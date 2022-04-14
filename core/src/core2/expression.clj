@@ -15,7 +15,7 @@
            (java.lang.reflect Method)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Duration Instant LocalDate ZonedDateTime ZoneId ZoneOffset Period)
+           (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId ZoneOffset Period)
            (java.time.temporal ChronoField ChronoUnit)
            (java.util Date HashMap LinkedList)
            (java.util.function IntUnaryOperator)
@@ -744,6 +744,58 @@
                          "HOUR" epoch-day-code
                          "MINUTE" epoch-day-code)))})
 
+(def ^:dynamic ^java.time.Clock *clock* (Clock/systemDefaultZone))
+
+(defmethod codegen-call [:current-timestamp] [_]
+  (let [zone-id (.getZone *clock*)
+        ret-type (ArrowType$Timestamp. TimeUnit/NANOSECOND (str zone-id))]
+    {:return-types #{ret-type}
+     :continue-call (fn [f _]
+                      (f ret-type
+                         `(long (let [inst# (.instant *clock*)]
+                                  (+ (* 1e9 (.getEpochSecond inst#))
+                                     (.getNano inst#))))))}))
+
+(defmethod codegen-call [:current-date] [_]
+  ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
+  ;; but Arrow expects Dates to be in UTC.
+  ;; we then turn DateDays into LocalDates, which confuses things further.
+  {:return-types #{types/date-day-type}
+   :continue-call (fn [f _]
+                    (f types/date-day-type
+                       `(long (-> (ZonedDateTime/ofInstant (.instant *clock*) ZoneOffset/UTC)
+                                  (.toLocalDate)
+                                  (.toEpochDay)))))})
+
+(defmethod codegen-call [:current-time] [_]
+  ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
+  ;; but Arrow expects Times to be in UTC.
+  ;; we then turn TimeNanos into LocalTimes, which confuses things further.
+  {:return-types #{types/time-nanos-type}
+   :continue-call (fn [f _]
+                    (f types/time-nanos-type
+                       `(long (-> (ZonedDateTime/ofInstant (.instant *clock*) ZoneOffset/UTC)
+                                  (.toLocalTime)
+                                  (.toNanoOfDay)))))})
+
+(defmethod codegen-call [:local-timestamp] [_]
+  (let [ret-type (ArrowType$Timestamp. TimeUnit/NANOSECOND nil)]
+    {:return-types #{ret-type}
+     :continue-call (fn [f _]
+                      (f ret-type
+                         `(let [ldt# (-> (ZonedDateTime/ofInstant (.instant *clock*) (.getZone *clock*))
+                                         (.toLocalDateTime))]
+                            (long (+ (* 1e9 (.toEpochSecond ldt# ZoneOffset/UTC))
+                                     (.getNano ldt#))))))}))
+
+(defmethod codegen-call [:local-time] [_]
+  {:return-types #{types/time-nanos-type}
+   :continue-call (fn [f _]
+                    (f types/time-nanos-type
+                       `(long (-> (ZonedDateTime/ofInstant (.instant *clock*) (.getZone *clock*))
+                                  (.toLocalTime)
+                                  (.toNanoOfDay)))))})
+
 (defmethod codegen-call [:abs ::types/Number] [{[numeric-type] :arg-types}]
   {:return-types #{numeric-type}
    :continue-call (fn [f emitted-args]
@@ -911,18 +963,21 @@
        (distinct)
        (apply concat)))
 
-;; NOTE: we macroexpand inside the memoize on the assumption that
-;; everything outside yields the same result on the pre-expanded expr - this
-;; assumption wouldn't hold if macroexpansion created new variable exprs, for example.
-;; macroexpansion is non-deterministic (gensym), so busts the memo cache.
+(defn- wrap-zone-id-cache-buster [f]
+  (fn [expr opts]
+    (f expr (assoc opts :zone-id (.getZone *clock*)))))
 
 (def ^:private memo-generate-projection
-  (-> (fn [expr var->types]
+  "NOTE: we macroexpand inside the memoize on the assumption that
+   everything outside yields the same result on the pre-expanded expr - this
+   assumption wouldn't hold if macroexpansion created new variable exprs, for example.
+   macroexpansion is non-deterministic (gensym), so busts the memo cache."
+  (-> (fn [expr opts]
         (let [expr (->> expr
                         (macro/macroexpand-all)
                         (walk/postwalk-expr (comp with-batch-bindings lit->param)))
 
-              {:keys [return-types continue]} (codegen-expr expr {:var->types var->types})
+              {:keys [return-types continue]} (codegen-expr expr opts)
               ret-field-type (return-types->field-type return-types)
 
               {:keys [writer-bindings write-value-out!]} (write-value-out-code ret-field-type return-types)]
@@ -943,7 +998,8 @@
                             (.endValue ~out-writer-sym)))))
 
            :field-type ret-field-type}))
-      (memoize)))
+      (memoize)
+      wrap-zone-id-cache-buster))
 
 (defn field->value-types [^Field field]
   ;; potential duplication with LegType
@@ -1181,7 +1237,8 @@
                                         (for [[variable ^ValueVector out-vec] evald-sub-exprs]
                                           (MapEntry/create variable (field->value-types (.getField out-vec)))))
                                 (into {}))
-                {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection prim-expr var->types)
+
+                {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection prim-expr {:var->types var->types})
                 out-field (Field. col-name field-type [])
                 out-vec (.createVector out-field al)]
 

@@ -8,9 +8,9 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import core2.types.LegType
-           [java.time Duration ZonedDateTime ZoneId LocalDate]
-           [org.apache.arrow.vector DurationVector TimeStampVector ValueVector]
-           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Timestamp ArrowType$Union FieldType]
+           (java.time Clock Duration LocalDate LocalDateTime LocalTime ZonedDateTime ZoneId)
+           (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
+           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Timestamp ArrowType$Union FieldType)
            org.apache.arrow.vector.types.TimeUnit))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -704,3 +704,72 @@
               :leg-type #{LegType/BIGINT LegType/NULL}
               :nullable? false}
              (run-projection rel '(. x a))))))
+
+(t/deftest test-current-times-111
+  (letfn [(project-fn [f]
+            (run-projection (iv/->indirect-rel [] 1) (list f)))]
+    (binding [expr/*clock* (Clock/fixed (util/->instant #inst "2022"), (ZoneId/of "UTC"))]
+      (t/testing "UTC"
+        (t/is (= {:res [#c2/zdt "2022-01-01T00:00Z[UTC]"]
+                  :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/NANOSECOND "UTC"))
+                  :nullable? false}
+                 (project-fn 'current-timestamp))
+              "current-timestamp")
+
+        (t/is (= {:res [(LocalDate/parse "2022-01-01")]
+                  :leg-type (LegType. types/date-day-type)
+                  :nullable? false}
+                 (project-fn 'current-date))
+              "current-date")
+
+        (t/is (= {:res [(LocalTime/parse "00:00:00")]
+                  :leg-type (LegType. types/time-nanos-type)
+                  :nullable? false}
+                 (project-fn 'current-time))
+              "current-time")
+
+        (t/is (= {:res [(LocalTime/parse "00:00:00")]
+                  :leg-type (LegType. types/time-nanos-type)
+                  :nullable? false}
+                 (project-fn 'local-time))
+              "local-time")
+
+        (t/is (= {:res [(LocalDateTime/parse "2022-01-01T00:00")]
+                  :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/NANOSECOND nil))
+                  :nullable? false}
+                 (project-fn 'local-timestamp))
+              "local-timestamp")))
+
+    (binding [expr/*clock* (Clock/fixed (util/->instant #inst "2022"), (ZoneId/of "America/Los_Angeles"))]
+      (t/testing "LA"
+        (t/is (= {:res [#c2/zdt "2021-12-31T16:00-08:00[America/Los_Angeles]"]
+                  :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/NANOSECOND "America/Los_Angeles"))
+                  :nullable? false}
+                 (run-projection (iv/->indirect-rel [] 1) '(current-timestamp)))
+              "current-timestamp")
+
+        ;; these two are where we may differ from the spec, due to Arrow's Date and Time types not supporting a TZ.
+        ;; I've opted to return these as UTC to differentiate them from `local-time` and `local-timestamp` below.
+        (t/is (= {:res [(LocalDate/parse "2022-01-01")]
+                  :leg-type (LegType. types/date-day-type)
+                  :nullable? false}
+                 (project-fn 'current-date))
+              "current-date")
+
+        (t/is (= {:res [(LocalTime/parse "00:00:00")]
+                  :leg-type (LegType. types/time-nanos-type)
+                  :nullable? false}
+                 (project-fn 'current-time))
+              "current-time")
+
+        (t/is (= {:res [(LocalTime/parse "16:00:00")]
+                  :leg-type (LegType. types/time-nanos-type)
+                  :nullable? false}
+                 (project-fn 'local-time))
+              "local-time")
+
+        (t/is (= {:res [(LocalDateTime/parse "2021-12-31T16:00")]
+                  :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/NANOSECOND nil))
+                  :nullable? false}
+                 (project-fn 'local-timestamp))
+              "local-timestamp")))))
