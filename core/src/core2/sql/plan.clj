@@ -9,9 +9,9 @@
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
             [instaparse.core :as insta])
-  (:import clojure.lang.IObj
-           [java.time LocalDate Period Duration]
-           [org.apache.arrow.vector PeriodDuration]))
+  (:import (clojure.lang IObj Var)
+           (java.time LocalDate Period Duration)
+           (org.apache.arrow.vector PeriodDuration)))
 
 ;; Attribute grammar for transformation into logical plan.
 
@@ -2061,7 +2061,7 @@
                                                   fired-rules
                                                   #(conj ;; could also capture z before the rewrite
                                                          %
-                                                         [(name (.toSymbol f))
+                                                         [(name (.toSymbol ^Var f))
                                                           successful-rewrite]))
                                                 successful-rewrite)))
                                           rules)))

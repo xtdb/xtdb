@@ -199,7 +199,10 @@
     (System/arraycopy arr2 0 ret-arr (alength arr1) (alength arr2))
     ret-arr))
 
-(defn- probe-outer-join-select [probe-rel rel-map ^BufferAllocator allocator ^RoaringBitmap matched-build-idxs ^IRelationSelector theta-selector]
+(defn- probe-outer-join-select [^IIndirectRelation probe-rel, rel-map
+                                ^BufferAllocator allocator
+                                ^RoaringBitmap matched-build-idxs
+                                ^IRelationSelector theta-selector]
   (let [[probe-sel build-sel :as selection-pair] (probe-inner-join-select probe-rel rel-map)
         inner-join-rel (join-rels probe-rel rel-map selection-pair)
 
