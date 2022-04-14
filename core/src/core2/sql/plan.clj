@@ -303,10 +303,6 @@
      ;;=>
      (list 'nth (expr ave) (expr nve))
 
-     [:when_operand_list ^:z wo]
-     ;;=>
-     (expr wo)
-
      (r/zcase z
        :case_abbreviation
        (->> (r/collect-stop
@@ -338,7 +334,16 @@
                  [(expr rvp)]
 
                  [:simple_when_clause "WHEN" ^:z wol "THEN" [:result ^:z then]]
-                 [(expr wol) (expr then)]
+                 (let [then-expr (expr then)
+                       wo-exprs (r/collect-stop
+                                 (fn [z]
+                                   (r/zcase z
+                                     (:when_operand_list nil) nil
+                                     [(expr z)]))
+                                 wol)]
+                   (->> (for [wo-expr wo-exprs]
+                          [wo-expr then-expr])
+                        (reduce into [])))
 
                  [:else_clause "ELSE" [:result ^:z else]]
                  [(expr else)]))

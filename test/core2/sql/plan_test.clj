@@ -208,12 +208,14 @@
            (plan-sql "VALUES 1, 2")))
 
   (t/is (= '[:rename
-             {x7 $column_1$, x8 $column_2$}
+             {x7 $column_1$, x8 $column_2$, x9 $column_3$}
              [:project [{x7 (case (+ x1 1) x2 111 x3 222 x4 333 x5 444 555)}
-                        {x8 (cond (< x1 (- x2 3)) 111 (<= x1 x2) 222 (< x1 (+ x2 3)) 333 444)}]
+                        {x8 (cond (< x1 (- x2 3)) 111 (<= x1 x2) 222 (< x1 (+ x2 3)) 333 444)}
+                        {x9 (case (+ x1 1) x2 222 x3 222 x4 444 (+ x5 1) 444 555)}]
               [:rename {a x1, b x2, c x3, d x4, e x5} [:scan [a b c d e]]]]]
            (plan-sql "SELECT CASE t1.a + 1 WHEN t1.b THEN 111 WHEN t1.c THEN 222 WHEN t1.d THEN 333 WHEN t1.e THEN 444 ELSE 555 END,
-                             CASE WHEN t1.a < t1.b - 3 THEN 111 WHEN t1.a <= t1.b THEN 222 WHEN t1.a < t1.b+3 THEN 333 ELSE 444 END FROM t1")))
+                             CASE WHEN t1.a < t1.b - 3 THEN 111 WHEN t1.a <= t1.b THEN 222 WHEN t1.a < t1.b+3 THEN 333 ELSE 444 END,
+                             CASE t1.a + 1 WHEN t1.b, t1.c THEN 222 WHEN t1.d, t1.e + 1 THEN 444 ELSE 555 END FROM t1")))
 
   (t/is (= '[:scan [{a (nil? a)}]]
            (plan-sql "SELECT * FROM t1 WHERE t1.a IS NULL")))
