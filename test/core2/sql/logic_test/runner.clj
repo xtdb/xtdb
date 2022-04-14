@@ -1,11 +1,12 @@
 (ns core2.sql.logic-test.runner
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [core2.test-util :as tu])
   (:import java.nio.charset.StandardCharsets
            java.io.File
            java.security.MessageDigest
-           java.sql.Connection))
+           [java.sql Connection DriverManager]))
 
 (defprotocol DbEngine
   (get-engine-name [_])
@@ -120,20 +121,20 @@
                           (= "" v) "(empty)"
                           (float? v) (format "%.3f" v)
                           :else (str v))))]
-    (->> (case sort-mode
-           :rowsort (flatten (sort-by (partial str/join " ") result-rows))
-           :valuesort (sort (flatten result-rows))
-           :nosort (flatten result-rows))
-         (str/join "\n"))))
+    (str (->> (case sort-mode
+                :rowsort (flatten (sort-by (partial str/join " ") result-rows))
+                :valuesort (sort (flatten result-rows))
+                :nosort (flatten result-rows))
+              (str/join "\n")) "\n")))
 
 (defn- validate-type-string [type-string result]
   (doseq [row result
           [value type] (map vector row type-string)
-          :let [java-class (case (str type)
-                             "I" Long
-                             "R" Double
-                             "T" String)]]
-    (t/is (or (nil? value) (cast java-class value)))))
+          :let [pred (case (str type)
+                       "I" integer?
+                       "R" float?
+                       "T" string?)]]
+    (t/is (or (nil? value) (pred value)))))
 
 (defn- md5 ^String [^String s]
   (->> (.getBytes s StandardCharsets/UTF_8)
@@ -154,10 +155,7 @@
       (when-let [row (first result)]
         (t/is (count type-string) (count row)))
       (t/is (= result-set-size (* (count result) (count (first result)))))
-      (let [result-str (cond->> result
-                         (and result-set-md5sum max-result-set-size) (take max-result-set-size)
-                         true (format-result-str sort-mode))
-            result-str (str result-str "\n")]
+      (let [result-str (format-result-str sort-mode result)]
         (when result-set
           (t/is (= (str (str/join "\n" result-set) "\n") result-str)))
         (when result-set-md5sum
@@ -168,6 +166,8 @@
                                      :or {onlyif db-engine-name}}]
   (or (= db-engine-name skipif)
       (not= db-engine-name onlyif)))
+
+(def ^:dynamic *db-engine*)
 
 (def ^:private ^:dynamic *current-record* nil)
 
@@ -188,6 +188,16 @@
 (defn- ns-relative-path ^java.io.File [ns file]
   (str (str/replace (namespace-munge (ns-name ns)) "." "/") "/" file))
 
+(defn with-xtdb [f]
+  (require 'core2.sql.logic-test.xtdb-engine)
+  (binding [*db-engine* tu/*node*]
+    (f)))
+
+(defn with-sqlite [f]
+  (with-open [c (DriverManager/getConnection "jdbc:sqlite::memory:")]
+    (binding [*db-engine* c]
+      (f))))
+
 ;; NOTE: this is called deftest to make cider-test happy, but could be
 ;; configured via cider-test-defining-forms.
 (defmacro deftest [name]
@@ -195,5 +205,5 @@
         test-path (ns-relative-path *ns* (str name ".test"))]
     `(alter-meta!
       (t/deftest ~test-symbol
-        (execute-records core2.test-util/*node* (parse-script ~test-path (slurp (io/resource ~test-path)))))
+        (execute-records *db-engine* (parse-script ~test-path (slurp (io/resource ~test-path)))))
       assoc :file ~test-path)))

@@ -20,6 +20,7 @@
         org.clojure/tools.namespace {:mvn/version "1.2.0"}
 
         org.postgresql/postgresql {:mvn/version "42.2.20"}
+        org.xerial/sqlite-jdbc {:mvn/version "3.36.0.3"}
 
         io.github.cognitect-labs/test-runner {:git/tag "v0.5.0" :git/sha "b3fd0d2"}}
 
