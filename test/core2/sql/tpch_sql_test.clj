@@ -579,7 +579,7 @@
   (t/is
     (=
      '[:rename
-       {x1 c_name, x2 c_custkey, x4 o_orderkey, x5 o_orderdate, x6 o_totalprice, x19 $column_6$}
+       {x1 c_name, x2 c_custkey, x4 o_orderkey, x5 o_orderdate, x6 o_totalprice, x19 sum_qty}
        [:top
         {:limit 100}
         [:order-by
