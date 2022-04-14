@@ -1769,6 +1769,15 @@
        [:project projection
         relation]])
 
+    [:map projection
+     [:select predicate
+      relation]]
+    ;;=>
+    (when (not-empty (expr-correlated-symbols predicate))
+      [:select predicate
+       [:map projection
+        relation]])
+
     [:cross-join [:select predicate lhs] rhs]
     ;;=>
     (when (not-empty (expr-correlated-symbols predicate))
@@ -1824,25 +1833,20 @@
        (filter (comp (expr-correlated-symbols dependent-relation) val))
        (into {})))
 
-(defn- decorrelate-group-by-apply [post-group-by-projection group-by-columns pre-group-by-projection
+(defn- decorrelate-group-by-apply [post-group-by-projection group-by-columns
                                    apply-mode columns independent-relation dependent-relation]
   (let [independent-projection (relation-columns independent-relation)
         smap (set/map-invert columns)
         row-number-sym '$row_number$
         columns (remove-unused-correlated-columns columns dependent-relation)
         post-group-by-projection (remove symbol? post-group-by-projection)]
-    (cond->> [:apply apply-mode columns (set (relation-columns dependent-relation))
-              [:map [{row-number-sym '(row-number)}]
-               independent-relation]
-              dependent-relation]
-      (not-empty pre-group-by-projection)
-      (conj [:map (w/postwalk-replace smap pre-group-by-projection)])
-
-      true
-      (conj [:group-by (vec (concat independent-projection
-                                    [row-number-sym]
-                                    (w/postwalk-replace smap group-by-columns)))])
-
+    (cond->> [:group-by (vec (concat independent-projection
+                                     [row-number-sym]
+                                     (w/postwalk-replace smap group-by-columns)))
+              [:apply apply-mode columns (set (relation-columns dependent-relation))
+               [:map [{row-number-sym '(row-number)}]
+                independent-relation]
+               dependent-relation]]
       (not-empty post-group-by-projection)
       (conj [:map (vec (w/postwalk-replace
                         smap
@@ -1925,33 +1929,16 @@
     [:apply :cross-join columns _ independent-relation
      [:project post-group-by-projection
       [:group-by group-by-columns
-       [:map pre-group-by-projection
-        dependent-relation]]]]
-    ;;=>
-    (decorrelate-group-by-apply post-group-by-projection group-by-columns pre-group-by-projection
-                                :cross-join columns independent-relation dependent-relation)
-
-    [:apply :cross-join columns _ independent-relation
-     [:group-by group-by-columns
-      [:map pre-group-by-projection
        dependent-relation]]]
     ;;=>
-    (decorrelate-group-by-apply nil group-by-columns pre-group-by-projection
-                                :cross-join columns independent-relation dependent-relation)
-
-    [:apply :cross-join columns _ independent-relation
-     [:project post-group-by-projection
-      [:group-by group-by-columns
-       dependent-relation]]]
-    ;;=>
-    (decorrelate-group-by-apply post-group-by-projection group-by-columns nil
+    (decorrelate-group-by-apply post-group-by-projection group-by-columns
                                 :cross-join columns independent-relation dependent-relation)
 
     [:apply :cross-join columns _ independent-relation
      [:group-by group-by-columns
       dependent-relation]]
     ;;=>
-    (decorrelate-group-by-apply nil group-by-columns nil
+    (decorrelate-group-by-apply nil group-by-columns
                                 :cross-join columns independent-relation dependent-relation)))
 
 (defn- decorrelate-apply-rule-9 [z]
@@ -1960,28 +1947,9 @@
      [:max-1-row
       [:project post-group-by-projection
        [:group-by group-by-columns
-        [:map pre-group-by-projection
-         dependent-relation]]]]]
-    ;;=>
-    (decorrelate-group-by-apply post-group-by-projection group-by-columns pre-group-by-projection
-                                :left-outer-join columns independent-relation dependent-relation)
-
-    [:apply :cross-join columns _ independent-relation
-     [:max-1-row
-      [:group-by group-by-columns
-       [:map pre-group-by-projection
         dependent-relation]]]]
     ;;=>
-    (decorrelate-group-by-apply nil group-by-columns pre-group-by-projection
-                                :left-outer-join columns independent-relation dependent-relation)
-
-    [:apply :cross-join columns _ independent-relation
-     [:max-1-row
-      [:project post-group-by-projection
-       [:group-by group-by-columns
-        dependent-relation]]]]
-    ;;=>
-    (decorrelate-group-by-apply post-group-by-projection group-by-columns nil
+    (decorrelate-group-by-apply post-group-by-projection group-by-columns
                                 :left-outer-join columns independent-relation dependent-relation)
 
     [:apply :cross-join columns _ independent-relation
@@ -1989,7 +1957,7 @@
       [:group-by group-by-columns
        dependent-relation]]]
     ;;=>
-    (decorrelate-group-by-apply nil group-by-columns nil
+    (decorrelate-group-by-apply nil group-by-columns
                                 :left-outer-join columns independent-relation dependent-relation)))
 
 (defn- optimize-join-expression [join-expressions lhs rhs]

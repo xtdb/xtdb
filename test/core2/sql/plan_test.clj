@@ -385,13 +385,13 @@
     (t/is (= '[:rename {x1 name, x12 $column_2$}
                [:project [x1 x12]
                 [:group-by [x1 x2 x3 $row_number$ {x12 (count x11)}]
-                 [:map [{x11 1}]
-                  [:left-outer-join [{x2 x9}]
-                   [:map [{$row_number$ (row-number)}]
-                    [:anti-join [{x3 x5}]
-                     [:rename {name x1, custno x2, country x3}
-                      [:scan [name custno country]]]
-                     [:rename {country x5} [:scan [country]]]]]
+                 [:left-outer-join [{x2 x9}]
+                  [:map [{$row_number$ (row-number)}]
+                   [:anti-join [{x3 x5}]
+                    [:rename {name x1, custno x2, country x3}
+                     [:scan [name custno country]]]
+                    [:rename {country x5} [:scan [country]]]]]
+                  [:map [{x11 1}]
                    [:rename {custno x9} [:scan [custno]]]]]]]]
              (plan-sql "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
                        FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)")))
