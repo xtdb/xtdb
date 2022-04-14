@@ -1924,7 +1924,9 @@
      (let [columns (remove-unused-correlated-columns columns dependent-relation)]
        [:apply :cross-join columns dependent-column-names independent-relation dependent-relation])]))
 
-(defn- decorrelate-apply-rule-8 [z]
+(defn- decorrelate-apply-rule-8
+  "R A× (G A,F E) = G A ∪ columns(R),F (R A× E)"
+  [z]
   (r/zmatch z
     [:apply :cross-join columns _ independent-relation
      [:project post-group-by-projection
@@ -1941,7 +1943,9 @@
     (decorrelate-group-by-apply nil group-by-columns
                                 :cross-join columns independent-relation dependent-relation)))
 
-(defn- decorrelate-apply-rule-9 [z]
+(defn- decorrelate-apply-rule-9
+  "R A× (G F1 E) = G columns(R),F' (R A⟕ E)"
+  [z]
   (r/zmatch z
     [:apply :cross-join columns _ independent-relation
      [:max-1-row
