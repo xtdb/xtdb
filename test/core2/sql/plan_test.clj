@@ -574,3 +574,35 @@
               [:rename {b x1, a x2}
                [:scan [b a]]]]]
            (plan-sql "SELECT u.b[u.a[0]] AS dyn_idx FROM u"))))
+
+(t/deftest test-current-time-111
+  (t/is (= '[:rename {x1 a,
+                      x8 $column_7$,
+                      x5 $column_4$,
+                      x9 $column_8$,
+                      x10 $column_9$,
+                      x4 $column_3$,
+                      x6 $column_5$,
+                      x11 $column_10$,
+                      x7 $column_6$,
+                      x3 $column_2$}
+             [:project [x1
+                        {x3 (current-time)}
+                        {x4 (current-time 2)}
+                        {x5 (current-date)}
+                        {x6 (current-timestamp)}
+                        {x7 (current-timestamp 4)}
+                        {x8 (local-time)}
+                        {x9 (local-time 6)}
+                        {x10 (local-timestamp)}
+                        {x11 (local-timestamp 9)}]
+              [:rename {a x1}
+               [:scan [a]]]]]
+           (plan-sql "
+SELECT u.a,
+       CURRENT_TIME, CURRENT_TIME(2),
+       CURRENT_DATE,
+       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(4),
+       LOCALTIME, LOCALTIME(6),
+       LOCALTIMESTAMP, LOCALTIMESTAMP(9)
+FROM u"))))

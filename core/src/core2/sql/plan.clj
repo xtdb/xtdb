@@ -159,6 +159,16 @@
        "MONTH" (PeriodDuration. (Period/ofMonths (Long/parseLong year-month-literal)) Duration/ZERO)
        "YEAR" (PeriodDuration. (Period/ofYears (Long/parseLong year-month-literal)) Duration/ZERO))
 
+     [:current_date_value_function _] '(current-date)
+     [:current_time_value_function _] '(current-time)
+     [:current_time_value_function _ ^:z tp] (list 'current-time (expr tp))
+     [:current_timestamp_value_function _] '(current-timestamp)
+     [:current_timestamp_value_function _ ^:z tp] (list 'current-timestamp (expr tp))
+     [:current_local_time_value_function _] '(local-time)
+     [:current_local_time_value_function _ ^:z tp] (list 'local-time (expr tp))
+     [:current_local_timestamp_value_function _] '(local-timestamp)
+     [:current_local_timestamp_value_function _ ^:z tp] (list 'local-timestamp (expr tp))
+
      [:character_like_predicate ^:z rvp [:character_like_predicate_part_2 "LIKE" ^:z cp]]
      ;;=>
      (list 'like (expr rvp) (expr cp))
