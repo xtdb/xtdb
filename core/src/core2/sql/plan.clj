@@ -201,8 +201,45 @@
      ;;=>
      (list 'extract extract-field (expr es))
 
-     [:absolute_value_expression "ABS" ^:z nve]
+     [:modulus_expression _ ^:z nve-1 ^:z nve-2]
+     ;;=>
+     (list 'mod (expr nve-1) (expr nve-2))
+
+     [:power_function _ ^:z nve-1 ^:z nve-2]
+     ;;=>
+     (list 'power (expr nve-1) (expr nve-2))
+
+     [:absolute_value_expression _ ^:z nve]
+     ;;=>
      (list 'abs (expr nve))
+
+     [:ceiling_function _ ^:z nve]
+     ;;=>
+     (list 'ceil (expr nve))
+
+     [:floor_function _ ^:z nve]
+     ;;=>
+     (list 'floor (expr nve))
+
+     [:natural_logarithm _ ^:z nve]
+     ;;=>
+     (list 'ln (expr nve))
+
+     [:exponential_function _ ^:z nve]
+     ;;=>
+     (list 'exp (expr nve))
+
+     [:common_logarithm _ ^:z nve]
+     ;;=>
+     (list 'log10 (expr nve))
+
+     [:general_logarithm_function _ ^:z nve-1 ^:z nve-2]
+     ;;=>
+     (list 'log (expr nve-1) (expr nve-2))
+
+     [:trigonometric_function [:trigonometric_function_name tfn] ^:z nve]
+     ;;=>
+     (list (symbol (str/lower-case tfn)) (expr nve))
 
      [:named_columns_join _ _]
      ;;=>

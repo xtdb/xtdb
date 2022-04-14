@@ -54,7 +54,7 @@
             "math")
 
       (t/is (= (interleave (map float (range)) (repeat 500 0))
-               (project '(if (= 0 (% a 2)) (/ a 2) 0)))
+               (project '(if (= 0 (mod a 2)) (/ a 2) 0)))
             "if")
 
       (t/is (thrown? IllegalArgumentException (project '(vec a)))
@@ -280,6 +280,22 @@
       "a"
       "hello"
       "😀")))
+
+(t/deftest test-math-functions
+  (t/is (= [1.4142135623730951 1.8439088914585775 nil]
+           (project '(sqrt x) [{:x 2} {:x 3.4} {:x nil}])))
+  (t/is (= [0.9092974268256817 -0.2555411020268312 nil]
+           (project '(sin x) [{:x 2} {:x 3.4} {:x nil}])))
+  (t/is (= [2 3.4 5.0 nil]
+           (project '(abs x) [{:x -2} {:x -3.4} {:x 5.0} {:x nil}])))
+  (t/is (= [4.0 11.559999999999999 nil nil nil]
+           (project '(power x y) [{:x -2 :y 2} {:x -3.4 :y 2.0} {:x 5.0 :y nil} {:x nil :y 2} {:x nil :y nil}])))
+  (t/is (= [2.1760912590556813 nil]
+           (project '(log10 x) [{:x 150} {:x nil}])))
+  (t/is (= [4.0 nil nil nil]
+           (project '(log x y) [{:x 16 :y 2} {:x nil :y 2} {:x 16 :y nil} {:x nil :y nil}])))
+  (t/is (= [2.772588722239781 nil]
+           (project '(ln x) [{:x 16} {:x nil}]))))
 
 (t/deftest test-min-max
   (letfn [(run-test [form vecs]

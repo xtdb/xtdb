@@ -616,7 +616,7 @@
      :continue-call (fn [f emitted-args]
                       (f return-type `(* ~@emitted-args)))}))
 
-(defmethod codegen-call [:% ::types/Number ::types/Number] [{:keys [arg-types]}]
+(defmethod codegen-call [:mod ::types/Number ::types/Number] [{:keys [arg-types]}]
   (mono-fn-call (types/least-upper-bound arg-types)
                 #(do `(mod ~@%))))
 
@@ -628,7 +628,22 @@
   (mono-fn-call (types/least-upper-bound arg-types)
                 #(do `(/ ~@%))))
 
-(doseq [f #{:+ :- :* :/ :%}]
+(defmethod codegen-call [:max ::types/Number ::types/Number] [{:keys [arg-types]}]
+  (mono-fn-call (types/least-upper-bound arg-types)
+                #(do `(Math/max ~@%))))
+
+(defmethod codegen-call [:min ::types/Number ::types/Number] [{:keys [arg-types]}]
+  (mono-fn-call (types/least-upper-bound arg-types)
+                #(do `(Math/min ~@%))))
+
+(defmethod codegen-call [:power ::types/Number ::types/Number] [_]
+  (mono-fn-call types/float8-type #(do `(Math/pow ~@%))))
+
+(defmethod codegen-call [:log ::types/Number ::types/Number] [_]
+  (mono-fn-call types/float8-type (fn [[x base]]
+                                    `(/ (Math/log ~x) (Math/log ~base)))))
+
+(doseq [f #{:+ :- :* :/ :mod :min :max :power :log}]
   (defmethod codegen-call [f ::types/Number ArrowType$Null] [_] call-returns-null)
   (defmethod codegen-call [f ArrowType$Null ::types/Number] [_] call-returns-null)
   (defmethod codegen-call [f ArrowType$Null ArrowType$Null] [_] call-returns-null))
@@ -729,23 +744,36 @@
                          "HOUR" epoch-day-code
                          "MINUTE" epoch-day-code)))})
 
-(def ^:private type->arrow-type
-  {Double/TYPE types/float8-type
-   Long/TYPE types/bigint-type
-   Boolean/TYPE ArrowType$Bool/INSTANCE})
+(defmethod codegen-call [:abs ::types/Number] [{[numeric-type] :arg-types}]
+  {:return-types #{numeric-type}
+   :continue-call (fn [f emitted-args]
+                    (f numeric-type
+                       `(Math/abs ~@emitted-args)))})
 
-(doseq [^Method method (.getDeclaredMethods Math)
-        :let [math-op (.getName method)
-              param-types (map type->arrow-type (.getParameterTypes method))
-              return-type (get type->arrow-type (.getReturnType method))]
-        :when (and return-type (every? some? param-types))]
-  (defmethod codegen-call (vec (cons (keyword math-op) (map class param-types))) [_]
-    {:return-types #{return-type}
+(defmethod codegen-call [:abs ArrowType$Null] [_] call-returns-null)
+
+(doseq [[math-op math-method] {:sin 'Math/sin
+                               :cos 'Math/cos
+                               :tan 'Math/tan
+                               :sinh 'Math/sinh
+                               :cosh 'Math/cosh
+                               :tanh 'Math/tanh
+                               :asin 'Math/asin
+                               :acos 'Math/acos
+                               :atan 'Math/atan
+                               :sqrt 'Math/sqrt
+                               :ln 'Math/log
+                               :log10 'Math/log10
+                               :exp 'Math/exp
+                               :floor 'Math/floor
+                               :ceil 'Math/ceil}]
+  (defmethod codegen-call [math-op ::types/Number] [{[numeric-type] :arg-types}]
+    {:return-types #{types/float8-type}
      :continue-call (fn [f emitted-args]
-                      (f return-type
-                         `(~(symbol "Math" math-op) ~@emitted-args)))}))
+                      (f numeric-type
+                         `(~math-method ~@emitted-args)))})
 
-(defmethod codegen-call [:sqrt ArrowType$Null] [_] call-returns-null)
+  (defmethod codegen-call [math-op ArrowType$Null] [_] call-returns-null))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti set-value-form
