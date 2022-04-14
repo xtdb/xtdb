@@ -1245,8 +1245,6 @@
                            {:p_brand "Brand#55" :p_type "STANDARD BRUSHED COPPER" :p_size 3 :supplier_cnt 4}
                            {:p_brand "Brand#55" :p_type "STANDARD BRUSHED STEEL" :p_size 19 :supplier_cnt 4}])
 
-;; count distinct not implemented
-#_
 (t/deftest ^:integration test-q16-part-supplier-relationship
   (t/is (= q16-result (q (tpch-test/slurp-query 16)))))
 
