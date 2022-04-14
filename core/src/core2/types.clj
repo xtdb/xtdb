@@ -2,23 +2,23 @@
   (:require [clojure.string :as str]
             [core2.util :as util])
   (:import clojure.lang.Keyword
-           [core2.types LegType LegType$StructLegType]
-           [core2.vector IDenseUnionWriter IVectorWriter]
-           [core2.vector.extensions KeywordType KeywordVector UuidType UuidVector UriType]
+           (core2.types LegType LegType$StructLegType)
+           (core2.vector IDenseUnionWriter IVectorWriter)
+           (core2.vector.extensions KeywordType KeywordVector UuidType UuidVector UriType)
            java.io.Writer
-           [java.nio ByteBuffer CharBuffer]
+           java.net.URI
+           (java.nio ByteBuffer CharBuffer)
            java.nio.charset.StandardCharsets
-           [java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId LocalDate LocalTime Period]
-           [java.util Date List Map UUID]
+           (java.time Duration Instant OffsetDateTime ZonedDateTime ZoneId LocalDate LocalTime Period)
+           (java.util Date List Map UUID)
            java.util.concurrent.ConcurrentHashMap
            java.util.function.Function
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeMilliVector TimeMicroVector TimeSecVector IntervalMonthDayNanoVector IntervalDayVector IntervalYearVector PeriodDuration]
-           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.types TimeUnit Types Types$MinorType UnionMode DateUnit IntervalUnit]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$Map ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType ArrowType$Date ArrowType$Time ArrowType$Interval]
-           org.apache.arrow.vector.util.Text
-           java.net.URI
-           [org.apache.arrow.vector.holders NullableIntervalDayHolder NullableIntervalYearHolder]))
+           (org.apache.arrow.vector BigIntVector BitVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeMilliVector TimeMicroVector TimeSecVector TimeStampSecVector TimeStampMilliVector TimeStampMicroVector TimeStampNanoVector IntervalMonthDayNanoVector IntervalDayVector IntervalYearVector PeriodDuration)
+           (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
+           (org.apache.arrow.vector.holders NullableIntervalDayHolder)
+           (org.apache.arrow.vector.types TimeUnit Types Types$MinorType UnionMode DateUnit IntervalUnit)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType ArrowType$Date ArrowType$Time ArrowType$Interval)
+           org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -34,9 +34,9 @@
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (ArrowType$Union. UnionMode/Dense (int-array 0)))
 (def list-type (.getType Types$MinorType/LIST))
-(def map-type (ArrowType$Map. false))
 (def keyword-type KeywordType/INSTANCE)
 (def date-day-type (ArrowType$Date. DateUnit/DAY))
+(def time-nanos-type (ArrowType$Time. TimeUnit/NANOSECOND 64))
 
 (defprotocol ArrowWriteable
   (^core2.types.LegType value->leg-type [v])
@@ -257,7 +257,11 @@
           "MILLISECOND" TimeStampMilliTZVector
           "MICROSECOND" TimeStampMicroTZVector
           "NANOSECOND" TimeStampNanoTZVector)
-        (throw (UnsupportedOperationException.)))))
+        (case (.name (.getUnit arrow-type))
+          "SECOND" TimeStampSecVector
+          "MILLISECOND" TimeStampMilliVector
+          "MICROSECOND" TimeStampMicroVector
+          "NANOSECOND" TimeStampNanoVector))))
 
   ArrowType$Duration (arrow-type->vector-type [_] DurationVector)
 
