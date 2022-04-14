@@ -750,13 +750,13 @@
 
 (defmethod codegen-call [:current-timestamp] [_]
   (let [zone-id (.getZone *clock*)
-        ret-type (ArrowType$Timestamp. TimeUnit/NANOSECOND (str zone-id))]
+        ret-type (ArrowType$Timestamp. TimeUnit/MICROSECOND (str zone-id))]
     {:return-types #{ret-type}
      :continue-call (fn [f _]
                       (f ret-type
                          `(long (let [inst# (.instant *clock*)]
-                                  (+ (* 1e9 (.getEpochSecond inst#))
-                                     (.getNano inst#))))))}))
+                                  (+ (* 1e6 (.getEpochSecond inst#))
+                                     (quot (.getNano inst#) 1e3))))))}))
 
 (defmethod codegen-call [:current-date] [_]
   ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
@@ -773,30 +773,32 @@
   ;; TODO check the specs on this one - I read the SQL spec as being returned in local,
   ;; but Arrow expects Times to be in UTC.
   ;; we then turn TimeNanos into LocalTimes, which confuses things further.
-  {:return-types #{types/time-nanos-type}
+  {:return-types #{types/time-micros-type}
    :continue-call (fn [f _]
-                    (f types/time-nanos-type
+                    (f types/time-micros-type
                        `(long (-> (ZonedDateTime/ofInstant (.instant *clock*) ZoneOffset/UTC)
                                   (.toLocalTime)
-                                  (.toNanoOfDay)))))})
+                                  (.toNanoOfDay)
+                                  (quot 1e3)))))})
 
 (defmethod codegen-call [:local-timestamp] [_]
-  (let [ret-type (ArrowType$Timestamp. TimeUnit/NANOSECOND nil)]
+  (let [ret-type (ArrowType$Timestamp. TimeUnit/MICROSECOND nil)]
     {:return-types #{ret-type}
      :continue-call (fn [f _]
                       (f ret-type
                          `(let [ldt# (-> (ZonedDateTime/ofInstant (.instant *clock*) (.getZone *clock*))
                                          (.toLocalDateTime))]
-                            (long (+ (* 1e9 (.toEpochSecond ldt# ZoneOffset/UTC))
-                                     (.getNano ldt#))))))}))
+                            (long (+ (* 1e6 (.toEpochSecond ldt# ZoneOffset/UTC))
+                                     (quot (.getNano ldt#) 1e3))))))}))
 
 (defmethod codegen-call [:local-time] [_]
-  {:return-types #{types/time-nanos-type}
+  {:return-types #{types/time-micros-type}
    :continue-call (fn [f _]
-                    (f types/time-nanos-type
+                    (f types/time-micros-type
                        `(long (-> (ZonedDateTime/ofInstant (.instant *clock*) (.getZone *clock*))
                                   (.toLocalTime)
-                                  (.toNanoOfDay)))))})
+                                  (.toNanoOfDay)
+                                  (quot 1e3)))))})
 
 (defmethod codegen-call [:abs ::types/Number] [{[numeric-type] :arg-types}]
   {:return-types #{numeric-type}

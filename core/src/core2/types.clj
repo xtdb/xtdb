@@ -36,7 +36,7 @@
 (def list-type (.getType Types$MinorType/LIST))
 (def keyword-type KeywordType/INSTANCE)
 (def date-day-type (ArrowType$Date. DateUnit/DAY))
-(def time-nanos-type (ArrowType$Time. TimeUnit/NANOSECOND 64))
+(def time-micros-type (ArrowType$Time. TimeUnit/MICROSECOND 64))
 
 (defprotocol ArrowWriteable
   (^core2.types.LegType value->leg-type [v])
