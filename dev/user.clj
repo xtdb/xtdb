@@ -3,7 +3,7 @@
             [clojure.java.io :as io])
   (:import java.io.File))
 
-(set! *warn-on-reflection* true)
+(alter-var-root #'*warn-on-reflection* (constantly true))
 (ctn/disable-reload!)
 
 (apply ctn/set-refresh-dirs (for [^File dir (concat (.listFiles (io/file "."))
