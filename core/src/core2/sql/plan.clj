@@ -312,7 +312,8 @@
                  [(expr z)]))
              z)
             (cons (case (r/lexeme z 1)
-                    "COALESCE" 'coalesce)))
+                    "COALESCE" 'coalesce
+                    "NULLIF" 'nullif)))
 
        :searched_case
        (->> (r/collect-stop

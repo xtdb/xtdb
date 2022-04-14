@@ -222,10 +222,10 @@
   (t/is (= '[:scan [{a (not (nil? a))}]]
            (plan-sql "SELECT * FROM t1 WHERE t1.a IS NOT NULL")))
 
-  (t/is (= '[:rename {x5 $column_1$}
-             [:project [{x5 (coalesce x1 x2 x3)}]
-              [:rename {a x1, b x2, c x3} [:scan [a b c]]]]]
-        (plan-sql "SELECT COALESCE(t1.a, t1.b, t1.c) FROM t1"))))
+  (t/is (= '[:rename {x4 $column_1$}
+             [:project [{x4 (nullif x1 x2)}]
+              [:rename {a x1, b x2} [:scan [a b]]]]]
+        (plan-sql "SELECT NULLIF(t1.a, t1.b) FROM t1"))))
 
 ;; TODO: sanity check semantic analysis for correlation both inside
 ;; and outside MAX, gives errors in both cases, are these correct?

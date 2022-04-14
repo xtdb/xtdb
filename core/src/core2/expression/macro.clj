@@ -84,6 +84,18 @@
        :then {:op :local, :local local}
        :else {:op :call, :f :coalesce, :args (rest args)}})))
 
+(defmethod macroexpand1-call :nullif [{[x y] :args}]
+  (let [local (gensym 'nullif)]
+    {:op :let
+     :local local
+     :expr x
+     :body {:op :if
+            :pred {:op :call, :f :true?
+                   :args [{:op :call, :f :=,
+                           :args [{:op :local, :local local} y]}]}
+            :then nil-literal
+            :else {:op :local, :local local}}}))
+
 ;; SQL:2011 §8.3
 (defmethod macroexpand1-call :between [{[x left right :as args] :args, :as expr}]
   (assert (= 3 (count args)) (format "`between` expects 3 args: '%s'" (pr-str expr)))

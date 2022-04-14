@@ -373,6 +373,17 @@
               :nullable? false}
              (run-test '(coalesce x y "default"))))))
 
+(t/deftest test-nullif
+  (letfn [(run-test [expr]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/varchar-type) ["x" "y" nil "x"])
+                                       (tu/->mono-vec "y" (FieldType/nullable types/varchar-type) ["y" "y" nil nil])])]
+              (run-projection rel expr)))]
+
+    (t/is (= {:res ["x" nil nil "x"]
+              :leg-type LegType/UTF8
+              :nullable? true}
+             (run-test '(nullif x y))))))
+
 (t/deftest test-mixing-numeric-types
   (letfn [(run-test [f x y]
             (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (types/value->leg-type x)) [x])
