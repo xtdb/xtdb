@@ -198,10 +198,12 @@
 (defmethod emit-value LocalDate [_ code]
   ;; if literal, we can just yield a long directly
   (if (instance? LocalDate code)
-    (.toEpochDay code)
+    (.toEpochDay ^LocalDate code)
     `(.toEpochDay ~code)))
 
-(defmethod emit-value PeriodDuration [_ code] `(PeriodDuration. (Period/parse ~(str (.getPeriod code))) (Duration/ofNanos ~(.toNanos (.getDuration code)))))
+(defmethod emit-value PeriodDuration [_ code]
+  `(PeriodDuration. (Period/parse ~(str (.getPeriod ^PeriodDuration code)))
+                    (Duration/ofNanos ~(.toNanos (.getDuration ^PeriodDuration code)))))
 
 (defmethod codegen-expr :literal [{:keys [literal]} _]
   (let [return-type (.arrowType (types/value->leg-type literal))
