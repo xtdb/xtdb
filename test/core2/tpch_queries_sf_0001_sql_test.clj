@@ -450,11 +450,11 @@
   (t/is (= []
            (q (tpch-test/slurp-query 18)))))
 
-#_(deftest test-q19-discounted-revenue ;; too slow
+(deftest test-q19-discounted-revenue
     (t/is (= []
              (q (tpch-test/slurp-query 19)))))
 
-(deftest test-q20-potential-part-promotion ;; group-by decorr null pointer
+(deftest test-q20-potential-part-promotion
   (t/is (= []
            (q (tpch-test/slurp-query 20)))))
 
@@ -462,7 +462,7 @@
   (t/is (= []
            (q (tpch-test/slurp-query 21)))))
 
-(deftest test-q22-global-sales-opportunity ;; group-by deccor IAE
+(deftest test-q22-global-sales-opportunity
   (t/is (= [{:cntrycode "13"
              :numcust 1
              :totacctbal 5679.84}
