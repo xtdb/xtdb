@@ -169,10 +169,10 @@
                                      (project/->project-cursor
                                       tu/*allocator*
                                       (.createCursor cursor-factory)
-                                      [(expr/->expression-projection-spec "a" '(+ a 1) {})
-                                       (expr/->expression-projection-spec "b" '(* (+ a 1) b) {})])
+                                      [(expr/->expression-projection-spec "a" '(+ a 1) '#{a} {})
+                                       (expr/->expression-projection-spec "b" '(* (+ a 1) b) '#{a b} {})])
 
-                                     (expr/->expression-relation-selector '(<= a 8) {}))))
+                                     (expr/->expression-relation-selector '(<= a 8) '#{a} {}))))
                                 true)]
 
     (t/is (= [[{:a 0, :b 1}]

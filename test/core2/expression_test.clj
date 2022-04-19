@@ -8,6 +8,7 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import core2.types.LegType
+           core2.vector.IIndirectVector
            (java.time Clock Duration Instant LocalDate LocalTime ZonedDateTime ZoneId)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
@@ -28,7 +29,7 @@
 (t/deftest test-simple-projection
   (with-open [in-rel (open-rel (->data-vecs))]
     (letfn [(project [form]
-              (with-open [project-col (.project (expr/->expression-projection-spec "c" form {})
+              (with-open [project-col (.project (expr/->expression-projection-spec "c" form '#{a b d} {})
                                                 tu/*allocator* in-rel)]
                 (tu/<-column project-col)))]
 
@@ -63,22 +64,22 @@
 
 (t/deftest can-compile-simple-expression
   (with-open [in-rel (open-rel (->data-vecs))]
-    (letfn [(select-relation [form params]
-              (alength (.select (expr/->expression-relation-selector form params)
+    (letfn [(select-relation [form col-names params]
+              (alength (.select (expr/->expression-relation-selector form col-names params)
                                 tu/*allocator*
                                 in-rel)))]
 
       (t/testing "selector"
-        (t/is (= 500 (select-relation '(>= a 500) {})))
-        (t/is (= 500 (select-relation '(>= e "0500") {}))))
+        (t/is (= 500 (select-relation '(>= a 500) '#{a} {})))
+        (t/is (= 500 (select-relation '(>= e "0500") '#{e} {}))))
 
       (t/testing "parameter"
-        (t/is (= 500 (select-relation '(>= a ?a) {'?a 500})))
-        (t/is (= 500 (select-relation '(>= e ?e) {'?e "0500"})))))))
+        (t/is (= 500 (select-relation '(>= a ?a) '#{a} {'?a 500})))
+        (t/is (= 500 (select-relation '(>= e ?e) '#{e} {'?e "0500"})))))))
 
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
-           (-> (.select (expr/->expression-relation-selector '(and true nil) {})
+           (-> (.select (expr/->expression-relation-selector '(and true nil) #{} {})
                         tu/*allocator*
                         (iv/->indirect-rel [] 1))
                (alength)))))
@@ -93,33 +94,33 @@
       (t/is (= {:vt-start [Long/MIN_VALUE μs-2019]
                 :vt-end [(inc μs-2019) Long/MAX_VALUE]}
                (transpose (expr.temp/->temporal-min-max-range
-                           {"_valid-time-start" '(<= _vt-time-start #inst "2019")
-                            "_valid-time-end" '(> _vt-time-end #inst "2019")}
+                           {"_valid-time-start" '(<= _valid-time-start #inst "2019")
+                            "_valid-time-end" '(> _valid-time-end #inst "2019")}
                            {}))))
 
       (t/is (= {:vt-start [μs-2019 μs-2019]}
                (transpose (expr.temp/->temporal-min-max-range
-                           {"_valid-time-start" '(= _vt-time-start #inst "2019")}
+                           {"_valid-time-start" '(= _valid-time-start #inst "2019")}
                            {}))))
 
       (t/testing "symbol column name"
         (t/is (= {:vt-start [μs-2019 μs-2019]}
                  (transpose (expr.temp/->temporal-min-max-range
-                             {'_valid-time-start '(= _vt-time-start #inst "2019")}
+                             {'_valid-time-start '(= _valid-time-start #inst "2019")}
                              {})))))
 
       (t/testing "conjunction"
         (t/is (= {:vt-start [Long/MIN_VALUE μs-2019]}
                  (transpose (expr.temp/->temporal-min-max-range
-                             {"_valid-time-start" '(and (<= _vt-time-start #inst "2019")
-                                                        (<= _vt-time-start #inst "2020"))}
+                             {"_valid-time-start" '(and (<= _valid-time-start #inst "2019")
+                                                        (<= _valid-time-start #inst "2020"))}
                              {})))))
 
       (t/testing "disjunction not supported"
         (t/is (= {}
                  (transpose (expr.temp/->temporal-min-max-range
-                             {"_valid-time-start" '(or (= _vt-time-start #inst "2019")
-                                                       (= _vt-time-start #inst "2020"))}
+                             {"_valid-time-start" '(or (= _valid-time-start #inst "2019")
+                                                       (= _valid-time-start #inst "2020"))}
                              {})))))
 
       (t/testing "parameters"
@@ -130,8 +131,8 @@
                  (transpose (expr.temp/->temporal-min-max-range
                              {"_tx-time-start" '(>= ?tt _tx-time-start)
                               "_tx-time-end" '(< ?tt _tx-time-end)
-                              "_valid-time-start" '(<= ?vt _vt-time-start)
-                              "_valid-time-end" '(> ?vt _vt-time-end)}
+                              "_valid-time-start" '(<= ?vt _valid-time-start)
+                              "_valid-time-end" '(> ?vt _valid-time-end)}
                              {'?tt (util/->instant #inst "2019",) '?vt (util/->instant #inst "2018")}))))))))
 
 (defn project
@@ -234,16 +235,17 @@
         (t/is (= [2022 2021 2020] (extract-all "YEAR" dates)))))))
 
 (defn- run-projection [rel form]
-  (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {})
-                                 tu/*allocator*
-                                 rel)]
-    {:res (tu/<-column out-ivec)
-     :leg-type (let [out-field (.getField (.getVector out-ivec))]
-                 (if (instance? ArrowType$Union (.getType out-field))
-                   (->> (.getChildren out-field)
-                        (into #{} (map types/field->leg-type)))
-                   (types/field->leg-type out-field)))
-     :nullable? (.isNullable (.getField (.getVector out-ivec)))}))
+  (let [col-names (into #{} (map #(symbol (.getName ^IIndirectVector %))) rel)]
+    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form col-names {})
+                                   tu/*allocator*
+                                   rel)]
+      {:res (tu/<-column out-ivec)
+       :leg-type (let [out-field (.getField (.getVector out-ivec))]
+                   (if (instance? ArrowType$Union (.getType out-field))
+                     (->> (.getChildren out-field)
+                          (into #{} (map types/field->leg-type)))
+                     (types/field->leg-type out-field)))
+       :nullable? (.isNullable (.getField (.getVector out-ivec)))})))
 
 (t/deftest test-variadics
   (letfn [(run-test [f x y z]

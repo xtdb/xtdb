@@ -6,7 +6,8 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.error :as err])
   (:import (clojure.lang Keyword MapEntry)
            (core2.operator IProjectionSpec IRelationSelector)
            (core2.types LegType)
@@ -33,7 +34,7 @@
     f)
   :default ::default)
 
-(defn form->expr [form {:keys [params locals] :as env}]
+(defn form->expr [form {:keys [col-names params locals] :as env}]
   (cond
     (symbol? form) (cond
                      (contains? locals form) {:op :local, :local form}
@@ -41,7 +42,10 @@
                                                {:op :param, :param form,
                                                 :param-type (.arrowType (types/value->leg-type param-v))
                                                 :param-class (class param-v)})
-                     :else {:op :variable, :variable form})
+                     (contains? col-names form) {:op :variable, :variable form}
+                     :else (throw (err/illegal-arg :unknown-symbol
+                                                   {::err/message (format "Unknown symbol: '%s'" form)
+                                                    :symbol form})))
 
     (map? form) (do
                   (when-not (every? keyword? (keys form))
@@ -1362,8 +1366,8 @@
            (MapEntry/create var-sym (-> ivec (.getVector) (.getField)))))
        (into {})))
 
-(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [^String col-name form params]
-  (let [expr (form->expr form {:params params})]
+(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [^String col-name form col-names params]
+  (let [expr (form->expr form {:col-names col-names, :params params})]
     (reify IProjectionSpec
       (getColumnName [_] col-name)
 
@@ -1371,8 +1375,8 @@
         (let [eval-expr (emit-expr expr col-name {:var-fields (->var-fields in-rel expr)})]
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))
 
-(defn ->expression-relation-selector ^core2.operator.IRelationSelector [form params]
-  (let [projector (->expression-projection-spec "select" (list 'boolean form) params)]
+(defn ->expression-relation-selector ^core2.operator.IRelationSelector [form col-names params]
+  (let [projector (->expression-projection-spec "select" (list 'boolean form) col-names params)]
     (reify IRelationSelector
       (select [_ al in-rel]
         (with-open [selection (.project projector al in-rel)]
@@ -1383,13 +1387,13 @@
                 (.add res idx)))
             (.toArray (.build res))))))))
 
-(defn eval-scalar-value [al form params]
+(defn eval-scalar-value [al form col-names params]
   (let [expr (form->expr form {:params params})]
     (case (:op expr)
       :literal form
       :param (get params (:param expr))
 
       ;; this is probably quite heavyweight to calculate a single value...
-      (let [projection-spec (->expression-projection-spec "_scalar" form params)]
+      (let [projection-spec (->expression-projection-spec "_scalar" form col-names params)]
         (with-open [out-vec (.project projection-spec al (iv/->indirect-rel [] 1))]
           (types/get-object (.getVector out-vec) (.getIndex out-vec 0)))))))

@@ -17,7 +17,7 @@
                                      [{:a 100, :b 83}]
                                      [{:a 83, :b 100}]])
                 select-cursor (select/->select-cursor tu/*allocator* cursor
-                                                      (expr/->expression-relation-selector '(> a b) {}))]
+                                                      (expr/->expression-relation-selector '(> a b) '#{a b} {}))]
       (t/is (= [[{:a 12, :b 10}]
                 [{:a 100, :b 83}]]
                (tu/<-cursor select-cursor))))))

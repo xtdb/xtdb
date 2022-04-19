@@ -27,13 +27,15 @@
           left-join-cols ["a"], right-join-cols ["b"]}}]
 
    (let [left-col-names (->> left-fields (into #{} (map #(.getName ^Field %))))
-         right-col-names (->> right-fields (into #{} (map #(.getName ^Field %))))]
+         right-col-names (->> right-fields (into #{} (map #(.getName ^Field %))))
+         theta-selector (some-> theta-expr
+                                (expr/->expression-relation-selector (into #{} (map symbol) (concat left-col-names right-col-names)) {}))]
      (with-open [left-cursor (tu/->cursor (Schema. left-fields) left-blocks)
                  right-cursor (tu/->cursor (Schema. right-fields) right-blocks)
                  ^ICursor join-cursor (->join-cursor tu/*allocator*
                                                      left-cursor left-join-cols left-col-names
                                                      right-cursor right-join-cols right-col-names
-                                                     (some-> theta-expr (expr/->expression-relation-selector {})))]
+                                                     theta-selector)]
 
        (vec (tu/<-cursor join-cursor))))))
 

@@ -142,16 +142,16 @@
                               ^long validTimeStart, ^long validTimeEnd
                               ^boolean tombstone])
 
-(def ->temporal-field
+(def temporal-fields
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
          [col-name (t/->field col-name t/timestamp-micro-tz-type false)])
        (into {})))
 
 (defn temporal-column? [col-name]
-  (contains? ->temporal-field (name col-name)))
+  (contains? temporal-fields (name col-name)))
 
 (defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]
-  (Schema. [t/row-id-field (get ->temporal-field (name col-name))]))
+  (Schema. [t/row-id-field (get temporal-fields (name col-name))]))
 
 (def ^:const ^int tx-time-end-idx 0)
 (def ^:const ^int id-idx 1)

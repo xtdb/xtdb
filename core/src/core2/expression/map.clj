@@ -76,12 +76,12 @@
                             (reify IntIntPredicate
                               (test [_ ~left-idx ~right-idx]
                                 ~(let [{continue-left :continue}
-                                       (-> (expr/form->expr left-vec {})
+                                       (-> (expr/form->expr left-vec {:col-names #{left-vec}})
                                            (assoc :idx left-idx)
                                            (expr/codegen-expr {:var->types {left-vec left-val-types}}))
 
                                        {continue-right :continue}
-                                       (-> (expr/form->expr right-vec {})
+                                       (-> (expr/form->expr right-vec {:col-names #{right-vec}})
                                            (assoc :idx right-idx)
                                            (expr/codegen-expr {:var->types {right-vec right-val-types}}))]
 

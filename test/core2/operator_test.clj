@@ -48,11 +48,11 @@
                                    {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]]
               (t/is (= expected-match
                        (meta/matching-chunks metadata-mgr watermark
-                                             (expr.meta/->metadata-selector '(> name "Ivan") {})))
+                                             (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})))
                     "only needs to scan chunk 1, block 1")
               (t/is (= expected-match
                        (meta/matching-chunks metadata-mgr watermark
-                                             (expr.meta/->metadata-selector '(> name ?name) {'?name "Ivan"})))
+                                             (expr.meta/->metadata-selector '(> name ?name) '#{name} {'?name "Ivan"})))
                     "only needs to scan chunk 1, block 1")))
 
           (-> (c2/submit-tx node [[:put {:name "Jeremy", :_id :jdt}]])
@@ -92,12 +92,12 @@
                                {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
           (t/is (= expected-match
                    (meta/matching-chunks metadata-mgr watermark
-                                         (expr.meta/->metadata-selector '(= name "Ivan") {})))
+                                         (expr.meta/->metadata-selector '(= name "Ivan") '#{name} {})))
                 "only needs to scan chunk 0, block 0")
 
           (t/is (= expected-match
                    (meta/matching-chunks metadata-mgr watermark
-                                         (expr.meta/->metadata-selector '(= name ?name) {'?name "Ivan"})))
+                                         (expr.meta/->metadata-selector '(= name ?name) '#{name} {'?name "Ivan"})))
                 "only needs to scan chunk 0, block 0"))
 
         (t/is (= #{{:name "Ivan"}}
@@ -434,3 +434,10 @@
           modulus (long 1e8)]
       (t/is (= nanos (* modulus (quot nanos modulus)))
             "check rounding"))))
+
+(t/deftest test-empty-rel-still-throws-149
+  (t/is (thrown-with-msg? IllegalArgumentException
+                          #"Unknown symbol: '\?x13'"
+                          (op/query-ra '[:select (= ?x13 x4)
+                                         [:table []]]
+                                       {}))))

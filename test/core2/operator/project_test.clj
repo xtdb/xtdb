@@ -16,7 +16,7 @@
                                    [{:a 100, :b 83}]])
               project-cursor (project/->project-cursor tu/*allocator* cursor
                                                        [(project/->identity-projection-spec "a")
-                                                        (expr/->expression-projection-spec "c" '(+ a b) {})])]
+                                                        (expr/->expression-projection-spec "c" '(+ a b) '#{a b} {})])]
     (t/is (= [[{:a 12, :c 22}, {:a 0, :c 15}]
               [{:a 100, :c 183}]]
              (tu/<-cursor project-cursor)))))

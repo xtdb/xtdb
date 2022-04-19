@@ -95,7 +95,7 @@
            ~(-> from-var (expr/with-tag IIndirectVector))
            ~(-> group-mapping-sym (expr/with-tag IntVector))]
 
-        ~(let [{continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {}) {:var->types {from-var from-val-types}})]
+        ~(let [{continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {:col-names #{from-var}}) {:var->types {from-var from-val-types}})]
            `(dotimes [~expr/idx-sym (.getValueCount ~from-var)]
               (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
                 (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)
@@ -246,7 +246,7 @@
 (defmethod ->aggregate-factory :avg [_ ^String from-name, ^String to-name]
   (let [sum-agg (->aggregate-factory :sum from-name "sum")
         count-agg (->aggregate-factory :count from-name "cnt")
-        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt) {})]
+        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt) '#{sum cnt} {})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
 
@@ -283,8 +283,8 @@
   (let [avgx-agg (->aggregate-factory :avg from-name "avgx")
         avgx2-agg (->aggregate-factory :avg "x2" "avgx2")
         from-var (symbol from-name)
-        x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var) {})
-        finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx)) {})]
+        x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var) #{from-var} {})
+        finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx)) '#{avgx2 avgx} {})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
 
@@ -320,7 +320,7 @@
 
 (defmethod ->aggregate-factory :std-dev [_ ^String from-name, ^String to-name]
   (let [variance-agg (->aggregate-factory :variance from-name "variance")
-        finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance) {})]
+        finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance) '#{variance} {})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
 

@@ -213,7 +213,7 @@
       ;; pass values instead?
       memoize))
 
-(defn ->metadata-selector [form params]
-  (let [{:keys [expr f]} (compile-meta-expr (expr/form->expr form {:params params}))]
+(defn ->metadata-selector [form col-names params]
+  (let [{:keys [expr f]} (compile-meta-expr (expr/form->expr form {:params params, :col-names col-names}))]
     (fn [chunk-idx metadata-root]
       (f chunk-idx metadata-root params (->bloom-hashes expr params)))))

@@ -57,13 +57,13 @@
                      (into {}))
         col-preds (->> (for [[col-name select-form] selects]
                          (MapEntry/create (name col-name)
-                                          (expr/->expression-relation-selector select-form params)))
+                                          (expr/->expression-relation-selector select-form #{col-name} params)))
                        (into {}))
         metadata-args (vec (concat (for [col-name ordered-col-names
                                          :when (not (contains? col-preds col-name))]
                                      (symbol col-name))
                                    (vals selects)))
-        metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) params)
+        metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (into #{} (map symbol) ordered-col-names) params)
 
         src-key (or source '$)]
 
@@ -73,9 +73,9 @@
                                :db source
                                :src-keys src-keys})))
     {:col-names (set ordered-col-names)
-     :->cursor (fn [{:keys [allocator srcs default-valid-time]}]
+     :->cursor (fn [{:keys [allocator srcs params default-valid-time]}]
                  (let [^ISnapshot db (get srcs src-key)
-                       [^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects srcs)]
+                       [^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects params)]
                    (when-not (or (contains? col-preds "_valid-time-start")
                                  (contains? col-preds "_valid-time-end"))
                      (expr.temp/apply-constraint temporal-min-range temporal-max-range
@@ -154,9 +154,9 @@
                        (throw e)))))}))
 
 (defmethod emit-op :select [{:keys [predicate relation]} {:keys [params] :as args}]
-  (let [selector (expr/->expression-relation-selector predicate params)]
-    (unary-op relation args
-              (fn [inner-col-names]
+  (unary-op relation args
+            (fn [inner-col-names]
+              (let [selector (expr/->expression-relation-selector predicate (into #{} (map symbol) inner-col-names) params)]
                 {:col-names inner-col-names
                  :->cursor (fn [{:keys [allocator]} inner]
                              (select/->select-cursor allocator inner selector))}))))
@@ -173,7 +173,7 @@
                                                  :row-number-column (let [[col-name _form] (first arg)]
                                                                       (project/->row-number-projection-spec (name col-name)))
                                                  :extend (let [[col-name form] (first arg)]
-                                                           (expr/->expression-projection-spec (name col-name) form params)))))]
+                                                           (expr/->expression-projection-spec (name col-name) form (into #{} (map symbol) inner-col-names) params)))))]
                 {:col-names (->> projection-specs
                                  (into #{} (map #(.getColumnName ^IProjectionSpec %))))
                  :->cursor (fn [{:keys [allocator]} inner]
@@ -255,17 +255,19 @@
           predicates (keep (fn [[tag val]]
                              (when (= :pred-expr tag)
                                val))
-                           condition)
-          theta-selector (when (seq predicates)
-                           (expr/->expression-relation-selector (list* 'and predicates) {}))]
+                           condition)]
       (binary-op left right args
                  (fn [left-col-names right-col-names]
-                   {:col-names (->col-names left-col-names right-col-names)
-                    :->cursor (fn [{:keys [allocator]} left right]
-                                (->join-cursor allocator
-                                               left left-key-cols left-col-names
-                                               right right-key-cols right-col-names
-                                               theta-selector))})))))
+                   (let [theta-selector (when (seq predicates)
+                                          (expr/->expression-relation-selector (list* 'and predicates)
+                                                                               (into #{} (map symbol) (concat left-col-names right-col-names))
+                                                                               {}))]
+                     {:col-names (->col-names left-col-names right-col-names)
+                      :->cursor (fn [{:keys [allocator]} left right]
+                                  (->join-cursor allocator
+                                                 left left-key-cols left-col-names
+                                                 right right-key-cols right-col-names
+                                                 theta-selector))}))))))
 
 (defmethod emit-op :group-by [{:keys [columns relation]} args]
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)

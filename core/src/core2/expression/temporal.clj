@@ -204,10 +204,11 @@
 
 (defn ->temporal-min-max-range [selects srcs]
   (let [min-range (temporal/->min-range)
-        max-range (temporal/->max-range)]
+        max-range (temporal/->max-range)
+        col-names (into #{} (map symbol) (keys temporal/temporal-fields))]
     (doseq [[col-name select-form] selects
             :when (temporal/temporal-column? col-name)]
-      (->> (expr/form->expr select-form {:params srcs})
+      (->> (expr/form->expr select-form {:params srcs, :col-names col-names})
            (emacro/macroexpand-all)
            (ewalk/postwalk-expr expr/lit->param)
            (expr.meta/meta-expr)
