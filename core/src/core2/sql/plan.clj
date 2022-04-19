@@ -313,6 +313,10 @@
      ;;=>
      (list 'nth (expr ave) (expr nve))
 
+     [:dynamic_parameter_specification _]
+     ;;=>
+     (symbol (str "?_" (sem/dynamic-param-idx z)))
+
      (r/zcase z
        :case_abbreviation
        (->> (r/collect-stop
@@ -2025,6 +2029,7 @@
   (if-let [parse-failure (insta/get-failure query)]
     {:errs [(prn-str parse-failure)]}
     (r/with-memoized-attributes [sem/id
+                                 sem/dynamic-param-idx
                                  sem/ctei
                                  sem/cteo
                                  sem/cte-env

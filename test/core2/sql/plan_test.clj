@@ -606,3 +606,21 @@ SELECT u.a,
        LOCALTIME, LOCALTIME(6),
        LOCALTIMESTAMP, LOCALTIMESTAMP(9)
 FROM u"))))
+
+(t/deftest test-dynamic-parameters-103
+  (t/is (= '[:rename {x1 a}
+             [:project [x1]
+              [:rename {a x1, b x2, c x3}
+               [:scan [a {b (= b ?_0)} {c (= c ?_1)}]]]]]
+           (plan-sql "SELECT foo.a FROM foo WHERE foo.b = ? AND foo.c = ?")))
+
+  (t/is (= '[:rename {x1 a}
+             [:project [x1]
+              [:cross-join
+               [:rename {a x1, b x2, c x3}
+                [:scan [a {b (= b ?_1)} {c (= c ?_2)}]]]
+               [:rename {b x5, c x6}
+                [:scan [b {c (= c ?_0)}]]]]]]
+           (plan-sql "SELECT foo.a
+                      FROM foo, (SELECT bar.b FROM bar WHERE bar.c = ?) bar (b)
+                      WHERE foo.b = ? AND foo.c = ?"))))

@@ -24,8 +24,8 @@
   (-open-datalog-async ^java.util.concurrent.CompletableFuture [node query args])
 
   ;; TODO will want to accept params in here eventually.
-  (-open-sql-async ^java.util.concurrent.CompletableFuture [node query basis-opts]
-    "basis-opts :: :basis, :basis-timeout"))
+  (-open-sql-async ^java.util.concurrent.CompletableFuture [node query query-opts]
+    "query-opts :: :basis, :basis-timeout, :?"))
 
 (defprotocol PSubmitNode
   (^java.util.concurrent.CompletableFuture #_<TransactionInstant>
@@ -77,44 +77,38 @@
 
 ;;;; SQL
 
-(defn- src-or-srcs->srcs [src-or-srcs]
-  (cond
-    (nil? src-or-srcs) {}
-    (map? src-or-srcs) src-or-srcs
-    :else {'$ src-or-srcs}))
-
-(defn open-sql-async ^java.util.concurrent.CompletableFuture [node query src-or-srcs]
-  (-open-sql-async node query (src-or-srcs->srcs src-or-srcs)))
+(defn open-sql-async ^java.util.concurrent.CompletableFuture [node query query-opts]
+  (-open-sql-async node query query-opts))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn open-sql ^core2.IResultSet [node query basis-opts]
-  (-> @(-open-sql-async node query basis-opts)
+(defn open-sql ^core2.IResultSet [node query query-opts]
+  (-> @(-open-sql-async node query query-opts)
       rethrowing-cause))
 
 (defn plan-sql-async
   "Calling `reduce` on the result from `plan-sql-async` yields a `CompletableFuture`."
-  [node query basis-opts]
+  [node query query-opts]
 
   (reify IReduceInit
     (reduce [_ f init]
-      (-> (-open-sql-async node query basis-opts)
+      (-> (-open-sql-async node query query-opts)
           (.thenApply (reify Function
                         (apply [_ res]
                           (with-open [^IResultSet res res]
                             (reduce f init (iterator-seq res))))))))))
 
-(defn plan-sql [node query basis-opts]
+(defn plan-sql [node query query-opts]
   (reify IReduceInit
     (reduce [_ f init]
-      (-> @(reduce f init (plan-sql-async node query basis-opts))
+      (-> @(reduce f init (plan-sql-async node query query-opts))
           rethrowing-cause))))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(defn sql-query-async ^java.util.concurrent.CompletableFuture [node query basis-opts]
-  (into [] (plan-sql-async node query basis-opts)))
+(defn sql-query-async ^java.util.concurrent.CompletableFuture [node query query-opts]
+  (into [] (plan-sql-async node query query-opts)))
 
-(defn sql-query [node query basis-opts]
-  (into [] (plan-sql node query basis-opts)))
+(defn sql-query [node query query-opts]
+  (into [] (plan-sql node query query-opts)))
 
 (def http-routes
   [["/status" {:name :status

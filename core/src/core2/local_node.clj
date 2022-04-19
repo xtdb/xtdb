@@ -44,7 +44,7 @@
                                              (d/compile-query args))]
                 (op/open-ra query (merge args {'$ db}) {:default-valid-time default-valid-time})))))))
 
-  (-open-sql-async [_ query {:core2/keys [basis ^Duration basis-timeout]}]
+  (-open-sql-async [_ query {:keys [basis ^Duration basis-timeout] :as query-opts}]
     (let [{:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
       (-> (snap/snapshot-async snapshot-factory tx)
           (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
@@ -56,7 +56,11 @@
                   (throw (err/illegal-arg :invalid-sql-query
                                           {::err/message "Invalid SQL query:"
                                            :errs errs}))
-                  (op/open-ra plan {'$ db} {:default-valid-time default-valid-time}))))))))
+                  (op/open-ra plan
+                              (into {'$ db}
+                                    (zipmap (map #(symbol (str "?_" %)) (range))
+                                            (:? query-opts)))
+                              {:default-valid-time default-valid-time}))))))))
 
   PNode
   (await-tx-async [_ tx]

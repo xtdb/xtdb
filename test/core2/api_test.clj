@@ -120,12 +120,25 @@
       (t/is (= #{:foo} (q-at tx1)))
       (t/is (= #{:foo :baz} (q-at tx3))))))
 
+(def ^:private devs
+  [[:put {:_id :jms, :name "James"}]
+   [:put {:_id :hak, :name "Håkan"}]
+   [:put {:_id :mat, :name "Matt"}]
+   [:put {:_id :wot, :name "Dan"}]])
+
 (t/deftest test-sql-roundtrip
-  (let [!tx (c2/submit-tx *node* [[:put {:_id :jms, :name "James"}]
-                                  [:put {:_id :mat, :name "Matt"}]])]
+  (let [!tx (c2/submit-tx *node* devs)]
 
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
 
     (t/is (= [{:name "James"}]
              (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name = 'James'"
-                           {:core2/basis {:tx !tx}})))))
+                           {:basis {:tx !tx}})))))
+
+(t/deftest test-sql-dynamic-params-103
+  (let [!tx (c2/submit-tx *node* devs)]
+
+    (t/is (= [{:name "James"} {:name "Matt"}]
+             (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN (?, ?)"
+                           {:basis {:tx !tx}
+                            :? ["James", "Matt"]})))))

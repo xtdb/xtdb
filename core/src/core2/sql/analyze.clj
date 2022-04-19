@@ -76,6 +76,10 @@
 (defn ^:dynamic id [ag]
   (or (some-> (z/prev ag) (id) (inc)) 0))
 
+(defn ^:dynamic dynamic-param-idx [ag]
+  (cond-> (or (some-> (z/prev ag) (dynamic-param-idx)) -1)
+    (= :dynamic_parameter_specification (r/ctor ag)) (inc)))
+
 ;; Identifiers
 
 (defn- identifiers [ag]
@@ -1002,6 +1006,7 @@
   (if-let [parse-failure (insta/get-failure query)]
     {:errs [(prn-str parse-failure)]}
     (r/with-memoized-attributes [id
+                                 dynamic-param-idx
                                  ctei
                                  cteo
                                  cte-env

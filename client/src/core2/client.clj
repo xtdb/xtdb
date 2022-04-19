@@ -94,9 +94,8 @@
                         (apply [_ resp]
                           (:body resp)))))))
 
-  (-open-sql-async [client query params]
-    ;; HACK basis as first and only param
-    (let [basis-tx (get-in (first params) [:core2/basis :tx])
+  (-open-sql-async [client query {:keys [basis] :as query-opts}]
+    (let [{basis-tx :tx} basis
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
                                          basis-tx
                                          (CompletableFuture/completedFuture basis-tx))]
@@ -106,7 +105,8 @@
                             (request client :post :sql-query
                                      {:content-type :transit+json
                                       :form-params {:query query
-                                                    :params [{:core2/basis {:tx basis-tx}}]}
+                                                    :basis {:tx basis-tx}
+                                                    :? (:? query-opts)}
                                       :as ::transit+json->resultset}))))
           (.thenApply (reify Function
                         (apply [_ resp]

@@ -133,8 +133,11 @@
 
 (s/def :core2.server.sql/query string?)
 
+(s/def ::? (s/nilable (s/coll-of any? :kind vector?)))
+
 (s/def :core2.server.sql/query-body
-  (s/keys :req-un [:core2.server.sql/query], :opt-un [::params]))
+  (s/keys :req-un [:core2.server.sql/query],
+          :opt-un [::basis ::basis-timeout ::?]))
 
 (defmethod route-handler :sql-query [_]
   {:muuntaja (m/create (-> muuntaja-opts
@@ -146,8 +149,8 @@
                                      [->edn-resultset-encoder])))
 
    :post {:handler (fn [{:keys [node parameters]}]
-                     (let [{{:keys [query params]} :body} parameters]
-                       (-> (apply c2/open-sql-async node query params)
+                     (let [{{:keys [query] :as query-opts} :body} parameters]
+                       (-> (c2/open-sql-async node query (dissoc query-opts :query))
                            (util/then-apply (fn [res]
                                               {:status 200, :body res})))))
 
