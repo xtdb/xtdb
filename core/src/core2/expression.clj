@@ -22,7 +22,8 @@
            (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector ValueVector PeriodDuration)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector)
            (org.apache.arrow.vector.types DateUnit TimeUnit Types Types$MinorType IntervalUnit)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Time ArrowType$Interval)))
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Time ArrowType$Interval)
+           (java.util.regex Pattern)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -660,12 +661,38 @@
   (defmethod codegen-call [f ArrowType$Null ::types/Number] [_] call-returns-null)
   (defmethod codegen-call [f ArrowType$Null ArrowType$Null] [_] call-returns-null))
 
-(defmethod codegen-call [:like ::types/Object ArrowType$Utf8] [{[_ {:keys [literal]}] :args}]
+(defn like->regex [like-pattern]
+  (-> like-pattern
+      (Pattern/quote)
+      (.replace "%" "\\E.*\\Q")
+      (.replace "_" "\\E.\\Q")
+      (->> (format "^%s$"))
+      re-pattern))
+
+(defmethod codegen-call [:like ArrowType$Utf8 ArrowType$Utf8] [{[_ {:keys [literal]}] :args}]
   {:return-types #{types/bool-type}
-   :continue-call (fn [f [haystack-code]]
+   :continue-call (fn [f [haystack-code needle-code]]
                     (f types/bool-type
-                       `(boolean (re-find ~(re-pattern (str "^" (str/replace literal #"%" ".*") "$"))
+                       `(boolean (re-find ~(if literal
+                                             (like->regex literal)
+                                             `(like->regex (resolve-string ~needle-code)))
                                           (resolve-string ~haystack-code)))))})
+
+(defmethod codegen-call [:like ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
+(defmethod codegen-call [:like ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
+(defmethod codegen-call [:like ArrowType$Null ArrowType$Null] [_] call-returns-null)
+
+(defmethod codegen-call [:like ArrowType$Binary ArrowType$Binary] [{[_ {:keys [literal]}] :args}]
+  {:return-types #{types/bool-type}
+   :continue-call (fn [f [haystack-code needle-code]]
+                    (f types/bool-type
+                       `(boolean (re-find ~(if literal
+                                             (like->regex literal)
+                                             `(like->regex (resolve-string ~needle-code)))
+                                          (resolve-string ~haystack-code)))))})
+
+(defmethod codegen-call [:like ArrowType$Binary ArrowType$Null] [_] call-returns-null)
+(defmethod codegen-call [:like ArrowType$Null ArrowType$Binary] [_] call-returns-null)
 
 (defmethod codegen-call [:substring ::types/Object ArrowType$Int ArrowType$Int] [_]
   {:return-types #{ArrowType$Utf8/INSTANCE}

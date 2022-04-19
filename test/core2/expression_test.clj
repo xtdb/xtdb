@@ -282,6 +282,51 @@
       "hello"
       "😀")))
 
+(t/deftest test-like
+  (letfn [(like [s ptn] (project1 '(like s ptn) {:s s, :ptn ptn}))]
+    (t/are [s ptn expected-result]
+      (= expected-result (like s ptn))
+
+      ""  "" true
+      "a" "" false
+      "a" "a" true
+      "a" "b" false
+      "a" "_" true
+      "a" "_a" false
+      "a" "%" true
+      "a" "_%" true
+      "a" "__%" false
+
+      "." "_" true
+      ".." ".." true
+      ".*" ".." false
+
+      "foobar" "fo%" true
+      "foobar" "%ar" true
+      "foobar" "%f__b%" true
+
+      "foobar" "foo" false
+      "foobar" "__foobar" false
+      "foobar" "%foobar" true
+      "foobar" "%foobar%" true
+
+      "%%" "%_" true
+      "%%" "___" false
+      "%___%" "%" true
+      "%__" "%_%" true
+
+      "" nil nil
+      "a" nil nil
+      nil nil nil
+      nil "%" nil
+
+      "A" "a" false
+      "a" "A" false
+      "A" "%" true)
+
+    (t/testing "literal projection"
+      (t/is (project1 (list 'like 's "%.+%ar") {:s "foo .+ bar"})))))
+
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
            (project '(sqrt x) [{:x 2} {:x 3.4} {:x nil}])))
