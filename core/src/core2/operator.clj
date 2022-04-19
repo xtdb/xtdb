@@ -215,7 +215,7 @@
                 :->cursor (fn [_opts left right]
                             (set-op/->union-all-cursor left right))})))
 
-(defmethod emit-op :intersection [{:keys [left right]} args]
+(defmethod emit-op :intersect [{:keys [left right]} args]
   (binary-op left right args
              (fn [left-col-names right-col-names]
                (let [col-names (ensuring-same-col-names left-col-names right-col-names)]
