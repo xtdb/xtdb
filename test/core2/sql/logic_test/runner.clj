@@ -133,7 +133,7 @@
           :let [pred (case (str type)
                        "I" integer?
                        "R" float?
-                       "T" string?)]]
+                       "T" some?)]]
     (t/is (or (nil? value) (pred value)))))
 
 (defn- md5 ^String [^String s]
