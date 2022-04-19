@@ -409,9 +409,11 @@
          [:select (< l_quantity small_avg_qty)
           [:join {p_partkey l_partkey}
            [:scan [p_partkey {p_brand (= p_brand ?brand)} {p_container (= p_container ?container)}]]
-           [:project [l_partkey {small_avg_qty (* 0.2 avg_qty)}]
-            [:group-by [l_partkey {avg_qty (avg l_quantity)}]
-             [:scan [l_partkey l_quantity]]]]]]]]
+           [:join {l_partkey l_partkey}
+            [:project [l_partkey {small_avg_qty (* 0.2 avg_qty)}]
+             [:group-by [l_partkey {avg_qty (avg l_quantity)}]
+              [:scan [l_partkey l_quantity]]]]
+            [:scan [l_partkey l_quantity]]]]]]]
       (with-params {'?brand "Brand#23"
                     '?container "MED_BOX"})))
 
