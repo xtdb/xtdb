@@ -382,7 +382,7 @@
   (unary-op independent-relation args
             (fn [independent-col-names]
               {:col-names (case mode
-                            (:cross-join :left-outer-join) (set/union independent-col-names dependent-column-names)
+                            (:cross-join :left-outer-join) (set/union independent-col-names (set (map name dependent-column-names)))
                             (:semi-join :anti-join) independent-col-names)
                :->cursor (fn [{:keys [allocator] :as query-opts} independent-cursor]
                            (let [dependent-cursor-factory
