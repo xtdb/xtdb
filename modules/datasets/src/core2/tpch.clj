@@ -522,7 +522,7 @@
 
 (def tpch-q22-global-sales-opportunity
   (-> '[:assign [Customer [:semi-join {cntrycode cntrycode}
-                           [:project [c_custkey {cntrycode (substr c_phone 1 2)} c_acctbal]
+                           [:project [c_custkey {cntrycode (substring c_phone 1 2)} c_acctbal]
                             [:scan [c_custkey c_phone c_acctbal]]]
                            [:table $cntrycodes]]]
         [:order-by [{cntrycode :asc}]

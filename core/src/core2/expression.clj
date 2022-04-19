@@ -667,13 +667,6 @@
                        `(boolean (re-find ~(re-pattern (str "^" (str/replace literal #"%" ".*") "$"))
                                           (resolve-string ~haystack-code)))))})
 
-(defmethod codegen-call [:substr ::types/Object ArrowType$Int ArrowType$Int] [_]
-  {:return-types #{ArrowType$Utf8/INSTANCE}
-   :continue-call (fn [f [x start length]]
-                    (f ArrowType$Utf8/INSTANCE
-                       `(ByteBuffer/wrap (.getBytes (subs (resolve-string ~x) (dec ~start) (+ (dec ~start) ~length))
-                                                    StandardCharsets/UTF_8))))})
-
 (defmethod codegen-call [:substring ::types/Object ArrowType$Int ArrowType$Int] [_]
   {:return-types #{ArrowType$Utf8/INSTANCE}
    :continue-call (fn [f [x start length]]
