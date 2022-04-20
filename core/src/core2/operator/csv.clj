@@ -5,7 +5,8 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [time-literals.data-readers :as time-literals.dr])
   (:import core2.ICursor
            java.lang.AutoCloseable
            [java.nio.file Files Path]
@@ -61,7 +62,7 @@
    :varchar identity
    :bit #(or (= "1" %) (= "true" %))
    :timestamp inst/read-instant-date
-   :duration edn/duration-reader})
+   :duration time-literals.dr/duration})
 
 (def ->arrow-type
   {:bigint (.getType Types$MinorType/BIGINT)
