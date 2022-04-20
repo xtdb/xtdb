@@ -371,6 +371,79 @@
     (= (project1 '(like a b) {:a s, :b ptn})
        (project1 '(like a b) {:a (.getBytes s "utf-8"), :b (.getBytes ptn "utf-8")}))))
 
+(t/deftest test-trim
+  (t/testing "leading trims of $"
+    (t/are [s expected]
+      (= expected (project1 '(trim a b c) {:a s, :b "LEADING", :c "$"}))
+
+      "" ""
+      " " " "
+      "a" "a"
+      "a$" "a$"
+      "$a" "a"
+      "$$a" "a"
+      "$$$" ""
+      "$a$" "a$"
+
+      nil nil))
+
+  (t/testing "trailing trims of $"
+    (t/are [s expected]
+      (= expected (project1 '(trim a b c) {:a s, :b "TRAILING", :c "$"}))
+
+      "" ""
+      " " " "
+      "a" "a"
+      "$a" "$a"
+      "a$" "a"
+      "a$$" "a"
+      "$$$" ""
+      "$a$" "$a"
+
+      nil nil))
+
+  (t/testing "both trims of $"
+    (t/are [s expected]
+      (= expected (project1 '(trim a b c) {:a s, :b "BOTH", :c "$"}))
+
+      "" ""
+      " " " "
+      "a" "a"
+      "$a" "a"
+      "a$" "a"
+      "$$a" "a"
+      "a$$" "a"
+      "$$$" ""
+      "$a$" "a"
+
+      nil nil))
+
+  (t/testing "null trim char returns null"
+    (t/are [s trim-spec expected]
+      (= expected (project1 '(trim a b c) {:a s, :b trim-spec, :c nil}))
+
+      "a" "BOTH" nil
+      nil "BOTH" nil
+
+      "a" "LEADING" nil
+      nil "LEADING" nil
+
+      "a" "TRAILING" nil
+      nil "TRAILING" nil)))
+
+(tct/defspec sql-trim-is-equiv-to-java-trim-on-space-test
+  (tcp/for-all [s (->> tcg/string
+                       ;; all whitespace to space, regex replace misses some stuff,
+                       ;; there are java chars that are considered 'isWhitespace' not match by \s.
+                       (tcg/fmap (fn [s] (str/join (map (fn [c] (if (Character/isWhitespace ^Character c)
+                                                                  \space
+                                                                  c))
+                                                        s)))))]
+    (and
+      (= (str/trim s) (project1 '(trim a b c) {:a s, :b "BOTH", :c " "}))
+      (= (str/triml s) (project1 '(trim a b c) {:a s, :b "LEADING", :c " "}))
+      (= (str/trimr s) (project1 '(trim a b c) {:a s, :b "TRAILING", :c " "})))))
+
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
            (project '(sqrt x) [{:x 2} {:x 3.4} {:x nil}])))

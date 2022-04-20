@@ -736,6 +736,68 @@
 (defmethod codegen-call [:like ArrowType$Binary ArrowType$Null] [_] call-returns-null)
 (defmethod codegen-call [:like ArrowType$Null ArrowType$Binary] [_] call-returns-null)
 
+;; apache commons has these functions but did not think they were worth the dep.
+;; replace if we ever put commons on classpath.
+
+(defn- sql-trim-leading
+  [^String s ^String trim-char]
+  (let [trim-cp (.codePointAt trim-char 0)]
+    (loop [i 0
+           len (.length s)]
+      (if (< i (.length s))
+        (let [cp (.codePointAt s i)]
+          (if (= cp trim-cp)
+            (recur (unchecked-inc-int i) (unchecked-dec-int len))
+            (.substring s i (+ i len))))
+        ""))))
+
+(defn- sql-trim-trailing
+  [^String s ^String trim-char]
+  (let [trim-cp (.codePointAt trim-char 0)]
+    (loop [j (unchecked-dec-int (.length s))
+           len (.length s)]
+      (if (< -1 j)
+        (let [cp (.codePointAt s j)]
+          (if (= cp trim-cp)
+            (recur (unchecked-dec-int j) (unchecked-dec-int len))
+            (.substring s 0 (+ 0 len))))
+        ""))))
+
+(defn sql-trim
+  "SQL Trim function.
+
+  trim-spec is a string having one of the values: BOTH | TRAILING | LEADING.
+
+  trim-char is a **SINGLE** character string e.g \" \"
+
+  N.B trim-char is currently restricted to just one char, not all database implementations behave this way, in postgres you
+  can specify multi-char strings for the trim char.
+
+  We do not take a Character typed trim-char as at time of writing do not map currently need or want to map Character to arrow,
+  as it would involve inventing a new arrow type.
+
+  See also sql-trim-leading, sql-trim-trailing"
+  [^String s ^String trim-spec ^String trim-char]
+  (when (not= 1 (.length trim-char))
+    (throw (IllegalArgumentException. "Data Exception - trim error.")))
+  (case trim-spec
+    "LEADING" (sql-trim-leading s trim-char)
+    "TRAILING" (sql-trim-trailing s trim-char)
+    "BOTH" (-> s (sql-trim-leading trim-char) (sql-trim-trailing trim-char))))
+
+(defmethod codegen-call [:trim ArrowType$Utf8 ArrowType$Utf8 ArrowType$Utf8] [_]
+  {:return-types #{types/varchar-type}
+   :continue-call (fn [f [s trim-spec trim-char]]
+                    (f types/varchar-type
+                       `(ByteBuffer/wrap (.getBytes (sql-trim (resolve-string ~s) (resolve-string ~trim-spec) (resolve-string ~trim-char))
+                                                    StandardCharsets/UTF_8))))})
+
+(defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ArrowType$Utf8] [_] call-returns-null)
+
+(defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
+
+(defmethod codegen-call [:trim ArrowType$Utf8 ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
+
 (defmethod codegen-call [:substring ::types/Object ArrowType$Int ArrowType$Int] [_]
   {:return-types #{ArrowType$Utf8/INSTANCE}
    :continue-call (fn [f [x start length]]
