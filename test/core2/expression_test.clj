@@ -429,7 +429,14 @@
       nil "LEADING" nil
 
       "a" "TRAILING" nil
-      nil "TRAILING" nil)))
+      nil "TRAILING" nil))
+
+  (t/testing "extended char plane trim"
+    (t/are [s trim-char expected]
+      (= expected (project1 '(trim a b c) {:a s, :b "BOTH", :c trim-char}))
+      "" "😎" ""
+      "😎a" "😎" "a"
+      "😎a" "😎" "a")))
 
 (tct/defspec sql-trim-is-equiv-to-java-trim-on-space-prop
   (tcp/for-all [s (->> tcg/string

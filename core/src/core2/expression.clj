@@ -747,7 +747,8 @@
       (if (< i (.length s))
         (let [cp (.codePointAt s i)]
           (if (= cp trim-cp)
-            (recur (unchecked-inc-int i) (unchecked-dec-int len))
+            (recur (unchecked-add-int i (Character/charCount cp))
+                   (unchecked-subtract-int len (Character/charCount cp)))
             (.substring s i (+ i len))))
         ""))))
 
@@ -759,27 +760,33 @@
       (if (< -1 j)
         (let [cp (.codePointAt s j)]
           (if (= cp trim-cp)
-            (recur (unchecked-dec-int j) (unchecked-dec-int len))
+            (recur (unchecked-subtract-int j (Character/charCount cp))
+                   (unchecked-subtract-int len (Character/charCount cp)))
             (.substring s 0 (+ 0 len))))
         ""))))
+
+(defn- trim-char-conforms?
+  "Trim char is allowed to be length 1, or 2 - but only 2 if the 2 chars represent a single unicode character
+  (but are split due to utf-16 surrogacy)."
+  [^String trim-char]
+  (or (= 1 (.length trim-char))
+      (and (= 2 (.length trim-char))
+           (= 2 (Character/charCount (.codePointAt trim-char 0))))))
 
 (defn sql-trim
   "SQL Trim function.
 
   trim-spec is a string having one of the values: BOTH | TRAILING | LEADING.
 
-  trim-char is a **SINGLE** character string e.g \" \"
+  trim-char is a **SINGLE** unicode-character string e.g \" \". The string can include 2-char code points, as long as it is one
+  logical unicode character.
 
-  N.B trim-char is currently restricted to just one char, not all database implementations behave this way, in postgres you
-  can specify multi-char strings for the trim char.
-
-  We do not take a Character typed trim-char as at time of writing do not map currently need or want to map Character to arrow,
-  as it would involve inventing a new arrow type.
+  N.B trim-char is currently restricted to just one character, not all database implementations behave this way, in postgres you
+  can specify multi-character strings for the trim char.
 
   See also sql-trim-leading, sql-trim-trailing"
   [^String s ^String trim-spec ^String trim-char]
-  (when (not= 1 (.length trim-char))
-    (throw (IllegalArgumentException. "Data Exception - trim error.")))
+  (when-not (trim-char-conforms? trim-char) (throw (IllegalArgumentException. "Data Exception - trim error.")))
   (case trim-spec
     "LEADING" (sql-trim-leading s trim-char)
     "TRAILING" (sql-trim-trailing s trim-char)
