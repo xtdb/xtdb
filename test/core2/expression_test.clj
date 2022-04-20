@@ -431,7 +431,7 @@
       "a" "TRAILING" nil
       nil "TRAILING" nil)))
 
-(tct/defspec sql-trim-is-equiv-to-java-trim-on-space-test
+(tct/defspec sql-trim-is-equiv-to-java-trim-on-space-prop
   (tcp/for-all [s (->> tcg/string
                        ;; all whitespace to space, regex replace misses some stuff,
                        ;; there are java chars that are considered 'isWhitespace' not match by \s.
