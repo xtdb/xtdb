@@ -24,7 +24,8 @@
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector)
            (org.apache.arrow.vector.types DateUnit TimeUnit Types Types$MinorType IntervalUnit)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Time ArrowType$Interval)
-           (java.util.regex Pattern)))
+           (java.util.regex Pattern)
+           (org.apache.commons.codec.binary Hex)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -192,7 +193,10 @@
 (defmethod emit-value Date [_ code] `(Math/multiplyExact (.getTime ~code) 1000))
 (defmethod emit-value Instant [_ code] `(util/instant->micros ~code))
 (defmethod emit-value Duration [_ code] `(quot (.toNanos ~code) 1000))
-(defmethod emit-value (Class/forName "[B") [_ code] `(ByteBuffer/wrap ~code))
+
+;; consider whether a bound hash map for literal parameters would be better
+;; so this could be a runtime 'wrap the byte array' instead of this round trip through the clj compiler.
+(defmethod emit-value (Class/forName "[B") [_ code] `(ByteBuffer/wrap (Hex/decodeHex (str ~(Hex/encodeHexString ^bytes code)))))
 
 (defmethod emit-value String [_ code]
   `(-> (.getBytes ~code StandardCharsets/UTF_8) (ByteBuffer/wrap)))
@@ -686,14 +690,48 @@
 (defmethod codegen-call [:like ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 (defmethod codegen-call [:like ArrowType$Null ArrowType$Null] [_] call-returns-null)
 
+(defn binary->hex-like-pattern
+  "Returns a like pattern that will match on binary encoded to hex.
+
+  Percent/underscore are encoded as the ascii/utf-8 binary value for their respective characters i.e
+
+  The byte 95 should be used for _
+  The byte 37 should be used for %.
+
+  Useful for now to use the string-impl of LIKE for binary search too."
+  [^bytes bin]
+  (-> (Hex/encodeHexString bin)
+      (.replace "25" "%")
+      ;; we are matching two chars per byte (hex)
+      (.replace "5f" "__")))
+
+(defn buf->bytes
+  "Returns a byte array given an nio buffer. Gives you the backing array if possible, else allocates a new array."
+  ^bytes [^ByteBuffer o]
+  (if (.hasArray o)
+    (.array o)
+    (let [size (.remaining o)
+          arr (byte-array size)]
+      (.get o arr)
+      arr)))
+
+(defn resolve-bytes
+  "Values of type ArrowType$Binary may have differing literal representations, e.g a byte array, or NIO byte buffer.
+
+  Use this function when you are unsure of the representation at hand and just want a byte array."
+  ^bytes [binary]
+  (if (bytes? binary)
+    binary
+    (buf->bytes binary)))
+
 (defmethod codegen-call [:like ArrowType$Binary ArrowType$Binary] [{[_ {:keys [literal]}] :args}]
   {:return-types #{types/bool-type}
    :continue-call (fn [f [haystack-code needle-code]]
                     (f types/bool-type
                        `(boolean (re-find ~(if literal
-                                             (like->regex literal)
-                                             `(like->regex (resolve-string ~needle-code)))
-                                          (resolve-string ~haystack-code)))))})
+                                             (like->regex (binary->hex-like-pattern (resolve-bytes literal)))
+                                             `(like->regex (binary->hex-like-pattern (buf->bytes ~needle-code))))
+                                          (Hex/encodeHexString (buf->bytes ~haystack-code))))))})
 
 (defmethod codegen-call [:like ArrowType$Binary ArrowType$Null] [_] call-returns-null)
 (defmethod codegen-call [:like ArrowType$Null ArrowType$Binary] [_] call-returns-null)

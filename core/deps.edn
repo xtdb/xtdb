@@ -18,7 +18,9 @@
 
         instaparse/instaparse {:mvn/version "1.4.10"}
 
-        pro.juxt.clojars-mirrors.integrant/integrant {:mvn/version "0.8.0"}}
+        pro.juxt.clojars-mirrors.integrant/integrant {:mvn/version "0.8.0"}
+
+        commons-codec/commons-codec {:mvn/version "1.15"}}
 
  :deps/prep-lib {:ensure "target/classes"
                  :alias :build

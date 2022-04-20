@@ -6,10 +6,14 @@
             [core2.test-util :as tu]
             [core2.types :as types]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            [clojure.test.check.clojure-test :as tct]
+            [clojure.test.check.properties :as tcp]
+            [clojure.test.check.generators :as tcg]
+            [clojure.string :as str])
   (:import core2.types.LegType
            core2.vector.IIndirectVector
-           (java.time Clock Duration Instant LocalDate LocalTime ZonedDateTime ZoneId)
+           (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Time ArrowType$Timestamp ArrowType$Union FieldType)
@@ -286,7 +290,7 @@
 
 (t/deftest test-like
   (t/are [s ptn expected-result]
-    (= expected-result (project1 '(like s ptn) {:s s, :ptn ptn}))
+    (= expected-result (project1 '(like a b) {:a s, :b ptn}))
 
     "" "" true
     "a" "" false
@@ -327,6 +331,45 @@
 
   (t/testing "literal projection"
     (t/is (project1 (list 'like 's "%.+%ar") {:s "foo .+ bar"}))))
+
+(t/deftest test-binary-like
+  (let [p 37
+        u 95]
+
+    (t/are [s ptn expected-result]
+      (= expected-result (project1 '(like a b) {:a (some-> s byte-array), :b (some-> ptn byte-array)}))
+
+      [] [] true
+
+      [0] [] false
+      [0] [0] true
+      [0] [1] false
+      [0] [u] true
+      [0] [u 0] false
+      [0] [p] true
+      [0] [u p] true
+      [0] [u u p] false
+
+      ;; 46 = . for re collision tests
+      ;; * = 42
+      [46] [u] true
+      [46 46] [46 46] true
+      [46 42] [46 46] false
+
+      [64 33 -33 -100] [64 33 -33 p] true
+
+      [] nil nil
+      [0] nil nil
+      nil [p] nil)
+
+    (t/testing "literal projection"
+      (t/is (project1 (list 'like 's (byte-array [p -33 -44])) {:s (byte-array [-22 -21 -21 -33 -44])})))))
+
+(tct/defspec binary-like-is-equiv-to-string-like-on-utf8-prop
+  (tcp/for-all [s tcg/string
+                ptn (tcg/fmap str/join (tcg/vector (tcg/elements [tcg/string (tcg/return "_") (tcg/return "%")])))]
+    (= (project1 '(like a b) {:a s, :b ptn})
+       (project1 '(like a b) {:a (.getBytes s "utf-8"), :b (.getBytes ptn "utf-8")}))))
 
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
