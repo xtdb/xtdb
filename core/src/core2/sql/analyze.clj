@@ -73,12 +73,18 @@
 
 ;; Ids
 
+(defn ^:dynamic prev-subtree-seq [ag]
+  (when ag
+    (lazy-seq (cons ag (prev-subtree-seq (z/prev ag))))))
+
 (defn ^:dynamic id [ag]
-  (or (some-> (z/prev ag) (id) (inc)) 0))
+  (dec (count (prev-subtree-seq ag))))
 
 (defn ^:dynamic dynamic-param-idx [ag]
-  (cond-> (or (some-> (z/prev ag) (dynamic-param-idx)) -1)
-    (= :dynamic_parameter_specification (r/ctor ag)) (inc)))
+  (->> (prev-subtree-seq ag)
+       (filter (partial r/ctor? :dynamic_parameter_specification))
+       (count)
+       (dec)))
 
 ;; Identifiers
 
@@ -1005,7 +1011,8 @@
 (defn analyze-query [query]
   (if-let [parse-failure (insta/get-failure query)]
     {:errs [(prn-str parse-failure)]}
-    (r/with-memoized-attributes [id
+    (r/with-memoized-attributes [prev-subtree-seq
+                                 id
                                  dynamic-param-idx
                                  ctei
                                  cteo
