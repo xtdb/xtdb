@@ -777,22 +777,30 @@
         query-id (sem/id (sem/scope-element ssl))
         order-by-specs (r/collect-stop
                         (fn [z]
-                          (r/zcase z
-                            :sort_specification
-                            (let [direction (case (sem/ordering-specification z)
-                                              "ASC" :asc
-                                              "DESC" :desc
-                                              :asc)]
-                              [(if-let [idx (sem/order-by-index z)]
-                                 {:spec {(unqualified-projection-symbol (nth projection idx)) direction}}
-                                 (let [column (symbol (str "$order_by" relation-id-delimiter query-id relation-prefix-delimiter (r/child-idx z) "$"))]
-                                   {:spec {column direction}
-                                    :projection {column (expr (r/$ z 1))}}))])
+                          (letfn [(->order-by-spec [sk os no]
+                                    (let [direction (case os
+                                                      "ASC" :asc
+                                                      "DESC" :desc
+                                                      :asc)
+                                          null-ordering (case no
+                                                          "FIRST" :nulls-first
+                                                          "LAST" :nulls-last
+                                                          :nulls-last)]
+                                      [(if-let [idx (sem/order-by-index z)]
+                                         {:spec [(unqualified-projection-symbol (nth projection idx)) direction null-ordering]}
+                                         (let [column (symbol (str "$order_by" relation-id-delimiter query-id relation-prefix-delimiter (r/child-idx z) "$"))]
+                                           {:spec [column direction null-ordering]
+                                            :projection {column (expr sk)}}))]))]
 
-                            :subquery
-                            []
+                            (r/zmatch z
+                              [:sort_specification ^:z sk] (->order-by-spec sk nil nil)
+                              [:sort_specification ^:z sk [:ordering_specification os]] (->order-by-spec sk os nil)
+                              [:sort_specification ^:z sk [:null_ordering _ no]] (->order-by-spec sk nil no)
+                              [:sort_specification ^:z sk [:ordering_specification os] [:null_ordering _ no]] (->order-by-spec sk os no)
 
-                            nil))
+                              (r/zcase z
+                                :subquery []
+                                nil))))
                         ssl)
         order-by-projection (vec (keep :projection order-by-specs))
         base-projection (mapv unqualified-projection-symbol projection)

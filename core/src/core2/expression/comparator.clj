@@ -5,7 +5,7 @@
   (:import (core2.vector IIndirectVector)
            (core2.vector.extensions KeywordType UuidType)
            java.util.function.IntBinaryOperator
-           (org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Int ArrowType$Timestamp ArrowType$Utf8)))
+           (org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -54,7 +54,22 @@
                       (f types/int-type `(.compareTo ~@(map #(expr/with-tag % Comparable) emitted-args))))
      :return-types #{types/int-type}}))
 
-(defn ->comparator ^java.util.function.IntBinaryOperator [^IIndirectVector left-col, ^IIndirectVector right-col]
+(doseq [[f left-type right-type res] [[:compare-nulls-first ArrowType$Null ArrowType$Null 0]
+                                      [:compare-nulls-first ArrowType$Null ::types/Object -1]
+                                      [:compare-nulls-first ::types/Object ArrowType$Null 1]
+                                      [:compare-nulls-last ArrowType$Null ArrowType$Null 0]
+                                      [:compare-nulls-last ArrowType$Null ::types/Object 1]
+                                      [:compare-nulls-last ::types/Object ArrowType$Null -1]]]
+  (defmethod expr/codegen-call [f left-type right-type] [_]
+    {:return-types #{types/int-type}
+     :continue-call (fn [f _]
+                      (f types/int-type res))}))
+
+(doseq [f [:compare-nulls-first :compare-nulls-last]]
+  (defmethod expr/codegen-call [f ::types/Object ::types/Object] [expr]
+    (expr/codegen-call (assoc expr :f :compare))))
+
+(defn ->comparator ^java.util.function.IntBinaryOperator [^IIndirectVector left-col, ^IIndirectVector right-col, null-ordering]
   (let [left-idx-sym (gensym 'left-idx)
         right-idx-sym (gensym 'right-idx)
         left-col-sym (gensym 'left-col)
@@ -72,7 +87,9 @@
                         (let [~expr/idx-sym ~left-idx-sym]
                           ~(cont-l (fn continue-left [left-type left-code]
                                      (cont-r (fn continue-right [right-type right-code]
-                                               (let [{cont-call :continue-call} (expr/codegen-call {:f :compare
+                                               (let [{cont-call :continue-call} (expr/codegen-call {:f (case null-ordering
+                                                                                                         :nulls-first :compare-nulls-first
+                                                                                                         :nulls-last :compare-nulls-last)
                                                                                                     :arg-types [left-type right-type]})]
                                                  (cont-call (fn [_arrow-type code] code)
                                                             [left-code right-code])))))))))))]

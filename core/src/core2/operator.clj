@@ -286,9 +286,8 @@
                              (group-by/->group-by-cursor allocator inner group-cols agg-factories))}))))
 
 (defmethod emit-op :order-by [{:keys [order relation]} args]
-  (let [order-specs (for [arg order
-                          :let [[column direction] (first arg)]]
-                      (order-by/->order-spec (name column) direction))]
+  (let [order-specs (for [{:keys [column direction null-ordering], :or {direction :asc, null-ordering :nulls-last}} order]
+                      {:col-name (name column), :direction direction, :null-ordering null-ordering})]
     (unary-op relation args
               (fn [col-names]
                 {:col-names col-names

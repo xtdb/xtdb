@@ -444,7 +444,7 @@
                   ^TemporalManager tm (::temporal/temporal-manager system)]
               (t/is (= first-half-tx-key
                        (-> first-half-tx-key
-                           (tu/then-await-tx node (Duration/ofSeconds 5)))))
+                           (tu/then-await-tx node (Duration/ofSeconds 10)))))
               (t/is (= first-half-tx-key (tu/latest-completed-tx node)))
 
               (let [{:keys [^TransactionInstant latest-tx, latest-row-id]}

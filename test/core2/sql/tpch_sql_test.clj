@@ -28,7 +28,7 @@
       '[:rename
         {x1 l_returnflag, x13 sum_base_price, x2 l_linestatus, x12 sum_qty, x14 sum_disc_price, x17 avg_price, x15 sum_charge, x16 avg_qty, x18 avg_disc, x19 count_order}
         [:order-by
-         [{x1 :asc} {x2 :asc}]
+         [[x1 :asc :nulls-last] [x2 :asc :nulls-last]]
          [:group-by
           [x1 x2 {x12 (sum x3)} {x13 (sum x4)} {x14 (sum x9)} {x15 (sum x10)} {x16 (avg x3)} {x17 (avg x4)} {x18 (avg x5)} {x19 (count x11)}]
           [:map
@@ -48,7 +48,7 @@
         [:top
          {:limit 100}
          [:order-by
-          [{x6 :desc} {x18 :asc} {x7 :asc} {x1 :asc}]
+          [[x6 :desc :nulls-last] [x18 :asc :nulls-last] [x7 :asc :nulls-last] [x1 :asc :nulls-last]]
           [:select
            (= x16 x38)
            [:group-by
@@ -102,7 +102,7 @@
         [:top
          {:limit 10}
          [:order-by
-          [{x15 :desc} {x4 :asc}]
+          [[x15 :desc :nulls-last] [x4 :asc :nulls-last]]
           [:group-by
            [x9 x4 x5 {x15 (sum x14)}]
            [:map
@@ -128,7 +128,7 @@
        '[:rename
          {x1 o_orderpriority, x12 order_count}
          [:order-by
-          [{x1 :asc}]
+          [[x1 :asc :nulls-last]]
           [:group-by
            [x1 {x12 (count x11)}]
            [:map
@@ -151,7 +151,7 @@
        '[:rename
         {x16 n_name, x24 revenue}
         [:order-by
-         [{x24 :desc}]
+         [[x24 :desc :nulls-last]]
          [:group-by
           [x16 {x24 (sum x23)}]
           [:map
@@ -210,7 +210,7 @@
        '[:rename
          {x16 supp_nation, x19 cust_nation, x22 l_year, x24 revenue}
          [:order-by
-          [{x16 :asc} {x19 :asc} {x22 :asc}]
+          [[x16 :asc :nulls-last] [x19 :asc :nulls-last] [x22 :asc :nulls-last]]
           [:group-by
            [x16 x19 x22 {x24 (sum x23)}]
            [:project
@@ -245,7 +245,7 @@
        '[:rename
          {x29 o_year, x35 mkt_share}
          [:order-by
-          [{x29 :asc}]
+          [[x29 :asc :nulls-last]]
           [:project
            [x29 {x35 (/ x32 x33)}]
            [:group-by
@@ -291,7 +291,7 @@
      '[:rename
        {x21 nation, x24 o_year, x26 sum_profit}
        [:order-by
-        [{x21 :asc} {x24 :desc}]
+        [[x21 :asc :nulls-last] [x24 :desc :nulls-last]]
         [:group-by
          [x21 x24 {x26 (sum x25)}]
          [:project
@@ -332,7 +332,7 @@
           [:top
            {:limit 20}
            [:order-by
-            [{x22 :desc}]
+            [[x22 :desc :nulls-last]]
             [:group-by
              [x1 x2 x3 x18 x4 x5 x6 {x22 (sum x21)}]
              [:map
@@ -361,7 +361,7 @@
        [:project
         [x1 x14]
         [:order-by
-         [{x14 :desc}]
+         [[x14 :desc :nulls-last]]
          [:join
           [(> x15 x30)]
           [:group-by
@@ -406,7 +406,7 @@
        '[:rename
          {x4 l_shipmode, x16 high_line_count, x17 low_line_count}
          [:order-by
-          [{x4 :asc}]
+          [[x4 :asc :nulls-last]]
           [:group-by
            [x4 {x16 (sum x14)} {x17 (sum x15)}]
            [:map
@@ -441,7 +441,7 @@
      '[:rename
       {x7 c_count, x10 custdist}
       [:order-by
-       [{x10 :desc} {x7 :desc}]
+       [[x10 :desc :nulls-last] [x7 :desc :nulls-last]]
        [:group-by
         [x7 {x10 (count x9)}]
         [:map
@@ -489,7 +489,7 @@
          [:project
           [x1 x2 x3 x4 x12]
           [:order-by
-           [{x1 :asc}]
+           [[x1 :asc :nulls-last]]
            [:join
             [{x12 x22}]
             [:join
@@ -528,7 +528,7 @@
      '[:rename
        {x4 p_brand, x5 p_type, x6 p_size, x18 supplier_cnt}
        [:order-by
-        [{x18 :desc} {x4 :asc} {x5 :asc} {x6 :asc}]
+        [[x18 :desc :nulls-last] [x4 :asc :nulls-last] [x5 :asc :nulls-last] [x6 :asc :nulls-last]]
         [:group-by
          [x4 x5 x6 {x18 (count-distinct x1)}]
          [:anti-join
@@ -583,7 +583,7 @@
        [:top
         {:limit 100}
         [:order-by
-         [{x6 :desc} {x5 :asc}]
+         [[x6 :desc :nulls-last] [x5 :asc :nulls-last]]
          [:group-by
           [x1 x2 x4 x5 x6 {x19 (sum x9)}]
           [:semi-join
@@ -757,7 +757,7 @@
          [:project
           [x1 x2]
           [:order-by
-           [{x1 :asc}]
+           [[x1 :asc :nulls-last]]
            [:semi-join
             [{x3 x9}]
             [:join
@@ -794,7 +794,7 @@
        [:top
         {:limit 100}
         [:order-by
-         [{x31 :desc} {x1 :asc}]
+         [[x31 :desc :nulls-last] [x1 :asc :nulls-last]]
          [:group-by
           [x1 {x31 (count x30)}]
           [:map
@@ -831,7 +831,7 @@
      '[:rename
        {x23 cntrycode, x25 numcust, x26 totacctbal}
        [:order-by
-        [{x23 :asc}]
+        [[x23 :asc :nulls-last]]
         [:group-by
          [x23 {x25 (count x24)} {x26 (sum x2)}]
          [:map

@@ -91,7 +91,9 @@
 
 (defmethod ra-expr :order-by [_]
   (s/cat :op '#{:τ :tau :order-by order-by}
-         :order (s/coll-of (s/map-of ::column ::order-direction :conform-keys true :count 1) :min-count 1)
+         :order (s/coll-of (s/cat :column ::column
+                                  :direction (s/? ::order-direction)
+                                  :null-ordering (s/? #{:nulls-first :nulls-last})))
          :relation ::ra-expression))
 
 (s/def ::aggregate-expr

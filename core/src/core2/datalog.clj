@@ -323,10 +323,10 @@
   (if order-by
     [:order-by (vec (for [{:keys [find-arg direction]} order-by
                           :let [[arg-type arg] find-arg]]
-                      {(case arg-type
+                      [(case arg-type
                          :logic-var arg
                          :aggregate (aggregate-logic-var-name arg))
-                       (or direction :asc)}))
+                       (or direction :asc)]))
      plan]
     plan))
 

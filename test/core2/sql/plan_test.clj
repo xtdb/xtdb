@@ -1,5 +1,6 @@
 (ns core2.sql.plan-test
   (:require [clojure.test :as t :refer [deftest]]
+            [core2.operator :as op]
             [core2.sql :as sql]
             [core2.sql.plan :as plan]))
 
@@ -128,7 +129,7 @@
            (plan-sql "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si")))
 
   (t/is (= '[:rename {x1 name}
-             [:order-by [{x1 :asc}]
+             [:order-by [[x1 :asc :nulls-last]]
               [:distinct
                [:union-all
                 [:rename {name x1} [:scan [name]]]
@@ -150,36 +151,37 @@
            (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS FETCH FIRST 10 ROWS ONLY")))
 
   (t/is (= '[:rename {x1 movieTitle}
-             [:order-by [{x1 :asc}] [:rename {movieTitle x1} [:scan [movieTitle]]]]]
+             [:order-by [[x1 :asc :nulls-last]]
+              [:rename {movieTitle x1}
+               [:scan [movieTitle]]]]]
            (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle")))
 
   (t/is (= '[:rename {x1 movieTitle}
              [:top {:skip 100}
-              [:order-by [{x1 :asc}]
+              [:order-by [[x1 :asc :nulls-last]]
                [:rename {movieTitle x1} [:scan [movieTitle]]]]]]
            (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle OFFSET 100 ROWS")))
 
   (t/is (= '[:rename {x1 movieTitle}
-             [:order-by [{x1 :desc}]
+             [:order-by [[x1 :desc :nulls-last]]
               [:rename {movieTitle x1} [:scan [movieTitle]]]]]
            (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY movieTitle DESC")))
 
   (t/is (= '[:rename {x1 movieTitle}
              [:project [x1]
-              [:order-by [{x4 :desc} {x1 :asc}]
+              [:order-by [[x4 :desc :nulls-last] [x1 :asc :nulls-last]]
                [:map [{x4 (= x2 "foo")}]
                 [:rename {movieTitle x1, year x2} [:scan [movieTitle year]]]]]]]
            (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle")))
 
   (t/is (= '[:rename {x1 movieTitle}
              [:project [x1]
-              [:order-by [{x2 :asc}]
+              [:order-by [[x2 :asc :nulls-last]]
                [:rename {movieTitle x1, year x2} [:scan [movieTitle year]]]]]]
            (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year")))
 
   (t/is (= '[:rename {x3 $column_1$}
-             [:order-by
-              [{x3 :asc}]
+             [:order-by [[x3 :asc :nulls-last]]
               [:project [{x3 (= x1 "foo")}] [:rename {year x1} [:scan [year]]]]]]
            (plan-sql "SELECT si.year = 'foo' FROM StarsIn AS si ORDER BY si.year = 'foo'")))
 
@@ -624,3 +626,14 @@ FROM u"))))
            (plan-sql "SELECT foo.a
                       FROM foo, (SELECT bar.b FROM bar WHERE bar.c = ?) bar (b)
                       WHERE foo.b = ? AND foo.c = ?"))))
+
+(t/deftest test-order-by-null-handling-159
+  (t/is (= '[:rename {x1 a}
+             [:order-by [[x1 :asc :nulls-first]]
+              [:rename {a x1} [:scan [a]]]]]
+           (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS FIRST")))
+
+  (t/is (= '[:rename {x1 a}
+             [:order-by [[x1 :asc :nulls-last]]
+              [:rename {a x1} [:scan [a]]]]]
+           (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS LAST"))))

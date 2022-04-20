@@ -628,20 +628,6 @@
 
     (r/inherit ag)))
 
-(defn ordering-specification [ag]
-  (r/zcase ag
-    :ordering_specification
-    (case (r/lexeme ag -1)
-      "ASC" "ASC"
-      "DESC" "DESC"
-      "ASC")
-
-    :sort_specification
-    (or (ordering-specification (r/$ ag -1))
-        (ordering-specification (r/$ ag -2)))
-
-    nil))
-
 ;; Column references
 
 (defn ^:dynamic column-reference [ag]

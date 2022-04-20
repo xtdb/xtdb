@@ -81,8 +81,8 @@
         (let [min-vec (get-or-add-child min-meta-vec arrow-type)
               max-vec (get-or-add-child max-meta-vec arrow-type)
 
-              min-comparator (expr.comp/->comparator (iv/->direct-vec field-vec) (iv/->direct-vec min-vec))
-              max-comparator (expr.comp/->comparator (iv/->direct-vec field-vec) (iv/->direct-vec max-vec))]
+              min-comparator (expr.comp/->comparator (iv/->direct-vec field-vec) (iv/->direct-vec min-vec) :nulls-last)
+              max-comparator (expr.comp/->comparator (iv/->direct-vec field-vec) (iv/->direct-vec max-vec) :nulls-last)]
 
           (.setIndexDefined min-meta-vec meta-idx)
           (.setIndexDefined max-meta-vec meta-idx)

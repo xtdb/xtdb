@@ -13,11 +13,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype OrderSpec [^String col-name, ^Keyword direction])
-
-(defn ->order-spec [col-name direction]
-  (OrderSpec. col-name direction))
-
 (defn- accumulate-relations ^core2.vector.IIndirectRelation [allocator ^ICursor in-cursor]
   (let [rel-writer (vw/->rel-writer allocator)]
     (try
@@ -31,19 +26,18 @@
 
     (vw/rel-writer->reader rel-writer)))
 
-(defn- sorted-idxs ^ints [^IIndirectRelation read-rel, ^List #_<OrderSpec> order-specs]
+(defn- sorted-idxs ^ints [^IIndirectRelation read-rel, order-specs]
   (-> (IntStream/range 0 (.rowCount read-rel))
       (.boxed)
-      (.sorted (reduce (fn [^Comparator acc ^OrderSpec order-spec]
-                         (let [^String col-name (.col-name order-spec)
-                               read-col (.vectorForName read-rel col-name)
-                               col-comparator (expr.comp/->comparator read-col read-col)
+      (.sorted (reduce (fn [^Comparator acc, {:keys [^String col-name direction null-ordering]}]
+                         (let [read-col (.vectorForName read-rel col-name)
+                               col-comparator (expr.comp/->comparator read-col read-col null-ordering)
 
                                ^Comparator
                                comparator (cond-> (reify Comparator
                                                     (compare [_ left right]
                                                       (.applyAsInt col-comparator left right)))
-                                            (= :desc (.direction order-spec)) (.reversed))]
+                                            (= :desc direction) (.reversed))]
                            (if acc
                              (.thenComparing acc comparator)
                              comparator)))
@@ -55,7 +49,7 @@
 
 (deftype OrderByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
-                        ^List #_<OrderSpec> order-specs]
+                        order-specs]
   ICursor
   (tryAdvance [_ c]
     (with-open [read-rel (accumulate-relations allocator in-cursor)]
@@ -68,5 +62,5 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defn ->order-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List #_<OrderSpec> order-specs]
+(defn ->order-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, order-specs]
   (OrderByCursor. allocator in-cursor order-specs))
