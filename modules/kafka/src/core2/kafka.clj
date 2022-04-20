@@ -10,14 +10,14 @@
            java.lang.AutoCloseable
            java.nio.file.Path
            [java.time Duration Instant]
-           [java.util Map Properties]
+           java.time.Instant
+           [java.util List Map Properties]
            [java.util.concurrent CompletableFuture ExecutionException]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer Callback KafkaProducer ProducerRecord]
            [org.apache.kafka.common.errors InterruptException TopicExistsException UnknownTopicOrPartitionException]
-           org.apache.kafka.common.TopicPartition
-           java.time.Instant))
+           org.apache.kafka.common.TopicPartition))
 
 (defn ->kafka-config [{:keys [bootstrap-servers ^Path properties-file properties-map]}]
   (merge {"bootstrap.servers" bootstrap-servers}
@@ -27,12 +27,6 @@
                     (.load in))
                   (into {}))))
          properties-map))
-
-(defn ->topic-opts [opts]
-  (-> opts
-      (update :topic-config (fn [config]
-                              (merge {"message.timestamp.type" "LogAppendTime"}
-                                     config)))))
 
 (defn ->producer [kafka-config]
   (KafkaProducer. ^Map (merge {"enable.idempotence" "true"
@@ -127,7 +121,8 @@
   (with-open [admin-client (AdminClient/create ^Map kafka-config)]
     (or (when-let [^TopicDescription
                    desc (-> (try
-                              @(.all (.describeTopics admin-client [topic-name]))
+                              (let [^List topics [topic-name]]
+                                @(.all (.describeTopics admin-client topics)))
                               (catch ExecutionException e
                                 (let [e (.getCause e)]
                                   (when-not (instance? UnknownTopicOrPartitionException e)
@@ -172,6 +167,8 @@
               :create-topic? true
               :poll-duration "PT1S"}
              opts)
+      (update :topic-config (fn [config]
+                              (into {"message.timestamp.type" "LogAppendTime"} config)))
       (util/maybe-update :properties-file util/->path)
       (util/maybe-update :poll-duration util/->duration)))
 

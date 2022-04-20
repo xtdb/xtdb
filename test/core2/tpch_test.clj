@@ -44,7 +44,7 @@
   dir, and written-file is the matching file in the node-dir.
 
   Useful to compare or replace expected .json with the ingest output."
-  [scale-factor node-dir]
+  [scale-factor ^Path node-dir]
   (let [objects-dir (.resolve node-dir "objects")
         test-dir (tpch-test-dir scale-factor)]
     (for [test-path (iterator-seq (.iterator (Files/list test-dir)))

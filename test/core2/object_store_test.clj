@@ -4,6 +4,7 @@
             [core2.test-util :as tu]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.object_store.ObjectStore
+           java.io.Closeable
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
            java.nio.file.attribute.FileAttribute
@@ -65,10 +66,10 @@
      '~sym))
 
 (def-obj-store-tests in-mem [f]
-  (with-open [os (ig/init-key ::os/memory-object-store {})]
+  (with-open [^Closeable os (ig/init-key ::os/memory-object-store {})]
     (f os)))
 
 (def-obj-store-tests fs [f]
   (tu/with-tmp-dirs #{os-path}
-    (with-open [os (ig/init-key ::os/file-system-object-store {:root-path os-path, :pool-size 2})]
+    (with-open [^Closeable os (ig/init-key ::os/file-system-object-store {:root-path os-path, :pool-size 2})]
       (f os))))

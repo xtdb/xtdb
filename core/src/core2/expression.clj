@@ -913,10 +913,10 @@
                                :exp 'Math/exp
                                :floor 'Math/floor
                                :ceil 'Math/ceil}]
-  (defmethod codegen-call [math-op ::types/Number] [{[numeric-type] :arg-types}]
+  (defmethod codegen-call [math-op ::types/Number] [_]
     {:return-types #{types/float8-type}
      :continue-call (fn [f emitted-args]
-                      (f numeric-type
+                      (f types/float8-type
                          `(~math-method ~@emitted-args)))})
 
   (defmethod codegen-call [math-op ArrowType$Null] [_] call-returns-null))
