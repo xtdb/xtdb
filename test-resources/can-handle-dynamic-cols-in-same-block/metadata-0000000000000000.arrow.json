@@ -42,14 +42,14 @@
       },
       "children" : [{
         "name" : "varchar",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "utf8"
         },
         "children" : [ ]
       },{
         "name" : "float8",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "floatingpoint",
           "precision" : "DOUBLE"
@@ -57,7 +57,7 @@
         "children" : [ ]
       },{
         "name" : "timestampmicrotz-utc",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "timestamp",
           "unit" : "MICROSECOND",
@@ -73,14 +73,14 @@
       },
       "children" : [{
         "name" : "varchar",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "utf8"
         },
         "children" : [ ]
       },{
         "name" : "float8",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "floatingpoint",
           "precision" : "DOUBLE"
@@ -88,7 +88,7 @@
         "children" : [ ]
       },{
         "name" : "timestampmicrotz-utc",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "timestamp",
           "unit" : "MICROSECOND",
@@ -123,14 +123,14 @@
           },
           "children" : [{
             "name" : "varchar",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "utf8"
             },
             "children" : [ ]
           },{
             "name" : "float8",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "floatingpoint",
               "precision" : "DOUBLE"
@@ -138,7 +138,7 @@
             "children" : [ ]
           },{
             "name" : "timestampmicrotz-utc",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "timestamp",
               "unit" : "MICROSECOND",
@@ -154,14 +154,14 @@
           },
           "children" : [{
             "name" : "varchar",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "utf8"
             },
             "children" : [ ]
           },{
             "name" : "float8",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "floatingpoint",
               "precision" : "DOUBLE"
@@ -169,7 +169,7 @@
             "children" : [ ]
           },{
             "name" : "timestampmicrotz-utc",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "timestamp",
               "unit" : "MICROSECOND",

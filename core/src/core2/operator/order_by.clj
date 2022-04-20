@@ -5,7 +5,6 @@
             [core2.vector.writer :as vw])
   (:import clojure.lang.Keyword
            core2.ICursor
-           core2.types.LegType
            core2.vector.IIndirectRelation
            [java.util Comparator List]
            [java.util.function Consumer ToIntFunction]
@@ -38,18 +37,12 @@
       (.sorted (reduce (fn [^Comparator acc ^OrderSpec order-spec]
                          (let [^String col-name (.col-name order-spec)
                                read-col (.vectorForName read-rel col-name)
-                               leg-types (iv/col->leg-types read-col)
-                               ^LegType leg-type (if (= 1 (count leg-types))
-                                                   (first leg-types)
-                                                   (throw (UnsupportedOperationException.)))
-                               read-col (iv/reader-for-type read-col leg-type)
-                               read-vec (.getVector read-col)
-                               col-comparator (expr.comp/->comparator (.arrowType leg-type))
+                               col-comparator (expr.comp/->comparator read-col read-col)
 
                                ^Comparator
                                comparator (cond-> (reify Comparator
                                                     (compare [_ left right]
-                                                      (.compareIdx col-comparator read-vec (.getIndex read-col left) read-vec (.getIndex read-col right))))
+                                                      (.applyAsInt col-comparator left right)))
                                             (= :desc (.direction order-spec)) (.reversed))]
                            (if acc
                              (.thenComparing acc comparator)

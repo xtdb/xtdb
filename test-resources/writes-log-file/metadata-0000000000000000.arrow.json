@@ -42,7 +42,7 @@
       },
       "children" : [{
         "name" : "varchar",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "utf8"
         },
@@ -56,7 +56,7 @@
       },
       "children" : [{
         "name" : "varchar",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "utf8"
         },
@@ -89,7 +89,7 @@
           },
           "children" : [{
             "name" : "varchar",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "utf8"
             },
@@ -103,7 +103,7 @@
           },
           "children" : [{
             "name" : "varchar",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "utf8"
             },

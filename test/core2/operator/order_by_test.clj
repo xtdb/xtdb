@@ -1,5 +1,6 @@
 (ns core2.operator.order-by-test
   (:require [clojure.test :as t]
+            [core2.operator :as op]
             [core2.operator.order-by :as order-by]
             [core2.test-util :as tu]
             [core2.types :as ty])
@@ -22,4 +23,16 @@
                  {:a 12, :b 10}
                  {:a 83, :b 100}
                  {:a 100, :b 83}]]
-               (tu/<-cursor order-by-cursor))))))
+               (tu/<-cursor order-by-cursor)))))
+
+  (t/is (= [{:a 0, :b 15}
+            {:a 12.4, :b 10}
+            {:a 83.0, :b 100}
+            {:a 100, :b 83}]
+           (op/query-ra '[:order-by [{a :asc}]
+                          [:table [{:a 12.4, :b 10}
+                                   {:a 0, :b 15}
+                                   {:a 100, :b 83}
+                                   {:a 83.0, :b 100}]]]
+                        {}))
+        "mixed numeric types"))

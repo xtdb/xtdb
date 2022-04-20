@@ -7,6 +7,7 @@
             core2.tx
             [core2.types :as t]
             [core2.util :as util]
+            [core2.vector.indirect :as iv]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
            core2.ICursor
@@ -67,7 +68,7 @@
 (defn- get-or-add-child ^org.apache.arrow.vector.ValueVector [^StructVector parent, ^ArrowType arrow-type]
   (let [field-name (t/type->field-name arrow-type)]
     (or (.getChild parent field-name)
-        (doto (.addOrGet parent field-name (FieldType/nullable arrow-type) ValueVector)
+        (doto (.addOrGet parent field-name (FieldType. false arrow-type nil) ValueVector)
           (.setValueCount (.getValueCount parent))))))
 
 (defn- write-min-max [^ValueVector field-vec,
@@ -80,7 +81,8 @@
         (let [min-vec (get-or-add-child min-meta-vec arrow-type)
               max-vec (get-or-add-child max-meta-vec arrow-type)
 
-              col-comparator (expr.comp/->comparator arrow-type)]
+              min-comparator (expr.comp/->comparator (iv/->direct-vec field-vec) (iv/->direct-vec min-vec))
+              max-comparator (expr.comp/->comparator (iv/->direct-vec field-vec) (iv/->direct-vec max-vec))]
 
           (.setIndexDefined min-meta-vec meta-idx)
           (.setIndexDefined max-meta-vec meta-idx)
@@ -88,12 +90,12 @@
           (dotimes [field-idx (.getValueCount field-vec)]
             (when (or (.isNull min-vec meta-idx)
                       (and (not (.isNull field-vec field-idx))
-                           (neg? (.compareIdx col-comparator field-vec field-idx min-vec meta-idx))))
+                           (neg? (.applyAsInt min-comparator field-idx meta-idx))))
               (.copyFromSafe min-vec field-idx meta-idx field-vec))
 
             (when (or (.isNull max-vec meta-idx)
                       (and (not (.isNull field-vec field-idx))
-                           (pos? (.compareIdx col-comparator field-vec field-idx max-vec meta-idx))))
+                           (pos? (.applyAsInt max-comparator field-idx meta-idx))))
               (.copyFromSafe max-vec field-idx meta-idx field-vec))))))))
 
 (defn write-meta [^VectorSchemaRoot metadata-root, live-roots, ^long chunk-idx, ^long max-rows-per-block]

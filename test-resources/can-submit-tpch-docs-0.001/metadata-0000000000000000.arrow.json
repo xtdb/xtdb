@@ -42,14 +42,14 @@
       },
       "children" : [{
         "name" : "varchar",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "utf8"
         },
         "children" : [ ]
       },{
         "name" : "float8",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "floatingpoint",
           "precision" : "DOUBLE"
@@ -57,7 +57,7 @@
         "children" : [ ]
       },{
         "name" : "dateday",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "date",
           "unit" : "DAY"
@@ -65,7 +65,7 @@
         "children" : [ ]
       },{
         "name" : "bigint",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "int",
           "bitWidth" : 64,
@@ -81,14 +81,14 @@
       },
       "children" : [{
         "name" : "varchar",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "utf8"
         },
         "children" : [ ]
       },{
         "name" : "float8",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "floatingpoint",
           "precision" : "DOUBLE"
@@ -96,7 +96,7 @@
         "children" : [ ]
       },{
         "name" : "dateday",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "date",
           "unit" : "DAY"
@@ -104,7 +104,7 @@
         "children" : [ ]
       },{
         "name" : "bigint",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "int",
           "bitWidth" : 64,
@@ -139,14 +139,14 @@
           },
           "children" : [{
             "name" : "varchar",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "utf8"
             },
             "children" : [ ]
           },{
             "name" : "float8",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "floatingpoint",
               "precision" : "DOUBLE"
@@ -154,7 +154,7 @@
             "children" : [ ]
           },{
             "name" : "dateday",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "date",
               "unit" : "DAY"
@@ -162,7 +162,7 @@
             "children" : [ ]
           },{
             "name" : "bigint",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "int",
               "bitWidth" : 64,
@@ -178,14 +178,14 @@
           },
           "children" : [{
             "name" : "varchar",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "utf8"
             },
             "children" : [ ]
           },{
             "name" : "float8",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "floatingpoint",
               "precision" : "DOUBLE"
@@ -193,7 +193,7 @@
             "children" : [ ]
           },{
             "name" : "dateday",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "date",
               "unit" : "DAY"
@@ -201,7 +201,7 @@
             "children" : [ ]
           },{
             "name" : "bigint",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "int",
               "bitWidth" : 64,
