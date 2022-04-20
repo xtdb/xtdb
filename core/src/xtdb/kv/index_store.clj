@@ -969,7 +969,7 @@
     (into (vec (for [[a a-buf] attr-bufs]
                  (MapEntry/create (encode-hash-cache-key-to nil a-buf) (mem/->nippy-buffer a))))
 
-          (mapcat seq)
+          cat
 
           (for [[content-hash doc] docs
                 :let [id (:crux.db/id doc)
@@ -977,7 +977,7 @@
                       content-hash (c/->id-buffer content-hash)]]
             (into [(MapEntry/create (encode-hash-cache-key-to nil (c/->id-buffer id) eid-value-buffer)
                                     (mem/->nippy-buffer id))]
-                  (mapcat seq)
+                  cat
                   (for [[a v] doc
                         :let [a (get attr-bufs a)]
                         [v idxs] (val-idxs v)
@@ -1005,7 +1005,7 @@
         ;; on the assumption that the transient-kv-store is always in-memory
         (some->> (seq (concat content-idx-kvs stats-kvs)) (kv/store transient-kv-store))
 
-        {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
+        {:bytes-indexed (->> content-idx-kvs (transduce (comp cat (map mem/capacity)) +))
          :indexed-docs docs})))
 
   (unindex-eids [_ eids]

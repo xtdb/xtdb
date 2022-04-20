@@ -81,9 +81,9 @@
   (max-depth [_]
     (db/max-depth idx)))
 
-(defn- value-comparsion-predicate
+(defn- value-comparison-predicate
   ([compare-pred compare-v]
-   (value-comparsion-predicate compare-pred compare-v Integer/MAX_VALUE))
+   (value-comparison-predicate compare-pred compare-v Integer/MAX_VALUE))
   ([compare-pred ^Box compare-v ^long max-length]
    (if (.val compare-v)
      (fn [value]
@@ -91,23 +91,23 @@
      (constantly true))))
 
 (defn new-prefix-equal-virtual-index [idx ^Box prefix-v ^long prefix-size]
-  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v prefix-size)
-        pred (value-comparsion-predicate zero? prefix-v prefix-size)]
+  (let [seek-k-pred (value-comparison-predicate (comp not neg?) prefix-v prefix-size)
+        pred (value-comparison-predicate zero? prefix-v prefix-size)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (seek-k-pred k)
                                           k
                                           (mem/limit-buffer (.val prefix-v) prefix-size))))))
 
 (defn new-less-than-equal-virtual-index [idx max-v]
-  (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
+  (let [pred (value-comparison-predicate (comp not pos?) max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
 (defn new-less-than-virtual-index [idx max-v]
-  (let [pred (value-comparsion-predicate neg? max-v)]
+  (let [pred (value-comparison-predicate neg? max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
 (defn new-greater-than-equal-virtual-index [idx ^Box min-v]
-  (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
+  (let [pred (value-comparison-predicate (comp not neg?) min-v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
                                           k
@@ -133,7 +133,7 @@
     (db/max-depth idx)))
 
 (defn new-greater-than-virtual-index [idx ^Box min-v]
-  (let [pred (value-comparsion-predicate pos? min-v)
+  (let [pred (value-comparison-predicate pos? min-v)
         idx (->PredicateVirtualIndex idx pred (fn [k]
                                                 (if (pred k)
                                                   k
@@ -141,7 +141,7 @@
     (->GreaterThanVirtualIndex idx)))
 
 (defn new-equals-virtual-index [idx ^Box v]
-  (let [pred (value-comparsion-predicate zero? v)]
+  (let [pred (value-comparison-predicate zero? v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
                                           k

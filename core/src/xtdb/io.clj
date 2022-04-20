@@ -103,7 +103,7 @@
   (cond
     (nil? f) 0
     (string? f) (folder-size (io/file f))
-    (.isDirectory f) (apply + (map folder-size (.listFiles f)))
+    (.isDirectory f) (transduce (map folder-size) + (.listFiles f))
     :else (.length f)))
 
 (defn try-close [c]
