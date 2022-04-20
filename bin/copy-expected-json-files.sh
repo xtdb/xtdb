@@ -9,12 +9,12 @@
         echo copying $x...
 
         cp target/$x/objects/*.json \
-           $(dirname $0)/../core/test-resources/$x/
+           $(dirname $0)/../test-resources/$x/
     done
 
     cp target/can-submit-tpch-docs-0.001/objects/metadata*.json \
-       $(dirname $0)/../core/test-resources/can-submit-tpch-docs-0.001/
+       $(dirname $0)/../test-resources/can-submit-tpch-docs-0.001/
 
     cp target/can-submit-tpch-docs-0.01/objects/metadata*.json \
-       $(dirname $0)/../core/test-resources/can-submit-tpch-docs-0.01/
+       $(dirname $0)/../test-resources/can-submit-tpch-docs-0.01/
 )
