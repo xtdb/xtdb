@@ -742,14 +742,12 @@
 (defn- sql-trim-leading
   [^String s ^String trim-char]
   (let [trim-cp (.codePointAt trim-char 0)]
-    (loop [i 0
-           len (.length s)]
+    (loop [i 0]
       (if (< i (.length s))
         (let [cp (.codePointAt s i)]
           (if (= cp trim-cp)
-            (recur (unchecked-add-int i (Character/charCount cp))
-                   (unchecked-subtract-int len (Character/charCount cp)))
-            (.substring s i (+ i len))))
+            (recur (unchecked-add-int i (Character/charCount cp)))
+            (.substring s i (.length s))))
         ""))))
 
 (defn- sql-trim-trailing
@@ -762,7 +760,7 @@
           (if (= cp trim-cp)
             (recur (unchecked-subtract-int j (Character/charCount cp))
                    (unchecked-subtract-int len (Character/charCount cp)))
-            (.substring s 0 (+ 0 len))))
+            (.substring s 0 len)))
         ""))))
 
 (defn- trim-char-conforms?
