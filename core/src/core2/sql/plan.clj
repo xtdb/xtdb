@@ -251,6 +251,15 @@
      ;;=>
      (list (symbol (str/lower-case tfn)) (expr nve))
 
+     [:trim_function _ [:trim_operands [:trim_specification trim-spec] ^:z trim-char _ ^:z nve]]
+     (list 'trim (expr nve) trim-spec (expr trim-char))
+
+     [:trim_function _ [:trim_operands [:trim_specification trim-spec] _ ^:z nve]]
+     (list 'trim (expr nve) trim-spec " ")
+
+     [:trim_function _ [:trim_operands ^:z nve]]
+     (list 'trim (expr nve) "BOTH" " ")
+
      [:named_columns_join _ _]
      ;;=>
      (reduce
