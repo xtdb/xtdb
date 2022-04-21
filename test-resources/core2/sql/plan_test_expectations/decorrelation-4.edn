@@ -1,0 +1,19 @@
+[:rename
+ {x1 name, x4 course}
+ [:project
+  [x1 x4]
+  [:select
+   (= x6 x11)
+   [:group-by
+    [x1 x2 x4 x5 x6 $row_number$ {x11 (min x8)}]
+    [:left-outer-join
+     [{x2 x9}]
+     [:map
+      [{$row_number$ (row-number)}]
+      [:join
+       [{x2 x5}]
+       [:rename {name x1, id x2} [:scan [name id]]]
+       [:rename
+        {course x4, sid x5, grade x6}
+        [:scan [course sid grade]]]]]
+     [:rename {grade x8, sid x9} [:scan [grade sid]]]]]]]]

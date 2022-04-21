@@ -1,0 +1,54 @@
+[:rename
+ {x16 supp_nation, x19 cust_nation, x22 l_year, x24 revenue}
+ [:order-by
+  [[x16 :asc :nulls-last]
+   [x19 :asc :nulls-last]
+   [x22 :asc :nulls-last]]
+  [:group-by
+   [x16 x19 x22 {x24 (sum x23)}]
+   [:project
+    [x16 x19 {x22 (extract "YEAR" x4)} {x23 (* x5 (- 1 x6))}]
+    [:join
+     [{x14 x20}
+      (or
+       (and (= x16 "FRANCE") (= x19 "GERMANY"))
+       (and (= x16 "GERMANY") (= x19 "FRANCE")))]
+     [:join
+      [{x2 x17}]
+      [:join
+       [{x11 x13}]
+       [:join
+        [{x8 x10}]
+        [:join
+         [{x1 x7}]
+         [:rename
+          {s_suppkey x1, s_nationkey x2}
+          [:scan [s_suppkey s_nationkey]]]
+         [:rename
+          {l_shipdate x4,
+           l_extendedprice x5,
+           l_discount x6,
+           l_suppkey x7,
+           l_orderkey x8}
+          [:scan
+           [{l_shipdate
+             (between
+              l_shipdate
+              #time/date "1995-01-01"
+              #time/date "1996-12-31")}
+            l_extendedprice
+            l_discount
+            l_suppkey
+            l_orderkey]]]]
+        [:rename
+         {o_orderkey x10, o_custkey x11}
+         [:scan [o_orderkey o_custkey]]]]
+       [:rename
+        {c_custkey x13, c_nationkey x14}
+        [:scan [c_custkey c_nationkey]]]]
+      [:rename
+       {n_name x16, n_nationkey x17}
+       [:scan [n_name n_nationkey]]]]
+     [:rename
+      {n_name x19, n_nationkey x20}
+      [:scan [n_name n_nationkey]]]]]]]]

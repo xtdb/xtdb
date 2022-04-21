@@ -1,0 +1,8 @@
+[:rename
+ {x1 name}
+ [:order-by
+  [[x1 :asc :nulls-last]]
+  [:distinct
+   [:union-all
+    [:rename {name x1} [:scan [name]]]
+    [:rename {name x1} [:scan [name]]]]]]]

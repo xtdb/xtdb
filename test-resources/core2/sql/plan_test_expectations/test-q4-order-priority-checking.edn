@@ -1,0 +1,28 @@
+[:rename
+ {x1 o_orderpriority, x12 order_count}
+ [:order-by
+  [[x1 :asc :nulls-last]]
+  [:group-by
+   [x1 {x12 (count x11)}]
+   [:map
+    [{x11 1}]
+    [:semi-join
+     [{x3 x5}]
+     [:rename
+      {o_orderpriority x1, o_orderdate x2, o_orderkey x3}
+      [:scan
+       [o_orderpriority
+        {o_orderdate
+         (and
+          (<
+           o_orderdate
+           (+
+            #time/date "1993-07-01"
+            #time/period-duration "P3M PT0S"))
+          (>= o_orderdate #time/date "1993-07-01"))}
+        o_orderkey]]]
+     [:rename
+      {l_orderkey x5, l_commitdate x6, l_receiptdate x7}
+      [:select
+       (< l_commitdate l_receiptdate)
+       [:scan [l_orderkey l_commitdate l_receiptdate]]]]]]]]]

@@ -1,0 +1,14 @@
+[:rename
+ {x1 name, x8 $column_2$}
+ [:project
+  [x1 x8]
+  [:select
+   (< x9 1930)
+   [:group-by
+    [x1 {x8 (sum x4)} {x9 (min x6)}]
+    [:join
+     [{x2 x5}]
+     [:rename {name x1, cert x2} [:scan [name cert]]]
+     [:rename
+      {length x4, producer x5, year x6}
+      [:scan [length producer year]]]]]]]]

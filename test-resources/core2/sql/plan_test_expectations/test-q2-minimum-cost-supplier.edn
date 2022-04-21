@@ -1,0 +1,103 @@
+[:rename
+ {x6 s_acctbal,
+  x7 s_name,
+  x18 n_name,
+  x1 p_partkey,
+  x2 p_mfgr,
+  x8 s_address,
+  x9 s_phone,
+  x10 s_comment}
+ [:project
+  [x6 x7 x18 x1 x2 x8 x9 x10]
+  [:top
+   {:limit 100}
+   [:order-by
+    [[x6 :desc :nulls-last]
+     [x18 :asc :nulls-last]
+     [x7 :asc :nulls-last]
+     [x1 :asc :nulls-last]]
+    [:select
+     (= x16 x38)
+     [:group-by
+      [x1
+       x2
+       x3
+       x4
+       x6
+       x7
+       x8
+       x9
+       x10
+       x11
+       x12
+       x14
+       x15
+       x16
+       x18
+       x19
+       x20
+       x22
+       x23
+       $row_number$
+       {x38 (min x25)}]
+      [:left-outer-join
+       [{x1 x26}]
+       [:map
+        [{$row_number$ (row-number)}]
+        [:join
+         [{x20 x22}]
+         [:join
+          [{x12 x19}]
+          [:join
+           [{x1 x14} {x11 x15}]
+           [:cross-join
+            [:rename
+             {p_partkey x1, p_mfgr x2, p_size x3, p_type x4}
+             [:scan
+              [p_partkey
+               p_mfgr
+               {p_size (= p_size 15)}
+               {p_type (like p_type "%BRASS")}]]]
+            [:rename
+             {s_acctbal x6,
+              s_name x7,
+              s_address x8,
+              s_phone x9,
+              s_comment x10,
+              s_suppkey x11,
+              s_nationkey x12}
+             [:scan
+              [s_acctbal
+               s_name
+               s_address
+               s_phone
+               s_comment
+               s_suppkey
+               s_nationkey]]]]
+           [:rename
+            {ps_partkey x14, ps_suppkey x15, ps_supplycost x16}
+            [:scan [ps_partkey ps_suppkey ps_supplycost]]]]
+          [:rename
+           {n_name x18, n_nationkey x19, n_regionkey x20}
+           [:scan [n_name n_nationkey n_regionkey]]]]
+         [:rename
+          {r_regionkey x22, r_name x23}
+          [:scan [r_regionkey {r_name (= r_name "EUROPE")}]]]]]
+       [:join
+        [{x33 x35}]
+        [:join
+         [{x30 x32}]
+         [:join
+          [{x27 x29}]
+          [:rename
+           {ps_supplycost x25, ps_partkey x26, ps_suppkey x27}
+           [:scan [ps_supplycost ps_partkey ps_suppkey]]]
+          [:rename
+           {s_suppkey x29, s_nationkey x30}
+           [:scan [s_suppkey s_nationkey]]]]
+         [:rename
+          {n_nationkey x32, n_regionkey x33}
+          [:scan [n_nationkey n_regionkey]]]]
+        [:rename
+         {r_regionkey x35, r_name x36}
+         [:scan [r_regionkey {r_name (= r_name "EUROPE")}]]]]]]]]]]]

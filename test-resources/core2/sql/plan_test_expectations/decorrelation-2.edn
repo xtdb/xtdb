@@ -1,0 +1,8 @@
+[:rename
+ {x1 country, x2 custno}
+ [:semi-join
+  [{x2 x4}]
+  [:rename
+   {country x1, custno x2}
+   [:scan [{country (= country "Mexico")} custno]]]
+  [:rename {custno x4} [:scan [custno]]]]]

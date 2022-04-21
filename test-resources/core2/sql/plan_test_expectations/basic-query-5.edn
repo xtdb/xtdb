@@ -1,0 +1,8 @@
+[:rename
+ {x4 movieTitle}
+ [:project
+  [x4]
+  [:join
+   [{x1 x4} {x2 x5}]
+   [:rename {title x1, movieYear x2} [:scan [title movieYear]]]
+   [:rename {movieTitle x4, year x5} [:scan [movieTitle year]]]]]]

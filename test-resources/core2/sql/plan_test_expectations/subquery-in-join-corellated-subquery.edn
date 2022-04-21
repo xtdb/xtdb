@@ -1,0 +1,11 @@
+[:rename
+ {x1 a}
+ [:project
+  [x1]
+  [:semi-join
+   [{x3 x6} {x4 x7}]
+   [:join
+    []
+    [:rename {a x1} [:scan [a]]]
+    [:rename {c x3, b x4} [:scan [c b]]]]
+   [:rename {b x6, a x7} [:scan [b a]]]]]]

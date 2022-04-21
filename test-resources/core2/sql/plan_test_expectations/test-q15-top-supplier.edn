@@ -1,0 +1,58 @@
+[:rename
+ {x1 s_suppkey, x2 s_name, x3 s_address, x4 s_phone, x12 total_revenue}
+ [:project
+  [x1 x2 x3 x4 x12]
+  [:order-by
+   [[x1 :asc :nulls-last]]
+   [:join
+    [{x12 x22}]
+    [:join
+     [{x1 x6}]
+     [:rename
+      {s_suppkey x1, s_name x2, s_address x3, s_phone x4}
+      [:scan [s_suppkey s_name s_address s_phone]]]
+     [:group-by
+      [x6 {x12 (sum x11)}]
+      [:map
+       [{x11 (* x7 (- 1 x8))}]
+       [:rename
+        {l_suppkey x6,
+         l_extendedprice x7,
+         l_discount x8,
+         l_shipdate x9}
+        [:scan
+         [l_suppkey
+          l_extendedprice
+          l_discount
+          {l_shipdate
+           (and
+            (<
+             l_shipdate
+             (+
+              #time/date "1996-01-01"
+              #time/period-duration "P3M PT0S"))
+            (>= l_shipdate #time/date "1996-01-01"))}]]]]]]
+    [:max-1-row
+     [:group-by
+      [{x22 (max x20)}]
+      [:group-by
+       [x14 {x20 (sum x19)}]
+       [:map
+        [{x19 (* x15 (- 1 x16))}]
+        [:rename
+         {l_suppkey x14,
+          l_extendedprice x15,
+          l_discount x16,
+          l_shipdate x17}
+         [:scan
+          [l_suppkey
+           l_extendedprice
+           l_discount
+           {l_shipdate
+            (and
+             (<
+              l_shipdate
+              (+
+               #time/date "1996-01-01"
+               #time/period-duration "P3M PT0S"))
+             (>= l_shipdate #time/date "1996-01-01"))}]]]]]]]]]]]

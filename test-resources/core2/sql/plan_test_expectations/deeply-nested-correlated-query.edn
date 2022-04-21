@@ -1,0 +1,15 @@
+[:rename
+ {x1 A, x2 B}
+ [:project
+  [x1 x2]
+  [:apply
+   :semi-join
+   {x2 ?x15, x4 ?x16}
+   #{}
+   [:cross-join
+    [:rename {A x1, B x2} [:scan [A B]]]
+    [:rename {C x4} [:scan [C]]]]
+   [:semi-join
+    [(= x10 ?x13) {x7 x9}]
+    [:rename {A x6, B x7} [:scan [{A (= A ?x15)} B]]]
+    [:rename {A x9, B x10} [:scan [A B]]]]]]]

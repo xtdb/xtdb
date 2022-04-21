@@ -1,0 +1,67 @@
+[:rename
+ {x29 o_year, x35 mkt_share}
+ [:order-by
+  [[x29 :asc :nulls-last]]
+  [:project
+   [x29 {x35 (/ x32 x33)}]
+   [:group-by
+    [x29 {x32 (sum x31)} {x33 (sum x30)}]
+    [:map
+     [{x31 (cond (= x23 "BRAZIL") x30 0)}]
+     [:project
+      [{x29 (extract "YEAR" x13)} {x30 (* x7 (- 1 x8))} x23]
+      [:join
+       [{x21 x26}]
+       [:join
+        [{x5 x24}]
+        [:join
+         [{x18 x20}]
+         [:join
+          [{x15 x17}]
+          [:join
+           [{x11 x14}]
+           [:join
+            [{x1 x9} {x4 x10}]
+            [:cross-join
+             [:rename
+              {p_partkey x1, p_type x2}
+              [:scan
+               [p_partkey
+                {p_type (= p_type "ECONOMY ANODIZED STEEL")}]]]
+             [:rename
+              {s_suppkey x4, s_nationkey x5}
+              [:scan [s_suppkey s_nationkey]]]]
+            [:rename
+             {l_extendedprice x7,
+              l_discount x8,
+              l_partkey x9,
+              l_suppkey x10,
+              l_orderkey x11}
+             [:scan
+              [l_extendedprice
+               l_discount
+               l_partkey
+               l_suppkey
+               l_orderkey]]]]
+           [:rename
+            {o_orderdate x13, o_orderkey x14, o_custkey x15}
+            [:scan
+             [{o_orderdate
+               (between
+                o_orderdate
+                #time/date "1995-01-01"
+                #time/date "1996-12-31")}
+              o_orderkey
+              o_custkey]]]]
+          [:rename
+           {c_custkey x17, c_nationkey x18}
+           [:scan [c_custkey c_nationkey]]]]
+         [:rename
+          {n_nationkey x20, n_regionkey x21}
+          [:scan [n_nationkey n_regionkey]]]]
+        [:rename
+         {n_name x23, n_nationkey x24}
+         [:scan [n_name n_nationkey]]]]
+       [:rename
+        {r_regionkey x26, r_name x27}
+        [:scan [r_regionkey {r_name (= r_name "AMERICA")}]]]]]]]]]]

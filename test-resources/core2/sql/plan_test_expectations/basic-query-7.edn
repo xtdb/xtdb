@@ -1,0 +1,8 @@
+[:rename
+ {x3 title}
+ [:project
+  [x3]
+  [:join
+   [{x1 x3}]
+   [:rename {title x1} [:scan [title]]]
+   [:rename {title x3} [:scan [title]]]]]]

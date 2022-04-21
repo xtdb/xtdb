@@ -1,0 +1,30 @@
+[:rename
+ {x19 avg_yearly}
+ [:project
+  [{x19 (/ x17 7.0)}]
+  [:group-by
+   [{x17 (sum x1)}]
+   [:select
+    (< x3 x14)
+    [:map
+     [{x14 (* 0.2 x12)}]
+     [:group-by
+      [x1 x2 x3 x5 x6 x7 $row_number$ {x12 (avg x9)}]
+      [:left-outer-join
+       [{x5 x10}]
+       [:map
+        [{$row_number$ (row-number)}]
+        [:join
+         [{x2 x5}]
+         [:rename
+          {l_extendedprice x1, l_partkey x2, l_quantity x3}
+          [:scan [l_extendedprice l_partkey l_quantity]]]
+         [:rename
+          {p_partkey x5, p_brand x6, p_container x7}
+          [:scan
+           [p_partkey
+            {p_brand (= p_brand "Brand#23")}
+            {p_container (= p_container "MED BOX")}]]]]]
+       [:rename
+        {l_quantity x9, l_partkey x10}
+        [:scan [l_quantity l_partkey]]]]]]]]]]

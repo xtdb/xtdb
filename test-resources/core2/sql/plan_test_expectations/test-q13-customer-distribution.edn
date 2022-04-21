@@ -1,0 +1,20 @@
+[:rename
+ {x7 c_count, x10 custdist}
+ [:order-by
+  [[x10 :desc :nulls-last] [x7 :desc :nulls-last]]
+  [:group-by
+   [x7 {x10 (count x9)}]
+   [:map
+    [{x9 1}]
+    [:group-by
+     [x1 {x7 (count x3)}]
+     [:left-outer-join
+      [{x1 x4}]
+      [:rename {c_custkey x1} [:scan [c_custkey]]]
+      [:rename
+       {o_orderkey x3, o_custkey x4, o_comment x5}
+       [:scan
+        [o_orderkey
+         o_custkey
+         {o_comment
+          (not (like o_comment "%special%requests%"))}]]]]]]]]]

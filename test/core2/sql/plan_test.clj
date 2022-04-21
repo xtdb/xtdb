@@ -1,5 +1,7 @@
 (ns core2.sql.plan-test
   (:require [clojure.test :as t :refer [deftest]]
+            [clojure.java.io :as io]
+            [core2.edn :as edn] ;; Enables data literals
             [core2.operator :as op]
             [core2.sql :as sql]
             [core2.sql.plan :as plan]))
@@ -11,476 +13,316 @@
     #_(assoc (select-keys plan [:fired-rules :plan]) :tree tree) ;; Debug Tool
     (:plan plan)))
 
-(t/deftest test-basic-queries
-  (t/is (= '[:rename {x1 movieTitle}
-             [:project [x1]
-              [:join [{x2 x4}]
-               [:rename {movieTitle x1, starName x2} [:scan [movieTitle starName]]]
-               [:rename {name x4, birthdate x5}
-                [:scan [name {birthdate (= birthdate 1960)}]]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate = 1960")))
+(def regen-expected-files? false)
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:project [x1]
-              [:join [{x2 x4}]
-               [:rename {movieTitle x1, starName x2} [:scan [movieTitle starName]]]
-               [:rename {name x4, birthdate x5}
-                [:scan [name {birthdate (and (< birthdate 1960) (> birthdate 1950))}]]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950")))
+(defmethod t/assert-expr '=plan-file [msg form]
+  `(let [exp-plan-file-name# ~(format "core2/sql/plan_test_expectations/%s.edn" (nth form 1))
+         actual-plan# ~(nth form 2)]
+     (if-let [exp-plan-file# (io/resource exp-plan-file-name#)]
+       (let [exp-plan# (read-string (slurp exp-plan-file#))
+             result# (= exp-plan# actual-plan#)]
+         (if result#
+           (t/do-report {:type :pass, :message ~msg,
+                         :expected exp-plan#, :actual (list '~'= exp-plan# actual-plan#)})
+           (do
+             (when regen-expected-files?
+               (spit (io/resource exp-plan-file-name#) (with-out-str (clojure.pprint/pprint actual-plan#))))
+             (t/do-report {:type :fail, :message ~msg,
+                           :expected exp-plan#, :actual (list '~'not (list '~'= exp-plan# actual-plan#))})))
+         result#)
+       (if regen-expected-files?
+         (do
+           (spit
+             ~(str (io/resource "core2/sql/plan_test_expectations/") (nth form 1) ".edn")
+             (with-out-str (clojure.pprint/pprint actual-plan#))))
+         (t/do-report
+           {:type :error, :message "Missing Expectation File"
+            :expected nil :actual (Exception. "Missing Expectation File")})))))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:project [x1]
-              [:join [{x2 x4}]
-               [:rename {movieTitle x1, starName x2} [:scan [movieTitle starName]]]
-               [:rename {name x4, birthdate x5}
-                [:scan [{name (= name "Foo")} {birthdate (< birthdate 1960)}]]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.name = 'Foo'")))
+(deftest test-basic-queries
+  (t/is (=plan-file
+          "basic-query-1"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate = 1960")))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:project [x1]
-              [:join [{x2 x4}]
-               [:rename {movieTitle x1, starName x2} [:scan [movieTitle starName]]]
-               [:rename {name x4, birthdate x5}
-                [:scan [name {birthdate (= birthdate 1960)}]]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name")))
+  (t/is (=plan-file
+          "basic-query-2"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.birthdate > 1950")))
 
-  (t/is (= '[:rename {x4 movieTitle}
-             [:project [x4]
-              [:join [{x1 x4} {x2 x5}]
-               [:rename {title x1, movieYear x2} [:scan [title movieYear]]]
-               [:rename {movieTitle x4, year x5} [:scan [movieTitle year]]]]]]
-           (plan-sql "SELECT si.movieTitle FROM Movie AS m JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")))
+  (t/is (=plan-file
+          "basic-query-3"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, MovieStar AS ms WHERE si.starName = ms.name AND ms.birthdate < 1960 AND ms.name = 'Foo'")))
 
-  (t/is (= '[:rename {x4 movieTitle}
-             [:project [x4]
-              [:left-outer-join [{x1 x4} {x2 x5}]
-               [:rename {title x1, movieYear x2} [:scan [title movieYear]]]
-               [:rename {movieTitle x4, year x5} [:scan [movieTitle year]]]]]]
-           (plan-sql "SELECT si.movieTitle FROM Movie AS m LEFT JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")))
+  (t/is (=plan-file
+          "basic-query-4"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si, (SELECT ms.name FROM MovieStar AS ms WHERE ms.birthdate = 1960) AS m WHERE si.starName = m.name")))
 
-  (t/is (= '[:rename {x3 title}
-             [:project [x3]
-              [:join [{x1 x3}]
-               [:rename {title x1} [:scan [title]]]
-               [:rename {title x3} [:scan [title]]]]]]
-           (plan-sql "SELECT si.title FROM Movie AS m JOIN StarsIn AS si USING (title)")))
+  (t/is (=plan-file
+          "basic-query-5"
+          (plan-sql "SELECT si.movieTitle FROM Movie AS m JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")))
 
-  (t/is (= '[:rename {x1 title}
-             [:project [x1]
-              [:left-outer-join [{x1 x3}]
-               [:rename {title x1} [:scan [title]]]
-               [:rename {title x3} [:scan [title]]]]]]
-           (plan-sql "SELECT si.title FROM Movie AS m RIGHT OUTER JOIN StarsIn AS si USING (title)")))
+  (t/is (=plan-file
+          "basic-query-6"
+          (plan-sql "SELECT si.movieTitle FROM Movie AS m LEFT JOIN StarsIn AS si ON m.title = si.movieTitle AND si.year = m.movieYear")))
 
-  (t/is (= '[:rename {x1 name, x8 $column_2$}
-             [:project [x1 x8]
-              [:select (< x9 1930)
-               [:group-by [x1 {x8 (sum x4)} {x9 (min x6)}]
-                [:join [{x2 x5}]
-                 [:rename {name x1, cert x2} [:scan [name cert]]]
-                 [:rename {length x4, producer x5, year x6}
-                  [:scan [length producer year]]]]]]]]
-           (plan-sql "SELECT me.name, SUM(m.length) FROM MovieExec AS me, Movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.year) < 1930")))
+  (t/is (=plan-file
+          "basic-query-7"
+          (plan-sql "SELECT si.title FROM Movie AS m JOIN StarsIn AS si USING (title)")))
 
-  (t/is (= '[:rename {x3 $column_1$}
-             [:group-by [{x3 (sum x1)}] [:rename {length x1} [:scan [length]]]]]
-           (plan-sql "SELECT SUM(m.length) FROM Movie AS m")))
+  (t/is (=plan-file
+          "basic-query-8"
+          (plan-sql "SELECT si.title FROM Movie AS m RIGHT OUTER JOIN StarsIn AS si USING (title)")))
 
-  (t/is (= '[:scan [name]]
-           (plan-sql "SELECT * FROM StarsIn AS si(name)")))
+  (t/is (=plan-file
+          "basic-query-9"
+          (plan-sql "SELECT me.name, SUM(m.length) FROM MovieExec AS me, Movie AS m WHERE me.cert = m.producer GROUP BY me.name HAVING MIN(m.year) < 1930")))
 
-  (t/is (= '[:rename {x1 bar}
-             [:rename {name x1}
-              [:scan [name]]]]
-           (plan-sql "SELECT * FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)")))
+  (t/is (=plan-file
+          "basic-query-10"
+          (plan-sql "SELECT SUM(m.length) FROM Movie AS m")))
 
-  (t/is (= (plan-sql "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname")
-           '[:select (= name lastname) [:scan [name lastname]]]))
+  (t/is (=plan-file
+          "basic-query-11"
+          (plan-sql "SELECT * FROM StarsIn AS si(name)")))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:distinct
-              [:rename {movieTitle x1} [:scan [movieTitle]]]]]
+  (t/is (=plan-file
+          "basic-query-12"
+          (plan-sql "SELECT * FROM (SELECT si.name FROM StarsIn AS si) AS foo(bar)")))
+
+  (t/is (=plan-file
+          "basic-query-13"
+           (plan-sql "SELECT si.* FROM StarsIn AS si WHERE si.name = si.lastname")))
+
+  (t/is (=plan-file
+          "basic-query-14"
            (plan-sql "SELECT DISTINCT si.movieTitle FROM StarsIn AS si")))
 
-  (t/is (= '[:rename {x1 name}
-             [:difference
-              [:rename {name x1} [:scan [name]]]
-              [:rename {name x1} [:scan [name]]]]]
-           (plan-sql "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si")))
+  (t/is (=plan-file
+          "basic-query-15"
+          (plan-sql "SELECT si.name FROM StarsIn AS si EXCEPT SELECT si.name FROM StarsIn AS si")))
 
-  (t/is (= '[:rename {x1 name}
-             [:union-all
-              [:rename {name x1} [:scan [name]]]
-              [:rename {name x1} [:scan [name]]]]]
+  (t/is (=plan-file
+          "basic-query-16"
            (plan-sql "SELECT si.name FROM StarsIn AS si UNION ALL SELECT si.name FROM StarsIn AS si")))
 
-  (t/is (= '[:rename {x1 name}
-             [:intersect
-              [:rename {name x1} [:scan [name]]]
-              [:rename {name x1} [:scan [name]]]]]
-           (plan-sql "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si")))
+  (t/is (=plan-file
+          "basic-query-17"
+          (plan-sql "SELECT si.name FROM StarsIn AS si INTERSECT SELECT si.name FROM StarsIn AS si")))
 
-  (t/is (= '[:rename
-             {x1 movieTitle}
-             [:distinct
-              [:union-all
-               [:rename {movieTitle x1} [:scan [movieTitle]]]
-               [:rename {name x1} [:scan [name]]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si")))
+  (t/is (=plan-file
+          "basic-query-18"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si")))
 
-  (t/is (= '[:rename {x1 name}
-             [:order-by [[x1 :asc :nulls-last]]
-              [:distinct
-               [:union-all
-                [:rename {name x1} [:scan [name]]]
-                [:rename {name x1} [:scan [name]]]]]]]
-           (plan-sql "SELECT si.name FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si ORDER BY name")))
+  (t/is (=plan-file
+          "basic-query-19"
+          (plan-sql "SELECT si.name FROM StarsIn AS si UNION SELECT si.name FROM StarsIn AS si ORDER BY name")))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:top {:limit 10}
-              [:rename {movieTitle x1} [:scan [movieTitle]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY")))
+  (t/is (=plan-file
+          "basic-query-20"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si FETCH FIRST 10 ROWS ONLY")))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:top {:skip 5} [:rename {movieTitle x1} [:scan [movieTitle]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS")))
+  (t/is (=plan-file
+          "basic-query-21"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS")))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:top {:skip 5, :limit 10}
-              [:rename {movieTitle x1} [:scan [movieTitle]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS FETCH FIRST 10 ROWS ONLY")))
+  (t/is (=plan-file
+          "basic-query-22"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si OFFSET 5 ROWS FETCH FIRST 10 ROWS ONLY")))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:order-by [[x1 :asc :nulls-last]]
-              [:rename {movieTitle x1}
-               [:scan [movieTitle]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle")))
+  (t/is (=plan-file
+          "basic-query-23"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle")))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:top {:skip 100}
-              [:order-by [[x1 :asc :nulls-last]]
-               [:rename {movieTitle x1} [:scan [movieTitle]]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle OFFSET 100 ROWS")))
+  (t/is (=plan-file
+          "basic-query-24"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.movieTitle OFFSET 100 ROWS")))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:order-by [[x1 :desc :nulls-last]]
-              [:rename {movieTitle x1} [:scan [movieTitle]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY movieTitle DESC")))
+  (t/is (=plan-file
+          "basic-query-25"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY movieTitle DESC")))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:project [x1]
-              [:order-by [[x4 :desc :nulls-last] [x1 :asc :nulls-last]]
-               [:map [{x4 (= x2 "foo")}]
-                [:rename {movieTitle x1, year x2} [:scan [movieTitle year]]]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle")))
+  (t/is (=plan-file
+          "basic-query-26"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year = 'foo' DESC, movieTitle")))
 
-  (t/is (= '[:rename {x1 movieTitle}
-             [:project [x1]
-              [:order-by [[x2 :asc :nulls-last]]
-               [:rename {movieTitle x1, year x2} [:scan [movieTitle year]]]]]]
-           (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year")))
+  (t/is (=plan-file
+          "basic-query-27"
+          (plan-sql "SELECT si.movieTitle FROM StarsIn AS si ORDER BY si.year")))
 
-  (t/is (= '[:rename {x3 $column_1$}
-             [:order-by [[x3 :asc :nulls-last]]
-              [:project [{x3 (= x1 "foo")}] [:rename {year x1} [:scan [year]]]]]]
+  (t/is (=plan-file
+          "basic-query-28"
            (plan-sql "SELECT si.year = 'foo' FROM StarsIn AS si ORDER BY si.year = 'foo'")))
 
-  (t/is (= '[:rename {x3 name}
-             [:project [x3]
-              [:unwind {x3 x1} {} [:rename {films x1} [:scan [films]]]]]]
-           (plan-sql "SELECT film.name FROM StarsIn AS si, UNNEST(si.films) AS film(name)")))
+  (t/is (=plan-file
+          "basic-query-29"
+          (plan-sql "SELECT film.name FROM StarsIn AS si, UNNEST(si.films) AS film(name)")))
 
-  (t/is (= '[:rename {x1 films, x3 $column_2$}
-             [:project [x1 x3]
-              [:unwind {x3 x1} {} [:rename {films x1} [:scan [films]]]]]]
-           (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film")))
+  (t/is (=plan-file
+          "basic-query-30"
+          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) AS film")))
 
-  (t/is (= '[:rename {x1 films, x3 $column_2$, x4 $column_3$}
-             [:project [x1 x3 x4]
-              [:unwind {x3 x1} {:ordinality-column x4}
-               [:rename {films x1} [:scan [films]]]]]]
-           (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film")))
+  (t/is (=plan-file
+          "basic-query-31"
+          (plan-sql "SELECT * FROM StarsIn AS si, UNNEST(si.films) WITH ORDINALITY AS film")))
 
-  (t/is (= '[:rename {x1 $column_1$, x2 $column_2$}
-             [:table [{x1 1, x2 2} {x1 3, x2 4}]]]
-           (plan-sql "VALUES (1, 2), (3, 4)")))
+  (t/is (=plan-file
+          "basic-query-32"
+          (plan-sql "VALUES (1, 2), (3, 4)")))
 
-  (t/is (= '[:rename {x1 $column_1$}
-             [:table [{x1 1} {x1 2}]]]
+  (t/is (=plan-file
+          "basic-query-33"
            (plan-sql "VALUES 1, 2")))
 
-  (t/is (= '[:rename
-             {x7 $column_1$, x8 $column_2$, x9 $column_3$}
-             [:project [{x7 (case (+ x1 1) x2 111 x3 222 x4 333 x5 444 555)}
-                        {x8 (cond (< x1 (- x2 3)) 111 (<= x1 x2) 222 (< x1 (+ x2 3)) 333 444)}
-                        {x9 (case (+ x1 1) x2 222 x3 222 x4 444 (+ x5 1) 444 555)}]
-              [:rename {a x1, b x2, c x3, d x4, e x5} [:scan [a b c d e]]]]]
-           (plan-sql "SELECT CASE t1.a + 1 WHEN t1.b THEN 111 WHEN t1.c THEN 222 WHEN t1.d THEN 333 WHEN t1.e THEN 444 ELSE 555 END,
-                             CASE WHEN t1.a < t1.b - 3 THEN 111 WHEN t1.a <= t1.b THEN 222 WHEN t1.a < t1.b+3 THEN 333 ELSE 444 END,
-                             CASE t1.a + 1 WHEN t1.b, t1.c THEN 222 WHEN t1.d, t1.e + 1 THEN 444 ELSE 555 END FROM t1")))
+  (t/is (=plan-file
+          "basic-query-34"
+          (plan-sql "SELECT CASE t1.a + 1 WHEN t1.b THEN 111 WHEN t1.c THEN 222 WHEN t1.d THEN 333 WHEN t1.e THEN 444 ELSE 555 END,
+                    CASE WHEN t1.a < t1.b - 3 THEN 111 WHEN t1.a <= t1.b THEN 222 WHEN t1.a < t1.b+3 THEN 333 ELSE 444 END,
+                    CASE t1.a + 1 WHEN t1.b, t1.c THEN 222 WHEN t1.d, t1.e + 1 THEN 444 ELSE 555 END FROM t1")))
 
-  (t/is (= '[:scan [{a (nil? a)}]]
-           (plan-sql "SELECT * FROM t1 WHERE t1.a IS NULL")))
-  (t/is (= '[:scan [{a (not (nil? a))}]]
-           (plan-sql "SELECT * FROM t1 WHERE t1.a IS NOT NULL")))
+  (t/is (=plan-file
+          "basic-query-35"
+          (plan-sql "SELECT * FROM t1 WHERE t1.a IS NULL")))
 
-  (t/is (= '[:rename {x4 $column_1$}
-             [:project [{x4 (nullif x1 x2)}]
-              [:rename {a x1, b x2} [:scan [a b]]]]]
-        (plan-sql "SELECT NULLIF(t1.a, t1.b) FROM t1"))))
+  (t/is (=plan-file
+          "basic-query-36"
+          (plan-sql "SELECT * FROM t1 WHERE t1.a IS NOT NULL")))
+
+  (t/is (=plan-file
+          "basic-query-37"
+          (plan-sql "SELECT NULLIF(t1.a, t1.b) FROM t1"))))
 
 ;; TODO: sanity check semantic analysis for correlation both inside
 ;; and outside MAX, gives errors in both cases, are these correct?
 ;; SELECT MAX(foo.bar) FROM foo
 
-(t/deftest test-subqueries
+(deftest test-subqueries
   (t/testing "Scalar subquery in SELECT"
-    (t/is (= '[:rename {x8 some_column}
-               [:project [{x8 (= 1 x5)}]
-                [:cross-join
-                 [:rename {y x1}
-                  [:scan [{y (= y 1)}]]]
-                 [:max-1-row
-                  [:group-by [{x5 (max x3)}]
-                   [:rename {bar x3} [:scan [bar]]]]]]]]
-             (plan-sql "SELECT (1 = (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"))))
+    (t/is (=plan-file
+            "scalar-subquery-in-select"
+            (plan-sql "SELECT (1 = (SELECT MAX(foo.bar) FROM foo)) AS some_column FROM x WHERE x.y = 1"))))
 
   (t/testing "Scalar subquery in WHERE"
-    (t/is (= '[:rename {x1 some_column}
-               [:project [x1]
-                [:join [{x1 x5}]
-                 [:rename {y x1} [:scan [y]]]
-                 [:max-1-row
-                  [:group-by [{x5 (max x3)}]
-                   [:rename {bar x3} [:scan [bar]]]]]]]]
-             (plan-sql "SELECT x.y AS some_column FROM x WHERE x.y = (SELECT MAX(foo.bar) FROM foo)"))))
+    (t/is (=plan-file
+            "scalar-subquery-in-where"
+            (plan-sql "SELECT x.y AS some_column FROM x WHERE x.y = (SELECT MAX(foo.bar) FROM foo)"))))
 
   (t/testing "Correlated scalar subquery in SELECT"
-    (t/is (= '[:rename {x8 some_column}
-               [:project [{x8 (= 1 x5)}]
-                [:apply :cross-join {x1 ?x6} #{x5}
-                 [:rename {y x1} [:scan [{y (= y 1)}]]]
-                 [:max-1-row
-                  [:project [{x5 (= x3 ?x6)}] [:rename {bar x3} [:scan [bar]]]]]]]]
-             (plan-sql "SELECT (1 = (SELECT foo.bar = x.y FROM foo)) AS some_column FROM x WHERE x.y = 1"))))
+    (t/is (=plan-file
+            "correlated-scalar-subquery-in-select"
+            (plan-sql "SELECT (1 = (SELECT foo.bar = x.y FROM foo)) AS some_column FROM x WHERE x.y = 1"))))
 
   (t/testing "EXISTS in WHERE"
-    (t/is (= '[:rename {x1 y}
-               [:project [x1]
-                [:semi-join [{x1 x4}]
-                 [:rename {y x1, z x2} [:scan [y {z (= z 10.0)}]]]
-                 [:rename {z x4} [:scan [z]]]]]]
+    (t/is (=plan-file
+            "exists-in-where"
              (plan-sql "SELECT x.y FROM x WHERE EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10.0"))))
 
   (t/testing "EXISTS as expression in SELECT"
-    (t/is (= '[:rename {x6 $column_1$}
-               [:project [x6]
-                [:apply :cross-join {x1 ?x9} #{x6}
-                 [:rename {y x1, z x2}
-                  [:scan [y {z (= z 10)}]]]
-                 [:top {:limit 1}
-                  [:union-all
-                   [:project [{x6 true}]
-                    [:rename {z x4} [:scan [{z (= z ?x9)}]]]]
-                   [:table [{x6 false}]]]]]]]
-             (plan-sql "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"))))
+    (t/is (=plan-file
+            "exists-as-expression-in-select"
+            (plan-sql "SELECT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) FROM x WHERE x.z = 10"))))
 
   (t/testing "NOT EXISTS in WHERE"
-    (t/is (= '[:rename {x1 y}
-               [:project [x1]
-                [:anti-join [{x1 x4}]
-                 [:rename {y x1, z x2} [:scan [y {z (= z 10)}]]]
-                 [:rename {z x4} [:scan [z]]]]]]
-             (plan-sql "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"))))
+    (t/is (=plan-file
+            "not-exists-in-where"
+            (plan-sql "SELECT x.y FROM x WHERE NOT EXISTS (SELECT y.z FROM y WHERE y.z = x.y) AND x.z = 10"))))
 
   (t/testing "IN in WHERE"
-    (t/is (= '[:rename {x1 y}
-               [:project [x1]
-                [:semi-join [{x2 x4}]
-                 [:rename {y x1, z x2} [:scan [y z]]]
-                 [:rename {z x4} [:scan [z]]]]]]
-             (plan-sql "SELECT x.y FROM x WHERE x.z IN (SELECT y.z FROM y)")))
+    (t/is (=plan-file
+            "in-in-where-select"
+            (plan-sql "SELECT x.y FROM x WHERE x.z IN (SELECT y.z FROM y)")))
 
-    (t/is (= '[:rename {x1 y}
-               [:project [x1]
-                [:semi-join [{x2 x4}]
-                 [:rename {y x1, z x2} [:scan [y z]]]
-                 [:table [{x4 1} {x4 2}]]]]]
-             (plan-sql "SELECT x.y FROM x WHERE x.z IN (1, 2)"))))
+    (t/is (=plan-file
+            "in-in-where-set"
+            (plan-sql "SELECT x.y FROM x WHERE x.z IN (1, 2)"))))
 
   (t/testing "NOT IN in WHERE"
-    (t/is (= '[:rename {x1 y}
-               [:project [x1]
-                [:anti-join [{x2 x4}]
-                 [:rename {y x1, z x2} [:scan [y z]]]
-                 [:rename {z x4} [:scan [z]]]]]]
-             (plan-sql "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.z FROM y)"))))
+    (t/is (=plan-file
+            "not-in-in-where"
+            (plan-sql "SELECT x.y FROM x WHERE x.z NOT IN (SELECT y.z FROM y)"))))
 
   (t/testing "ALL in WHERE"
-    (t/is (= '[:rename {x1 y}
-               [:project [x1]
-                [:anti-join [(or (<= x2 x4) (nil? x2) (nil? x4))]
-                 [:rename {y x1, z x2}
-                  [:scan [y z]]]
-                 [:rename {z x4} [:scan [z]]]]]]
+    (t/is (=plan-file
+            "all-in-where"
             (plan-sql "SELECT x.y FROM x WHERE x.z > ALL (SELECT y.z FROM y)"))))
 
   (t/testing "ANY in WHERE"
-    (t/is (= '[:rename {x1 y}
-               [:project [x1]
-                [:semi-join
-                 [(> (= x2 1) x4)]
-                 [:rename {y x1, z x2} [:scan [y z]]]
-                 [:rename {z x4}
-                  [:scan [z]]]]]]
-             (plan-sql "SELECT x.y FROM x WHERE (x.z = 1) > ANY (SELECT y.z FROM y)"))))
+    (t/is (=plan-file
+            "any-in-where"
+            (plan-sql "SELECT x.y FROM x WHERE (x.z = 1) > ANY (SELECT y.z FROM y)"))))
 
   (t/testing "ALL as expression in SELECT"
-    (t/is (= '[:rename {x10 $column_1$}
-               [:project [{x10 (not x5)}]
-                [:apply :cross-join {x1 ?x8} #{x5}
-                 [:rename {z x1} [:scan [z]]]
-                 [:top {:limit 1}
-                  [:union-all
-                   [:project [{x5 true}]
-                    [:rename {z x3}
-                     [:scan [{z (or (> ?x8 z) (nil? ?x8) (nil? z))}]]]]
-                   [:table [{x5 false}]]]]]]]
-             (plan-sql "SELECT x.z <= ALL (SELECT y.z FROM y) FROM x"))))
+    (t/is (=plan-file
+            "all-as-expression-in-select"
+            (plan-sql "SELECT x.z <= ALL (SELECT y.z FROM y) FROM x"))))
 
   (t/testing "LATERAL derived table"
-    (t/is (= '[:rename {x1 y, x3 z}
-               [:join [{x1 x3}]
-                [:rename {y x1} [:scan [y]]]
-                [:rename {z x3} [:scan [z]]]]]
-             (plan-sql "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y")))
+    (t/is (=plan-file
+            "lateral-derived-table-1"
+            (plan-sql "SELECT x.y, y.z FROM x, LATERAL (SELECT z.z FROM z WHERE z.z = x.y) AS y")))
 
-    (t/is (= '[:scan [{z (= z 1)}]]
-             (plan-sql "SELECT y.z FROM LATERAL (SELECT z.z FROM z WHERE z.z = 1) AS y"))))
+    (t/is (=plan-file
+            "lateral-derived-table-2"
+            (plan-sql "SELECT y.z FROM LATERAL (SELECT z.z FROM z WHERE z.z = 1) AS y"))))
 
   (t/testing "decorrelation"
     ;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf "Orthogonal Optimization of Subqueries and Aggregation"
-    (t/is (= '[:rename {x1 custkey}
-               [:project [x1]
-                [:select (< 1000000 x6)
-                 [:group-by [x1 $row_number$ {x6 (sum x3)}]
-                  [:left-outer-join [{x1 x4}]
-                   [:map [{$row_number$ (row-number)}]
-                    [:rename {custkey x1} [:scan [custkey]]]]
-                   [:rename {totalprice x3, custkey x4}
-                    [:scan [totalprice custkey]]]]]]]]
-             (plan-sql "SELECT c.custkey FROM customer c
-                       WHERE 1000000 < (SELECT SUM(o.totalprice) FROM orders o WHERE o.custkey = c.custkey)")))
+    (t/is (=plan-file
+            "decorrelation-1"
+            (plan-sql "SELECT c.custkey FROM customer c
+                      WHERE 1000000 < (SELECT SUM(o.totalprice) FROM orders o WHERE o.custkey = c.custkey)")))
 
     ;; https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2000-31.pdf "Parameterized Queries and Nesting Equivalences"
-    (t/is (= '[:rename {x1 country, x2 custno}
-               [:semi-join [{x2 x4}]
-                [:rename {country x1, custno x2}
-                 [:scan [{country (= country "Mexico")} custno]]]
-                [:rename {custno x4} [:scan [custno]]]]]
-             (plan-sql "SELECT * FROM customers
-                       WHERE customers.country = 'Mexico' AND
-                       EXISTS (SELECT * FROM orders WHERE customers.custno = orders.custno)")))
+    (t/is (=plan-file
+            "decorrelation-2"
+            (plan-sql "SELECT * FROM customers
+                      WHERE customers.country = 'Mexico' AND
+                      EXISTS (SELECT * FROM orders WHERE customers.custno = orders.custno)")))
 
     ;; NOTE: these below simply check what's currently being produced,
     ;; not necessarily what should be produced.
-    (t/is (= '[:rename {x1 name, x12 $column_2$}
-               [:project [x1 x12]
-                [:group-by [x1 x2 x3 $row_number$ {x12 (count x11)}]
-                 [:left-outer-join [{x2 x9}]
-                  [:map [{$row_number$ (row-number)}]
-                   [:anti-join [{x3 x5}]
-                    [:rename {name x1, custno x2, country x3}
-                     [:scan [name custno country]]]
-                    [:rename {country x5} [:scan [country]]]]]
-                  [:map [{x11 1}]
-                   [:rename {custno x9} [:scan [custno]]]]]]]]
-             (plan-sql "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
-                       FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)")))
+    (t/is (=plan-file
+            "decorrelation-3"
+            (plan-sql "SELECT customers.name, (SELECT COUNT(*) FROM orders WHERE customers.custno = orders.custno)
+                      FROM customers WHERE customers.country <> ALL (SELECT salesp.country FROM salesp)")))
 
     ;; https://subs.emis.de/LNI/Proceedings/Proceedings241/383.pdf "Unnesting Arbitrary Queries"
-    (t/is (= '[:rename {x1 name, x4 course}
-               [:project [x1 x4]
-                [:select (= x6 x11)
-                 [:group-by [x1 x2 x4 x5 x6 $row_number$ {x11 (min x8)}]
-                  [:left-outer-join [{x2 x9}]
-                   [:map [{$row_number$ (row-number)}]
-                    [:join [{x2 x5}]
-                     [:rename {name x1, id x2} [:scan [name id]]]
-                     [:rename {course x4, sid x5, grade x6}
-                      [:scan [course sid grade]]]]]
-                   [:rename {grade x8, sid x9} [:scan [grade sid]]]]]]]]
-             (plan-sql "SELECT s.name, e.course
-                       FROM students s, exams e
-                       WHERE s.id = e.sid AND
-                       e.grade = (SELECT MIN(e2.grade)
-                       FROM exams e2
-                       WHERE s.id = e2.sid)")))
+    (t/is (=plan-file
+            "decorrelation-4"
+            (plan-sql "SELECT s.name, e.course
+                      FROM students s, exams e
+                      WHERE s.id = e.sid AND
+                      e.grade = (SELECT MIN(e2.grade)
+                      FROM exams e2
+                      WHERE s.id = e2.sid)")))
 
-    (t/is (= '[:rename {x1 name, x6 course}
-               [:project [x1 x6]
-                [:select (>= x8 x17)
-                 [:map [{x17 (+ x15 1)}]
-                  [:group-by [x1 x2 x3 x4 x6 x7 x8 $row_number$ {x15 (avg x10)}]
-                   [:left-outer-join
-                    [(or (= x2 x11) (and (= x12 x3) (> x4 x13)))]
-                    [:map [{$row_number$ (row-number)}]
-                     [:join [{x2 x7}]
-                      [:rename {name x1, id x2, major x3, year x4}
-                       [:scan [name id {major (or (= major "CS") (= major "Games Eng"))} year]]]
-                      [:rename {course x6, sid x7, grade x8}
-                       [:scan [course sid grade]]]]]
-                    [:rename {grade x10, sid x11, curriculum x12, date x13}
-                     [:scan [grade sid curriculum date]]]]]]]]]
-             (plan-sql
-               "SELECT s.name, e.course
-               FROM students s, exams e
-               WHERE s.id = e.sid AND
-               (s.major = 'CS' OR s.major = 'Games Eng') AND
-               e.grade >= (SELECT AVG(e2.grade) + 1
-               FROM exams e2
-               WHERE s.id = e2.sid OR
-               (e2.curriculum = s.major AND
-               s.year > e2.date))")))
+    (t/is (=plan-file
+            "decorrelation-5"
+            (plan-sql
+              "SELECT s.name, e.course
+              FROM students s, exams e
+              WHERE s.id = e.sid AND
+              (s.major = 'CS' OR s.major = 'Games Eng') AND
+              e.grade >= (SELECT AVG(e2.grade) + 1
+              FROM exams e2
+              WHERE s.id = e2.sid OR
+              (e2.curriculum = s.major AND
+              s.year > e2.date))")))
 
 
     (t/testing "Subqueries in join conditions"
 
       (->> "uncorrelated subquery"
-           (t/is (= '[:rename {x1 a}
-                      [:project [x1]
-                       [:join [{x3 x5}]
-                        [:join []
-                         [:rename {a x1} [:scan [a]]]
-                         [:rename {c x3} [:scan [c]]]]
-                        [:max-1-row
-                         [:rename {b x5} [:scan [b]]]]]]]
-                    (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo)"))))
+           (t/is (=plan-file
+                   "subquery-in-join-uncorellated-subquery"
+                   (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo)"))))
 
       (->> "correlated subquery"
-           (t/is (= '[:rename {x1 a}
-                      [:project [x1]
-                       [:semi-join [{x3 x6} {x4 x7}]
-                        [:join []
-                         [:rename {a x1}
-                          [:scan [a]]]
-                         [:rename {c x3, b x4} [:scan [c b]]]]
-                        [:rename {b x6, a x7} [:scan [b a]]]]]]
-                    (plan-sql "select foo.a from foo join bar on bar.c in (select foo.b from foo where foo.a = bar.b)"))))
+           (t/is (=plan-file
+                   "subquery-in-join-corellated-subquery"
+                   (plan-sql "select foo.a from foo join bar on bar.c in (select foo.b from foo where foo.a = bar.b)"))))
 
       (->> "correlated equalty subquery" ;;TODO unable to decorr, need to be able to pull the select over the max-1-row
-           (t/is (= '[:rename {x1 a}
-                      [:project [x1]
-                       [:select (= x3 x6)
-                        [:apply :cross-join
-                         {x4 ?x9}
-                         #{x6}
-                         [:join []
-                          [:rename {a x1} [:scan [a]]]
-                          [:rename {c x3, b x4} [:scan [c b]]]]
-                         [:max-1-row
-                          [:rename {b x6, a x7}
-                           [:scan [b {a (= a ?x9)}]]]]]]]]
+           (t/is (=plan-file
+                   "subquery-in-join-corellated-equality-subquery"
                     (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)")))))))
 
 (t/deftest parameters-in-e-resolved-from-r-test
@@ -494,149 +336,73 @@
 
 
 (deftest non-semi-join-subquery-optimizations-test
-  (t/is
-    (=
-     '[:rename {x1 a}
-       [:project [x1]
-        [:select (or x6 (= x2 42))
-         [:apply
-          :cross-join
-          {x1 ?x9}
-          #{x6}
-          [:rename {a x1, b x2} [:scan [a b]]]
-          [:top {:limit 1}
-           [:union-all
-            [:project [{x6 true}]
-             [:select (= ?x9 x4) [:table [{x4 1} {x4 2}]]]]
-            [:table [{x6 false}]]]]]]]]
-       (plan-sql "select f.a from foo f where f.a in (1,2) or f.b = 42"))
-    "should not be decorrelated")
-  (t/is
-    (=
-     '[:rename {x1 a}
-       [:project [x1]
-        [:cross-join
-         [:rename {a x1} [:scan [a]]]
-         [:select (= true x5)
-          [:top {:limit 1}
-           [:union-all
-            [:project [{x5 true}]
-             [:rename {c x3} [:scan [c]]]]
-            [:table [{x5 false}]]]]]]]]
-     (plan-sql "select f.a from foo f where true = (EXISTS (SELECT foo.c from foo))"))
-    "should be decorrelated as a cross join, not a semi/anti join"))
+  (t/is (=plan-file
+          "non-semi-join-subquery-optimizations-test-1"
+          (plan-sql "select f.a from foo f where f.a in (1,2) or f.b = 42"))
+        "should not be decorrelated")
+  (t/is (=plan-file
+          "non-semi-join-subquery-optimizations-test-2"
+          (plan-sql "select f.a from foo f where true = (EXISTS (SELECT foo.c from foo))"))
+        "should be decorrelated as a cross join, not a semi/anti join"))
 
 (deftest multiple-ins-in-where-clause
-  (t/is
-    (=
-     '[:rename {x1 a}
-       [:project [x1]
-        [:semi-join [{x2 x8}]
-         [:semi-join [{x1 x4}]
-          [:rename {a x1, b x2}
-           [:scan [{a (= a 42)} b]]]
-          [:table [{x4 1} {x4 2}]]]
-         [:table [{x8 3} {x8 4}]]]]]
-     (plan-sql "select f.a from foo f where f.a in (1,2) AND f.a = 42 AND f.b in (3,4)"))))
+  (t/is (=plan-file
+          "multiple-ins-in-where-clause"
+          (plan-sql "select f.a from foo f where f.a in (1,2) AND f.a = 42 AND f.b in (3,4)"))))
 
 (deftest deeply-nested-correlated-query ;;TODO broken
-  (t/is
-    (=
-     '[:rename
-       {x1 A, x2 B}
-       [:project
-        [x1 x2]
-        [:apply :semi-join {x2 ?x15, x4 ?x16} #{}
-         [:cross-join
-          [:rename {A x1, B x2} [:scan [A B]]]
-          [:rename {C x4} [:scan [C]]]]
-         [:semi-join [(= x10 ?x13) {x7 x9}]
-          [:rename {A x6, B x7}
-           [:scan [{A (= A ?x15)} B]]]
-          [:rename {A x9, B x10} [:scan [A B]]]]]]]
-     (plan-sql "SELECT R1.A, R1.B
-               FROM R R1, S
-               WHERE EXISTS
-               (SELECT R2.A, R2.B
-               FROM R R2
-               WHERE R2.A = R1.B AND EXISTS
-               (SELECT R3.A, R3.B
-               FROM R R3
-               WHERE R3.A = R2.B AND R3.B = S.C))"))))
+  (t/is (=plan-file
+          "deeply-nested-correlated-query"
+          (plan-sql "SELECT R1.A, R1.B
+                    FROM R R1, S
+                    WHERE EXISTS
+                    (SELECT R2.A, R2.B
+                    FROM R R2
+                    WHERE R2.A = R1.B AND EXISTS
+                    (SELECT R3.A, R3.B
+                    FROM R R3
+                    WHERE R3.A = R2.B AND R3.B = S.C))"))))
 
 (t/deftest test-array-element-reference-107
-  (t/is (= '[:rename {x3 first_el}
-             [:project [{x3 (nth x1 0)}]
-              [:rename {a x1}
-               [:scan [a]]]]]
-           (plan-sql "SELECT u.a[0] AS first_el FROM u")))
+  (t/is (=plan-file
+          "test-array-element-reference-107-1"
+          (plan-sql "SELECT u.a[0] AS first_el FROM u")))
 
-  (t/is (= '[:rename {x4 dyn_idx}
-             [:project [{x4 (nth x1 (nth x2 0))}]
-              [:rename {b x1, a x2}
-               [:scan [b a]]]]]
-           (plan-sql "SELECT u.b[u.a[0]] AS dyn_idx FROM u"))))
+  (t/is (=plan-file
+          "test-array-element-reference-107-2"
+          (plan-sql "SELECT u.b[u.a[0]] AS dyn_idx FROM u"))))
 
 (t/deftest test-current-time-111
-  (t/is (= '[:rename {x1 a,
-                      x8 $column_7$,
-                      x5 $column_4$,
-                      x9 $column_8$,
-                      x10 $column_9$,
-                      x4 $column_3$,
-                      x6 $column_5$,
-                      x11 $column_10$,
-                      x7 $column_6$,
-                      x3 $column_2$}
-             [:project [x1
-                        {x3 (current-time)}
-                        {x4 (current-time 2)}
-                        {x5 (current-date)}
-                        {x6 (current-timestamp)}
-                        {x7 (current-timestamp 4)}
-                        {x8 (local-time)}
-                        {x9 (local-time 6)}
-                        {x10 (local-timestamp)}
-                        {x11 (local-timestamp 9)}]
-              [:rename {a x1}
-               [:scan [a]]]]]
-           (plan-sql "
-SELECT u.a,
-       CURRENT_TIME, CURRENT_TIME(2),
-       CURRENT_DATE,
-       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(4),
-       LOCALTIME, LOCALTIME(6),
-       LOCALTIMESTAMP, LOCALTIMESTAMP(9)
-FROM u"))))
+  (t/is (=plan-file
+          "test-current-time-111"
+          (plan-sql "
+                    SELECT u.a,
+                    CURRENT_TIME, CURRENT_TIME(2),
+                    CURRENT_DATE,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(4),
+                    LOCALTIME, LOCALTIME(6),
+                    LOCALTIMESTAMP, LOCALTIMESTAMP(9)
+                    FROM u"))))
 
 (t/deftest test-dynamic-parameters-103
-  (t/is (= '[:rename {x1 a}
-             [:project [x1]
-              [:rename {a x1, b x2, c x3}
-               [:scan [a {b (= b ?_0)} {c (= c ?_1)}]]]]]
-           (plan-sql "SELECT foo.a FROM foo WHERE foo.b = ? AND foo.c = ?")))
+  (t/is (=plan-file
+          "test-dynamic-parameters-103-1"
+          (plan-sql "SELECT foo.a FROM foo WHERE foo.b = ? AND foo.c = ?")))
 
-  (t/is (= '[:rename {x1 a}
-             [:project [x1]
-              [:cross-join
-               [:rename {a x1, b x2, c x3}
-                [:scan [a {b (= b ?_1)} {c (= c ?_2)}]]]
-               [:rename {b x5, c x6}
-                [:scan [b {c (= c ?_0)}]]]]]]
-           (plan-sql "SELECT foo.a
-                      FROM foo, (SELECT bar.b FROM bar WHERE bar.c = ?) bar (b)
-                      WHERE foo.b = ? AND foo.c = ?"))))
+  (t/is (=plan-file
+          "test-dynamic-parameters-103-2"
+          (plan-sql "SELECT foo.a
+                    FROM foo, (SELECT bar.b FROM bar WHERE bar.c = ?) bar (b)
+                    WHERE foo.b = ? AND foo.c = ?"))))
 
 (t/deftest test-order-by-null-handling-159
-  (t/is (= '[:rename {x1 a}
-             [:order-by [[x1 :asc :nulls-first]]
-              [:rename {a x1} [:scan [a]]]]]
+  (t/is (=plan-file
+          "test-order-by-null-handling-159-1"
            (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS FIRST")))
 
-  (t/is (= '[:rename {x1 a}
-             [:order-by [[x1 :asc :nulls-last]]
-              [:rename {a x1} [:scan [a]]]]]
-           (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS LAST"))))
+  (t/is (=plan-file
+          "test-order-by-null-handling-159-2"
+          (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS LAST"))))
 
 (defn- plan-expr [sql]
   (let [plan (plan-sql (format "SELECT %s t FROM foo" sql))

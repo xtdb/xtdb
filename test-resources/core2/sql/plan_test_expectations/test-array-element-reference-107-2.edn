@@ -1,0 +1,5 @@
+[:rename
+ {x4 dyn_idx}
+ [:project
+  [{x4 (nth x1 (nth x2 0))}]
+  [:rename {b x1, a x2} [:scan [b a]]]]]

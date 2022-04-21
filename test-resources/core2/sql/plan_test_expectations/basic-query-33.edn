@@ -1,0 +1,1 @@
+[:rename {x1 $column_1$} [:table [{x1 1} {x1 2}]]]

@@ -1,0 +1,15 @@
+[:rename
+ {x1 a}
+ [:project
+  [x1]
+  [:select
+   (= x3 x6)
+   [:apply
+    :cross-join
+    {x4 ?x9}
+    #{x6}
+    [:join
+     []
+     [:rename {a x1} [:scan [a]]]
+     [:rename {c x3, b x4} [:scan [c b]]]]
+    [:max-1-row [:rename {b x6, a x7} [:scan [b {a (= a ?x9)}]]]]]]]]

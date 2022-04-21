@@ -1,0 +1,48 @@
+[:rename
+ {x1 ps_partkey, x14 value}
+ [:project
+  [x1 x14]
+  [:order-by
+   [[x14 :desc :nulls-last]]
+   [:join
+    [(> x15 x30)]
+    [:group-by
+     [x1 {x14 (sum x12)} {x15 (sum x13)}]
+     [:map
+      [{x12 (* x2 x3)} {x13 (* x2 x3)}]
+      [:join
+       [{x7 x9}]
+       [:join
+        [{x4 x6}]
+        [:rename
+         {ps_partkey x1,
+          ps_supplycost x2,
+          ps_availqty x3,
+          ps_suppkey x4}
+         [:scan [ps_partkey ps_supplycost ps_availqty ps_suppkey]]]
+        [:rename
+         {s_suppkey x6, s_nationkey x7}
+         [:scan [s_suppkey s_nationkey]]]]
+       [:rename
+        {n_nationkey x9, n_name x10}
+        [:scan [n_nationkey {n_name (= n_name "GERMANY")}]]]]]]
+    [:max-1-row
+     [:project
+      [{x30 (* x28 1.0E-4)}]
+      [:group-by
+       [{x28 (sum x27)}]
+       [:map
+        [{x27 (* x17 x18)}]
+        [:join
+         [{x22 x24}]
+         [:join
+          [{x19 x21}]
+          [:rename
+           {ps_supplycost x17, ps_availqty x18, ps_suppkey x19}
+           [:scan [ps_supplycost ps_availqty ps_suppkey]]]
+          [:rename
+           {s_suppkey x21, s_nationkey x22}
+           [:scan [s_suppkey s_nationkey]]]]
+         [:rename
+          {n_nationkey x24, n_name x25}
+          [:scan [n_nationkey {n_name (= n_name "GERMANY")}]]]]]]]]]]]]

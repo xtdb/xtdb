@@ -1,0 +1,7 @@
+[:rename
+ {x1 movieTitle}
+ [:project
+  [x1]
+  [:order-by
+   [[x2 :asc :nulls-last]]
+   [:rename {movieTitle x1, year x2} [:scan [movieTitle year]]]]]]

@@ -1,0 +1,13 @@
+[:rename
+ {x1 a}
+ [:project
+  [x1]
+  [:cross-join
+   [:rename {a x1} [:scan [a]]]
+   [:select
+    (= true x5)
+    [:top
+     {:limit 1}
+     [:union-all
+      [:project [{x5 true}] [:rename {c x3} [:scan [c]]]]
+      [:table [{x5 false}]]]]]]]]

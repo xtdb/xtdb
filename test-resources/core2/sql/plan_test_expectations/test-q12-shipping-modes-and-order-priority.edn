@@ -1,0 +1,40 @@
+[:rename
+ {x4 l_shipmode, x16 high_line_count, x17 low_line_count}
+ [:order-by
+  [[x4 :asc :nulls-last]]
+  [:group-by
+   [x4 {x16 (sum x14)} {x17 (sum x15)}]
+   [:map
+    [{x14 (cond (or (= x1 "1-URGENT") (= x1 "2-HIGH")) 1 0)}
+     {x15 (cond (and (<> x1 "1-URGENT") (<> x1 "2-HIGH")) 1 0)}]
+    [:semi-join
+     [{x4 x10}]
+     [:join
+      [{x2 x5}]
+      [:rename
+       {o_orderpriority x1, o_orderkey x2}
+       [:scan [o_orderpriority o_orderkey]]]
+      [:rename
+       {l_shipmode x4,
+        l_orderkey x5,
+        l_commitdate x6,
+        l_receiptdate x7,
+        l_shipdate x8}
+       [:select
+        (and
+         (< l_commitdate l_receiptdate)
+         (< l_shipdate l_commitdate))
+        [:scan
+         [l_shipmode
+          l_orderkey
+          l_commitdate
+          {l_receiptdate
+           (and
+            (<
+             l_receiptdate
+             (+
+              #time/date "1994-01-01"
+              #time/period-duration "P1Y PT0S"))
+            (>= l_receiptdate #time/date "1994-01-01"))}
+          l_shipdate]]]]]
+     [:table [{x10 "MAIL"} {x10 "SHIP"}]]]]]]]

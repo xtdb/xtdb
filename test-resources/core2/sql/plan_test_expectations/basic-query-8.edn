@@ -1,0 +1,8 @@
+[:rename
+ {x1 title}
+ [:project
+  [x1]
+  [:left-outer-join
+   [{x1 x3}]
+   [:rename {title x1} [:scan [title]]]
+   [:rename {title x3} [:scan [title]]]]]]

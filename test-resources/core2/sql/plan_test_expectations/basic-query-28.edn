@@ -1,0 +1,5 @@
+[:rename
+ {x3 $column_1$}
+ [:order-by
+  [[x3 :asc :nulls-last]]
+  [:project [{x3 (= x1 "foo")}] [:rename {year x1} [:scan [year]]]]]]

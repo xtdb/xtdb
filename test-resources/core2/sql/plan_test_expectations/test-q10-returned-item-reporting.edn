@@ -1,0 +1,67 @@
+[:rename
+ {x1 c_custkey,
+  x2 c_name,
+  x22 revenue,
+  x3 c_acctbal,
+  x18 n_name,
+  x4 c_address,
+  x5 c_phone,
+  x6 c_comment}
+ [:project
+  [x1 x2 x22 x3 x18 x4 x5 x6]
+  [:top
+   {:limit 20}
+   [:order-by
+    [[x22 :desc :nulls-last]]
+    [:group-by
+     [x1 x2 x3 x18 x4 x5 x6 {x22 (sum x21)}]
+     [:map
+      [{x21 (* x13 (- 1 x14))}]
+      [:join
+       [{x7 x19}]
+       [:join
+        [{x10 x15}]
+        [:join
+         [{x1 x9}]
+         [:rename
+          {c_custkey x1,
+           c_name x2,
+           c_acctbal x3,
+           c_address x4,
+           c_phone x5,
+           c_comment x6,
+           c_nationkey x7}
+          [:scan
+           [c_custkey
+            c_name
+            c_acctbal
+            c_address
+            c_phone
+            c_comment
+            c_nationkey]]]
+         [:rename
+          {o_custkey x9, o_orderkey x10, o_orderdate x11}
+          [:scan
+           [o_custkey
+            o_orderkey
+            {o_orderdate
+             (and
+              (<
+               o_orderdate
+               (+
+                #time/date "1993-10-01"
+                #time/period-duration "P3M PT0S"))
+              (>= o_orderdate #time/date "1993-10-01"))}]]]]
+        [:rename
+         {l_extendedprice x13,
+          l_discount x14,
+          l_orderkey x15,
+          l_returnflag x16}
+         [:scan
+          [l_extendedprice
+           l_discount
+           l_orderkey
+           {l_returnflag (= l_returnflag "R")}]]]]
+       [:rename
+        {n_name x18, n_nationkey x19}
+        [:scan [n_name n_nationkey]]]]]]]]]]

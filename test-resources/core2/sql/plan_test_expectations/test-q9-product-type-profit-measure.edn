@@ -1,0 +1,48 @@
+[:rename
+ {x21 nation, x24 o_year, x26 sum_profit}
+ [:order-by
+  [[x21 :asc :nulls-last] [x24 :desc :nulls-last]]
+  [:group-by
+   [x21 x24 {x26 (sum x25)}]
+   [:project
+    [x21
+     {x24 (extract "YEAR" x18)}
+     {x25 (- (* x7 (- 1 x8)) (* x14 x9))}]
+    [:join
+     [{x5 x22}]
+     [:join
+      [{x12 x19}]
+      [:join
+       [{x10 x15} {x11 x16}]
+       [:join
+        [{x4 x10} {x1 x11}]
+        [:cross-join
+         [:rename
+          {p_partkey x1, p_name x2}
+          [:scan [p_partkey {p_name (like p_name "%green%")}]]]
+         [:rename
+          {s_suppkey x4, s_nationkey x5}
+          [:scan [s_suppkey s_nationkey]]]]
+        [:rename
+         {l_extendedprice x7,
+          l_discount x8,
+          l_quantity x9,
+          l_suppkey x10,
+          l_partkey x11,
+          l_orderkey x12}
+         [:scan
+          [l_extendedprice
+           l_discount
+           l_quantity
+           l_suppkey
+           l_partkey
+           l_orderkey]]]]
+       [:rename
+        {ps_supplycost x14, ps_suppkey x15, ps_partkey x16}
+        [:scan [ps_supplycost ps_suppkey ps_partkey]]]]
+      [:rename
+       {o_orderdate x18, o_orderkey x19}
+       [:scan [o_orderdate o_orderkey]]]]
+     [:rename
+      {n_name x21, n_nationkey x22}
+      [:scan [n_name n_nationkey]]]]]]]]

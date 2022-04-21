@@ -1,0 +1,18 @@
+[:rename
+ {x7 revenue}
+ [:group-by
+  [{x7 (sum x6)}]
+  [:map
+   [{x6 (* x1 x2)}]
+   [:rename
+    {l_extendedprice x1, l_discount x2, l_shipdate x3, l_quantity x4}
+    [:scan
+     [l_extendedprice
+      {l_discount (between l_discount 0.05 0.07)}
+      {l_shipdate
+       (and
+        (<
+         l_shipdate
+         (+ #time/date "1994-01-01" #time/period-duration "P1Y PT0S"))
+        (>= l_shipdate #time/date "1994-01-01"))}
+      {l_quantity (< l_quantity 24)}]]]]]]

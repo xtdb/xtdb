@@ -1,0 +1,6 @@
+[:rename
+ {x1 y, x3 z}
+ [:join
+  [{x1 x3}]
+  [:rename {y x1} [:scan [y]]]
+  [:rename {z x3} [:scan [z]]]]]

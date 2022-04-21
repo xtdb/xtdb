@@ -1,0 +1,9 @@
+[:rename
+ {x1 some_column}
+ [:project
+  [x1]
+  [:join
+   [{x1 x5}]
+   [:rename {y x1} [:scan [y]]]
+   [:max-1-row
+    [:group-by [{x5 (max x3)}] [:rename {bar x3} [:scan [bar]]]]]]]]

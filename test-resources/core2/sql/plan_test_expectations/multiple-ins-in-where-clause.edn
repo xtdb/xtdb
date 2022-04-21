@@ -1,0 +1,11 @@
+[:rename
+ {x1 a}
+ [:project
+  [x1]
+  [:semi-join
+   [{x2 x8}]
+   [:semi-join
+    [{x1 x4}]
+    [:rename {a x1, b x2} [:scan [{a (= a 42)} b]]]
+    [:table [{x4 1} {x4 2}]]]
+   [:table [{x8 3} {x8 4}]]]]]

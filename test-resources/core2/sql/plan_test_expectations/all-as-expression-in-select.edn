@@ -1,0 +1,18 @@
+[:rename
+ {x10 $column_1$}
+ [:project
+  [{x10 (not x5)}]
+  [:apply
+   :cross-join
+   {x1 ?x8}
+   #{x5}
+   [:rename {z x1} [:scan [z]]]
+   [:top
+    {:limit 1}
+    [:union-all
+     [:project
+      [{x5 true}]
+      [:rename
+       {z x3}
+       [:scan [{z (or (> ?x8 z) (nil? ?x8) (nil? z))}]]]]
+     [:table [{x5 false}]]]]]]]

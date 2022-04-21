@@ -1,0 +1,8 @@
+[:rename
+ {x1 films, x3 $column_2$, x4 $column_3$}
+ [:project
+  [x1 x3 x4]
+  [:unwind
+   {x3 x1}
+   {:ordinality-column x4}
+   [:rename {films x1} [:scan [films]]]]]]

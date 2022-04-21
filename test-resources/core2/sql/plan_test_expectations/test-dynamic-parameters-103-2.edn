@@ -1,0 +1,7 @@
+[:rename
+ {x1 a}
+ [:project
+  [x1]
+  [:cross-join
+   [:rename {a x1, b x2, c x3} [:scan [a {b (= b ?_1)} {c (= c ?_2)}]]]
+   [:rename {b x5, c x6} [:scan [b {c (= c ?_0)}]]]]]]

@@ -1,0 +1,18 @@
+[:rename
+ {x1 a}
+ [:project
+  [x1]
+  [:select
+   (or x6 (= x2 42))
+   [:apply
+    :cross-join
+    {x1 ?x9}
+    #{x6}
+    [:rename {a x1, b x2} [:scan [a b]]]
+    [:top
+     {:limit 1}
+     [:union-all
+      [:project
+       [{x6 true}]
+       [:select (= ?x9 x4) [:table [{x4 1} {x4 2}]]]]
+      [:table [{x6 false}]]]]]]]]

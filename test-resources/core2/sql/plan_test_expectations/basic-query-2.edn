@@ -1,0 +1,11 @@
+[:rename
+ {x1 movieTitle}
+ [:project
+  [x1]
+  [:join
+   [{x2 x4}]
+   [:rename {movieTitle x1, starName x2} [:scan [movieTitle starName]]]
+   [:rename
+    {name x4, birthdate x5}
+    [:scan
+     [name {birthdate (and (< birthdate 1960) (> birthdate 1950))}]]]]]]

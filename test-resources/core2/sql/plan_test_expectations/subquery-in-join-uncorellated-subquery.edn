@@ -1,0 +1,8 @@
+[:rename
+ {x1 a}
+ [:project
+  [x1]
+  [:join
+   [{x3 x5}]
+   [:join [] [:rename {a x1} [:scan [a]]] [:rename {c x3} [:scan [c]]]]
+   [:max-1-row [:rename {b x5} [:scan [b]]]]]]]

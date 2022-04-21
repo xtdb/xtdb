@@ -1,0 +1,40 @@
+[:rename
+ {x9 l_orderkey, x15 revenue, x4 o_orderdate, x5 o_shippriority}
+ [:project
+  [x9 x15 x4 x5]
+  [:top
+   {:limit 10}
+   [:order-by
+    [[x15 :desc :nulls-last] [x4 :asc :nulls-last]]
+    [:group-by
+     [x9 x4 x5 {x15 (sum x14)}]
+     [:map
+      [{x14 (* x10 (- 1 x11))}]
+      [:join
+       [{x7 x9}]
+       [:join
+        [{x2 x6}]
+        [:rename
+         {c_mktsegment x1, c_custkey x2}
+         [:scan
+          [{c_mktsegment (= c_mktsegment "BUILDING")} c_custkey]]]
+        [:rename
+         {o_orderdate x4,
+          o_shippriority x5,
+          o_custkey x6,
+          o_orderkey x7}
+         [:scan
+          [{o_orderdate (< o_orderdate #time/date "1995-03-15")}
+           o_shippriority
+           o_custkey
+           o_orderkey]]]]
+       [:rename
+        {l_orderkey x9,
+         l_extendedprice x10,
+         l_discount x11,
+         l_shipdate x12}
+        [:scan
+         [l_orderkey
+          l_extendedprice
+          l_discount
+          {l_shipdate (> l_shipdate #time/date "1995-03-15")}]]]]]]]]]]

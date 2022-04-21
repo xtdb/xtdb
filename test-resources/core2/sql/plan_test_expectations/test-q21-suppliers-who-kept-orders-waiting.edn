@@ -1,0 +1,50 @@
+[:rename
+ {x1 s_name, x31 numwait}
+ [:top
+  {:limit 100}
+  [:order-by
+   [[x31 :desc :nulls-last] [x1 :asc :nulls-last]]
+   [:group-by
+    [x1 {x31 (count x30)}]
+    [:map
+     [{x30 1}]
+     [:anti-join
+      [(<> x23 x5) {x6 x22}]
+      [:semi-join
+       [(<> x17 x5) {x6 x16}]
+       [:join
+        [{x3 x13}]
+        [:join
+         [{x6 x10}]
+         [:join
+          [{x2 x5}]
+          [:rename
+           {s_name x1, s_suppkey x2, s_nationkey x3}
+           [:scan [s_name s_suppkey s_nationkey]]]
+          [:rename
+           {l_suppkey x5,
+            l_orderkey x6,
+            l_receiptdate x7,
+            l_commitdate x8}
+           [:select
+            (> l_receiptdate l_commitdate)
+            [:scan
+             [l_suppkey l_orderkey l_receiptdate l_commitdate]]]]]
+         [:rename
+          {o_orderkey x10, o_orderstatus x11}
+          [:scan [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]]
+        [:rename
+         {n_nationkey x13, n_name x14}
+         [:scan [n_nationkey {n_name (= n_name "SAUDI ARABIA")}]]]]
+       [:rename
+        {l_orderkey x16, l_suppkey x17}
+        [:scan [l_orderkey l_suppkey]]]]
+      [:rename
+       {l_orderkey x22,
+        l_suppkey x23,
+        l_receiptdate x24,
+        l_commitdate x25}
+       [:select
+        (> l_receiptdate l_commitdate)
+        [:scan
+         [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]]]]]]]

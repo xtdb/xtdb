@@ -1,0 +1,6 @@
+[:rename
+ {x1 movieTitle}
+ [:distinct
+  [:union-all
+   [:rename {movieTitle x1} [:scan [movieTitle]]]
+   [:rename {name x1} [:scan [name]]]]]]

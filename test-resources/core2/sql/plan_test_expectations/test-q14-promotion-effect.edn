@@ -1,0 +1,26 @@
+[:rename
+ {x14 promo_revenue}
+ [:project
+  [{x14 (/ (* 100.0 x11) x12)}]
+  [:group-by
+   [{x11 (sum x9)} {x12 (sum x10)}]
+   [:map
+    [{x9 (cond (like x6 "PROMO%") (* x1 (- 1 x2)) 0)}
+     {x10 (* x1 (- 1 x2))}]
+    [:join
+     [{x3 x7}]
+     [:rename
+      {l_extendedprice x1, l_discount x2, l_partkey x3, l_shipdate x4}
+      [:scan
+       [l_extendedprice
+        l_discount
+        l_partkey
+        {l_shipdate
+         (and
+          (<
+           l_shipdate
+           (+
+            #time/date "1995-09-01"
+            #time/period-duration "P1M PT0S"))
+          (>= l_shipdate #time/date "1995-09-01"))}]]]
+     [:rename {p_type x6, p_partkey x7} [:scan [p_type p_partkey]]]]]]]]

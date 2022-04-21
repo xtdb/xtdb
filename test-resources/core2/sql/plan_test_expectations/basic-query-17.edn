@@ -1,0 +1,5 @@
+[:rename
+ {x1 name}
+ [:intersect
+  [:rename {name x1} [:scan [name]]]
+  [:rename {name x1} [:scan [name]]]]]

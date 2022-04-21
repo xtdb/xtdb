@@ -1,0 +1,44 @@
+[:rename
+ {x23 cntrycode, x25 numcust, x26 totacctbal}
+ [:order-by
+  [[x23 :asc :nulls-last]]
+  [:group-by
+   [x23 {x25 (count x24)} {x26 (sum x2)}]
+   [:map
+    [{x24 1}]
+    [:project
+     [{x23 (substring x1 1 2)} x2]
+     [:anti-join
+      [{x3 x19}]
+      [:join
+       [(> x2 x16)]
+       [:semi-join
+        [(= (substring x1 1 2) x5)]
+        [:rename
+         {c_phone x1, c_acctbal x2, c_custkey x3}
+         [:scan [c_phone c_acctbal c_custkey]]]
+        [:table
+         [{x5 "13"}
+          {x5 "31"}
+          {x5 "23"}
+          {x5 "29"}
+          {x5 "30"}
+          {x5 "18"}
+          {x5 "17"}]]]
+       [:max-1-row
+        [:group-by
+         [{x16 (avg x9)}]
+         [:semi-join
+          [(= (substring x10 1 2) x12)]
+          [:rename
+           {c_acctbal x9, c_phone x10}
+           [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
+          [:table
+           [{x12 "13"}
+            {x12 "31"}
+            {x12 "23"}
+            {x12 "29"}
+            {x12 "30"}
+            {x12 "18"}
+            {x12 "17"}]]]]]]
+      [:rename {o_custkey x19} [:scan [o_custkey]]]]]]]]]
