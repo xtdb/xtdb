@@ -4,13 +4,13 @@
   x4 o_orderkey,
   x5 o_orderdate,
   x6 o_totalprice,
-  x19 sum_qty}
+  x18 sum_qty}
  [:top
   {:limit 100}
   [:order-by
    [[x6 :desc :nulls-last] [x5 :asc :nulls-last]]
    [:group-by
-    [x1 x2 x4 x5 x6 {x19 (sum x9)}]
+    [x1 x2 x4 x5 x6 {x18 (sum x9)}]
     [:semi-join
      [{x4 x12}]
      [:join

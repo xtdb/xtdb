@@ -1,7 +1,7 @@
 [:rename
- {x8 some_column}
+ {x7 some_column}
  [:project
-  [{x8 (= 1 x5)}]
+  [{x7 (= 1 x5)}]
   [:apply
    :cross-join
    {x1 ?x6}

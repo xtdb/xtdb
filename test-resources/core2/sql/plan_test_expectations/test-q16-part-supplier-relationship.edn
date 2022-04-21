@@ -1,14 +1,14 @@
 [:rename
- {x4 p_brand, x5 p_type, x6 p_size, x18 supplier_cnt}
+ {x4 p_brand, x5 p_type, x6 p_size, x16 supplier_cnt}
  [:order-by
-  [[x18 :desc :nulls-last]
+  [[x16 :desc :nulls-last]
    [x4 :asc :nulls-last]
    [x5 :asc :nulls-last]
    [x6 :asc :nulls-last]]
   [:group-by
-   [x4 x5 x6 {x18 (count-distinct x1)}]
+   [x4 x5 x6 {x16 (count-distinct x1)}]
    [:anti-join
-    [{x1 x13}]
+    [{x1 x12}]
     [:semi-join
      [{x6 x9}]
      [:join
@@ -26,7 +26,7 @@
      [:table
       [{x9 49} {x9 14} {x9 23} {x9 45} {x9 19} {x9 3} {x9 36} {x9 9}]]]
     [:rename
-     {s_suppkey x13, s_comment x14}
+     {s_suppkey x12, s_comment x13}
      [:scan
       [s_suppkey
        {s_comment (like s_comment "%Customer%Complaints%")}]]]]]]]

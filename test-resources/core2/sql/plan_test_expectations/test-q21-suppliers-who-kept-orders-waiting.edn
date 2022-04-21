@@ -1,15 +1,15 @@
 [:rename
- {x1 s_name, x31 numwait}
+ {x1 s_name, x29 numwait}
  [:top
   {:limit 100}
   [:order-by
-   [[x31 :desc :nulls-last] [x1 :asc :nulls-last]]
+   [[x29 :desc :nulls-last] [x1 :asc :nulls-last]]
    [:group-by
-    [x1 {x31 (count x30)}]
+    [x1 {x29 (count x28)}]
     [:map
-     [{x30 1}]
+     [{x28 1}]
      [:anti-join
-      [(<> x23 x5) {x6 x22}]
+      [(<> x22 x5) {x6 x21}]
       [:semi-join
        [(<> x17 x5) {x6 x16}]
        [:join
@@ -40,10 +40,10 @@
         {l_orderkey x16, l_suppkey x17}
         [:scan [l_orderkey l_suppkey]]]]
       [:rename
-       {l_orderkey x22,
-        l_suppkey x23,
-        l_receiptdate x24,
-        l_commitdate x25}
+       {l_orderkey x21,
+        l_suppkey x22,
+        l_receiptdate x23,
+        l_commitdate x24}
        [:select
         (> l_receiptdate l_commitdate)
         [:scan

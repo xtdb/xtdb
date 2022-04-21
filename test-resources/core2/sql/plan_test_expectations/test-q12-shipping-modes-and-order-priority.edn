@@ -1,12 +1,12 @@
 [:rename
- {x4 l_shipmode, x16 high_line_count, x17 low_line_count}
+ {x4 l_shipmode, x15 high_line_count, x16 low_line_count}
  [:order-by
   [[x4 :asc :nulls-last]]
   [:group-by
-   [x4 {x16 (sum x14)} {x17 (sum x15)}]
+   [x4 {x15 (sum x13)} {x16 (sum x14)}]
    [:map
-    [{x14 (cond (or (= x1 "1-URGENT") (= x1 "2-HIGH")) 1 0)}
-     {x15 (cond (and (<> x1 "1-URGENT") (<> x1 "2-HIGH")) 1 0)}]
+    [{x13 (cond (or (= x1 "1-URGENT") (= x1 "2-HIGH")) 1 0)}
+     {x14 (cond (and (<> x1 "1-URGENT") (<> x1 "2-HIGH")) 1 0)}]
     [:semi-join
      [{x4 x10}]
      [:join

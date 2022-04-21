@@ -1246,7 +1246,11 @@
                                      (assoc acc k (smap v))
                                      (assoc acc k (next-name))))
                                  (assoc acc p (smap p))))
-                             (if (= op :map) smap {})
+                             (if (= op :map)
+                               smap
+                               (->> smap
+                                    (filter #(str/starts-with? (name (key %)) "?"))
+                                    (into {})))
                              projection)
                   projection (w/postwalk-replace smap projection)
 
@@ -1309,7 +1313,9 @@
       (let [smap (->smap relation)]
         (with-smap relation
           (if (symbol? prefix-or-columns)
-            (update-keys smap #(symbol (str prefix-or-columns relation-prefix-delimiter %)))
+            (update-keys smap #(if (str/starts-with? (name %) "?")
+                                 %
+                                 (symbol (str prefix-or-columns relation-prefix-delimiter %))))
             (set/rename-keys smap prefix-or-columns))))
 
       [:project projection relation]
@@ -1358,14 +1364,27 @@
         (->smap lhs))
 
       [:apply mode columns dependent-column-names independent-relation dependent-relation]
-      (let [params (zipmap (filter #(str/starts-with? (name %) "?") (vals columns))
-                           (map #(with-meta (symbol (str "?" %)) {:correlated-column? true}) (repeatedly next-name)))]
+      (let [smap (merge (->smap independent-relation) (->smap dependent-relation))
+            params (->> columns
+                        (vals)
+                         (filter #(str/starts-with? (name %) "?"))
+                         (map (fn [param]
+                                {param (get
+                                         smap
+                                         param
+                                         (with-meta
+                                           (symbol (str "?" (next-name)))
+                                           {:correlated-column? true}))}))
+                         (into {}))
+            new-smap (merge smap params)]
         (with-smap [:apply mode
-                    (w/postwalk-replace (merge params (->smap independent-relation)) columns)
-                    (w/postwalk-replace (->smap dependent-relation) dependent-column-names)
+                    (w/postwalk-replace new-smap columns)
+                    (w/postwalk-replace new-smap dependent-column-names)
                     independent-relation
-                    (w/postwalk-replace params dependent-relation)]
-          (merge (->smap independent-relation) (->smap dependent-relation))))
+                    (w/postwalk-replace new-smap dependent-relation)]
+          (case mode
+           (:cross-join :left-outer-join) new-smap
+           (:semi-join :anti-join) (merge (->smap independent-relation) params))))
 
       [:unwind columns opts relation]
       (let [smap (->smap relation)

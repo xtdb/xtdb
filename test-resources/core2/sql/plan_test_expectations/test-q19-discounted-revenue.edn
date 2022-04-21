@@ -1,9 +1,9 @@
 [:rename
- {x56 revenue}
+ {x50 revenue}
  [:group-by
-  [{x56 (sum x55)}]
+  [{x50 (sum x49)}]
   [:map
-   [{x55 (* x1 (- 1 x2))}]
+   [{x49 (* x1 (- 1 x2))}]
    [:select
     (or
      (and
@@ -12,41 +12,41 @@
       (>= x4 1)
       (<= x4 (+ 1 10))
       (between x11 1 5)
-      x22)
+      x21)
      (and
       (= x9 "Brand#23")
-      x29
+      x27
       (>= x4 10)
       (<= x4 (+ 10 10))
       (between x11 1 10)
-      x36)
+      x33)
      (and
       (= x9 "Brand#34")
-      x43
+      x39
       (>= x4 20)
       (<= x4 (+ 20 10))
       (between x11 1 15)
-      x50))
+      x45))
     [:apply
      :cross-join
-     {x5 ?x53}
-     #{x50}
+     {x5 ?x24}
+     #{x45}
      [:apply
       :cross-join
-      {x10 ?x46}
-      #{x43}
+      {x10 ?x18}
+      #{x39}
       [:apply
        :cross-join
-       {x5 ?x39}
-       #{x36}
+       {x5 ?x24}
+       #{x33}
        [:apply
         :cross-join
-        {x10 ?x32}
-        #{x29}
+        {x10 ?x18}
+        #{x27}
         [:apply
          :cross-join
-         {x5 ?x25}
-         #{x22}
+         {x5 ?x24}
+         #{x21}
          [:apply
           :cross-join
           {x10 ?x18}
@@ -88,50 +88,50 @@
           {:limit 1}
           [:union-all
            [:project
-            [{x22 true}]
+            [{x21 true}]
             [:select
-             (= ?x25 x20)
-             [:table [{x20 "AIR"} {x20 "AIR REG"}]]]]
-           [:table [{x22 false}]]]]]
+             (= ?x24 x19)
+             [:table [{x19 "AIR"} {x19 "AIR REG"}]]]]
+           [:table [{x21 false}]]]]]
         [:top
          {:limit 1}
          [:union-all
           [:project
-           [{x29 true}]
+           [{x27 true}]
            [:select
-            (= ?x32 x27)
+            (= ?x18 x25)
             [:table
-             [{x27 "MED BAG"}
-              {x27 "MED BOX"}
-              {x27 "MED PKG"}
-              {x27 "MED PACK"}]]]]
-          [:table [{x29 false}]]]]]
+             [{x25 "MED BAG"}
+              {x25 "MED BOX"}
+              {x25 "MED PKG"}
+              {x25 "MED PACK"}]]]]
+          [:table [{x27 false}]]]]]
        [:top
         {:limit 1}
         [:union-all
          [:project
-          [{x36 true}]
+          [{x33 true}]
           [:select
-           (= ?x39 x34)
-           [:table [{x34 "AIR"} {x34 "AIR REG"}]]]]
-         [:table [{x36 false}]]]]]
+           (= ?x24 x31)
+           [:table [{x31 "AIR"} {x31 "AIR REG"}]]]]
+         [:table [{x33 false}]]]]]
       [:top
        {:limit 1}
        [:union-all
         [:project
-         [{x43 true}]
+         [{x39 true}]
          [:select
-          (= ?x46 x41)
+          (= ?x18 x37)
           [:table
-           [{x41 "LG CASE"}
-            {x41 "LG BOX"}
-            {x41 "LG PACK"}
-            {x41 "LG PKG"}]]]]
-        [:table [{x43 false}]]]]]
+           [{x37 "LG CASE"}
+            {x37 "LG BOX"}
+            {x37 "LG PACK"}
+            {x37 "LG PKG"}]]]]
+        [:table [{x39 false}]]]]]
      [:top
       {:limit 1}
       [:union-all
        [:project
-        [{x50 true}]
-        [:select (= ?x53 x48) [:table [{x48 "AIR"} {x48 "AIR REG"}]]]]
-       [:table [{x50 false}]]]]]]]]]
+        [{x45 true}]
+        [:select (= ?x24 x43) [:table [{x43 "AIR"} {x43 "AIR REG"}]]]]
+       [:table [{x45 false}]]]]]]]]]

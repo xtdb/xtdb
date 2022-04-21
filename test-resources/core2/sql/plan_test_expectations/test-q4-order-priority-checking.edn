@@ -1,11 +1,11 @@
 [:rename
- {x1 o_orderpriority, x12 order_count}
+ {x1 o_orderpriority, x11 order_count}
  [:order-by
   [[x1 :asc :nulls-last]]
   [:group-by
-   [x1 {x12 (count x11)}]
+   [x1 {x11 (count x10)}]
    [:map
-    [{x11 1}]
+    [{x10 1}]
     [:semi-join
      [{x3 x5}]
      [:rename

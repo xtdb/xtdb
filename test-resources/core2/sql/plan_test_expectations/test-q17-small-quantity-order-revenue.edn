@@ -1,9 +1,9 @@
 [:rename
- {x19 avg_yearly}
+ {x18 avg_yearly}
  [:project
-  [{x19 (/ x17 7.0)}]
+  [{x18 (/ x16 7.0)}]
   [:group-by
-   [{x17 (sum x1)}]
+   [{x16 (sum x1)}]
    [:select
     (< x3 x14)
     [:map
