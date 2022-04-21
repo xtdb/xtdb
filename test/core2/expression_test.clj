@@ -444,14 +444,14 @@
       "😎a" "😎" "a"
       "😎a" "😎" "a")))
 
+(defn- all-whitespace-to-spaces
+  "all whitespace to space, regex replace misses some stuff,
+  there are java chars that are considered 'isWhitespace' not match by regex \\s."
+  [s]
+  (str/join (remove #(Character/isWhitespace ^Character %) s)))
+
 (tct/defspec sql-trim-is-equiv-to-java-trim-on-space-prop
-  (tcp/for-all [s (->> tcg/string
-                       ;; all whitespace to space, regex replace misses some stuff,
-                       ;; there are java chars that are considered 'isWhitespace' not match by \s.
-                       (tcg/fmap (fn [s] (str/join (map (fn [c] (if (Character/isWhitespace ^Character c)
-                                                                  \space
-                                                                  c))
-                                                        s)))))]
+  (tcp/for-all [s (tcg/fmap (comp all-whitespace-to-spaces str/join) (tcg/vector (tcg/elements [tcg/string (tcg/return " ")])))]
     (and
       (= (str/trim s) (project1 '(trim a b c) {:a s, :b "BOTH", :c " "}))
       (= (str/triml s) (project1 '(trim a b c) {:a s, :b "LEADING", :c " "}))
@@ -579,7 +579,7 @@
       [0 42 0] "TRAILING" (double 0) [0 42])))
 
 (tct/defspec bin-trim-is-equiv-to-str-trim-on-utf8-prop
-  (tcp/for-all [^String s (tcg/fmap str/join (tcg/vector (tcg/elements [tcg/string (tcg/return " ")])))]
+  (tcp/for-all [^String s (tcg/fmap (comp all-whitespace-to-spaces str/join) (tcg/vector (tcg/elements [tcg/string (tcg/return " ")])))]
     (and
       (= (str/trim s)
          (String. (byte-array (btrim (.getBytes s "utf-8") "BOTH" 32)) "utf-8"))
