@@ -17,7 +17,7 @@
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId ZoneOffset Period)
            (java.time.temporal ChronoField ChronoUnit)
-           (java.util Date HashMap LinkedList)
+           (java.util Date HashMap LinkedList Arrays)
            (java.util.function IntUnaryOperator)
            (java.util.stream IntStream)
            (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector ValueVector PeriodDuration)
@@ -802,6 +802,68 @@
 (defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
 
 (defmethod codegen-call [:trim ArrowType$Utf8 ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
+
+(defn- binary-trim-leading
+  [^bytes bin trim-octet]
+  (let [trim-octet (byte trim-octet)]
+    (loop [i 0]
+      (if (< i (alength bin))
+        (let [v (aget bin i)]
+          (if (= v trim-octet)
+            (recur (unchecked-inc-int i))
+            (if (= i 0)
+              bin
+              (Arrays/copyOfRange bin i (alength bin)))))
+        (byte-array 0)))))
+
+(defn- binary-trim-trailing
+  [^bytes bin trim-octet]
+  (let [trim-octet (byte trim-octet)]
+    (loop [j (unchecked-dec-int (alength bin))
+           len (alength bin)]
+      (if (< -1 j)
+        (let [v (aget bin j)]
+          (if (= v trim-octet)
+            (recur (unchecked-dec-int j) (unchecked-dec-int len))
+            (if (= len (alength bin))
+              bin
+              (Arrays/copyOfRange bin 0 len))))
+        (byte-array 0)))))
+
+(defn binary-trim
+  "SQL Trim function on binary.
+
+  trim-spec is a string having one of the values: BOTH | TRAILING | LEADING.
+
+  trim-octet is the byte value to trim.
+
+  See also binary-trim-leading, binary-trim-trailing"
+  [^bytes bin ^String trim-spec trim-octet]
+  (case trim-spec
+    "BOTH" (-> bin (binary-trim-leading trim-octet) (binary-trim-trailing trim-octet))
+    "LEADING" (binary-trim-leading bin trim-octet)
+    "TRAILING" (binary-trim-trailing bin trim-octet)))
+
+(defmethod codegen-call [:trim ArrowType$Binary ArrowType$Utf8 ArrowType$Binary] [_]
+  {:return-types #{types/varbinary-type}
+   :continue-call (fn [f [s trim-spec trim-octet]]
+                    (f types/varbinary-type
+                       `(ByteBuffer/wrap (binary-trim (resolve-bytes ~s) (resolve-string ~trim-spec) (first (resolve-bytes ~trim-octet))))))})
+
+(defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ArrowType$Binary] [_] call-returns-null)
+
+(defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
+
+(defmethod codegen-call [:trim ArrowType$Binary ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
+
+(defmethod codegen-call [:trim ArrowType$Binary ArrowType$Utf8 ::types/Number] [_]
+  {:return-types #{types/varbinary-type}
+   :continue-call (fn [f [s trim-spec trim-octet]]
+                    (f types/varbinary-type
+                       ;; should we throw an explicit error if no good cast to byte is possible?
+                       `(ByteBuffer/wrap (binary-trim (resolve-bytes ~s) (resolve-string ~trim-spec) (byte ~trim-octet)))))})
+
+(defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ::types/Number] [_] call-returns-null)
 
 (defmethod codegen-call [:substring ::types/Object ArrowType$Int ArrowType$Int] [_]
   {:return-types #{ArrowType$Utf8/INSTANCE}

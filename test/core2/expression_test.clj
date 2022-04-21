@@ -457,6 +457,137 @@
       (= (str/triml s) (project1 '(trim a b c) {:a s, :b "LEADING", :c " "}))
       (= (str/trimr s) (project1 '(trim a b c) {:a s, :b "TRAILING", :c " "})))))
 
+(defn- btrim [bin trim-spec trim-octet]
+  (some-> (project1 '(trim a b c) {:a (some-> bin byte-array), :b trim-spec, :c (some-> trim-octet vector byte-array)})
+          expr/resolve-bytes
+          vec))
+
+(t/deftest test-binary-trim
+  (t/testing "leading trims of 0"
+    (t/are [bin expected]
+      (= expected (btrim bin "LEADING" 0))
+
+      [] []
+      ;; \space
+      [32] [32]
+      [42] [42]
+      [42 0] [42 0]
+      [0 42] [42]
+      [0 0 42] [42]
+      [0 0 0] []
+      [0 42 0] [42 0]
+      [42 0 42] [42 0 42]
+      [0 42 0 42 0] [42 0 42 0]
+
+      nil nil))
+
+  (t/testing "trailing trims of 0"
+    (t/are [bin expected]
+      (= expected (btrim bin "TRAILING" 0))
+
+      [] []
+      [32] [32]
+      [42] [42]
+      [0 42] [0 42]
+      [42 0] [42]
+      [42 0 0] [42]
+      [0 0 0] []
+      [0 42 0] [0 42]
+      [42 0 42] [42 0 42]
+      [0 42 0 42 0] [0 42 0 42]
+
+      nil nil))
+
+  (t/testing "both trims of 0"
+    (t/are [bin expected]
+      (= expected (btrim bin "BOTH" 0))
+
+      [] []
+      [32] [32]
+      [42] [42]
+      [0 42] [42]
+      [42 0] [42]
+      [0 0 42] [42]
+      [42 0 0] [42]
+      [0 0 0] []
+      [0 42 0] [42]
+      [42 0 42] [42 0 42]
+      [0 42 0 42 0] [42 0 42]
+
+      nil nil))
+
+  (t/testing "null trim octet returns null"
+    (t/are [bin trim-spec expected]
+      (= expected (btrim bin trim-spec nil))
+
+      [42] "BOTH" nil
+      nil "BOTH" nil
+
+      [42] "LEADING" nil
+      nil "LEADING" nil
+
+      [42] "TRAILING" nil
+      nil "TRAILING" nil))
+
+  (t/testing "numeric octet is permitted"
+    ;; no defined behaviour for bigint / bigdec
+    (t/are [bin trim-spec octet expected]
+      (= expected (some-> (project1 '(trim a b c) {:a (some-> bin byte-array), :b trim-spec, :c octet})
+                          expr/resolve-bytes
+                          vec))
+
+      nil "BOTH" (byte 0) nil
+      nil "BOTH" (int 0) nil
+      nil "BOTH" (short 0) nil
+      nil "BOTH" (long 0) nil
+      nil "BOTH" (float 0) nil
+      nil "BOTH" (double 0) nil
+
+      nil "LEADING" (byte 0) nil
+      nil "LEADING" (int 0) nil
+      nil "LEADING" (short 0) nil
+      nil "LEADING" (long 0) nil
+      nil "LEADING" (float 0) nil
+      nil "LEADING" (double 0) nil
+
+      nil "TRAILING" (byte 0) nil
+      nil "TRAILING" (int 0) nil
+      nil "TRAILING" (short 0) nil
+      nil "TRAILING" (long 0) nil
+      nil "TRAILING" (float 0) nil
+      nil "TRAILING" (double 0) nil
+
+      [0 42 0] "BOTH" (byte 0) [42]
+      [0 42 0] "BOTH" (int 0) [42]
+      [0 42 0] "BOTH" (short 0) [42]
+      [0 42 0] "BOTH" (long 0) [42]
+      [0 42 0] "BOTH" (float 0) [42]
+      [0 42 0] "BOTH" (double 0) [42]
+
+      [0 42 0] "LEADING" (byte 0) [42 0]
+      [0 42 0] "LEADING" (int 0) [42 0]
+      [0 42 0] "LEADING" (short 0) [42 0]
+      [0 42 0] "LEADING" (long 0) [42 0]
+      [0 42 0] "LEADING" (float 0) [42 0]
+      [0 42 0] "LEADING" (double 0) [42 0]
+
+      [0 42 0] "TRAILING" (byte 0) [0 42]
+      [0 42 0] "TRAILING" (int 0) [0 42]
+      [0 42 0] "TRAILING" (short 0) [0 42]
+      [0 42 0] "TRAILING" (long 0) [0 42]
+      [0 42 0] "TRAILING" (float 0) [0 42]
+      [0 42 0] "TRAILING" (double 0) [0 42])))
+
+(tct/defspec bin-trim-is-equiv-to-str-trim-on-utf8-prop
+  (tcp/for-all [^String s (tcg/fmap str/join (tcg/vector (tcg/elements [tcg/string (tcg/return "")])))]
+    (and
+      (= (str/trim s)
+         (String. (byte-array (btrim (.getBytes s "utf-8") "BOTH" 32)) "utf-8"))
+      (= (str/triml s)
+         (String. (byte-array (btrim (.getBytes s "utf-8") "LEADING" 32)) "utf-8"))
+      (= (str/trimr s)
+         (String. (byte-array (btrim (.getBytes s "utf-8") "TRAILING" 32)) "utf-8")))))
+
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
            (project '(sqrt x) [{:x 2} {:x 3.4} {:x nil}])))
