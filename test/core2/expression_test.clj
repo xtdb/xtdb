@@ -579,7 +579,7 @@
       [0 42 0] "TRAILING" (double 0) [0 42])))
 
 (tct/defspec bin-trim-is-equiv-to-str-trim-on-utf8-prop
-  (tcp/for-all [^String s (tcg/fmap str/join (tcg/vector (tcg/elements [tcg/string (tcg/return "")])))]
+  (tcp/for-all [^String s (tcg/fmap str/join (tcg/vector (tcg/elements [tcg/string (tcg/return " ")])))]
     (and
       (= (str/trim s)
          (String. (byte-array (btrim (.getBytes s "utf-8") "BOTH" 32)) "utf-8"))
