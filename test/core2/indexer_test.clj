@@ -318,7 +318,7 @@
                             nil
                             (partition-all 100 tx-ops))]
 
-          (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 5))))
+          (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 15))))
           (t/is (= last-tx-key (tu/latest-completed-tx node)))
           (tu/finish-chunk node)
 
