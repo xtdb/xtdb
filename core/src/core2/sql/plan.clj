@@ -260,6 +260,11 @@
      [:trim_function _ [:trim_operands ^:z nve]]
      (list 'trim (expr nve) "BOTH" " ")
 
+     [:fold mode ^:z nve]
+     (case mode
+       "LOWER" (list 'lower (expr nve))
+       "UPPER" (list 'upper (expr nve)))
+
      [:named_columns_join _ _]
      ;;=>
      (reduce

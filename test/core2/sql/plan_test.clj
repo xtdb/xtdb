@@ -439,3 +439,9 @@
 
     ;; no support for ESCAPE (or default escapes), see #157
     ))
+
+(t/deftest test-upper-expr
+  (t/is (= '(upper x1) (plan-expr "UPPER(foo.a)"))))
+
+(t/deftest test-lower-expr
+  (t/is (= '(lower x1) (plan-expr "LOWER(foo.a)"))))

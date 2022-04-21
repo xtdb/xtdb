@@ -865,6 +865,22 @@
 
 (defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ::types/Number] [_] call-returns-null)
 
+(defmethod codegen-call [:upper ArrowType$Utf8] [_]
+  (mono-fn-call
+    types/varchar-type
+    (fn [[code]]
+      `(ByteBuffer/wrap (.getBytes (.toUpperCase (resolve-string ~code)) StandardCharsets/UTF_8)))))
+
+(defmethod codegen-call [:upper ArrowType$Null] [_] call-returns-null)
+
+(defmethod codegen-call [:lower ArrowType$Utf8] [_]
+  (mono-fn-call
+    types/varchar-type
+    (fn [[code]]
+      `(ByteBuffer/wrap (.getBytes (.toLowerCase (resolve-string ~code)) StandardCharsets/UTF_8)))))
+
+(defmethod codegen-call [:lower ArrowType$Null] [_] call-returns-null)
+
 (defmethod codegen-call [:substring ::types/Object ArrowType$Int ArrowType$Int] [_]
   {:return-types #{ArrowType$Utf8/INSTANCE}
    :continue-call (fn [f [x start length]]

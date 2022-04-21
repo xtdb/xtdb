@@ -588,6 +588,34 @@
       (= (str/trimr s)
          (String. (byte-array (btrim (.getBytes s "utf-8") "TRAILING" 32)) "utf-8")))))
 
+(t/deftest test-upper
+  (t/are [s expected]
+    (= expected (project1 '(upper a) {:a s}))
+    nil nil
+    "" ""
+    " " " "
+    "a" "A"
+    "aa" "AA"
+    "AA" "AA"))
+
+(tct/defspec upper-is-equiv-to-java-upper-prop
+  (tcp/for-all [^String s tcg/string]
+    (= (.toUpperCase s) (project1 '(upper a) {:a s}))))
+
+(t/deftest test-lower
+  (t/are [s expected]
+    (= expected (project1 '(lower a) {:a s}))
+    nil nil
+    "" ""
+    " " " "
+    "A" "a"
+    "AA" "aa"
+    "aa" "aa"))
+
+(tct/defspec lower-is-equiv-to-java-lower-prop
+  (tcp/for-all [^String s tcg/string]
+    (= (.toLowerCase s) (project1 '(lower a) {:a s}))))
+
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
            (project '(sqrt x) [{:x 2} {:x 3.4} {:x nil}])))
