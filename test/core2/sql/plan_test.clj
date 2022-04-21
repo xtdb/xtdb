@@ -662,3 +662,14 @@ FROM u"))))
     "TRIM(BOTH foo.b FROM foo.a)" '(trim x2 "BOTH" x1)
 
     "TRIM(BOTH '😎' FROM foo.a)" '(trim x1 "BOTH" "😎")))
+
+(t/deftest test-like-expr
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+
+    "foo.a LIKE ''" '(like x1 "")
+    "foo.a LIKE foo.b" '(like x1 x2)
+    "foo.a LIKE 'foo%'" '(like x1 "foo%")
+
+    ;; no support for ESCAPE (or default escapes), see #157
+    ))
