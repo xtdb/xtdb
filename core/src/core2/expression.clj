@@ -753,12 +753,12 @@
 (defn- sql-trim-trailing
   [^String s ^String trim-char]
   (let [trim-cp (.codePointAt trim-char 0)]
-    (loop [j (unchecked-dec-int (.length s))
+    (loop [i (unchecked-dec-int (.length s))
            len (.length s)]
-      (if (< -1 j)
-        (let [cp (.codePointAt s j)]
+      (if (< -1 i)
+        (let [cp (.codePointAt s i)]
           (if (= cp trim-cp)
-            (recur (unchecked-subtract-int j (Character/charCount cp))
+            (recur (unchecked-subtract-int i (Character/charCount cp))
                    (unchecked-subtract-int len (Character/charCount cp)))
             (.substring s 0 len)))
         ""))))
@@ -811,7 +811,7 @@
         (let [v (aget bin i)]
           (if (= v trim-octet)
             (recur (unchecked-inc-int i))
-            (if (= i 0)
+            (if (zero? i)
               bin
               (Arrays/copyOfRange bin i (alength bin)))))
         (byte-array 0)))))
@@ -819,12 +819,12 @@
 (defn- binary-trim-trailing
   [^bytes bin trim-octet]
   (let [trim-octet (byte trim-octet)]
-    (loop [j (unchecked-dec-int (alength bin))
+    (loop [i (unchecked-dec-int (alength bin))
            len (alength bin)]
-      (if (< -1 j)
-        (let [v (aget bin j)]
+      (if (< -1 i)
+        (let [v (aget bin i)]
           (if (= v trim-octet)
-            (recur (unchecked-dec-int j) (unchecked-dec-int len))
+            (recur (unchecked-dec-int i) (unchecked-dec-int len))
             (if (= len (alength bin))
               bin
               (Arrays/copyOfRange bin 0 len))))
