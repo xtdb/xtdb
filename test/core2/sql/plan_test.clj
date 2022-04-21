@@ -16,28 +16,34 @@
 (def regen-expected-files? false)
 
 (defmethod t/assert-expr '=plan-file [msg form]
-  `(let [exp-plan-file-name# ~(format "core2/sql/plan_test_expectations/%s.edn" (nth form 1))
+  `(let [exp-plan-file-name# ~(nth form 1)
+         exp-plan-file-path# (format "core2/sql/plan_test_expectations/%s.edn" exp-plan-file-name#)
          actual-plan# ~(nth form 2)]
-     (if-let [exp-plan-file# (io/resource exp-plan-file-name#)]
+     (if-let [exp-plan-file# (io/resource exp-plan-file-path#)]
        (let [exp-plan# (read-string (slurp exp-plan-file#))
              result# (= exp-plan# actual-plan#)]
          (if result#
-           (t/do-report {:type :pass, :message ~msg,
-                         :expected exp-plan#, :actual (list '~'= exp-plan# actual-plan#)})
+           (t/do-report {:type :pass
+                         :message ~msg
+                         :expected (list '~'= exp-plan-file-name# actual-plan#)
+                         :actual (list '~'= exp-plan# actual-plan#)})
            (do
              (when regen-expected-files?
-               (spit (io/resource exp-plan-file-name#) (with-out-str (clojure.pprint/pprint actual-plan#))))
-             (t/do-report {:type :fail, :message ~msg,
-                           :expected exp-plan#, :actual (list '~'not (list '~'= exp-plan# actual-plan#))})))
+               (spit (io/resource exp-plan-file-path#) (with-out-str (clojure.pprint/pprint actual-plan#))))
+             (t/do-report {:type :fail
+                           :message ~msg
+                           :expected (list '~'= exp-plan-file-name# actual-plan#)
+                           :actual (list '~'not (list '~'= exp-plan# actual-plan#))})))
          result#)
        (if regen-expected-files?
          (do
            (spit
-             ~(str (io/resource "core2/sql/plan_test_expectations/") (nth form 1) ".edn")
+             (str (io/resource "core2/sql/plan_test_expectations/") exp-plan-file-name# ".edn")
              (with-out-str (clojure.pprint/pprint actual-plan#))))
          (t/do-report
            {:type :error, :message "Missing Expectation File"
-            :expected nil :actual (Exception. "Missing Expectation File")})))))
+            :expected exp-plan-file-path#  :actual (Exception. "Missing Expectation File")})))))
+
 
 (deftest test-basic-queries
   (t/is (=plan-file
