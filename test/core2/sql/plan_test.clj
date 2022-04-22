@@ -456,3 +456,12 @@
   (t/is (= '(concat x1 x2) (plan-expr "foo.a || foo.b")))
   (t/is (= '(concat "a" x1) (plan-expr "'a' || foo.b")))
   (t/is (= '(concat (concat x1 "a") "b") (plan-expr "foo.a || 'a' || 'b'"))))
+
+(t/deftest test-character-length-expr
+  (t/is (= '(character-length x1) (plan-expr "CHARACTER_LENGTH(foo.a)"))))
+
+(t/deftest test-char-length-alias
+  (t/is (= '(character-length x1) (plan-expr "CHAR_LENGTH(foo.a)")) "CHAR_LENGTH alias works"))
+
+(t/deftest test-octet-length-expr
+  (t/is (= '(octet-length x1) (plan-expr "OCTET_LENGTH(foo.a)"))))

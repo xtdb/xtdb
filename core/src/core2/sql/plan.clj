@@ -268,6 +268,12 @@
      [:concatenation ^:z nve1 _ ^:z nve2]
      (list 'concat (expr nve1) (expr nve2))
 
+     [:char_length_expression _ ^:z nve]
+     (list 'character-length (expr nve))
+
+     [:octet_length_expression _ ^:z nve]
+     (list 'octet-length (expr nve))
+
      [:named_columns_join _ _]
      ;;=>
      (reduce
