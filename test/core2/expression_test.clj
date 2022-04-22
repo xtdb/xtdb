@@ -271,18 +271,26 @@
         first)))
 
 (t/deftest test-character-length
-  (letfn [(len [s vec-type] (project-mono-value 'character-length s vec-type))]
+  (letfn [(len [s unit] (project1 (list 'character-length 'a unit) {:a s}))]
     (t/are [s]
-      (= (.count (.codePoints s)) (len s types/varchar-type))
+      (and (= (.count (.codePoints s)) (len s "CHARACTERS"))
+           (= (alength (.getBytes s "utf-8"))) (len s "OCTETS"))
+
       ""
       "a"
       "hello"
       "😀")
-    (= nil (len nil types/null-type))))
+
+    (t/is (= nil (len nil "CHARACTERS")))
+    (t/is (= nil (len nil "OCTETS")))))
 
 (tct/defspec character-length-is-equiv-to-code-point-count-prop
   (tcp/for-all [^String s tcg/string]
-    (= (.count (.codePoints s)) (project-mono-value 'character-length s types/varchar-type))))
+    (= (.count (.codePoints s)) (project1 '(character-length a "CHARACTERS") {:a s}))))
+
+(tct/defspec character-length-octet-is-equiv-to-byte-count-prop
+  (tcp/for-all [^String s tcg/string]
+    (= (alength (.getBytes s "utf-8")) (project1 '(character-length a "OCTETS") {:a s}))))
 
 (t/deftest test-octet-length
   (letfn [(len [s vec-type] (project-mono-value 'octet-length s vec-type))]
@@ -292,7 +300,7 @@
       "a"
       "hello"
       "😀")
-    (= nil (len nil types/null-type))))
+    (t/is (= nil (len nil types/null-type)))))
 
 (t/deftest test-like
   (t/are [s ptn expected-result]

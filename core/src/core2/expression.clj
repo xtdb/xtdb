@@ -923,10 +923,13 @@
         (recur (unchecked-inc-int i) length))
       length)))
 
-(defmethod codegen-call [:character-length ArrowType$Utf8] [_]
-  (mono-fn-call types/int-type #(do `(utf8-length ~@%))))
+(defmethod codegen-call [:character-length ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
+  (let [[_ unit] (map :literal args)]
+    (mono-fn-call types/int-type (case unit
+                                   "CHARACTERS" #(do `(utf8-length ~(first %)))
+                                   "OCTETS" #(do `(.limit ~(-> (first %) (with-tag ByteBuffer))))))))
 
-(defmethod codegen-call [:character-length ArrowType$Null] [_] call-returns-null)
+(defmethod codegen-call [:character-length ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 
 (defmethod codegen-call [:octet-length ArrowType$Utf8] [_]
   (mono-fn-call types/int-type #(do `(.limit ~(-> (first %) (with-tag ByteBuffer))))))

@@ -269,7 +269,10 @@
      (list 'concat (expr nve1) (expr nve2))
 
      [:char_length_expression _ ^:z nve]
-     (list 'character-length (expr nve))
+     (list 'character-length (expr nve) "CHARACTERS")
+
+     [:char_length_expression _ ^:z nve _ [:char_length_units unit]]
+     (list 'character-length (expr nve) unit)
 
      [:octet_length_expression _ ^:z nve]
      (list 'octet-length (expr nve))
