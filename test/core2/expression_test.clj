@@ -631,6 +631,23 @@
                 s2 tcg/string]
     (= (str s1 s2) (project1 '(concat a b) {:a s1 :b s2}))))
 
+(defn- bconcat [b1 b2]
+  (some-> (project1 '(concat a b) {:a (some-> b1 byte-array), :b (some-> b2 byte-array)}) expr/resolve-bytes vec))
+
+(t/deftest bin-concat-test
+  (t/are [b1 b2 expected]
+    (= expected (bconcat b1 b2))
+    nil nil nil
+    [] nil nil
+    nil [] nil
+    [] [] []
+    [42] [32] [42 32]))
+
+(tct/defspec bin-concat-equiv-to-str-concat-on-utf8-prop
+  (tcp/for-all [^String s1 tcg/string
+                ^String s2 tcg/string]
+    (= (str s1 s2) (String. (byte-array (bconcat (.getBytes s1 "utf-8") (.getBytes s2 "utf-8"))) "utf-8"))))
+
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
            (project '(sqrt x) [{:x 2} {:x 3.4} {:x nil}])))

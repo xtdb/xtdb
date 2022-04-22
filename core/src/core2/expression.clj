@@ -891,6 +891,18 @@
 (defmethod codegen-call [:concat ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
 (defmethod codegen-call [:concat ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 
+(defn bconcat ^bytes [^bytes b1 ^bytes b2]
+  (let [ret (byte-array (+ (alength b1) (alength b2)))]
+    (System/arraycopy b1 0 ret 0 (alength b1))
+    (System/arraycopy b2 0 ret (alength b1) (alength b2))
+    ret))
+
+(defmethod codegen-call [:concat ArrowType$Binary ArrowType$Binary] [_]
+  (mono-fn-call types/varbinary-type (fn [[a b]] `(ByteBuffer/wrap (bconcat (resolve-bytes ~a) (resolve-bytes ~b))))))
+
+(defmethod codegen-call [:concat ArrowType$Binary ArrowType$Null] [_] call-returns-null)
+(defmethod codegen-call [:concat ArrowType$Null ArrowType$Binary] [_] call-returns-null)
+
 (defmethod codegen-call [:substring ::types/Object ArrowType$Int ArrowType$Int] [_]
   {:return-types #{ArrowType$Utf8/INSTANCE}
    :continue-call (fn [f [x start length]]
