@@ -910,7 +910,10 @@
                        `(ByteBuffer/wrap (.getBytes (subs (resolve-string ~x) (dec ~start) (+ (dec ~start) ~length))
                                                     StandardCharsets/UTF_8))))})
 
-(defn utf8-length [^ByteBuffer buf]
+(defn utf8-length
+  "Java strings are utf-16 backed, and java chars cannot represent all utf-8 characters in one char - therefore
+  we do not use string length or anything like it, so that one character == one code point."
+  [^ByteBuffer buf]
   (loop [i 0
          length 0]
     (if (< i (.limit buf))
