@@ -616,6 +616,21 @@
   (tcp/for-all [^String s tcg/string]
     (= (.toLowerCase s) (project1 '(lower a) {:a s}))))
 
+(t/deftest concat-test
+  (t/are [s1 s2 expected]
+    (= expected (project1 '(concat a b) {:a s1, :b s2}))
+
+    nil nil nil
+    "" nil nil
+    nil "" nil
+    "" "" ""
+    "a" "b" "ab"))
+
+(tct/defspec concat-equiv-to-str-prop
+  (tcp/for-all [s1 tcg/string
+                s2 tcg/string]
+    (= (str s1 s2) (project1 '(concat a b) {:a s1 :b s2}))))
+
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
            (project '(sqrt x) [{:x 2} {:x 3.4} {:x nil}])))

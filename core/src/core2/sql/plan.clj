@@ -265,6 +265,9 @@
        "LOWER" (list 'lower (expr nve))
        "UPPER" (list 'upper (expr nve)))
 
+     [:concatenation ^:z nve1 _ ^:z nve2]
+     (list 'concat (expr nve1) (expr nve2))
+
      [:named_columns_join _ _]
      ;;=>
      (reduce

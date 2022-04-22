@@ -451,3 +451,8 @@
 
 (t/deftest test-lower-expr
   (t/is (= '(lower x1) (plan-expr "LOWER(foo.a)"))))
+
+(t/deftest test-concat-expr
+  (t/is (= '(concat x1 x2) (plan-expr "foo.a || foo.b")))
+  (t/is (= '(concat "a" x1) (plan-expr "'a' || foo.b")))
+  (t/is (= '(concat (concat x1 "a") "b") (plan-expr "foo.a || 'a' || 'b'"))))

@@ -881,6 +881,16 @@
 
 (defmethod codegen-call [:lower ArrowType$Null] [_] call-returns-null)
 
+;; todo high perf variadic version, or specialisation for arity up to N.
+(defmethod codegen-call [:concat ArrowType$Utf8 ArrowType$Utf8] [_]
+  (mono-fn-call types/varchar-type (fn [[a b]]
+                                     `(ByteBuffer/wrap (.getBytes (str (resolve-string ~a) (resolve-string ~b))
+                                                                  StandardCharsets/UTF_8)))))
+
+(defmethod codegen-call [:concat ArrowType$Null ArrowType$Null] [_] call-returns-null)
+(defmethod codegen-call [:concat ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
+(defmethod codegen-call [:concat ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
+
 (defmethod codegen-call [:substring ::types/Object ArrowType$Int ArrowType$Int] [_]
   {:return-types #{ArrowType$Utf8/INSTANCE}
    :continue-call (fn [f [x start length]]
