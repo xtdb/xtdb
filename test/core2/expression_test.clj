@@ -277,7 +277,8 @@
       ""
       "a"
       "hello"
-      "😀")))
+      "😀")
+    (= nil (len nil types/null-type))))
 
 (tct/defspec character-length-is-equiv-to-code-point-count-prop
   (tcp/for-all [^String s tcg/string]
@@ -290,7 +291,8 @@
       ""
       "a"
       "hello"
-      "😀")))
+      "😀")
+    (= nil (len nil types/null-type))))
 
 (t/deftest test-like
   (t/are [s ptn expected-result]
