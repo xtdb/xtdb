@@ -338,7 +338,7 @@
        ([] (rf))
 
        ([acc el]
-         (rf acc (MapEntry/create (key el) (f (val el)))))
+        (rf acc (MapEntry/create (key el) (f (val el)))))
 
        ([acc] (rf acc)))))
 

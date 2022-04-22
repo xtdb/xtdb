@@ -2102,7 +2102,7 @@
   (db-basis [_]
     {::xt/valid-time valid-time
      ::xt/tx {::xt/tx-time tx-time,
-             ::xt/tx-id tx-id}})
+              ::xt/tx-id tx-id}})
 
   (with-tx [_ tx-ops]
     (let [valid-time valid-time
