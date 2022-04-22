@@ -127,9 +127,12 @@
                               (write-c-string out v))
                             (.writeByte out 0))))
 
-(def ^:private ^:const ^long text-format-code 0)
-
 (def ^:private ^:const ^long json-oid 114)
+
+(def ^:private ^:const ^long typlen-varlena -1)
+(def ^:private ^:const ^long typmod-none -1)
+
+(def ^:private ^:const ^long text-format-code 0)
 
 (defn- send-row-description [^DataOutputStream out columns]
   (send-message-with-body out
@@ -140,8 +143,8 @@
                                     :let [table-oid 0
                                           column-attribute-number 0
                                           oid json-oid
-                                          data-type-size 0
-                                          type-modifier 0
+                                          data-type-size typlen-varlena
+                                          type-modifier typmod-none
                                           format-code text-format-code]]
                               (doto out
                                 (write-c-string column)
@@ -299,7 +302,7 @@
       :else
       (let [node (:node (meta session))
             projection (mapv keyword (query-projection (:tree (meta parse-message))))
-            result (c2/sql-query node (strip-query-semi-colon (:pgwire.parse/query-string parse-message)))]
+            result (c2/sql-query node (strip-query-semi-colon (:pgwire.parse/query-string parse-message)) {})]
         (doseq [row result]
           (send-data-row out (for [column (mapv row projection)]
                                (when (some? column)
