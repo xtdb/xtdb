@@ -399,7 +399,7 @@
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [os ^ObjectStore (::os/file-system-object-store @(:!system node))]]
-            (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 30))))
+            (t/is (= last-tx-key (tu/then-await-tx last-tx-key node (Duration/ofSeconds 60))))
             (t/is (= last-tx-key (tu/latest-completed-tx node)))
 
             (Thread/sleep 1000) ;; TODO for now
