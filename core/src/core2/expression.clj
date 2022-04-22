@@ -910,8 +910,18 @@
                        `(ByteBuffer/wrap (.getBytes (subs (resolve-string ~x) (dec ~start) (+ (dec ~start) ~length))
                                                     StandardCharsets/UTF_8))))})
 
+(defn utf8-length [^ByteBuffer buf]
+  (loop [i 0
+         length 0]
+    (if (< i (.limit buf))
+      ;; conditional a bit more verbose than necessary to avoid clj auto-boxing.
+      (if (not= (bit-and (.get buf i) 0xc0) 0x80)
+        (recur (unchecked-inc-int i) (unchecked-inc-int length))
+        (recur (unchecked-inc-int i) length))
+      length)))
+
 (defmethod codegen-call [:character-length ArrowType$Utf8] [_]
-  (mono-fn-call types/int-type #(do `(.length (.decode StandardCharsets/UTF_8 ~@%)))))
+  (mono-fn-call types/int-type #(do `(utf8-length ~@%))))
 
 (defmethod codegen-call [:octet-length ArrowType$Utf8] [_]
   (mono-fn-call types/int-type #(do `(.limit ~(-> (first %) (with-tag ByteBuffer))))))

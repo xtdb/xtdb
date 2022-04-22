@@ -273,11 +273,15 @@
 (t/deftest test-character-length
   (letfn [(len [s vec-type] (project-mono-value 'character-length s vec-type))]
     (t/are [s]
-      (= (count s) (len s types/varchar-type))
+      (= (.count (.codePoints s)) (len s types/varchar-type))
       ""
       "a"
       "hello"
       "😀")))
+
+(tct/defspec character-length-is-equiv-to-code-point-count-prop
+  (tcp/for-all [^String s tcg/string]
+    (= (.count (.codePoints s)) (project-mono-value 'character-length s types/varchar-type))))
 
 (t/deftest test-octet-length
   (letfn [(len [s vec-type] (project-mono-value 'octet-length s vec-type))]
