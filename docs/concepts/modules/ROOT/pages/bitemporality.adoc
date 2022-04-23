@@ -22,7 +22,7 @@ each document remains valid until explicitly updated with a new version via
 == Why?
 
 The rationale for bitemporality is also explained in this
-https://juxt.pro/blog/posts/value-of-bitemporality.html[blog post].
+https://juxt.pro/blog/value-of-bitemporality[blog post].
 
 A baseline notion of time that is always available is
 `transaction-time`; the point at which data is transacted into the
