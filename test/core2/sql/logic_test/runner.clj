@@ -142,14 +142,11 @@
        (BigInteger. 1)
        (format "%032x")))
 
-;; TODO: parse query and qualify known table columns if
-;; needed. Generate logical plan and format and hash result according
-;; to sort mode. Projection will usually be positional.
 (defmethod execute-record :query [{:keys [db-engine max-result-set-size] :as ctx}
                                   {:keys [query type-string sort-mode label
                                           result-set-size result-set result-set-md5sum]}]
 
-  (let [result (t/is (execute-query db-engine query))]
+  (let [result (execute-query db-engine query)]
     (when (vector? result)
       (validate-type-string type-string result)
       (when-let [row (first result)]
