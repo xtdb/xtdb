@@ -662,6 +662,55 @@
                 ^String s2 tcg/string]
     (= (str s1 s2) (String. (byte-array (bconcat (.getBytes s1 "utf-8") (.getBytes s2 "utf-8"))) "utf-8"))))
 
+(t/deftest position-test
+  (t/are [s1 s2 unit expected]
+    (= expected (project1 (list 'position 'a 'b unit) {:a s1, :b s2}))
+
+    nil nil "CHARACTERS" nil
+    "" "" "CHARACTERS" 1
+    "" "" "OCTETS" 1
+
+    "a" "" "CHARACTERS" 0
+    "a" "a" "CHARACTERS" 1
+    "b" "a" "CHARACTERS" 0
+
+    "a" "" "OCTETS" 0
+    "a" "a" "OCTETS" 1
+    "b" "a" "OCTETS" 0
+
+    "😎" "😎" "CHARACTERS" 1
+    "😎" "a😎" "CHARACTERS" 2
+    "😎" "🌝😎" "CHARACTERS" 2
+
+    "😎" "😎" "OCTETS" 1
+    "😎" "a😎" "OCTETS" 2
+    "😎" "aa😎" "OCTETS" 3
+    "😎" "🌝😎" "OCTETS" 5))
+
+(tct/defspec position-is-codepoint-count-from-idx-prop
+  (tcp/for-all [s1 tcg/string
+                s2 tcg/string]
+    (let [pos (project1 '(position a b "CHARACTERS") {:a s2, :b s1})]
+      (if-some [i (str/index-of s1 s2)]
+        (= pos (inc (Character/codePointCount (str s1) (int 0) (int i))))
+        (zero? pos)))))
+
+(tct/defspec position-is-equiv-to-idx-of-on-ascii-prop
+  (tcp/for-all [s1 tcg/string-ascii
+                s2 tcg/string-ascii]
+    (let [pos (project1 '(position a b "CHARACTERS") {:a s2, :b s1})]
+      (if-some [i (str/index-of s1 s2)]
+        (= pos (inc i))
+        (zero? pos)))))
+
+(tct/defspec position-on-octet-is-equiv-to-idx-of-on-ascii-prop
+  (tcp/for-all [s1 tcg/string-ascii
+                s2 tcg/string-ascii]
+    (let [pos (project1 '(position a b "OCTETS") {:a s2, :b s1})]
+      (if-some [i (str/index-of s1 s2)]
+        (= pos (inc i))
+        (zero? pos)))))
+
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
            (project '(sqrt x) [{:x 2} {:x 3.4} {:x nil}])))

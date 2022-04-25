@@ -268,6 +268,12 @@
      [:concatenation ^:z nve1 _ ^:z nve2]
      (list 'concat (expr nve1) (expr nve2))
 
+     [:character_position_expression _ ^:z needle _ ^:z haystack]
+     (list 'position (expr needle) (expr haystack) "CHARACTERS")
+
+     [:character_position_expression _ ^:z needle _ ^:z haystack _ [:char_length_units unit]]
+     (list 'position (expr needle) (expr haystack) unit)
+
      [:char_length_expression _ ^:z nve]
      (list 'character-length (expr nve) "CHARACTERS")
 

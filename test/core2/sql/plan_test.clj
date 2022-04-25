@@ -469,3 +469,8 @@
 
 (t/deftest test-octet-length-expr
   (t/is (= '(octet-length x1) (plan-expr "OCTET_LENGTH(foo.a)"))))
+
+(t/deftest test-position-expr
+  (t/is (= '(position x1 x2 "CHARACTERS") (plan-expr "POSITION(foo.a IN foo.b)")))
+  (t/is (= '(position x1 x2 "CHARACTERS") (plan-expr "POSITION(foo.a IN foo.b USING CHARACTERS)")))
+  (t/is (= '(position x1 x2 "OCTETS") (plan-expr "POSITION(foo.a IN foo.b USING OCTETS)"))))
