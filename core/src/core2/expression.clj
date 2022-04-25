@@ -25,7 +25,8 @@
            (org.apache.arrow.vector.types DateUnit TimeUnit Types Types$MinorType IntervalUnit)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Time ArrowType$Interval)
            (java.util.regex Pattern)
-           (org.apache.commons.codec.binary Hex)))
+           (org.apache.commons.codec.binary Hex)
+           [core2 StringUtil]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -939,42 +940,21 @@
 
 (defmethod codegen-call [:octet-length ArrowType$Null] [_] call-returns-null)
 
+(defn resolve-utf8-buf ^ByteBuffer [s-or-buf]
+  (if (instance? ByteBuffer s-or-buf)
+    s-or-buf
+    (ByteBuffer/wrap (.getBytes ^String s-or-buf StandardCharsets/UTF_8))))
+
 (defmethod codegen-call [:position ArrowType$Utf8 ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
   (let [[_ _ unit] (map :literal args)]
     {:return-types #{types/int-type}
-     :continue-call (fn [f [needle haystack]]
-                      (case unit
-                        "CHARACTERS"
-                        ;; todo unbox by embedding continuation calls
-                        (f types/int-type
-                           `(let [haystack# (resolve-string ~haystack)
-                                  i# (.indexOf haystack# (resolve-string ~needle))]
-                              (if (neg? i#)
-                                0
-                                ;; sql position 1 based, zero being as -1 in java.
-                                (unchecked-inc-int (Character/codePointCount haystack# 0 i#)))))
-                        "OCTETS"
-                        ;; todo specialise if already in a utf8 nio buf
-                        ;; todo unbox by embedding continuation calls
-                        (f types/int-type
-                           `(let [needle# (.getBytes (resolve-string ~needle) StandardCharsets/UTF_8)
-                                  haystack# (.getBytes (resolve-string ~haystack) StandardCharsets/UTF_8)]
-                              (if (and (= 0 (alength haystack#))
-                                       (= 0 (alength needle#)))
-                                1
-                                (loop [i# 0
-                                       j# 0]
-                                  (cond
-                                    (= j# (alength needle#)) (unchecked-inc-int i#)
-                                    (< (+ i# j#) (alength haystack#))
-                                    (let [b1# (aget haystack# (+ i# j#))]
-                                      (if (< j# (alength needle#))
-                                        (if (= b1# (aget needle# j#))
-                                          (recur i# (unchecked-inc-int j#))
-                                          (recur (unchecked-inc-int i#) 0))
-                                        ;; sql position 1 based, zero being as -1 in java.
-                                        (unchecked-inc-int i#)))
-                                    :else 0)))))))}))
+     :continue-call
+     (fn [f [needle haystack]]
+       (case unit
+         "CHARACTERS"
+         (f types/int-type `(StringUtil/sqlUtf8Position (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))
+         "OCTETS"
+         (f types/int-type `(StringUtil/sqlPosition (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))))}))
 
 (defmethod codegen-call [:position ArrowType$Utf8 ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 (defmethod codegen-call [:position ArrowType$Null ArrowType$Utf8 ArrowType$Utf8] [_] call-returns-null)
