@@ -784,7 +784,7 @@
   can specify multi-character strings for the trim char.
 
   See also sql-trim-leading, sql-trim-trailing"
-  [^String s ^String trim-spec ^String trim-char]
+  ^String [^String s ^String trim-spec ^String trim-char]
   (when-not (trim-char-conforms? trim-char) (throw (IllegalArgumentException. "Data Exception - trim error.")))
   (case trim-spec
     "LEADING" (sql-trim-leading s trim-char)
