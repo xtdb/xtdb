@@ -113,19 +113,22 @@
     :error (do (t/is (thrown? Exception (execute-statement db-engine statement)))
                ctx)))
 
-(defn- format-result-str [sort-mode result]
+(defn- format-result-str [sort-mode type-string result]
   (let [result-rows (for [vs result]
-                      (for [v vs]
-                        (cond
-                          (nil? v) "NULL"
-                          (= "" v) "(empty)"
-                          (float? v) (format "%.3f" v)
-                          :else (str v))))]
-    (str (->> (case sort-mode
-                :rowsort (flatten (sort-by (partial str/join " ") result-rows))
-                :valuesort (sort (flatten result-rows))
-                :nosort (flatten result-rows))
-              (str/join "\n")) "\n")))
+                      (for [[t v] (map vector type-string vs)]
+                        (if (nil? v)
+                          "NULL"
+                          (case t
+                            \R (format "%.3f" v)
+                            \I (format "%d" (long v))
+                            (if (= "" v)
+                              "(empty)"
+                              (str v))))))
+        result-rows (case sort-mode
+                      :rowsort (flatten (sort-by (partial str/join " ") result-rows))
+                      :valuesort (sort (flatten result-rows))
+                      :nosort (flatten result-rows))]
+    (str (str/join "\n" result-rows) "\n")))
 
 (defn- validate-type-string [type-string result]
   (doseq [row result
@@ -150,7 +153,7 @@
                                           result-set-size result-set result-set-md5sum]}]
 
   (let [result (execute-query db-engine query)
-        result-str (format-result-str sort-mode result)]
+        result-str (format-result-str sort-mode type-string result)]
     (when result-set
       (t/is (= (str (str/join "\n" result-set) "\n") result-str)))
     (when result-set-md5sum
