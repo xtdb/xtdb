@@ -20,18 +20,21 @@
   (^int hashCode [^int idx]))
 
 (defn ->hasher ^core2.expression.map.IIndexHasher [^List #_<IIndirectVector> cols]
-  (let [hashers (mapv (fn [^IIndirectVector col]
-                        (let [v (.getVector col)]
-                          (reify IIndexHasher
-                            (hashCode [_ idx]
-                              (.hashCode v (.getIndex col idx) hasher)))))
-                      cols)]
+  (case (.size cols)
+    1 (let [^IIndirectVector col (.get cols 0)
+            v (.getVector col)]
+        (reify IIndexHasher
+          (hashCode [_ idx]
+            (.hashCode v (.getIndex col idx) hasher))))
+
     (reify IIndexHasher
       (hashCode [_ idx]
-        (loop [[^IIndexHasher hasher & more-hashers] hashers
+        (loop [n 0
                hash-code 0]
-          (if hasher
-            (recur more-hashers (MurmurHasher/combineHashCode hash-code (.hashCode hasher idx)))
+          (if (< n (.size cols))
+            (let [^IIndirectVector col (.get cols n)
+                  v (.getVector col)]
+              (recur (inc n) (MurmurHasher/combineHashCode hash-code (.hashCode v (.getIndex col idx) hasher))))
             hash-code))))))
 
 (definterface IRelationMapBuilder
