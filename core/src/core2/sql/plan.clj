@@ -134,10 +134,15 @@
      ;;=>
      (Long/parseLong lexeme)
 
-     [:factor [_ sign] ^:z np]
-     (if (= "-" sign)
-       (- (expr np))
-       (expr np))
+     [:factor [:minus_sign "-"] ^:z np]
+     (let [np-expr (expr np)]
+       (if (number? np-expr)
+         (- np-expr)
+         (list '- np-expr)))
+
+     [:factor [:plus_sign "+"] ^:z np]
+     ;;=>
+     (expr np)
 
      [:character_string_literal lexeme]
      ;;=>
