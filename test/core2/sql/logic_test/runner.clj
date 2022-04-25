@@ -136,6 +136,9 @@
                        "T" some?)]]
     (t/is (or (nil? value) (pred value)))))
 
+(defn- validate-result-set-size [result-set-size result]
+  (t/is (= result-set-size (* (count result) (count (first result))))))
+
 (defn- md5 ^String [^String s]
   (->> (.getBytes s StandardCharsets/UTF_8)
        (.digest (MessageDigest/getInstance "MD5"))
@@ -146,18 +149,13 @@
                                   {:keys [query type-string sort-mode label
                                           result-set-size result-set result-set-md5sum]}]
 
-  (let [result (execute-query db-engine query)]
-    (when (vector? result)
-      (validate-type-string type-string result)
-      (when-let [row (first result)]
-        (t/is (count type-string) (count row)))
-      (t/is (= result-set-size (* (count result) (count (first result)))))
-      (let [result-str (format-result-str sort-mode result)]
-        (when result-set
-          (t/is (= (str (str/join "\n" result-set) "\n") result-str)))
-        (when result-set-md5sum
-          (t/is (= result-set-md5sum (md5 result-str)))))))
-  ctx)
+  (let [result (execute-query db-engine query)
+        result-str (format-result-str sort-mode result)]
+    (when result-set
+      (t/is (= (str (str/join "\n" result-set) "\n") result-str)))
+    (when result-set-md5sum
+      (t/is (= result-set-md5sum (md5 result-str))))
+    ctx))
 
 (defn- skip-record? [db-engine-name {:keys [skipif onlyif]
                                      :or {onlyif db-engine-name}}]
