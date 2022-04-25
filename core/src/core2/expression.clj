@@ -911,23 +911,10 @@
                        `(ByteBuffer/wrap (.getBytes (subs (resolve-string ~x) (dec ~start) (+ (dec ~start) ~length))
                                                     StandardCharsets/UTF_8))))})
 
-(defn utf8-length
-  "Java strings are utf-16 backed, and java chars cannot represent all utf-8 characters in one char - therefore
-  we do not use string length or anything like it, so that one character == one code point."
-  [^ByteBuffer buf]
-  (loop [i 0
-         length 0]
-    (if (< i (.limit buf))
-      ;; conditional a bit more verbose than necessary to avoid clj auto-boxing.
-      (if (not= (bit-and (.get buf i) 0xc0) 0x80)
-        (recur (unchecked-inc-int i) (unchecked-inc-int length))
-        (recur (unchecked-inc-int i) length))
-      length)))
-
 (defmethod codegen-call [:character-length ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
   (let [[_ unit] (map :literal args)]
     (mono-fn-call types/int-type (case unit
-                                   "CHARACTERS" #(do `(utf8-length ~(first %)))
+                                   "CHARACTERS" #(do `(StringUtil/utf8Length ~(first %)))
                                    "OCTETS" #(do `(.limit ~(-> (first %) (with-tag ByteBuffer))))))))
 
 (defmethod codegen-call [:character-length ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
