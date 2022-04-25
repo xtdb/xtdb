@@ -1542,7 +1542,8 @@
     [:select predicate
      [:cross-join lhs rhs]]
     ;;=>
-    [:join [predicate] lhs rhs]))
+    (when (columns-in-both-relations? predicate lhs rhs)
+      [:join [predicate] lhs rhs])))
 
 (defn- promote-selection-to-join [z]
   (r/zmatch z
