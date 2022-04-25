@@ -2085,74 +2085,78 @@
 
 ;; Logical plan API
 
-(defn plan-query [query]
-  (if-let [parse-failure (insta/get-failure query)]
-    {:errs [(prn-str parse-failure)]}
-    (r/with-memoized-attributes [sem/id
-                                 sem/dynamic-param-idx
-                                 sem/ctei
-                                 sem/cteo
-                                 sem/cte-env
-                                 sem/dcli
-                                 sem/dclo
-                                 sem/env
-                                 sem/group-env
-                                 sem/projected-columns
-                                 sem/column-reference]
-      (let [ag (z/vector-zip query)]
-        (if-let [errs (not-empty (sem/errs ag))]
-          {:errs errs}
-          (let [fired-rules (atom [])
-                instrument-rules (fn [rules]
-                                   (apply
-                                     some-fn
-                                     (map (fn [f]
-                                            (fn [z]
-                                              (when-let [successful-rewrite (f z)]
-                                                (swap!
-                                                  fired-rules
-                                                  #(conj ;; could also capture z before the rewrite
-                                                         %
-                                                         [(name (.toSymbol ^Var f))
-                                                          successful-rewrite]))
-                                                successful-rewrite)))
-                                          rules)))
-                optimize-plan [#'promote-selection-cross-join-to-join
-                               #'promote-selection-to-join
-                               #'push-selection-down-past-apply
-                               #'push-correlated-selection-down-past-join
-                               #'push-correlated-selection-down-past-rename
-                               #'push-correlated-selection-down-past-project
-                               #'push-correlated-selection-down-past-group-by
-                               #'push-correlated-selections-with-fewer-variables-down
-                               #'remove-superseded-projects
-                               #'merge-selections-around-scan
-                               #'add-selection-to-scan-predicate]
-                decorrelate-plan [#'pull-correlated-selection-up-towards-apply
-                                  #'push-selection-down-past-apply
-                                  #'push-decorrelated-selection-down-past-join
-                                  #'push-decorrelated-selection-down-past-rename
-                                  #'push-decorrelated-selection-down-past-project
-                                  #'push-decorrelated-selection-down-past-group-by
-                                  #'push-decorrelated-selections-with-fewer-variables-down
-                                  #'squash-correlated-selects
-                                  #'decorrelate-apply-rule-1
-                                  #'decorrelate-apply-rule-2
-                                  #'decorrelate-apply-rule-3
-                                  #'decorrelate-apply-rule-4
-                                  #'decorrelate-apply-rule-8
-                                  #'decorrelate-apply-rule-9]
-                plan (remove-names (plan ag))
-                add-projection-fn (:add-projection-fn (meta plan))
-                plan (->> plan
-                          (z/vector-zip)
-                          (r/innermost (r/mono-tp (instrument-rules decorrelate-plan)))
-                          (r/innermost (r/mono-tp (instrument-rules optimize-plan)))
-                          (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
-                          (z/node)
-                          (add-projection-fn))]
+(defn plan-query
+  ([query] (plan-query query {:decorrelate? true}))
+  ([query {:keys [decorrelate?]}]
+   (if-let [parse-failure (insta/get-failure query)]
+     {:errs [(prn-str parse-failure)]}
+     (r/with-memoized-attributes [sem/id
+                                  sem/dynamic-param-idx
+                                  sem/ctei
+                                  sem/cteo
+                                  sem/cte-env
+                                  sem/dcli
+                                  sem/dclo
+                                  sem/env
+                                  sem/group-env
+                                  sem/projected-columns
+                                  sem/column-reference]
+       (let [ag (z/vector-zip query)]
+         (if-let [errs (not-empty (sem/errs ag))]
+           {:errs errs}
+           (let [fired-rules (atom [])
+                 instrument-rules (fn [rules]
+                                    (apply
+                                      some-fn
+                                      (map (fn [f]
+                                             (fn [z]
+                                               (when-let [successful-rewrite (f z)]
+                                                 (swap!
+                                                   fired-rules
+                                                   #(conj ;; could also capture z before the rewrite
+                                                          %
+                                                          [(name (.toSymbol ^Var f))
+                                                           successful-rewrite]))
+                                                 successful-rewrite)))
+                                           rules)))
+                 optimize-plan [#'promote-selection-cross-join-to-join
+                                #'promote-selection-to-join
+                                #'push-selection-down-past-apply
+                                #'push-correlated-selection-down-past-join
+                                #'push-correlated-selection-down-past-rename
+                                #'push-correlated-selection-down-past-project
+                                #'push-correlated-selection-down-past-group-by
+                                #'push-correlated-selections-with-fewer-variables-down
+                                #'remove-superseded-projects
+                                #'merge-selections-around-scan
+                                #'add-selection-to-scan-predicate]
+                 decorrelate-plan [#'pull-correlated-selection-up-towards-apply
+                                   #'push-selection-down-past-apply
+                                   #'push-decorrelated-selection-down-past-join
+                                   #'push-decorrelated-selection-down-past-rename
+                                   #'push-decorrelated-selection-down-past-project
+                                   #'push-decorrelated-selection-down-past-group-by
+                                   #'push-decorrelated-selections-with-fewer-variables-down
+                                   #'squash-correlated-selects
+                                   #'decorrelate-apply-rule-1
+                                   #'decorrelate-apply-rule-2
+                                   #'decorrelate-apply-rule-3
+                                   #'decorrelate-apply-rule-4
+                                   #'decorrelate-apply-rule-8
+                                   #'decorrelate-apply-rule-9]
+                 plan (remove-names (plan ag))
+                 add-projection-fn (:add-projection-fn (meta plan))
+                 plan (->> plan
+                           (z/vector-zip)
+                           (#(if decorrelate?
+                               (r/innermost (r/mono-tp (instrument-rules decorrelate-plan)) %)
+                               %))
+                           (r/innermost (r/mono-tp (instrument-rules optimize-plan)))
+                           (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
+                           (z/node)
+                           (add-projection-fn))]
 
-            (if (s/invalid? (s/conform ::lp/logical-plan plan))
-              (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
-              {:plan plan
-               :fired-rules @fired-rules})))))))
+             (if (s/invalid? (s/conform ::lp/logical-plan plan))
+               (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
+               {:plan plan
+                :fired-rules @fired-rules}))))))))

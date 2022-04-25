@@ -6,12 +6,14 @@
             [core2.sql :as sql]
             [core2.sql.plan :as plan]))
 
-(defn plan-sql [sql]
-  (let [tree (sql/parse sql)
-        {errs :errs :as plan} (plan/plan-query tree)]
-    (assert (empty? errs) errs)
-    #_(assoc (select-keys plan [:fired-rules :plan]) :tree tree) ;; Debug Tool
-    (:plan plan)))
+(defn plan-sql
+  ([sql] (plan-sql sql {:decorrelate? true}))
+  ([sql opts]
+   (let [tree (sql/parse sql)
+         {errs :errs :as plan} (plan/plan-query tree opts)]
+     (assert (empty? errs) errs)
+     #_(assoc (select-keys plan [:fired-rules :plan]) :tree tree) ;; Debug Tool
+     (:plan plan))))
 
 (def regen-expected-files? false)
 
