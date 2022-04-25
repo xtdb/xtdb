@@ -58,7 +58,7 @@
 
 ;; TODO:
 ;; - needs cleanup.
-;; - does not take renamed tables into account, probably won't need to.
+;; - does not take renamed tables in presence of sub-queries into account.
 
 (defn- normalize-rewrite [column->table]
   (fn [z]
@@ -69,7 +69,7 @@
        expr
        [:as_clause
         "AS"
-        [:regular_identifier (str "col" (r/child-idx z))]]]
+        [:regular_identifier (str "col__" (r/child-idx z))]]]
 
       [:identifier_chain
        [:regular_identifier column]]
@@ -85,12 +85,36 @@
       [:sort_specification
        [:column_reference
         [:identifier_chain
-         [:regular_identifier (str "col" ordinal)]]]])))
+         [:regular_identifier (str "col__" ordinal)]]]])))
+
+(defn- top-level-query-table->correlation-name [query]
+  (->> (r/collect-stop
+        (fn [z]
+          (r/zmatch z
+            [:table_primary [:regular_identifier table]]
+            ;;=>
+            [[table table]]
+
+            [:table_primary [:regular_identifier table] "AS" [:regular_identifier correlation-name]]
+            ;;=>
+            [[table correlation-name]]
+
+            [:table_primary [:regular_identifier table] [:regular_identifier correlation-name]]
+            ;;=>
+            [[table correlation-name]]
+
+            [:subquery _]
+            ;;=>
+            []))
+        (z/vector-zip query))
+       (into {})))
 
 (defn normalize-query [tables query]
-  (let [column->table (->> (for [[table columns] (reverse tables)
+  (let [table->correlation-name (top-level-query-table->correlation-name query)
+        column->table (->> (for [[table columns] tables
+                                 :when (contains? table->correlation-name table)
                                  column columns]
-                             [column table])
+                             [column (get table->correlation-name table)])
                            (into {}))]
     (->> (z/vector-zip query)
          (r/innermost (r/mono-tp (normalize-rewrite column->table)))
