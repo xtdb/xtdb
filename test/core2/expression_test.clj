@@ -711,6 +711,25 @@
         (= pos (inc i))
         (zero? pos)))))
 
+(t/deftest binary-position-test
+  (t/are [b1 b2 expected]
+    (= expected (project1 (list 'position 'a 'b) {:a (some-> b1 byte-array), :b (some-> b2 byte-array)}))
+    nil nil nil
+    [] [] 1
+    [42] [] 0
+    [] [42] 1
+    [42] [42] 1
+    [43] [42] 0
+    [42] [43] 0
+    [-44 21] [-32 -44 -21] 0
+    [-44 -21] [-32 -44 -21] 2))
+
+(tct/defspec binary-position-equiv-to-octet-position-prop
+  (tcp/for-all [^String s1 tcg/string
+                ^String s2 tcg/string]
+    (= (project1 '(position a b "OCTETS") {:a s1, :b s2})
+       (project1 '(position a b) {:a (.getBytes s1 "utf-8"), :b (.getBytes s2 "utf-8")}))))
+
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
            (project '(sqrt x) [{:x 2} {:x 3.4} {:x nil}])))

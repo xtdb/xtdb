@@ -725,6 +725,15 @@
     binary
     (buf->bytes binary)))
 
+(defn resolve-buf
+  "Values of type ArrowType$Binary may have differing literal representations, e.g a byte array, or NIO byte buffer.
+
+  Use this function when you are unsure of the representation at hand and just want a ByteBuffer."
+  ^ByteBuffer [buf-or-bytes]
+  (if (instance? ByteBuffer buf-or-bytes)
+    buf-or-bytes
+    (ByteBuffer/wrap ^bytes buf-or-bytes)))
+
 (defmethod codegen-call [:like ArrowType$Binary ArrowType$Binary] [{[_ {:keys [literal]}] :args}]
   {:return-types #{types/bool-type}
    :continue-call (fn [f [haystack-code needle-code]]
@@ -946,6 +955,13 @@
 (defmethod codegen-call [:position ArrowType$Utf8 ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 (defmethod codegen-call [:position ArrowType$Null ArrowType$Utf8 ArrowType$Utf8] [_] call-returns-null)
 (defmethod codegen-call [:position ArrowType$Null ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
+
+(defmethod codegen-call [:position ArrowType$Binary ArrowType$Binary] [_]
+  (mono-fn-call types/int-type (fn [[needle haystack]] `(StringUtil/sqlPosition (resolve-buf ~needle) (resolve-buf ~haystack)))))
+
+(defmethod codegen-call [:position ArrowType$Binary ArrowType$Null] [_] call-returns-null)
+(defmethod codegen-call [:position ArrowType$Null ArrowType$Binary] [_] call-returns-null)
+(defmethod codegen-call [:position ArrowType$Null ArrowType$Null] [_] call-returns-null)
 
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]
   {:return-types #{types/bigint-type}
