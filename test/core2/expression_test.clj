@@ -667,14 +667,19 @@
     (= expected (project1 (list 'position 'a 'b unit) {:a s1, :b s2}))
 
     nil nil "CHARACTERS" nil
+    nil "" "CHARACTERS" nil
+    "" nil "CHARACTERS" nil
+
     "" "" "CHARACTERS" 1
     "" "" "OCTETS" 1
 
     "a" "" "CHARACTERS" 0
+    "" "a" "CHARACTERS" 1
     "a" "a" "CHARACTERS" 1
     "b" "a" "CHARACTERS" 0
 
     "a" "" "OCTETS" 0
+    "" "a" "OCTETS" 1
     "a" "a" "OCTETS" 1
     "b" "a" "OCTETS" 0
 
