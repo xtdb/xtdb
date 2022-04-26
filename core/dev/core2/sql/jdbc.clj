@@ -4,8 +4,7 @@
             [core2.sql :as sql]
             [core2.api :as c2]
             [core2.local-node :as node]
-            [core2.rewrite :as r]
-            [clojure.zip :as z])
+            [core2.rewrite :as r])
   (:import [java.sql Connection Driver DriverManager DriverPropertyInfo
             ResultSet ResultSetMetaData PreparedStatement SQLException SQLFeatureNotSupportedException]))
 
@@ -49,7 +48,7 @@
       (reset! result nil))))
 
 (defn- ->prepared-statement [node sql]
-  (let [projection (->> (r/$ (z/vector-zip (sql/parse sql)) 1)
+  (let [projection (->> (r/$ (r/vector-zip (sql/parse sql)) 1)
                         (sem/projected-columns)
                         (first)
                         (mapv (comp keyword plan/unqualified-projection-symbol)))

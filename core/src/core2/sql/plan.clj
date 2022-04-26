@@ -3,7 +3,6 @@
             [clojure.main]
             [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.zip :as z]
             [clojure.spec.alpha :as s]
             [core2.logical-plan :as lp]
             [core2.rewrite :as r]
@@ -402,7 +401,7 @@
              z)
             (cons 'case))
 
-       (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (z/node z)))))))))
+       (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (r/node z)))))))))
 
 ;; Logical plan.
 
@@ -705,12 +704,12 @@
 (defn- dnf [predicate]
   (->> (r/->zipper predicate)
        (r/innermost (r/mono-tp (some-fn prop-eval-rules prop-simplify prop-further-simplify prop-dnf)))
-       (z/node)))
+       (r/node)))
 
 (defn- cnf [predicate]
   (->> (r/->zipper predicate)
        (r/innermost (r/mono-tp (some-fn prop-eval-rules prop-simplify prop-further-simplify prop-cnf)))
-       (z/node)))
+       (r/node)))
 
 (defn- boolean-constraint-propagation [cnf-clauses]
   (loop [clauses (distinct (for [clause cnf-clauses]
@@ -842,7 +841,7 @@
         order-by-projection (vec (keep :projection order-by-specs))
         base-projection (mapv unqualified-projection-symbol projection)
         relation (if (not-empty order-by-projection)
-                   (->> (z/vector-zip relation)
+                   (->> (r/vector-zip relation)
                         (r/once-td-tp
                          (r/mono-tp
                           (fn [z]
@@ -851,7 +850,7 @@
                               ;;=>
                               [:project (vec (concat projection (mapcat keys order-by-projection)))
                                [:map order-by-projection relation]]))))
-                        (z/node))
+                        (r/node))
                    relation)
         order-by [:order-by (mapv :spec order-by-specs) relation]]
     (if (not-empty order-by-projection)
@@ -1141,7 +1140,7 @@
 
      (r/zcase z
        :in_value_list (build-values-list z)
-       (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (z/node z)))))))))
+       (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (r/node z)))))))))
 
 (defn- extend-projection? [column-or-expr]
   (map? column-or-expr))
@@ -1424,14 +1423,14 @@
       [:max-1-row relation]
       (with-smap [:max-1-row relation] (->smap relation))
 
-      (when (and (vector? (z/node relation))
+      (when (and (vector? (r/node relation))
                  (keyword? (r/ctor relation)))
-        (throw (IllegalArgumentException. (str "cannot remove names for: " (pr-str (z/node relation)))))))))
+        (throw (IllegalArgumentException. (str "cannot remove names for: " (pr-str (r/node relation)))))))))
 
 (defn- remove-names [relation]
   (let [projection (relation-columns relation)
         relation (binding [*name-counter* (atom 0)]
-                   (z/node (r/bottomup (r/adhoc-tp r/id-tp remove-names-step) (z/vector-zip relation))))
+                   (r/node (r/bottomup (r/adhoc-tp r/id-tp remove-names-step) (r/vector-zip relation))))
         smap (:smap (meta relation))
         rename-map (select-keys smap projection)
         projection (replace smap projection)
@@ -2109,7 +2108,7 @@
                                   sem/all-column-references
                                   sem/projected-columns
                                   sem/column-reference]
-       (let [ag (z/vector-zip query)]
+       (let [ag (r/vector-zip query)]
          (if-let [errs (not-empty (sem/errs ag))]
            {:errs errs}
            (let [fired-rules (atom [])
@@ -2155,13 +2154,13 @@
                  plan (remove-names (plan ag))
                  add-projection-fn (:add-projection-fn (meta plan))
                  plan (->> plan
-                           (z/vector-zip)
+                           (r/vector-zip)
                            (#(if decorrelate?
                                (r/innermost (r/mono-tp (instrument-rules decorrelate-plan)) %)
                                %))
                            (r/innermost (r/mono-tp (instrument-rules optimize-plan)))
                            (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
-                           (z/node)
+                           (r/node)
                            (add-projection-fn))]
 
              (if (s/invalid? (s/conform ::lp/logical-plan plan))

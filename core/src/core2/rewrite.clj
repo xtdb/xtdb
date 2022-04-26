@@ -123,6 +123,13 @@
              n)
            z/right)))
 
+(def vector-zip z/vector-zip)
+(def node z/node)
+(def root z/root)
+(def left z/left)
+(def right z/right)
+(def prev z/prev)
+
 (def parent z/up)
 (def $ z-nth)
 (def child-idx (comp count z/lefts))

@@ -1,6 +1,5 @@
 (ns core2.sql.analyze
   (:require [clojure.string :as str]
-            [clojure.zip :as z]
             [core2.rewrite :as r]
             [instaparse.core :as insta]
             [instaparse.failure]))
@@ -11,15 +10,15 @@
     n))
 
 (defn- ->line-info-str [loc]
-  (let [{:core2.sql/keys [sql]} (meta (z/root loc))
-        {:instaparse.gll/keys [start-index]} (meta (z/node loc))
+  (let [{:core2.sql/keys [sql]} (meta (r/root loc))
+        {:instaparse.gll/keys [start-index]} (meta (r/node loc))
         start-index (skip-whitespace sql start-index)
         {:keys [line column]} (instaparse.failure/index->line-column start-index sql)]
     (format "at line %d, column %d" line column)))
 
 (defn- ->src-str [loc]
-  (let [{:core2.sql/keys [sql]} (meta (z/root loc))
-        {:instaparse.gll/keys [start-index end-index]} (meta (z/node loc))
+  (let [{:core2.sql/keys [sql]} (meta (r/root loc))
+        {:instaparse.gll/keys [start-index end-index]} (meta (r/node loc))
         start-index (skip-whitespace sql start-index)]
     (subs sql start-index end-index)))
 
@@ -75,7 +74,7 @@
 
 (defn ^:dynamic prev-subtree-seq [ag]
   (when ag
-    (lazy-seq (cons ag (prev-subtree-seq (z/prev ag))))))
+    (lazy-seq (cons ag (prev-subtree-seq (r/prev ag))))))
 
 (defn ^:dynamic id [ag]
   (dec (count (prev-subtree-seq ag))))
@@ -361,7 +360,7 @@
     (dcli (r/parent ag))
 
     :order_by_clause
-    (let [query-expression-body (z/left ag)]
+    (let [query-expression-body (r/left ag)]
       (env query-expression-body))
 
     (r/inherit ag)))
@@ -498,12 +497,12 @@
             (calculate-select-list [ag]
               (r/zcase ag
                 :asterisk
-                (let [table-expression (z/right (r/parent ag))]
+                (let [table-expression (r/right (r/parent ag))]
                   (r/collect-stop expand-asterisk table-expression))
 
                 :qualified_asterisk
                 (let [identifiers (identifiers (r/$ ag 1))
-                      table-expression (z/right (r/parent ag))]
+                      table-expression (r/right (r/parent ag))]
                   (for [{:keys [qualified-column] :as projection} (r/collect-stop expand-asterisk table-expression)
                         :when (= identifiers (butlast qualified-column))]
                     projection))
@@ -513,7 +512,7 @@
                       qualified-column (when (r/ctor? :column_reference (r/$ ag 1))
                                          (identifiers (r/$ ag 1)))]
                   [(with-meta
-                     (cond-> {:normal-form (z/node (r/$ ag 1))}
+                     (cond-> {:normal-form (r/node (r/$ ag 1))}
                        identifier (assoc :identifier identifier)
                        qualified-column (assoc :qualified-column qualified-column))
                      {:ref ag})])
@@ -1010,7 +1009,7 @@
                                  column-reference
                                  scope-element
                                  scope]
-      (let [ag (z/vector-zip query)]
+      (let [ag (r/vector-zip query)]
         (if-let [errs (not-empty (errs ag))]
           {:errs errs}
           {:scopes (scopes ag)

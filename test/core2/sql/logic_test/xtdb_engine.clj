@@ -1,7 +1,6 @@
 (ns core2.sql.logic-test.xtdb-engine
   (:require [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.zip :as z]
             [core2.api :as c2]
             [core2.rewrite :as r]
             [core2.snapshot :as snap]
@@ -114,7 +113,7 @@
             [:where_clause _]
             ;;=>
             []))
-        (z/vector-zip query))
+        (r/vector-zip query))
        (into {})))
 
 (defn normalize-query [tables query]
@@ -124,9 +123,9 @@
                                  column columns]
                              [column (get table->correlation-name table)])
                            (into {}))]
-    (->> (z/vector-zip query)
+    (->> (r/vector-zip query)
          (r/innermost (r/mono-tp (normalize-rewrite column->table)))
-         (z/node))))
+         (r/node))))
 
 (defn parse-create-table [^String x]
   (when-let [[_ table-name columns] (re-find #"(?is)^\s*CREATE\s+TABLE\s+(\w+)\s*\((.+)\)\s*$" x)]
