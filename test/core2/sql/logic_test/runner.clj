@@ -312,6 +312,9 @@
             (with-jdbc db f)))))))
 
 (comment
+
+  (time (-main "--verify" "--db" "xtdb" "--limit" "100" "test/core2/sql/logic_test/sqlite_test/select1.test"))
+
   (= (time
       (with-out-str
         (-main "--db" "xtdb" "--limit" "10" "test/core2/sql/logic_test/sqlite_test/select1.test")))
