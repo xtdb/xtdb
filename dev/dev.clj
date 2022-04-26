@@ -60,11 +60,11 @@
 (def profiler-port 5001)
 
 (defonce profiler-server
-         (delay
-           (let [port profiler-port
-                 url (str "http://localhost:" port)]
-             (println "Starting serving profiles on" url)
-             (clj-async-profiler/serve-files port))))
+  (delay
+    (let [port profiler-port
+          url (str "http://localhost:" port)]
+      (println "Starting serving profiles on" url)
+      (clj-async-profiler/serve-files port))))
 
 (defmacro profile
   "Profiles the given code body with clj-async-profiler, see (browse-profiler) to look at the resulting flamegraph.
