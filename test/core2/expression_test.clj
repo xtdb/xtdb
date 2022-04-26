@@ -735,6 +735,59 @@
     (= (project1 '(position a b "OCTETS") {:a s1, :b s2})
        (project1 '(position a b) {:a (.getBytes s1 "utf-8"), :b (.getBytes s2 "utf-8")}))))
 
+(t/deftest overlay-test
+  (t/are [s1 s2 from len expected]
+    (= expected (project1 (list 'overlay 'a 'b 'c 'd) {:a s1, :b s2, :c from, :d len}))
+
+    "" "" 1 0 ""
+    "" "" 1 1 ""
+    "a" "b" 1 1 "b"
+    "a" "b" 1 0 "ba"
+
+    "foobar" "zzz" 1 0 "zzzfoobar"
+    "foobar" "zzz" 1 1 "zzzoobar"
+    "foobar" "zzz" 1 2 "zzzobar"
+    "foobar" "zzz" 1 6 "zzz"
+    "foobar" "zzz" 4 3 "foozzz"
+    "foobar" "zzz" 4 4 "foozzz"
+
+    "a" "bbb" 1 0 "bbba"
+    "a" "bbb" 2 0 "abbb"
+
+    "aaa" "" 1 1 "aa"
+
+    "a" "bbb" 1 1 "bbb"
+
+    "😎" "🌝😎" 1 1 "🌝😎"
+    "🌝😎" "😎" 1 1 "😎😎"
+    "🌝😎" "😎" 2 0 "🌝😎😎")
+
+  (t/is (thrown? IllegalArgumentException (project1 '(overlay a b c d) {:a "", :b "", :c 0, :d 0}))))
+
+(t/deftest overlay-nils-test
+  (doseq [a ["" nil]
+          b ["" nil]
+          c [1 nil]
+          d [1 nil]
+          :when (not (and a b c d))]
+    (t/is (nil? (project1 '(overlay a b c d) {:a a, :b b, :c c, :d d})))))
+
+(tct/defspec overlay-is-equiv-to-ss-concat-on-ascii-prop
+  (tcp/for-all [[s1 i len]
+                (-> tcg/string-ascii
+                    (tcg/bind (fn [s]
+                                (tcg/tuple
+                                  (tcg/return s)
+                                  (tcg/choose 0 (count s)))))
+                    (tcg/bind (fn [[s i]]
+                                (tcg/tuple
+                                  (tcg/return s)
+                                  (tcg/return i)
+                                  (tcg/choose 0 (- (count s) i))))))
+                s2 tcg/string-ascii]
+    (= (str (subs s1 0 i) s2 (subs s1 (+ i len) (count s1)))
+       (project1 '(overlay a b c d) {:a s1, :b s2, :c (inc i), :d len}))))
+
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
            (project '(sqrt x) [{:x 2} {:x 3.4} {:x nil}])))
