@@ -2095,7 +2095,8 @@
   ([query {:keys [decorrelate?]}]
    (if-let [parse-failure (insta/get-failure query)]
      {:errs [(prn-str parse-failure)]}
-     (r/with-memoized-attributes [sem/id
+     (r/with-memoized-attributes [sem/prev-subtree-seq
+                                  sem/id
                                   sem/dynamic-param-idx
                                   sem/ctei
                                   sem/cteo
