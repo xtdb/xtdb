@@ -169,6 +169,8 @@
 
 (def ^:private ^:dynamic *current-record* nil)
 
+(def ^:private ^:dynamic *query-limit* nil)
+
 (defn execute-records [db-engine records]
   (with-redefs [clojure.test/do-report
                 (fn [m]
@@ -177,14 +179,25 @@
                      (:fail :error) (merge (select-keys *current-record* [:file :line]) m)
                      m)))]
     (->> (remove (partial skip-record? (get-engine-name db-engine)) records)
-         (reduce (fn [db-engine record]
+         (reduce (fn [ctx record]
                    (binding [*current-record* record]
-                     (execute-record db-engine record)))
-                 {:db-engine db-engine})
+                     (if (= (:queries-run ctx) *query-limit*)
+                       (reduced ctx)
+                       (-> (execute-record ctx record)
+                           (update :queries-run + (if (= :query (:type record))
+                                                    1
+                                                    0))))))
+                 {:db-engine db-engine :queries-run 0})
          :db-engine)))
 
 (defn- ns-relative-path ^java.io.File [ns file]
   (str (str/replace (namespace-munge (ns-name ns)) "." "/") "/" file))
+
+(defn with-query-limit
+  ([query-limit] (partial with-query-limit query-limit))
+  ([query-limit f]
+   (binding [*query-limit* query-limit]
+     (f))))
 
 (defn with-xtdb [f]
   (require 'core2.sql.logic-test.xtdb-engine)
