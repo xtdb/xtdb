@@ -2105,6 +2105,8 @@
                                   sem/dclo
                                   sem/env
                                   sem/group-env
+                                  sem/order-by-index
+                                  sem/all-column-references
                                   sem/projected-columns
                                   sem/column-reference]
        (let [ag (z/vector-zip query)]

@@ -437,6 +437,13 @@
 
 (declare column-reference)
 
+(defn ^:dynamic all-column-references [ag]
+  (r/collect
+   (fn [ag]
+     (when (r/ctor? :column_reference ag)
+       [(column-reference ag)]))
+   ag))
+
 (defn ^:dynamic projected-columns [ag]
   (r/zcase ag
     :table_primary
@@ -452,14 +459,11 @@
                             (let [query-specification (scope-element ag)
                                   query-expression (scope-element (r/parent query-specification))
                                   named-join-columns (for [identifier (named-columns-join-columns (r/parent ag))]
-                                                       {:identifier identifier})]
-                              (->> (r/collect
-                                    (fn [ag]
-                                      (when (r/ctor? :column_reference ag)
-                                        (let [{:keys [identifiers] column-table-id :table-id} (column-reference ag)]
-                                          (when (= table-id column-table-id)
-                                            [{:identifier (last identifiers)}]))))
-                                    query-expression)
+                                                       {:identifier identifier})
+                                  column-references (all-column-references query-expression)]
+                              (->> (for [{:keys [identifiers] column-table-id :table-id} column-references
+                                         :when (= table-id column-table-id)]
+                                     {:identifier (last identifiers)})
                                    (concat named-join-columns)
                                    (distinct)))))]
         [(reduce
@@ -597,7 +601,7 @@
 
 ;; Order by
 
-(defn order-by-index [ag]
+(defn ^:dynamic order-by-index [ag]
   (r/zcase ag
     :query_expression
     nil
@@ -915,13 +919,6 @@
 
 ;; Scopes
 
-(defn all-column-references [ag]
-  (r/collect
-   (fn [ag]
-     (when (r/ctor? :column_reference ag)
-       [(column-reference ag)]))
-   ag))
-
 (defn ^:dynamic scope-element [ag]
   (r/zcase ag
     (:query_expression
@@ -1007,6 +1004,8 @@
                                  dclo
                                  env
                                  group-env
+                                 order-by-index
+                                 all-column-references
                                  projected-columns
                                  column-reference
                                  scope-element
