@@ -69,28 +69,34 @@
   (defmethod expr/codegen-call [f ::types/Object ::types/Object] [expr]
     (expr/codegen-call (assoc expr :f :compare))))
 
-(defn ->comparator ^java.util.function.IntBinaryOperator [^IIndirectVector left-col, ^IIndirectVector right-col, null-ordering]
+(defn build-comparator [left-col-types right-col-types null-ordering]
   (let [left-idx-sym (gensym 'left-idx)
         right-idx-sym (gensym 'right-idx)
         left-col-sym (gensym 'left-col)
         right-col-sym (gensym 'right-col)
-        codegen-opts {:var->types {left-col-sym (expr/field->value-types (.getField (.getVector left-col)))
-                                   right-col-sym (expr/field->value-types (.getField (.getVector right-col)))}}
+        codegen-opts {:var->types {left-col-sym left-col-types
+                                   right-col-sym right-col-types}}
         {cont-l :continue} (expr/codegen-expr {:op :variable, :variable left-col-sym, :idx left-idx-sym} codegen-opts)
-        {cont-r :continue} (expr/codegen-expr {:op :variable, :variable right-col-sym, :idx right-idx-sym} codegen-opts)
+        {cont-r :continue} (expr/codegen-expr {:op :variable, :variable right-col-sym, :idx right-idx-sym} codegen-opts)]
+    (eval
+      `(fn [~(-> left-col-sym (expr/with-tag IIndirectVector))
+            ~(-> right-col-sym (expr/with-tag IIndirectVector))]
+         (reify IntBinaryOperator
+           (applyAsInt [_# ~left-idx-sym ~right-idx-sym]
+             (let [~expr/idx-sym ~left-idx-sym]
+               ~(cont-l (fn continue-left [left-type left-code]
+                          (cont-r (fn continue-right [right-type right-code]
+                                    (let [{cont-call :continue-call} (expr/codegen-call {:f (case null-ordering
+                                                                                              :nulls-first :compare-nulls-first
+                                                                                              :nulls-last :compare-nulls-last)
+                                                                                         :arg-types [left-type right-type]})]
+                                      (cont-call (fn [_arrow-type code] code)
+                                                 [left-code right-code])))))))))))))
 
-        comp-fn (eval
-                 `(fn [~(-> left-col-sym (expr/with-tag IIndirectVector))
-                       ~(-> right-col-sym (expr/with-tag IIndirectVector))]
-                    (reify IntBinaryOperator
-                      (applyAsInt [_# ~left-idx-sym ~right-idx-sym]
-                        (let [~expr/idx-sym ~left-idx-sym]
-                          ~(cont-l (fn continue-left [left-type left-code]
-                                     (cont-r (fn continue-right [right-type right-code]
-                                               (let [{cont-call :continue-call} (expr/codegen-call {:f (case null-ordering
-                                                                                                         :nulls-first :compare-nulls-first
-                                                                                                         :nulls-last :compare-nulls-last)
-                                                                                                    :arg-types [left-type right-type]})]
-                                                 (cont-call (fn [_arrow-type code] code)
-                                                            [left-code right-code])))))))))))]
-    (comp-fn left-col right-col)))
+(def memoized-build-comparator (memoize build-comparator))
+
+(defn ->comparator ^java.util.function.IntBinaryOperator [^IIndirectVector left-col, ^IIndirectVector right-col, null-ordering]
+  (let [f (memoized-build-comparator (expr/field->value-types (.getField (.getVector left-col)))
+                                     (expr/field->value-types (.getField (.getVector right-col)))
+                                     null-ordering)]
+    (f left-col right-col)))

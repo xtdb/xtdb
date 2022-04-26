@@ -104,6 +104,8 @@
                 ~(continue-var (fn [var-type val-code]
                                  (emit-step var-type acc-sym group-idx-sym val-code))))))))))
 
+(def memo-emit-agg (memoize emit-agg))
+
 (defn- monomorphic-agg-factory {:style/indent 2} [^String from-name, ^String to-name, ->out-vec, emit-init-group, emit-step]
   (let [from-var (symbol from-name)]
     (reify IAggregateSpecFactory
@@ -117,7 +119,7 @@
 
             (aggregate [_ in-vec group-mapping]
               (let [from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
-                    f (emit-agg from-var from-val-types emit-init-group emit-step)]
+                    f (memo-emit-agg from-var from-val-types emit-init-group emit-step)]
                 (f out-vec in-vec group-mapping)))
 
             (finish [_] (iv/->direct-vec out-vec))
@@ -197,7 +199,9 @@
       new-vec)))
 
 (defn- promotable-agg-factory {:style/indent 2} [^String from-name, ^String to-name, emit-init-group, emit-step]
-  (let [from-var (symbol from-name)]
+  (let [from-var (symbol from-name)
+        emit-init-group (memoize (fn [acc-type] (partial emit-init-group acc-type)))
+        emit-step (memoize (fn [acc-type] (partial emit-step acc-type)))]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
 
@@ -212,9 +216,10 @@
                 (let [from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
                       out-vec (.maybePromote out-pvec from-val-types)
                       acc-type (.getType (.getField out-vec))
-                      f (emit-agg from-var from-val-types
-                                  (partial emit-init-group acc-type)
-                                  (partial emit-step acc-type))]
+                      f (memo-emit-agg
+                          from-var from-val-types
+                          (emit-init-group acc-type)
+                          (emit-step acc-type))]
                   (f out-vec in-vec group-mapping))))
 
             (finish [_] (iv/->direct-vec (.getVector out-pvec)))

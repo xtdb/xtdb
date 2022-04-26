@@ -65,43 +65,46 @@
        (and (.test p1 l r)
             (.test p2 l r))))))
 
+(defn- build-comparator [left-val-types right-val-types]
+  (let [left-vec (gensym 'left-vec)
+        left-idx (gensym 'left-idx)
+        right-vec (gensym 'right-vec)
+        right-idx (gensym 'right-idx)]
+    (eval
+      `(fn [~(expr/with-tag left-vec IIndirectVector)
+            ~(expr/with-tag right-vec IIndirectVector)]
+         (reify IntIntPredicate
+           (test [_ ~left-idx ~right-idx]
+             ~(let [{continue-left :continue}
+                    (-> (expr/form->expr left-vec {:col-names #{left-vec}})
+                        (assoc :idx left-idx)
+                        (expr/codegen-expr {:var->types {left-vec left-val-types}}))
+
+                    {continue-right :continue}
+                    (-> (expr/form->expr right-vec {:col-names #{right-vec}})
+                        (assoc :idx right-idx)
+                        (expr/codegen-expr {:var->types {right-vec right-val-types}}))]
+
+                (continue-left
+                  (fn [left-type left-code]
+                    (continue-right
+                      (fn [right-type right-code]
+                        (let [{continue-= :continue-call}
+                              (expr/codegen-call {:op :call, :f :=,
+                                                  :arg-types [left-type right-type]})]
+                          (continue-= (fn [_out-type out-code] out-code)
+                                      [left-code right-code])))))))))))))
+
+(def memoized-build-comparator (memoize build-comparator))
+
 (defn- ->comparator ^core2.expression.map.IntIntPredicate [left-cols right-cols]
   (->> (map (fn [^IIndirectVector left-col, ^IIndirectVector right-col]
-              (let [f (eval
-                       (let [left-val-types (expr/field->value-types (.getField (.getVector left-col)))
-                             right-val-types (expr/field->value-types (.getField (.getVector right-col)))
-                             left-vec (gensym 'left-vec)
-                             left-idx (gensym 'left-idx)
-                             right-vec (gensym 'right-vec)
-                             right-idx (gensym 'right-idx)]
-                         `(fn [~(expr/with-tag left-vec IIndirectVector)
-                               ~(expr/with-tag right-vec IIndirectVector)]
-                            (reify IntIntPredicate
-                              (test [_ ~left-idx ~right-idx]
-                                ~(let [{continue-left :continue}
-                                       (-> (expr/form->expr left-vec {:col-names #{left-vec}})
-                                           (assoc :idx left-idx)
-                                           (expr/codegen-expr {:var->types {left-vec left-val-types}}))
-
-                                       {continue-right :continue}
-                                       (-> (expr/form->expr right-vec {:col-names #{right-vec}})
-                                           (assoc :idx right-idx)
-                                           (expr/codegen-expr {:var->types {right-vec right-val-types}}))]
-
-                                   (continue-left
-                                    (fn [left-type left-code]
-                                      (continue-right
-                                       (fn [right-type right-code]
-                                         (let [{continue-= :continue-call}
-                                               (expr/codegen-call {:op :call, :f :=,
-                                                                   :arg-types [left-type right-type]})]
-                                           (continue-= (fn [_out-type out-code] out-code)
-                                                       [left-code right-code]))))))))))))]
-
+              (let [left-val-types (expr/field->value-types (.getField (.getVector left-col)))
+                    right-val-types (expr/field->value-types (.getField (.getVector right-col)))
+                    f (memoized-build-comparator left-val-types right-val-types)]
                 (f left-col right-col)))
             left-cols
             right-cols)
-
        (reduce andIIP)))
 
 (defn- find-in-hash-bitmap ^long [^RoaringBitmap hash-bitmap, ^IntIntPredicate comparator, ^long idx]

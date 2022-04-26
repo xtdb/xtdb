@@ -269,14 +269,16 @@
                                                  right right-key-cols right-col-names
                                                  theta-selector))}))))))
 
+(def memo-agg-factory (memoize group-by/->aggregate-factory))
+
 (defmethod emit-op :group-by [{:keys [columns relation]} args]
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
         group-cols (mapv (comp name second) group-cols)
         agg-factories (for [[_ agg] aggs]
                         (let [[to-column {:keys [aggregate-fn from-column]}] (first agg)]
-                          (group-by/->aggregate-factory aggregate-fn
-                                                        (name from-column)
-                                                        (name to-column))))]
+                          (memo-agg-factory aggregate-fn
+                                            (name from-column)
+                                            (name to-column))))]
     (unary-op relation args
               (fn [_inner-col-names]
                 {:col-names (set/union (set group-cols)
