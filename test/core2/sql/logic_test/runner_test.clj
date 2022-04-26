@@ -52,6 +52,32 @@ SELECT t1.a FROM t1
     (t/is (= 3 (count records)))
     (t/is (= {"t1" ["a" "b" "c" "d" "e"]} (:tables (slt/execute-records tu/*node* records))))))
 
+(t/deftest test-sql-logic-test-completion
+  (let [script  "statement ok
+CREATE TABLE t1(a INTEGER, b INTEGER, c INTEGER, d INTEGER, e INTEGER)
+
+statement ok
+INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)
+
+query I nosort
+SELECT t1.a FROM t1
+----
+104
+
+skipif xtdb
+query I nosort
+SELECT t1.b FROM t1
+----
+foo
+
+"
+        records (slt/parse-script script)]
+
+    (binding [slt/*opts* {:script-mode :completion :query-limit 2}]
+      (t/is (= script
+               (with-out-str
+                 (slt/execute-records tu/*node* records)))))))
+
 (t/deftest test-parse-create-table
   (t/is (= {:type :create-table
             :table-name "t1"

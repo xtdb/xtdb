@@ -66,7 +66,7 @@
     (if-let [[_ values hash] (and (= 1 (count result))
                                   (re-find #"^(\d+) values hashing to (\p{XDigit}{32})$" (first result)))]
       (assoc record :result-set-size (Long/parseLong values) :result-set-md5sum hash)
-      (assoc record :result-set-size (count result) :result-set (vec result)))))
+      (assoc record :result-set-size (count result) :result-set (str (str/join "\n" result) "\n")))))
 
 (defmethod parse-record :skipif [[x & xs]]
   (let [[_ database-name] (str/split x #"\s+")]
@@ -96,22 +96,84 @@
           (assoc (parse-record (map second idx+lines))
                  :line (inc (ffirst idx+lines)) :file file-name)))))
 
+;; Printer
+
+(defn- print-skip-only [{:keys [skipif onlyif] :as record}]
+  (when skipif
+    (println "skipif" skipif))
+  (when onlyif
+    (println "onlyif" onlyif)))
+
+(defmulti print-record (fn [{:keys [type] :as record}]
+                         type))
+
+(defmethod print-record :halt [_]
+  (println "halt")
+  (println))
+
+(defmethod print-record :halt [{:keys [max-result-set-size]}]
+  (println "hash-threshold" max-result-set-size)
+  (println))
+
+(defmethod print-record :statement [{:keys [mode statement] :as record}]
+  (print-skip-only record)
+  (println "statement" (name mode))
+  (println statement)
+  (println))
+
+(defmethod print-record :query [{:keys [query type-string sort-mode label
+                                        result-set-size result-set result-set-md5sum]
+                                 :as record}]
+  (print-skip-only record)
+  (print "query" type-string (name sort-mode))
+  (if label
+    (println label)
+    (println))
+  (println query)
+  (println "----")
+  (if result-set-md5sum
+    (do (println result-set-size "values hashing to" result-set-md5sum)
+        (println))
+    (println result-set)))
+
 ;; Runner
+
+(defn- skip-record? [{:keys [db-engine script-mode] :as ctx} {:keys [skipif onlyif] :as record}]
+  (let [db-engine-name (get-engine-name db-engine)]
+    (let [onlyif (or onlyif db-engine-name)]
+      (or (= db-engine-name skipif)
+          (not= db-engine-name onlyif)))))
 
 (defmulti execute-record (fn [_ {:keys [type] :as record}]
                            type))
 
-(defmethod execute-record :halt [ctx _]
+(defmethod execute-record :halt [{:keys [script-mode] :as ctx} record]
+  (when (= :completion script-mode)
+    (print-record record))
   (reduced ctx))
 
-(defmethod execute-record :hash-threshold [ctx {:keys [max-result-set-size]}]
+(defmethod execute-record :hash-threshold [{:keys [script-mode] :as ctx} {:keys [max-result-set-size] :as record}]
+  (when (= :completion script-mode)
+    (print-record record))
   (assoc ctx :max-result-set-size max-result-set-size))
 
-(defmethod execute-record :statement [{:keys [db-engine] :as ctx} {:keys [mode statement]}]
-  (case mode
-    :ok (update ctx :db-engine execute-statement statement)
-    :error (do (t/is (thrown? Exception (execute-statement db-engine statement)))
-               ctx)))
+(defmethod execute-record :statement [{:keys [db-engine script-mode] :as ctx} {:keys [mode statement] :as record}]
+  (if (skip-record? ctx record)
+    (do (when (= :completion script-mode)
+          (print-record record))
+        ctx)
+    (if (= :completion script-mode)
+      (try
+        (let [ctx (update ctx :db-engine execute-statement statement)]
+          (print-record (assoc record :mode :ok))
+          ctx)
+        (catch Exception e
+          (print-record (assoc record :mode :error))
+          ctx))
+      (case mode
+        :ok (update ctx :db-engine execute-statement statement)
+        :error (do (t/is (thrown? Exception (execute-statement db-engine statement)))
+                   ctx)))))
 
 (defn- format-result-str [sort-mode type-string result]
   (let [result-rows (for [vs result]
@@ -130,46 +192,40 @@
                       :nosort (flatten result-rows))]
     (str (str/join "\n" result-rows) "\n")))
 
-(defn- validate-type-string [type-string result]
-  (doseq [row result
-          [value type] (map vector row type-string)
-          :let [pred (case (str type)
-                       "I" integer?
-                       "R" float?
-                       "T" some?)]]
-    (t/is (or (nil? value) (pred value)))))
-
-(defn- validate-result-set-size [result-set-size result]
-  (t/is (= result-set-size (* (count result) (count (first result))))))
-
 (defn- md5 ^String [^String s]
   (->> (.getBytes s StandardCharsets/UTF_8)
        (.digest (MessageDigest/getInstance "MD5"))
        (BigInteger. 1)
        (format "%032x")))
 
-(defmethod execute-record :query [{:keys [db-engine max-result-set-size] :as ctx}
+(defmethod execute-record :query [{:keys [db-engine max-result-set-size script-mode] :as ctx}
                                   {:keys [query type-string sort-mode label
-                                          result-set-size result-set result-set-md5sum]}]
-
-  (let [result (execute-query db-engine query)
-        result-str (format-result-str sort-mode type-string result)]
-    (when result-set
-      (t/is (= (str (str/join "\n" result-set) "\n") result-str)))
-    (when result-set-md5sum
-      (t/is (= result-set-md5sum (md5 result-str))))
-    ctx))
-
-(defn- skip-record? [db-engine-name {:keys [skipif onlyif]
-                                     :or {onlyif db-engine-name}}]
-  (or (= db-engine-name skipif)
-      (not= db-engine-name onlyif)))
+                                          result-set-size result-set result-set-md5sum]
+                                   :as record}]
+  (if (skip-record? ctx record)
+    (do (when (= :completion script-mode)
+          (print-record record))
+        ctx)
+    (let [result (execute-query db-engine query)
+          result-str (format-result-str sort-mode type-string result)]
+      (when (= :completion script-mode)
+        (print-record (if (and max-result-set-size (> (count (flatten result)) max-result-set-size))
+                        (-> (assoc record :result-set-md5sum (md5 result-str))
+                            (dissoc :result-set))
+                        (-> (assoc record :result-set result-str)
+                            (dissoc :result-set-md5sum)))))
+      (when result-set
+        (t/is (= result-set result-str)))
+      (when result-set-md5sum
+        (t/is (= result-set-md5sum (md5 result-str))))
+      ctx)))
 
 (def ^:dynamic *db-engine*)
 
-(def ^:private ^:dynamic *current-record* nil)
+(def ^:dynamic *opts* {:script-mode :validation
+                       :query-limit nil})
 
-(def ^:private ^:dynamic *query-limit* nil)
+(def ^:private ^:dynamic *current-record* nil)
 
 (defn execute-records [db-engine records]
   (with-redefs [clojure.test/do-report
@@ -178,25 +234,27 @@
                    (case (:type m)
                      (:fail :error) (merge (select-keys *current-record* [:file :line]) m)
                      m)))]
-    (->> (remove (partial skip-record? (get-engine-name db-engine)) records)
-         (reduce (fn [ctx record]
-                   (binding [*current-record* record]
-                     (if (= (:queries-run ctx) *query-limit*)
-                       (reduced ctx)
-                       (-> (execute-record ctx record)
-                           (update :queries-run + (if (= :query (:type record))
-                                                    1
-                                                    0))))))
-                 {:db-engine db-engine :queries-run 0})
-         :db-engine)))
+    (let [ctx (merge {:db-engine db-engine :queries-run 0} *opts*)]
+      (->> records
+           (reduce
+            (fn [{:keys [queries-run query-limit] :as ctx} record]
+              (binding [*current-record* record]
+                (if (= queries-run query-limit)
+                  (reduced ctx)
+                  (-> (execute-record ctx record)
+                      (update :queries-run + (if (= :query (:type record))
+                                               1
+                                               0))))))
+            ctx)
+           :db-engine))))
 
 (defn- ns-relative-path ^java.io.File [ns file]
   (str (str/replace (namespace-munge (ns-name ns)) "." "/") "/" file))
 
-(defn with-query-limit
-  ([query-limit] (partial with-query-limit query-limit))
-  ([query-limit f]
-   (binding [*query-limit* query-limit]
+(defn with-opts
+  ([opts] (partial with-opts opts))
+  ([opts f]
+   (binding [*opts* opts]
      (f))))
 
 (defn with-xtdb [f]
