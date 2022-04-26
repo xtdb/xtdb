@@ -105,6 +105,14 @@
 
             [:subquery _]
             ;;=>
+            []
+
+            [:select_list _]
+            ;;=>
+            []
+
+            [:where_clause _]
+            ;;=>
             []))
         (z/vector-zip query))
        (into {})))
