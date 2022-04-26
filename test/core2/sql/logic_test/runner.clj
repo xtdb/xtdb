@@ -112,7 +112,7 @@
   (println "halt")
   (println))
 
-(defmethod print-record :halt [{:keys [max-result-set-size]}]
+(defmethod print-record :hash-threshold [{:keys [max-result-set-size]}]
   (println "hash-threshold" max-result-set-size)
   (println))
 
@@ -290,25 +290,26 @@
 
 (defn -main [& args]
   (let [{:keys [options arguments errors]} (cli/parse-opts args cli-options)
-        script-name (first arguments)
-        f #(binding [*opts* {:script-mode (if (:verify options)
-                                            :validation
-                                            :completion)
-                             :query-limit (:limit options)}]
-             (binding [t/*report-counters* (ref t/*initial-report-counters*)]
-               (execute-records *db-engine* (parse-script script-name (slurp script-name)))
-               (when (:verify options)
-                 (println @t/*report-counters*))))]
+        {:keys [verify db]} options]
     (if (seq errors)
       (binding [*out* *err*]
         (doseq [error errors]
           (println error))
         (System/exit 1))
-      (case (:db options)
-        "xtdb" (tu/with-node
-                 #(with-xtdb f))
-        "sqlite" (with-sqlite f)
-        (with-jdbc (:db options) f)))))
+      (binding [*opts* {:script-mode (if verify
+                                       :validation
+                                       :completion)
+                        :query-limit (:limit options)}]
+        (doseq [script-name arguments
+                :let [f #(binding [t/*report-counters* (ref t/*initial-report-counters*)]
+                           (execute-records *db-engine* (parse-script script-name (slurp script-name)))
+                           (when (:verify options)
+                             (println @t/*report-counters*)))]]
+          (case db
+            "xtdb" (tu/with-node
+                     #(with-xtdb f))
+            "sqlite" (with-sqlite f)
+            (with-jdbc db f)))))))
 
 (comment
   (= (time
