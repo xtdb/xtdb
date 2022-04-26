@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [clojure.string :as str]
+            [clojure.tools.cli :as cli]
             [core2.test-util :as tu])
   (:import java.nio.charset.StandardCharsets
            java.io.File
@@ -262,10 +263,12 @@
   (binding [*db-engine* tu/*node*]
     (f)))
 
-(defn with-sqlite [f]
-  (with-open [c (DriverManager/getConnection "jdbc:sqlite::memory:")]
+(defn with-jdbc [url f]
+  (with-open [c (DriverManager/getConnection url)]
     (binding [*db-engine* c]
       (f))))
+
+(def with-sqlite (partial with-jdbc "jdbc:sqlite::memory:"))
 
 ;; NOTE: this is called deftest to make cider-test happy, but could be
 ;; configured via cider-test-defining-forms.
@@ -277,3 +280,40 @@
       (t/deftest ~test-symbol
         (execute-records *db-engine* (parse-script ~test-path (slurp (io/resource ~test-path)))))
       assoc :file ~test-path)))
+
+(def cli-options
+  [[nil "--verify"]
+   [nil "--limit LIMIT" :parse-fn #(Long/parseLong %)]
+   [nil "--db DB" :default "xtdb" :validate [(fn [x]
+                                               (or (contains? #{"xtdb" "sqlite"} x)
+                                                   (str/starts-with? x "jdbc:"))) "Unknown db."]]])
+
+(defn -main [& args]
+  (let [{:keys [options arguments errors]} (cli/parse-opts args cli-options)
+        script-name (first arguments)
+        f #(binding [*opts* {:script-mode (if (:verify options)
+                                            :validation
+                                            :completion)
+                             :query-limit (:limit options)}]
+             (binding [t/*report-counters* (ref t/*initial-report-counters*)]
+               (execute-records *db-engine* (parse-script script-name (slurp script-name)))
+               (when (:verify options)
+                 (println @t/*report-counters*))))]
+    (if (seq errors)
+      (binding [*out* *err*]
+        (doseq [error errors]
+          (println error))
+        (System/exit 1))
+      (case (:db options)
+        "xtdb" (tu/with-node
+                 #(with-xtdb f))
+        "sqlite" (with-sqlite f)
+        (with-jdbc (:db options) f)))))
+
+(comment
+  (= (time
+      (with-out-str
+        (-main "--db" "xtdb" "--limit" "10" "test/core2/sql/logic_test/sqlite_test/select1.test")))
+     (time
+      (with-out-str
+        (-main "--db" "sqlite" "--limit" "10" "test/core2/sql/logic_test/sqlite_test/select1.test")))))
