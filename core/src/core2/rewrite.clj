@@ -160,24 +160,16 @@
 
 ;; Type Preserving
 
-(defn seq-tp [& xs]
+(defn seq-tp [x y]
   (fn [z]
-    (reduce
-     (fn [acc x]
-       (if-some [acc (x acc)]
-         acc
-         (reduced nil)))
-     z
-     xs)))
+    (when-some [z (x z)]
+      (y z))))
 
-(defn choice-tp [& xs]
+(defn choice-tp [x y]
   (fn [z]
-    (reduce
-     (fn [_ x]
-       (when-some [z (x z)]
-         (reduced z)))
-     nil
-     xs)))
+    (if-some [z (x z)]
+      z
+      (y z))))
 
 (defn all-tp [f]
   (fn [z]
@@ -283,11 +275,12 @@
 
 ;; TODO: should this short-circuit properly? Ztrategic doesn't seem
 ;; to.
-(defn seq-tu [& xs]
+(defn seq-tu [x y]
   (fn [z]
-    (transduce (map (fn [x] (x z)))
-               (monoid z)
-               xs)))
+    (let [m (monoid z)]
+      (-> (m)
+          (m (x z))
+          (m (y z))))))
 
 (def choice-tu choice-tp)
 
