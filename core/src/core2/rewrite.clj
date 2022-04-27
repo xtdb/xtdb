@@ -1,25 +1,157 @@
 (ns core2.rewrite
-  (:require [clojure.string :as str]
-            [clojure.walk :as w]
-            [clojure.zip :as z])
-  (:import java.util.regex.Pattern))
+  (:import java.util.regex.Pattern
+           java.util.List))
 
 (set! *unchecked-math* :warn-on-boxed)
+
+(defrecord Zip [node ^long idx parent branch?])
+
+(defn ->zip
+  ([x]
+   (->zip x vector?))
+  ([x branch?]
+   (->Zip x -1 nil branch?)))
+
+(defn znode [^Zip z]
+  (when z
+    (.node z)))
+
+(defn- zupdate-parent [^Zip z]
+  (when-let [^Zip parent (.parent z)]
+    (let [node (.node z)
+          ^List level (.node parent)
+          idx (.idx z)]
+      (if (identical? node (.get level idx))
+        parent
+        (->Zip (assoc level idx node) (.idx parent) (.parent parent) (.branch? parent))))))
+
+(defn zleft [^Zip z]
+  (when z
+    (when-let [^Zip parent (zupdate-parent z)]
+      (let [idx (dec (.idx z))]
+        (when-not (neg? idx)
+          (let [^List level (.node parent)]
+            (with-meta
+              (->Zip (.get level idx)
+                     idx
+                     parent
+                     (.branch? z))
+              (meta z))))))))
+
+(defn zright [^Zip z]
+  (when z
+    (when-let [^Zip parent (zupdate-parent z)]
+      (let [idx (inc (.idx z))
+            ^List level (.node parent)]
+        (when (< idx (count level))
+          (with-meta
+            (->Zip (.get level idx)
+                   idx
+                   parent
+                   (.branch? z))
+            (meta z)))))))
+
+(defn znth [^Zip z ^long idx]
+  (when z
+    (let [node (.node z)]
+      (when ((.branch? z) node)
+        (let [idx (if (neg? idx)
+                    (+ (count node) idx)
+                    idx)]
+          (when (and (< idx (count node))
+                     (not (neg? idx)))
+            (with-meta
+              (->Zip (.get ^List node idx) idx z (.branch? z))
+              (meta z))))))))
+
+(defn zdown [^Zip z]
+  (when z
+    (let [node (.node z)]
+      (when (and ((.branch? z) node)
+                 (not (.isEmpty ^List node)))
+        (with-meta
+          (->Zip (.get ^List node 0) 0 z (.branch? z))
+          (meta z))))))
+
+(defn zup [^Zip z]
+  (when z
+    (let [idx (.idx z)]
+      (when-not (neg? idx)
+        (with-meta
+          (zupdate-parent z)
+          (meta z))))))
+
+(defn zroot [^Zip z]
+  (if-let [z (zup z)]
+    (recur z)
+    (.node z)))
+
+(defn zprev [z]
+  (if-let [z (zleft z)]
+    (loop [z z]
+      (if-let [z (znth z -1)]
+        (recur z)
+        z))
+    (zup z)))
+
+(defn zchild-idx ^long [^Zip z]
+  (when z
+    (.idx z)))
+
+(defn zchildren [^Zip z]
+  (vec (.node ^Zip (.parent z))))
+
+(defn zrights [^Zip z]
+  (let [idx (inc (.idx z))
+        children (zchildren z)]
+    (when (< idx (count children))
+      (seq (subvec children idx)))))
+
+(defn zlefts [^Zip z]
+  (seq (subvec (zchildren z) 0 (.idx z))))
+
+(defn zreplace [^Zip z x]
+  (when z
+    (assoc z :node x)))
+
+(comment
+  (require '[clojure.zip :as z])
+
+  (def data '[[a * b] + [c * d]])
+  (def dz (z/vector-zip data))
+  (def dr (->zip data))
+
+  (= (znode (zright (zdown (zright (zright (zdown dr))))))
+     (z/node (z/right (z/down (z/right (z/right (z/down dz)))))))
+
+  (= (zlefts (zright (zdown (zright (zright (zdown dr))))))
+     (z/lefts (z/right (z/down (z/right (z/right (z/down dz)))))))
+
+  (= (zrights (zright (zdown (zright (zright (zdown dr))))))
+     (z/rights (z/right (z/down (z/right (z/right (z/down dz)))))))
+
+  (= (znode (zup (zup (zright (zdown (zright (zright (zdown dr))))))))
+     (z/node (z/up (z/up (z/right (z/down (z/right (z/right (z/down dz)))))))))
+
+  (= (-> dr zdown zright zright zdown zright znode)
+     (-> dz z/down z/right z/right z/down z/right z/node))
+  (= (-> dr zdown zright zright zdown zright (zreplace '/) zroot)
+     (-> dz z/down z/right z/right z/down z/right (z/replace '/) z/root)))
 
 ;; Zipper pattern matching
 
 (defn ->zipper [x]
   (cond
-    (:zip/make-node (meta x))
+    (instance? Zip x)
     x
 
     (or (vector? x)
         (symbol? x)
         (instance? Pattern x))
-    (z/vector-zip x)
+    (->zip x)
 
     (sequential? x)
-    (z/seq-zip x)
+    (->zip x sequential?)
 
     :else
     (throw (IllegalArgumentException. (str "No zipper constructor for: " (type x))))))
@@ -38,20 +170,20 @@
 
     (symbol? pattern)
     (fn [acc z]
-      (let [node (z/node z)]
+      (let [node (znode z)]
         (when (= node (get acc pattern node))
           (assoc acc pattern node))))
 
     (keyword? pattern)
     (fn [acc z]
-      (let [node (z/node z)]
+      (let [node (znode z)]
         (when (and (ident? node)
                    (= (name pattern) (name node)))
           acc)))
 
     (instance? Pattern pattern)
     (fn [acc z]
-      (let [node (z/node z)]
+      (let [node (znode z)]
         (when (and (string? node)
                    (re-find pattern node))
           acc)))
@@ -60,8 +192,8 @@
     (let [matchers (object-array (map build-zmatcher pattern))
           len (count matchers)]
       (fn [acc z]
-        (when-let [z (z/down z)]
-          (when (= len (inc (count (z/rights z))))
+        (when-let [z (zdown z)]
+          (when (= len (inc (count (zrights z))))
             (loop [acc acc
                    z z
                    n 0]
@@ -69,14 +201,14 @@
                 acc
                 (when z
                   (when-let [acc ((aget matchers n) acc z)]
-                    (recur acc (z/right z) (inc n))))))))))
+                    (recur acc (zright z) (inc n))))))))))
 
     :else
     (fn [acc z]
-      (when (= pattern (z/node z))
+      (when (= pattern (znode z))
         acc))))
 
-(def zmatchers (atom {}))
+(defonce zmatchers (atom {}))
 
 (defmacro zmatch {:style/indent 1} [loc & [pattern expr & clauses :as all-clauses]]
   (when pattern
@@ -106,50 +238,37 @@
 
 (defn ctor [ag]
   (when ag
-    (let [node (z/node ag)]
+    (let [node (znode ag)]
       (when (sequential? node)
         (first node)))))
 
 (defn ctor? [kw ag]
   (= kw (ctor ag)))
 
-(defn- z-nth [ag ^long n]
-  (reduce
-   (fn [ag f]
-     (f ag))
-   (z/down ag)
-   (repeat (if (neg? n)
-             (+ (count (z/children ag)) n)
-             n)
-           z/right)))
+(def vector-zip ->zip)
+(def node znode)
+(def root zroot)
+(def left zleft)
+(def right zright)
+(def prev zprev)
 
-(def vector-zip z/vector-zip)
-(def node z/node)
-(def root z/root)
-(def left z/left)
-(def right z/right)
-(def prev z/prev)
-
-(def parent z/up)
-(def $ z-nth)
-(def child-idx (comp count z/lefts))
+(def parent zup)
+(def $ znth)
+(def child-idx zchild-idx)
 
 (defn lexeme [ag ^long n]
-  (some-> ($ ag n) (z/node)))
+  (some-> ($ ag n) (znode)))
 
 (defn first-child? [ag]
-  (= 1 (count (z/lefts ag))))
-
-(defn single-child? [loc]
-  (= 1 (count (rest (z/children loc)))))
+  (= 1 (count (zlefts ag))))
 
 (defn left-or-parent [ag]
   (if (first-child? ag)
     (parent ag)
-    (z/left ag)))
+    (zleft ag)))
 
 (defmacro inherit [ag]
-  `(some-> (parent ~ag) (recur)))
+  `(some-> ~ag (parent) (recur)))
 
 (defmacro zcase {:style/indent 1} [ag & body]
   `(case (ctor ~ag) ~@body))
@@ -184,21 +303,21 @@
 
 (defn all-tp [f]
   (fn [z]
-    (if-some [d (z/down z)]
+    (if-some [d (zdown z)]
       (loop [z d]
         (when-some [z (f z)]
-          (if-some [r (z/right z)]
+          (if-some [r (zright z)]
             (recur r)
-            (z/up z))))
+            (zup z))))
       z)))
 
 (defn one-tp [f]
   (fn [z]
-    (when-some [d (z/down z)]
+    (when-some [d (zdown z)]
       (loop [z d]
         (if-some [z (f z)]
-          (z/up z)
-          (when-some [r (z/right z)]
+          (zup z)
+          (when-some [r (zright z)]
             (recur r)))))))
 
 (defn full-td-tp
@@ -239,7 +358,7 @@
 (defn z-try-apply-m [f]
   (fn [z]
     (some->> (f z)
-             (z/replace z))))
+             (zreplace z))))
 
 (defn adhoc-tp [f g]
   (choice-tp (z-try-apply-m g) f))
@@ -291,30 +410,31 @@
     (let [m (monoid z)]
       (-> (m)
           (m (x z))
-          (m (y z))))))
+          (m (y z))
+          (m)))))
 
 (def choice-tu choice-tp)
 
 (defn all-tu [f]
   (fn [z]
     (let [m (monoid z)]
-      (if-some [d (z/down z)]
+      (if-some [d (zdown z)]
         (loop [z d
                acc (m)]
           (when-some [x (f z)]
             (let [acc (m acc x)]
-              (if-some [r (z/right z)]
+              (if-some [r (zright z)]
                 (recur r acc)
                 (m acc)))))
         (m)))))
 
 (defn one-tu [f]
   (fn [z]
-    (when-some [d (z/down z)]
+    (when-some [d (zdown z)]
       (loop [z d]
         (if-some [x (f z)]
           x
-          (when-some [r (z/right z)]
+          (when-some [r (zright z)]
             (recur r)))))))
 
 (defn full-td-tu
