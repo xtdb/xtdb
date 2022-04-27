@@ -1,5 +1,6 @@
 [:rename
  {x1 name}
- [:difference
-  [:rename {name x1} [:scan [name]]]
-  [:rename {name x1} [:scan [name]]]]]
+ [:distinct
+  [:difference
+   [:rename {name x1} [:scan [name]]]
+   [:rename {name x1} [:scan [name]]]]]]
