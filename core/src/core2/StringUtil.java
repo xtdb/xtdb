@@ -107,9 +107,51 @@ public class StringUtil {
         return ret;
     }
 
+    public static ByteBuffer sqlBinSubstring(ByteBuffer target, int pos, int len, boolean useLen) {
+        if (useLen && len < 0) {
+            throw new java.lang.IllegalArgumentException("Negative substring length");
+        }
+
+        if (useLen && len == 0) {
+            return ByteBuffer.allocate(0);
+        }
+
+        int startIndex = Math.max(0, pos - 1);
+
+        if(startIndex >= target.remaining()) {
+            return ByteBuffer.allocate(0);
+        }
+
+        if (!useLen) {
+            ByteBuffer ret = target.slice();
+            ret.position(startIndex);
+            return ret;
+        }
+
+        int limit = Math.min(startIndex + len, target.remaining());
+
+        ByteBuffer ret = target.slice();
+        ret.position(startIndex);
+        ret.limit(limit);
+        return ret;
+    }
+
     public static ByteBuffer sqlUtf8Overlay(ByteBuffer target, ByteBuffer placing, int start, int replaceLength) {
         ByteBuffer s1 = sqlUtf8Substring(target, 1, start-1, true);
         ByteBuffer s2 = sqlUtf8Substring(target, start + replaceLength, -1, false);
+
+        ByteBuffer newBuf = ByteBuffer.allocate(s1.remaining() + s2.remaining() + placing.remaining());
+        newBuf.put(s1);
+        newBuf.put(placing.duplicate());
+        newBuf.put(s2);
+        newBuf.position(0);
+        return newBuf;
+    }
+
+
+    public static ByteBuffer sqlBinOverlay(ByteBuffer target, ByteBuffer placing, int start, int replaceLength) {
+        ByteBuffer s1 = sqlBinSubstring(target, 1, start-1, true);
+        ByteBuffer s2 = sqlBinSubstring(target, start + replaceLength, -1, false);
 
         ByteBuffer newBuf = ByteBuffer.allocate(s1.remaining() + s2.remaining() + placing.remaining());
         newBuf.put(s1);

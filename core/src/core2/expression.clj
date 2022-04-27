@@ -964,10 +964,11 @@
 (defmethod codegen-call [:position ArrowType$Null ArrowType$Null] [_] call-returns-null)
 
 ;; instantiate defaults for overlay, 4 nilable args is too much to list!
-(doseq [target [ArrowType$Utf8 ArrowType$Null]
-        replacement [ArrowType$Utf8 ArrowType$Null]
+(doseq [target [ArrowType$Utf8 ArrowType$Binary ArrowType$Null]
+        replacement [ArrowType$Utf8 ArrowType$Binary ArrowType$Null]
         start [ArrowType$Int ArrowType$Null]
-        len [ArrowType$Int ArrowType$Null]]
+        len [ArrowType$Int ArrowType$Null]
+        :when (some #(= ArrowType$Null %) [target replacement start len])]
   (defmethod codegen-call [:overlay target replacement start len] [_] call-returns-null))
 
 (defmethod codegen-call [:overlay ArrowType$Utf8 ArrowType$Utf8 ArrowType$Int ArrowType$Int] [_]
@@ -975,6 +976,12 @@
     types/varchar-type
     (fn [[target replacement from len]]
       `(StringUtil/sqlUtf8Overlay (resolve-utf8-buf ~target) (resolve-utf8-buf ~replacement) ~from ~len))))
+
+(defmethod codegen-call [:overlay ArrowType$Binary ArrowType$Binary ArrowType$Int ArrowType$Int] [_]
+  (mono-fn-call
+    types/varbinary-type
+    (fn [[target replacement from len]]
+      `(StringUtil/sqlBinOverlay (resolve-buf ~target) (resolve-buf ~replacement) ~from ~len))))
 
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]
   {:return-types #{types/bigint-type}

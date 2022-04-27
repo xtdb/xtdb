@@ -737,7 +737,7 @@
 
 (t/deftest overlay-test
   (t/are [s1 s2 from len expected]
-    (= expected (project1 (list 'overlay 'a 'b 'c 'd) {:a s1, :b s2, :c from, :d len}))
+    (= expected (project1 '(overlay a b c d) {:a s1, :b s2, :c from, :d len}))
 
     "" "" 1 0 ""
     "" "" 1 1 ""
@@ -772,21 +772,61 @@
           :when (not (and a b c d))]
     (t/is (nil? (project1 '(overlay a b c d) {:a a, :b b, :c c, :d d})))))
 
+(defn- overlay-args-gen [string-gen]
+  (-> string-gen
+      (tcg/bind (fn [s]
+                  (tcg/tuple
+                    (tcg/return s)
+                    (tcg/choose 0 (count s)))))
+      (tcg/bind (fn [[s i]]
+                  (tcg/tuple
+                    (tcg/return s)
+                    string-gen
+                    (tcg/return (inc i))
+                    (tcg/choose 0 (- (count s) i)))))) )
+
 (tct/defspec overlay-is-equiv-to-ss-concat-on-ascii-prop
-  (tcp/for-all [[s1 i len]
-                (-> tcg/string-ascii
-                    (tcg/bind (fn [s]
-                                (tcg/tuple
-                                  (tcg/return s)
-                                  (tcg/choose 0 (count s)))))
-                    (tcg/bind (fn [[s i]]
-                                (tcg/tuple
-                                  (tcg/return s)
-                                  (tcg/return i)
-                                  (tcg/choose 0 (- (count s) i))))))
-                s2 tcg/string-ascii]
-    (= (str (subs s1 0 i) s2 (subs s1 (+ i len) (count s1)))
-       (project1 '(overlay a b c d) {:a s1, :b s2, :c (inc i), :d len}))))
+  (tcp/for-all [[s1 s2 i len] (overlay-args-gen tcg/string-ascii)]
+    (= (str (subs s1 0 (dec i)) s2 (subs s1 (+ (dec i) len) (count s1)))
+       (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d len}))))
+
+(t/deftest binary-overlay-test
+  (t/are [s1 s2 from len expected]
+    (= expected (vec (expr/resolve-bytes (project1 '(overlay a b c d) {:a (some-> s1 byte-array), :b (some-> s2 byte-array), :c from, :d len}))))
+
+    [] [] 1 0 []
+    [] [] 1 1 []
+    [0] [1] 1 1 [1]
+    [0] [1] 1 0 [1 0]
+
+    [0 1 2 3 4] [5 5 5] 1 0 [5 5 5 0 1 2 3 4]
+    [0 1 2 3 4] [5 5 5] 1 1 [5 5 5 1 2 3 4]
+    [0 1 2 3 4] [5 5 5] 1 2 [5 5 5 2 3 4]
+    [0 1 2 3 4] [5 5 5] 1 5 [5 5 5]
+    [0 1 2 3 4] [5 5 5] 3 3 [0 1 5 5 5]
+
+    [0] [1 1 1] 1 0 [1 1 1 0]
+    [0] [1 1 1] 2 0 [0 1 1 1]
+
+    [0 0 0] [] 1 1 [0 0]
+    [0] [1 1 1] 1 1 [1 1 1]))
+
+(t/deftest binary-overlay-nils-tset
+  (doseq [a [[] nil]
+          b [[] nil]
+          c [1 nil]
+          d [1 nil]
+          :when (not (and a b c d))]
+    (t/is (nil? (project1 '(overlay a b c d) {:a (some-> a byte-array), :b (some-> b byte-array), :c c, :d d})))))
+
+(tct/defspec binary-overlay-is-equiv-to-str-overlay-on-ascii-prop
+  (tcp/for-all [[s1 s2 i len] (overlay-args-gen tcg/string-ascii)]
+    (= (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d len})
+       (String. (expr/resolve-bytes (project1 '(overlay a b c d) {:a (.getBytes ^String s1 "ascii"),
+                                                                  :b (.getBytes ^String s2 "ascii"),
+                                                                  :c i,
+                                                                  :d len}))
+                "ascii"))))
 
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]
