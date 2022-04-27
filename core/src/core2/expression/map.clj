@@ -11,7 +11,8 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher)
            org.apache.arrow.vector.NullVector
-           (org.roaringbitmap IntConsumer RoaringBitmap)))
+           (org.roaringbitmap IntConsumer RoaringBitmap)
+           (org.apache.arrow.vector.types.pojo ArrowType$Null)))
 
 (def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
   (MurmurHasher.))
@@ -92,8 +93,12 @@
                         (let [{continue-= :continue-call}
                               (expr/codegen-call {:op :call, :f :=,
                                                   :arg-types [left-type right-type]})]
-                          (continue-= (fn [_out-type out-code] out-code)
-                                      [left-code right-code])))))))))))))
+                          (continue-=
+                            (fn [out-type out-code]
+                              (if (instance? ArrowType$Null out-type)
+                                false
+                                out-code))
+                            [left-code right-code])))))))))))))
 
 (def memoized-build-comparator (memoize build-comparator))
 

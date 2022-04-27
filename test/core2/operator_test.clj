@@ -441,3 +441,10 @@
                           (op/query-ra '[:select (= ?x13 x4)
                                          [:table []]]
                                        {}))))
+
+(t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
+  (t/is
+    (-> '[:group-by [a]
+          [:table [{:a 42, :b 42} {:a nil, :b 42} {:a nil, :b 42}]]]
+        (op/query-ra {})
+        any?)))
