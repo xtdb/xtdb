@@ -4,6 +4,7 @@
             [core2.operator.project :as project]
             [core2.operator.select :as select]
             [core2.operator.set :as set-op]
+            [core2.operator :as op]
             [core2.test-util :as tu]
             [core2.types :as ty])
   (:import org.apache.arrow.vector.types.pojo.Schema))
@@ -185,3 +186,13 @@
               [{:a 7, :b 5040}]
               [{:a 8, :b 40320}]]
              (tu/<-cursor factorial-cursor)))))
+
+(t/deftest first-tuple-in-rhs-is-taken-into-account-test
+  (t/is
+    (= [{:x1 2}]
+       (op/query-ra
+         '[:difference
+           [:table [{x1 1} {x1 2}]]
+           [:table [{x1 1}]]] {}))))
+
+

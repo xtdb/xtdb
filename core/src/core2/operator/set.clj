@@ -66,7 +66,7 @@
                                       (when (pos? row-count)
                                         (let [idxs (IntStream/builder)]
                                           (dotimes [idx row-count]
-                                            (when (cond-> (pos? (.indexOf prober idx))
+                                            (when (cond-> (not= -1 (.indexOf prober idx))
                                                     difference? not)
                                               (.add idxs idx)))
 
