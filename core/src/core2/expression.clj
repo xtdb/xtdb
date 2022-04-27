@@ -950,14 +950,14 @@
          "CHARACTERS"
          (f types/int-type `(StringUtil/sqlUtf8Position (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))
          "OCTETS"
-         (f types/int-type `(StringUtil/sqlPosition (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))))}))
+         (f types/int-type `(StringUtil/SqlBinPosition (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))))}))
 
 (defmethod codegen-call [:position ArrowType$Utf8 ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 (defmethod codegen-call [:position ArrowType$Null ArrowType$Utf8 ArrowType$Utf8] [_] call-returns-null)
 (defmethod codegen-call [:position ArrowType$Null ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 
 (defmethod codegen-call [:position ArrowType$Binary ArrowType$Binary] [_]
-  (mono-fn-call types/int-type (fn [[needle haystack]] `(StringUtil/sqlPosition (resolve-buf ~needle) (resolve-buf ~haystack)))))
+  (mono-fn-call types/int-type (fn [[needle haystack]] `(StringUtil/SqlBinPosition (resolve-buf ~needle) (resolve-buf ~haystack)))))
 
 (defmethod codegen-call [:position ArrowType$Binary ArrowType$Null] [_] call-returns-null)
 (defmethod codegen-call [:position ArrowType$Null ArrowType$Binary] [_] call-returns-null)
@@ -974,7 +974,7 @@
   (mono-fn-call
     types/varchar-type
     (fn [[target replacement from len]]
-      `(StringUtil/sqlOverlay (resolve-utf8-buf ~target) (resolve-utf8-buf ~replacement) ~from ~len))))
+      `(StringUtil/sqlUtf8Overlay (resolve-utf8-buf ~target) (resolve-utf8-buf ~replacement) ~from ~len))))
 
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]
   {:return-types #{types/bigint-type}

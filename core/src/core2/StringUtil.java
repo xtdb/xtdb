@@ -8,7 +8,7 @@ public class StringUtil {
      * Returns the 1-based position of the given (needle) bytes in the haystack. 0 if not found.
      * This is equivalent to sql POSITION on binary.
      */
-    public static int sqlPosition(ByteBuffer needle, ByteBuffer haystack) {
+    public static int SqlBinPosition(ByteBuffer needle, ByteBuffer haystack) {
         if(needle.remaining() == 0) return 1;
         int i = 0;
         int j = 0;
@@ -52,12 +52,12 @@ public class StringUtil {
      * This is equivalent to sql POSITION on characters.
      * */
     public static int sqlUtf8Position(ByteBuffer needle, ByteBuffer haystack) {
-        int bpos = sqlPosition(needle, haystack);
+        int bpos = SqlBinPosition(needle, haystack);
         if (bpos == 0) return 0;
         return utf8Length(haystack, 0, bpos-1) + 1;
     }
 
-    public static ByteBuffer sqlSubstring(ByteBuffer target, int pos, int len, boolean useLen){
+    public static ByteBuffer sqlUtf8Substring(ByteBuffer target, int pos, int len, boolean useLen){
         if (useLen && len < 0) {
             throw new java.lang.IllegalArgumentException("Negative substring length");
         }
@@ -107,9 +107,9 @@ public class StringUtil {
         return ret;
     }
 
-    public static ByteBuffer sqlOverlay(ByteBuffer target, ByteBuffer placing, int start, int replaceLength) {
-        ByteBuffer s1 = sqlSubstring(target, 1, start-1, true);
-        ByteBuffer s2 = sqlSubstring(target, start + replaceLength, -1, false);
+    public static ByteBuffer sqlUtf8Overlay(ByteBuffer target, ByteBuffer placing, int start, int replaceLength) {
+        ByteBuffer s1 = sqlUtf8Substring(target, 1, start-1, true);
+        ByteBuffer s2 = sqlUtf8Substring(target, start + replaceLength, -1, false);
 
         ByteBuffer newBuf = ByteBuffer.allocate(s1.remaining() + s2.remaining() + placing.remaining());
         newBuf.put(s1);
