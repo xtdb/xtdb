@@ -1,10 +1,11 @@
 (ns core2.rewrite
   (:import java.util.regex.Pattern
-           java.util.List))
+           java.util.List
+           clojure.lang.IPersistentVector))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defrecord Zip [node ^long idx parent branch?])
+(defrecord Zip [node ^int idx parent branch?])
 
 (defn ->zip
   ([x]
@@ -23,7 +24,7 @@
           idx (.idx z)]
       (if (identical? node (.get level idx))
         parent
-        (->Zip (assoc level idx node) (.idx parent) (.parent parent) (.branch? parent))))))
+        (->Zip (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent) (.branch? parent))))))
 
 (defn zleft [^Zip z]
   (when z
