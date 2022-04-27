@@ -924,15 +924,15 @@
   (let [[_ unit] (map :literal args)]
     (mono-fn-call types/int-type (case unit
                                    "CHARACTERS" #(do `(StringUtil/utf8Length ~(first %)))
-                                   "OCTETS" #(do `(.limit ~(-> (first %) (with-tag ByteBuffer))))))))
+                                   "OCTETS" #(do `(.remaining ~(-> (first %) (with-tag ByteBuffer))))))))
 
 (defmethod codegen-call [:character-length ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 
 (defmethod codegen-call [:octet-length ArrowType$Utf8] [_]
-  (mono-fn-call types/int-type #(do `(.limit ~(-> (first %) (with-tag ByteBuffer))))))
+  (mono-fn-call types/int-type #(do `(.remaining ~(-> (first %) (with-tag ByteBuffer))))))
 
 (defmethod codegen-call [:octet-length ArrowType$Binary] [_]
-  (mono-fn-call types/int-type #(do `(.limit ~(-> (first %) (with-tag ByteBuffer))))))
+  (mono-fn-call types/int-type #(do `(.remaining ~(-> (first %) (with-tag ByteBuffer))))))
 
 (defmethod codegen-call [:octet-length ArrowType$Null] [_] call-returns-null)
 
