@@ -2,11 +2,8 @@
   (:require [core2.sql :as sql]
             [core2.sql.plan :as plan]
             [core2.sql.plan-test :as pt]
-            [clojure.walk :as w]
             [clojure.java.io :as io]
-            [clojure.test :as t])
-  (:import [java.time LocalDate Period Duration]
-           [org.apache.arrow.vector PeriodDuration]))
+            [clojure.test :as t]))
 
 (t/deftest test-parse-tpch-queries
   (doseq [q (range 22)

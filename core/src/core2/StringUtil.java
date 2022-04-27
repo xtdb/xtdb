@@ -58,15 +58,19 @@ public class StringUtil {
     }
 
     public static ByteBuffer sqlUtf8Substring(ByteBuffer target, int pos, int len, boolean useLen){
+
         if (useLen && len < 0) {
             throw new java.lang.IllegalArgumentException("Negative substring length");
         }
+
+        int zeroPos = pos - 1;
+        len = zeroPos < 0 ? Math.max(0, len + zeroPos) : len;
 
         if (useLen && len == 0) {
             return ByteBuffer.allocate(0);
         }
 
-        int startCodepoint = Math.max(pos-1, 0);
+        int startCodepoint = Math.max(zeroPos, 0);
         int startIndex = 0;
 
         int cp = -1;
@@ -112,11 +116,13 @@ public class StringUtil {
             throw new java.lang.IllegalArgumentException("Negative substring length");
         }
 
+        int zeroPos = pos - 1;
+        len = zeroPos < 0 ? Math.max(0, len + zeroPos) : len;
+        int startIndex = Math.max(0, zeroPos);
+
         if (useLen && len == 0) {
             return ByteBuffer.allocate(0);
         }
-
-        int startIndex = Math.max(0, pos - 1);
 
         if(startIndex >= target.remaining()) {
             return ByteBuffer.allocate(0);

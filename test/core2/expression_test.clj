@@ -17,7 +17,9 @@
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Time ArrowType$Timestamp ArrowType$Union FieldType)
-           org.apache.arrow.vector.types.TimeUnit))
+           org.apache.arrow.vector.types.TimeUnit
+           [core2 StringUtil]
+           [java.nio ByteBuffer]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -735,6 +737,95 @@
     (= (project1 '(position a b "OCTETS") {:a s1, :b s2})
        (project1 '(position a b) {:a (.getBytes s1 "utf-8"), :b (.getBytes s2 "utf-8")}))))
 
+(t/deftest substring-test
+  (t/are [s pos len expected]
+    (= expected (project1 '(substring a b c true) {:a s, :b pos, :c len}))
+
+    "" -1 0 ""
+    "" 0 0 ""
+    "" 1 0 ""
+    "" 1 1 ""
+    "" 1 2 ""
+
+    "a" -1 0 ""
+    "a" -1 1 ""
+    "a" -1 2 ""
+    "a" -1 3 "a"
+
+    "a" 1 0 ""
+    "a" 1 1 "a"
+    "a" 1 2 "a"
+
+    "🌝😎😎" 2 2 "😎😎"
+    "f😎😎bar" 1 1 "f"
+    "f😎😎bar" 2 1 "😎"
+    "f😎😎bar" 2 100 "😎😎bar"
+
+    "1234567890" 3 8 "34567890"
+    "1234567890" 4 3 "456"
+
+    "string" 2 2147483646 "tring"
+    "string" -10 2147483646 "string"))
+
+(t/deftest negative-substring-length-test
+  (t/is (thrown-with-msg? IllegalArgumentException #"Negative substring length" (project1 '(substring "" 0 -1 true) {}))))
+
+(t/deftest substring-nils-test
+  (doseq [a ["" nil]
+          b [1 nil]
+          c [1 nil]
+          d [true false]
+          :when (not (and a b c))]
+    (t/is (nil? (project1 '(substring a b c d) {:a a, :b b, :c c, :d d})))))
+
+(defn- utf8len [^String s] (StringUtil/utf8Length (ByteBuffer/wrap (.getBytes s "utf-8"))))
+
+(defn- substring-args-gen [string-gen]
+  (tcg/bind string-gen
+            (fn [s] (tcg/tuple (tcg/return s)
+                               (tcg/choose 1 (inc (utf8len s)))
+                               (tcg/choose 0 (utf8len s))))))
+
+(tct/defspec substring-with-no-len-is-equiv-to-remaining-str-prop
+  (tcp/for-all [[s i] (substring-args-gen tcg/string)]
+    (= (project1 '(substring a b c true) {:a s, :b i, :c (- (utf8len s) (dec i))})
+       (project1 '(substring a b -1 false) {:a s, :b i}))))
+
+(tct/defspec substring-is-equiv-to-clj-on-ascii-when-idx-within-bounds-prop
+  (tcp/for-all [[s i len] (substring-args-gen tcg/string-ascii)]
+    (= (subs s (dec i) (min (+ (dec i) len) (count s)))
+       (project1 '(substring a b c true) {:a s, :b i, :c len}))))
+
+(t/deftest bin-substring-test
+  (t/are [s pos len expected]
+    (= expected (vec (expr/resolve-bytes (project1 '(substring a b c true) {:a (some-> s byte-array), :b pos, :c len}))))
+
+    [] -1 0 []
+    [] 0 0 []
+    [] 1 0 []
+    [] 1 1 []
+    [] 1 2 []
+
+    [0] -1 0 []
+    [0] -1 1 []
+    [0] -1 2 []
+    [0] -1 3 [0]
+
+    [0] 1 0 []
+    [0] 1 1 [0]
+    [0] 1 2 [0]
+
+    [1 2 3 4 5 6 7 8 9 0] 3 8 [3 4 5 6 7 8 9 0]
+    [1 2 3 4 5 6 7 8 9 0] 4 3 [4 5 6]
+
+    [1 2 3 4 5] 2 2147483646 [2 3 4 5]
+    [1 2 3 4 5] -10 2147483646 [1 2 3 4 5]))
+
+(tct/defspec bin-substring-is-equiv-to-substring-on-ascii-prop
+  (tcp/for-all [[s i len] (substring-args-gen tcg/string-ascii)]
+    (= (vec (expr/resolve-bytes (project1 '(substring a b c true) {:a (.getBytes ^String s "ascii"), :b i, :c len})))
+       (vec (.getBytes ^String (project1 '(substring a b c true) {:a s, :b i, :c len}) "ascii")))))
+
 (t/deftest overlay-test
   (t/are [s1 s2 from len expected]
     (= expected (project1 '(overlay a b c d) {:a s1, :b s2, :c from, :d len}))
@@ -760,9 +851,10 @@
 
     "😎" "🌝😎" 1 1 "🌝😎"
     "🌝😎" "😎" 1 1 "😎😎"
-    "🌝😎" "😎" 2 0 "🌝😎😎")
+    "🌝😎" "😎" 2 0 "🌝😎😎"))
 
-  (t/is (thrown? IllegalArgumentException (project1 '(overlay a b c d) {:a "", :b "", :c 0, :d 0}))))
+(t/deftest overlay-negative-substring-length-test
+  (t/is (thrown-with-msg? IllegalArgumentException #"Negative substring length" (project1 '(overlay "" "" 0 0) {}))))
 
 (t/deftest overlay-nils-test
   (doseq [a ["" nil]

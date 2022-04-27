@@ -181,10 +181,13 @@
      ;;=>
      (list 'not (list 'like (expr rvp) (expr cp)))
 
-     ;; TODO: this is called substr in expression engine.
      [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp "FOR" ^:z sl]
      ;;=>
-     (list 'substring (expr cve) (expr sp) (expr sl))
+     (list 'substring (expr cve) (expr sp) (expr sl) true)
+
+     [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp]
+     ;;=>
+     (list 'substring (expr cve) (expr sp) -1 false)
 
      [:between_predicate ^:z rvp-1 [:between_predicate_part_2 "BETWEEN" ^:z rvp-2 "AND" ^:z rvp-3]]
      ;;=>

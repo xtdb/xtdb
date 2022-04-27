@@ -913,12 +913,27 @@
 (defmethod codegen-call [:concat ArrowType$Binary ArrowType$Null] [_] call-returns-null)
 (defmethod codegen-call [:concat ArrowType$Null ArrowType$Binary] [_] call-returns-null)
 
-(defmethod codegen-call [:substring ::types/Object ArrowType$Int ArrowType$Int] [_]
-  {:return-types #{ArrowType$Utf8/INSTANCE}
-   :continue-call (fn [f [x start length]]
-                    (f ArrowType$Utf8/INSTANCE
-                       `(ByteBuffer/wrap (.getBytes (subs (resolve-string ~x) (dec ~start) (+ (dec ~start) ~length))
-                                                    StandardCharsets/UTF_8))))})
+(defn resolve-utf8-buf ^ByteBuffer [s-or-buf]
+  (if (instance? ByteBuffer s-or-buf)
+    s-or-buf
+    (ByteBuffer/wrap (.getBytes ^String s-or-buf StandardCharsets/UTF_8))))
+
+(defmethod codegen-call [:substring ArrowType$Utf8 ArrowType$Int ArrowType$Int ArrowType$Bool] [_]
+  {:return-types #{types/varchar-type}
+   :continue-call (fn [f [x start length use-len]]
+                    (f types/varchar-type `(StringUtil/sqlUtf8Substring (resolve-utf8-buf ~x) ~start ~length ~use-len)))})
+
+(defmethod codegen-call [:substring ArrowType$Binary ArrowType$Int ArrowType$Int ArrowType$Bool] [_]
+  {:return-types #{types/varbinary-type}
+   :continue-call (fn [f [x start length use-len]]
+                    (f types/varbinary-type `(StringUtil/sqlBinSubstring (resolve-buf ~x) ~start ~length ~use-len)))})
+
+;; nil specialisation for substring
+(doseq [a [ArrowType$Utf8 ArrowType$Binary ArrowType$Null]
+        b [ArrowType$Int ArrowType$Null]
+        c [ArrowType$Int ArrowType$Null]
+        :when (some #(= ArrowType$Null %) [a b c])]
+  (defmethod codegen-call [:substring a b c ArrowType$Bool] [_] call-returns-null))
 
 (defmethod codegen-call [:character-length ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
   (let [[_ unit] (map :literal args)]
@@ -935,11 +950,6 @@
   (mono-fn-call types/int-type #(do `(.remaining ~(-> (first %) (with-tag ByteBuffer))))))
 
 (defmethod codegen-call [:octet-length ArrowType$Null] [_] call-returns-null)
-
-(defn resolve-utf8-buf ^ByteBuffer [s-or-buf]
-  (if (instance? ByteBuffer s-or-buf)
-    s-or-buf
-    (ByteBuffer/wrap (.getBytes ^String s-or-buf StandardCharsets/UTF_8))))
 
 (defmethod codegen-call [:position ArrowType$Utf8 ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
   (let [[_ _ unit] (map :literal args)]
