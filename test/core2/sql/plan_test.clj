@@ -477,6 +477,12 @@
   (t/is (= '(position x1 x2 "CHARACTERS") (plan-expr "POSITION(foo.a IN foo.b USING CHARACTERS)")))
   (t/is (= '(position x1 x2 "OCTETS") (plan-expr "POSITION(foo.a IN foo.b USING OCTETS)"))))
 
+(t/deftest test-overlay-expr
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+    "OVERLAY(foo.a PLACING foo.b FROM 1 for 4)" '(overlay x1 x2 1 4)
+    "OVERLAY(foo.a PLACING foo.b FROM 1)" '(overlay x1 x2 1 (_default-overlay-length x2))))
+
 (deftest test-projects-that-matter-are-maintained
   (t/is (=plan-file
           "projects-that-matter-are-maintained"

@@ -983,6 +983,14 @@
     (fn [[target replacement from len]]
       `(StringUtil/sqlBinOverlay (resolve-buf ~target) (resolve-buf ~replacement) ~from ~len))))
 
+(defmethod codegen-call [:_default-overlay-length ArrowType$Null] [_] call-returns-null)
+
+(defmethod codegen-call [:_default-overlay-length ArrowType$Utf8] [_]
+  (mono-fn-call types/int-type #(do `(StringUtil/utf8Length (resolve-utf8-buf ~@%)))))
+
+(defmethod codegen-call [:_default-overlay-length ArrowType$Binary] [_]
+  (mono-fn-call types/int-type #(do `(.remaining (resolve-buf ~@%)))))
+
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]
   {:return-types #{types/bigint-type}
    :continue-call (fn [f [_ ts-code]]
