@@ -263,7 +263,7 @@
   session)
 
 (defn- query-projection [tree]
-  (->> (sem/projected-columns (r/$ (r/->zipper tree) 1))
+  (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
        (first)
        (mapv (comp name plan/unqualified-projection-symbol))))
 

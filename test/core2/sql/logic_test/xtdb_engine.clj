@@ -165,7 +165,7 @@
       (when (insta/failure? tree)
         (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
       (let [tree (normalize-query (:tables this) tree)
-            projection (->> (sem/projected-columns (r/$ (r/->zipper tree) 1))
+            projection (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
                             (first)
                             (mapv (comp keyword name plan/unqualified-projection-symbol)))
             {:keys [errs plan]} (plan/plan-query tree)]
