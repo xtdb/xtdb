@@ -1,0 +1,6 @@
+[:rename
+ {x1 id}
+ [:distinct
+  [:union-all
+   [:rename {id x1} [:scan [id]]]
+   [:project [x1] [:rename {id x1, product x4} [:scan [id product]]]]]]]

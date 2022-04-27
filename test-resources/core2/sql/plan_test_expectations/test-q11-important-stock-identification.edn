@@ -1,9 +1,9 @@
 [:rename
  {x1 ps_partkey, x14 value}
- [:project
-  [x1 x14]
-  [:order-by
-   [[x14 :desc :nulls-last]]
+ [:order-by
+  [[x14 :desc :nulls-last]]
+  [:project
+   [x1 x14]
    [:join
     [(> x15 x30)]
     [:group-by

@@ -12,4 +12,7 @@
      []
      [:rename {a x1} [:scan [a]]]
      [:rename {c x3, b x4} [:scan [c b]]]]
-    [:max-1-row [:rename {b x6, a x7} [:scan [b {a (= a ?x9)}]]]]]]]]
+    [:max-1-row
+     [:project
+      [x6]
+      [:rename {b x6, a x7} [:scan [b {a (= a ?x9)}]]]]]]]]]

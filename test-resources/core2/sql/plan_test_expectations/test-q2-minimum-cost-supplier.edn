@@ -7,15 +7,15 @@
   x8 s_address,
   x9 s_phone,
   x10 s_comment}
- [:project
-  [x6 x7 x18 x1 x2 x8 x9 x10]
-  [:top
-   {:limit 100}
-   [:order-by
-    [[x6 :desc :nulls-last]
-     [x18 :asc :nulls-last]
-     [x7 :asc :nulls-last]
-     [x1 :asc :nulls-last]]
+ [:top
+  {:limit 100}
+  [:order-by
+   [[x6 :desc :nulls-last]
+    [x18 :asc :nulls-last]
+    [x7 :asc :nulls-last]
+    [x1 :asc :nulls-last]]
+   [:project
+    [x6 x7 x18 x1 x2 x8 x9 x10]
     [:select
      (= x16 x38)
      [:group-by

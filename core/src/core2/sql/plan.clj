@@ -1286,7 +1286,10 @@
                   projection (if (= :map op)
                                (filterv map? projection)
                                projection)
-                  relation (if (every? symbol? projection)
+                  relation (if (and (every? symbol? projection)
+                                    (or (= :map op)
+                                        (= (set projection)
+                                           (set (relation-columns relation)))))
                              relation
                              [op
                               projection
@@ -2075,6 +2078,39 @@
       (when (not= new-join-expressions join-expressions)
         [:left-outer-join new-join-expressions lhs rhs]))))
 
+(defn remove-redundant-projects [z]
+  ;; assumes you wont ever have a project like [] whos job is to return an empty rel
+  (r/zmatch z
+    [:apply :semi-join c p i
+     [:project projection dependent-relation]]
+    ;;=>
+    (when (every? symbol? projection)
+      [:apply :semi-join c p i dependent-relation])
+
+    [:apply :anti-join c p i
+     [:project projection dependent-relation]]
+    ;;=>
+    (when (every? symbol? projection)
+      [:apply :anti-join c p i dependent-relation])
+
+    [:semi-join jc i
+     [:project projection dependent-relation]]
+    ;;=>
+    (when (every? symbol? projection)
+      [:semi-join jc i dependent-relation])
+
+    [:anti-join jc i
+     [:project projection dependent-relation]]
+     ;;=>
+     (when (every? symbol? projection)
+       [:anti-join jc i dependent-relation])
+
+    [:group-by c
+     [:project projection dependent-relation]]
+     ;;=>
+     (when (every? symbol? projection)
+       [:group-by c dependent-relation])))
+
 (def push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
 (def push-correlated-selection-down-past-project (partial push-selection-down-past-project true))
@@ -2138,6 +2174,7 @@
                                 #'merge-selections-around-scan
                                 #'add-selection-to-scan-predicate]
                  decorrelate-plan [#'pull-correlated-selection-up-towards-apply
+                                   #'remove-redundant-projects
                                    #'push-selection-down-past-apply
                                    #'push-decorrelated-selection-down-past-join
                                    #'push-decorrelated-selection-down-past-rename

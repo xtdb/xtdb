@@ -1,9 +1,9 @@
 [:rename
  {x1 s_name, x2 s_address}
- [:project
-  [x1 x2]
-  [:order-by
-   [[x1 :asc :nulls-last]]
+ [:order-by
+  [[x1 :asc :nulls-last]]
+  [:project
+   [x1 x2]
    [:semi-join
     [{x3 x9}]
     [:join

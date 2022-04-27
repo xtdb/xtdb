@@ -4,6 +4,8 @@
   [x1]
   [:order-by
    [[x4 :desc :nulls-last] [x1 :asc :nulls-last]]
-   [:map
-    [{x4 (= x2 "foo")}]
-    [:rename {movieTitle x1, year x2} [:scan [movieTitle year]]]]]]]
+   [:project
+    [x1 x4]
+    [:map
+     [{x4 (= x2 "foo")}]
+     [:rename {movieTitle x1, year x2} [:scan [movieTitle year]]]]]]]]

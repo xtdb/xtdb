@@ -476,3 +476,15 @@
   (t/is (= '(position x1 x2 "CHARACTERS") (plan-expr "POSITION(foo.a IN foo.b)")))
   (t/is (= '(position x1 x2 "CHARACTERS") (plan-expr "POSITION(foo.a IN foo.b USING CHARACTERS)")))
   (t/is (= '(position x1 x2 "OCTETS") (plan-expr "POSITION(foo.a IN foo.b USING OCTETS)"))))
+
+(deftest test-projects-that-matter-are-maintained
+  (t/is (=plan-file
+          "projects-that-matter-are-maintained"
+          (plan-sql
+            "SELECT customers.id
+            FROM customers
+            UNION
+            SELECT o.id
+            FROM
+            (SELECT orders.id, orders.product
+            FROM orders) AS o"))))
