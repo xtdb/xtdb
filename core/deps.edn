@@ -8,6 +8,7 @@
         org.clojure/data.json {:mvn/version "2.4.0"}
         org.clojure/data.csv {:mvn/version "1.0.1"}
         org.clojure/tools.cli {:mvn/version "1.0.206"}
+        org.clojure/core.match {:mvn/version "1.0.0"}
 
         org.apache.arrow/arrow-algorithm {:mvn/version "6.0.0"}
         org.apache.arrow/arrow-compression {:mvn/version "6.0.0"}

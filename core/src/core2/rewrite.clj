@@ -1,21 +1,18 @@
 (ns core2.rewrite
+  (:require [clojure.walk :as w]
+            [clojure.core.match :as m])
   (:import java.util.regex.Pattern
            java.util.List
            clojure.lang.IPersistentVector))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defrecord Zip [node ^int idx parent branch?])
+(defrecord Zip [node ^int idx parent])
 
-(defn ->zip
-  ([x]
-   (->zip x vector?))
-  ([x branch?]
-   (->Zip x -1 nil branch?)))
-
-(defn znode [^Zip z]
-  (when z
-    (.node z)))
+(defn ->zipper [x]
+  (if (instance? Zip x)
+    x
+    (->Zip x -1 nil)))
 
 (defn- zupdate-parent [^Zip z]
   (when-let [^Zip parent (.parent z)]
@@ -24,7 +21,14 @@
           idx (.idx z)]
       (if (identical? node (.get level idx))
         parent
-        (->Zip (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent) (.branch? parent))))))
+        (->Zip (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent))))))
+
+(defn znode [^Zip z]
+  (when z
+    (.node z)))
+
+(defn zbranch? [^Zip z]
+  (vector? (.node z)))
 
 (defn zleft [^Zip z]
   (when z
@@ -33,10 +37,7 @@
         (when-not (neg? idx)
           (let [^List level (.node parent)]
             (with-meta
-              (->Zip (.get level idx)
-                     idx
-                     parent
-                     (.branch? z))
+              (->Zip (.get level idx) idx parent)
               (meta z))))))))
 
 (defn zright [^Zip z]
@@ -46,32 +47,29 @@
             ^List level (.node parent)]
         (when (< idx (count level))
           (with-meta
-            (->Zip (.get level idx)
-                   idx
-                   parent
-                   (.branch? z))
+            (->Zip (.get level idx) idx parent)
             (meta z)))))))
 
 (defn znth [^Zip z ^long idx]
   (when z
-    (let [node (.node z)]
-      (when ((.branch? z) node)
-        (let [idx (if (neg? idx)
-                    (+ (count node) idx)
-                    idx)]
-          (when (and (< idx (count node))
-                     (not (neg? idx)))
-            (with-meta
-              (->Zip (.get ^List node idx) idx z (.branch? z))
-              (meta z))))))))
+    (when (zbranch? z)
+      (let [node (.node z)
+            idx (if (neg? idx)
+                  (+ (count node) idx)
+                  idx)]
+        (when (and (< idx (count node))
+                   (not (neg? idx)))
+          (with-meta
+            (->Zip (.get ^List node idx) idx z)
+            (meta z)))))))
 
 (defn zdown [^Zip z]
   (when z
     (let [node (.node z)]
-      (when (and ((.branch? z) node)
+      (when (and (zbranch? z)
                  (not (.isEmpty ^List node)))
         (with-meta
-          (->Zip (.get ^List node 0) 0 z (.branch? z))
+          (->Zip (.get ^List node 0) 0 z)
           (meta z))))))
 
 (defn zup [^Zip z]
@@ -115,119 +113,73 @@
   (when z
     (assoc z :node x)))
 
-(comment
-  (require '[clojure.zip :as z])
-
-  (def data '[[a * b] + [c * d]])
-  (def dz (z/vector-zip data))
-  (def dr (->zip data))
-
-  (= (znode (zright (zdown (zright (zright (zdown dr))))))
-     (z/node (z/right (z/down (z/right (z/right (z/down dz)))))))
-
-  (= (zlefts (zright (zdown (zright (zright (zdown dr))))))
-     (z/lefts (z/right (z/down (z/right (z/right (z/down dz)))))))
-
-  (= (zrights (zright (zdown (zright (zright (zdown dr))))))
-     (z/rights (z/right (z/down (z/right (z/right (z/down dz)))))))
-
-  (= (znode (zup (zup (zright (zdown (zright (zright (zdown dr))))))))
-     (z/node (z/up (z/up (z/right (z/down (z/right (z/right (z/down dz)))))))))
-
-  (= (-> dr zdown zright zright zdown zright znode)
-     (-> dz z/down z/right z/right z/down z/right z/node))
-  (= (-> dr zdown zright zright zdown zright (zreplace '/) zroot)
-     (-> dz z/down z/right z/right z/down z/right (z/replace '/) z/root)))
-
 ;; Zipper pattern matching
 
-(defn ->zipper [x]
-  (cond
-    (instance? Zip x)
-    x
+(derive ::m/zip ::m/vector)
 
-    (or (vector? x)
-        (symbol? x)
-        (instance? Pattern x))
-    (->zip x)
+(defmethod m/nth-inline ::m/zip
+  [t ocr i]
+  `(let [^Zip z# ~ocr]
+     (with-meta
+       (->Zip (.get ^List (.node z#) ~i) ~i z#)
+       (meta z#))))
 
-    (sequential? x)
-    (->zip x sequential?)
+(defmethod m/count-inline ::m/zip
+  [t ocr]
+  `(let [^Zip z# ~ocr]
+     (if (zbranch? z#)
+       (count (znode z#))
+       0)))
 
-    :else
-    (throw (IllegalArgumentException. (str "No zipper constructor for: " (type x))))))
+(defmethod m/subvec-inline ::m/zip
+  ([_ ocr start] (throw (UnsupportedOperationException.)))
+  ([_ ocr start end] (throw (UnsupportedOperationException.))))
 
-(defn- build-zmatcher [pattern]
-  (cond
-    (= '_ pattern)
-    (fn [acc _]
-      acc)
+(defmethod m/tag ::m/zip
+  [_] "core2.rewrite.Zip")
 
-    (and (symbol? pattern)
-         (:z (meta pattern)))
-    (fn [acc z]
-      (when-not (contains? acc pattern)
-        (assoc acc pattern z)))
+(defmacro zmatch {:style/indent 1} [z & clauses]
+  (let [pattern+exprs (partition 2 clauses)
+        else-clause (when (odd? (count clauses))
+                      (last clauses))
+        variables (->> pattern+exprs
+                       (map first)
+                       (flatten)
+                       (filter symbol?))
+        zip-matches? (some (comp :z meta) variables)
+        shadowed-locals (filter (set variables) (keys &env))]
+    (when-not (empty? shadowed-locals)
+      (throw (IllegalArgumentException. (str "Match variables shadow locals: " (set shadowed-locals)))))
+    (if-not zip-matches?
+      `(let [z# ~z
+             node# (if (instance? Zip z#)
+                     (znode z#)
+                     z#)]
+         (m/match node#
+                  ~@(->> (for [[pattern expr] pattern+exprs]
+                           [pattern expr])
+                         (reduce into []))
+                  :else ~else-clause))
+      `(m/matchv ::m/zip [(->zipper ~z)]
+                 ~@(->> (for [[pattern expr] pattern+exprs]
+                          [[(w/postwalk
+                             (fn [x]
+                               (cond
+                                 (symbol? x)
+                                 (if (or (= '_ x)
+                                         (:z (meta x)))
+                                   x
+                                   {:node x})
 
-    (symbol? pattern)
-    (fn [acc z]
-      (let [node (znode z)]
-        (when (= node (get acc pattern node))
-          (assoc acc pattern node))))
+                                 (vector? x)
+                                 x
 
-    (keyword? pattern)
-    (fn [acc z]
-      (let [node (znode z)]
-        (when (and (ident? node)
-                   (= (name pattern) (name node)))
-          acc)))
-
-    (instance? Pattern pattern)
-    (fn [acc z]
-      (let [node (znode z)]
-        (when (and (string? node)
-                   (re-find pattern node))
-          acc)))
-
-    (sequential? pattern)
-    (let [matchers (object-array (map build-zmatcher pattern))
-          len (count matchers)]
-      (fn [acc z]
-        (when-let [z (zdown z)]
-          (when (= len (inc (count (zrights z))))
-            (loop [acc acc
-                   z z
-                   n 0]
-              (if (= n len)
-                acc
-                (when z
-                  (when-let [acc ((aget matchers n) acc z)]
-                    (recur acc (zright z) (inc n))))))))))
-
-    :else
-    (fn [acc z]
-      (when (= pattern (znode z))
-        acc))))
-
-(defonce zmatchers (atom {}))
-
-(defmacro zmatch {:style/indent 1} [loc & [pattern expr & clauses :as all-clauses]]
-  (when pattern
-    (if (> (count all-clauses) 1)
-      (let [vars (if (symbol? pattern)
-                   #{pattern}
-                   (->> (flatten pattern)
-                        (filter symbol?)
-                        (remove '#{_})))
-            matcher-key (binding  [*print-meta* true]
-                          (pr-str pattern))]
-        (swap! zmatchers update matcher-key (fn [matcher]
-                                              (or matcher (build-zmatcher pattern))))
-        `(let [loc# (->zipper ~loc)]
-           (if-let [{:syms [~@vars] :as acc#} ((get @zmatchers '~matcher-key) {} loc#)]
-             ~expr
-             (zmatch loc# ~@clauses))))
-      pattern)))
+                                 :else
+                                 {:node x}))
+                             pattern)]
+                           expr])
+                        (reduce into []))
+                 :else ~else-clause))))
 
 ;; Attribute Grammar spike.
 
@@ -246,7 +198,7 @@
 (defn ctor? [kw ag]
   (= kw (ctor ag)))
 
-(def vector-zip ->zip)
+(def vector-zip ->zipper)
 (def node znode)
 (def root zroot)
 (def left zleft)

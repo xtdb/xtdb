@@ -611,138 +611,6 @@
 (defn- wrap-with-apply [z relation]
   (reduce (fn [relation sq] (apply-subquery relation (interpret-subquery sq))) relation (find-sub-queries z)))
 
-;; https://www.spoofax.dev/background/stratego/strategic-rewriting/term-rewriting/
-;; https://www.spoofax.dev/background/stratego/strategic-rewriting/limitations-of-rewriting/
-
-(defn- prop-eval-rules [z]
-  (r/zmatch z
-    [:not true]
-    ;;=>
-    false
-
-    [:not false]
-    ;;=>
-    true
-
-    [:and true x]
-    ;;=>
-    x
-
-    [:and x true]
-    ;;=>
-    x
-
-    [:and false x]
-    ;;=>
-    false
-
-    [:and x false]
-    ;;=>
-    false
-
-    [:or true x]
-    ;;=>
-    true
-
-    [:or x true]
-    ;;=>
-    true
-
-    [:or false x]
-    ;;=>
-    x
-
-    [:or x false]
-    ;;=>
-    x))
-
-(defn- prop-simplify [z]
-  (r/zmatch z
-    [:not [:not x]]
-    ;;=>
-    x
-
-    [:not [:and x y]]
-    ;;=>
-    `(~'or (~'not ~x) (~'not ~y))
-
-    [:not [:or x y]]
-    ;;=>
-    `(~'and (~'not ~x) (~'not ~y))))
-
-(defn- prop-further-simplify [z]
-  (r/zmatch z
-    [:and x x]
-    ;;=>
-    x
-
-    [:or x x]
-    ;;=>
-    x
-
-    [:and x [:or x y]]
-    ;;=>
-    x
-
-    [:or x [:and x y]]
-    ;;=>
-    x
-
-    [:and [:or x y] [:or y x]]
-    ;;=>
-    `(~'or ~x ~y)))
-
-(defn- prop-dnf [z]
-  (r/zmatch z
-    [:and [:or x y] z]
-    ;;=>
-    `(~'or (~'and ~x ~z) (~'and ~y ~z))
-
-    [:and z [:or x y]]
-    ;;=>
-    `(~'or (~'and ~z ~x) (~'and ~z ~y))))
-
-(defn- prop-cnf [z]
-  (r/zmatch z
-    [:or [:and x y] z]
-    ;;=>
-    `(~'and (~'or ~x ~z) (~'or ~y ~z))
-
-    [:or z [:and x y]]
-    ;;=>
-    `(~'and (~'or ~z ~x) (~'or ~z ~y))))
-
-(defn- dnf [predicate]
-  (->> (r/->zipper predicate)
-       (r/innermost (r/mono-tp (some-fn prop-eval-rules prop-simplify prop-further-simplify prop-dnf)))
-       (r/node)))
-
-(defn- cnf [predicate]
-  (->> (r/->zipper predicate)
-       (r/innermost (r/mono-tp (some-fn prop-eval-rules prop-simplify prop-further-simplify prop-cnf)))
-       (r/node)))
-
-(defn- boolean-constraint-propagation [cnf-clauses]
-  (loop [clauses (distinct (for [clause cnf-clauses]
-                             (if (or-predicate? clause)
-                               (cons 'or (flatten-expr or-predicate? clause))
-                               clause)))]
-    (let [units (set (remove or-predicate? clauses))
-          not-units (set (for [u units]
-                           `(~'not ~u)))
-          new-clauses (->> (for [clause clauses
-                                 :let [clause (if (or-predicate? clause)
-                                                (let [literals (remove not-units (rest clause))]
-                                                  (when-not (some units literals)
-                                                    (cons 'or literals)))
-                                                clause)]
-                                 :when (some? clause)]
-                             clause)
-                           (distinct))]
-      (if (= clauses new-clauses)
-        new-clauses
-        (recur new-clauses)))))
-
 (defn- predicate-conjunctive-clauses [predicate]
   (if (or-predicate? predicate)
     (let [disjuncts (->> (flatten-expr or-predicate? predicate)
@@ -857,10 +725,10 @@
                          (r/mono-tp
                           (fn [z]
                             (r/zmatch z
-                              [:project projection relation]
+                              [:project projection-2 relation-2]
                               ;;=>
-                              [:project (vec (concat projection (mapcat keys order-by-projection)))
-                               [:map order-by-projection relation]]))))
+                              [:project (vec (concat projection-2 (mapcat keys order-by-projection)))
+                               [:map order-by-projection relation-2]]))))
                         (r/node))
                    relation)
         order-by [:order-by (mapv :spec order-by-specs) relation]]
@@ -1177,8 +1045,8 @@
 ;; function will mainly be used for decorrelation, so not being able
 ;; to deduct this, fail, and keep Apply is also an option, say by
 ;; returning nil instead of throwing an exception like now.
-(defn- relation-columns [relation]
-  (r/zmatch relation
+(defn- relation-columns [relation-in]
+  (r/zmatch relation-in
     [:table explicit-column-names _]
     (vec explicit-column-names)
 
@@ -1259,7 +1127,7 @@
     [:max-1-row relation]
     (relation-columns relation)
 
-    (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation))))))
+    (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation-in))))))
 
 ;; Attempt to clean up tree, removing names internally and only add
 ;; them back at the top. Scan still needs explicit names to access the
@@ -1270,7 +1138,7 @@
 (defn- next-name []
   (with-meta (symbol (str 'x (swap! *name-counter* inc))) {:column? true}))
 
-(defn- remove-names-step [relation]
+(defn- remove-names-step [relation-in]
   (letfn [(with-smap [relation smap]
             (vary-meta relation assoc :smap smap))
           (->smap [relation]
@@ -1312,7 +1180,7 @@
                               projection
                               relation])]
               (with-smap relation new-smap)))]
-    (r/zmatch relation
+    (r/zmatch relation-in
       [:table explicit-column-names table]
       (let [smap (zipmap explicit-column-names
                          (repeatedly next-name))]
@@ -1443,9 +1311,9 @@
       [:max-1-row relation]
       (with-smap [:max-1-row relation] (->smap relation))
 
-      (when (and (vector? (r/node relation))
-                 (keyword? (r/ctor relation)))
-        (throw (IllegalArgumentException. (str "cannot remove names for: " (pr-str (r/node relation)))))))))
+      (when (and (vector? (r/node relation-in))
+                 (keyword? (r/ctor relation-in)))
+        (throw (IllegalArgumentException. (str "cannot remove names for: " (pr-str (r/node relation-in)))))))))
 
 (defn- remove-names [relation]
   (let [projection (relation-columns relation)
@@ -1461,10 +1329,10 @@
                                               relation])
                                   smap-inv (set/map-invert rename-map)
                                   relation (or (r/zmatch relation
-                                                 [:rename rename-map-2 relation]
+                                                 [:rename rename-map-2 relation-2]
                                                  ;;=>
                                                  (when (= smap-inv (set/map-invert rename-map-2))
-                                                   relation))
+                                                   relation-2))
                                                [:rename smap-inv relation])]
                               (with-meta relation {:column->name smap})))]
     (with-meta relation {:column->name smap
@@ -1474,7 +1342,7 @@
   (let [smap (:column->name (meta relation))
         relation (w/postwalk-replace (set/map-invert smap) relation)]
     (or (r/zmatch relation
-          [:rename rename-map relation]
+          [:rename rename-map relation-2]
           ;;=>
           (when-let [rename-map (and (map? rename-map)
                                      (->> (for [[k v] rename-map
@@ -1482,8 +1350,8 @@
                                             [k v])
                                           (into {})))]
             (if (empty? rename-map)
-              relation
-              [:rename rename-map relation])))
+              relation-2
+              [:rename rename-map relation-2])))
 
         relation)))
 
@@ -1504,25 +1372,27 @@
          x)))
 
 (defn- equals-predicate? [predicate]
-  (r/zmatch predicate
-    [:= x y]
-    true
+  (and (sequential? predicate)
+       (= 3 (count predicate))
+       (= '= (first predicate))))
 
-    false))
+(defn- nil-predicate? [predicate]
+  (and (sequential? predicate)
+       (= 2 (count predicate))
+       (= 'nil? (first predicate))))
 
 (defn- all-predicate? [predicate]
-  (r/zmatch predicate
-    [:or [:= x y] [:nil? x] [:nil? y]]
-    true
-
-    false))
+  (and (sequential? predicate)
+       (= 4 (count predicate))
+       (= 'or (first predicate))
+       (equals-predicate? (second predicate))
+       (nil-predicate? (nth predicate 2))
+       (nil-predicate? (nth predicate 3))))
 
 (defn- not-predicate? [predicate]
-  (r/zmatch predicate
-    [:not _]
-    true
-
-    false))
+  (and (sequential? predicate)
+       (= 2 (count predicate))
+       (= 'not (first predicate))))
 
 (defn- build-join-map [predicate lhs rhs]
   (when (equals-predicate? predicate)
