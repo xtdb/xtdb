@@ -66,7 +66,8 @@
     (if (seq group-col-names)
       (GroupMapper. group-col-names
                     (emap/->relation-map allocator {:key-col-names group-col-names,
-                                                    :store-col-names #{}})
+                                                    :store-col-names #{}
+                                                    :nil-keys-equal? true})
                     gm-vec)
       (NullGroupMapper. gm-vec))))
 

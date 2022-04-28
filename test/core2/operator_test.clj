@@ -448,3 +448,12 @@
           [:table [{:a 42, :b 42} {:a nil, :b 42} {:a nil, :b 42}]]]
         (op/query-ra {})
         any?)))
+
+(t/deftest test-group-by-groups-nils
+  (t/is
+    (=
+      [{:a nil, :b 1, :n 85}]
+      (-> '[:group-by [a b {n (sum c)}]
+            [:table [{:a nil, :b 1, :c 42}
+                     {:a nil, :b 1, :c 43}]]]
+          (op/query-ra {})))))

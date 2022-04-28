@@ -66,11 +66,12 @@
        (and (.test p1 l r)
             (.test p2 l r))))))
 
-(defn- build-comparator [left-val-types right-val-types]
+(defn- build-comparator [left-val-types right-val-types nil-equal]
   (let [left-vec (gensym 'left-vec)
         left-idx (gensym 'left-idx)
         right-vec (gensym 'right-vec)
-        right-idx (gensym 'right-idx)]
+        right-idx (gensym 'right-idx)
+        eq-fn (if nil-equal :_null-eq :=)]
     (eval
       `(fn [~(expr/with-tag left-vec IIndirectVector)
             ~(expr/with-tag right-vec IIndirectVector)]
@@ -91,7 +92,7 @@
                     (continue-right
                       (fn [right-type right-code]
                         (let [{continue-= :continue-call}
-                              (expr/codegen-call {:op :call, :f :=,
+                              (expr/codegen-call {:op :call, :f eq-fn,
                                                   :arg-types [left-type right-type]})]
                           (continue-=
                             (fn [out-type out-code]
@@ -102,11 +103,11 @@
 
 (def memoized-build-comparator (memoize build-comparator))
 
-(defn- ->comparator ^core2.expression.map.IntIntPredicate [left-cols right-cols]
+(defn- ->comparator ^core2.expression.map.IntIntPredicate [left-cols right-cols nil-equal]
   (->> (map (fn [^IIndirectVector left-col, ^IIndirectVector right-col]
               (let [left-val-types (expr/field->value-types (.getField (.getVector left-col)))
                     right-val-types (expr/field->value-types (.getField (.getVector right-col)))
-                    f (memoized-build-comparator left-val-types right-val-types)]
+                    f (memoized-build-comparator left-val-types right-val-types nil-equal)]
                 (f left-col right-col)))
             left-cols
             right-cols)
@@ -142,7 +143,8 @@
 
 (defn ^core2.expression.map.IRelationMap ->relation-map
   [^BufferAllocator allocator,
-   {:keys [key-col-names build-key-col-names probe-key-col-names store-col-names with-nil-row?]
+   {:keys [key-col-names build-key-col-names probe-key-col-names store-col-names with-nil-row?
+           nil-keys-equal?]
     :or {build-key-col-names key-col-names
          probe-key-col-names key-col-names}}]
 
@@ -173,8 +175,7 @@
                 out-writers (->> (mapv #(.writerForName out-rel (.getName ^IIndirectVector %)) in-rel))
                 out-copiers (mapv vw/->row-copier out-writers in-rel)
                 build-rel (vw/rel-writer->reader out-rel)
-
-                comparator (->comparator in-key-cols (mapv #(.vectorForName build-rel %) build-key-col-names))
+                comparator (->comparator in-key-cols (mapv #(.vectorForName build-rel %) build-key-col-names) nil-keys-equal?)
                 hasher (->hasher in-key-cols)]
 
             (letfn [(add ^long [^RoaringBitmap hash-bitmap, ^long idx]
@@ -200,7 +201,7 @@
         (probeFromRelation [_ probe-rel]
           (let [in-key-cols (mapv #(.vectorForName probe-rel %) probe-key-col-names)
                 build-rel (vw/rel-writer->reader out-rel)
-                comparator (->comparator in-key-cols (mapv #(.vectorForName build-rel %) build-key-col-names))
+                comparator (->comparator in-key-cols (mapv #(.vectorForName build-rel %) build-key-col-names) nil-keys-equal?)
                 hasher (->hasher in-key-cols)]
 
             (reify IRelationMapProber

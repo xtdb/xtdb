@@ -496,6 +496,20 @@
 (defmethod codegen-call [:= ::types/Object ::types/Object] [_]
   (mono-fn-call types/bool-type #(do `(= ~@%))))
 
+;; _null-eq is an internal function used in situations where two nulls should compare equal,
+;; e.g when grouping rows in group-by.
+(defmethod codegen-call [:_null-eq ::types/Object ::types/Object] [_]
+  (mono-fn-call types/bool-type #(do `(= ~@%))))
+
+(defmethod codegen-call [:_null-eq ArrowType$Null ::types/Object] [_]
+  (mono-fn-call types/bool-type (constantly false)))
+
+(defmethod codegen-call [:_null-eq ::types/Object ArrowType$Null] [_]
+  (mono-fn-call types/bool-type (constantly false)))
+
+(defmethod codegen-call [:_null-eq ArrowType$Null ArrowType$Null] [_]
+  (mono-fn-call types/bool-type (constantly true)))
+
 (defmethod codegen-call [:<> ::types/Number ::types/Number] [_]
   (mono-fn-call types/bool-type #(do `(not (== ~@%)))))
 
