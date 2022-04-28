@@ -496,18 +496,18 @@
 (defmethod codegen-call [:= ::types/Object ::types/Object] [_]
   (mono-fn-call types/bool-type #(do `(= ~@%))))
 
-;; _null-eq is an internal function used in situations where two nulls should compare equal,
+;; null-eq is an internal function used in situations where two nulls should compare equal,
 ;; e.g when grouping rows in group-by.
-(defmethod codegen-call [:_null-eq ::types/Object ::types/Object] [_]
+(defmethod codegen-call [:null-eq ::types/Object ::types/Object] [_]
   (mono-fn-call types/bool-type #(do `(= ~@%))))
 
-(defmethod codegen-call [:_null-eq ArrowType$Null ::types/Object] [_]
+(defmethod codegen-call [:null-eq ArrowType$Null ::types/Object] [_]
   (mono-fn-call types/bool-type (constantly false)))
 
-(defmethod codegen-call [:_null-eq ::types/Object ArrowType$Null] [_]
+(defmethod codegen-call [:null-eq ::types/Object ArrowType$Null] [_]
   (mono-fn-call types/bool-type (constantly false)))
 
-(defmethod codegen-call [:_null-eq ArrowType$Null ArrowType$Null] [_]
+(defmethod codegen-call [:null-eq ArrowType$Null ArrowType$Null] [_]
   (mono-fn-call types/bool-type (constantly true)))
 
 (defmethod codegen-call [:<> ::types/Number ::types/Number] [_]
@@ -1007,12 +1007,12 @@
     (fn [[target replacement from len]]
       `(StringUtil/sqlBinOverlay (resolve-buf ~target) (resolve-buf ~replacement) ~from ~len))))
 
-(defmethod codegen-call [:_default-overlay-length ArrowType$Null] [_] call-returns-null)
+(defmethod codegen-call [:default-overlay-length ArrowType$Null] [_] call-returns-null)
 
-(defmethod codegen-call [:_default-overlay-length ArrowType$Utf8] [_]
+(defmethod codegen-call [:default-overlay-length ArrowType$Utf8] [_]
   (mono-fn-call types/int-type #(do `(StringUtil/utf8Length (resolve-utf8-buf ~@%)))))
 
-(defmethod codegen-call [:_default-overlay-length ArrowType$Binary] [_]
+(defmethod codegen-call [:default-overlay-length ArrowType$Binary] [_]
   (mono-fn-call types/int-type #(do `(.remaining (resolve-buf ~@%)))))
 
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]

@@ -71,7 +71,7 @@
         left-idx (gensym 'left-idx)
         right-vec (gensym 'right-vec)
         right-idx (gensym 'right-idx)
-        eq-fn (if nil-equal :_null-eq :=)]
+        eq-fn (if nil-equal :null-eq :=)]
     (eval
       `(fn [~(expr/with-tag left-vec IIndirectVector)
             ~(expr/with-tag right-vec IIndirectVector)]

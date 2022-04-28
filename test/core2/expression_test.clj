@@ -923,12 +923,12 @@
 (tct/defspec overlay-len-default-is-len-of-placing-prop
   (tcp/for-all [[s1 s2 i] (overlay-args-gen tcg/string)]
     (= (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d (project1 '(character-length a "CHARACTERS") {:a s2})})
-       (project1 '(overlay a b c (_default-overlay-length b)) {:a s1, :b s2, :c i}))))
+       (project1 '(overlay a b c (default-overlay-length b)) {:a s1, :b s2, :c i}))))
 
 (tct/defspec binary-overlay-len-default-is-len-of-placing-prop
   (tcp/for-all [[s1 s2 i] (overlay-args-gen tcg/bytes)]
     (= (project1 '(overlay a b c d) {:a s1, :b s2, :c i, :d (project1 '(octet-length a) {:a s2})})
-       (project1 '(overlay a b c (_default-overlay-length b)) {:a s1, :b s2, :c i}))))
+       (project1 '(overlay a b c (default-overlay-length b)) {:a s1, :b s2, :c i}))))
 
 (t/deftest test-math-functions
   (t/is (= [1.4142135623730951 1.8439088914585775 nil]

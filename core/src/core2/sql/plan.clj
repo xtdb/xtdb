@@ -296,7 +296,7 @@
      [:character_overlay_function _ ^:z target _ ^:z placing _ ^:z pos]
      ;; assuming common sub expression & constant folding optimisations should make their way in at some point
      ;; calculating the default length like this should not be a problem.
-     (list 'overlay (expr target) (expr placing) (expr pos) (list '_default-overlay-length (expr placing)))
+     (list 'overlay (expr target) (expr placing) (expr pos) (list 'default-overlay-length (expr placing)))
 
      [:named_columns_join _ _]
      ;;=>
