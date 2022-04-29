@@ -11,23 +11,23 @@
    [[x6 :desc :nulls-last] [x5 :asc :nulls-last]]
    [:group-by
     [x1 x2 x4 x5 x6 {x18 (sum x9)}]
-    [:semi-join
-     [{x4 x12}]
+    [:join
+     [{x4 x10}]
      [:join
-      [{x4 x10}]
-      [:join
-       [{x2 x7}]
-       [:rename {c_name x1, c_custkey x2} [:scan [c_name c_custkey]]]
+      [{x2 x7}]
+      [:rename {c_name x1, c_custkey x2} [:scan [c_name c_custkey]]]
+      [:semi-join
+       [{x4 x12}]
        [:rename
         {o_orderkey x4, o_orderdate x5, o_totalprice x6, o_custkey x7}
-        [:scan [o_orderkey o_orderdate o_totalprice o_custkey]]]]
-      [:rename
-       {l_quantity x9, l_orderkey x10}
-       [:scan [l_quantity l_orderkey]]]]
-     [:select
-      (> x15 300)
-      [:group-by
-       [x12 {x15 (sum x13)}]
-       [:rename
-        {l_orderkey x12, l_quantity x13}
-        [:scan [l_orderkey l_quantity]]]]]]]]]]
+        [:scan [o_orderkey o_orderdate o_totalprice o_custkey]]]
+       [:select
+        (> x15 300)
+        [:group-by
+         [x12 {x15 (sum x13)}]
+         [:rename
+          {l_orderkey x12, l_quantity x13}
+          [:scan [l_orderkey l_quantity]]]]]]]
+     [:rename
+      {l_quantity x9, l_orderkey x10}
+      [:scan [l_quantity l_orderkey]]]]]]]]

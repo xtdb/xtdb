@@ -494,3 +494,14 @@
             FROM
             (SELECT orders.id, orders.product
             FROM orders) AS o"))))
+
+(deftest test-semi-and-anti-joins-are-pushed-down
+  (t/is (=plan-file
+          "test-semi-and-anti-joins-are-pushed-down"
+          (plan-sql
+            "SELECT t1.a1
+            FROM t1, t2, t3
+            WHERE t1.b1 in (532,593)
+            AND t2.b1 in (808,662)
+            AND t3.c1 in (792,14)
+            AND t1.a1 = t2.a2"))))

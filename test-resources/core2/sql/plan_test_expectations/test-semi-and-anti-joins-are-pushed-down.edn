@@ -1,0 +1,19 @@
+[:rename
+ {x1 a1}
+ [:project
+  [x1]
+  [:cross-join
+   [:join
+    [{x1 x5}]
+    [:semi-join
+     [{x2 x9}]
+     [:rename {a1 x1, b1 x2} [:scan [a1 b1]]]
+     [:table [{x9 532} {x9 593}]]]
+    [:semi-join
+     [{x4 x12}]
+     [:rename {b1 x4, a2 x5} [:scan [b1 a2]]]
+     [:table [{x12 808} {x12 662}]]]]
+   [:semi-join
+    [{x7 x15}]
+    [:rename {c1 x7} [:scan [c1]]]
+    [:table [{x15 792} {x15 14}]]]]]]

@@ -1998,6 +1998,66 @@
      (when (every? symbol? projection)
        [:group-by c dependent-relation])))
 
+(defn push-semi-and-anti-joins-down [z]
+  (r/zmatch
+    z
+    [:semi-join join-condition
+     [:cross-join inner-lhs inner-rhs]
+     rhs]
+    ;;=>
+    (cond (columns-in-both-relations? join-condition inner-lhs rhs)
+          [:cross-join
+           [:semi-join join-condition inner-lhs rhs]
+           inner-rhs]
+
+          (columns-in-both-relations? join-condition inner-rhs rhs)
+          [:cross-join
+           inner-lhs
+           [:semi-join join-condition inner-rhs rhs]])
+
+    [:anti-join join-condition
+     [:cross-join inner-lhs inner-rhs]
+     rhs]
+    ;;=>
+    (cond (columns-in-both-relations? join-condition inner-lhs rhs)
+          [:cross-join
+           [:anti-join join-condition inner-lhs rhs]
+           inner-rhs]
+
+          (columns-in-both-relations? join-condition inner-rhs rhs)
+          [:cross-join
+           inner-lhs
+           [:anti-join join-condition inner-rhs rhs]])
+
+    [:semi-join join-condition
+     [:join inner-join-condition inner-lhs inner-rhs]
+     rhs]
+    ;;=>
+    (cond (columns-in-both-relations? join-condition inner-lhs rhs)
+          [:join inner-join-condition
+           [:semi-join join-condition inner-lhs rhs]
+           inner-rhs]
+
+          (columns-in-both-relations? join-condition inner-rhs rhs)
+          [:join inner-join-condition
+           inner-lhs
+           [:semi-join join-condition inner-rhs rhs]])
+
+    [:anti-join join-condition
+     [:join inner-join-condition inner-lhs inner-rhs]
+     rhs]
+    ;;=>
+    (cond (columns-in-both-relations? join-condition inner-lhs rhs)
+          [:join inner-join-condition
+           [:anti-join join-condition inner-lhs rhs]
+           inner-rhs]
+
+          (columns-in-both-relations? join-condition inner-rhs rhs)
+          [:join inner-join-condition
+           inner-lhs
+           [:anti-join join-condition inner-rhs rhs]])))
+
+
 (def push-correlated-selection-down-past-join (partial push-selection-down-past-join true))
 (def push-correlated-selection-down-past-rename (partial push-selection-down-past-rename true))
 (def push-correlated-selection-down-past-project (partial push-selection-down-past-project true))
@@ -2059,6 +2119,7 @@
                                 #'push-correlated-selections-with-fewer-variables-down
                                 #'remove-superseded-projects
                                 #'merge-selections-around-scan
+                                #'push-semi-and-anti-joins-down
                                 #'add-selection-to-scan-predicate]
                  decorrelate-plan [#'pull-correlated-selection-up-towards-apply
                                    #'remove-redundant-projects
