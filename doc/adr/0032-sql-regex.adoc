@@ -1,0 +1,37 @@
+= 32. SQL Regex
+
+Date: 2022-04-29
+
+== Status
+
+Proposed
+
+== Context
+
+XTDB should support regular expression string functions defined by the SQL spec, for example, `SUBSTRING_REGEX`.
+
+The spec references two flavours of regex, POSIX and XQuery. Each regex string function may require one of these two flavors. e.g `SUBSTRING` with `SIMILAR` requires POSIX, where `SUBSTRING_REGEX` XQuery.
+
+Postgres drops XQuery functions, and only provides POSIX, therefore implementing a subset of the spec.
+
+H2 is also non-compliant, and exposes java flavoured regexes. HSQLDB also uses java regexes.
+
+== Option A: Just use java regex
+
+One option is to expose java regular expressions, its easy, should perform well, and there exists documentation we can point users to. If we choose to do this, we will have to choose which functions to implement (or invent our own) - there will be decisions to be made regarding new syntax, or where to break or omit parts of the spec.
+
+== Option B: Support POSIX
+
+We could expose POSIX regular expressions, via JNI, The GNU C library contains `regex.h` for this.
+
+== Option C: Support XQuery
+
+There should exist java libraries for java, see link:https://en.wikipedia.org/wiki/XQuery_API_for_Java[wikipedia]. It seems the ecosystem around XQuery is not very active.
+
+== Option D: Support Both POSIX & XQuery for spec compliance.
+
+To full comply with the spec & to implement correctly all string functions, we would need to support both POSIX and XQuery flavored regexes.
+
+== Decision
+
+== Consequences
