@@ -26,7 +26,7 @@ We could expose POSIX regular expressions, via JNI, The GNU C library contains `
 
 == Option C: Support XQuery
 
-There should exist java libraries for java, see link:https://en.wikipedia.org/wiki/XQuery_API_for_Java[wikipedia]. It seems the ecosystem around XQuery is not very active.
+There should exist XQuery libraries for java, see link:https://en.wikipedia.org/wiki/XQuery_API_for_Java[wikipedia]. It seems the ecosystem around XQuery is not very active.
 
 == Option D: Support Both POSIX & XQuery for spec compliance.
 
