@@ -11,7 +11,7 @@
 (def parse-sql2011
   (insta/parser
    (io/resource "core2/sql/SQL2011.ebnf")
-   :auto-whitespace (insta/parser "whitespace = #'\\s+' | #'\\s*--[^\r\n]*\\s*' | #'\\s*/[*].*?([*]/\\s*|$)'")
+   :auto-whitespace (insta/parser "whitespace = #'(\\s+|\\s*--[^\r\n]*\\s*|\\s*/[*].*?([*]/\\s*|$))'")
    :string-ci true))
 
 (defn- prune-tree [tree]
