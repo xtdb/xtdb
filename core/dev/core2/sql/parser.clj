@@ -11,7 +11,6 @@
 ;; Spike to replace Instaparse.
 
 ;; TODO:
-;; fix reduction type raw, it looks at the wrong level, need to look in body.
 ;; detect need for left-recursion memo.
 ;; explore error handling, needs to be passed upwards, merged, a kind of result.
 ;; try compiling rule bodies to fns?
@@ -168,7 +167,7 @@
               (cond-> (case tag
                         :nt (->NonTerminalParser (:keyword parser)
                                                  (= {:reduction-type :raw}
-                                                    (:red parser))
+                                                    (get-in grammar [(:keyword parser) :red]))
                                                  rules)
                         :star (->RepeatParser (build-parser (:parser parser)) true)
                         :plus (->RepeatParser (build-parser (:parser parser)) false)
