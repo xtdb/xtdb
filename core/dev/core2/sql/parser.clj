@@ -5,12 +5,13 @@
             [core2.sql])
   (:import java.io.File
            [java.util HashMap List Map]
+           java.util.regex.Pattern
            clojure.lang.MapEntry))
 
 ;; Spike to replace Instaparse.
 
 ;; TODO:
-;; add records with parse interface and generate a "compiled" tree from edn input.
+;; fix reduction type raw, it looks at the wrong level, need to look in body.
 ;; detect need for left-recursion memo.
 ;; explore error handling, needs to be passed upwards, merged, a kind of result.
 ;; try compiling rule bodies to fns?
@@ -43,96 +44,149 @@
 
 (defrecord ParseState [ast ^int idx])
 
-(defn- ebnf-parser [grammar ws-regexp ^String in start-rule]
-  (let [memos (HashMap.)]
-    (letfn [(parse [^long idx {:keys [tag] :as parser}]
-              (when (<= idx (.length in))
-                (case tag
-                  :nt (let [kw (:keyword parser)
-                            memo-key (MapEntry/create idx kw)
-                            nt-parser (get grammar kw)]
-                        (if-let [^ParseState state (.get memos memo-key)]
-                          (when (.ast state)
-                            state)
-                          (loop [last-state (ParseState. nil idx)]
-                            (.put memos memo-key last-state)
-                            (when-let [^ParseState state (parse idx nt-parser)]
-                              (let [new-state (ParseState. (if (:hide parser)
-                                                             []
-                                                             (if (= {:reduction-type :raw}
-                                                                    (:red nt-parser))
-                                                               (.ast state)
-                                                               [(with-meta
-                                                                  (into [kw] (.ast state))
-                                                                  {:start-idx idx
-                                                                   :end-idx (.idx state)})]))
-                                                           (.idx state))]
-                                (if (<= (.idx new-state) (.idx last-state))
-                                  (when (.ast last-state)
-                                    last-state)
-                                  (recur new-state)))))))
-                  (:star :plus) (let [parser (:parser parser)]
-                                  (loop [ast []
-                                         idx idx
-                                         n 0]
-                                    (if-let [^ParseState state (parse idx parser)]
-                                      (recur (into ast (.ast state))
-                                             (.idx state)
-                                             (inc n))
-                                      (when (or (= :star tag)
-                                                (pos? n))
-                                        (ParseState. ast idx)))))
-                  :opt (or (parse idx (:parser parser))
-                           (ParseState. [] idx))
-                  :neg (when-not (parse idx (:parser parser))
-                         (ParseState. [] idx))
-                  :cat (let [^List parsers (:parsers parser)]
-                         (loop [ast []
-                                idx idx
-                                n 0]
-                           (if (< n (.size parsers))
-                             (when-let [^ParseState state (parse idx (.get parsers n))]
-                               (recur (into ast (.ast state))
-                                      (.idx state)
-                                      (inc n)))
-                             (ParseState. ast idx))))
-                  :alt (reduce
-                        (fn [^ParseState state parser]
-                          (if-let [^ParseState alt-state (parse idx parser)]
-                            (if (and state (> (.idx state) (.idx alt-state)))
-                              state
-                              alt-state)
-                            state))
-                        nil
-                        (:parsers parser))
-                  :ord (let [^ParseState state1 (parse idx (:parser1 parser))
-                             ^ParseState state2 (parse idx (:parser2 parser))]
-                         (if (and state1 state2)
-                           (if (< (.idx state1) (.idx state2))
-                             state2
-                             state1)
-                           (or state1 state2)))
-                  (:regexp :string) (let [idx (if ws-regexp
-                                                (let [m (re-matcher ws-regexp in)
-                                                      m (.region m idx (.length in))]
-                                                  (if (.lookingAt m)
-                                                    (long (.end m))
-                                                    idx))
-                                                idx)]
-                                      (if (= :regexp tag)
-                                        (let [m (re-matcher (:regexp parser) in)
-                                              m (.region m idx (.length in))]
-                                          (when (.lookingAt m)
-                                            (ParseState. (when-not (:hide parser)
-                                                           [(.group m)])
-                                                         (.end m))))
-                                        (let [^String s (:string parser)]
-                                          (when (.regionMatches in true idx s 0 (.length s))
-                                            (ParseState. (when-not (:hide parser)
-                                                           [s])
-                                                         (+ idx (.length s))))))))))]
-      (when-let [^ParseState state (parse 0 {:tag :nt :keyword start-rule})]
-        (first (.ast state))))))
+(definterface IParser
+  (^core2.sql.parser.ParseState parse [^String in ^int idx ^java.util.Map memos]))
+
+(defrecord WhitespaceParser [^java.util.regex.Pattern pattern ^core2.sql.parser.IParser parser]
+  IParser
+  (parse [_ in idx memos]
+    (let [m (.matcher pattern in)
+          m (.region m idx (.length in))
+          idx (if (.lookingAt m)
+                (int (.end m))
+                idx)]
+      (.parse parser in idx memos))))
+
+(defrecord NonTerminalParser [rule-name ^boolean raw? ^Map rules]
+  IParser
+  (parse [_ in idx memos]
+    (let [memo-key (MapEntry/create idx rule-name)
+          ^IParser parser (.get rules rule-name)]
+      (if-let [^ParseState state (.get memos memo-key)]
+        (when (.ast state)
+          state)
+        (loop [last-state (ParseState. nil idx)]
+          (.put memos memo-key last-state)
+          (when-let [^ParseState state (.parse parser in idx memos)]
+            (let [new-state (ParseState. (if raw?
+                                           (.ast state)
+                                           [(with-meta
+                                              (into [rule-name] (.ast state))
+                                              {:start-idx idx
+                                               :end-idx (.idx state)})])
+                                         (.idx state))]
+              (if (<= (.idx new-state) (.idx last-state))
+                (when (.ast last-state)
+                  last-state)
+                (recur new-state)))))))))
+
+(defrecord HideParser [^core2.sql.parser.IParser parser]
+  IParser
+  (parse [_ in idx memos]
+    (when-let [state (.parse parser in idx memos)]
+      (ParseState. [] (.idx state)))))
+
+(defrecord OptParser [^core2.sql.parser.IParser parser]
+  IParser
+  (parse [_ in idx memos]
+    (or (.parse parser in idx memos)
+        (ParseState. [] idx))))
+
+(defrecord NegParser [^core2.sql.parser.IParser parser]
+  IParser
+  (parse [_ in idx memos]
+    (when-not (.parse parser in idx memos)
+      (ParseState. [] idx))))
+
+(defrecord RepeatParser [^core2.sql.parser.IParser parser ^boolean star?]
+  IParser
+  (parse [_ in idx memos]
+    (loop [ast []
+           idx idx
+           n 0]
+      (if-let [state (.parse parser in idx memos)]
+        (recur (into ast (.ast state))
+               (.idx state)
+               (inc n))
+        (when (or star? (pos? n))
+          (ParseState. ast idx))))))
+
+(defrecord CatParser [^java.util.List parsers]
+  IParser
+  (parse [_ in idx memos]
+    (loop [ast []
+           idx idx
+           n 0]
+      (if (< n (.size parsers))
+        (when-let [state (.parse ^IParser (.get parsers n) in idx memos)]
+          (recur (into ast (.ast state))
+                 (.idx state)
+                 (inc n)))
+        (ParseState. ast idx)))))
+
+(defrecord AltParser [^java.util.List parsers]
+  IParser
+  (parse [_ in idx memos]
+    (reduce
+     (fn [^ParseState state ^IParser parser]
+       (if-let [alt-state (.parse parser in idx memos)]
+         (if (and state (> (.idx state) (.idx alt-state)))
+           state
+           alt-state)
+         state))
+     nil
+     parsers)))
+
+(defrecord OrdParser [^core2.sql.parser.IParser parser1 ^core2.sql.parser.IParser parser2]
+  IParser
+  (parse [_ in idx memos]
+    (let [state1 (.parse parser1 in idx memos)
+          state2 (.parse parser2 in idx memos)]
+      (if (and state1 state2)
+        (if (< (.idx state1) (.idx state2))
+          state2
+          state1)
+        (or state1 state2)))))
+
+(defrecord StringParser [^String string]
+  IParser
+  (parse [_ in idx memos]
+    (when (.regionMatches in true idx string 0 (.length string))
+      (ParseState. [string] (+ idx (.length string))))))
+
+(defrecord RegexpParser [^Pattern pattern]
+  IParser
+  (parse [_ in idx memos]
+    (let [m (.matcher pattern in)
+          m (.region m idx (.length in))]
+      (when (.lookingAt m)
+        (ParseState. [(.group m)] (.end m))))))
+
+(defn build-ebnf-parser [grammar ws-pattern]
+  (let [rules (HashMap.)]
+    (letfn [(build-parser [{:keys [tag hide] :as parser}]
+              (cond-> (case tag
+                        :nt (->NonTerminalParser (:keyword parser)
+                                                 (= {:reduction-type :raw}
+                                                    (:red parser))
+                                                 rules)
+                        :star (->RepeatParser (build-parser (:parser parser)) true)
+                        :plus (->RepeatParser (build-parser (:parser parser)) false)
+                        :opt (->OptParser (build-parser (:parser parser)))
+                        :neg (->NegParser (build-parser (:parser parser)))
+                        :cat (->CatParser (mapv build-parser (:parsers parser)))
+                        :alt (->AltParser (mapv build-parser (:parsers parser)))
+                        :ord (->OrdParser (build-parser (:parser1 parser))
+                                          (build-parser (:parser2 parser)))
+                        :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser)))
+                        :string (->WhitespaceParser ws-pattern (->StringParser (:string parser))))
+                hide (->HideParser)))]
+      (doseq [[k v] grammar]
+        (.put rules k (build-parser v)))
+      (fn [in start-rule]
+        (some-> (.parse ^IParser (build-parser {:tag :nt :keyword start-rule}) in 0 (HashMap.))
+                (.ast)
+                (first))))))
 
 (comment
 
@@ -145,12 +199,12 @@ expr:	expr ('*'|'/') expr
 NEWLINE : #'[\\r\\n]+' ;
 INT     : #'[0-9]+' ;"
         expr-parser (insta/parser grammar)
-        expr-cfg (insta-cfg/ebnf grammar)
+        expr-cfg (build-ebnf-parser (insta-cfg/ebnf grammar) #"")
         in "100+2*34
 "]
     (time
      (dotimes [_ 10000]
-       (ebnf-parser expr-cfg nil in :prog)))
+       (expr-cfg in :prog)))
 
     (time
      (dotimes [_ 10000]
@@ -170,7 +224,7 @@ TOKEN: !'::=' #'[^ |\\n\\r\\t.!/]+' ;
 HEADER_COMMENT: #'// *\\d.*?\\n' ;
         "
         spec-parser (insta/parser grammar :auto-whitespace (insta/parser "whitespace: #'\\s+'"))
-        spec-cfg (insta-cfg/ebnf grammar)
+        spec-cfg (build-ebnf-parser (insta-cfg/ebnf grammar) #"\s+")
         in "<colon> ::=
   :
 
@@ -199,7 +253,7 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 "]
     (time
      (dotimes [_ 1000]
-       (ebnf-parser spec-cfg #"\s+" in :spec)))
+       (spec-cfg in :spec)))
 
     (time
      (dotimes [_ 1000]
@@ -211,10 +265,11 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
   (let [in "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END
   FROM t1
- ORDER BY 1"]
+ ORDER BY 1"
+        sql-cfg (build-ebnf-parser sql-cfg #"\s+")]
     (time
      (dotimes [_ 1000]
-       (ebnf-parser sql-cfg #"\s+" in :directly_executable_statement)))
+       (sql-cfg in :directly_executable_statement)))
 
     (time
      (dotimes [_ 1000]
