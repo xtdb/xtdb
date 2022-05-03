@@ -25,6 +25,12 @@
 (definterface IParser
   (^core2.sql.parser.ParseState parse [^String in ^int idx ^java.util.Map memos]))
 
+(defrecord EpsilonParser []
+  IParser
+  (parse [_ in idx memos]
+    (when (= (count in) idx)
+      (ParseState. [] idx))))
+
 (defrecord WhitespaceParser [^java.util.regex.Pattern pattern ^core2.sql.parser.IParser parser]
   IParser
   (parse [_ in idx memos]
@@ -156,6 +162,7 @@
         rules (object-array (count rule->id))]
     (letfn [(build-parser [{:keys [tag hide] :as parser}]
               (cond-> (case tag
+                        :epsilon (->EpsilonParser)
                         :nt (->NonTerminalParser (get rule->id (:keyword parser)) rules)
                         :star (->RepeatParser (build-parser (:parser parser)) true)
                         :plus (->RepeatParser (build-parser (:parser parser)) false)
@@ -175,9 +182,14 @@
               rule-id
               (->MemoizeParser (->RuleParser k rule-id raw? (build-parser v)))))
       (fn [in start-rule]
-        (when-let [state (.parse ^IParser (build-parser {:tag :nt :keyword start-rule}) in 0 (HashMap.))]
-          (when (= (count in) (.idx state))
-            (first (.ast state))))))))
+        (when-let [state (.parse ^IParser (build-parser {:tag :cat
+                                                         :parsers [{:tag :nt :keyword start-rule}
+                                                                   {:tag :opt :parser {:tag :string :string ""}}
+                                                                   {:tag :epsilon}]})
+                                 in
+                                 0
+                                 (HashMap.))]
+          (first (.ast state)))))))
 
 (comment
 
@@ -240,7 +252,8 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
 <right bracket or trigraph> ::=
     <right bracket>
-  | <right bracket trigraph>"]
+  | <right bracket trigraph>
+"]
     (time
      (dotimes [_ 1000]
        (spec-cfg in :spec)))
