@@ -34,4 +34,14 @@ To full comply with the spec & to implement correctly all string functions, we w
 
 == Decision
 
+Early decision is to support some subset of regex functionality in the spec via java regex. Plan to revist UX around regex functions as part of a future pass.
+
+We have left open the option to in the future make our regexps compliant by mapping e.g XQuery semantics onto java patterns, if possible.
+
 == Consequences
+
+Only regex function to receive support at time of writing is `LIKE_REGEX` where the XQuery regex / flags are substituted for java.
+
+Need to consider clobbering names in the spec or inventing / borrowing names from other vendors - our `LIKE_REGEX` is not strictly complaint, as it does not implement XQuery.
+
+Other regex use cases may still need support in the future, e.g `POSITION_REGEX`, `SUBSTRING` and so on.
