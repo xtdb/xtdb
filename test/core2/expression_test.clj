@@ -276,7 +276,7 @@
   (letfn [(len [s unit] (project1 (list 'character-length 'a unit) {:a s}))]
     (t/are [s]
       (and (= (.count (.codePoints s)) (len s "CHARACTERS"))
-           (= (alength (.getBytes s "utf-8"))) (len s "OCTETS"))
+           (= (alength (.getBytes s "utf-8")) (len s "OCTETS")))
 
       ""
       "a"
