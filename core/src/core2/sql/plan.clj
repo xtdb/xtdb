@@ -677,13 +677,11 @@
   (boolean (:grouping-columns (sem/local-env (sem/group-env z)))))
 
 (defn- wrap-with-group-by [te relation]
-  (let [projection (first (sem/projected-columns te))
-        {:keys [grouping-columns]} (sem/local-env (sem/group-env te))
-        grouping-columns (set grouping-columns)
-        grouping-columns (vec (for [{:keys [qualified-column] :as projection} projection
-                                    :when (contains? grouping-columns qualified-column)
-                                    :let [derived-column (:ref (meta projection))]]
-                                (expr (r/$ derived-column 1))))
+  (let [{:keys [grouping-columns]} (sem/local-env (sem/group-env te))
+        current-env (sem/env te)
+        grouping-columns (vec (for [[table-name column] grouping-columns
+                                    :let [table (sem/find-decl current-env table-name)]]
+                                (id-symbol table-name (:id table) column)))
         aggregates (r/collect-stop
                     (fn [z]
                       (r/zcase z

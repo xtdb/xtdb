@@ -535,3 +535,15 @@
             AND t2.b1 in (808,662)
             AND t3.c1 in (792,14)
             AND t1.a1 = t2.a2"))))
+
+(deftest test-group-by-with-projected-column-in-expr
+  (t/is (=plan-file
+          "test-group-by-with-projected-column-in-expr"
+          (plan-sql
+            "SELECT foo.a - 4 AS bar
+            FROM foo
+            GROUP BY foo.a"))))
+
+
+
+

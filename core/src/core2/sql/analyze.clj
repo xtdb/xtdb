@@ -58,7 +58,7 @@
   (when s
     (first (get s k))))
 
-(defn- find-decl [[s & ss :as env] k]
+(defn find-decl [[s & ss :as env] k]
   (when s
     (or (find-local-decl env k)
         (recur ss k))))

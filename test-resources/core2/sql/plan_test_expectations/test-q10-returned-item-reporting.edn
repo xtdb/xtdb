@@ -14,7 +14,7 @@
    [:order-by
     [[x22 :desc :nulls-last]]
     [:group-by
-     [x1 x2 x3 x18 x4 x5 x6 {x22 (sum x21)}]
+     [x1 x2 x3 x5 x18 x4 x6 {x22 (sum x21)}]
      [:map
       [{x21 (* x13 (- 1 x14))}]
       [:join
