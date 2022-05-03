@@ -1,0 +1,45 @@
+= 32. UTF-8
+
+Date: 2022-05-03
+
+== Status
+
+Proposed
+
+== Context
+
+We allow strings to be stored and operated on by XTDB, they are stored as utf-8, as is common in arrow.
+
+The SQL standard supports multiple charsets (and collations), we would like to avoid some of that complexity.
+
+Unfortunately, java strings are represented as utf-16, and a therefore, as single codepoint can be split over multiple java 'chars', this is the high-low surrogate pair you sometimes hear about.
+
+Where this tends to matter is in the implementation of string functions, as the definition of character in java is not the same as the definition of character in utf-8.
+
+We should decide on what encoding is considered canonical, and what our character semantics should be.
+
+To get to this point a set of a string functions have currently been implemented using utf-8 character semantics to get a feel for the challenge, see `StringUtils.java`.
+
+== Option A: UTF-8 codepoint characters
+
+By opting to fully support utf-8, we will have to handroll implementation of string functions that operate directly on buffers, and that check for multi-byte characters correctly.
+
+For example, calculating the length of a utf-8 string is not the same as `str.length()`.
+
+The initial implementations of various string functions at time of writing are in terms of utf-8, and so they can be used as a reference against the possibility of java chars being used.
+
+As opposed to java, less memory will be necessary to represent strings. We can operate directly on the bytes in each arrow vector, so the performance may well be better in terms of CPU as well.
+
+== Option B: UTF-16 java characters
+
+We could choose to store utf-8, and read utf-8 from arrow vectors, but convert to utf-16 when working on strings in memory. This may provide advantages in terms of using the stdlib or community libraries to implement various string functions.
+
+However it is important to note SQL string functions often have their own semantics quite independent of what you might expect in java.
+
+UTF-16 will likely require more transient allocation into java char arrays, buffers and strings. We cannot operate directly on the bytes in each arrow vector.
+
+It is possible by using UTF-16 we unlock JVM intrinsics or highly optimised community / stdlib implementations of string functions.
+
+== Decision
+
+== Consequences
