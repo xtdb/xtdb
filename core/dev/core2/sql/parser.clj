@@ -4,20 +4,21 @@
             [instaparse.cfg :as insta-cfg]
             [core2.sql])
   (:import java.io.File
+           java.nio.IntBuffer
            [java.util HashMap List Map]
-           java.util.regex.Pattern
-           clojure.lang.MapEntry))
+           java.util.regex.Pattern))
 
 ;; Spike to replace Instaparse.
 
 ;; TODO:
-;; try rule ids with array instead of map.
 ;; explore error handling, needs to be passed upwards, merged, a kind of result.
 ;; detect need for left-recursion memo?
 ;; try compiling rule bodies to fns?
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
 ;; https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
+
+(set! *unchecked-math* :warn-on-boxed)
 
 (defrecord ParseState [ast ^int idx])
 
@@ -34,13 +35,12 @@
                 idx)]
       (.parse parser in idx memos))))
 
-(defrecord NonTerminalParser [rule-name ^Map rules]
+(defrecord NonTerminalParser [^int rule-id ^objects rules]
   IParser
   (parse [_ in idx memos]
-    (let [^IParser parser (.get rules rule-name)]
-      (.parse parser in idx memos))))
+    (.parse ^IParser (aget rules rule-id) in idx memos)))
 
-(defrecord RuleParser [rule-name ^boolean raw? ^IParser parser]
+(defrecord RuleParser [rule-name ^int rule-id ^boolean raw? ^IParser parser]
   IParser
   (parse [_ in idx memos]
     (when-let [state (.parse parser in idx memos)]
@@ -55,8 +55,9 @@
 (defrecord MemoizeParser [^RuleParser parser]
   IParser
   (parse [_ in idx memos]
-    (let [rule-name (.rule-name parser)
-          memo-key (MapEntry/create idx rule-name)]
+    (let [memo-key (IntBuffer/wrap (doto (int-array 2)
+                                     (aset 0 idx)
+                                     (aset 1 (.rule-id parser))))]
       (if-let [^ParseState state (.get memos memo-key)]
         (when (.ast state)
           state)
@@ -151,10 +152,11 @@
         (ParseState. [(.group m)] (.end m))))))
 
 (defn build-ebnf-parser [grammar ws-pattern]
-  (let [rules (HashMap.)]
+  (let [rule->id (zipmap (keys grammar) (range))
+        rules (object-array (count rule->id))]
     (letfn [(build-parser [{:keys [tag hide] :as parser}]
               (cond-> (case tag
-                        :nt (->NonTerminalParser (:keyword parser) rules)
+                        :nt (->NonTerminalParser (get rule->id (:keyword parser)) rules)
                         :star (->RepeatParser (build-parser (:parser parser)) true)
                         :plus (->RepeatParser (build-parser (:parser parser)) false)
                         :opt (->OptParser (build-parser (:parser parser)))
@@ -166,10 +168,12 @@
                         :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser)))
                         :string (->WhitespaceParser ws-pattern (->StringParser (:string parser))))
                 hide (->HideParser)))]
-      (doseq [[k v] grammar]
-        (.put rules k (->MemoizeParser (->RuleParser k
-                                                     (= {:reduction-type :raw} (:red v))
-                                                     (build-parser v)))))
+      (doseq [[k v] grammar
+              :let [rule-id (int (get rule->id k))
+                    raw? (= {:reduction-type :raw} (:red v))]]
+        (aset rules
+              rule-id
+              (->MemoizeParser (->RuleParser k rule-id raw? (build-parser v)))))
       (fn [in start-rule]
         (when-let [state (.parse ^IParser (build-parser {:tag :nt :keyword start-rule}) in 0 (HashMap.))]
           (when (= (count in) (.idx state))
