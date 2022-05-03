@@ -445,8 +445,22 @@
     "foo.a LIKE foo.b" '(like x1 x2)
     "foo.a LIKE 'foo%'" '(like x1 "foo%")
 
+    "foo.a NOT LIKE ''" '(not (like x1 ""))
+    "foo.a NOT LIKE foo.b" '(not (like x1 x2))
+    "foo.a NOT LIKE 'foo%'" '(not (like x1 "foo%"))
+
     ;; no support for ESCAPE (or default escapes), see #157
     ))
+
+(t/deftest test-like-regex-expr
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+
+    "foo.a LIKE_REGEX foo.b" '(like-regex x1 x2 "")
+    "foo.a LIKE_REGEX foo.b FLAG 'i'" '(like-regex x1 x2 "i")
+
+    "foo.a NOT LIKE_REGEX foo.b" '(not (like-regex x1 x2 ""))
+    "foo.a NOT LIKE_REGEX foo.b FLAG 'i'" '(not (like-regex x1 x2 "i"))))
 
 (t/deftest test-upper-expr
   (t/is (= '(upper x1) (plan-expr "UPPER(foo.a)"))))

@@ -348,6 +348,73 @@
   (t/testing "literal projection"
     (t/is (project1 (list 'like 's "%.+%ar") {:s "foo .+ bar"}))))
 
+(t/deftest test-like-regex
+  (t/are [s ptn expected-result]
+    (= expected-result (project1 '(like-regex a b "") {:a s, :b ptn}))
+
+    "" "" true
+    "a" "" true
+
+    "a" "a" true
+    "a" "b" false
+
+    "a" "_" false
+    "a" "_a" false
+    "a" "%" false
+    "a" "_%" false
+    "a" "__%" false
+
+    "a" "." true
+    "a" ".+" true
+    "a" ".*" true
+
+    nil nil nil
+    "a" nil nil
+    nil nil nil
+    nil "%" nil
+
+    "foo" "foo" true
+    "foo" "^foo$" true
+    "foo" "f" true
+    "foo" "oo" true
+    "foo" "ooo" false
+    "foo" "^fo$" false
+    "foo" ".*(f|o).*" true
+    "foo" "(f|d).*" true
+    "foo" "(o|d).*" true
+    "foo" "^(o|d).*" false
+
+    "." "." true
+    "." "\\." true
+    ".+" "^.+$" true
+    ".+" "^\\.\\+$" true
+    ".+" "^.\\+$" true
+    "+" "\\+" true
+    "aaaa" "^.+$" true
+
+    "A" "a" false)
+
+  (t/testing "flags"
+    (t/are [s ptn flags expected-result]
+      (= expected-result (project1 (list 'like-regex 'a 'b flags) {:a s, :b ptn}))
+
+      "" "" "i" true
+      "A" "a" "i" true
+      "a\nB\nc" "^B$" "" false
+      "a\nB\nc" "^B$" "m" true
+      "a\nB\nc" "^b$" "m" false
+      "a\nB\nc" "^b$" "mi" true
+      "a\nB\nc" "^b$" "im" true
+      "a\nB\nc" "^b$" "i  zz\nm" true
+
+      "a\nB\nc" "a.B.c" "" false
+      "a\nB\nc" "a.B.c" "s" true
+      "a\nB\nc" "a.b.c" "s" false
+      "a\nB\nc" "a.b.c" "is" true))
+
+  (t/testing "literal projection"
+    (t/is (project1 (list 'like-regex 's ".+ar" "") {:s "foo bar"}))))
+
 (t/deftest test-binary-like
   (let [p 37
         u 95]

@@ -760,6 +760,29 @@
 (defmethod codegen-call [:like ArrowType$Binary ArrowType$Null] [_] call-returns-null)
 (defmethod codegen-call [:like ArrowType$Null ArrowType$Binary] [_] call-returns-null)
 
+(defmethod codegen-call [:like-regex ArrowType$Utf8 ArrowType$Utf8 ArrowType$Utf8]
+  [{:keys [args]}]
+  (let [[_ re-literal flags] (map :literal args)
+
+        flag-map
+        {\s [Pattern/DOTALL]
+         \i [Pattern/CASE_INSENSITIVE, Pattern/UNICODE_CASE]
+         \m [Pattern/MULTILINE]}
+
+        flag-int (int (reduce bit-or 0 (mapcat flag-map flags)))]
+
+    {:return-types #{types/bool-type}
+     :continue-call (fn [f [haystack-code needle-code]]
+                      (f types/bool-type
+                         `(boolean (re-find ~(if re-literal
+                                               (Pattern/compile re-literal flag-int)
+                                               `(Pattern/compile (resolve-string ~needle-code) ~flag-int))
+                                            (resolve-string ~haystack-code)))))}))
+
+(defmethod codegen-call [:like-regex ArrowType$Utf8 ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
+(defmethod codegen-call [:like-regex ArrowType$Null ArrowType$Utf8 ArrowType$Utf8] [_] call-returns-null)
+(defmethod codegen-call [:like-regex ArrowType$Null ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
+
 ;; apache commons has these functions but did not think they were worth the dep.
 ;; replace if we ever put commons on classpath.
 

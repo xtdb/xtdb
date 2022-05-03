@@ -181,6 +181,18 @@
      ;;=>
      (list 'not (list 'like (expr rvp) (expr cp)))
 
+     [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "LIKE_REGEX" ^:z cp]]
+     (list 'like-regex (expr rvp) (expr cp) "")
+
+     [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "NOT" "LIKE_REGEX" ^:z cp]]
+     (list 'not (list 'like-regex (expr rvp) (expr cp) ""))
+
+     [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "LIKE_REGEX" ^:z cp "FLAG" ^:z flag]]
+     (list 'like-regex (expr rvp) (expr cp) (expr flag))
+
+     [:regex_like_predicate ^:z rvp [:regex_like_predicate_part_2 "NOT" "LIKE_REGEX" ^:z cp "FLAG" ^:z flag]]
+     (list 'not (list 'like-regex (expr rvp) (expr cp) (expr flag)))
+
      [:character_substring_function "SUBSTRING" ^:z cve "FROM" ^:z sp "FOR" ^:z sl]
      ;;=>
      (list 'substring (expr cve) (expr sp) (expr sl) true)
