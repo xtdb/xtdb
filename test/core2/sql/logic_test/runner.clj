@@ -3,6 +3,7 @@
             [clojure.test :as t]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
+            [clojure.tools.logging :as log]
             [core2.test-util :as tu])
   (:import java.nio.charset.StandardCharsets
            java.io.File
@@ -242,10 +243,14 @@
               (binding [*current-record* record]
                 (if (= queries-run query-limit)
                   (reduced ctx)
-                  (-> (execute-record ctx record)
-                      (update :queries-run + (if (= :query (:type record))
-                                               1
-                                               0))))))
+                  (try
+                    (-> (execute-record ctx record)
+                        (update :queries-run + (if (= :query (:type record))
+                                                 1
+                                                 0)))
+                    (catch Throwable t
+                      (log/error t record)
+                      (throw t))))))
             ctx)
            :db-engine))))
 
@@ -310,10 +315,11 @@
                      #(with-xtdb f))
             "sqlite" (with-sqlite f)
             (with-jdbc db f)))))))
-
 (comment
 
-  (time (-main "--verify" "--db" "xtdb" "--limit" "100" "test/core2/sql/logic_test/sqlite_test/select1.test"))
+  (time (-main "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/select5.test"))
+
+  (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
   (= (time
       (with-out-str
