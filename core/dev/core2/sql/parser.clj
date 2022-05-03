@@ -240,8 +240,7 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
 <right bracket or trigraph> ::=
     <right bracket>
-  | <right bracket trigraph>
-"]
+  | <right bracket trigraph>"]
     (time
      (dotimes [_ 1000]
        (spec-cfg in :spec)))
