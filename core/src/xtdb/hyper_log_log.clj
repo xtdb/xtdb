@@ -34,12 +34,12 @@
       (<= e (* (double (/ 5 2)) m))
       (let [v (long (loop [n 0
                            acc 0]
-                           (if (< n (.capacity hll))
-                             (recur (+ n Integer/BYTES)
-                                    (+ acc (if (zero? (.getInt hll n ByteOrder/BIG_ENDIAN))
-                                             1
-                                             0)))
-                             acc)))]
+                      (if (< n (.capacity hll))
+                        (recur (+ n Integer/BYTES)
+                               (+ acc (if (zero? (.getInt hll n ByteOrder/BIG_ENDIAN))
+                                        1
+                                        0)))
+                        acc)))]
         (if (zero? v)
           e
           (* m (Math/log (/ m v)))))

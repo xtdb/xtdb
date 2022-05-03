@@ -788,8 +788,7 @@
                                                                  (group-clauses-by-type)
                                                                  (collect-vars)
                                                                  (vals)
-                                                                 (reduce into #{})
-                                                                 (into #{} (remove blank-var?)))
+                                                                 (into #{} (comp cat (remove blank-var?))))
                                                 bound-vars (set/intersection branch-vars bound-args)]
                                             (assert-branches-have-same-free-vars branch-vars free-args)
 
@@ -1163,7 +1162,7 @@
                          (into {}))
         leaf-triple-clauses (->> (for [[_e-var leaf-group] leaf-groups]
                                    leaf-group)
-                                 (reduce into #{}))
+                                 (into #{} cat))
         triple-clauses (remove leaf-triple-clauses triple-clauses)
         new-triple-clauses (for [[_e-var leaf-group] leaf-groups]
                              ;; we put these last s.t. if the rest of the query doesn't yield any tuples,
@@ -1384,7 +1383,7 @@
                                                                (group-clauses-by-type)
                                                                (collect-vars)
                                                                (vals)
-                                                               (reduce into #{}))
+                                                               (into #{} cat))
                                                 body-var->hidden-var (zipmap body-vars
                                                                              (map gensym body-vars))]]
                                       (-> (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body)
@@ -1401,7 +1400,7 @@
                                     [:just-args (filter logic-var? (:args clause))])
                             :branches (vec expanded-rules)}
                            (vary-meta assoc :rule-name rule-name))]])))))))
-       (reduce into [])))
+       (into [] cat)))
 
 (def default-allow-list
   (->> (slurp (io/resource "query-allowlist.edn"))
@@ -1454,7 +1453,7 @@
              [[:pred (update clause :return (partial w/postwalk-replace {node cycle-var}))]
               [:pred {:pred {:pred-fn '== :args [node cycle-var]}}]])
            [[type clause]]))
-       (reduce into [])))
+       (into [] cat)))
 
 (def ^:private ^:dynamic *broken-cycles* #{})
 
@@ -2102,7 +2101,7 @@
   (db-basis [_]
     {::xt/valid-time valid-time
      ::xt/tx {::xt/tx-time tx-time,
-             ::xt/tx-id tx-id}})
+              ::xt/tx-id tx-id}})
 
   (with-tx [_ tx-ops]
     (let [valid-time valid-time

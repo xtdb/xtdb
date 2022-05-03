@@ -90,9 +90,9 @@
     (when (= 1 (count known-files))
       (.addShutdownHook
        (Runtime/getRuntime)
-       (Thread. (fn []
-                  (doseq [f @files-to-delete]
-                    (delete-dir f)))
+       (Thread. ^Runnable (fn []
+                            (doseq [f @files-to-delete]
+                              (delete-dir f)))
                 "xtdb.io.shutdown-hook-thread")))
 
     f))
@@ -338,7 +338,7 @@
        ([] (rf))
 
        ([acc el]
-         (rf acc (MapEntry/create (key el) (f (val el)))))
+        (rf acc (MapEntry/create (key el) (f (val el)))))
 
        ([acc] (rf acc)))))
 

@@ -282,8 +282,8 @@
 
 (defn attach-current-query-listeners [!running-queries {:keys [bus] :as node-opts}]
   (bus/listen bus {::xt/event-types #{:xtdb.query/submitted-query
-                                     :xtdb.query/completed-query
-                                     :xtdb.query/failed-query}}
+                                      :xtdb.query/completed-query
+                                      :xtdb.query/failed-query}}
               (fn [{::q/keys [query-id query error], ::xt/keys [event-type]}]
                 (case event-type
                   :xtdb.query/submitted-query

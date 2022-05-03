@@ -67,8 +67,8 @@
                                          v
                                          (f stored-key))
                                      vp (.computeIfAbsent hot wrapped-key (reify Function
-                                                                  (apply [_ k]
-                                                                    (ValuePointer. v))))]
+                                                                            (apply [_ k]
+                                                                              (ValuePointer. v))))]
                                  (resize-cache this)
                                  vp))
           v (.swizzle vp)]

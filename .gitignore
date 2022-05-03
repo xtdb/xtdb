@@ -26,3 +26,6 @@ redoc/
 package-lock.json
 package.json
 swagger.json
+
+.idea/
+*.iml
