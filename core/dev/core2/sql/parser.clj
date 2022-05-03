@@ -5,14 +5,13 @@
             [core2.sql])
   (:import java.io.File
            java.nio.IntBuffer
-           [java.util HashMap List Map]
+           [java.util ArrayDeque HashMap HashSet List Map]
            java.util.regex.Pattern))
 
 ;; Spike to replace Instaparse.
 
 ;; TODO:
 ;; explore error handling, needs to be passed upwards, merged, a kind of result.
-;; detect need for left-recursion memo?
 ;; try compiling rule bodies to fns?
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
@@ -67,13 +66,30 @@
       (if-let [^ParseState state (.get memos memo-key)]
         (when (.ast state)
           state)
+        (if-let [^ParseState state (.parse parser in idx memos)]
+          (do (.put memos memo-key state)
+              state)
+          (do (.put memos memo-key (ParseState. nil idx))
+              nil))))))
+
+(defrecord MemoizeLeftRecParser [^RuleParser parser]
+  IParser
+  (parse [_ in idx memos]
+    (let [memo-key (IntBuffer/wrap (doto (int-array 2)
+                                     (aset 0 idx)
+                                     (aset 1 (.rule-id parser))))]
+      (if-let [^ParseState state (.get memos memo-key)]
+        (when (.ast state)
+          state)
         (loop [last-state (ParseState. nil idx)]
           (.put memos memo-key last-state)
-          (when-let [^ParseState new-state (.parse parser in idx memos)]
+          (if-let [^ParseState new-state (.parse parser in idx memos)]
             (if (<= (.idx new-state) (.idx last-state))
               (when (.ast last-state)
                 last-state)
-              (recur new-state))))))))
+              (recur new-state))
+            (do (.remove memos memo-key)
+                nil)))))))
 
 (defrecord HideParser [^core2.sql.parser.IParser parser]
   IParser
@@ -125,7 +141,7 @@
     (reduce
      (fn [^ParseState state ^IParser parser]
        (if-let [alt-state (.parse parser in idx memos)]
-         (if (and state (> (.idx state) (.idx alt-state)))
+         (if (and state (>= (.idx state) (.idx alt-state)))
            state
            alt-state)
          state))
@@ -157,6 +173,45 @@
       (when (.lookingAt m)
         (ParseState. [(.group m)] (.end m))))))
 
+(defn- left-recursive? [grammar rule-name]
+  (let [visited (HashSet.)
+        stack (ArrayDeque.)]
+    (.push stack (get grammar rule-name))
+    (loop []
+      (if-let [node (.poll stack)]
+        (cond
+          (= (:keyword node) rule-name)
+          true
+
+          (.contains visited node)
+          (recur)
+
+          :else
+          (do (.add visited node)
+              (let [node (if (= :nt (:tag node))
+                           (get grammar (:keyword node))
+                           node)]
+                (case (:tag node)
+                  :cat (let [[opts mandatory] (split-with (comp #{:opt :star} :tag) (:parsers node))]
+                         (doseq [opt opts]
+                           (.push stack opt))
+                         (.push stack (first mandatory)))
+                  :ord (do (.push stack (:parser1 node))
+                           (.push stack (:parser2 node)))
+                  :alt (doseq [alt (:parsers node)]
+                         (.push stack alt))
+                  (:star :plus :opt) (.push stack (:parser node))
+                  :nt (.push stack node)
+                  nil)
+                (recur))))
+        false))))
+
+(defn- ->trailing-ws-parser [start-rule]
+  {:tag :cat
+   :parsers [{:tag :nt :keyword start-rule}
+             {:tag :opt :parser {:tag :string :string ""}}
+             {:tag :epsilon}]})
+
 (defn build-ebnf-parser [grammar ws-pattern]
   (let [rule->id (zipmap (keys grammar) (range))
         rules (object-array (count rule->id))]
@@ -177,18 +232,16 @@
                 hide (->HideParser)))]
       (doseq [[k v] grammar
               :let [rule-id (int (get rule->id k))
-                    raw? (= {:reduction-type :raw} (:red v))]]
-        (aset rules
-              rule-id
-              (->MemoizeParser (->RuleParser k rule-id raw? (build-parser v)))))
+                    raw? (= {:reduction-type :raw} (:red v))
+                    memo-fn (if (left-recursive? grammar k)
+                              ->MemoizeLeftRecParser
+                              ->MemoizeParser)
+                    parser (->RuleParser k rule-id raw? (build-parser v))]]
+        (aset rules rule-id (memo-fn parser)))
       (fn [in start-rule]
-        (when-let [state (.parse ^IParser (build-parser {:tag :cat
-                                                         :parsers [{:tag :nt :keyword start-rule}
-                                                                   {:tag :opt :parser {:tag :string :string ""}}
-                                                                   {:tag :epsilon}]})
-                                 in
-                                 0
-                                 (HashMap.))]
+        (when-let [state (-> (->trailing-ws-parser start-rule)
+                             ^IParser (build-parser)
+                             (.parse in 0 (HashMap.)))]
           (first (.ast state)))))))
 
 (comment
@@ -266,10 +319,18 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
 (comment
 
-  (let [in "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END
-  FROM t1
- ORDER BY 1"
-        sql-cfg (build-ebnf-parser sql-cfg #"\s+")]
+  (let [in "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END,
+       a+b*2+c*3+d*4,
+       abs(b-c),
+       (SELECT count(*) FROM t1 AS x WHERE x.b<t1.b),
+       c-d,
+       a+b*2,
+       CASE WHEN a<b-3 THEN 111 WHEN a<=b THEN 222
+        WHEN a<b+3 THEN 333 ELSE 444 END
+  FROM t1 WHERE e+d BETWEEN a+b-10 AND c+130
+    OR coalesce(a,b,c,d,e)<>0"
+        sql-cfg (build-ebnf-parser sql-cfg #"(\s+|\s*--[^\r\n]*\s*|\s*/[*].*?([*]/\s*|$))")]
+
     (time
      (dotimes [_ 1000]
        (sql-cfg in :directly_executable_statement)))
