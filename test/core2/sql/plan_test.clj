@@ -497,6 +497,22 @@
     "OVERLAY(foo.a PLACING foo.b FROM 1 for 4)" '(overlay x1 x2 1 4)
     "OVERLAY(foo.a PLACING foo.b FROM 1)" '(overlay x1 x2 1 (default-overlay-length x2))))
 
+(t/deftest test-bool-test-expr
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+
+    "foo.a IS true" '(true? x1)
+    "foo.a IS NOT true" '(not (true? x1))
+
+    "foo.a IS false" '(false? x1)
+    "foo.a IS NOT false" '(not (false? x1))
+
+    "foo.a IS UNKNOWN" '(nil? x1)
+    "foo.a IS NOT UNKNOWN" '(not (nil? x1))
+
+    "foo.a IS NULL" '(nil? x1)
+    "foo.a IS NOT NULL" '(not (nil? x1))))
+
 (deftest test-projects-that-matter-are-maintained
   (t/is (=plan-file
           "projects-that-matter-are-maintained"

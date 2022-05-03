@@ -90,6 +90,20 @@
      ;;=>
      (expr bp)
 
+     [:boolean_test ^:z bp "IS" [:truth_value truth-value]]
+     ;; =>
+     (case truth-value
+       "TRUE" (list 'true? (expr bp))
+       "FALSE" (list 'false? (expr bp))
+       "UNKNOWN" (list 'nil? (expr bp)))
+
+     [:boolean_test ^:z bp "IS" "NOT" [:truth_value truth-value]]
+     ;; =>
+     (case truth-value
+       "TRUE" (list 'not (list 'true? (expr bp)))
+       "FALSE" (list 'not (list 'false? (expr bp)))
+       "UNKNOWN" (list 'not (list 'nil? (expr bp))))
+
      [:boolean_literal bl]
      (case bl
        "TRUE" true
