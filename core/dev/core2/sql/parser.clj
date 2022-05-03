@@ -11,35 +11,13 @@
 ;; Spike to replace Instaparse.
 
 ;; TODO:
-;; detect need for left-recursion memo.
+;; try rule ids with array instead of map.
 ;; explore error handling, needs to be passed upwards, merged, a kind of result.
+;; detect need for left-recursion memo?
 ;; try compiling rule bodies to fns?
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
 ;; https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
-;; def memoize_left_rec_wrapper(self, *args):
-;;     pos = self.mark()
-;;     memo = self.memos.get(pos)
-;;     if memo is None:
-;;         memo = self.memos[pos] = {}
-;;     key = (func, args)
-;;     if key in memo:
-;;         res, endpos = memo[key]
-;;         self.reset(endpos)
-;;     else:
-;;         # Prime the cache with a failure.
-;;         memo[key] = lastres, lastpos = None, pos
-;;         # Loop until no longer parse is obtained.
-;;         while True:
-;;             self.reset(pos)
-;;             res = func(self, *args)
-;;             endpos = self.mark()
-;;             if endpos <= lastpos:
-;;                 break
-;;             memo[key] = lastres, lastpos = res, endpos
-;;         res = lastres
-;;         self.reset(lastpos)
-;;     return res
 
 (defrecord ParseState [ast ^int idx])
 
@@ -56,28 +34,39 @@
                 idx)]
       (.parse parser in idx memos))))
 
-(defrecord NonTerminalParser [rule-name ^boolean raw? ^Map rules]
+(defrecord NonTerminalParser [rule-name ^Map rules]
   IParser
   (parse [_ in idx memos]
-    (let [memo-key (MapEntry/create idx rule-name)
-          ^IParser parser (.get rules rule-name)]
+    (let [^IParser parser (.get rules rule-name)]
+      (.parse parser in idx memos))))
+
+(defrecord RuleParser [rule-name ^boolean raw? ^IParser parser]
+  IParser
+  (parse [_ in idx memos]
+    (when-let [state (.parse parser in idx memos)]
+      (ParseState. (if raw?
+                     (.ast state)
+                     [(with-meta
+                        (into [rule-name] (.ast state))
+                        {:start-idx idx
+                         :end-idx (.idx state)})])
+                   (.idx state)))))
+
+(defrecord MemoizeParser [^RuleParser parser]
+  IParser
+  (parse [_ in idx memos]
+    (let [rule-name (.rule-name parser)
+          memo-key (MapEntry/create idx rule-name)]
       (if-let [^ParseState state (.get memos memo-key)]
         (when (.ast state)
           state)
         (loop [last-state (ParseState. nil idx)]
           (.put memos memo-key last-state)
-          (when-let [^ParseState state (.parse parser in idx memos)]
-            (let [new-state (ParseState. (if raw?
-                                           (.ast state)
-                                           [(with-meta
-                                              (into [rule-name] (.ast state))
-                                              {:start-idx idx
-                                               :end-idx (.idx state)})])
-                                         (.idx state))]
-              (if (<= (.idx new-state) (.idx last-state))
-                (when (.ast last-state)
-                  last-state)
-                (recur new-state)))))))))
+          (when-let [^ParseState new-state (.parse parser in idx memos)]
+            (if (<= (.idx new-state) (.idx last-state))
+              (when (.ast last-state)
+                last-state)
+              (recur new-state))))))))
 
 (defrecord HideParser [^core2.sql.parser.IParser parser]
   IParser
@@ -165,10 +154,7 @@
   (let [rules (HashMap.)]
     (letfn [(build-parser [{:keys [tag hide] :as parser}]
               (cond-> (case tag
-                        :nt (->NonTerminalParser (:keyword parser)
-                                                 (= {:reduction-type :raw}
-                                                    (get-in grammar [(:keyword parser) :red]))
-                                                 rules)
+                        :nt (->NonTerminalParser (:keyword parser) rules)
                         :star (->RepeatParser (build-parser (:parser parser)) true)
                         :plus (->RepeatParser (build-parser (:parser parser)) false)
                         :opt (->OptParser (build-parser (:parser parser)))
@@ -181,11 +167,13 @@
                         :string (->WhitespaceParser ws-pattern (->StringParser (:string parser))))
                 hide (->HideParser)))]
       (doseq [[k v] grammar]
-        (.put rules k (build-parser v)))
+        (.put rules k (->MemoizeParser (->RuleParser k
+                                                     (= {:reduction-type :raw} (:red v))
+                                                     (build-parser v)))))
       (fn [in start-rule]
-        (some-> (.parse ^IParser (build-parser {:tag :nt :keyword start-rule}) in 0 (HashMap.))
-                (.ast)
-                (first))))))
+        (when-let [state (.parse ^IParser (build-parser {:tag :nt :keyword start-rule}) in 0 (HashMap.))]
+          (when (= (count in) (.idx state))
+            (first (.ast state))))))))
 
 (comment
 
