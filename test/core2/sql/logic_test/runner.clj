@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
+            [core2.sql.plan :as plan]
             [core2.test-util :as tu])
   (:import java.nio.charset.StandardCharsets
            java.io.File
@@ -304,7 +305,8 @@
       (binding [*opts* {:script-mode (if verify
                                        :validation
                                        :completion)
-                        :query-limit (:limit options)}]
+                        :query-limit (:limit options)}
+                plan/*include-table-column-in-scan?* true]
         (doseq [script-name arguments
                 :let [f #(binding [t/*report-counters* (ref t/*initial-report-counters*)]
                            (execute-records *db-engine* (parse-script script-name (slurp script-name)))
@@ -317,7 +319,7 @@
             (with-jdbc db f)))))))
 (comment
 
-  (time (-main "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/select5.test"))
+  (time (-main "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/groupby/slt_good_0.test"))
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 

@@ -19,6 +19,8 @@
 (def ^:private ^:const ^String relation-id-delimiter "__")
 (def ^:private ^:const ^String relation-prefix-delimiter "_")
 
+(def ^:dynamic *include-table-column-in-scan?* false)
+
 (declare expr)
 
 (defn- maybe-add-ref [z x]
@@ -789,7 +791,7 @@
         (plan rhs)])]))
 
 (defn- build-collection-derived-table [tp]
-  (let [{:keys [id correlation-name]} (sem/table tp)
+  (let [{:keys [id]} (sem/table tp)
         [unwind-column ordinality-column] (map qualified-projection-symbol (first (sem/projected-columns tp)))
         cdt (r/$ tp 1)
         cve (r/$ cdt 2)
@@ -800,7 +802,7 @@
      [:map [{unwind-symbol (expr cve)}] nil]]))
 
 (defn- build-table-primary [tp]
-  (let [{:keys [id correlation-name] :as table} (sem/table tp)
+  (let [{:keys [id correlation-name table-or-query-name] :as table} (sem/table tp)
         projection (first (sem/projected-columns tp))]
     [:rename (table-reference-symbol correlation-name id)
      (if-let [subquery-ref (:subquery-ref (meta table))]
@@ -809,8 +811,13 @@
                           (map symbol derived-columns))
           (plan subquery-ref)]
          (plan subquery-ref))
-       [:scan (vec (for [{:keys [identifier]} projection]
-                     (symbol identifier)))])]))
+       [:scan (let [columns (vec (for [{:keys [identifier]} projection]
+                                   (symbol identifier)))]
+                (if *include-table-column-in-scan?*
+                  (conj
+                    columns
+                    {'_table (list '=  '_table table-or-query-name)})
+                  columns))])]))
 
 (defn- build-lateral-derived-table [tp qe]
   (let [scope-id (sem/id (sem/scope-element tp))
