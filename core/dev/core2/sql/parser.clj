@@ -34,7 +34,7 @@
   (parse [_ in idx memos]
     (if (= (count in) idx)
       (ParseState. [] nil idx)
-      (ParseState. nil ["expected end of input"] idx))))
+      (ParseState. nil #{[:expected "<eof>"]} idx))))
 
 (defrecord WhitespaceParser [^java.util.regex.Pattern pattern ^core2.sql.parser.IParser parser]
   IParser
@@ -62,7 +62,9 @@
                           (into [rule-name] (.ast state))
                           {:start-idx idx
                            :end-idx (.idx state)})]))
-                   (.errs state)
+                   (if (instance? Pattern (second (first (.errs state))))
+                     #{[:expected (str "<" (str/replace (name rule-name) "_" " ") ">")]}
+                     (.errs state))
                    (.idx state)))))
 
 (defrecord MemoizeParser [^RuleParser parser]
@@ -120,7 +122,7 @@
   (parse [_ in idx memos]
     (let [state (.parse parser in idx memos)]
       (if (.ast state)
-        (ParseState. nil [(str "unexpected: "(subs in idx (.idx state)))] idx)
+        (ParseState. nil #{[:unexpected (subs in idx (.idx state))]} idx)
         (ParseState. [] nil idx)))))
 
 (defrecord RepeatParser [^core2.sql.parser.IParser parser ^boolean star?]
@@ -153,33 +155,36 @@
                    (inc n))))
         (ParseState. ast nil idx)))))
 
-(defrecord AltParser [^java.util.List parsers]
+(defrecord OrdParser [^IParser parser1 ^IParser parser2]
   IParser
   (parse [_ in idx memos]
-    (let [^ParseState state (reduce
-                             (fn [^ParseState state ^IParser parser]
-                               (let [alt-state (.parse parser in idx memos)
-                                     new-state (if (and (.ast state)
-                                                        (or (nil? (.ast alt-state))
-                                                            (>= (.idx state) (.idx alt-state))))
-                                                 state
-                                                 alt-state)]
-                                 (ParseState. (.ast new-state)
-                                              (not-empty (vec (concat (.errs state)
-                                                                      (.errs new-state))))
-                                              (.idx new-state))))
-                             (ParseState. nil nil idx)
-                             parsers)]
-      (if (.ast state)
-        (ParseState. (.ast state) nil (.idx state))
-        (ParseState. nil [(str/join ", " (.errs state))] (.idx state))))))
+    (let [state1 (.parse parser1 in idx memos)
+          state2 (.parse parser2 in idx memos)
+          cmp (Integer/compare (.idx state1) (.idx state2))]
+      (cond
+        (and (.ast state1)
+             (or (nil? (.ast state2))
+                 (not (neg? cmp))))
+        state1
+
+        (.ast state2)
+        state2
+
+        (pos? cmp)
+        state1
+
+        (neg? cmp)
+        state2
+
+        :else
+        (ParseState. nil (into (.errs state1) (.errs state2)) (.idx state1))))))
 
 (defrecord StringParser [^String string]
   IParser
   (parse [_ in idx memos]
     (if (.regionMatches in true idx string 0 (.length string))
       (ParseState. [string] nil (+ idx (.length string)))
-      (ParseState. nil [(str "expected: " string)] idx))))
+      (ParseState. nil #{[:expected string]} idx))))
 
 (defrecord RegexpParser [^Pattern pattern]
   IParser
@@ -188,7 +193,7 @@
           m (.region m idx (.length in))]
       (if (.lookingAt m)
         (ParseState. [(.group m)] nil (.end m))
-        (ParseState. nil [(str "expected: " (pr-str pattern))] idx)))))
+        (ParseState. nil #{[:expected pattern]} idx)))))
 
 (defn- left-recursive? [grammar rule-name]
   (let [visited (HashSet.)
@@ -248,8 +253,12 @@
       (dotimes [_ (dec column)]
         (print " "))
       (println "^")
-      (doseq [err (.errs failure)]
-        (println err)))))
+      (doseq [[category errs] (group-by first (.errs failure))]
+        (println (if (= 1 (count errs))
+                   (str (name category) ":")
+                   (str (name category) " one of:")))
+        (doseq [[_ msg] errs]
+          (println (name msg)))))))
 
 (defn build-ebnf-parser [grammar ws-pattern]
   (let [rule->id (zipmap (keys grammar) (range))
@@ -262,9 +271,13 @@
                         :opt (->OptParser (build-parser (:parser parser)))
                         :neg (->NegParser (build-parser (:parser parser)))
                         :cat (->CatParser (mapv build-parser (:parsers parser)))
-                        :alt (->AltParser (mapv build-parser (:parsers parser)))
-                        :ord (->AltParser [(build-parser (:parser1 parser))
-                                           (build-parser (:parser2 parser))])
+                        :alt (->> (reverse (:parsers parser))
+                                  (mapv build-parser)
+                                  (reduce
+                                   (fn [parser2 parser1]
+                                     (->OrdParser parser1 parser2))))
+                        :ord (->OrdParser (build-parser (:parser1 parser))
+                                          (build-parser (:parser2 parser)))
                         :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser))
                         :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser)))
                         :string (->WhitespaceParser ws-pattern (->StringParser (:string parser))))
@@ -371,12 +384,11 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
        CASE WHEN a<b-3 THEN 111 WHEN a<=b THEN 222
         WHEN a<b+3 THEN 333 ELSE 444 END
   FROM t1 WHERE e+d BETWEEN a+b-10 AND c+130
-    OR coalesce(a,b,c,d,e)<>0"
-        sql-cfg sql-parser]
+    OR coalesce(a,b,c,d,e)<>0"]
 
     (time
      (dotimes [_ 1000]
-       (sql-cfg in :directly_executable_statement)))
+       (sql-parser in :directly_executable_statement)))
 
     (time
      (dotimes [_ 1000]
