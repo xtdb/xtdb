@@ -250,8 +250,13 @@
                                                  1
                                                  0)))
                     (catch Throwable t
-                      (log/error t record)
-                      (throw t))))))
+                      (t/do-report
+                        {:type :error, :message "Error Executing Record"
+                         :expected record :actual t})
+                      (update ctx :queries-run + (if (= :query (:type record))
+                                                   1
+                                                   0))
+                      #_(throw t))))))
             ctx)
            :db-engine))))
 
@@ -319,7 +324,7 @@
             (with-jdbc db f)))))))
 (comment
 
-  (time (-main "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/groupby/slt_good_0.test"))
+  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/groupby/slt_good_0.test"))
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
