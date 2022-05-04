@@ -29,12 +29,12 @@
 (definterface IParser
   (^core2.sql.parser.ParseState parse [^String in ^int idx ^java.util.Map memos]))
 
-(defrecord EpsilonParser []
+(defrecord EpsilonParser [errs]
   IParser
   (parse [_ in idx memos]
     (if (= (count in) idx)
       (ParseState. [] nil idx)
-      (ParseState. nil #{[:expected "<eof>"]} idx))))
+      (ParseState. nil errs idx))))
 
 (defrecord WhitespaceParser [^java.util.regex.Pattern pattern ^core2.sql.parser.IParser parser]
   IParser
@@ -51,7 +51,7 @@
   (parse [_ in idx memos]
     (.parse ^IParser (aget rules rule-id) in idx memos)))
 
-(defrecord RuleParser [rule-name ^int rule-id ^boolean raw? ^IParser parser]
+(defrecord RuleParser [rule-name ^int rule-id ^boolean raw? ^IParser parser errs]
   IParser
   (parse [_ in idx memos]
     (let [state (.parse parser in idx memos)]
@@ -63,7 +63,7 @@
                           {:start-idx idx
                            :end-idx (.idx state)})]))
                    (if (instance? Pattern (second (first (.errs state))))
-                     #{[:expected (str "<" (str/replace (name rule-name) "_" " ") ">")]}
+                     errs
                      (.errs state))
                    (.idx state)))))
 
@@ -179,21 +179,21 @@
         :else
         (ParseState. nil (into (.errs state1) (.errs state2)) (.idx state1))))))
 
-(defrecord StringParser [^String string]
+(defrecord StringParser [^String string errs]
   IParser
   (parse [_ in idx memos]
     (if (.regionMatches in true idx string 0 (.length string))
       (ParseState. [string] nil (+ idx (.length string)))
-      (ParseState. nil #{[:expected string]} idx))))
+      (ParseState. nil errs idx))))
 
-(defrecord RegexpParser [^Pattern pattern]
+(defrecord RegexpParser [^Pattern pattern errs]
   IParser
   (parse [_ in idx memos]
     (let [m (.matcher pattern in)
           m (.region m idx (.length in))]
       (if (.lookingAt m)
         (ParseState. [(.group m)] nil (.end m))
-        (ParseState. nil #{[:expected pattern]} idx)))))
+        (ParseState. nil errs idx)))))
 
 (defn- left-recursive? [grammar rule-name]
   (let [visited (HashSet.)
@@ -233,6 +233,9 @@
    :parsers [{:tag :nt :keyword start-rule}
              {:tag :epsilon}]})
 
+(defn- rule-kw->name [kw]
+   (str "<" (str/replace (name kw) "_" " ") ">"))
+
 (defn index->line-column [^String in ^long idx]
   (loop [line 1
          col 1
@@ -249,16 +252,18 @@
   (let [{:keys [^long line ^long column]} (index->line-column (.in failure) (.idx failure))]
     (with-out-str
       (println (str "Parse error at line " line ", column " column ":"))
+      (println)
       (println (get (str/split-lines (.in failure)) (dec line)))
       (dotimes [_ (dec column)]
         (print " "))
       (println "^")
       (doseq [[category errs] (group-by first (.errs failure))]
-        (println (if (= 1 (count errs))
-                   (str (name category) ":")
-                   (str (name category) " one of:")))
+        (println (str (str/capitalize (name category))
+                      (if (= 1 (count errs))
+                        ":"
+                        " one of:")))
         (doseq [[_ msg] errs]
-          (println (name msg)))))))
+          (println "  " (name msg)))))))
 
 (defn build-ebnf-parser [grammar ws-pattern]
   (let [rule->id (zipmap (keys grammar) (range))
@@ -278,9 +283,9 @@
                                      (->OrdParser parser1 parser2))))
                         :ord (->OrdParser (build-parser (:parser1 parser))
                                           (build-parser (:parser2 parser)))
-                        :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser))
-                        :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser)))
-                        :string (->WhitespaceParser ws-pattern (->StringParser (:string parser))))
+                        :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser #{[:expected "<EOF>"]} ))
+                        :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser) #{[:expected (:regexp parser)]} ))
+                        :string (->WhitespaceParser ws-pattern (->StringParser (:string parser) #{[:expected (:string parser)]} )))
                 hide (->HideParser)))]
       (doseq [[k v] grammar
               :let [rule-id (int (get rule->id k))
@@ -288,7 +293,7 @@
                     memo-fn (if (left-recursive? grammar k)
                               ->MemoizeLeftRecParser
                               ->MemoizeParser)
-                    parser (->RuleParser k rule-id raw? (build-parser v))]]
+                    parser (->RuleParser k rule-id raw? (build-parser v) #{[:expected (rule-kw->name k)]})]]
         (aset rules rule-id (memo-fn parser)))
       (fn [in start-rule]
         (when-let [state (-> (->trailing-ws-parser start-rule)
