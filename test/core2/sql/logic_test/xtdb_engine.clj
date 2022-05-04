@@ -159,7 +159,8 @@
             (execute-statement this direct-sql-data-statement-tree))))))
 
   (execute-query [this query]
-    (let [tree (sql/parse query :query_expression)
+    (let [edited-query (str/replace query "CROSS JOIN" ",")
+          tree (sql/parse edited-query :query_expression)
           snapshot-factory (tu/component this ::snap/snapshot-factory)
           db (snap/snapshot snapshot-factory)]
       (when (insta/failure? tree)
