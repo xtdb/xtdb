@@ -228,6 +228,29 @@
    :parsers [{:tag :nt :keyword start-rule}
              {:tag :epsilon}]})
 
+(defn index->line-column [^String in ^long idx]
+  (loop [line 1
+         col 1
+         n 0]
+    (cond
+      (= idx n) {:line line :column col}
+      (= \newline (.charAt in n)) (recur (inc line) 1 (inc n))
+      :else (recur line (inc col) (inc n)))))
+
+(defn failure? [x]
+  (instance? ParseFailure x))
+
+(defn failure->str [^ParseFailure failure]
+  (let [{:keys [^long line ^long column]} (index->line-column (.in failure) (.idx failure))]
+    (with-out-str
+      (println (str "Parse error at line " line ", column " column ":"))
+      (println (get (str/split-lines (.in failure)) (dec line)))
+      (dotimes [_ (dec column)]
+        (print " "))
+      (println "^")
+      (doseq [err (.errs failure)]
+        (println err)))))
+
 (defn build-ebnf-parser [grammar ws-pattern]
   (let [rule->id (zipmap (keys grammar) (range))
         rules (object-array (count rule->id))]
