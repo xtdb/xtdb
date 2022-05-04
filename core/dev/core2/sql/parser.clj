@@ -240,7 +240,7 @@
 (defn failure? [x]
   (instance? ParseFailure x))
 
-(defn failure->str [^ParseFailure failure]
+(defn failure->str ^String [^ParseFailure failure]
   (let [{:keys [^long line ^long column]} (index->line-column (.in failure) (.idx failure))]
     (with-out-str
       (println (str "Parse error at line " line ", column " column ":"))
@@ -358,6 +358,8 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
 (def sql-cfg (insta-cfg/ebnf (slurp (io/resource "core2/sql/SQL2011.ebnf"))))
 
+(def sql-parser (build-ebnf-parser sql-cfg #"(\s+|$|\s*--[^\r\n]*\s*|\s*/[*].*?([*]/\s*|$))"))
+
 (comment
 
   (let [in "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END,
@@ -370,7 +372,7 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
         WHEN a<b+3 THEN 333 ELSE 444 END
   FROM t1 WHERE e+d BETWEEN a+b-10 AND c+130
     OR coalesce(a,b,c,d,e)<>0"
-        sql-cfg (build-ebnf-parser sql-cfg #"(\s+|$|\s*--[^\r\n]*\s*|\s*/[*].*?([*]/\s*|$))")]
+        sql-cfg sql-parser]
 
     (time
      (dotimes [_ 1000]
