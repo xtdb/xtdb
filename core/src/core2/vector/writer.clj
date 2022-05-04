@@ -202,7 +202,7 @@
                         (apply [_ col-name]
                           (-> (or (.getChild dest-vec col-name)
                                   (.addOrGet dest-vec col-name
-                                             (FieldType. false types/dense-union-type nil)
+                                             (FieldType/notNullable types/dense-union-type)
                                              DenseUnionVector))
                               (vec->writer pos)))))))
 

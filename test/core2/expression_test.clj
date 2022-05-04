@@ -1196,7 +1196,7 @@
              :leg-type LegType/BOOL, :nullable? true}
             {:res [true true true true false nil true nil nil]
              :leg-type LegType/BOOL, :nullable? true}]
-           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true types/bool-type nil)
+           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bool-type)
                                                      [true true true false false false nil nil nil])
                                       (tu/->duv "y" [true false nil true false nil true false nil])])]
              [(run-projection rel '(and x y))
@@ -1210,7 +1210,7 @@
              :leg-type LegType/BOOL, :nullable? false}
             {:res [false false true]
              :leg-type LegType/BOOL, :nullable? false}]
-           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType. true types/bool-type nil) [true false nil])])]
+           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bool-type) [true false nil])])]
              [(run-projection rel '(not x))
               (run-projection rel '(true? x))
               (run-projection rel '(false? x))

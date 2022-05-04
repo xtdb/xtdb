@@ -68,7 +68,7 @@
 (defn- get-or-add-child ^org.apache.arrow.vector.ValueVector [^StructVector parent, ^ArrowType arrow-type]
   (let [field-name (t/type->field-name arrow-type)]
     (or (.getChild parent field-name)
-        (doto (.addOrGet parent field-name (FieldType. false arrow-type nil) ValueVector)
+        (doto (.addOrGet parent field-name (FieldType/notNullable arrow-type) ValueVector)
           (.setValueCount (.getValueCount parent))))))
 
 (defn- write-min-max [^ValueVector field-vec,

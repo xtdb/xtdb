@@ -242,7 +242,7 @@
           (recur (inc element-idx)
                  (assoc acc (get-value key-vec element-idx) (get-value value-vec element-idx))))))))
 
-(def ^:private dense-union-field-type (FieldType. false (.getType Types$MinorType/DENSEUNION) nil))
+(def ^:private dense-union-field-type (FieldType/notNullable (.getType Types$MinorType/DENSEUNION)))
 
 (defn- kw-name ^String [x]
   (if (keyword? x)
@@ -276,9 +276,7 @@
   ([^DenseUnionVector v ^ArrowType arrow-type ^String prefix ^Long type-id extension-type]
    (or (.getVectorByType v type-id)
        (.addVector v type-id (.createNewSingleVector
-                              (FieldType. false
-                                          arrow-type
-                                          nil
+                              (FieldType. false arrow-type nil
                                           (when extension-type
                                             {ArrowType$ExtensionType/EXTENSION_METADATA_KEY_NAME extension-type}))
                               (str prefix type-id)
@@ -577,7 +575,7 @@
             type-id (get-or-create-type-id v arrow-type)
             ^MapVector inner-vec (get-or-add-vector v arrow-type "map" type-id)
             offset (DenseUnionUtil/writeTypeId v (.getValueCount v) type-id)
-            ^StructVector element-vec (.getVector (.addOrGetVector inner-vec (FieldType. false (.getType Types$MinorType/STRUCT) nil)))
+            ^StructVector element-vec (.getVector (.addOrGetVector inner-vec (FieldType/notNullable (.getType Types$MinorType/STRUCT))))
             key-vec (.addOrGet element-vec MapVector/KEY_NAME dense-union-field-type DenseUnionVector)
             value-vec (.addOrGet element-vec MapVector/VALUE_NAME dense-union-field-type DenseUnionVector)]
         (.startNewValue inner-vec offset)

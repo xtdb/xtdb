@@ -1334,11 +1334,11 @@
 (defn- return-types->field-type ^org.apache.arrow.vector.types.pojo.FieldType [return-types]
   (let [without-null (disj return-types types/null-type)]
     (case (count without-null)
-      0 (FieldType. true types/null-type nil)
+      0 (FieldType/nullable types/null-type)
       1 (FieldType. (contains? return-types types/null-type)
                     (first without-null)
                     nil)
-      (FieldType. false types/dense-union-type nil))))
+      (FieldType/notNullable types/dense-union-type))))
 
 (defn- write-value-out-code [^FieldType field-type return-types]
   (if-not (= types/dense-union-type (.getType field-type))

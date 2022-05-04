@@ -132,7 +132,7 @@
   (^org.apache.arrow.vector.ValueVector [^String col-name col-type]
    (let [^FieldType field-type (cond
                                  (instance? FieldType col-type) col-type
-                                 (instance? ArrowType col-type) (FieldType. false col-type nil)
+                                 (instance? ArrowType col-type) (FieldType/notNullable col-type)
                                  :else (throw (UnsupportedOperationException.)))]
      (.createNewSingleVector field-type col-name *allocator* nil)))
 

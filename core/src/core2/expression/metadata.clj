@@ -159,7 +159,7 @@
                                             :args [{:op :variable, :variable col-sym}
                                                    param-expr]}
                                            (-> opts
-                                               (assoc-in [:var->types col-sym] (FieldType. false arrow-type nil)))))
+                                               (assoc-in [:var->types col-sym] (FieldType/notNullable arrow-type)))))
                                (fn [_ code] code)))))))))))}))
 
 (defmethod ewalk/walk-expr :metadata-vp-call [inner outer expr]
