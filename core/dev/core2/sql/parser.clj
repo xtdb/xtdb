@@ -100,7 +100,7 @@
   IParser
   (parse [_ in idx memos]
     (let [state (.parse parser in idx memos)]
-      (ParseState. (when (empty? (.errs state))
+      (ParseState. (when (.ast state)
                      [])
                    (.errs state)
                    (.idx state)))))
