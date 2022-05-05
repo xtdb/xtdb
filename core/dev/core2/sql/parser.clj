@@ -32,7 +32,7 @@
 (defrecord EpsilonParser [errs]
   IParser
   (parse [_ in idx memos]
-    (if (= (count in) idx)
+    (if (= (.length in) idx)
       (ParseState. [] nil idx)
       (ParseState. nil errs idx))))
 
@@ -63,7 +63,7 @@
                           {:start-idx idx
                            :end-idx (.idx state)})]))
                    (when-let [rule-errs (.errs state)]
-                     (if (instance? Pattern (second (first rule-errs)))
+                     (if (:regexp? (meta rule-errs))
                        errs
                        rule-errs))
                    (.idx state)))))
@@ -94,7 +94,11 @@
               (if (<= (.idx new-state) (.idx last-state))
                 last-state
                 (recur new-state))
-              (.remove memos memo-key))))))))
+              (do (.remove memos memo-key)
+                  (if (and (nil? (.ast last-state))
+                           (.errs new-state))
+                    new-state
+                    last-state)))))))))
 
 (defrecord HideParser [^core2.sql.parser.IParser parser]
   IParser
@@ -280,7 +284,9 @@
                         :ord (->OrdParser (build-parser (:parser1 parser))
                                           (build-parser (:parser2 parser)))
                         :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser #{[:expected "<EOF>"]} ))
-                        :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser) #{[:expected (:regexp parser)]} ))
+                        :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser) (with-meta
+                                                                                                  #{[:expected (:regexp parser)]}
+                                                                                                  {:regexp? true}) ))
                         :string (->WhitespaceParser ws-pattern (->StringParser (:string parser) #{[:expected (:string parser)]} )))
                 hide (->HideParser)))]
       (doseq [[k v] grammar
