@@ -186,9 +186,7 @@
 
   (execute-query [this query]
     (let [edited-query (-> query
-                           (str/replace "CROSS JOIN" ",")
-                           (str/replace "- +" "-")
-                           (str/replace "- -" ""))
+                           (str/replace "CROSS JOIN" ","))
           tree (sql/parse edited-query :query_expression)
           snapshot-factory (tu/component this ::snap/snapshot-factory)
           db (snap/snapshot snapshot-factory)]
