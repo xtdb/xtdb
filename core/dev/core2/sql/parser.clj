@@ -273,7 +273,6 @@
                         :star (->RepeatParser (build-parser (:parser parser)) true)
                         :plus (->RepeatParser (build-parser (:parser parser)) false)
                         :opt (->OptParser (build-parser (:parser parser)))
-                        :neg (->NegParser (build-parser (:parser parser)))
                         :cat (->CatParser (mapv build-parser (:parsers parser)))
                         :alt (->> (reverse (:parsers parser))
                                   (mapv build-parser)
@@ -282,6 +281,7 @@
                                      (->OrdParser parser1 parser2))))
                         :ord (->OrdParser (build-parser (:parser1 parser))
                                           (build-parser (:parser2 parser)))
+                        :neg (->WhitespaceParser ws-pattern (->NegParser (build-parser (:parser parser))))
                         :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser #{[:expected "<EOF>"]} ))
                         :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser) (with-meta
                                                                                                   #{[:expected (:regexp parser)]}
