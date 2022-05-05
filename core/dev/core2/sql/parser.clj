@@ -62,9 +62,10 @@
                           (into [rule-name] (.ast state))
                           {:start-idx idx
                            :end-idx (.idx state)})]))
-                   (if (instance? Pattern (second (first (.errs state))))
-                     errs
-                     (.errs state))
+                   (when-let [rule-errs (.errs state)]
+                     (if (instance? Pattern (second (first rule-errs)))
+                       errs
+                       rule-errs))
                    (.idx state)))))
 
 (defrecord MemoizeParser [^RuleParser parser]
@@ -73,11 +74,10 @@
     (let [memo-key (IntBuffer/wrap (doto (int-array 2)
                                      (aset 0 idx)
                                      (aset 1 (.rule-id parser))))]
-      (if-let [^ParseState state (.get memos memo-key)]
+      (if-let [state (.get memos memo-key)]
         state
-        (let [^ParseState state (.parse parser in idx memos)]
-          (.put memos memo-key state)
-          state)))))
+        (doto (.parse parser in idx memos)
+          (->> (.put memos memo-key)))))))
 
 (defrecord MemoizeLeftRecParser [^RuleParser parser]
   IParser
@@ -85,7 +85,7 @@
     (let [memo-key (IntBuffer/wrap (doto (int-array 2)
                                      (aset 0 idx)
                                      (aset 1 (.rule-id parser))))]
-      (if-let [^ParseState state (.get memos memo-key)]
+      (if-let [state (.get memos memo-key)]
         state
         (loop [last-state (ParseState. nil nil idx)]
           (.put memos memo-key last-state)
@@ -94,11 +94,7 @@
               (if (<= (.idx new-state) (.idx last-state))
                 last-state
                 (recur new-state))
-              (do (.remove memos memo-key)
-                  (if (and (nil? (.ast last-state))
-                           (.errs new-state))
-                    new-state
-                    last-state)))))))))
+              (.remove memos memo-key))))))))
 
 (defrecord HideParser [^core2.sql.parser.IParser parser]
   IParser
@@ -113,9 +109,9 @@
   IParser
   (parse [_ in idx memos]
     (let [state (.parse parser in idx memos)]
-      (if (.errs state)
-        (ParseState. [] nil (.idx state))
-        state))))
+      (if (.ast state)
+        state
+        (ParseState. [] nil (.idx state))))))
 
 (defrecord NegParser [^core2.sql.parser.IParser parser]
   IParser
@@ -148,11 +144,11 @@
            n 0]
       (if (< n (.size parsers))
         (let [state (.parse ^IParser (.get parsers n) in idx memos)]
-          (if (.errs state)
-            (ParseState. nil (.errs state) (.idx state))
+          (if (.ast state)
             (recur (into ast (.ast state))
                    (.idx state)
-                   (inc n))))
+                   (inc n))
+            (ParseState. nil (.errs state) (.idx state))))
         (ParseState. ast nil idx)))))
 
 (defrecord OrdParser [^IParser parser1 ^IParser parser2]
