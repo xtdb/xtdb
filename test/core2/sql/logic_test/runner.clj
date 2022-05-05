@@ -39,6 +39,9 @@
                        (recur (inc n)
                               (conj row (.getObject rs (inc n)))))))
             acc))))))
+;; reporting
+
+(def error-counts-by-message (atom {}))
 
 ;; Parser
 
@@ -253,6 +256,12 @@
                       (t/do-report
                         {:type :error, :message "Error Executing Record"
                          :expected record :actual t})
+                      #_(swap!
+                          error-counts-by-message
+                          #(update
+                             %
+                             (ex-message t)
+                             (fnil inc 0)))
                       (update ctx :queries-run + (if (= :query (:type record))
                                                    1
                                                    0))
@@ -324,7 +333,11 @@
             (with-jdbc db f)))))))
 (comment
 
-  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/groupby/slt_good_0.test"))
+(sort-by val @error-counts-by-message)
+(sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
+
+
+(time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/expr/slt_good_0.test"))
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
