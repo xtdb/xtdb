@@ -59,32 +59,58 @@
 ;; - needs cleanup.
 ;; - does not take renamed tables in presence of sub-queries into account.
 
-(defn- normalize-rewrite [column->table]
-  (fn [z]
-    (r/zmatch z
-      [:derived_column expr]
-      ;;=>
-      [:derived_column
-       expr
-       [:as_clause
-        "AS"
-        [:regular_identifier (str "col__" (r/child-idx z))]]]
+(defn- normalize-rewrite [column->table tables]
+  (letfn [(build-column-name-list [table tables]
+            (vec
+              (cons
+                :column_name_list
+                (for [col (get tables table)]
+                  [:regular_identifier col]))))]
+    (fn [z]
+      (r/zmatch z
+        [:derived_column expr]
+        ;;=>
+        [:derived_column
+         expr
+         [:as_clause
+          "AS"
+          [:regular_identifier (str "col__" (r/child-idx z))]]]
 
-      [:identifier_chain
-       [:regular_identifier column]]
-      ;;=>
-      (when-let [table (get column->table column)]
         [:identifier_chain
+         [:regular_identifier column]]
+        ;;=>
+        (when-let [table (get column->table column)]
+          [:identifier_chain
+           [:regular_identifier table]
+           [:regular_identifier column]])
+
+        [:sort_specification
+         [:exact_numeric_literal ordinal]]
+        ;;=>
+        [:sort_specification
+         [:column_reference
+          [:identifier_chain
+           [:regular_identifier (str "col__" ordinal)]]]]
+
+        [:table_primary
          [:regular_identifier table]
-         [:regular_identifier column]])
+         "AS"
+         [:regular_identifier table_alias]]
+        ;;=>
+        [:table_primary
+         [:regular_identifier table]
+         "AS"
+         [:regular_identifier table_alias]
+         (build-column-name-list table tables)]
 
-      [:sort_specification
-       [:exact_numeric_literal ordinal]]
-      ;;=>
-      [:sort_specification
-       [:column_reference
-        [:identifier_chain
-         [:regular_identifier (str "col__" ordinal)]]]])))
+        [:table_primary
+         [:regular_identifier table]]
+        ;;=>
+        [:table_primary
+         [:regular_identifier table]
+         "AS"
+         [:regular_identifier table]
+         (build-column-name-list table tables)]))))
 
 (defn- top-level-query-table->correlation-name [query]
   (->> (r/collect-stop
@@ -124,7 +150,7 @@
                              [column (get table->correlation-name table)])
                            (into {}))]
     (->> (r/vector-zip query)
-         (r/innermost (r/mono-tp (normalize-rewrite column->table)))
+         (r/innermost (r/mono-tp (normalize-rewrite column->table tables)))
          (r/node))))
 
 (defn parse-create-table [^String x]
@@ -159,7 +185,10 @@
             (execute-statement this direct-sql-data-statement-tree))))))
 
   (execute-query [this query]
-    (let [edited-query (str/replace query "CROSS JOIN" ",")
+    (let [edited-query (-> query
+                           (str/replace "CROSS JOIN" ",")
+                           (str/replace "- +" "-")
+                           (str/replace "- -" ""))
           tree (sql/parse edited-query :query_expression)
           snapshot-factory (tu/component this ::snap/snapshot-factory)
           db (snap/snapshot snapshot-factory)]

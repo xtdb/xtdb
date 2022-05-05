@@ -113,7 +113,7 @@ CREATE UNIQUE INDEX t1i0 ON t1(
 (t/deftest test-normalize-query
   (let [tables {"t1" ["a" "b" "c" "d" "e"]}
         query "SELECT a+b*2+c*3+d*4+e*5, (a+b+c+d+e)/5 FROM t1 ORDER BY 1,2"
-        expected "SELECT t1.a+t1.b*2+t1.c*3+t1.d*4+t1.e*5 AS col__1, (t1.a+t1.b+t1.c+t1.d+t1.e)/5 AS col__2 FROM t1 ORDER BY col__1,col__2"]
+        expected "SELECT t1.a+t1.b*2+t1.c*3+t1.d*4+t1.e*5 AS col__1, (t1.a+t1.b+t1.c+t1.d+t1.e)/5 AS col__2 FROM t1 AS t1(a, b, c, d, e) ORDER BY col__1,col__2"]
     (t/is (= (sql/parse expected :query_expression)
              (xtdb-engine/normalize-query tables (sql/parse query :query_expression)))))
 
@@ -121,17 +121,17 @@ CREATE UNIQUE INDEX t1i0 ON t1(
                 "tab1" ["col0" "col1" "col2"]
                 "tab2" ["col0" "col1" "col2"]}]
     (let [query "SELECT cor0.col2 col1 FROM tab0 AS cor0 GROUP BY col2, cor0.col1"
-          expected "SELECT cor0.col2 col1 FROM tab0 AS cor0 GROUP BY cor0.col2, cor0.col1"]
+          expected "SELECT cor0.col2 col1 FROM tab0 AS cor0(col0, col1, col2) GROUP BY cor0.col2, cor0.col1"]
       (t/is (= (sql/parse expected :query_expression)
                (xtdb-engine/normalize-query tables (sql/parse query :query_expression)))))
 
     (let [query "SELECT DISTINCT col0 FROM tab0"
-          expected "SELECT DISTINCT tab0.col0 AS col__1 FROM tab0"]
+          expected "SELECT DISTINCT tab0.col0 AS col__1 FROM tab0 AS tab0(col0, col1, col2)"]
       (t/is (= (sql/parse expected :query_expression)
                (xtdb-engine/normalize-query tables (sql/parse query :query_expression)))))
 
     (let [query "SELECT DISTINCT - ( + col1 ) + - 51 AS col0 FROM tab1 AS cor0 GROUP BY col1"
-          expected "SELECT DISTINCT - ( + cor0.col1 ) + - 51 AS col0 FROM tab1 AS cor0 GROUP BY cor0.col1"]
+          expected "SELECT DISTINCT - ( + cor0.col1 ) + - 51 AS col0 FROM tab1 AS cor0(col0, col1, col2) GROUP BY cor0.col1"]
       (t/is (= (sql/parse expected :query_expression)
                (xtdb-engine/normalize-query tables (sql/parse query :query_expression)))))))
 
