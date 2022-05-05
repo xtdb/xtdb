@@ -252,7 +252,6 @@
   (let [{:keys [^long line ^long column]} (index->line-column (.in failure) (.idx failure))]
     (with-out-str
       (println (str "Parse error at line " line ", column " column ":"))
-      (println)
       (println (get (str/split-lines (.in failure)) (dec line)))
       (dotimes [_ (dec column)]
         (print " "))
@@ -263,7 +262,7 @@
                         ":"
                         " one of:")))
         (doseq [[_ msg] errs]
-          (println (str "  " (name msg))))))))
+          (println (name msg)))))))
 
 (defn build-ebnf-parser [grammar ws-pattern]
   (let [rule->id (zipmap (keys grammar) (range))
@@ -286,8 +285,8 @@
                         :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser #{[:expected "<EOF>"]} ))
                         :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser) (with-meta
                                                                                                   #{[:expected (:regexp parser)]}
-                                                                                                  {:regexp? true}) ))
-                        :string (->WhitespaceParser ws-pattern (->StringParser (:string parser) #{[:expected (:string parser)]} )))
+                                                                                                  {:regexp? true})))
+                        :string (->WhitespaceParser ws-pattern (->StringParser (:string parser) #{[:expected (:string parser)]})))
                 hide (->HideParser)))]
       (doseq [[k v] grammar
               :let [rule-id (int (get rule->id k))
