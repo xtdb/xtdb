@@ -259,7 +259,7 @@
                         ":"
                         " one of:")))
         (doseq [[_ msg] errs]
-          (println "  " (name msg)))))))
+          (println (str "  " (name msg))))))))
 
 (defn build-ebnf-parser [grammar ws-pattern]
   (let [rule->id (zipmap (keys grammar) (range))
