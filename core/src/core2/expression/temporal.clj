@@ -8,9 +8,11 @@
             [core2.types :as types]
             [core2.util :as util])
   (:import java.time.Instant
-           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Int ArrowType$Timestamp ArrowType$Interval ArrowType$Date]
+           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Int ArrowType$Timestamp ArrowType$Interval ArrowType$Date ArrowType ArrowType$Null]
            org.apache.arrow.vector.types.TimeUnit
-           [java.time LocalDate]))
+           [java.time LocalDate Period Duration]
+           [org.apache.arrow.vector PeriodDuration]
+           [org.apache.arrow.vector.types IntervalUnit]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -186,6 +188,90 @@
                     (f x-type
                        `(quot ~@emitted-args)))
    :return-types #{x-type}})
+
+(defn pd-add ^PeriodDuration [^PeriodDuration pd1 ^PeriodDuration pd2]
+  (let [p1 (.getPeriod pd1)
+        p2 (.getPeriod pd2)
+        d1 (.getDuration pd1)
+        d2 (.getDuration pd2)]
+    (PeriodDuration. (.plus p1 p2) (.plus d1 d2))))
+
+(defn pd-sub ^PeriodDuration [^PeriodDuration pd1 ^PeriodDuration pd2]
+  (let [p1 (.getPeriod pd1)
+        p2 (.getPeriod pd2)
+        d1 (.getDuration pd1)
+        d2 (.getDuration pd2)]
+    (PeriodDuration. (.minus p1 p2) (.minus d1 d2))))
+
+(defn- choose-interval-arith-return [^ArrowType$Interval type-a ^ArrowType$Interval type-b]
+  (if (= (.getUnit type-a) (.getUnit type-b))
+    type-a
+    ;; we could be smarter about the return type here to allow a more compact representation
+    ;; for day time cases
+    types/interval-month-day-nano-type))
+
+(defmethod expr/codegen-call [:+ ArrowType$Interval ArrowType$Interval] [{:keys [arg-types]}]
+  (let [[type-a type-b] arg-types
+        return-type (choose-interval-arith-return type-a type-b)]
+    {:return-types #{return-type}
+     :continue-call (fn [f [a b]] (f return-type `(pd-add ~a ~b)))}))
+
+(defmethod expr/codegen-call [:+ ArrowType$Interval ArrowType$Null] [_] expr/call-returns-null)
+(defmethod expr/codegen-call [:+ ArrowType$Null ArrowType$Interval] [_] expr/call-returns-null)
+
+(defmethod expr/codegen-call [:- ArrowType$Interval ArrowType$Interval] [{:keys [arg-types]}]
+  (let [[type-a type-b] arg-types
+        return-type (choose-interval-arith-return type-a type-b)]
+    {:return-types #{return-type}
+     :continue-call (fn [f [a b]] (f return-type `(pd-sub ~a ~b)))}))
+
+(defmethod expr/codegen-call [:- ArrowType$Interval ArrowType$Null] [_] expr/call-returns-null)
+(defmethod expr/codegen-call [:- ArrowType$Null ArrowType$Interval] [_] expr/call-returns-null)
+
+(defn pd-scale ^PeriodDuration [^PeriodDuration pd ^long factor]
+  (let [p (.getPeriod pd)
+        d (.getDuration pd)]
+    (PeriodDuration. (.multipliedBy p factor) (.multipliedBy d factor))))
+
+(defmethod expr/codegen-call [:* ArrowType$Interval ArrowType$Int] [_]
+  {:return-types #{types/interval-month-day-nano-type}
+   :continue-call (fn [f [a b]] (f types/interval-month-day-nano-type `(pd-scale ~a ~b)))})
+
+(defmethod expr/codegen-call [:* ArrowType$Int ArrowType$Interval] [_]
+  {:return-types #{types/interval-month-day-nano-type}
+   :continue-call (fn [f [a b]] (f types/interval-month-day-nano-type `(pd-scale ~b ~a)))})
+
+(defmethod expr/codegen-call [:* ArrowType$Interval ArrowType$Null] [_] expr/call-returns-null)
+(defmethod expr/codegen-call [:* ArrowType$Null ArrowType$Int] [_] expr/call-returns-null)
+(defmethod expr/codegen-call [:* ArrowType$Int ArrowType$Null] [_] expr/call-returns-null)
+(defmethod expr/codegen-call [:* ArrowType$Null ArrowType$Interval] [_] expr/call-returns-null)
+
+(defn pd-year-month-div ^PeriodDuration [^PeriodDuration pd ^long divisor]
+  (let [p (.getPeriod pd)]
+    (PeriodDuration.
+      (Period/of 0 (quot (.toTotalMonths p) divisor) 0)
+      Duration/ZERO)))
+
+(defn pd-day-time-div ^PeriodDuration [^PeriodDuration pd ^long divisor]
+  (let [p (.getPeriod pd)
+        d (.getDuration pd)]
+    (PeriodDuration.
+      (Period/ofDays (quot (.getDays p) divisor))
+      (Duration/ofSeconds (quot (.toSeconds d) divisor)))))
+
+(defmethod expr/codegen-call [:/ ArrowType$Interval ArrowType$Int] [{:keys [arg-types]}]
+  (let [[^ArrowType$Interval itype] arg-types]
+    (util/case-enum (.getUnit itype)
+      IntervalUnit/YEAR_MONTH
+      {:return-types #{types/interval-year-month-type}
+       :continue-call (fn [f [a b]] (f types/interval-year-month-type `(pd-year-month-div ~a ~b)))}
+      IntervalUnit/DAY_TIME
+      {:return-types #{types/interval-day-time-type}
+       :continue-call (fn [f [a b]] (f types/interval-day-time-type `(pd-day-time-div ~a ~b)))}
+      (throw (UnsupportedOperationException. "Cannot divide mixed period / duration intervals")))))
+
+(defmethod expr/codegen-call [:/ ArrowType$Interval ArrowType$Null] [_] expr/call-returns-null)
+(defmethod expr/codegen-call [:/ ArrowType$Null ArrowType$Int] [_] expr/call-returns-null)
 
 (defn apply-constraint [^longs min-range ^longs max-range
                         f col-name ^Instant time]

@@ -10,16 +10,17 @@
             [clojure.test.check.clojure-test :as tct]
             [clojure.test.check.properties :as tcp]
             [clojure.test.check.generators :as tcg]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [core2.edn :as edn])
   (:import core2.types.LegType
            core2.vector.IIndirectVector
-           (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId)
+           (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId Period)
            (java.time.temporal ChronoUnit)
-           (org.apache.arrow.vector DurationVector TimeStampVector ValueVector)
+           (org.apache.arrow.vector DurationVector TimeStampVector ValueVector PeriodDuration)
            (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Time ArrowType$Timestamp ArrowType$Union FieldType)
            org.apache.arrow.vector.types.TimeUnit
-           [core2 StringUtil]
-           [java.nio ByteBuffer]))
+           (core2 StringUtil)
+           (java.nio ByteBuffer)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -1534,3 +1535,143 @@
                     :nullable? false}
                    (project-fn '(local-time 2)))
                 "local-time"))))))
+
+(t/deftest test-interval-constructors
+  (t/are [expected expr data]
+    (= (some-> expected edn/period-duration-reader) (project1 expr data))
+
+    nil '(pd-year nil) {}
+    nil '(pd-month nil) {}
+    nil '(pd-day nil) {}
+    nil '(pd-hour nil) {}
+    nil '(pd-minute nil) {}
+    nil '(pd-second nil) {}
+
+    "P0D PT0S" '(pd-year 0) {}
+    "P0D PT0S" '(pd-month 0) {}
+    "P0D PT0S" '(pd-day 0) {}
+    "P0D PT0S" '(pd-hour 0) {}
+    "P0D PT0S" '(pd-minute 0) {}
+    "P0D PT0S" '(pd-second 0) {}
+
+    "P0D PT0S" '(pd-year a) {:a 0}
+    "P0D PT0S" '(pd-month a) {:a 0}
+    "P0D PT0S" '(pd-day a) {:a 0}
+    "P0D PT0S" '(pd-hour a) {:a 0}
+    "P0D PT0S" '(pd-minute a) {:a 0}
+    "P0D PT0S" '(pd-second a) {:a 0}
+
+    ;; Y / M distinction is lost when writing to IntervalYear vectors
+    "P12M PT0S" '(pd-year 1) {}
+    "P-24M PT0S" '(pd-year -2) {}
+
+    "P1M PT0S" '(pd-month 1) {}
+    "P-2M PT0S" '(pd-month -2) {}
+
+    "P1D PT0S" '(pd-day 1) {}
+    "P-2D PT0S" '(pd-day -2) {}
+
+    "P0D PT1H" '(pd-hour 1) {}
+    "P0D PT-2H" '(pd-hour -2) {}
+
+    "P0D PT1M" '(pd-minute 1) {}
+    "P0D PT-2M" '(pd-minute -2) {}
+
+    "P0D PT1S" '(pd-second 1) {}
+    "P0D PT-2S" '(pd-second -2) {}))
+
+(t/deftest test-interval-arithmetic
+  (t/are [expected expr]
+    (= (some-> expected edn/period-duration-reader) (project1 expr {}))
+
+    nil '(+ (pd-year 1) nil)
+    nil '(+ nil (pd-year 1))
+
+    nil '(- (pd-year 1) nil)
+    nil '(- nil (pd-year 1))
+
+    nil '(* (pd-year 1) nil)
+    nil '(* nil (pd-year 1))
+
+    "P24M PT0S" '(+ (pd-year 1) (pd-year 1))
+    "P13M PT0S" '(+ (pd-year 1) (pd-month 1))
+    "P11M PT0S" '(+ (pd-year 1) (pd-month -1))
+
+    "P12M-1D PT0S" '(+ (pd-year 1) (pd-day -1))
+    "P12M PT-1S" '(+ (pd-year 1) (pd-second -1))
+    "P12M PT1H1S" '(+ (pd-year 1) (pd-hour 1) (pd-second 1))
+
+    "P0D PT0S" '(- (pd-year 1) (pd-year 1))
+    "P11M PT0S" '(- (pd-year 1) (pd-month 1))
+    "P13M PT0S" '(- (pd-year 1) (pd-month -1))
+
+    "P12M1D PT0S" '(- (pd-year 1) (pd-day -1))
+    "P12M PT1S" '(- (pd-year 1) (pd-second -1))
+    "P12M PT-1H-1S" '(- (pd-year 1) (pd-hour 1) (pd-second 1))
+
+    "P36M PT0S" '(* (pd-year 1) 3)
+
+    "P6M PT0S" '(/ (pd-year 1) 2)
+    "P2M PT0S" '(/ (pd-year 1) 5)
+
+    "P12M PT0S" '(/ (+ (pd-year 1) (pd-year 1)) 2)
+
+    "P0M PT0S" '(/ (pd-month 1) 2)
+    "P1M PT0S" '(/ (pd-month 6) 5)
+
+    "P0M PT0S" '(/ (pd-day 1) 2)
+    "P1D PT0S" '(/ (pd-day 6) 5)))
+
+(t/deftest test-uoe-thrown-for-unsupported-div
+  (t/is (thrown? UnsupportedOperationException (project1 '(/ (+ (pd-month 1) (pd-minute 3)) 3) {})))
+  (t/is (thrown? UnsupportedOperationException (project1 '(/ (+ (pd-month 1) (pd-day 3)) 3) {}))))
+
+(def period-gen
+  (tcg/fmap (fn [[y m d]]
+              (Period/of y m d))
+            (tcg/tuple
+              (tcg/return 0)
+              tcg/small-integer
+              tcg/small-integer)))
+
+(def small-duration-gen
+  (tcg/fmap #(Duration/ofNanos %) (tcg/choose -86399999999999 86399999999999)))
+
+(def period-duration-gen
+  (tcg/fmap
+    #(PeriodDuration. (first %) (second %))
+    (tcg/tuple period-gen small-duration-gen)))
+
+;; some basic interval algebraic properties
+
+(def pd-zero (PeriodDuration. Period/ZERO Duration/ZERO))
+
+(tct/defspec interval-add-identity-prop
+  (tcp/for-all [pd period-duration-gen]
+    (= pd (project1 '(+ a b) {:a pd, :b pd-zero}))))
+
+(tct/defspec interval-sub-identity-prop
+  (tcp/for-all [pd period-duration-gen]
+    (= pd (project1 '(- a b) {:a pd, :b pd-zero}))))
+
+(tct/defspec interval-mul-factor-identity-prop
+  (tcp/for-all [pd period-duration-gen]
+    (= pd (project1 '(* a 1) {:a pd}))))
+
+(tct/defspec interval-mul-by-zero-prop
+  (tcp/for-all [pd period-duration-gen]
+    (= #time/period-duration "P0M PT0S" (project1 '(* a 0) {:a pd}))))
+
+(tct/defspec interval-add-sub-round-trip-prop
+  (tcp/for-all [pd period-duration-gen]
+    (= pd (project1 '(- (+ a a) a) {:a pd}))))
+
+(tct/defspec interval-mul-by-2-is-equiv-to-sum-self-prop
+  (tcp/for-all [pd period-duration-gen]
+    (= (project1 '(* a 2) {:a pd})
+       (project1 '(+ a a) {:a pd}))))
+
+(tct/defspec interval-mul-by-neg1-is-equiv-to-sub-self2-prop
+  (tcp/for-all [pd period-duration-gen]
+    (= (project1 '(* a -1) {:a pd})
+       (project1 '(- a a a) {:a pd}))))

@@ -20,7 +20,7 @@
            (java.util Date HashMap LinkedList Arrays)
            (java.util.function IntUnaryOperator)
            (java.util.stream IntStream)
-           (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector ValueVector PeriodDuration)
+           (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector ValueVector PeriodDuration IntervalDayVector IntervalYearVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector)
            (org.apache.arrow.vector.types DateUnit TimeUnit Types Types$MinorType IntervalUnit)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8 Field FieldType ArrowType$Time ArrowType$Interval)
@@ -1038,6 +1038,27 @@
 (defmethod codegen-call [:default-overlay-length ArrowType$Binary] [_]
   (mono-fn-call types/int-type #(do `(.remaining (resolve-buf ~@%)))))
 
+(defmethod codegen-call [:pd-year ArrowType$Int] [_]
+  (mono-fn-call types/interval-year-month-type #(do `(PeriodDuration. (Period/ofYears ~@%) Duration/ZERO))))
+
+(defmethod codegen-call [:pd-month ArrowType$Int] [_]
+  (mono-fn-call types/interval-year-month-type #(do `(PeriodDuration. (Period/ofMonths ~@%) Duration/ZERO))))
+
+(defmethod codegen-call [:pd-day ArrowType$Int] [_]
+  (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. (Period/ofDays ~@%) Duration/ZERO))))
+
+(defmethod codegen-call [:pd-hour ArrowType$Int] [_]
+  (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofHours ~@%)))))
+
+(defmethod codegen-call [:pd-minute ArrowType$Int] [_]
+  (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofMinutes ~@%)))))
+
+(defmethod codegen-call [:pd-second ArrowType$Int] [_]
+  (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofSeconds ~@%)))))
+
+(doseq [interval-ctor [:pd-year, :pd-month, :pd-day, :pd-hour, :pd-minute, :pd-second]]
+  (defmethod codegen-call [interval-ctor ArrowType$Null] [_] call-returns-null))
+
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]
   {:return-types #{types/bigint-type}
    :continue-call (fn [f [_ ts-code]]
@@ -1288,11 +1309,22 @@
 (defmethod set-value-form ArrowType$Time [_ out-vec-sym idx-sym code]
   `(.set ~out-vec-sym ~idx-sym ~code))
 
-(defmethod set-value-form ArrowType$Interval [_ out-vec-sym idx-sym code]
-  `(let [period-duration# ~code
-         period# (.getPeriod period-duration#)
-         duration# (.getDuration period-duration#)]
-     (.set ~out-vec-sym ~idx-sym (.toTotalMonths period#) (.getDays period#) (.toNanos duration#))))
+(defmethod set-value-form ArrowType$Interval [^ArrowType$Interval t out-vec-sym idx-sym code]
+  (util/case-enum (.getUnit t)
+    IntervalUnit/YEAR_MONTH
+    `(let [^PeriodDuration period-duration# ~code
+           period# (.getPeriod period-duration#)]
+       (.set ^IntervalYearVector ~out-vec-sym ~idx-sym (.toTotalMonths period#)))
+    IntervalUnit/DAY_TIME
+    `(let [^PeriodDuration period-duration# ~code
+           period# (.getPeriod period-duration#)
+           duration# (.getDuration period-duration#)]
+       (.set ^IntervalDayVector ~out-vec-sym ~idx-sym (.getDays period#) (.toMillis duration#)))
+    IntervalUnit/MONTH_DAY_NANO
+    `(let [^PeriodDuration period-duration# ~code
+           period# (.getPeriod period-duration#)
+           duration# (.getDuration period-duration#)]
+       (.set ~out-vec-sym ~idx-sym (.toTotalMonths period#) (.getDays period#) (.toNanos duration#)))))
 
 (def ^:private out-vec-sym (gensym 'out-vec))
 (def ^:private out-writer-sym (gensym 'out-writer-sym))
@@ -1721,3 +1753,4 @@
       (let [projection-spec (->expression-projection-spec "_scalar" form col-names params)]
         (with-open [out-vec (.project projection-spec al (iv/->indirect-rel [] 1))]
           (types/get-object (.getVector out-vec) (.getIndex out-vec 0)))))))
+
