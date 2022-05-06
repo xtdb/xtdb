@@ -413,7 +413,7 @@
           (plan-sql "SELECT foo.a FROM foo ORDER BY foo.a NULLS LAST"))))
 
 (defn- plan-expr [sql]
-  (let [plan (plan-sql (format "SELECT %s t FROM foo" sql))
+  (let [plan (plan-sql (format "SELECT %s t FROM foo WHERE foo.a = 42" sql))
         [expr] (filter (fn [form] (and (list? form) (symbol? (first form)))) (tree-seq seqable? seq plan))]
     expr))
 
@@ -547,3 +547,46 @@
 
 
 
+
+(deftest test-interval-expr
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+
+    "1 YEAR" '(pd-year 1)
+    "1 YEAR + 3 MONTH + 4 DAY" '(+ (+ (pd-year 1) (pd-month 3)) (pd-day 4))
+
+    ;; todo investigate, these expr are entirely ambiguous
+    ;; I think these should not be parsed, but they are! ...
+    #_#_ "1 YEAR + 3" '()
+    #_#_ "1 YEAR - 3" '()
+
+    ;; scaling is not ambiguous like add/sub is
+    "1 YEAR * 3" '(* (pd-year 1) 3)
+    "3 * 1 YEAR" '(* 3 (pd-year 1))
+
+    ;; division is allowed in spec, but provides some ambiguity
+    ;; as we do not allow fractional components (other than seconds)
+    ;; so this parses however, I do not think we should support this.
+    "1 YEAR / 3" '(/ (pd-year 1) 3)
+
+    "foo.a YEAR" '(pd-year x1)
+    "foo.a MONTH" '(pd-month x1)
+    "foo.a DAY" '(pd-day x1)
+    "foo.a HOUR" '(pd-hour x1)
+    "foo.a MINUTE" '(pd-minute x1)
+    "foo.a SECOND" '(pd-second x1)
+
+    "- foo.a SECOND" '(- (pd-second x1))
+    "+ foo.a SECOND" '(pd-second x1)
+
+    "foo.a YEAR + foo.b YEAR" '(+ (pd-year x1) (pd-year x2))
+    "foo.a YEAR + foo.b MONTH" '(+ (pd-year x1) (pd-month x2))
+    "foo.a YEAR - foo.b MONTH" '(- (pd-year x1) (pd-month x2))
+
+    "foo.a YEAR + 1 MONTH" '(+ (pd-year x1) (pd-month 1))
+    "foo.a YEAR + 1 MONTH + 2 DAY" '(+ (+ (pd-year x1) (pd-month 1)) (pd-day 2))
+    "foo.a YEAR + 1 MONTH - 2 DAY" '(- (+ (pd-year x1) (pd-month 1)) (pd-day 2))
+
+    "foo.a + 2 MONTH" '(+ x1 (pd-month 2))
+    "foo.a + +1 MONTH" '(+ x1 (pd-month 1))
+    "foo.a + -1 MONTH" '(+ x1 (- (pd-month 1)))))

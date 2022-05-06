@@ -179,6 +179,49 @@
        "MONTH" (PeriodDuration. (Period/ofMonths (Long/parseLong year-month-literal)) Duration/ZERO)
        "YEAR" (PeriodDuration. (Period/ofYears (Long/parseLong year-month-literal)) Duration/ZERO))
 
+     [:interval_primary ^:z n [:interval_qualifier [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]]
+     ;; =>
+     (case datetime-field
+       "YEAR" (list 'pd-year (expr n))
+       "MONTH" (list 'pd-month (expr n))
+       "DAY" (list 'pd-day (expr n))
+       "HOUR" (list 'pd-hour (expr n))
+       "MINUTE" (list 'pd-minute (expr n)))
+
+     [:interval_term ^:z i [:asterisk "*"] ^:z n]
+     (list '* (expr i) (expr n))
+
+     [:interval_term ^:z i [:solidus "/"] ^:z n]
+     (list '/ (expr i) (expr n))
+
+     [:interval_factor [:minus_sign "-"] ^:z i]
+     ;; =>
+     (list '- (expr i))
+
+     [:interval_factor [:plus_sign "+"] ^:z i]
+     ;; =>
+     (expr i)
+
+     [:interval_primary ^:z n [:interval_qualifier [:single_datetime_field "SECOND"]]]
+     ;; =>
+     (list 'pd-second (expr n))
+
+     [:interval_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
+     ;; =>
+     (list '+ (expr i1) (expr i2))
+
+     [:datetime_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
+     ;; =>
+     (list '+ (expr i1) (expr i2))
+
+     [:interval_value_expression ^:z i1 [:minus_sign "-"] ^:z i2]
+     ;; =>
+     (list '- (expr i1) (expr i2))
+
+     [:datetime_value_expression ^:z i1 [:minus_sign "-"] ^:z i2]
+     ;; =>
+     (list '- (expr i1) (expr i2))
+
      [:current_date_value_function _] '(current-date)
      [:current_time_value_function _] '(current-time)
      [:current_time_value_function _ ^:z tp] (list 'current-time (expr tp))
