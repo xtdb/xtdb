@@ -37,6 +37,9 @@
 (def keyword-type KeywordType/INSTANCE)
 (def date-day-type (ArrowType$Date. DateUnit/DAY))
 (def time-micros-type (ArrowType$Time. TimeUnit/MICROSECOND 64))
+(def interval-day-time-type (ArrowType$Interval. IntervalUnit/DAY_TIME))
+(def interval-year-month-type (ArrowType$Interval. IntervalUnit/YEAR_MONTH))
+(def interval-month-day-nano-type (ArrowType$Interval. IntervalUnit/MONTH_DAY_NANO))
 
 (defprotocol ArrowWriteable
   (^core2.types.LegType value->leg-type [v])
