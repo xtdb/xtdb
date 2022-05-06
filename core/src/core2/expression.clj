@@ -337,15 +337,23 @@
                                                          `(.getOffset ~var-vec-sym ~var-idx-sym)))])))
                      (apply concat)))))})))
 
-(defn- wrap-mono-return [{:keys [return-types continue]}]
-  {:return-types return-types
-   :continue (if (= 1 (count return-types))
-               ;; only generate the surrounding code once if we're monomorphic
-               (fn [f]
-                 (f (first return-types)
-                    (continue (fn [_ code] code))))
+(defn- wrap-boxed-poly-return [{:keys [return-types continue]}]
+  (let [mono? (= 1 (count return-types))]
+    {:return-types return-types
+     :continue (fn [f]
+                 (if mono?
+                   (f (first return-types)
+                      (continue (fn [_ code] code)))
 
-               continue)})
+                   (let [type-ids (into {} (map-indexed (fn [idx rt] [rt idx])) return-types)
+                         code (continue (fn [return-type code]
+                                          [(get type-ids return-type) code]))
+                         res-sym (gensym 'res)]
+                     `(let [[type-id# ~res-sym] ~code]
+                        (case (long type-id#)
+                          ~@(->> (for [[return-type type-id] type-ids]
+                                   [type-id (f return-type res-sym)])
+                                 (apply concat)))))))}))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} opts]
   (let [{p-rets :return-types, p-cont :continue} (codegen-expr pred opts)
@@ -361,7 +369,7 @@
                      `(if ~(p-cont (fn [_ code] code))
                         ~(t-cont f)
                         ~(e-cont f)))}
-        (wrap-mono-return))))
+        (wrap-boxed-poly-return))))
 
 (defmethod codegen-expr :local [{:keys [local]} {:keys [local-types]}]
   (let [return-type (get local-types local)]
@@ -380,7 +388,7 @@
                      (continue-expr (fn [local-type code]
                                       `(let [~local ~code]
                                          ~((:continue (get emitted-bodies local-type)) f)))))}
-        (wrap-mono-return))))
+        (wrap-boxed-poly-return))))
 
 (defmethod codegen-expr :if-some [{:keys [local expr then else]} opts]
   (let [{continue-expr :continue, expr-rets :return-types} (codegen-expr expr opts)
@@ -407,7 +415,7 @@
                                             (e-cont f)
                                             `(let [~local ~code]
                                                ~((:continue (get emitted-thens local-type)) f))))))}))
-        (wrap-mono-return))))
+        (wrap-boxed-poly-return))))
 
 (defmulti codegen-call
   "Expects a map containing both the expression and an `:arg-types` key - a vector of ArrowTypes.
@@ -461,9 +469,9 @@
 
                                    ;; reverse because we're working inside-out
                                    (reverse emitted-args))]
-
                        (build-args-then-call [] [])))}
-        (wrap-mono-return))))
+
+        (wrap-boxed-poly-return))))
 
 (defn mono-fn-call [return-type wrap-args-f]
   {:continue-call (fn [f emitted-args]
@@ -1369,7 +1377,7 @@
   `(.set ~out-vec-sym ~idx-sym (if ~code 1 0)))
 
 (defmethod set-value-form ArrowType$Int [_ out-vec-sym idx-sym code]
-  `(.set ~out-vec-sym ~idx-sym ~code))
+  `(.set ~out-vec-sym ~idx-sym (long ~code)))
 
 (defmethod set-value-form ArrowType$FloatingPoint [_ out-vec-sym idx-sym code]
   `(.set ~out-vec-sym ~idx-sym (double ~code)))
@@ -1524,20 +1532,21 @@
 
               {:keys [writer-bindings write-value-out!]} (write-value-out-code ret-field-type return-types)]
 
-          {:expr-fn (eval
-                     `(fn [~(-> out-vec-sym (with-tag ValueVector))
-                           ~(-> rel-sym (with-tag IIndirectRelation))
-                           ~params-sym]
-                        (let [~@(batch-bindings expr)
+          {:expr-fn (-> `(fn [~(-> out-vec-sym (with-tag ValueVector))
+                              ~(-> rel-sym (with-tag IIndirectRelation))
+                              ~params-sym]
+                           (let [~@(batch-bindings expr)
 
-                              ~out-writer-sym (vw/vec->writer ~out-vec-sym)
-                              ~@writer-bindings
-                              row-count# (.rowCount ~rel-sym)]
-                          (.setValueCount ~out-vec-sym row-count#)
-                          (dotimes [~idx-sym row-count#]
-                            (.startValue ~out-writer-sym)
-                            ~(continue write-value-out!)
-                            (.endValue ~out-writer-sym)))))
+                                 ~out-writer-sym (vw/vec->writer ~out-vec-sym)
+                                 ~@writer-bindings
+                                 row-count# (.rowCount ~rel-sym)]
+                             (.setValueCount ~out-vec-sym row-count#)
+                             (dotimes [~idx-sym row-count#]
+                               (.startValue ~out-writer-sym)
+                               ~(continue write-value-out!)
+                               (.endValue ~out-writer-sym))))
+                        #_(doto clojure.pprint/pprint)
+                        eval)
 
            :field-type ret-field-type}))
       (memoize)

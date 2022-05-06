@@ -254,6 +254,16 @@
                      (types/field->leg-type out-field)))
        :nullable? (.isNullable (.getField (.getVector out-ivec)))})))
 
+(t/deftest test-nils
+  (letfn [(run-test [f xs ys]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bigint-type) xs)
+                                       (tu/->mono-vec "y" (FieldType/nullable types/bigint-type) ys)])]
+              (-> (run-projection rel (list f 'x 'y))
+                  :res)))]
+
+    (t/is (= [3 nil nil nil]
+             (run-test '+ [1 1 nil nil] [2 nil 2 nil])))))
+
 (t/deftest test-variadics
   (letfn [(run-test [f x y z]
             (with-open [rel (open-rel [(tu/->mono-vec "x" types/bigint-type [x])
