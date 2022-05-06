@@ -210,6 +210,21 @@
      ;; =>
      (list '+ (expr i1) (expr i2))
 
+     [:interval_primary ^:z i [:interval_qualifier
+                               [:start_field [:non_second_primary_datetime_field start-field]]
+                               "TO"
+                               [:end_field [:non_second_primary_datetime_field end-field]]]]
+     ;; =>
+     (list 'parse-multi-part-pd (expr i) start-field end-field)
+
+     [:interval_primary ^:z i [:interval_qualifier
+                               [:start_field [:non_second_primary_datetime_field start-field]]
+                               "TO"
+                               [:end_field "SECOND"]]]
+     ;; =>
+     (list 'parse-multi-part-pd (expr i) start-field "SECOND")
+
+
      [:datetime_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
      ;; =>
      (list '+ (expr i1) (expr i2))

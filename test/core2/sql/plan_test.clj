@@ -585,4 +585,7 @@
 
     "foo.a + 2 MONTH" '(+ x1 (pd-month 2))
     "foo.a + +1 MONTH" '(+ x1 (pd-month 1))
-    "foo.a + -1 MONTH" '(+ x1 (- (pd-month 1)))))
+    "foo.a + -1 MONTH" '(+ x1 (- (pd-month 1)))
+
+    "foo.a YEAR TO MONTH" '(parse-multi-part-pd x1 "YEAR" "MONTH")
+    "foo.a DAY TO SECOND" '(parse-multi-part-pd x1 "DAY" "SECOND")))
