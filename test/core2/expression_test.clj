@@ -1635,6 +1635,8 @@
               tcg/small-integer)))
 
 (def small-duration-gen
+  "Generates java.time.Duration instances representing -1D to +1D (exclusive), this is useful
+  as the fractional component of MonthDayNano is going to hold nanos in this range."
   (tcg/fmap #(Duration/ofNanos %) (tcg/choose -86399999999999 86399999999999)))
 
 (def period-duration-gen
