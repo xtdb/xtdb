@@ -1578,7 +1578,16 @@
     "P0D PT-2M" '(pd-minute -2) {}
 
     "P0D PT1S" '(pd-second 1) {}
-    "P0D PT-2S" '(pd-second -2) {}))
+    "P0D PT-2S" '(pd-second -2) {}
+
+    ;; multi part parsing
+    nil '(parse-multi-part-pd nil "YEAR" "MONTH") {}
+    "P0D PT0S" '(parse-multi-part-pd "0-0" "YEAR" "MONTH") {}
+    "P12M PT0S" '(parse-multi-part-pd "1-0" "YEAR" "MONTH") {}
+    "P13M PT0S" '(parse-multi-part-pd "1-1" "YEAR" "MONTH") {}
+
+    "P1M PT0S" '(parse-multi-part-pd "1-0" "MONTH" "DAY") {}
+    "P1D PT0S" '(parse-multi-part-pd "1-0" "DAY" "MONTH") {}))
 
 (t/deftest test-interval-arithmetic
   (t/are [expected expr]

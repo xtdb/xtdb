@@ -1059,6 +1059,43 @@
 (doseq [interval-ctor [:pd-year, :pd-month, :pd-day, :pd-hour, :pd-minute, :pd-second]]
   (defmethod codegen-call [interval-ctor ArrowType$Null] [_] call-returns-null))
 
+(defn parse-multi-part-pd
+  "This function is used to parse a multi-component interval literal into a PeriodDuration, e.g '12-03' YEAR TO MONTH."
+  ^PeriodDuration [s unit1 unit2]
+  ; In practice likely applied as a const-expr so not too worried about vectorized perf.
+  (letfn [(unit-p [unit ^long n]
+            (case unit
+              "YEAR" (Period/ofYears n)
+              "MONTH" (Period/ofMonths n)
+              "DAY" (Period/ofDays n)
+              Period/ZERO))
+          (unit-d [unit ^long n]
+            (case unit
+              "HOUR" (Duration/ofHours n)
+              "MINUTE" (Duration/ofMinutes n)
+              "SECOND" (Duration/ofSeconds n)
+              Duration/ZERO))]
+    (let [[match part1 part2] (re-find #"^(\d+)\-(\d+)" s)
+          _ (when-not match (throw (IllegalArgumentException. "Cannot parse interval, incorrect format.")))
+          n1 (parse-long part1)
+          n2 (parse-long part2)
+
+          ^Period p1 (unit-p unit1 n1)
+          ^Period p2 (unit-p unit2 n2)
+
+          ^Duration d1 (unit-d unit1 n1)
+          ^Duration d2 (unit-d unit2 n2)]
+      (PeriodDuration. (.plus p1 p2) (.plus d1 d2)))))
+
+(defmethod codegen-call [:parse-multi-part-pd ArrowType$Utf8 ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
+  (let [[_ unit1 unit2] (map :literal args)
+        _ (when (= unit1 unit2) (throw (IllegalArgumentException. "Cannot start and end interval with same unit.")))
+        ;; todo choose a more specific representation when possible
+        return-type types/interval-month-day-nano-type]
+    (mono-fn-call return-type (fn [[s & _]] `(parse-multi-part-pd (resolve-string ~s) ~unit1 ~unit2)))))
+
+(defmethod codegen-call [:parse-multi-part-pd ArrowType$Null ArrowType$Utf8 ArrowType$Utf8] [_] call-returns-null)
+
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]
   {:return-types #{types/bigint-type}
    :continue-call (fn [f [_ ts-code]]

@@ -562,7 +562,7 @@
 
     ;; division is allowed in spec, but provides some ambiguity
     ;; as we do not allow fractional components (other than seconds)
-    ;; so this parses however, I do not think we should support this.
+    ;; we therefore throw at runtime for arrow vectors that cannot be cleanly truncated / rond
     "1 YEAR / 3" '(/ (pd-year 1) 3)
 
     "foo.a YEAR" '(pd-year x1)
