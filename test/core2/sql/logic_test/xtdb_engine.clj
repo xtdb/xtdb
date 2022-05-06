@@ -104,6 +104,16 @@
          (build-column-name-list table tables)]
 
         [:table_primary
+         [:regular_identifier table]
+         [:regular_identifier table_alias]]
+        ;;=>
+        [:table_primary
+         [:regular_identifier table]
+         "AS"
+         [:regular_identifier table_alias]
+         (build-column-name-list table tables)]
+
+        [:table_primary
          [:regular_identifier table]]
         ;;=>
         [:table_primary
