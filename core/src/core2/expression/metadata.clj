@@ -79,14 +79,16 @@
           <= (bool-expr '<= :min, '>= :max)
           > (bool-expr '> :max, '< :min)
           >= (bool-expr '>= :max, '<= :min)
-          = {:op :call
-             :f 'and
-             :args [(meta-expr {:op :call,
-                                :f 'and,
-                                :args [{:op :call, :f '<=, :args args}
-                                       {:op :call, :f '>=, :args args}]})
+          = (-> {:op :call
+                 :f 'and
+                 :args (->> [(meta-expr {:op :call,
+                                         :f 'and,
+                                         :args [{:op :call, :f '<=, :args args}
+                                                {:op :call, :f '>=, :args args}]})
 
-                    (bool-expr nil :bloom-filter, nil :bloom-filter)]}
+                             (bool-expr nil :bloom-filter, nil :bloom-filter)]
+                            (filterv some?))}
+                simplify-and-or-expr)
           nil)
 
         (meta-fallback-expr expr))))
