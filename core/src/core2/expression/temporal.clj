@@ -203,7 +203,13 @@
         d2 (.getDuration pd2)]
     (PeriodDuration. (.minus p1 p2) (.minus d1 d2))))
 
-(defn- choose-interval-arith-return [^ArrowType$Interval type-a ^ArrowType$Interval type-b]
+(defn- choose-interval-arith-return
+  "Given two interval types, return an interval type that can represent the result of an binary arithmetic expression
+  over those types, i.e + or -.
+
+  If you add two YearMonth intervals, you can use an YearMonth representation for the result, if you add a YearMonth
+  and a MonthDayNano, you must use MonthDayNano to represent the result."
+  [^ArrowType$Interval type-a ^ArrowType$Interval type-b]
   (if (= (.getUnit type-a) (.getUnit type-b))
     type-a
     ;; we could be smarter about the return type here to allow a more compact representation
@@ -245,6 +251,11 @@
 (defmethod expr/codegen-call [:* ArrowType$Null ArrowType$Int] [_] expr/call-returns-null)
 (defmethod expr/codegen-call [:* ArrowType$Int ArrowType$Null] [_] expr/call-returns-null)
 (defmethod expr/codegen-call [:* ArrowType$Null ArrowType$Interval] [_] expr/call-returns-null)
+
+;; numeric division for intervals
+;; can only be supported for Year_Month and Day_Time interval units without
+;; ambguity, e.g if I was to divide an interval containing P1M20D, I could return P10D for the day component, but I have
+;; to truncate the month component to zero (as it is not divisible into days).
 
 (defn pd-year-month-div ^PeriodDuration [^PeriodDuration pd ^long divisor]
   (let [p (.getPeriod pd)]
