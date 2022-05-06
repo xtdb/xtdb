@@ -544,10 +544,6 @@
             FROM foo
             GROUP BY foo.a"))))
 
-
-
-
-
 (deftest test-interval-expr
   (t/are [sql expected]
     (= expected (plan-expr sql))
