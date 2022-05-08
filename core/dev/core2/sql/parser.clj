@@ -12,10 +12,7 @@
 ;; Spike to replace Instaparse.
 
 ;; TODO:
-;; explore errors? flag to avoid tracking when there's a valid alternative already.
 ;; explore ws properly, tokens shouldn't be possible to "stack" without ws between.
-;; explore error handling, needs to be passed upwards, merged, a kind of result.
-;; try compiling rule bodies to fns?
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
 ;; https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
@@ -29,34 +26,34 @@
 (defrecord ParseFailure [^String in errs ^int idx])
 
 (definterface IParser
-  (^core2.sql.parser.ParseState parse [^String in ^int idx ^java.util.Map memos]))
+  (^core2.sql.parser.ParseState parse [^String in ^int idx ^java.util.Map memos ^boolean errors?]))
 
 (defrecord EpsilonParser [errs]
   IParser
-  (parse [_ in idx memos]
+  (parse [_ in idx memos errors?]
     (if (= (.length in) idx)
       (ParseState. [] nil idx)
       (ParseState. nil errs idx))))
 
 (defrecord WhitespaceParser [^java.util.regex.Pattern pattern ^core2.sql.parser.IParser parser]
   IParser
-  (parse [_ in idx memos]
+  (parse [_ in idx memos errors?]
     (let [m (.matcher pattern in)
           m (.region m idx (.length in))
           idx (if (.lookingAt m)
                 (int (.end m))
                 idx)]
-      (.parse parser in idx memos))))
+      (.parse parser in idx memos errors?))))
 
 (defrecord NonTerminalParser [^int rule-id ^objects rules]
   IParser
-  (parse [_ in idx memos]
-    (.parse ^IParser (aget rules rule-id) in idx memos)))
+  (parse [_ in idx memos errors?]
+    (.parse ^IParser (aget rules rule-id) in idx memos errors?)))
 
 (defrecord RuleParser [rule-name ^int rule-id ^boolean raw? ^IParser parser errs]
   IParser
-  (parse [_ in idx memos]
-    (let [state (.parse parser in idx memos)]
+  (parse [_ in idx memos errors?]
+    (let [state (.parse parser in idx memos errors?)]
       (ParseState. (when (.ast state)
                      (if raw?
                        (.ast state)
@@ -65,25 +62,25 @@
                           {:start-idx idx
                            :end-idx (.idx state)})]))
                    (when-let [rule-errs (.errs state)]
-                     (if (:regexp? (meta rule-errs))
+                     (if (and errors? (:regexp? (meta rule-errs)))
                        errs
                        rule-errs))
                    (.idx state)))))
 
 (defrecord MemoizeParser [^RuleParser parser]
   IParser
-  (parse [_ in idx memos]
+  (parse [_ in idx memos errors?]
     (let [memo-key (IntBuffer/wrap (doto (int-array 2)
                                      (aset 0 idx)
                                      (aset 1 (.rule-id parser))))]
       (if-let [state (.get memos memo-key)]
         state
-        (doto (.parse parser in idx memos)
+        (doto (.parse parser in idx memos errors?)
           (->> (.put memos memo-key)))))))
 
 (defrecord MemoizeLeftRecParser [^RuleParser parser]
   IParser
-  (parse [_ in idx memos]
+  (parse [_ in idx memos errors?]
     (let [memo-key (IntBuffer/wrap (doto (int-array 2)
                                      (aset 0 idx)
                                      (aset 1 (.rule-id parser))))]
@@ -91,7 +88,7 @@
         state
         (loop [last-state (ParseState. nil nil idx)]
           (.put memos memo-key last-state)
-          (let [^ParseState new-state (.parse parser in idx memos)]
+          (let [^ParseState new-state (.parse parser in idx memos errors?)]
             (if (.ast new-state)
               (if (<= (.idx new-state) (.idx last-state))
                 last-state
@@ -104,8 +101,8 @@
 
 (defrecord HideParser [^core2.sql.parser.IParser parser]
   IParser
-  (parse [_ in idx memos]
-    (let [state (.parse parser in idx memos)]
+  (parse [_ in idx memos errors?]
+    (let [state (.parse parser in idx memos errors?)]
       (ParseState. (when (.ast state)
                      [])
                    (.errs state)
@@ -113,27 +110,28 @@
 
 (defrecord OptParser [^core2.sql.parser.IParser parser]
   IParser
-  (parse [_ in idx memos]
-    (let [state (.parse parser in idx memos)]
+  (parse [_ in idx memos errors?]
+    (let [state (.parse parser in idx memos errors?)]
       (if (.ast state)
         state
         (ParseState. [] nil idx)))))
 
 (defrecord NegParser [^core2.sql.parser.IParser parser]
   IParser
-  (parse [_ in idx memos]
-    (let [state (.parse parser in idx memos)]
+  (parse [_ in idx memos errors?]
+    (let [state (.parse parser in idx memos errors?)]
       (if (.ast state)
-        (ParseState. nil #{[:unexpected (subs in idx (.idx state))]} idx)
+        (ParseState. nil (when errors?
+                           #{[:unexpected (subs in idx (.idx state))]}) idx)
         (ParseState. [] nil idx)))))
 
 (defrecord RepeatParser [^core2.sql.parser.IParser parser ^boolean star?]
   IParser
-  (parse [_ in idx memos]
+  (parse [_ in idx memos errors?]
     (loop [ast []
            idx idx
            n 0]
-      (let [state (.parse parser in idx memos)]
+      (let [state (.parse parser in idx memos errors?)]
         (if (.ast state)
           (recur (into ast (.ast state))
                  (.idx state)
@@ -144,12 +142,12 @@
 
 (defrecord CatParser [^java.util.List parsers]
   IParser
-  (parse [_ in idx memos]
+  (parse [_ in idx memos errors?]
     (loop [ast []
            idx idx
            n 0]
       (if (< n (.size parsers))
-        (let [state (.parse ^IParser (.get parsers n) in idx memos)]
+        (let [state (.parse ^IParser (.get parsers n) in idx memos errors?)]
           (if (.ast state)
             (recur (into ast (.ast state))
                    (.idx state)
@@ -159,9 +157,12 @@
 
 (defrecord OrdParser [^IParser parser1 ^IParser parser2]
   IParser
-  (parse [_ in idx memos]
-    (let [state1 (.parse parser1 in idx memos)
-          state2 (.parse parser2 in idx memos)
+  (parse [_ in idx memos errors?]
+    (let [state1 (.parse parser1 in idx memos errors?)
+          errors? (if errors?
+                    (nil? (.ast state1))
+                    errors?)
+          state2 (.parse parser2 in idx memos errors?)
           cmp (Integer/compare (.idx state1) (.idx state2))]
       (cond
         (and (.ast state1)
@@ -179,18 +180,19 @@
         state2
 
         :else
-        (ParseState. nil (into (.errs state1) (.errs state2)) (.idx state1))))))
+        (ParseState. nil (when errors?
+                           (into (.errs state1) (.errs state2))) (.idx state1))))))
 
 (defrecord StringParser [^String string errs]
   IParser
-  (parse [_ in idx memos]
+  (parse [_ in idx memos errors?]
     (if (.regionMatches in true idx string 0 (.length string))
       (ParseState. [string] nil (+ idx (.length string)))
       (ParseState. nil errs idx))))
 
 (defrecord RegexpParser [^Pattern pattern errs]
   IParser
-  (parse [_ in idx memos]
+  (parse [_ in idx memos errors?]
     (let [m (.matcher pattern in)
           m (.region m idx (.length in))]
       (if (.lookingAt m)
@@ -301,7 +303,7 @@
       (fn [in start-rule]
         (when-let [state (-> (->trailing-ws-parser start-rule)
                              ^IParser (build-parser)
-                             (.parse in 0 (HashMap.)))]
+                             (.parse in 0 (HashMap.) true))]
           (if (.errs state)
             (ParseFailure. in (.errs state) (.idx state))
             (first (.ast state))))))))
