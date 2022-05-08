@@ -12,8 +12,6 @@
 ;; Spike to replace Instaparse.
 
 ;; TODO:
-;; sanity check times from cbe630be - is difference now only down to error tracking?
-;; could the failure left rec memo case cache new-state instead of removing last-state?
 ;; explore errors? flag to avoid tracking when there's a valid alternative already.
 ;; explore ws properly, tokens shouldn't be possible to "stack" without ws between.
 ;; explore error handling, needs to be passed upwards, merged, a kind of result.
