@@ -28,22 +28,32 @@
 (definterface IParser
   (^core2.sql.parser.ParseState parse [^String in ^int idx ^java.util.Map memos ^boolean errors?]))
 
-(defrecord EpsilonParser [errs]
+(def ^:private epsilon-errs #{[:expected "<EOF>"]})
+
+(defrecord EpsilonParser []
   IParser
   (parse [_ in idx memos errors?]
     (if (= (.length in) idx)
       (ParseState. [] nil idx)
-      (ParseState. nil errs idx))))
+      (ParseState. nil epsilon-errs idx))))
+
+(def ^:private ws-errs #{[:expected "<WS>"]})
 
 (defrecord WhitespaceParser [^java.util.regex.Pattern pattern ^core2.sql.parser.IParser parser]
   IParser
   (parse [_ in idx memos errors?]
     (let [m (.matcher pattern in)
           m (.region m idx (.length in))
-          idx (if (.lookingAt m)
-                (int (.end m))
-                idx)]
-      (.parse parser in idx memos errors?))))
+          m (.useTransparentBounds m true)]
+      (cond
+        (.lookingAt m)
+        (.parse parser in (.end m) memos errors?)
+
+        (zero? idx)
+        (.parse parser in idx memos errors?)
+
+        :else
+        (ParseState. nil ws-errs idx)))))
 
 (defrecord NonTerminalParser [^int rule-id ^objects rules]
   IParser
@@ -286,7 +296,7 @@
                         :ord (->OrdParser (build-parser (:parser1 parser))
                                           (build-parser (:parser2 parser)))
                         :neg (->WhitespaceParser ws-pattern (->NegParser (build-parser (:parser parser))))
-                        :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser #{[:expected "<EOF>"]} ))
+                        :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser))
                         :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser) (with-meta
                                                                                                   #{[:expected (:regexp parser)]}
                                                                                                   {:regexp? true})))
@@ -344,7 +354,7 @@ TOKEN: !'::=' #'[^ |\\n\\r\\t.!/]+' ;
 HEADER_COMMENT: #'// *\\d.*?\\n' ;
         "
         spec-parser (insta/parser grammar :auto-whitespace (insta/parser "whitespace: #'\\s+'"))
-        spec-cfg (build-ebnf-parser (insta-cfg/ebnf grammar) #"(\s+|$)")
+        spec-cfg (build-ebnf-parser (insta-cfg/ebnf grammar) #"(?:\s+|\A|\b)")
         in "<colon> ::=
   :
 
@@ -381,9 +391,12 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
 (def sql-cfg (insta-cfg/ebnf (slurp (io/resource "core2/sql/SQL2011.ebnf"))))
 
-(def sql-parser (build-ebnf-parser sql-cfg #"(\s+|$|\s*--[^\r\n]*\s*|\s*/[*].*?([*]/\s*|$))"))
+(def sql-parser (build-ebnf-parser sql-cfg #"(?:\z|\s+|(?<=\p{Punct})|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"))
 
 (comment
+  (sql-parser "SELECT * FROMfoo" :directly_executable_statement)
+
+  (sql-parser "(SELECT avg(c) FROM t1)  " :subquery)
 
   (let [in "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END,
        a+b*2+c*3+d*4,
