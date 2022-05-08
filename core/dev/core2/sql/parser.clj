@@ -119,7 +119,7 @@
     (let [state (.parse parser in idx memos)]
       (if (.ast state)
         state
-        (ParseState. [] nil (.idx state))))))
+        (ParseState. [] nil idx)))))
 
 (defrecord NegParser [^core2.sql.parser.IParser parser]
   IParser
