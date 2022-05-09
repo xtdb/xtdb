@@ -42,18 +42,14 @@
 (defrecord WhitespaceParser [^java.util.regex.Pattern pattern ^core2.sql.parser.IParser parser]
   IParser
   (parse [_ in idx memos errors?]
-    (let [m (.matcher pattern in)
-          m (.region m idx (.length in))
-          m (.useTransparentBounds m true)]
-      (cond
-        (.lookingAt m)
-        (.parse parser in (.end m) memos errors?)
-
-        (zero? idx)
-        (.parse parser in idx memos errors?)
-
-        :else
-        (ParseState. nil ws-errs idx)))))
+    (if (zero? idx)
+      (.parse parser in idx memos errors?)
+      (let [m (.matcher pattern in)
+            m (.region m idx (.length in))
+            m (.useTransparentBounds m true)]
+        (if (.lookingAt m)
+          (.parse parser in (.end m) memos errors?)
+          (ParseState. nil ws-errs idx))))))
 
 (defrecord NonTerminalParser [^int rule-id ^objects rules]
   IParser
