@@ -4,13 +4,12 @@
             [core2.api :as c2]
             [core2.rewrite :as r]
             [core2.snapshot :as snap]
-            [core2.sql :as sql]
+            [core2.sql.parser :as p]
             [core2.sql.analyze :as sem]
             [core2.sql.plan :as plan]
             [core2.sql.logic-test.runner :as slt]
             [core2.operator :as op]
-            [core2.test-util :as tu]
-            [instaparse.core :as insta])
+            [core2.test-util :as tu])
   (:import java.util.UUID
            core2.local_node.Node))
 
@@ -191,22 +190,22 @@
   (execute-statement [this statement]
     (if (skip-statement? statement)
       this
-      (let [tree (sql/parse statement :directly_executable_statement)]
-        (if (insta/failure? tree)
+      (let [tree (p/parse statement :directly_executable_statement)]
+        (if (p/failure? tree)
           (if-let [record (or (parse-create-table statement)
                               (parse-create-view statement))]
             (execute-record this record)
-            (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
+            (throw (IllegalArgumentException. (p/failure->str tree))))
           (let [direct-sql-data-statement-tree (second tree)]
             (execute-statement this direct-sql-data-statement-tree))))))
 
   (execute-query [this query]
     (let [edited-query (preprocess-query query)
-          tree (sql/parse edited-query :query_expression)
+          tree (p/parse edited-query :query_expression)
           snapshot-factory (tu/component this ::snap/snapshot-factory)
           db (snap/snapshot snapshot-factory)]
-      (when (insta/failure? tree)
-        (throw (IllegalArgumentException. (prn-str (insta/get-failure tree)))))
+      (when (p/failure? tree)
+        (throw (IllegalArgumentException. (p/failure->str tree))))
       (let [tree (normalize-query (:tables this) tree)
             projection (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
                             (first)

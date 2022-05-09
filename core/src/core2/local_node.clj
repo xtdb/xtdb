@@ -6,7 +6,7 @@
             [core2.indexer :as idx]
             [core2.operator :as op]
             [core2.snapshot :as snap]
-            [core2.sql :as sql]
+            [core2.sql.parser :as p]
             [core2.sql.plan :as sql.plan]
             [core2.tx-producer :as txp]
             [core2.util :as util]
@@ -50,7 +50,7 @@
           (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
           (util/then-apply
             (fn [db]
-              (let [{:keys [errs plan]} (-> (sql/parse query)
+              (let [{:keys [errs plan]} (-> (p/parse query)
                                             (sql.plan/plan-query))]
                 (if errs
                   (throw (err/illegal-arg :invalid-sql-query

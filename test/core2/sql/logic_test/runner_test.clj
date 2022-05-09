@@ -1,7 +1,7 @@
 (ns core2.sql.logic-test.runner-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
-            [core2.sql :as sql]
+            [core2.sql.parser :as p]
             [core2.sql.logic-test.runner :as slt]
             [core2.sql.logic-test.xtdb-engine :as xtdb-engine]
             [core2.test-util :as tu]))
@@ -114,33 +114,33 @@ CREATE UNIQUE INDEX t1i0 ON t1(
   (let [tables {"t1" ["a" "b" "c" "d" "e"]}
         query "SELECT a+b*2+c*3+d*4+e*5, (a+b+c+d+e)/5 FROM t1 ORDER BY 1,2"
         expected "SELECT t1.a+t1.b*2+t1.c*3+t1.d*4+t1.e*5 AS col__1, (t1.a+t1.b+t1.c+t1.d+t1.e)/5 AS col__2 FROM t1 AS t1(a, b, c, d, e) ORDER BY col__1,col__2"]
-    (t/is (= (sql/parse expected :query_expression)
-             (xtdb-engine/normalize-query tables (sql/parse query :query_expression)))))
+    (t/is (= (p/parse expected :query_expression)
+             (xtdb-engine/normalize-query tables (p/parse query :query_expression)))))
 
   (let [tables {"tab0" ["col0" "col1" "col2"]
                 "tab1" ["col0" "col1" "col2"]
                 "tab2" ["col0" "col1" "col2"]}]
     (let [query "SELECT cor0.col2 col1 FROM tab0 AS cor0 GROUP BY col2, cor0.col1"
           expected "SELECT cor0.col2 col1 FROM tab0 AS cor0(col0, col1, col2) GROUP BY cor0.col2, cor0.col1"]
-      (t/is (= (sql/parse expected :query_expression)
-               (xtdb-engine/normalize-query tables (sql/parse query :query_expression)))))
+      (t/is (= (p/parse expected :query_expression)
+               (xtdb-engine/normalize-query tables (p/parse query :query_expression)))))
 
     (let [query "SELECT DISTINCT col0 FROM tab0"
           expected "SELECT DISTINCT tab0.col0 AS col__1 FROM tab0 AS tab0(col0, col1, col2)"]
-      (t/is (= (sql/parse expected :query_expression)
-               (xtdb-engine/normalize-query tables (sql/parse query :query_expression)))))
+      (t/is (= (p/parse expected :query_expression)
+               (xtdb-engine/normalize-query tables (p/parse query :query_expression)))))
 
     (let [query "SELECT DISTINCT - ( + col1 ) + - 51 AS col0 FROM tab1 AS cor0 GROUP BY col1"
           expected "SELECT DISTINCT - ( + cor0.col1 ) + - 51 AS col0 FROM tab1 AS cor0(col0, col1, col2) GROUP BY cor0.col1"]
-      (t/is (= (sql/parse expected :query_expression)
-               (xtdb-engine/normalize-query tables (sql/parse query :query_expression)))))))
+      (t/is (= (p/parse expected :query_expression)
+               (xtdb-engine/normalize-query tables (p/parse query :query_expression)))))))
 
 (t/deftest test-insert->doc
   (let [tables {"t1" ["a" "b" "c" "d" "e"]}]
     (t/is (= [{:e 103 :c 102 :b 100 :d 101 :a 104 :_table "t1"}]
-             (xtdb-engine/insert->docs tables (sql/parse "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :insert_statement))))
+             (xtdb-engine/insert->docs tables (p/parse "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :insert_statement))))
     (t/is (= [{:a nil :b -102 :c true :d "101" :e 104.5 :_table "t1"}]
-             (xtdb-engine/insert->docs tables (sql/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement))))))
+             (xtdb-engine/insert->docs tables (p/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement))))))
 
 (comment
 
@@ -159,11 +159,11 @@ CREATE UNIQUE INDEX t1i0 ON t1(
                :when (and input
                           (not (slt/skip-record? "xtdb" record))
                           (not (xtdb-engine/skip-statement? input)))
-               :let [tree (sql/parse-sql2011 input :start :directly_executable_statement)]]
-         (if-let [failure (instaparse.core/get-failure tree)]
+               :let [tree (p/parse input :start :directly_executable_statement)]]
+         (if (p/failure? tree)
            (do (when-not (xtdb-engine/parse-create-table input)
                  (swap! failures inc))
-               #_(println (or (xtdb-engine/parse-create-table input) failure)))
+               #_(println (or (xtdb-engine/parse-create-table input) (p/failure->str failure))))
            #_(print ".")))
        (println "failures: " @failures)
        (println)))))

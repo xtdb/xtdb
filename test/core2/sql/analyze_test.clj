@@ -1,10 +1,10 @@
 (ns core2.sql.analyze-test
   (:require [clojure.test :as t]
-            [core2.sql :as sql]
+            [core2.sql.parser :as p]
             [core2.sql.analyze :as sem]))
 
 (t/deftest test-annotate-query-scopes
-  (let [tree (sql/parse "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
+  (let [tree (p/parse "WITH RECURSIVE foo AS (SELECT 1 FROM foo AS bar)
 SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
   FROM t1, foo AS baz
  WHERE EXISTS (SELECT 1 FROM t1 AS x WHERE x.b < t1.c AND x.b > (SELECT t1.b FROM (SELECT 1 AS b FROM boz) AS t2 WHERE t1.b = t2.b))
@@ -213,13 +213,13 @@ SELECT t1.d-t1.e AS a, SUM(t1.a) AS b
               (sem/analyze-query tree)))))
 
 (defmacro ^:private invalid? [re q]
-  `(let [[err# :as errs#] (:errs (sem/analyze-query (sql/parse ~q)))
+  `(let [[err# :as errs#] (:errs (sem/analyze-query (p/parse ~q)))
          err# (or err# "")]
      (t/is (= 1 (count errs#)) (pr-str errs#))
      (t/is (re-find ~re err#))))
 
 (defmacro ^:private valid? [q]
-  `(let [{errs# :errs scopes# :scopes} (sem/analyze-query (sql/parse ~q))]
+  `(let [{errs# :errs scopes# :scopes} (sem/analyze-query (p/parse ~q))]
      (t/is (empty? errs#))
      scopes#))
 

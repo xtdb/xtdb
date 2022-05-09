@@ -7,7 +7,7 @@
             [core2.logical-plan :as lp]
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
-            [instaparse.core :as insta])
+            [core2.sql.parser :as p])
   (:import (clojure.lang IObj Var)
            (java.time LocalDate Period Duration)
            (org.apache.arrow.vector PeriodDuration)))
@@ -2166,8 +2166,8 @@
 (defn plan-query
   ([query] (plan-query query {:decorrelate? true}))
   ([query {:keys [decorrelate?]}]
-   (if-let [parse-failure (insta/get-failure query)]
-     {:errs [(prn-str parse-failure)]}
+   (if (p/failure? query)
+     {:errs [(p/failure->str query)]}
      (r/with-memoized-attributes [sem/prev-subtree-seq
                                   sem/id
                                   sem/dynamic-param-idx

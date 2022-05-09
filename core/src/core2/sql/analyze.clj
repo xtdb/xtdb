@@ -1,8 +1,7 @@
 (ns core2.sql.analyze
   (:require [clojure.string :as str]
             [core2.rewrite :as r]
-            [instaparse.core :as insta]
-            [instaparse.failure]))
+            [core2.sql.parser :as p]))
 
 (defn- skip-whitespace ^long [^String s ^long n]
   (if (Character/isWhitespace (.charAt s n))
@@ -10,17 +9,17 @@
     n))
 
 (defn- ->line-info-str [loc]
-  (let [{:core2.sql/keys [sql]} (meta (r/root loc))
-        {:instaparse.gll/keys [start-index]} (meta (r/node loc))
-        start-index (skip-whitespace sql start-index)
-        {:keys [line column]} (instaparse.failure/index->line-column start-index sql)]
+  (let [{:keys [sql]} (meta (r/root loc))
+        {:keys [start-idx]} (meta (r/node loc))
+        start-idx (skip-whitespace sql start-idx)
+        {:keys [line column]} (p/index->line-column sql start-idx)]
     (format "at line %d, column %d" line column)))
 
 (defn- ->src-str [loc]
-  (let [{:core2.sql/keys [sql]} (meta (r/root loc))
-        {:instaparse.gll/keys [start-index end-index]} (meta (r/node loc))
-        start-index (skip-whitespace sql start-index)]
-    (subs sql start-index end-index)))
+  (let [{:keys [sql]} (meta (r/root loc))
+        {:keys [start-idx end-idx]} (meta (r/node loc))
+        start-idx (skip-whitespace sql start-idx)]
+    (subs sql start-idx end-idx)))
 
 ;; Attribute grammar for SQL semantics.
 
@@ -991,8 +990,8 @@
 ;; Analysis API, might be deprecated.
 
 (defn analyze-query [query]
-  (if-let [parse-failure (insta/get-failure query)]
-    {:errs [(prn-str parse-failure)]}
+  (if (p/failure? query)
+    {:errs [(p/failure->str query)]}
     (r/with-memoized-attributes [prev-subtree-seq
                                  id
                                  dynamic-param-idx

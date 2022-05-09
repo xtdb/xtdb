@@ -3,14 +3,16 @@
             [clojure.java.io :as io]
             [core2.edn :as edn] ;; Enables data literals
             [core2.operator :as op]
-            [core2.sql :as sql]
+            [core2.sql.parser :as p]
             [core2.sql.plan :as plan]))
 
 (defn plan-sql
   ([sql] (plan-sql sql {:decorrelate? true}))
   ([sql opts]
-   (let [tree (sql/parse sql)
+   (let [tree (p/parse sql :directly_executable_statement)
          {errs :errs :as plan} (plan/plan-query tree opts)]
+     (when (seq errs)
+       (println sql))
      (assert (empty? errs) errs)
      #_(assoc (select-keys plan [:fired-rules :plan]) :tree tree) ;; Debug Tool
      (:plan plan))))
