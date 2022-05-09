@@ -1589,7 +1589,12 @@
     "P11D PT12H" '(parse-multi-part-pd "11 12" "DAY" "HOUR") {}
     "P1D PT-1S" '(parse-multi-part-pd "1 00:00:-01" "DAY" "SECOND") {}
     "P1D PT2M" '(parse-multi-part-pd "1 00:02" "DAY" "MINUTE") {}
-    "P1D PT23H" '(parse-multi-part-pd "1 23" "DAY" "HOUR") {}))
+    "P1D PT23H" '(parse-multi-part-pd "1 23" "DAY" "HOUR") {}
+
+    "P0D PT3H4M-1S" '(parse-multi-part-pd "03:04:-01" "HOUR" "SECOND") {}
+    "P0D PT23H2M" '(parse-multi-part-pd "23:02" "HOUR" "MINUTE") {}
+
+    "P0D PT44M34S" '(parse-multi-part-pd "44:34" "MINUTE" "SECOND") {}))
 
 (t/deftest test-multi-part-interval-ex-cases
   (letfn [(p [unit1 unit2] (project1 (list 'parse-multi-part-pd "0-0" unit1 unit2) {}))]
