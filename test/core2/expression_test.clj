@@ -1586,17 +1586,29 @@
     "P12M PT0S" '(parse-multi-part-pd "1-0" "YEAR" "MONTH") {}
     "P13M PT0S" '(parse-multi-part-pd "1-1" "YEAR" "MONTH") {}
 
-    "P1M PT0S" '(parse-multi-part-pd "1-0" "MONTH" "DAY") {}
-    "P1D PT0S" '(parse-multi-part-pd "1-0" "DAY" "MONTH") {}))
+    "P1D PT2H" '(parse-multi-part-pd "1-2" "DAY" "HOUR") {}
+    "P1D PT-1S" '(parse-multi-part-pd "1--1" "DAY" "SECOND") {}))
 
-(tct/defspec parse-multi-part-equiv-to-part-addition-prop
+(t/deftest test-multi-part-interval-ex-cases
+  (letfn [(p [unit1 unit2] (project1 (list 'parse-multi-part-pd "0-0" unit1 unit2) {}))]
+    (t/is (thrown-with-msg? IllegalArgumentException #"If YEAR specified as the interval start field, MONTH must be the end field\." (p "YEAR" "DAY")))
+    (t/is (thrown-with-msg? IllegalArgumentException #"MONTH is not permitted as the interval start field\." (p "MONTH" "DAY")))
+    (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "DAY" "DAY")))
+    (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "MINUTE" "HOUR")))))
+
+(tct/defspec parse-multi-part-interval-equiv-to-part-addition-prop
   (tcp/for-all [[p1 ctor1 p2 ctor2]
-                (tcg/such-that
-                  (fn [[_ ctor1 _ ctor2]] (not= ctor1 ctor2))
-                  (tcg/tuple tcg/small-integer
-                             (tcg/elements '[pd-year pd-day pd-month pd-hour pd-minute pd-second])
-                             tcg/small-integer
-                             (tcg/elements '[pd-year pd-day pd-month pd-hour pd-minute pd-second])))]
+                (-> (tcg/tuple tcg/small-integer
+                               (tcg/elements '[pd-year pd-day pd-hour pd-minute])
+                               tcg/small-integer)
+                    (tcg/bind (fn [[p1 start p2]]
+                                (let [end-opts
+                                      (condp = start
+                                        'pd-year '[pd-month]
+                                        'pd-day '[pd-hour pd-minute pd-second]
+                                        'pd-hour '[pd-minute pd-second]
+                                        'pd-minute '[pd-second])]
+                                  (tcg/fmap (fn [end] [p1 start p2 end]) (tcg/elements end-opts))))))]
     (= (project1 (list '+ (list ctor1 p1) (list ctor2 p2)) {})
        (project1 (list 'parse-multi-part-pd (str p1 "-" p2)
                        (str/upper-case (subs (str ctor1) 3))

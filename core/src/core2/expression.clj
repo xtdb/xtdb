@@ -1060,9 +1060,9 @@
   (defmethod codegen-call [interval-ctor ArrowType$Null] [_] call-returns-null))
 
 (defn parse-multi-part-pd
-  "This function is used to parse a multi-component interval literal into a PeriodDuration, e.g '12-03' YEAR TO MONTH."
+  "This function is used to parse a 2 field interval literal into a PeriodDuration, e.g '12-03' YEAR TO MONTH."
   ^PeriodDuration [s unit1 unit2]
-  ; In practice likely applied as a const-expr so not too worried about vectorized perf.
+  ; This function overwhelming likely to be applied as a const-expr so not concerned about vectorized perf.
   (letfn [(unit-p [unit ^long n]
             (case unit
               "YEAR" (Period/ofYears n)
@@ -1075,6 +1075,25 @@
               "MINUTE" (Duration/ofMinutes n)
               "SECOND" (Duration/ofSeconds n)
               Duration/ZERO))]
+
+    ;; these rules are not strictly necessary
+    ;; be are specified by SQL2011
+    ;; if year, end field must be month.
+    (when (= unit1 "YEAR")
+      (when-not (= unit2 "MONTH")
+        (throw (IllegalArgumentException. "If YEAR specified as the interval start field, MONTH must be the end field."))))
+
+    ;; start cannot = month rule.
+    (when (= unit1 "MONTH")
+      (throw (IllegalArgumentException. "MONTH is not permitted as the interval start field.")))
+
+    ;; less significance rule.
+    (when-not (or (= unit1 "YEAR")
+                  (and (= unit1 "DAY") (#{"HOUR" "MINUTE" "SECOND"} unit2))
+                  (and (= unit1 "HOUR") (#{"MINUTE" "SECOND"} unit2))
+                  (and (= unit1 "MINUTE") (#{"SECOND"} unit2)))
+      (throw (IllegalArgumentException. "Interval end field must have less significance than the start field.")))
+
     (let [[match part1 _ part2] (re-find #"^((-|)\d+)\-((-|)\d+)" s)
           _ (when-not match (throw (IllegalArgumentException. "Cannot parse interval, incorrect format.")))
           n1 (parse-long part1)
@@ -1089,7 +1108,6 @@
 
 (defmethod codegen-call [:parse-multi-part-pd ArrowType$Utf8 ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
   (let [[_ unit1 unit2] (map :literal args)
-        _ (when (= unit1 unit2) (throw (IllegalArgumentException. "Cannot start and end interval with same unit.")))
         ;; todo choose a more specific representation when possible
         return-type types/interval-month-day-nano-type]
     (mono-fn-call return-type (fn [[s & _]] `(parse-multi-part-pd (resolve-string ~s) ~unit1 ~unit2)))))
@@ -1790,4 +1808,3 @@
       (let [projection-spec (->expression-projection-spec "_scalar" form col-names params)]
         (with-open [out-vec (.project projection-spec al (iv/->indirect-rel [] 1))]
           (types/get-object (.getVector out-vec) (.getIndex out-vec 0)))))))
-
