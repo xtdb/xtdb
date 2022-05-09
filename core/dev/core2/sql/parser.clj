@@ -7,7 +7,7 @@
   (:import java.io.File
            java.nio.IntBuffer
            [java.util ArrayDeque HashMap HashSet List Map]
-           java.util.regex.Pattern))
+           [java.util.regex Matcher Pattern]))
 
 ;; Spike to replace Instaparse.
 
@@ -200,13 +200,13 @@
       (ParseState. [string] nil (+ idx (.length string)))
       (ParseState. nil errs idx))))
 
-(defrecord RegexpParser [^Pattern pattern errs]
+(defrecord RegexpParser [^Pattern pattern errs matcher-fn]
   IParser
   (parse [_ in idx memos errors?]
     (let [m (.matcher pattern in)
           m (.region m idx (.length in))]
       (if (.lookingAt m)
-        (ParseState. [(.group m)] nil (.end m))
+        (ParseState. (matcher-fn m) nil (.end m))
         (ParseState. nil errs idx)))))
 
 (defn- left-recursive? [grammar rule-name]
@@ -300,10 +300,19 @@
                                            (build-parser (:parser2 parser)))
                          :neg (->WhitespaceParser ws-pattern (->NegParser (build-parser (:parser parser))))
                          :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser))
-                         :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser) (with-meta
-                                                                                                   #{[:expected (:regexp parser)]}
-                                                                                                   {:regexp? true})))
-                         :string (->WhitespaceParser ws-pattern (->StringParser (:string parser) #{[:expected (:string parser)]})))
+                         :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser)
+                                                                                (with-meta
+                                                                                  #{[:expected (:regexp parser)]}
+                                                                                  {:regexp? true})
+                                                                                (fn [^Matcher m]
+                                                                                  [(.group m)])))
+                         :string (->WhitespaceParser ws-pattern
+                                                     (if (re-find #"^\w+$" (:string parser))
+                                                       (->RegexpParser (Pattern/compile (str (Pattern/quote (:string parser)) "\\b")
+                                                                                        Pattern/CASE_INSENSITIVE)
+                                                                       #{[:expected (:string parser)]}
+                                                                       (constantly [(:string parser)]))
+                                                       (->StringParser (:string parser) #{[:expected (:string parser)]}))))
                  hide (->HideParser)))]
        (doseq [[k v] grammar
                :let [rule-id (int (get rule->id k))
