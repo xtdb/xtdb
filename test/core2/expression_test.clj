@@ -1602,7 +1602,7 @@
                        (str/upper-case (subs (str ctor1) 3))
                        (str/upper-case (subs (str ctor2) 3))) {}))))
 
-(t/deftest test-interval-arithmeticx
+(t/deftest test-interval-arithmetic
   (t/are [expected expr]
     (= (some-> expected edn/period-duration-reader) (project1 expr {}))
 
