@@ -42,14 +42,18 @@
 (defrecord WhitespaceParser [^java.util.regex.Pattern pattern ^core2.sql.parser.IParser parser]
   IParser
   (parse [_ in idx memos errors?]
-    (if (zero? idx)
-      (.parse parser in idx memos errors?)
-      (let [m (.matcher pattern in)
-            m (.region m idx (.length in))
-            m (.useTransparentBounds m true)]
-        (if (.lookingAt m)
-          (.parse parser in (.end m) memos errors?)
-          (ParseState. nil ws-errs idx))))))
+    (let [m (.matcher pattern in)
+          m (.region m idx (.length in))
+          m (.useTransparentBounds m true)]
+      (cond
+        (.lookingAt m)
+        (.parse parser in (.end m) memos errors?)
+
+        (zero? idx)
+        (.parse parser in idx memos errors?)
+
+        :else
+        (ParseState. nil ws-errs idx)))))
 
 (defrecord NonTerminalParser [^int rule-id ^objects rules]
   IParser
@@ -393,7 +397,7 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 (def sql-cfg (insta-cfg/ebnf (slurp (io/resource "core2/sql/SQL2011.ebnf"))))
 
 (def sql-parser (build-ebnf-parser sql-cfg
-                                   #"(?:\z|\s+|(?<=\p{Punct})|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
+                                   #"(?:\s+|(?<=\p{Punct})|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
                                    (fn [rule-name ast]
                                      (and (= 1 (count ast))
                                           (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
@@ -402,7 +406,7 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 (comment
   (sql-parser "SELECT * FROMfoo" :directly_executable_statement)
 
-  (sql-parser "(SELECT avg(c) FROM t1)  " :subquery)
+  (sql-parser "  (SELECT avg(c) FROM t1)  " :subquery)
 
   (let [in "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END,
        a+b*2+c*3+d*4,
