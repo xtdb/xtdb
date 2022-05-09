@@ -1075,7 +1075,7 @@
               "MINUTE" (Duration/ofMinutes n)
               "SECOND" (Duration/ofSeconds n)
               Duration/ZERO))]
-    (let [[match part1 part2] (re-find #"^(\d+)\-(\d+)" s)
+    (let [[match part1 _ part2] (re-find #"^((-|)\d+)\-((-|)\d+)" s)
           _ (when-not match (throw (IllegalArgumentException. "Cannot parse interval, incorrect format.")))
           n1 (parse-long part1)
           n2 (parse-long part2)

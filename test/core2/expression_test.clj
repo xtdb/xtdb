@@ -1589,7 +1589,20 @@
     "P1M PT0S" '(parse-multi-part-pd "1-0" "MONTH" "DAY") {}
     "P1D PT0S" '(parse-multi-part-pd "1-0" "DAY" "MONTH") {}))
 
-(t/deftest test-interval-arithmetic
+(tct/defspec parse-multi-part-equiv-to-part-addition-prop
+  (tcp/for-all [[p1 ctor1 p2 ctor2]
+                (tcg/such-that
+                  (fn [[_ ctor1 _ ctor2]] (not= ctor1 ctor2))
+                  (tcg/tuple tcg/small-integer
+                             (tcg/elements '[pd-year pd-day pd-month pd-hour pd-minute pd-second])
+                             tcg/small-integer
+                             (tcg/elements '[pd-year pd-day pd-month pd-hour pd-minute pd-second])))]
+    (= (project1 (list '+ (list ctor1 p1) (list ctor2 p2)) {})
+       (project1 (list 'parse-multi-part-pd (str p1 "-" p2)
+                       (str/upper-case (subs (str ctor1) 3))
+                       (str/upper-case (subs (str ctor2) 3))) {}))))
+
+(t/deftest test-interval-arithmeticx
   (t/are [expected expr]
     (= (some-> expected edn/period-duration-reader) (project1 expr {}))
 
