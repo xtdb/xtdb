@@ -501,8 +501,8 @@
   (-> (->aggregate-factory :array-agg from-name to-name)
       (wrap-distinct)))
 
-;; TODO this doesn't short-circuit yet.
 (defn- bool-agg-factory [^String from-name, ^String to-name, zero-value step-f-kw]
+  ;; TODO this could be a nullable input?
   (monomorphic-agg-factory from-name to-name #(BitVector. to-name ^BufferAllocator %)
     (fn emit-bool-agg-init [acc-sym group-idx-sym]
       `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym]
@@ -510,26 +510,23 @@
          ~(expr/set-value-form types/bool-type acc-sym group-idx-sym zero-value)))
 
     (fn emit-bool-agg-step [var-type acc-sym group-idx-sym val-code]
-      (let [null-call (expr/codegen-call {:op :call, :f step-f-kw
-                                          :arg-types [types/null-type var-type]})
+      (let [{:keys [continue]} (expr/codegen-call* {:op :call, :f step-f-kw
+                                                    :emitted-args [{:return-types #{types/null-type types/bool-type}
+                                                                    :continue (fn [f]
+                                                                                `(if (.isNull ~acc-sym ~group-idx-sym)
+                                                                                   ~(f types/null-type nil)
+                                                                                   ~(f types/bool-type (expr/get-value-form types/bool-type acc-sym group-idx-sym))))}
+                                                                   {:return-types #{var-type}
+                                                                    :continue (fn [f]
+                                                                                (f var-type val-code))}]})]
 
-            bool-call (expr/codegen-call {:op :call, :f step-f-kw
-                                          :arg-types [types/bool-type var-type]})
-
-            val-sym (gensym 'val)
-
-            emit-set-res (fn [arrow-type res-code]
-                           (if (= arrow-type ArrowType$Null/INSTANCE)
-                             `(.setNull ~acc-sym ~group-idx-sym)
-                             `(do
-                                (.setIndexDefined ~acc-sym ~group-idx-sym)
-                                ~(expr/set-value-form arrow-type acc-sym group-idx-sym res-code))))]
-
-        `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym
-               ~val-sym ~val-code]
-           (if (.isNull ~acc-sym ~group-idx-sym)
-             ~((:continue-call null-call) emit-set-res [nil val-sym])
-             ~((:continue-call bool-call) emit-set-res [(expr/get-value-form types/bool-type acc-sym group-idx-sym) val-sym])))))))
+        `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym]
+           ~(continue (fn [arrow-type res-code]
+                        (if (= arrow-type types/null-type)
+                          `(.setNull ~acc-sym ~group-idx-sym)
+                          `(do
+                             (.setIndexDefined ~acc-sym ~group-idx-sym)
+                             ~(expr/set-value-form arrow-type acc-sym group-idx-sym res-code))))))))))
 
 (defmethod ->aggregate-factory :all [_ ^String from-name, ^String to-name] (bool-agg-factory from-name to-name true :and))
 (defmethod ->aggregate-factory :every [_ ^String from-name, ^String to-name] (->aggregate-factory :all from-name to-name))

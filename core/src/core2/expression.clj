@@ -433,9 +433,14 @@
     (vec (cons (keyword (name f)) (map class arg-types))))
   :hierarchy #'types/arrow-type-hierarchy)
 
-(defmethod codegen-expr :call [{:keys [args] :as expr} opts]
-  (let [emitted-args (mapv #(codegen-expr % opts) args)
-        all-arg-types (reduce (fn [acc {:keys [return-types]}]
+#_{:clj-kondo/ignore [:unused-binding]}
+(defmulti codegen-call*
+  (fn [{:keys [f] :as expr}]
+    f)
+  :default ::default)
+
+(defmethod codegen-call* ::default [{:keys [emitted-args] :as expr}]
+  (let [all-arg-types (reduce (fn [acc {:keys [return-types]}]
                                 (for [el acc
                                       return-type return-types]
                                   (conj el return-type)))
@@ -472,6 +477,52 @@
                        (build-args-then-call [] [])))}
 
         (wrap-boxed-poly-return))))
+
+(defn- cont-b3-call [arg-type code]
+  (if (= types/null-type arg-type)
+    0
+    `(long (if ~code 1 -1))))
+
+(defmethod codegen-call* :and [{[{l-rets :return-types, l-cont :continue}
+                                 {r-rets :return-types, r-cont :continue}] :emitted-args}]
+  (let [return-types (set/union l-rets r-rets)]
+    {:return-types return-types
+     :continue (if-not (contains? return-types types/null-type)
+                 (fn [f]
+                   (f types/bool-type `(and ~(l-cont (fn [_ code] `(boolean ~code)))
+                                            ~(r-cont (fn [_ code] `(boolean ~code))))))
+                 (let [l-sym (gensym 'l)
+                       r-sym (gensym 'r)]
+                   (fn [f]
+                     `(let [~l-sym ~(l-cont cont-b3-call)
+                            ~r-sym (long (if (neg? ~l-sym)
+                                           -1
+                                           ~(r-cont cont-b3-call)))]
+                        (if (zero? (min ~l-sym ~r-sym))
+                          ~(f types/null-type nil)
+                          ~(f types/bool-type `(== 1 ~l-sym ~r-sym)))))))}))
+
+(defmethod codegen-call* :or [{[{l-rets :return-types, l-cont :continue}
+                                {r-rets :return-types, r-cont :continue}] :emitted-args}]
+  (let [return-types (set/union l-rets r-rets)]
+    {:return-types return-types
+     :continue (if-not (contains? return-types types/null-type)
+                 (fn [f]
+                   (f types/bool-type `(or ~(l-cont (fn [_ code] `(boolean ~code)))
+                                           ~(r-cont (fn [_ code] `(boolean ~code))))))
+                 (let [l-sym (gensym 'l)
+                       r-sym (gensym 'r)]
+                   (fn [f]
+                     `(let [~l-sym ~(l-cont cont-b3-call)
+                            ~r-sym (long (if (pos? ~l-sym)
+                                           1
+                                           ~(r-cont cont-b3-call)))]
+                        (if (zero? (max ~l-sym ~r-sym))
+                          ~(f types/null-type nil)
+                          ~(f types/bool-type `(not (== -1 ~l-sym ~r-sym))))))))}))
+
+(defmethod codegen-expr :call [{:keys [args] :as expr} opts]
+  (codegen-call* (-> expr (assoc :emitted-args (mapv #(codegen-expr % opts) args)))))
 
 (defn mono-fn-call [return-type wrap-args-f]
   {:continue-call (fn [f emitted-args]
