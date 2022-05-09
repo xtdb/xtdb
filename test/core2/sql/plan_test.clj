@@ -589,3 +589,10 @@
 
     "foo.a YEAR TO MONTH" '(parse-multi-part-pd x1 "YEAR" "MONTH")
     "foo.a DAY TO SECOND" '(parse-multi-part-pd x1 "DAY" "SECOND")))
+
+(deftest test-interval-abs
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+
+    "ABS(foo.a)" '(abs x1)
+    "ABS(1 YEAR)" '(abs (pd-year 1))))

@@ -224,6 +224,8 @@
      ;; =>
      (list 'parse-multi-part-pd (expr i) start-field "SECOND")
 
+     [:interval_absolute_value_function "ABS" ^:z i]
+     (list 'abs (expr i))
 
      [:datetime_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
      ;; =>

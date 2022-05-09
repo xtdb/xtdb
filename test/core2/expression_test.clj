@@ -1699,3 +1699,14 @@
   (tcp/for-all [pd period-duration-gen]
     (= (project1 '(* a -1) {:a pd})
        (project1 '(- a a a) {:a pd}))))
+
+(t/deftest test-interval-abs
+  (t/are [expected expr]
+    (= (some-> expected edn/period-duration-reader) (project1 expr {}))
+
+    "P0D PT0S" '(abs (pd-year 0))
+    "P12M PT0S" '(abs (pd-year 1))
+    "P12M PT0S" '(abs (pd-year -1))
+
+    "P11M PT0S" '(abs (+ (pd-year -1) (pd-month 1)))
+    "P1D PT-1S" '(abs (+ (pd-day -1) (pd-second 1)))))

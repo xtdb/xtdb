@@ -284,6 +284,40 @@
 (defmethod expr/codegen-call [:/ ArrowType$Interval ArrowType$Null] [_] expr/call-returns-null)
 (defmethod expr/codegen-call [:/ ArrowType$Null ArrowType$Int] [_] expr/call-returns-null)
 
+(defn interval-abs-ym
+  "In SQL the ABS function can be applied to intervals, negating them if they are below some definition of 'zero' for the components
+  of the intervals.
+
+  We only support abs on YEAR_MONTH and DAY_TIME typed vectors at the moment, This seems compliant with the standard
+  which only talks about ABS being applied to a single component interval.
+
+  For YEAR_MONTH, we define where ZERO as 0 months.
+  For DAY_TIME we define ZERO as 0 seconds (interval-abs-dt)."
+  ^PeriodDuration [^PeriodDuration pd]
+  (let [p (.getPeriod pd)]
+    (if (<= 0 (.toTotalMonths p))
+      pd
+      (PeriodDuration. (Period/ofMonths (- (.toTotalMonths p))) Duration/ZERO))))
+
+(defn interval-abs-dt ^PeriodDuration [^PeriodDuration pd]
+  (let [p (.getPeriod pd)
+        d (.getDuration pd)
+
+        days (.getDays p)
+        secs (.toSeconds d)]
+    ;; cast to long to avoid overflow during calc
+    (if (<= 0 (+ (long secs) (* (long days) 24 60 60)))
+      pd
+      (PeriodDuration. (Period/ofDays (- days)) (Duration/ofSeconds (- secs))))))
+
+(defmethod expr/codegen-call [:abs ArrowType$Interval] [{[^ArrowType$Interval arg-type] :arg-types}]
+  (util/case-enum (.getUnit arg-type)
+    IntervalUnit/YEAR_MONTH
+    (expr/mono-fn-call arg-type #(do `(interval-abs-ym ~@%)))
+    IntervalUnit/DAY_TIME
+    (expr/mono-fn-call arg-type #(do `(interval-abs-dt ~@%)))
+    (throw (UnsupportedOperationException. "Can only ABS YEAR_MONTH / DAY_TIME intervals"))))
+
 (defn apply-constraint [^longs min-range ^longs max-range
                         f col-name ^Instant time]
   (let [range-idx (temporal/->temporal-column-idx col-name)
