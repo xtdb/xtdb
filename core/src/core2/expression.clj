@@ -1059,52 +1059,89 @@
 (doseq [interval-ctor [:pd-year, :pd-month, :pd-day, :pd-hour, :pd-minute, :pd-second]]
   (defmethod codegen-call [interval-ctor ArrowType$Null] [_] call-returns-null))
 
+(defn- parse-year-month-literal [s]
+  (let [[match part1 _ part2] (re-find #"^((-|)\d+)\-((-|)\d+)" s)]
+    (when match
+      (PeriodDuration. (Period/ofMonths (+ (* 12 (Integer/parseInt part1)) (Integer/parseInt part2))) Duration/ZERO))))
+
+(defn- parse-day-to-second-literal [s unit1 unit2]
+  (case [unit1 unit2]
+    ["DAY" "SECOND"]
+    (let [re #"^((-|)\d+) ((-|)\d+)\:((-|)\d+):((-|)\d+)(\.(-|)\d+){0,1}$"
+          [match day _ hour _ min _ sec _ _ fractional-secs] (re-find re s)]
+      (when match
+        (PeriodDuration. (Period/of 0 0 (Integer/parseInt day))
+                         (Duration/ofSeconds (+ (* 60 60 (Integer/parseInt hour))
+                                                (* 60 (Integer/parseInt min))
+                                                (Integer/parseInt sec))))))
+    ["DAY" "MINUTE"]
+    (let [re #"^((-|)\d+) ((-|)\d+)\:((-|)\d+)$"
+          [match day _ hour _ min] (re-find re s)]
+      (when match
+        (PeriodDuration. (Period/of 0 0 (Integer/parseInt day))
+                         (Duration/ofMinutes (+ (* 60 (Integer/parseInt hour))
+                                                (Integer/parseInt min))))))
+
+
+    ["DAY" "HOUR"]
+    (let [re #"^((-|)\d+) ((-|)\d+)$"
+          [match day _ hour] (re-find re s)]
+      (when match
+        (PeriodDuration. (Period/of 0 0 (Integer/parseInt day))
+                         (Duration/ofHours (Integer/parseInt hour)))))
+
+    ["HOUR" "SECOND"]
+    (let [re #"^((-|)\d{2})\:((-|)\d+):((-|)\d+)(\.(-|)\d+){0,1}$"
+          [match hour _ min _ sec _ _ fractional-secs] (re-find re s)]
+      (when match
+        (PeriodDuration. Period/ZERO
+                         (Duration/ofSeconds (+ (* 60 60 (Integer/parseInt hour))
+                                                (* 60 (Integer/parseInt min))
+                                                (Integer/parseInt  sec))))))
+
+    ["HOUR" "MINUTE"]
+    (let [re #"^((-|)\d+)\:((-|)\d+)$"
+          [match hour _ min] (re-find re s)]
+      (when match
+        (PeriodDuration. Period/ZERO
+                         (Duration/ofMinutes (+ (* 60 (Integer/parseInt hour))
+                                                (Integer/parseInt min))))))
+
+    ["MINUTE" "SECOND"]
+    (let [re #"^((-|)\d+):((-|)\d+)(\.(-|)\d+){0,1}$"
+          [match min _ sec _ _ fractional-secs] (re-find re s)]
+      (when match
+        (PeriodDuration. Period/ZERO
+                         (Duration/ofSeconds (+ (* 60 (Integer/parseInt min))
+                                                (Integer/parseInt sec))))))))
+
 (defn parse-multi-part-pd
   "This function is used to parse a 2 field interval literal into a PeriodDuration, e.g '12-03' YEAR TO MONTH."
   ^PeriodDuration [s unit1 unit2]
   ; This function overwhelming likely to be applied as a const-expr so not concerned about vectorized perf.
-  (letfn [(unit-p [unit ^long n]
-            (case unit
-              "YEAR" (Period/ofYears n)
-              "MONTH" (Period/ofMonths n)
-              "DAY" (Period/ofDays n)
-              Period/ZERO))
-          (unit-d [unit ^long n]
-            (case unit
-              "HOUR" (Duration/ofHours n)
-              "MINUTE" (Duration/ofMinutes n)
-              "SECOND" (Duration/ofSeconds n)
-              Duration/ZERO))]
 
-    ;; these rules are not strictly necessary
-    ;; be are specified by SQL2011
-    ;; if year, end field must be month.
-    (when (= unit1 "YEAR")
-      (when-not (= unit2 "MONTH")
-        (throw (IllegalArgumentException. "If YEAR specified as the interval start field, MONTH must be the end field."))))
+  ;; these rules are not strictly necessary
+  ;; be are specified by SQL2011
+  ;; if year, end field must be month.
+  (when (= unit1 "YEAR")
+    (when-not (= unit2 "MONTH")
+      (throw (IllegalArgumentException. "If YEAR specified as the interval start field, MONTH must be the end field."))))
 
-    ;; start cannot = month rule.
-    (when (= unit1 "MONTH")
-      (throw (IllegalArgumentException. "MONTH is not permitted as the interval start field.")))
+  ;; start cannot = month rule.
+  (when (= unit1 "MONTH")
+    (throw (IllegalArgumentException. "MONTH is not permitted as the interval start field.")))
 
-    ;; less significance rule.
-    (when-not (or (= unit1 "YEAR")
-                  (and (= unit1 "DAY") (#{"HOUR" "MINUTE" "SECOND"} unit2))
-                  (and (= unit1 "HOUR") (#{"MINUTE" "SECOND"} unit2))
-                  (and (= unit1 "MINUTE") (#{"SECOND"} unit2)))
-      (throw (IllegalArgumentException. "Interval end field must have less significance than the start field.")))
+  ;; less significance rule.
+  (when-not (or (= unit1 "YEAR")
+                (and (= unit1 "DAY") (#{"HOUR" "MINUTE" "SECOND"} unit2))
+                (and (= unit1 "HOUR") (#{"MINUTE" "SECOND"} unit2))
+                (and (= unit1 "MINUTE") (#{"SECOND"} unit2)))
+    (throw (IllegalArgumentException. "Interval end field must have less significance than the start field.")))
 
-    (let [[match part1 _ part2] (re-find #"^((-|)\d+)\-((-|)\d+)" s)
-          _ (when-not match (throw (IllegalArgumentException. "Cannot parse interval, incorrect format.")))
-          n1 (parse-long part1)
-          n2 (parse-long part2)
-
-          ^Period p1 (unit-p unit1 n1)
-          ^Period p2 (unit-p unit2 n2)
-
-          ^Duration d1 (unit-d unit1 n1)
-          ^Duration d2 (unit-d unit2 n2)]
-      (PeriodDuration. (.plus p1 p2) (.plus d1 d2)))))
+  (or (if (= "YEAR" unit1)
+        (parse-year-month-literal s)
+        (parse-day-to-second-literal s unit1 unit2))
+      (throw (IllegalArgumentException. "Cannot parse interval, incorrect format."))))
 
 (defmethod codegen-call [:parse-multi-part-pd ArrowType$Utf8 ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
   (let [[_ unit1 unit2] (map :literal args)

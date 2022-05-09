@@ -1586,8 +1586,10 @@
     "P12M PT0S" '(parse-multi-part-pd "1-0" "YEAR" "MONTH") {}
     "P13M PT0S" '(parse-multi-part-pd "1-1" "YEAR" "MONTH") {}
 
-    "P1D PT2H" '(parse-multi-part-pd "1-2" "DAY" "HOUR") {}
-    "P1D PT-1S" '(parse-multi-part-pd "1--1" "DAY" "SECOND") {}))
+    "P11D PT12H" '(parse-multi-part-pd "11 12" "DAY" "HOUR") {}
+    "P1D PT-1S" '(parse-multi-part-pd "1 00:00:-01" "DAY" "SECOND") {}
+    "P1D PT2M" '(parse-multi-part-pd "1 00:02" "DAY" "MINUTE") {}
+    "P1D PT23H" '(parse-multi-part-pd "1 23" "DAY" "HOUR") {}))
 
 (t/deftest test-multi-part-interval-ex-cases
   (letfn [(p [unit1 unit2] (project1 (list 'parse-multi-part-pd "0-0" unit1 unit2) {}))]
@@ -1595,24 +1597,6 @@
     (t/is (thrown-with-msg? IllegalArgumentException #"MONTH is not permitted as the interval start field\." (p "MONTH" "DAY")))
     (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "DAY" "DAY")))
     (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "MINUTE" "HOUR")))))
-
-(tct/defspec parse-multi-part-interval-equiv-to-part-addition-prop
-  (tcp/for-all [[p1 ctor1 p2 ctor2]
-                (-> (tcg/tuple tcg/small-integer
-                               (tcg/elements '[pd-year pd-day pd-hour pd-minute])
-                               tcg/small-integer)
-                    (tcg/bind (fn [[p1 start p2]]
-                                (let [end-opts
-                                      (condp = start
-                                        'pd-year '[pd-month]
-                                        'pd-day '[pd-hour pd-minute pd-second]
-                                        'pd-hour '[pd-minute pd-second]
-                                        'pd-minute '[pd-second])]
-                                  (tcg/fmap (fn [end] [p1 start p2 end]) (tcg/elements end-opts))))))]
-    (= (project1 (list '+ (list ctor1 p1) (list ctor2 p2)) {})
-       (project1 (list 'parse-multi-part-pd (str p1 "-" p2)
-                       (str/upper-case (subs (str ctor1) 3))
-                       (str/upper-case (subs (str ctor2) 3))) {}))))
 
 (t/deftest test-interval-arithmetic
   (t/are [expected expr]
