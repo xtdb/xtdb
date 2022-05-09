@@ -101,7 +101,8 @@
           (let [^ParseState new-state (.parse parser in idx memos errors?)]
             (if (.ast new-state)
               (if (<= (.idx new-state) (.idx last-state))
-                last-state
+                (do (.remove memos memo-key)
+                    last-state)
                 (recur new-state))
               (do (.remove memos memo-key)
                   (if (and (nil? (.ast last-state))
@@ -248,7 +249,7 @@
              {:tag :epsilon}]})
 
 (defn- rule-kw->name [kw]
-   (str "<" (str/replace (name kw) "_" " ") ">"))
+  (str "<" (str/replace (name kw) "_" " ") ">"))
 
 (defn index->line-column [^String in ^long idx]
   (loop [line 1
@@ -412,10 +413,32 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
                                           (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
                                           (re-find #"(^|_)(term|factor|primary|expression|query_expression_body)$" (name rule-name))))))
 
+(def parse (memoize
+            (fn self
+              ([in]
+               (self in :directly_executable_statement))
+              ([in start-rule]
+               (vary-meta
+                (sql-parser in start-rule)
+                assoc :sql in)))))
+
 (comment
   (sql-parser "SELECT * FROMfoo" :directly_executable_statement)
 
   (sql-parser "  (SELECT avg(c) FROM t1)  " :subquery)
+
+  (sql-parser "a[0]" :value_expression_primary)
+
+  (doseq [sql ["SELECT u.a[0] AS first_el FROM uo"
+               "SELECT u.b[u.a[0]] AS dyn_idx FROM u"
+               "SELECT 1 YEAR + 3 MONTH + 4 DAY t FROM foo WHERE foo.a = 42"
+               "SELECT 3 * 1 YEAR t FROM foo WHERE foo.a = 42"
+               "SELECT foo.a YEAR + 1 MONTH + 2 DAY t FROM foo WHERE foo.a = 42"
+               "SELECT foo.a YEAR + 1 MONTH - 2 DAY t FROM foo WHERE foo.a = 42"
+               "SELECT foo.a || 'a' || 'b' t FROM foo WHERE foo.a = 42"]
+          :let [tree (sql-parser sql :directly_executable_statement)]
+          :when (failure? tree)]
+    (println (failure->str tree)))
 
   (let [in "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END,
        a+b*2+c*3+d*4,
