@@ -60,15 +60,15 @@
   (parse [_ in idx memos errors?]
     (.parse ^IParser (aget rules rule-id) in idx memos errors?)))
 
-(defrecord RuleParser [rule-name ^int rule-id ^boolean raw? ^IParser parser errs]
+(defrecord RuleParser [rule-name ^int rule-id raw? ^IParser parser errs]
   IParser
   (parse [_ in idx memos errors?]
     (let [state (.parse parser in idx memos errors?)]
-      (ParseState. (when (.ast state)
-                     (if raw?
-                       (.ast state)
+      (ParseState. (when-let [ast (.ast state)]
+                     (if (raw? rule-name ast)
+                       ast
                        [(with-meta
-                          (into [rule-name] (.ast state))
+                          (into [rule-name] ast)
                           {:start-idx idx
                            :end-idx (.idx state)})]))
                    (when-let [rule-errs (.errs state)]
@@ -278,45 +278,50 @@
         (doseq [[_ msg] errs]
           (println (name msg)))))))
 
-(defn build-ebnf-parser [grammar ws-pattern]
-  (let [rule->id (zipmap (keys grammar) (range))
-        rules (object-array (count rule->id))]
-    (letfn [(build-parser [{:keys [tag hide] :as parser}]
-              (cond-> (case tag
-                        :nt (->NonTerminalParser (get rule->id (:keyword parser)) rules)
-                        :star (->RepeatParser (build-parser (:parser parser)) true)
-                        :plus (->RepeatParser (build-parser (:parser parser)) false)
-                        :opt (->OptParser (build-parser (:parser parser)))
-                        :cat (->CatParser (mapv build-parser (:parsers parser)))
-                        :alt (->> (reverse (:parsers parser))
-                                  (mapv build-parser)
-                                  (reduce
-                                   (fn [parser2 parser1]
-                                     (->OrdParser parser1 parser2))))
-                        :ord (->OrdParser (build-parser (:parser1 parser))
-                                          (build-parser (:parser2 parser)))
-                        :neg (->WhitespaceParser ws-pattern (->NegParser (build-parser (:parser parser))))
-                        :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser))
-                        :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser) (with-meta
-                                                                                                  #{[:expected (:regexp parser)]}
-                                                                                                  {:regexp? true})))
-                        :string (->WhitespaceParser ws-pattern (->StringParser (:string parser) #{[:expected (:string parser)]})))
-                hide (->HideParser)))]
-      (doseq [[k v] grammar
-              :let [rule-id (int (get rule->id k))
-                    raw? (= {:reduction-type :raw} (:red v))
-                    memo-fn (if (left-recursive? grammar k)
-                              ->MemoizeLeftRecParser
-                              ->MemoizeParser)
-                    parser (->RuleParser k rule-id raw? (build-parser v) #{[:expected (rule-kw->name k)]})]]
-        (aset rules rule-id (memo-fn parser)))
-      (fn [in start-rule]
-        (when-let [state (-> (->trailing-ws-parser start-rule)
-                             ^IParser (build-parser)
-                             (.parse in 0 (HashMap.) true))]
-          (if (.errs state)
-            (ParseFailure. in (.errs state) (.idx state))
-            (first (.ast state))))))))
+(defn build-ebnf-parser
+  ([grammar ws-pattern]
+   (build-ebnf-parser grammar ws-pattern (constantly false)))
+  ([grammar ws-pattern raw?]
+   (let [rule->id (zipmap (keys grammar) (range))
+         rules (object-array (count rule->id))]
+     (letfn [(build-parser [{:keys [tag hide] :as parser}]
+               (cond-> (case tag
+                         :nt (->NonTerminalParser (get rule->id (:keyword parser)) rules)
+                         :star (->RepeatParser (build-parser (:parser parser)) true)
+                         :plus (->RepeatParser (build-parser (:parser parser)) false)
+                         :opt (->OptParser (build-parser (:parser parser)))
+                         :cat (->CatParser (mapv build-parser (:parsers parser)))
+                         :alt (->> (reverse (:parsers parser))
+                                   (mapv build-parser)
+                                   (reduce
+                                    (fn [parser2 parser1]
+                                      (->OrdParser parser1 parser2))))
+                         :ord (->OrdParser (build-parser (:parser1 parser))
+                                           (build-parser (:parser2 parser)))
+                         :neg (->WhitespaceParser ws-pattern (->NegParser (build-parser (:parser parser))))
+                         :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser))
+                         :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser) (with-meta
+                                                                                                   #{[:expected (:regexp parser)]}
+                                                                                                   {:regexp? true})))
+                         :string (->WhitespaceParser ws-pattern (->StringParser (:string parser) #{[:expected (:string parser)]})))
+                 hide (->HideParser)))]
+       (doseq [[k v] grammar
+               :let [rule-id (int (get rule->id k))
+                     raw? (if (= {:reduction-type :raw} (:red v))
+                            (constantly true)
+                            raw?)
+                     memo-fn (if (left-recursive? grammar k)
+                               ->MemoizeLeftRecParser
+                               ->MemoizeParser)
+                     parser (->RuleParser k rule-id raw? (build-parser v) #{[:expected (rule-kw->name k)]})]]
+         (aset rules rule-id (memo-fn parser)))
+       (fn [in start-rule]
+         (when-let [state (-> (->trailing-ws-parser start-rule)
+                              ^IParser (build-parser)
+                              (.parse in 0 (HashMap.) true))]
+           (if (.errs state)
+             (ParseFailure. in (.errs state) (.idx state))
+             (first (.ast state)))))))))
 
 (comment
 
@@ -391,7 +396,12 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
 (def sql-cfg (insta-cfg/ebnf (slurp (io/resource "core2/sql/SQL2011.ebnf"))))
 
-(def sql-parser (build-ebnf-parser sql-cfg #"(?:\z|\s+|(?<=\p{Punct})|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"))
+(def sql-parser (build-ebnf-parser sql-cfg
+                                   #"(?:\z|\s+|(?<=\p{Punct})|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
+                                   (fn [rule-name ast]
+                                     (and (= 1 (count ast))
+                                          (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
+                                          (re-find #"(^|_)(term|factor|primary|expression|query_expression_body)$" (name rule-name))))))
 
 (comment
   (sql-parser "SELECT * FROMfoo" :directly_executable_statement)
