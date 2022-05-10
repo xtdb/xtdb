@@ -6,7 +6,8 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [clojure.string :as str])
   (:import (clojure.lang Keyword MapEntry)
            (core2 StringUtil)
            (core2.expression.boxes BoolBox DoubleBox LongBox ObjectBox)
@@ -1166,16 +1167,26 @@
     (when match
       (PeriodDuration. (Period/ofMonths (+ (* 12 (Integer/parseInt part1)) (Integer/parseInt part2))) Duration/ZERO))))
 
+(defn- fractional-secs-to->nanos ^long [fractional-secs]
+  (if fractional-secs
+    (let [num-digits (if (str/starts-with? fractional-secs "-")
+                       (unchecked-dec-int (count fractional-secs))
+                       (count fractional-secs))
+          exp (- 9 num-digits)]
+      (* (Math/pow 10 exp) (Long/parseLong fractional-secs)))
+    0))
+
 (defn- parse-day-to-second-literal [s unit1 unit2]
   (case [unit1 unit2]
     ["DAY" "SECOND"]
-    (let [re #"^((-|)\d+) ((-|)\d+)\:((-|)\d+):((-|)\d+)(\.(-|)\d+){0,1}$"
+    (let [re #"^((-|)\d+) ((-|)\d+)\:((-|)\d+):((-|)\d+)(\.(\d+)){0,1}$"
           [match day _ hour _ min _ sec _ _ fractional-secs] (re-find re s)]
       (when match
         (PeriodDuration. (Period/of 0 0 (Integer/parseInt day))
                          (Duration/ofSeconds (+ (* 60 60 (Integer/parseInt hour))
                                                 (* 60 (Integer/parseInt min))
-                                                (Integer/parseInt sec))))))
+                                                (Integer/parseInt sec))
+                                             (fractional-secs-to->nanos fractional-secs)))))
     ["DAY" "MINUTE"]
     (let [re #"^((-|)\d+) ((-|)\d+)\:((-|)\d+)$"
           [match day _ hour _ min] (re-find re s)]
@@ -1193,13 +1204,14 @@
                          (Duration/ofHours (Integer/parseInt hour)))))
 
     ["HOUR" "SECOND"]
-    (let [re #"^((-|)\d{2})\:((-|)\d+):((-|)\d+)(\.(-|)\d+){0,1}$"
+    (let [re #"^((-|)\d+)\:((-|)\d+):((-|)\d+)(\.(\d+)){0,1}$"
           [match hour _ min _ sec _ _ fractional-secs] (re-find re s)]
       (when match
         (PeriodDuration. Period/ZERO
                          (Duration/ofSeconds (+ (* 60 60 (Integer/parseInt hour))
                                                 (* 60 (Integer/parseInt min))
-                                                (Integer/parseInt  sec))))))
+                                                (Integer/parseInt sec))
+                                             (fractional-secs-to->nanos fractional-secs)))))
 
     ["HOUR" "MINUTE"]
     (let [re #"^((-|)\d+)\:((-|)\d+)$"
@@ -1210,12 +1222,13 @@
                                                 (Integer/parseInt min))))))
 
     ["MINUTE" "SECOND"]
-    (let [re #"^((-|)\d+):((-|)\d+)(\.(-|)\d+){0,1}$"
+    (let [re #"^((-|)\d+):((-|)\d+)(\.(\d+)){0,1}$"
           [match min _ sec _ _ fractional-secs] (re-find re s)]
       (when match
         (PeriodDuration. Period/ZERO
                          (Duration/ofSeconds (+ (* 60 (Integer/parseInt min))
-                                                (Integer/parseInt sec))))))))
+                                                (Integer/parseInt sec))
+                                             (fractional-secs-to->nanos fractional-secs)))))))
 
 (defn parse-multi-part-pd
   "This function is used to parse a 2 field interval literal into a PeriodDuration, e.g '12-03' YEAR TO MONTH."

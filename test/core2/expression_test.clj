@@ -1604,7 +1604,15 @@
     "P0D PT3H4M-1S" '(parse-multi-part-pd "03:04:-01" "HOUR" "SECOND") {}
     "P0D PT23H2M" '(parse-multi-part-pd "23:02" "HOUR" "MINUTE") {}
 
-    "P0D PT44M34S" '(parse-multi-part-pd "44:34" "MINUTE" "SECOND") {}))
+    "P0D PT44M34S" '(parse-multi-part-pd "44:34" "MINUTE" "SECOND") {}
+    "P0D PT44M34.123456S" '(parse-multi-part-pd "44:34.123456" "MINUTE" "SECOND") {}
+
+
+    "P1D PT1.334S" '(parse-multi-part-pd "1 00:00:01.334" "DAY" "SECOND") {}
+    "P0D PT3H4M1.334S" '(parse-multi-part-pd "03:04:1.334" "HOUR" "SECOND") {}
+    "P0D PT44M34.123456789S" '(parse-multi-part-pd "44:34.123456789" "MINUTE" "SECOND") {}
+    ;; truncates when we can no longer represent the number
+    "P0D PT44M34.123456789S" '(parse-multi-part-pd "44:34.123456789666" "MINUTE" "SECOND") {}))
 
 (t/deftest test-multi-part-interval-ex-cases
   (letfn [(p [unit1 unit2] (project1 (list 'parse-multi-part-pd "0-0" unit1 unit2) {}))]
