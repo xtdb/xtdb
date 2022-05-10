@@ -17,7 +17,7 @@
 )
 
 
-#_(comment
+(defn example-entity-history [node]
 ;; tag::history-full[]
 (xt/submit-tx
   node
@@ -85,9 +85,9 @@
  :ids.persons/Jeff
  :asc
  {:start-valid-time #inst "2015-05-18T09:20:27.966"
-  :start-tx-time #inst "2015-05-18T09:20:27.966"
+  :start-tx {::xt/tx-time #inst "2015-05-18T09:20:27.966"}
   :end-valid-time #inst "2020-05-18T09:20:27.966"
-  :end-tx-time #inst "2020-05-18T09:20:27.966"})
+  :end-tx {::xt/tx-time #inst "2020-05-18T09:20:27.966"}})
 
 ; yields
 [{::xt/tx-time #inst "2019-04-15T07:53:56.178-00:00",
