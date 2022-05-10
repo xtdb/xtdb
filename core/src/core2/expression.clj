@@ -330,9 +330,7 @@
                        `(let [~res-sym
                               ~(continue (fn [return-type code]
                                            (let [{:keys [box-sym]} (get boxes return-type)]
-                                             `(do
-                                                (set! (.-value ~box-sym) ~code)
-                                                ~box-sym))))]
+                                             `(.withValue ~box-sym ~code))))]
                           (condp identical? ~res-sym
                             ~@(->> (for [[ret-type {:keys [box-sym]}] boxes]
                                      [box-sym (f ret-type `(.value ~box-sym))])
