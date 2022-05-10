@@ -317,11 +317,17 @@ Represents the database as of a specific valid and transaction time.
     Options:
     * `sort-order`: `#{:asc :desc}`
     * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `::xt/doc` key
-    * `:with-corrections?` (boolean, default false): specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
-    * `:start-valid-time`, `:start-tx-time`, `:start-tx-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
-    * `:end-valid-time`, `:end-tx-time`, `:end-tx-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
+    * `:with-corrections?` (boolean, default false): specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id
+    * `:start-valid-time` (inclusive, default unbounded)
+    * `:start-tx`: (map, all keys optional)
+      - `:xtdb.api/tx-time` (Date, inclusive, default unbounded)
+      - `:xtdb.api/tx-id` (Long, inclusive, default unbounded)
+    * `:end-valid-time` (exclusive, default unbounded)
+    * `:end-tx`: (map, all keys optional)
+      - `:xtdb.api/tx-time` (Date, exclusive, default unbounded)
+      - `:xtdb.api/tx-id` (Long, exclusive, default unbounded)
 
-    No matter what `:start-*` and `:end-*` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
+    No matter what `start-*` and `end-*` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
 
     Each entry in the result contains the following keys:
     * `::xt/valid-time`,
@@ -337,14 +343,7 @@ Represents the database as of a specific valid and transaction time.
 ----
   (open-entity-history
     [db eid sort-order]
-    [db eid sort-order {:keys [with-docs?
-                               with-corrections?
-                               start-valid-time
-                               end-valid-time
-                               start-tx-time
-                               end-tx-time
-                               start-tx-id
-                               end-tx-id]}]
+    [db eid sort-order opts]
     "Lazily retrieves entity history for the given entity.
     Don't forget to close the cursor when you've consumed enough history!
     See `entity-history` for all the options")

@@ -196,11 +196,17 @@
   Options:
   * `sort-order`: `#{:asc :desc}`
   * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `:xtdb.api/doc` key
-  * `:with-corrections?` (boolean, default false): specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
-  * `:start-valid-time`, `:start-tx-time`, `:start-tx-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
-  * `:end-valid-time`, `:end-tx-time`, `:end-tx-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
+  * `:with-corrections?` (boolean, default false): specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id
+  * `:start-valid-time` (inclusive, default unbounded)
+  * `:start-tx`: (map, all keys optional)
+    - `:xtdb.api/tx-time` (Date, inclusive, default unbounded)
+    - `:xtdb.api/tx-id` (Long, inclusive, default unbounded)
+  * `:end-valid-time` (exclusive, default unbounded)
+  * `:end-tx`: (map, all keys optional)
+    - `:xtdb.api/tx-time` (Date, exclusive, default unbounded)
+    - `:xtdb.api/tx-id` (Long, exclusive, default unbounded)
 
-  No matter what `:start-*` and `:end-*` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
+  No matter what `start-*` and `end-*` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
 
   Each entry in the result contains the following keys:
   * `:xtdb.api/valid-time`,
@@ -389,12 +395,13 @@
 (let [arglists '(^xtdb.api.ICursor
                  [db eid sort-order]
                  ^xtdb.api.ICursor
-                 [db eid sort-order {:keys [with-docs? with-corrections?]
-                                     {start-vt ::valid-time
-                                      start-tt ::tx-time
-                                      start-tx-id ::tx-id} :start
-                                     {end-vt ::valid-time
-                                      end-tt ::tx-time
-                                      end-tx-id ::tx-id} :end}])]
+                 [db eid sort-order {:keys [with-docs?
+                                            with-corrections?
+                                            start-valid-time
+                                            end-valid-time]
+                                     {start-tt ::tx-time
+                                      start-tx-id ::tx-id} :start-tx
+                                     {end-tt ::tx-time
+                                      end-tx-id ::tx-id} :end-tx}])]
   (alter-meta! #'entity-history assoc :arglists arglists)
   (alter-meta! #'open-entity-history assoc :arglists arglists))
