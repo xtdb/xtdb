@@ -1,6 +1,5 @@
 (ns core2.operator.order-by-test
   (:require [clojure.test :as t]
-            [core2.api :as c2]
             [core2.operator :as op]
             [core2.operator.order-by :as order-by]
             [core2.test-util :as tu]

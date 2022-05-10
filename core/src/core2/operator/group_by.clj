@@ -9,13 +9,13 @@
            (core2.expression.map IRelationMap IRelationMapBuilder)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (java.io Closeable)
-           (java.util ArrayList LinkedList List Spliterator)
+           (java.util ArrayList LinkedList List HashMap Spliterator)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector Float8Vector IntVector NullVector ValueVector)
            (org.apache.arrow.vector.complex ListVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$FloatingPoint ArrowType$Int ArrowType$Null FieldType)))
+           (org.apache.arrow.vector.types.pojo ArrowType$FloatingPoint ArrowType$Int FieldType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -87,25 +87,28 @@
   (fn [f from-name to-name]
     (keyword (name f))))
 
-(defn- emit-agg [from-var from-val-types, emit-init-group, emit-step]
-  (let [acc-sym (gensym 'acc)
-        group-mapping-sym (gensym 'group-mapping)
-        group-idx-sym (gensym 'group-idx)]
-    (eval
-     `(fn [~(-> acc-sym (expr/with-tag ValueVector))
-           ~(-> from-var (expr/with-tag IIndirectVector))
-           ~(-> group-mapping-sym (expr/with-tag IntVector))]
-
-        ~(let [{continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {:col-names #{from-var}}) {:var->types {from-var from-val-types}})]
-           `(dotimes [~expr/idx-sym (.getValueCount ~from-var)]
-              (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
-                (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)
-                  (.setValueCount ~acc-sym (inc ~group-idx-sym))
-                  ~(emit-init-group acc-sym group-idx-sym))
-                ~(continue-var (fn [var-type val-code]
-                                 (emit-step var-type acc-sym group-idx-sym val-code))))))))))
-
-(def memo-emit-agg (memoize emit-agg))
+(def emit-agg
+  (-> (fn [from-var from-val-types, emit-init-group, emit-step]
+        (let [acc-sym (gensym 'acc)
+              group-mapping-sym (gensym 'group-mapping)
+              group-idx-sym (gensym 'group-idx)
+              boxes (HashMap.)
+              {continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {:col-names #{from-var}})
+                                                          {:var->types {from-var from-val-types}
+                                                           :return-boxes boxes})]
+          (eval
+           `(fn [~(-> acc-sym (expr/with-tag ValueVector))
+                 ~(-> from-var (expr/with-tag IIndirectVector))
+                 ~(-> group-mapping-sym (expr/with-tag IntVector))]
+              (let [~@(expr/box-bindings (vals boxes))]
+                (dotimes [~expr/idx-sym (.getValueCount ~from-var)]
+                  (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
+                    (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)
+                      (.setValueCount ~acc-sym (inc ~group-idx-sym))
+                      ~(emit-init-group acc-sym group-idx-sym))
+                    ~(continue-var (fn [var-type val-code]
+                                     (emit-step var-type acc-sym group-idx-sym val-code))))))))))
+      (memoize)))
 
 (defn- monomorphic-agg-factory {:style/indent 2} [^String from-name, ^String to-name, ->out-vec, emit-init-group, emit-step]
   (let [from-var (symbol from-name)]
@@ -120,7 +123,7 @@
 
             (aggregate [_ in-vec group-mapping]
               (let [from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
-                    f (memo-emit-agg from-var from-val-types emit-init-group emit-step)]
+                    f (emit-agg from-var from-val-types emit-init-group emit-step)]
                 (f out-vec in-vec group-mapping)))
 
             (finish [_] (iv/->direct-vec out-vec))
@@ -217,10 +220,9 @@
                 (let [from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
                       out-vec (.maybePromote out-pvec from-val-types)
                       acc-type (.getType (.getField out-vec))
-                      f (memo-emit-agg
-                          from-var from-val-types
-                          (emit-init-group acc-type)
-                          (emit-step acc-type))]
+                      f (emit-agg from-var from-val-types
+                                  (emit-init-group acc-type)
+                                  (emit-step acc-type))]
                   (f out-vec in-vec group-mapping))))
 
             (finish [_] (iv/->direct-vec (.getVector out-pvec)))
