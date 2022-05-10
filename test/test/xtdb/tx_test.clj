@@ -924,13 +924,15 @@
 
 (t/deftest overlapping-valid-time-ranges-434
   (let [_ (fix/submit+await-tx
-           [[::xt/put {:xt/id :foo, :v 10} #inst "2020-01-10"]
+           [[::xt/put {:xt/id :foo, :v 10} #inst "2019-01-01"]
+            [::xt/put {:xt/id :foo, :v 10} #inst "2020-01-10"]
             [::xt/put {:xt/id :bar, :v 5} #inst "2020-01-05"]
             [::xt/put {:xt/id :bar, :v 10} #inst "2020-01-10"]
 
             [::xt/put {:xt/id :baz, :v 10} #inst "2020-01-10"]])
 
-        last-tx (fix/submit+await-tx [[::xt/put {:xt/id :bar, :v 7} #inst "2020-01-07"]
+        last-tx (fix/submit+await-tx [[::xt/put {:xt/id :foo, :v 10} #inst "2019-01-01"]
+                                      [::xt/put {:xt/id :bar, :v 7} #inst "2020-01-07"]
                                       ;; mixing foo and bar shouldn't matter
                                       [::xt/put {:xt/id :foo, :v 8} #inst "2020-01-08" #inst "2020-01-12"] ; reverts to 10 afterwards
                                       [::xt/put {:xt/id :foo, :v 9} #inst "2020-01-09" #inst "2020-01-11"] ; reverts to 8 afterwards, then 10
@@ -944,7 +946,7 @@
       (let [eid->history (fn [eid]
                            (let [history (db/entity-history index-snapshot
                                                             (c/new-id eid) :asc
-                                                            {:start {::xt/valid-time #inst "2020-01-01"}})
+                                                            {:start-valid-time #inst "2020-01-01"})
                                  docs (db/fetch-docs (:document-store *api*) (map :content-hash history))]
                              (->> history
                                   (mapv (fn [{:keys [content-hash vt]}]
