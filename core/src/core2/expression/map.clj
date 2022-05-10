@@ -66,48 +66,51 @@
        (and (.test p1 l r)
             (.test p2 l r))))))
 
-(defn- build-comparator [left-val-types right-val-types nil-equal]
-  (let [left-vec (gensym 'left-vec)
-        left-idx (gensym 'left-idx)
-        right-vec (gensym 'right-vec)
-        right-idx (gensym 'right-idx)
-        eq-fn (if nil-equal :null-eq :=)]
-    (eval
-      `(fn [~(expr/with-tag left-vec IIndirectVector)
-            ~(expr/with-tag right-vec IIndirectVector)]
-         (reify IntIntPredicate
-           (test [_ ~left-idx ~right-idx]
-             ~(let [{continue-left :continue}
-                    (-> (expr/form->expr left-vec {:col-names #{left-vec}})
-                        (assoc :idx left-idx)
-                        (expr/codegen-expr {:var->types {left-vec left-val-types}}))
+(def build-comparator
+  (-> (fn [left-val-types right-val-types nil-equal]
+        (let [left-vec (gensym 'left-vec)
+              left-idx (gensym 'left-idx)
+              right-vec (gensym 'right-vec)
+              right-idx (gensym 'right-idx)
+              eq-fn (if nil-equal :null-eq :=)
 
-                    {continue-right :continue}
-                    (-> (expr/form->expr right-vec {:col-names #{right-vec}})
-                        (assoc :idx right-idx)
-                        (expr/codegen-expr {:var->types {right-vec right-val-types}}))]
+              left-boxes (HashMap.)
+              {continue-left :continue} (-> (expr/form->expr left-vec {:col-names #{left-vec}})
+                                            (assoc :idx left-idx)
+                                            (expr/codegen-expr {:var->types {left-vec left-val-types}
+                                                                :return-boxes left-boxes}))
 
-                (continue-left
-                  (fn [left-type left-code]
-                    (continue-right
-                      (fn [right-type right-code]
-                        (let [{continue-= :continue-call}
-                              (expr/codegen-call {:op :call, :f eq-fn,
-                                                  :arg-types [left-type right-type]})]
-                          (continue-=
-                            (fn [out-type out-code]
-                              (if (instance? ArrowType$Null out-type)
-                                false
-                                out-code))
-                            [left-code right-code])))))))))))))
-
-(def memoized-build-comparator (memoize build-comparator))
+              right-boxes (HashMap.)
+              {continue-right :continue} (-> (expr/form->expr right-vec {:col-names #{right-vec}})
+                                             (assoc :idx right-idx)
+                                             (expr/codegen-expr {:var->types {right-vec right-val-types}
+                                                                 :return-boxes right-boxes}))]
+          (eval
+           `(fn [~(expr/with-tag left-vec IIndirectVector)
+                 ~(expr/with-tag right-vec IIndirectVector)]
+              (let [~@(expr/box-bindings (concat (vals left-boxes) (vals right-boxes)))]
+                (reify IntIntPredicate
+                  (test [_ ~left-idx ~right-idx]
+                    ~(continue-left
+                      (fn [left-type left-code]
+                        (continue-right
+                         (fn [right-type right-code]
+                           (let [{continue-= :continue-call}
+                                 (expr/codegen-call {:op :call, :f eq-fn,
+                                                     :arg-types [left-type right-type]})]
+                             (continue-=
+                              (fn [out-type out-code]
+                                (if (instance? ArrowType$Null out-type)
+                                  false
+                                  out-code))
+                              [left-code right-code])))))))))))))
+      (memoize)))
 
 (defn- ->comparator ^core2.expression.map.IntIntPredicate [left-cols right-cols nil-equal]
   (->> (map (fn [^IIndirectVector left-col, ^IIndirectVector right-col]
               (let [left-val-types (expr/field->value-types (.getField (.getVector left-col)))
                     right-val-types (expr/field->value-types (.getField (.getVector right-col)))
-                    f (memoized-build-comparator left-val-types right-val-types nil-equal)]
+                    f (build-comparator left-val-types right-val-types nil-equal)]
                 (f left-col right-col)))
             left-cols
             right-cols)
@@ -141,7 +144,7 @@
 
 (def nil-row-idx 0)
 
-(defn ^core2.expression.map.IRelationMap ->relation-map
+(defn ->relation-map ^core2.expression.map.IRelationMap
   [^BufferAllocator allocator,
    {:keys [key-col-names build-key-col-names probe-key-col-names store-col-names with-nil-row?
            nil-keys-equal?]

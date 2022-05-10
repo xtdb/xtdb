@@ -9,13 +9,13 @@
            (core2.expression.map IRelationMap IRelationMapBuilder)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (java.io Closeable)
-           (java.util ArrayList LinkedList List Spliterator)
+           (java.util ArrayList LinkedList List HashMap Spliterator)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector Float8Vector IntVector NullVector ValueVector)
            (org.apache.arrow.vector.complex ListVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$FloatingPoint ArrowType$Int ArrowType$Null FieldType)))
+           (org.apache.arrow.vector.types.pojo ArrowType$FloatingPoint ArrowType$Int FieldType)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -87,25 +87,28 @@
   (fn [f from-name to-name]
     (keyword (name f))))
 
-(defn- emit-agg [from-var from-val-types, emit-init-group, emit-step]
-  (let [acc-sym (gensym 'acc)
-        group-mapping-sym (gensym 'group-mapping)
-        group-idx-sym (gensym 'group-idx)]
-    (eval
-     `(fn [~(-> acc-sym (expr/with-tag ValueVector))
-           ~(-> from-var (expr/with-tag IIndirectVector))
-           ~(-> group-mapping-sym (expr/with-tag IntVector))]
-
-        ~(let [{continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {:col-names #{from-var}}) {:var->types {from-var from-val-types}})]
-           `(dotimes [~expr/idx-sym (.getValueCount ~from-var)]
-              (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
-                (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)
-                  (.setValueCount ~acc-sym (inc ~group-idx-sym))
-                  ~(emit-init-group acc-sym group-idx-sym))
-                ~(continue-var (fn [var-type val-code]
-                                 (emit-step var-type acc-sym group-idx-sym val-code))))))))))
-
-(def memo-emit-agg (memoize emit-agg))
+(def emit-agg
+  (-> (fn [from-var from-val-types, emit-init-group, emit-step]
+        (let [acc-sym (gensym 'acc)
+              group-mapping-sym (gensym 'group-mapping)
+              group-idx-sym (gensym 'group-idx)
+              boxes (HashMap.)
+              {continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {:col-names #{from-var}})
+                                                          {:var->types {from-var from-val-types}
+                                                           :return-boxes boxes})]
+          (eval
+           `(fn [~(-> acc-sym (expr/with-tag ValueVector))
+                 ~(-> from-var (expr/with-tag IIndirectVector))
+                 ~(-> group-mapping-sym (expr/with-tag IntVector))]
+              (let [~@(expr/box-bindings (vals boxes))]
+                (dotimes [~expr/idx-sym (.getValueCount ~from-var)]
+                  (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
+                    (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)
+                      (.setValueCount ~acc-sym (inc ~group-idx-sym))
+                      ~(emit-init-group acc-sym group-idx-sym))
+                    ~(continue-var (fn [var-type val-code]
+                                     (emit-step var-type acc-sym group-idx-sym val-code))))))))))
+      (memoize)))
 
 (defn- monomorphic-agg-factory {:style/indent 2} [^String from-name, ^String to-name, ->out-vec, emit-init-group, emit-step]
   (let [from-var (symbol from-name)]
@@ -120,7 +123,7 @@
 
             (aggregate [_ in-vec group-mapping]
               (let [from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
-                    f (memo-emit-agg from-var from-val-types emit-init-group emit-step)]
+                    f (emit-agg from-var from-val-types emit-init-group emit-step)]
                 (f out-vec in-vec group-mapping)))
 
             (finish [_] (iv/->direct-vec out-vec))
@@ -217,10 +220,9 @@
                 (let [from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
                       out-vec (.maybePromote out-pvec from-val-types)
                       acc-type (.getType (.getField out-vec))
-                      f (memo-emit-agg
-                          from-var from-val-types
-                          (emit-init-group acc-type)
-                          (emit-step acc-type))]
+                      f (emit-agg from-var from-val-types
+                                  (emit-init-group acc-type)
+                                  (emit-step acc-type))]
                   (f out-vec in-vec group-mapping))))
 
             (finish [_] (iv/->direct-vec (.getVector out-pvec)))
@@ -501,8 +503,8 @@
   (-> (->aggregate-factory :array-agg from-name to-name)
       (wrap-distinct)))
 
-;; TODO this doesn't short-circuit yet.
 (defn- bool-agg-factory [^String from-name, ^String to-name, zero-value step-f-kw]
+  ;; TODO this could be a nullable input?
   (monomorphic-agg-factory from-name to-name #(BitVector. to-name ^BufferAllocator %)
     (fn emit-bool-agg-init [acc-sym group-idx-sym]
       `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym]
@@ -510,26 +512,23 @@
          ~(expr/set-value-form types/bool-type acc-sym group-idx-sym zero-value)))
 
     (fn emit-bool-agg-step [var-type acc-sym group-idx-sym val-code]
-      (let [null-call (expr/codegen-call {:op :call, :f step-f-kw
-                                          :arg-types [types/null-type var-type]})
+      (let [{:keys [continue]} (expr/codegen-call* {:op :call, :f step-f-kw
+                                                    :emitted-args [{:return-types #{types/null-type types/bool-type}
+                                                                    :continue (fn [f]
+                                                                                `(if (.isNull ~acc-sym ~group-idx-sym)
+                                                                                   ~(f types/null-type nil)
+                                                                                   ~(f types/bool-type (expr/get-value-form types/bool-type acc-sym group-idx-sym))))}
+                                                                   {:return-types #{var-type}
+                                                                    :continue (fn [f]
+                                                                                (f var-type val-code))}]})]
 
-            bool-call (expr/codegen-call {:op :call, :f step-f-kw
-                                          :arg-types [types/bool-type var-type]})
-
-            val-sym (gensym 'val)
-
-            emit-set-res (fn [arrow-type res-code]
-                           (if (= arrow-type ArrowType$Null/INSTANCE)
-                             `(.setNull ~acc-sym ~group-idx-sym)
-                             `(do
-                                (.setIndexDefined ~acc-sym ~group-idx-sym)
-                                ~(expr/set-value-form arrow-type acc-sym group-idx-sym res-code))))]
-
-        `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym
-               ~val-sym ~val-code]
-           (if (.isNull ~acc-sym ~group-idx-sym)
-             ~((:continue-call null-call) emit-set-res [nil val-sym])
-             ~((:continue-call bool-call) emit-set-res [(expr/get-value-form types/bool-type acc-sym group-idx-sym) val-sym])))))))
+        `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym]
+           ~(continue (fn [arrow-type res-code]
+                        (if (= arrow-type types/null-type)
+                          `(.setNull ~acc-sym ~group-idx-sym)
+                          `(do
+                             (.setIndexDefined ~acc-sym ~group-idx-sym)
+                             ~(expr/set-value-form arrow-type acc-sym group-idx-sym res-code))))))))))
 
 (defmethod ->aggregate-factory :all [_ ^String from-name, ^String to-name] (bool-agg-factory from-name to-name true :and))
 (defmethod ->aggregate-factory :every [_ ^String from-name, ^String to-name] (->aggregate-factory :all from-name to-name))
