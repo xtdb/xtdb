@@ -12,7 +12,10 @@
 ;; Spike to replace Instaparse.
 
 ;; TODO:
-;; explore ws properly, tokens shouldn't be possible to "stack" without ws between.
+;; break raw? into const rule-name and dynamic part.
+;; try inline raw rules in nt.
+;; check with YourKit.
+;; sanity check SLT parsing.
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
 ;; https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
