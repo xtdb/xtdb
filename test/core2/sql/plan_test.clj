@@ -550,8 +550,10 @@
   (t/are [sql expected]
     (= expected (plan-expr sql))
 
-    "1 YEAR" '(pd-year 1)
-    "1 YEAR + 3 MONTH + 4 DAY" '(+ (+ (pd-year 1) (pd-month 3)) (pd-day 4))
+    "1 YEAR" '(single-field-interval 1 "YEAR" 2 0)
+    "1 YEAR + 3 MONTH + 4 DAY" '(+ (+ (single-field-interval 1 "YEAR" 2 0)
+                                      (single-field-interval 3 "MONTH" 2 0))
+                                   (single-field-interval 4 "DAY" 2 0))
 
     ;; todo investigate, these expr are entirely ambiguous
     ;; I think these should not be parsed, but they are! ...
@@ -559,42 +561,49 @@
     #_#_ "1 YEAR - 3" '()
 
     ;; scaling is not ambiguous like add/sub is
-    "1 YEAR * 3" '(* (pd-year 1) 3)
-    "3 * 1 YEAR" '(* 3 (pd-year 1))
+    "1 YEAR * 3" '(* (single-field-interval 1 "YEAR" 2 0) 3)
+    "3 * 1 YEAR" '(* 3 (single-field-interval 1 "YEAR" 2 0))
 
     ;; division is allowed in spec, but provides some ambiguity
     ;; as we do not allow fractional components (other than seconds)
     ;; we therefore throw at runtime for arrow vectors that cannot be cleanly truncated / rond
-    "1 YEAR / 3" '(/ (pd-year 1) 3)
+    "1 YEAR / 3" '(/ (single-field-interval 1 "YEAR" 2 0) 3)
 
-    "foo.a YEAR" '(pd-year x1)
-    "foo.a MONTH" '(pd-month x1)
-    "foo.a DAY" '(pd-day x1)
-    "foo.a HOUR" '(pd-hour x1)
-    "foo.a MINUTE" '(pd-minute x1)
-    "foo.a SECOND" '(pd-second x1)
+    "foo.a YEAR" '(single-field-interval x1 "YEAR" 2 0)
+    "foo.a MONTH" '(single-field-interval x1 "MONTH" 2 0)
+    "foo.a DAY" '(single-field-interval x1 "DAY" 2 0)
+    "foo.a HOUR" '(single-field-interval x1 "HOUR" 2 0)
+    "foo.a MINUTE" '(single-field-interval x1 "MINUTE" 2 0)
+    "foo.a SECOND" '(single-field-interval x1 "SECOND" 2 6)
 
-    "- foo.a SECOND" '(- (pd-second x1))
-    "+ foo.a SECOND" '(pd-second x1)
+    "- foo.a SECOND" '(- (single-field-interval x1 "SECOND" 2 6))
+    "+ foo.a SECOND" '(single-field-interval x1 "SECOND" 2 6)
 
-    "foo.a YEAR + foo.b YEAR" '(+ (pd-year x1) (pd-year x2))
-    "foo.a YEAR + foo.b MONTH" '(+ (pd-year x1) (pd-month x2))
-    "foo.a YEAR - foo.b MONTH" '(- (pd-year x1) (pd-month x2))
+    "foo.a YEAR + foo.b YEAR" '(+ (single-field-interval x1 "YEAR" 2 0)
+                                  (single-field-interval x2 "YEAR" 2 0))
+    "foo.a YEAR + foo.b MONTH" '(+ (single-field-interval x1 "YEAR" 2 0)
+                                   (single-field-interval x2 "MONTH" 2 0))
+    "foo.a YEAR - foo.b MONTH" '(- (single-field-interval x1 "YEAR" 2 0)
+                                   (single-field-interval x2 "MONTH" 2 0))
 
-    "foo.a YEAR + 1 MONTH" '(+ (pd-year x1) (pd-month 1))
-    "foo.a YEAR + 1 MONTH + 2 DAY" '(+ (+ (pd-year x1) (pd-month 1)) (pd-day 2))
-    "foo.a YEAR + 1 MONTH - 2 DAY" '(- (+ (pd-year x1) (pd-month 1)) (pd-day 2))
+    "foo.a YEAR + 1 MONTH" '(+ (single-field-interval x1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+    "foo.a YEAR + 1 MONTH + 2 DAY" '(+ (+ (single-field-interval x1 "YEAR" 2 0)
+                                          (single-field-interval 1 "MONTH" 2 0))
+                                       (single-field-interval 2 "DAY" 2 0))
+    "foo.a YEAR + 1 MONTH - 2 DAY" '(- (+ (single-field-interval x1 "YEAR" 2 0)
+                                          (single-field-interval 1 "MONTH" 2 0))
+                                       (single-field-interval 2 "DAY" 2 0))
 
-    "foo.a + 2 MONTH" '(+ x1 (pd-month 2))
-    "foo.a + +1 MONTH" '(+ x1 (pd-month 1))
-    "foo.a + -1 MONTH" '(+ x1 (- (pd-month 1)))
+    "foo.a + 2 MONTH" '(+ x1 (single-field-interval 2 "MONTH" 2 0))
+    "foo.a + +1 MONTH" '(+ x1 (single-field-interval 1 "MONTH" 2 0))
+    "foo.a + -1 MONTH" '(+ x1 (- (single-field-interval 1 "MONTH" 2 0)))
 
-    "foo.a YEAR TO MONTH" '(parse-multi-part-pd x1 "YEAR" "MONTH")
-    "foo.a DAY TO SECOND" '(parse-multi-part-pd x1 "DAY" "SECOND")))
+    "foo.a YEAR TO MONTH" '(multi-field-interval x1 "YEAR" 2 "MONTH" 2)
+    "foo.a DAY TO SECOND" '(multi-field-interval x1 "DAY" 2 "SECOND" 6)))
 
 (deftest test-interval-abs
   (t/are [sql expected]
     (= expected (plan-expr sql))
 
     "ABS(foo.a)" '(abs x1)
-    "ABS(1 YEAR)" '(abs (pd-year 1))))
+    "ABS(1 YEAR)" '(abs (single-field-interval 1 "YEAR" 2 0))))

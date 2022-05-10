@@ -181,12 +181,7 @@
 
      [:interval_primary ^:z n [:interval_qualifier [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]]
      ;; =>
-     (case datetime-field
-       "YEAR" (list 'pd-year (expr n))
-       "MONTH" (list 'pd-month (expr n))
-       "DAY" (list 'pd-day (expr n))
-       "HOUR" (list 'pd-hour (expr n))
-       "MINUTE" (list 'pd-minute (expr n)))
+     (list 'single-field-interval (expr n) datetime-field 2 0)
 
      [:interval_term ^:z i [:asterisk "*"] ^:z n]
      (list '* (expr i) (expr n))
@@ -204,7 +199,7 @@
 
      [:interval_primary ^:z n [:interval_qualifier [:single_datetime_field "SECOND"]]]
      ;; =>
-     (list 'pd-second (expr n))
+     (list 'single-field-interval (expr n) "SECOND" 2 6)
 
      [:interval_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
      ;; =>
@@ -215,14 +210,14 @@
                                "TO"
                                [:end_field [:non_second_primary_datetime_field end-field]]]]
      ;; =>
-     (list 'parse-multi-part-pd (expr i) start-field end-field)
+     (list 'multi-field-interval (expr i) start-field 2 end-field 2)
 
      [:interval_primary ^:z i [:interval_qualifier
                                [:start_field [:non_second_primary_datetime_field start-field]]
                                "TO"
                                [:end_field "SECOND"]]]
      ;; =>
-     (list 'parse-multi-part-pd (expr i) start-field "SECOND")
+     (list 'multi-field-interval (expr i) start-field 2 "SECOND" 6)
 
      [:interval_absolute_value_function "ABS" ^:z i]
      (list 'abs (expr i))

@@ -1141,26 +1141,23 @@
 (defmethod codegen-call [:default-overlay-length ArrowType$Binary] [_]
   (mono-fn-call types/int-type #(do `(.remaining (resolve-buf ~@%)))))
 
-(defmethod codegen-call [:pd-year ArrowType$Int] [_]
-  (mono-fn-call types/interval-year-month-type #(do `(PeriodDuration. (Period/ofYears ~@%) Duration/ZERO))))
+(defmethod codegen-call [:single-field-interval ArrowType$Int ArrowType$Utf8 ArrowType$Int ArrowType$Int] [{:keys [args]}]
+  (let [[_ unit] (map :literal args)]
+    (case unit
+      "YEAR"
+      (mono-fn-call types/interval-year-month-type #(do `(PeriodDuration. (Period/ofYears ~(first %)) Duration/ZERO)))
+      "MONTH"
+      (mono-fn-call types/interval-year-month-type #(do `(PeriodDuration. (Period/ofMonths ~(first %)) Duration/ZERO)))
+      "DAY"
+      (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. (Period/ofDays ~(first %)) Duration/ZERO)))
+      "HOUR"
+      (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofHours ~(first %)))))
+      "MINUTE"
+      (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofMinutes ~(first %)))))
+      "SECOND"
+      (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofSeconds ~(first %))))))))
 
-(defmethod codegen-call [:pd-month ArrowType$Int] [_]
-  (mono-fn-call types/interval-year-month-type #(do `(PeriodDuration. (Period/ofMonths ~@%) Duration/ZERO))))
-
-(defmethod codegen-call [:pd-day ArrowType$Int] [_]
-  (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. (Period/ofDays ~@%) Duration/ZERO))))
-
-(defmethod codegen-call [:pd-hour ArrowType$Int] [_]
-  (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofHours ~@%)))))
-
-(defmethod codegen-call [:pd-minute ArrowType$Int] [_]
-  (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofMinutes ~@%)))))
-
-(defmethod codegen-call [:pd-second ArrowType$Int] [_]
-  (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofSeconds ~@%)))))
-
-(doseq [interval-ctor [:pd-year, :pd-month, :pd-day, :pd-hour, :pd-minute, :pd-second]]
-  (defmethod codegen-call [interval-ctor ArrowType$Null] [_] call-returns-null))
+(defmethod codegen-call [:single-field-interval ArrowType$Null ArrowType$Utf8 ArrowType$Int ArrowType$Int] [_] call-returns-null)
 
 (defn- parse-year-month-literal [s]
   (let [[match part1 _ part2] (re-find #"^((-|)\d+)\-((-|)\d+)" s)]
@@ -1230,7 +1227,7 @@
                                                 (Integer/parseInt sec))
                                              (fractional-secs-to->nanos fractional-secs)))))))
 
-(defn parse-multi-part-pd
+(defn parse-multi-field-interval
   "This function is used to parse a 2 field interval literal into a PeriodDuration, e.g '12-03' YEAR TO MONTH."
   ^PeriodDuration [s unit1 unit2]
   ; This function overwhelming likely to be applied as a const-expr so not concerned about vectorized perf.
@@ -1258,13 +1255,13 @@
         (parse-day-to-second-literal s unit1 unit2))
       (throw (IllegalArgumentException. "Cannot parse interval, incorrect format."))))
 
-(defmethod codegen-call [:parse-multi-part-pd ArrowType$Utf8 ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
-  (let [[_ unit1 unit2] (map :literal args)
+(defmethod codegen-call [:multi-field-interval ArrowType$Utf8 ArrowType$Utf8 ArrowType$Int ArrowType$Utf8 ArrowType$Int] [{:keys [args]}]
+  (let [[_ unit1 _prec1 unit2 _prec2] (map :literal args)
         ;; todo choose a more specific representation when possible
         return-type types/interval-month-day-nano-type]
-    (mono-fn-call return-type (fn [[s & _]] `(parse-multi-part-pd (resolve-string ~s) ~unit1 ~unit2)))))
+    (mono-fn-call return-type (fn [[s & _]] `(parse-multi-field-interval (resolve-string ~s) ~unit1 ~unit2)))))
 
-(defmethod codegen-call [:parse-multi-part-pd ArrowType$Null ArrowType$Utf8 ArrowType$Utf8] [_] call-returns-null)
+(defmethod codegen-call [:multi-field-interval ArrowType$Null ArrowType$Utf8 ArrowType$Int ArrowType$Utf8 ArrowType$Int] [_] call-returns-null)
 
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]
   {:return-types #{types/bigint-type}

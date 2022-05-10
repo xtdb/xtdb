@@ -1550,72 +1550,71 @@
   (t/are [expected expr data]
     (= (some-> expected edn/period-duration-reader) (project1 expr data))
 
-    nil '(pd-year nil) {}
-    nil '(pd-month nil) {}
-    nil '(pd-day nil) {}
-    nil '(pd-hour nil) {}
-    nil '(pd-minute nil) {}
-    nil '(pd-second nil) {}
+    nil '(single-field-interval nil "YEAR" 2 0) {}
+    nil '(single-field-interval nil "MONTH" 2 0) {}
+    nil '(single-field-interval nil "DAY" 2 0) {}
+    nil '(single-field-interval nil "HOUR" 2 0) {}
+    nil '(single-field-interval nil "MINUTE" 2 0) {}
+    nil '(single-field-interval nil "SECOND" 2 6) {}
 
-    "P0D PT0S" '(pd-year 0) {}
-    "P0D PT0S" '(pd-month 0) {}
-    "P0D PT0S" '(pd-day 0) {}
-    "P0D PT0S" '(pd-hour 0) {}
-    "P0D PT0S" '(pd-minute 0) {}
-    "P0D PT0S" '(pd-second 0) {}
+    "P0D PT0S" '(single-field-interval 0 "YEAR" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "MONTH" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "DAY" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "HOUR" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "MINUTE" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "SECOND" 2 0) {}
 
-    "P0D PT0S" '(pd-year a) {:a 0}
-    "P0D PT0S" '(pd-month a) {:a 0}
-    "P0D PT0S" '(pd-day a) {:a 0}
-    "P0D PT0S" '(pd-hour a) {:a 0}
-    "P0D PT0S" '(pd-minute a) {:a 0}
-    "P0D PT0S" '(pd-second a) {:a 0}
+    "P0D PT0S" '(single-field-interval a "YEAR" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "MONTH" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "DAY" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "HOUR" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "MINUTE" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "SECOND" 2 0) {:a 0}
 
     ;; Y / M distinction is lost when writing to IntervalYear vectors
-    "P12M PT0S" '(pd-year 1) {}
-    "P-24M PT0S" '(pd-year -2) {}
+    "P12M PT0S" '(single-field-interval 1 "YEAR" 2 0) {}
+    "P-24M PT0S" '(single-field-interval -2 "YEAR" 2 0) {}
 
-    "P1M PT0S" '(pd-month 1) {}
-    "P-2M PT0S" '(pd-month -2) {}
+    "P1M PT0S" '(single-field-interval 1 "MONTH" 2 0) {}
+    "P-2M PT0S" '(single-field-interval -2 "MONTH" 2 0) {}
 
-    "P1D PT0S" '(pd-day 1) {}
-    "P-2D PT0S" '(pd-day -2) {}
+    "P1D PT0S" '(single-field-interval 1 "DAY" 2 0) {}
+    "P-2D PT0S" '(single-field-interval -2 "DAY" 2 0) {}
 
-    "P0D PT1H" '(pd-hour 1) {}
-    "P0D PT-2H" '(pd-hour -2) {}
+    "P0D PT1H" '(single-field-interval 1 "HOUR" 2 0) {}
+    "P0D PT-2H" '(single-field-interval -2 "HOUR" 2 0) {}
 
-    "P0D PT1M" '(pd-minute 1) {}
-    "P0D PT-2M" '(pd-minute -2) {}
+    "P0D PT1M" '(single-field-interval 1 "MINUTE" 2 0) {}
+    "P0D PT-2M" '(single-field-interval -2 "MINUTE" 2 0) {}
 
-    "P0D PT1S" '(pd-second 1) {}
-    "P0D PT-2S" '(pd-second -2) {}
+    "P0D PT1S" '(single-field-interval 1 "SECOND" 2 6) {}
+    "P0D PT-2S" '(single-field-interval -2 "SECOND" 2 6) {}
 
     ;; multi part parsing
-    nil '(parse-multi-part-pd nil "YEAR" "MONTH") {}
-    "P0D PT0S" '(parse-multi-part-pd "0-0" "YEAR" "MONTH") {}
-    "P12M PT0S" '(parse-multi-part-pd "1-0" "YEAR" "MONTH") {}
-    "P13M PT0S" '(parse-multi-part-pd "1-1" "YEAR" "MONTH") {}
+    nil '(multi-field-interval nil "YEAR" 2 "MONTH" 2) {}
+    "P0D PT0S" '(multi-field-interval "0-0" "YEAR" 2 "MONTH" 2) {}
+    "P12M PT0S" '(multi-field-interval "1-0" "YEAR" 2 "MONTH" 2) {}
+    "P13M PT0S" '(multi-field-interval "1-1" "YEAR" 2 "MONTH" 2) {}
 
-    "P11D PT12H" '(parse-multi-part-pd "11 12" "DAY" "HOUR") {}
-    "P1D PT-1S" '(parse-multi-part-pd "1 00:00:-01" "DAY" "SECOND") {}
-    "P1D PT2M" '(parse-multi-part-pd "1 00:02" "DAY" "MINUTE") {}
-    "P1D PT23H" '(parse-multi-part-pd "1 23" "DAY" "HOUR") {}
+    "P11D PT12H" '(multi-field-interval "11 12" "DAY" 2 "HOUR" 2) {}
+    "P1D PT-1S" '(multi-field-interval "1 00:00:-01" "DAY" 2 "SECOND" 6) {}
+    "P1D PT2M" '(multi-field-interval "1 00:02" "DAY" 2 "MINUTE" 2) {}
+    "P1D PT23H" '(multi-field-interval "1 23" "DAY" 2 "HOUR" 2) {}
 
-    "P0D PT3H4M-1S" '(parse-multi-part-pd "03:04:-01" "HOUR" "SECOND") {}
-    "P0D PT23H2M" '(parse-multi-part-pd "23:02" "HOUR" "MINUTE") {}
+    "P0D PT3H4M-1S" '(multi-field-interval "03:04:-01" "HOUR" 2 "SECOND" 6) {}
+    "P0D PT23H2M" '(multi-field-interval "23:02" "HOUR" 2 "MINUTE" 2) {}
 
-    "P0D PT44M34S" '(parse-multi-part-pd "44:34" "MINUTE" "SECOND") {}
-    "P0D PT44M34.123456S" '(parse-multi-part-pd "44:34.123456" "MINUTE" "SECOND") {}
+    "P0D PT44M34S" '(multi-field-interval "44:34" "MINUTE" 2 "SECOND" 6) {}
+    "P0D PT44M34.123456S" '(multi-field-interval "44:34.123456" "MINUTE" 2 "SECOND" 6) {}
 
-
-    "P1D PT1.334S" '(parse-multi-part-pd "1 00:00:01.334" "DAY" "SECOND") {}
-    "P0D PT3H4M1.334S" '(parse-multi-part-pd "03:04:1.334" "HOUR" "SECOND") {}
-    "P0D PT44M34.123456789S" '(parse-multi-part-pd "44:34.123456789" "MINUTE" "SECOND") {}
+    "P1D PT1.334S" '(multi-field-interval "1 00:00:01.334" "DAY" 2 "SECOND" 6) {}
+    "P0D PT3H4M1.334S" '(multi-field-interval "03:04:1.334" "HOUR" 2 "SECOND" 6) {}
+    "P0D PT44M34.123456789S" '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 6) {}
     ;; truncates when we can no longer represent the number
-    "P0D PT44M34.123456789S" '(parse-multi-part-pd "44:34.123456789666" "MINUTE" "SECOND") {}))
+    "P0D PT44M34.123456789S" '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 6) {}))
 
 (t/deftest test-multi-part-interval-ex-cases
-  (letfn [(p [unit1 unit2] (project1 (list 'parse-multi-part-pd "0-0" unit1 unit2) {}))]
+  (letfn [(p [unit1 unit2] (project1 (list 'multi-field-interval "0-0" unit1 2 unit2 2) {}))]
     (t/is (thrown-with-msg? IllegalArgumentException #"If YEAR specified as the interval start field, MONTH must be the end field\." (p "YEAR" "DAY")))
     (t/is (thrown-with-msg? IllegalArgumentException #"MONTH is not permitted as the interval start field\." (p "MONTH" "DAY")))
     (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "DAY" "DAY")))
@@ -1625,47 +1624,47 @@
   (t/are [expected expr]
     (= (some-> expected edn/period-duration-reader) (project1 expr {}))
 
-    nil '(+ (pd-year 1) nil)
-    nil '(+ nil (pd-year 1))
+    nil '(+ (single-field-interval 1 "YEAR" 2 0) nil)
+    nil '(+ nil (single-field-interval 1 "YEAR" 2 0))
 
-    nil '(- (pd-year 1) nil)
-    nil '(- nil (pd-year 1))
+    nil '(- (single-field-interval 1 "YEAR" 2 0) nil)
+    nil '(- nil (single-field-interval 1 "YEAR" 2 0))
 
-    nil '(* (pd-year 1) nil)
-    nil '(* nil (pd-year 1))
+    nil '(* (single-field-interval 1 "YEAR" 2 0) nil)
+    nil '(* nil (single-field-interval 1 "YEAR" 2 0))
 
-    "P24M PT0S" '(+ (pd-year 1) (pd-year 1))
-    "P13M PT0S" '(+ (pd-year 1) (pd-month 1))
-    "P11M PT0S" '(+ (pd-year 1) (pd-month -1))
+    "P24M PT0S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
+    "P13M PT0S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+    "P11M PT0S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
 
-    "P12M-1D PT0S" '(+ (pd-year 1) (pd-day -1))
-    "P12M PT-1S" '(+ (pd-year 1) (pd-second -1))
-    "P12M PT1H1S" '(+ (pd-year 1) (pd-hour 1) (pd-second 1))
+    "P12M-1D PT0S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
+    "P12M PT-1S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
+    "P12M PT1H1S" '(+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
 
-    "P0D PT0S" '(- (pd-year 1) (pd-year 1))
-    "P11M PT0S" '(- (pd-year 1) (pd-month 1))
-    "P13M PT0S" '(- (pd-year 1) (pd-month -1))
+    "P0D PT0S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0))
+    "P11M PT0S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0))
+    "P13M PT0S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "MONTH" 2 0))
 
-    "P12M1D PT0S" '(- (pd-year 1) (pd-day -1))
-    "P12M PT1S" '(- (pd-year 1) (pd-second -1))
-    "P12M PT-1H-1S" '(- (pd-year 1) (pd-hour 1) (pd-second 1))
+    "P12M1D PT0S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "DAY" 2 0))
+    "P12M PT1S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval -1 "SECOND" 2 6))
+    "P12M PT-1H-1S" '(- (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "HOUR" 2 0) (single-field-interval 1 "SECOND" 2 6))
 
-    "P36M PT0S" '(* (pd-year 1) 3)
+    "P36M PT0S" '(* (single-field-interval 1 "YEAR" 2 0) 3)
 
-    "P6M PT0S" '(/ (pd-year 1) 2)
-    "P2M PT0S" '(/ (pd-year 1) 5)
+    "P6M PT0S" '(/ (single-field-interval 1 "YEAR" 2 0) 2)
+    "P2M PT0S" '(/ (single-field-interval 1 "YEAR" 2 0) 5)
 
-    "P12M PT0S" '(/ (+ (pd-year 1) (pd-year 1)) 2)
+    "P12M PT0S" '(/ (+ (single-field-interval 1 "YEAR" 2 0) (single-field-interval 1 "YEAR" 2 0)) 2)
 
-    "P0M PT0S" '(/ (pd-month 1) 2)
-    "P1M PT0S" '(/ (pd-month 6) 5)
+    "P0M PT0S" '(/ (single-field-interval 1 "MONTH" 2 0) 2)
+    "P1M PT0S" '(/ (single-field-interval 6 "MONTH" 2 0) 5)
 
-    "P0M PT0S" '(/ (pd-day 1) 2)
-    "P1D PT0S" '(/ (pd-day 6) 5)))
+    "P0M PT0S" '(/ (single-field-interval 1 "DAY" 2 0) 2)
+    "P1D PT0S" '(/ (single-field-interval 6 "DAY" 2 0) 5)))
 
 (t/deftest test-uoe-thrown-for-unsupported-div
-  (t/is (thrown? UnsupportedOperationException (project1 '(/ (+ (pd-month 1) (pd-minute 3)) 3) {})))
-  (t/is (thrown? UnsupportedOperationException (project1 '(/ (+ (pd-month 1) (pd-day 3)) 3) {}))))
+  (t/is (thrown? UnsupportedOperationException (project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "MINUTE" 2 0)) 3) {})))
+  (t/is (thrown? UnsupportedOperationException (project1 '(/ (+ (single-field-interval 1 "MONTH" 2 0) (single-field-interval 3 "DAY" 2 0)) 3) {}))))
 
 (def period-gen
   (tcg/fmap (fn [[y m d]]
@@ -1723,9 +1722,9 @@
   (t/are [expected expr]
     (= (some-> expected edn/period-duration-reader) (project1 expr {}))
 
-    "P0D PT0S" '(abs (pd-year 0))
-    "P12M PT0S" '(abs (pd-year 1))
-    "P12M PT0S" '(abs (pd-year -1))
+    "P0D PT0S" '(abs (single-field-interval 0 "YEAR" 2 0))
+    "P12M PT0S" '(abs (single-field-interval 1 "YEAR" 2 0))
+    "P12M PT0S" '(abs (single-field-interval -1 "YEAR" 2 0))
 
-    "P11M PT0S" '(abs (+ (pd-year -1) (pd-month 1)))
-    "P1D PT-1S" '(abs (+ (pd-day -1) (pd-second 1)))))
+    "P11M PT0S" '(abs (+ (single-field-interval -1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0)))
+    "P1D PT-1S" '(abs (+ (single-field-interval -1 "DAY" 2 0) (single-field-interval 1 "SECOND" 2 6)))))
