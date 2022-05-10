@@ -393,7 +393,6 @@
                                                                       [::xt/delete eid])
                                                                     vts)]))
                                        txs)
-                             first-vt (ffirst history)
                              last-tx (last res)]
 
                          (xt/await-tx *api* last-tx nil)
@@ -403,8 +402,7 @@
                                       [vt (get-in res [tx-idx ::xt/tx-id]) (c/hash-doc (when value
                                                                                          (assoc ivan :value value)))])
 
-                                    (->> (db/entity-history index-snapshot eid :asc
-                                                            {:start {::xt/valid-time first-vt}})
+                                    (->> (db/entity-history index-snapshot eid :asc {})
                                          (map (juxt :vt :tx-id :content-hash)))))))
 
     ;; pairs
