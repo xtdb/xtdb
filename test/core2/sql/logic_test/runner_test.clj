@@ -159,7 +159,7 @@ CREATE UNIQUE INDEX t1i0 ON t1(
                :when (and input
                           (not (slt/skip-record? "xtdb" record))
                           (not (xtdb-engine/skip-statement? input)))
-               :let [tree (p/parse input :start :directly_executable_statement)]]
+               :let [tree (p/parse input :directly_executable_statement)]]
          (if (p/failure? tree)
            (do (when-not (xtdb-engine/parse-create-table input)
                  (swap! failures inc))
