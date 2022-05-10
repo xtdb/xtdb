@@ -12,7 +12,6 @@
 ;; Spike to replace Instaparse.
 
 ;; TODO:
-;; break raw? into const rule-name and dynamic part.
 ;; try inline raw rules in nt.
 ;; check with YourKit.
 ;; sanity check SLT parsing.
@@ -68,7 +67,7 @@
   (parse [_ in idx memos errors?]
     (let [state (.parse parser in idx memos errors?)]
       (ParseState. (when-let [ast (.ast state)]
-                     (if (raw? rule-name ast)
+                     (if (raw? ast)
                        ast
                        [(with-meta
                           (into [rule-name] ast)
@@ -284,8 +283,10 @@
 
 (defn build-ebnf-parser
   ([grammar ws-pattern]
-   (build-ebnf-parser grammar ws-pattern (constantly false)))
-  ([grammar ws-pattern raw?]
+   (build-ebnf-parser grammar ws-pattern (fn [rule-name]
+                                           (fn [ast]
+                                             false))))
+  ([grammar ws-pattern ->raw?]
    (let [rule->id (zipmap (keys grammar) (range))
          rules (object-array (count rule->id))]
      (letfn [(build-parser [{:keys [tag hide] :as parser}]
@@ -321,8 +322,9 @@
        (doseq [[k v] grammar
                :let [rule-id (int (get rule->id k))
                      raw? (if (= {:reduction-type :raw} (:red v))
-                            (constantly true)
-                            raw?)
+                            (fn [ast]
+                              true)
+                            (->raw? k))
                      memo-fn (if (left-recursive? grammar k)
                                ->MemoizeLeftRecParser
                                ->MemoizeParser)
@@ -411,10 +413,13 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
 (def sql-parser (build-ebnf-parser sql-cfg
                                    #"(?:\s+|(?<=\p{Punct})|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
-                                   (fn [rule-name ast]
-                                     (and (= 1 (count ast))
-                                          (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
-                                          (re-find #"(^|_)(term|factor|primary|expression|query_expression_body)$" (name rule-name))))))
+                                   (fn [rule-name]
+                                     (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
+                                              (re-find #"(^|_)(term|factor|primary|expression|query_expression_body)$" (name rule-name)))
+                                       (fn [ast]
+                                         (= 1 (count ast)))
+                                       (fn [ast]
+                                         false)))))
 
 (def parse (memoize
             (fn self
