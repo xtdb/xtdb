@@ -76,7 +76,7 @@
 
 (defmethod parse-record :skipif [[x & xs]]
   (let [[_ database-name] (str/split x #"\s+")]
-    (assoc (parse-record xs) :skipif database-name)))
+    (update (parse-record xs) :skipif (fnil conj []) database-name)))
 
 (defmethod parse-record :onlyif [[x & xs]]
   (let [[_ database-name] (str/split x #"\s+")]
@@ -105,7 +105,7 @@
 ;; Printer
 
 (defn- print-skip-only [{:keys [skipif onlyif] :as record}]
-  (when skipif
+  (doseq [skipif skipif]
     (println "skipif" skipif))
   (when onlyif
     (println "onlyif" onlyif)))
@@ -144,11 +144,10 @@
 
 ;; Runner
 
-(defn- skip-record? [{:keys [db-engine script-mode] :as ctx} {:keys [skipif onlyif] :as record}]
-  (let [db-engine-name (get-engine-name db-engine)]
-    (let [onlyif (or onlyif db-engine-name)]
-      (or (= db-engine-name skipif)
-          (not= db-engine-name onlyif)))))
+(defn skip-record? [db-engine-name {:keys [skipif onlyif] :as record}]
+  (let [onlyif (or onlyif db-engine-name)]
+    (or (contains? (set skipif) db-engine-name)
+        (not= db-engine-name onlyif))))
 
 (defmulti execute-record (fn [_ {:keys [type] :as record}]
                            type))
@@ -164,7 +163,7 @@
   (assoc ctx :max-result-set-size max-result-set-size))
 
 (defmethod execute-record :statement [{:keys [db-engine script-mode] :as ctx} {:keys [mode statement] :as record}]
-  (if (skip-record? ctx record)
+  (if (skip-record? (get-engine-name db-engine) record)
     (do (when (= :completion script-mode)
           (print-record record))
         ctx)
@@ -208,7 +207,7 @@
                                   {:keys [query type-string sort-mode label
                                           result-set-size result-set result-set-md5sum]
                                    :as record}]
-  (if (skip-record? ctx record)
+  (if (skip-record? (get-engine-name db-engine) record)
     (do (when (= :completion script-mode)
           (print-record record))
         ctx)

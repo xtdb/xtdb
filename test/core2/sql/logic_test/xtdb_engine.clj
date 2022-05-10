@@ -178,6 +178,12 @@
      :view-name view-name
      :as query}))
 
+(defn preprocess-query [^String query]
+  (let [query (str/replace query "CROSS JOIN" ",")]
+    (if (re-find #"(?i) FROM " query)
+      query
+      (str query " FROM (VALUES 0) AS no_from"))))
+
 (extend-protocol slt/DbEngine
   Node
   (get-engine-name [_] "xtdb")
@@ -195,8 +201,7 @@
             (execute-statement this direct-sql-data-statement-tree))))))
 
   (execute-query [this query]
-    (let [edited-query (-> query
-                           (str/replace "CROSS JOIN" ","))
+    (let [edited-query (preprocess-query query)
           tree (sql/parse edited-query :query_expression)
           snapshot-factory (tu/component this ::snap/snapshot-factory)
           db (snap/snapshot snapshot-factory)]

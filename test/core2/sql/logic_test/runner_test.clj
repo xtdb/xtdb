@@ -143,19 +143,27 @@ CREATE UNIQUE INDEX t1i0 ON t1(
              (xtdb-engine/insert->docs tables (sql/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement))))))
 
 (comment
-  (dotimes [n 5]
+
+  (doseq [f (->> (file-seq (io/file (io/resource "core2/sql/logic_test/sqlite_test/")))
+                 (filter #(clojure.string/ends-with? % ".test"))
+                 (sort))]
     (time
-     (let [f (format "core2/sql/logic_test/sqlite_test/select%d.test" (inc n))
-           records (slt/parse-script (slurp (io/resource f)))]
+     (let [records (slt/parse-script (slurp f))
+           failures (atom 0)]
        (println f (count records))
        (doseq [{:keys [type statement query] :as record} records
                :let [input (case type
                              :statement statement
-                             :query query
+                             :query (xtdb-engine/preprocess-query query)
                              nil)]
-               :when input
+               :when (and input
+                          (not (slt/skip-record? "xtdb" record))
+                          (not (xtdb-engine/skip-statement? input)))
                :let [tree (sql/parse-sql2011 input :start :directly_executable_statement)]]
          (if-let [failure (instaparse.core/get-failure tree)]
-           (println (or (xtdb-engine/parse-create-table input) failure))
-           (print ".")))
+           (do (when-not (xtdb-engine/parse-create-table input)
+                 (swap! failures inc))
+               #_(println (or (xtdb-engine/parse-create-table input) failure)))
+           #_(print ".")))
+       (println "failures: " @failures)
        (println)))))
