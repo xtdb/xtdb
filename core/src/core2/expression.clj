@@ -476,7 +476,7 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti codegen-call*
   (fn [{:keys [f] :as expr}]
-    f)
+    (keyword f))
   :default ::default)
 
 (defmethod codegen-call* ::default [{:keys [emitted-args] :as expr}]
@@ -623,44 +623,6 @@
   (defmethod codegen-call [f-kw ::types/Object ArrowType$Null] [_] call-returns-null)
   (defmethod codegen-call [f-kw ArrowType$Null ::types/Object] [_] call-returns-null)
   (defmethod codegen-call [f-kw ArrowType$Null ArrowType$Null] [_] call-returns-null))
-
-(defmethod codegen-call [:and ArrowType$Bool ArrowType$Bool] [_]
-  (mono-fn-call types/bool-type #(do `(and ~@%))))
-
-(defmethod codegen-call [:and ArrowType$Bool ArrowType$Null] [_]
-  {:return-types #{types/null-type types/bool-type}
-   :continue-call (fn [f [x-code _]]
-                    `(if-not ~x-code
-                       ~(f types/bool-type false)
-                       ~(f types/null-type nil)))})
-
-(defmethod codegen-call [:and ArrowType$Null ArrowType$Bool] [_]
-  {:return-types #{types/null-type types/bool-type}
-   :continue-call (fn [f [_ y-code]]
-                    `(if-not ~y-code
-                       ~(f types/bool-type false)
-                       ~(f types/null-type nil)))})
-
-(defmethod codegen-call [:and ArrowType$Null ArrowType$Null] [_] call-returns-null)
-
-(defmethod codegen-call [:or ArrowType$Bool ArrowType$Bool] [_]
-  (mono-fn-call types/bool-type #(do `(or ~@%))))
-
-(defmethod codegen-call [:or ArrowType$Bool ArrowType$Null] [_]
-  {:return-types #{types/null-type types/bool-type}
-   :continue-call (fn [f [x-code _]]
-                    `(if ~x-code
-                       ~(f types/bool-type true)
-                       ~(f types/null-type nil)))})
-
-(defmethod codegen-call [:or ArrowType$Null ArrowType$Bool] [_]
-  {:return-types #{types/null-type types/bool-type}
-   :continue-call (fn [f [_ y-code]]
-                    `(if ~y-code
-                       ~(f types/bool-type true)
-                       ~(f types/null-type nil)))})
-
-(defmethod codegen-call [:or ArrowType$Null ArrowType$Null] [_] call-returns-null)
 
 (defmethod codegen-call [:not ArrowType$Bool] [_]
   (mono-fn-call types/bool-type #(do `(not ~@%))))
