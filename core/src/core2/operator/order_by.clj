@@ -3,10 +3,9 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import clojure.lang.Keyword
-           core2.ICursor
+  (:import core2.ICursor
            core2.vector.IIndirectRelation
-           [java.util Comparator List]
+           [java.util Comparator]
            [java.util.function Consumer ToIntFunction]
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator))

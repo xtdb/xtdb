@@ -84,21 +84,24 @@
               right-boxes (HashMap.)
               {cont-r :continue} (expr/codegen-expr {:op :variable, :variable right-col-sym, :idx right-idx-sym}
                                                     (assoc codegen-opts :return-boxes right-boxes))]
-          (eval
-           `(fn [~(-> left-col-sym (expr/with-tag IIndirectVector))
-                 ~(-> right-col-sym (expr/with-tag IIndirectVector))]
-              (let [~@(expr/box-bindings (concat (vals left-boxes) (vals right-boxes)))]
-                (reify IntBinaryOperator
-                  (applyAsInt [_# ~left-idx-sym ~right-idx-sym]
-                    (let [~expr/idx-sym ~left-idx-sym]
+          (-> `(fn [~(-> left-col-sym (expr/with-tag IIndirectVector))
+                    ~(-> right-col-sym (expr/with-tag IIndirectVector))]
+                 (let [~@(expr/box-bindings (concat (vals left-boxes) (vals right-boxes)))]
+                   (reify IntBinaryOperator
+                     (~'applyAsInt [_# ~left-idx-sym ~right-idx-sym]
                       ~(cont-l (fn continue-left [left-type left-code]
                                  (cont-r (fn continue-right [right-type right-code]
-                                           (let [{cont-call :continue-call} (expr/codegen-call {:f (case null-ordering
-                                                                                                     :nulls-first :compare-nulls-first
-                                                                                                     :nulls-last :compare-nulls-last)
-                                                                                                :arg-types [left-type right-type]})]
-                                             (cont-call (fn [_arrow-type code] code)
-                                                        [left-code right-code]))))))))))))))
+                                           (let [{cont :continue}
+                                                 (expr/codegen-call* {:f (case null-ordering
+                                                                           :nulls-first :compare-nulls-first
+                                                                           :nulls-last :compare-nulls-last)
+                                                                      :emitted-args [{:return-types #{left-type}
+                                                                                      :continue (fn [f] (f left-type left-code))}
+                                                                                     {:return-types #{right-type}
+                                                                                      :continue (fn [f] (f right-type right-code))}]})]
+                                             (cont (fn [_arrow-type code] code)))))))))))
+              #_(doto clojure.pprint/pprint)
+              (eval))))
       (memoize)))
 
 (defn ->comparator ^java.util.function.IntBinaryOperator [^IIndirectVector left-col, ^IIndirectVector right-col, null-ordering]

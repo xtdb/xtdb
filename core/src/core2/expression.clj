@@ -480,7 +480,9 @@
   :default ::default)
 
 (def ^:private shortcut-null-args?
-  (complement (comp #{:true? :false? :nil? :boolean} keyword)))
+  (complement (comp #{:true? :false? :nil? :boolean
+                      :compare-nulls-first :compare-nulls-last}
+                    keyword)))
 
 (defmethod codegen-call* ::default [{:keys [f emitted-args] :as expr}]
   (let [shortcut-null? (shortcut-null-args? f)
