@@ -1,20 +1,10 @@
 (ns core2.sql.parser
   (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [instaparse.core :as insta]
-            [instaparse.cfg :as insta-cfg]
-            [core2.sql])
+            [clojure.string :as str])
   (:import java.io.File
            java.nio.IntBuffer
            [java.util ArrayDeque HashMap HashSet List Map]
            [java.util.regex Matcher Pattern]))
-
-;; Spike to replace Instaparse.
-
-;; TODO:
-;; try inline raw rules in nt.
-;; check with YourKit.
-;; sanity check SLT parsing.
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
 ;; https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
@@ -410,7 +400,7 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
      (dotimes [_ 1000]
        (spec-parser in)))))
 
-(def sql-cfg (insta-cfg/ebnf (slurp (io/resource "core2/sql/SQL2011.ebnf"))))
+(def sql-cfg (read-string (slurp (io/resource "core2/sql/SQL2011.edn"))))
 
 (def sql-parser (build-ebnf-parser sql-cfg
                                    #"(?:\s+|(?<=\p{Punct}|\s)|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
@@ -472,8 +462,4 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
     (time
      (dotimes [_ 1000]
-       (sql-parser in :directly_executable_statement)))
-
-    (time
-     (dotimes [_ 1000]
-       (core2.sql/parse-sql2011 in :start :directly_executable_statement)))))
+       (sql-parser in :directly_executable_statement)))))

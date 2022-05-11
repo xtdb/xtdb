@@ -17,8 +17,6 @@
 
         org.roaringbitmap/RoaringBitmap {:mvn/version "0.9.26"}
 
-        instaparse/instaparse {:mvn/version "1.4.11"}
-
         pro.juxt.clojars-mirrors.integrant/integrant {:mvn/version "0.8.0"}
 
         commons-codec/commons-codec {:mvn/version "1.15"}}
@@ -27,11 +25,13 @@
                  :alias :build
                  :fn build/prep}
 
- :aliases {:dev {:extra-paths ["dev"]}
+ :aliases {:dev {:extra-paths ["dev"]
+                 :deps {instaparse/instaparse {:mvn/version "1.4.11"}}}
 
            :build {:deps {io.github.clojure/tools.build {:git/tag "v0.7.7" :git/sha "1474ad6"}}
                    :extra-paths ["dev"]
                    :ns-default build}
 
            :generate-sql-parser {:extra-paths ["dev"]
+                                 :deps {instaparse/instaparse {:mvn/version "1.4.11"}}
                                  :main-opts ["-m" "core2.sql.parser-generator"]}}}
