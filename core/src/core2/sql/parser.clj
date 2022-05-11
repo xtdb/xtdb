@@ -3,7 +3,7 @@
             [clojure.string :as str])
   (:import java.io.File
            java.nio.IntBuffer
-           [java.util ArrayDeque HashMap HashSet List Map Set]
+           [java.util ArrayDeque ArrayList HashMap HashSet List Map Set]
            [java.util.regex Matcher Pattern]))
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
@@ -76,7 +76,7 @@
   (parse [_ in idx memos errors]
     (.parse ^IParser (aget rules rule-id) in idx memos errors)))
 
-(defrecord RuleParser [rule-name ^int rule-id raw? ^IParser parser]
+(defrecord RuleParser [rule-name ast-head ^int rule-id raw? ^IParser parser]
   IParser
   (parse [_ in idx memos errors]
     (when-let [state (.parse parser in idx memos errors)]
@@ -84,7 +84,7 @@
                      (if (raw? ast)
                        ast
                        [(with-meta
-                          (into [rule-name] ast)
+                          (into ast-head ast)
                           {:start-idx idx
                            :end-idx (.idx state)})]))
                    (.idx state)))))
@@ -143,28 +143,30 @@
 (defrecord RepeatParser [^IParser parser ^boolean star?]
   IParser
   (parse [_ in idx memos errors]
-    (loop [ast []
+    (loop [ast (ArrayList.)
            idx idx
            n 0]
       (if-let [state (.parse parser in idx memos errors)]
-        (recur (into ast (.ast state))
+        (recur (doto ast
+                 (.addAll (.ast state)))
                (.idx state)
                (inc n))
         (when (or star? (pos? n))
-          (ParseState. ast idx))))))
+          (ParseState. (vec ast) idx))))))
 
 (defrecord CatParser [^List parsers]
   IParser
   (parse [_ in idx memos errors]
-    (loop [ast []
+    (loop [ast (ArrayList.)
            idx idx
            n 0]
       (if (< n (.size parsers))
         (when-let [state (.parse ^IParser (.get parsers n) in idx memos errors)]
-          (recur (into ast (.ast state))
+          (recur (doto ast
+                   (.addAll (.ast state)))
                  (.idx state)
                  (inc n)))
-        (ParseState. ast idx)))))
+        (ParseState. (vec ast) idx)))))
 
 (defrecord AltParser [^List parsers]
   IParser
@@ -183,11 +185,11 @@
                    state2)
                  (inc n)))))))
 
-(defrecord StringParser [^String string errs]
+(defrecord StringParser [^String string ast errs]
   IParser
   (parse [_ in idx memos errors]
     (if (.regionMatches in true idx string 0 (.length string))
-      (ParseState. [string] (+ idx (.length string)))
+      (ParseState. ast (+ idx (.length string)))
       (.addError errors errs idx))))
 
 (defrecord RegexpParser [^Pattern pattern errs matcher-fn]
@@ -303,7 +305,7 @@
                                                                                         Pattern/CASE_INSENSITIVE)
                                                                        [:expected (:string parser)]
                                                                        (constantly [(:string parser)]))
-                                                       (->StringParser (:string parser) [:expected (:string parser)]))))
+                                                       (->StringParser (:string parser) [(:string parser)] [:expected (:string parser)]))))
                  hide (->HideParser)))]
        (doseq [[k v] grammar
                :let [rule-id (int (get rule->id k))
@@ -314,7 +316,7 @@
                      memo-fn (if (left-recursive? grammar k)
                                ->MemoizeLeftRecParser
                                ->MemoizeParser)
-                     parser (->RuleParser k rule-id raw? (build-parser k v))]]
+                     parser (->RuleParser k [k] rule-id raw? (build-parser k v))]]
          (aset rules rule-id (memo-fn parser)))
        (fn [in start-rule]
          (let [errors (ParseErrors. (HashSet.) 0)]
