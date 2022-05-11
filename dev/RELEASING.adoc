@@ -4,7 +4,7 @@ We could automate more of this than we do, but here's a checklist in the meantim
 
 You can kick off a couple of these in parallel (particularly, `./lein-sub install && ./lein-sub do check, test` takes ~10 mins) but note the various 'await' items.
 
-Version number is `Major.Minor.Patch`, e.g. `1.20.0`.
+Version number is `Major.Minor.Patch`, e.g. `1.21.0`.
 We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[BreakVer].
 
 ## Git tag:
@@ -20,7 +20,7 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 If you're building XTDB locally, run:
 
 . `git clean -dXf`
-. `export XTDB_VERSION=1.20.0` (`set -x XTDB_VERSION=1.20.0` for the fish people)
+. `export XTDB_VERSION=1.21.0` (`set -x XTDB_VERSION=1.21.0` for the fish people)
 . `./lein-sub install && ./lein-sub do check, test`
 . `./lein-sub deploy`
 . (in `labs/corda`): `./gradlew clean publish`

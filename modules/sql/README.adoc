@@ -7,7 +7,7 @@ SQL adapter for XTDB making use of https://calcite.apache.org/[Apache Calcite].
 .deps.edn
 [source,clojure]
 ----
-com.xtdb/xtdb-sql {:mvn/version "1.20.0"}
+com.xtdb/xtdb-sql {:mvn/version "1.21.0"}
 ----
 
 .pom.xml
@@ -16,7 +16,7 @@ com.xtdb/xtdb-sql {:mvn/version "1.20.0"}
 <dependency>
     <groupId>com.xtdb</groupId>
     <artifactId>xtdb-sql</artifactId>
-    <version>1.20.0</version>
+    <version>1.21.0</version>
 </dependency>
 ----
 
