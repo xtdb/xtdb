@@ -1,5 +1,5 @@
 = AWS S3
-:page-aliases: reference::s3.adoc
+:page-aliases: 1.21.0@reference::s3.adoc
 
 You can use AWS's Simple Storage Service (S3) as XTDB's 'document store'.
 

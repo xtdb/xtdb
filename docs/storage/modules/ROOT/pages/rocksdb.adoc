@@ -1,5 +1,5 @@
 = RocksDB
-:page-aliases: reference::rocksdb.adoc
+:page-aliases: 1.21.0@reference::rocksdb.adoc
 
 https://rocksdb.org/[RocksDB] is often used as the data store for XTDB's query indices, but can also be used as a transaction log and/or document store in single node clusters.
 

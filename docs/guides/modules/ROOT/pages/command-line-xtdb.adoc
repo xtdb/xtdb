@@ -7,7 +7,7 @@
 :thumbnail: begin-with-coffee
 :page-thumbnail: {thumbnail}
 :page-thumbnailalt: Command Line XTDB
-:page-aliases: howto::command-line-crux.adoc
+:page-aliases: 1.21.0@howto::command-line-crux.adoc
 
 Without writing a single line of code, this guide will show you how to spin up an in-memory XTDB node on your development machine in less than 2 minutes. Then we'll show you how to talk to it over HTTP from the command line.
 

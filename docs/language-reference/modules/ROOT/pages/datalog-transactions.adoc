@@ -1,5 +1,5 @@
 = Datalog Transactions
-:page-aliases: reference::transactions.adoc
+:page-aliases: 1.21.0@reference::transactions.adoc
 
 Transactions are how you insert and modify data within XTDB.
 

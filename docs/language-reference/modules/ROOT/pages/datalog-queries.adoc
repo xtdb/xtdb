@@ -1,5 +1,5 @@
 = Datalog Queries
-:page-aliases: reference::queries.adoc
+:page-aliases: 1.21.0@reference::queries.adoc
 
 [#intro]
 == Introduction
