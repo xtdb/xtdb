@@ -34,7 +34,7 @@
              l_receiptdate
              (+
               #time/date "1994-01-01"
-              (single-field-interval 1 "YEAR" 2 0)))
+              (single-field-interval "1" "YEAR" 2 0)))
             (>= l_receiptdate #time/date "1994-01-01"))}
           l_shipdate]]]]
       [:table [{x10 "MAIL"} {x10 "SHIP"}]]]]]]]]
