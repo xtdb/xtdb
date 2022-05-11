@@ -17,16 +17,32 @@
 
 (defrecord ParseFailure [^String in errs ^int idx])
 
-(definterface IParser
-  (^core2.sql.parser.ParseState parse [^String in ^int idx ^java.util.Map memos ^java.util.Map errors?]))
+(definterface IParseErrors
+  (^void addError [error ^int idx])
 
-(defn add-error! [^Map errors error ^long idx]
-  (when errors
-    (if-let [^Set errors-at-idx (.get errors idx)]
-      (.add errors-at-idx error)
-      (.put errors idx (doto (HashSet.)
-                         (.add error)))))
-  nil)
+  (^int getIndex []))
+
+(def ^:private null-parse-errors
+  (reify IParseErrors
+    (addError [_ _ _])
+    (getIndex [_] 0)))
+
+(deftype ParseErrors [^Set errs ^:unsynchronized-mutable ^int idx]
+  IParseErrors
+  (addError [this error idx]
+    (cond
+      (= idx (.idx this))
+      (.add errs error)
+
+      (> idx (.idx this))
+      (do (.clear errs)
+          (.add errs error)
+          (set! (.idx this) idx))))
+
+  (getIndex [_] idx))
+
+(definterface IParser
+  (^core2.sql.parser.ParseState parse [^String in ^int idx ^java.util.Map memos ^core2.sql.parser.IParseErrors errors]))
 
 (def ^:private epsilon-err [:expected "<EOF>"])
 
@@ -35,7 +51,7 @@
   (parse [_ in idx memos errors]
     (if (= (.length in) idx)
       (ParseState. [] idx)
-      (add-error! errors epsilon-err idx))))
+      (.addError errors epsilon-err idx))))
 
 (def ^:private ws-err [:expected "<WS>"])
 
@@ -53,7 +69,7 @@
         (.parse parser in idx memos errors)
 
         :else
-        (add-error! errors ws-err idx)))))
+        (.addError errors ws-err idx)))))
 
 (defrecord NonTerminalParser [^int rule-id ^objects rules]
   IParser
@@ -120,8 +136,8 @@
 (defrecord NegParser [^IParser parser]
   IParser
   (parse [_ in idx memos errors]
-    (if-let [state (.parse parser in idx memos nil)]
-      (add-error! errors [:unexpected (subs in idx (.idx state))] idx)
+    (if-let [state (.parse parser in idx memos null-parse-errors)]
+      (.addError errors [:unexpected (subs in idx (.idx state))] idx)
       (ParseState. [] idx))))
 
 (defrecord RepeatParser [^IParser parser ^boolean star?]
@@ -172,7 +188,7 @@
   (parse [_ in idx memos errors]
     (if (.regionMatches in true idx string 0 (.length string))
       (ParseState. [string] (+ idx (.length string)))
-      (add-error! errors errs idx))))
+      (.addError errors errs idx))))
 
 (defrecord RegexpParser [^Pattern pattern errs matcher-fn]
   IParser
@@ -182,7 +198,7 @@
           m (.useTransparentBounds m true)]
       (if (.lookingAt m)
         (ParseState. (matcher-fn m) (.end m))
-        (add-error! errors errs idx)))))
+        (.addError errors errs idx)))))
 
 (defn- left-recursive? [grammar rule-name]
   (let [visited (HashSet.)
@@ -301,12 +317,11 @@
                      parser (->RuleParser k rule-id raw? (build-parser k v))]]
          (aset rules rule-id (memo-fn parser)))
        (fn [in start-rule]
-         (let [errors (HashMap.)]
+         (let [errors (ParseErrors. (HashSet.) 0)]
            (if-let [state (-> ^IParser (build-parser nil (->trailing-ws-parser start-rule))
                               (.parse in 0 (HashMap.) errors))]
              (first (.ast state))
-             (let [[k v] (last (sort-by key errors))]
-               (ParseFailure. in v k)))))))))
+             (ParseFailure. in (.errs errors) (.getIndex errors)))))))))
 
 (comment
 
