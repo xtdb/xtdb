@@ -1078,16 +1078,16 @@
 (defmethod codegen-call [:character-length ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
   (let [[_ unit] (map :literal args)]
     (mono-fn-call types/int-type (case unit
-                                   "CHARACTERS" #(do `(StringUtil/utf8Length ~(first %)))
-                                   "OCTETS" #(do `(.remaining ~(-> (first %) (with-tag ByteBuffer))))))))
+                                   "CHARACTERS" #(do `(StringUtil/utf8Length (resolve-utf8-buf ~(first %))))
+                                   "OCTETS" #(do `(.remaining (resolve-utf8-buf ~(first %))))))))
 
 (defmethod codegen-call [:character-length ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 
 (defmethod codegen-call [:octet-length ArrowType$Utf8] [_]
-  (mono-fn-call types/int-type #(do `(.remaining ~(-> (first %) (with-tag ByteBuffer))))))
+  (mono-fn-call types/int-type #(do `(.remaining (resolve-utf8-buf ~@%)))))
 
 (defmethod codegen-call [:octet-length ArrowType$Binary] [_]
-  (mono-fn-call types/int-type #(do `(.remaining ~(-> (first %) (with-tag ByteBuffer))))))
+  (mono-fn-call types/int-type #(do `(.remaining (resolve-buf ~@%)))))
 
 (defmethod codegen-call [:octet-length ArrowType$Null] [_] call-returns-null)
 
