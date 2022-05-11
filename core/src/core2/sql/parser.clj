@@ -432,6 +432,8 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
   (sql-parser "IN ( col0 * col0 )" :in_predicate_part_2)
 
+  (sql-parser "INTERVAL '3 4' DAY TO HOUR" :interval_literal)
+
   (doseq [sql ["SELECT u.a[0] AS first_el FROM uo"
                "SELECT u.b[u.a[0]] AS dyn_idx FROM u"
                "SELECT 1 YEAR + 3 MONTH + 4 DAY t FROM foo WHERE foo.a = 42"
@@ -444,7 +446,8 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
                "SELECT cor0.col2 AS col2 FROM tab2 AS cor0 GROUP BY col2 HAVING NOT NULL < NULL"
                "SELECT DISTINCT col2 FROM tab1 WHERE NULL BETWEEN NULL AND - col2"
                ;; spec doesn't seem to allow expressions inside IN.
-               "SELECT * FROM tab1 WHERE NULL NOT IN ( col0 * col0 )"]
+               "SELECT * FROM tab1 WHERE NULL NOT IN ( col0 * col0 )"
+               "SELECT INTERVAL '3 4' DAY TO HOUR t FROM foo WHERE foo.a = 42"]
           :let [tree (sql-parser sql :directly_executable_statement)]
           :when (failure? tree)]
     (println (failure->str tree)))
