@@ -1072,9 +1072,11 @@
       (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofSeconds (ensure-single-field-interval-int ~(first %)))))))))
 
 (defn- parse-year-month-literal [s]
-  (let [[match part1 _ part2] (re-find #"^((-|)\d+)\-((-|)\d+)" s)]
+  (let [[match plus-minus part1 part2] (re-find #"^([-+]|)(\d+)\-(\d+)" s)]
     (when match
-      (PeriodDuration. (Period/ofMonths (+ (* 12 (Integer/parseInt part1)) (Integer/parseInt part2))) Duration/ZERO))))
+      (let [months (+ (* 12 (Integer/parseInt part1)) (Integer/parseInt part2))
+            months' (if (= plus-minus "-") (- months) months)]
+        (PeriodDuration. (Period/ofMonths months') Duration/ZERO)))))
 
 (defn- fractional-secs-to->nanos ^long [fractional-secs]
   (if fractional-secs
@@ -1085,59 +1087,78 @@
       (* (Math/pow 10 exp) (Long/parseLong fractional-secs)))
     0))
 
+
 (defn- parse-day-to-second-literal [s unit1 unit2]
-  (case [unit1 unit2]
-    ["DAY" "SECOND"]
-    (let [re #"^((-|)\d+) ((-|)\d+)\:((-|)\d+):((-|)\d+)(\.(\d+)){0,1}$"
-          [match day _ hour _ min _ sec _ _ fractional-secs] (re-find re s)]
-      (when match
-        (PeriodDuration. (Period/of 0 0 (Integer/parseInt day))
-                         (Duration/ofSeconds (+ (* 60 60 (Integer/parseInt hour))
-                                                (* 60 (Integer/parseInt min))
-                                                (Integer/parseInt sec))
-                                             (fractional-secs-to->nanos fractional-secs)))))
-    ["DAY" "MINUTE"]
-    (let [re #"^((-|)\d+) ((-|)\d+)\:((-|)\d+)$"
-          [match day _ hour _ min] (re-find re s)]
-      (when match
-        (PeriodDuration. (Period/of 0 0 (Integer/parseInt day))
-                         (Duration/ofMinutes (+ (* 60 (Integer/parseInt hour))
-                                                (Integer/parseInt min))))))
+  (letfn [(negate-if-minus [plus-minus ^PeriodDuration pd]
+            (if (= "-" plus-minus)
+              (PeriodDuration.
+                (.negated (.getPeriod pd))
+                (.negated (.getDuration pd)))
+              pd))]
+    (case [unit1 unit2]
+      ["DAY" "SECOND"]
+      (let [re #"^([-+]|)(\d+) (\d+)\:(\d+):(\d+)(\.(\d+)){0,1}$"
+            [match plus-minus day hour min sec _ fractional-secs] (re-find re s)]
+        (when match
+          (negate-if-minus
+            plus-minus
+            (PeriodDuration. (Period/of 0 0 (Integer/parseInt day))
+                             (Duration/ofSeconds (+ (* 60 60 (Integer/parseInt hour))
+                                                    (* 60 (Integer/parseInt min))
+                                                    (Integer/parseInt sec))
+                                                 (fractional-secs-to->nanos fractional-secs))))))
+      ["DAY" "MINUTE"]
+      (let [re #"^([-+]|)(\d+) (\d+)\:(\d+)$"
+            [match plus-minus day hour min] (re-find re s)]
+        (when match
+          (negate-if-minus
+            plus-minus
+            (PeriodDuration. (Period/of 0 0 (Integer/parseInt day))
+                             (Duration/ofMinutes (+ (* 60 (Integer/parseInt hour))
+                                                    (Integer/parseInt min)))))))
 
 
-    ["DAY" "HOUR"]
-    (let [re #"^((-|)\d+) ((-|)\d+)$"
-          [match day _ hour] (re-find re s)]
-      (when match
-        (PeriodDuration. (Period/of 0 0 (Integer/parseInt day))
-                         (Duration/ofHours (Integer/parseInt hour)))))
+      ["DAY" "HOUR"]
+      (let [re #"^([-+]|)(\d+) (\d+)$"
+            [match plus-minus day hour] (re-find re s)]
+        (when match
+          (negate-if-minus
+            plus-minus
+            (PeriodDuration. (Period/of 0 0 (Integer/parseInt day))
+                             (Duration/ofHours (Integer/parseInt hour))))))
 
-    ["HOUR" "SECOND"]
-    (let [re #"^((-|)\d+)\:((-|)\d+):((-|)\d+)(\.(\d+)){0,1}$"
-          [match hour _ min _ sec _ _ fractional-secs] (re-find re s)]
-      (when match
-        (PeriodDuration. Period/ZERO
-                         (Duration/ofSeconds (+ (* 60 60 (Integer/parseInt hour))
-                                                (* 60 (Integer/parseInt min))
-                                                (Integer/parseInt sec))
-                                             (fractional-secs-to->nanos fractional-secs)))))
+      ["HOUR" "SECOND"]
+      (let [re #"^([-+]|)(\d+)\:(\d+):(\d+)(\.(\d+)){0,1}$"
+            [match plus-minus hour min sec _ fractional-secs] (re-find re s)]
+        (when match
+          (negate-if-minus
+            plus-minus
+            (PeriodDuration. Period/ZERO
+                             (Duration/ofSeconds (+ (* 60 60 (Integer/parseInt hour))
+                                                    (* 60 (Integer/parseInt min))
+                                                    (Integer/parseInt sec))
+                                                 (fractional-secs-to->nanos fractional-secs))))))
 
-    ["HOUR" "MINUTE"]
-    (let [re #"^((-|)\d+)\:((-|)\d+)$"
-          [match hour _ min] (re-find re s)]
-      (when match
-        (PeriodDuration. Period/ZERO
-                         (Duration/ofMinutes (+ (* 60 (Integer/parseInt hour))
-                                                (Integer/parseInt min))))))
+      ["HOUR" "MINUTE"]
+      (let [re #"^([-+]|)(\d+)\:(\d+)$"
+            [match plus-minus hour min] (re-find re s)]
+        (when match
+          (negate-if-minus
+            plus-minus
+            (PeriodDuration. Period/ZERO
+                             (Duration/ofMinutes (+ (* 60 (Integer/parseInt hour))
+                                                    (Integer/parseInt min)))))))
 
-    ["MINUTE" "SECOND"]
-    (let [re #"^((-|)\d+):((-|)\d+)(\.(\d+)){0,1}$"
-          [match min _ sec _ _ fractional-secs] (re-find re s)]
-      (when match
-        (PeriodDuration. Period/ZERO
-                         (Duration/ofSeconds (+ (* 60 (Integer/parseInt min))
-                                                (Integer/parseInt sec))
-                                             (fractional-secs-to->nanos fractional-secs)))))))
+      ["MINUTE" "SECOND"]
+      (let [re #"^([-+]|)(\d+):(\d+)(\.(\d+)){0,1}$"
+            [match plus-minus min sec _ fractional-secs] (re-find re s)]
+        (when match
+          (negate-if-minus
+            plus-minus
+            (PeriodDuration. Period/ZERO
+                             (Duration/ofSeconds (+ (* 60 (Integer/parseInt min))
+                                                    (Integer/parseInt sec))
+                                                 (fractional-secs-to->nanos fractional-secs)))))))))
 
 (defn parse-multi-field-interval
   "This function is used to parse a 2 field interval literal into a PeriodDuration, e.g '12-03' YEAR TO MONTH."

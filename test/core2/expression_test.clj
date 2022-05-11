@@ -1615,16 +1615,19 @@
 
     ;; multi part parsing
     nil '(multi-field-interval nil "YEAR" 2 "MONTH" 2) {}
+
     "P0D PT0S" '(multi-field-interval "0-0" "YEAR" 2 "MONTH" 2) {}
     "P12M PT0S" '(multi-field-interval "1-0" "YEAR" 2 "MONTH" 2) {}
+    "P12M PT0S" '(multi-field-interval "+1-0" "YEAR" 2 "MONTH" 2) {}
+    "P-12M PT0S" '(multi-field-interval "-1-0" "YEAR" 2 "MONTH" 2) {}
     "P13M PT0S" '(multi-field-interval "1-1" "YEAR" 2 "MONTH" 2) {}
 
     "P11D PT12H" '(multi-field-interval "11 12" "DAY" 2 "HOUR" 2) {}
-    "P1D PT-1S" '(multi-field-interval "1 00:00:-01" "DAY" 2 "SECOND" 6) {}
+    "P-1D PT-1S" '(multi-field-interval "-1 00:00:01" "DAY" 2 "SECOND" 6) {}
     "P1D PT2M" '(multi-field-interval "1 00:02" "DAY" 2 "MINUTE" 2) {}
     "P1D PT23H" '(multi-field-interval "1 23" "DAY" 2 "HOUR" 2) {}
 
-    "P0D PT3H4M-1S" '(multi-field-interval "03:04:-01" "HOUR" 2 "SECOND" 6) {}
+    "P0D PT-3H-4M-1S" '(multi-field-interval "-03:04:01" "HOUR" 2 "SECOND" 6) {}
     "P0D PT23H2M" '(multi-field-interval "23:02" "HOUR" 2 "MINUTE" 2) {}
 
     "P0D PT44M34S" '(multi-field-interval "44:34" "MINUTE" 2 "SECOND" 6) {}
@@ -1634,7 +1637,11 @@
     "P0D PT3H4M1.334S" '(multi-field-interval "03:04:1.334" "HOUR" 2 "SECOND" 6) {}
     "P0D PT44M34.123456789S" '(multi-field-interval "44:34.123456789" "MINUTE" 2 "SECOND" 6) {}
     ;; truncates when we can no longer represent the number
-    "P0D PT44M34.123456789S" '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 6) {}))
+    "P0D PT44M34.123456789S" '(multi-field-interval "44:34.123456789666" "MINUTE" 2 "SECOND" 6) {}
+
+    "P0D PT0.123S" '(multi-field-interval "+00:00.123" "MINUTE" 2 "SECOND" 6) {}
+    "P0D PT0.123S" '(multi-field-interval "00:00.123" "MINUTE" 2 "SECOND" 6) {}
+    "P0D PT-0.123S" '(multi-field-interval "-00:00.123" "MINUTE" 2 "SECOND" 6) {}))
 
 (t/deftest test-multi-part-interval-ex-cases
   (letfn [(p [unit1 unit2] (project1 (list 'multi-field-interval "0-0" unit1 2 unit2 2) {}))]
