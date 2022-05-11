@@ -162,8 +162,9 @@ CREATE UNIQUE INDEX t1i0 ON t1(
                :let [tree (p/parse input :directly_executable_statement)]]
          (if (p/failure? tree)
            (do (when-not (xtdb-engine/parse-create-table input)
-                 (swap! failures inc))
-               #_(println (or (xtdb-engine/parse-create-table input) (p/failure->str failure))))
+                 (when (= 1 (swap! failures inc))
+                   (println (p/failure->str tree))))
+               #_(println (or (xtdb-engine/parse-create-table input) (p/failure->str tree))))
            #_(print ".")))
        (println "failures: " @failures)
        (println)))))
