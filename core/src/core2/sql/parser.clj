@@ -20,7 +20,7 @@
 (definterface IParser
   (^core2.sql.parser.ParseState parse [^String in ^int idx ^java.util.Map memos ^java.util.Map errors?]))
 
-(defn add-error! [^Map errors ^Set error ^long idx]
+(defn add-error! [^Map errors error ^long idx]
   (when errors
     (if-let [^Set errors-at-idx (.get errors idx)]
       (.add errors-at-idx error)
@@ -150,18 +150,22 @@
                  (inc n)))
         (ParseState. ast idx)))))
 
-(defrecord OrdParser [^IParser parser1 ^IParser parser2]
+(defrecord AltParser [^List parsers]
   IParser
   (parse [_ in idx memos errors]
-    (let [state1 (.parse parser1 in idx memos errors)
-          state2 (.parse parser2 in idx memos errors)]
-      (if state1
-        (if state2
-          (if (<= (.idx state2) (.idx state1))
-            state1
-            state2)
-          state1)
-        state2))))
+    (loop [^ParseState state1 nil
+           n 0]
+      (if (= n (.size parsers))
+        state1
+        (let [state2 (.parse ^IParser (.get parsers n) in idx memos errors)]
+          (recur (if state1
+                   (if state2
+                     (if (<= (.idx state2) (.idx state1))
+                       state1
+                       state2)
+                     state1)
+                   state2)
+                 (inc n)))))))
 
 (defrecord StringParser [^String string errs]
   IParser
@@ -263,14 +267,14 @@
                          :star (->RepeatParser (build-parser rule-name (:parser parser)) true)
                          :plus (->RepeatParser (build-parser rule-name (:parser parser)) false)
                          :opt (->OptParser (build-parser rule-name (:parser parser)))
-                         :cat (->CatParser (mapv (partial build-parser rule-name ) (:parsers parser)))
-                         :alt (->> (reverse (:parsers parser))
-                                   (mapv (partial build-parser rule-name ))
-                                   (reduce
-                                    (fn [parser2 parser1]
-                                      (->OrdParser parser1 parser2))))
-                         :ord (->OrdParser (build-parser rule-name (:parser1 parser))
-                                           (build-parser rule-name (:parser2 parser)))
+                         :cat (->CatParser (mapv (partial build-parser rule-name) (:parsers parser)))
+                         :alt (->AltParser (mapv (partial build-parser rule-name) (:parsers parser)))
+                         :ord (->AltParser (->> ((fn step [{:keys [parser1 parser2]}]
+                                                   (cons parser1 (if (= :ord (:tag parser2))
+                                                                   (step parser2)
+                                                                   [parser2])))
+                                                 parser)
+                                                (mapv (partial build-parser rule-name))))
                          :neg (->WhitespaceParser ws-pattern (->NegParser (build-parser rule-name (:parser parser))))
                          :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser))
                          :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser)
