@@ -52,6 +52,10 @@ Any other attributes supplied (`user`, `password`, say) are appended to the URL 
 XTDB uses https://github.com/brettwooldridge/HikariCP[HikariCP] to provide connection pools.
 You can pass options directly to https://javadoc.io/static/com.zaxxer/HikariCP/3.2.0/com/zaxxer/hikari/HikariConfig.html[`HikariConfig`] via `pool-opts` - for example, to `setMaximumPoolSize`, add `maximumPoolSize` to your configuration.
 
+[#timezones]
+To avoid confusion and unexpected behaviours in cases where the database server's timezone differs from the JVM timezone, it is recommended to configure all database servers and JVMs to operate on UTC (e.g. using `-Duser.timezone=UTC`).
+Alternatively, a `serverTimezone` parameter may be configured as part of the JDBC connection `db-spec` configuration (e.g. "serverTimezone": "UTC").
+
 === JDBC as a Transaction Log
 
 [tabs]
