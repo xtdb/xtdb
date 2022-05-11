@@ -475,7 +475,7 @@
       "interval" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Interval arrow-type))))
       minor-type-name)))
 
-(defn field->leg-type [^Field field]
+(defn field->leg-type ^core2.types.LegType [^Field field]
   (let [arrow-type (.getType field)]
     (if (instance? ArrowType$Struct arrow-type)
       (LegType$StructLegType. (->> (.getChildren field) (into #{} (map #(.getName ^Field %)))))

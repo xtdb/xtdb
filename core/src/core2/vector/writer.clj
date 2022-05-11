@@ -97,8 +97,22 @@
                 (.copyRow (.getOffset src-vec src-idx)))))))))
 
 (defn- vec->duv-copier ^core2.vector.IRowCopier [^ValueVector src-vec, ^IDenseUnionWriter dest-col]
-  (-> (.writerForType dest-col (types/field->leg-type (.getField src-vec)))
-      (.rowCopier src-vec)))
+  (let [field (.getField src-vec)
+        leg-type (types/field->leg-type field)]
+    (if (and (.isNullable field)
+             (not (= types/null-type (.getType field))))
+      (let [non-null-copier (-> (.writerForType dest-col leg-type)
+                                (.rowCopier src-vec))
+            null-copier (-> (.writerForType dest-col LegType/NULL)
+                            (.rowCopier src-vec))]
+        (reify IRowCopier
+          (copyRow [_ src-idx]
+            (if (.isNull src-vec src-idx)
+              (.copyRow null-copier src-idx)
+              (.copyRow non-null-copier src-idx)))))
+
+      (-> (.writerForType dest-col leg-type)
+          (.rowCopier src-vec)))))
 
 (declare ^core2.vector.IVectorWriter vec->writer)
 
