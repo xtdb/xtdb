@@ -222,17 +222,11 @@
     {:return-types #{return-type}
      :continue-call (fn [f [a b]] (f return-type `(pd-add ~a ~b)))}))
 
-(defmethod expr/codegen-call [:+ ArrowType$Interval ArrowType$Null] [_] expr/call-returns-null)
-(defmethod expr/codegen-call [:+ ArrowType$Null ArrowType$Interval] [_] expr/call-returns-null)
-
 (defmethod expr/codegen-call [:- ArrowType$Interval ArrowType$Interval] [{:keys [arg-types]}]
   (let [[type-a type-b] arg-types
         return-type (choose-interval-arith-return type-a type-b)]
     {:return-types #{return-type}
      :continue-call (fn [f [a b]] (f return-type `(pd-sub ~a ~b)))}))
-
-(defmethod expr/codegen-call [:- ArrowType$Interval ArrowType$Null] [_] expr/call-returns-null)
-(defmethod expr/codegen-call [:- ArrowType$Null ArrowType$Interval] [_] expr/call-returns-null)
 
 (defn pd-scale ^PeriodDuration [^PeriodDuration pd ^long factor]
   (let [p (.getPeriod pd)
@@ -246,11 +240,6 @@
 (defmethod expr/codegen-call [:* ArrowType$Int ArrowType$Interval] [_]
   {:return-types #{types/interval-month-day-nano-type}
    :continue-call (fn [f [a b]] (f types/interval-month-day-nano-type `(pd-scale ~b ~a)))})
-
-(defmethod expr/codegen-call [:* ArrowType$Interval ArrowType$Null] [_] expr/call-returns-null)
-(defmethod expr/codegen-call [:* ArrowType$Null ArrowType$Int] [_] expr/call-returns-null)
-(defmethod expr/codegen-call [:* ArrowType$Int ArrowType$Null] [_] expr/call-returns-null)
-(defmethod expr/codegen-call [:* ArrowType$Null ArrowType$Interval] [_] expr/call-returns-null)
 
 ;; numeric division for intervals
 ;; can only be supported for Year_Month and Day_Time interval units without
@@ -280,9 +269,6 @@
       {:return-types #{types/interval-day-time-type}
        :continue-call (fn [f [a b]] (f types/interval-day-time-type `(pd-day-time-div ~a ~b)))}
       (throw (UnsupportedOperationException. "Cannot divide mixed period / duration intervals")))))
-
-(defmethod expr/codegen-call [:/ ArrowType$Interval ArrowType$Null] [_] expr/call-returns-null)
-(defmethod expr/codegen-call [:/ ArrowType$Null ArrowType$Int] [_] expr/call-returns-null)
 
 (defn interval-abs-ym
   "In SQL the ABS function can be applied to intervals, negating them if they are below some definition of 'zero' for the components

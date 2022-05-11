@@ -244,12 +244,17 @@
     (fn emit-sum-step [acc-type var-type acc-sym group-idx-sym val-code]
       ;; TODO `DoubleSummaryStatistics` uses 'Kahan's summation algorithm'
       ;; to compensate for rounding errors - should we?
-      (let [{:keys [continue-call]} (expr/codegen-call {:op :call, :f :+, :arg-types [acc-type var-type]})]
+      (let [{:keys [continue]} (expr/codegen-call*
+                                {:op :call, :f :+,
+                                 :emitted-args [{:return-types #{acc-type}
+                                                 :continue (fn [f]
+                                                             (f acc-type (expr/get-value-form var-type acc-sym group-idx-sym)))}
+                                                {:return-types #{var-type}
+                                                 :continue (fn [f]
+                                                             (f var-type val-code))}]})]
         `(let [~(-> acc-sym (expr/with-tag (types/arrow-type->vector-type acc-type))) ~acc-sym]
-           ~(continue-call (fn [arrow-type res-code]
-                             (expr/set-value-form arrow-type acc-sym group-idx-sym res-code))
-                           [(expr/get-value-form var-type acc-sym group-idx-sym)
-                            val-code]))))))
+           ~(continue (fn [arrow-type res-code]
+                        (expr/set-value-form arrow-type acc-sym group-idx-sym res-code))))))))
 
 (defmethod ->aggregate-factory :avg [_ ^String from-name, ^String to-name]
   (let [sum-agg (->aggregate-factory :sum from-name "sum")

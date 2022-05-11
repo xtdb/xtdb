@@ -479,23 +479,35 @@
     (keyword f))
   :default ::default)
 
-(defmethod codegen-call* ::default [{:keys [emitted-args] :as expr}]
-  (let [all-arg-types (reduce (fn [acc {:keys [return-types]}]
+(def ^:private shortcut-null-args?
+  (complement (comp #{:true? :false? :nil? :boolean} keyword)))
+
+(defmethod codegen-call* ::default [{:keys [f emitted-args] :as expr}]
+  (let [shortcut-null? (shortcut-null-args? f)
+
+        all-arg-types (reduce (fn [acc {:keys [return-types]}]
                                 (for [el acc
                                       return-type return-types]
                                   (conj el return-type)))
                               [[]]
                               emitted-args)
 
-        emitted-calls (->> (for [arg-types all-arg-types]
+        emitted-calls (->> (for [arg-types all-arg-types
+                                 :when (or (not shortcut-null?)
+                                           (every? #(not= types/null-type %) arg-types))]
                              (MapEntry/create arg-types
                                               (codegen-call (assoc expr
                                                                    :args emitted-args
                                                                    :arg-types arg-types))))
                            (into {}))
 
-        return-types (->> emitted-calls
-                          (into #{} (mapcat (comp :return-types val))))]
+        return-types (cond-> (->> emitted-calls
+                                  (into #{} (mapcat (comp :return-types val))))
+                       (and shortcut-null?
+                            (some #(= types/null-type %)
+                                  (sequence cat all-arg-types)))
+                       (conj types/null-type))]
+
 
     {:return-types return-types
      :continue (fn continue-call-expr [handle-emitted-expr]
@@ -504,8 +516,10 @@
                                  ;; step: emit this arg, and pass it through to the inner build-fn
                                  (fn continue-building-args [arg-types emitted-args]
                                    (continue-this-arg (fn [arg-type emitted-arg]
-                                                        (build-next-arg (conj arg-types arg-type)
-                                                                        (conj emitted-args emitted-arg))))))
+                                                        (if (and shortcut-null? (= arg-type types/null-type))
+                                                          (handle-emitted-expr types/null-type nil)
+                                                          (build-next-arg (conj arg-types arg-type)
+                                                                          (conj emitted-args emitted-arg)))))))
 
                                ;; innermost fn - we're done, call continue-call for these types
                                (fn call-with-built-args [arg-types emitted-args]
@@ -573,9 +587,6 @@
                     (f return-type (-> emitted-args wrap-args-f)))
    :return-types #{return-type}})
 
-(def call-returns-null
-  (mono-fn-call ArrowType$Null/INSTANCE (constantly nil)))
-
 (doseq [[f-kw cmp] [[:< #(do `(neg? ~%))]
                     [:<= #(do `(not (pos? ~%)))]
                     [:> #(do `(pos? ~%))]
@@ -619,15 +630,8 @@
 (defmethod codegen-call [:<> ::types/Object ::types/Object] [_]
   (mono-fn-call types/bool-type #(do `(not= ~@%))))
 
-(doseq [f-kw #{:= :< :<= :> :>= :<>}]
-  (defmethod codegen-call [f-kw ::types/Object ArrowType$Null] [_] call-returns-null)
-  (defmethod codegen-call [f-kw ArrowType$Null ::types/Object] [_] call-returns-null)
-  (defmethod codegen-call [f-kw ArrowType$Null ArrowType$Null] [_] call-returns-null))
-
 (defmethod codegen-call [:not ArrowType$Bool] [_]
   (mono-fn-call types/bool-type #(do `(not ~@%))))
-
-(defmethod codegen-call [:not ArrowType$Null] [_] call-returns-null)
 
 (defmethod codegen-call [:true? ArrowType$Bool] [_]
   (mono-fn-call types/bool-type #(do `(true? ~@%))))
@@ -689,7 +693,6 @@
    :return-types #{x-type}})
 
 (defmethod codegen-call [:- ::types/Number] [{[x-type] :arg-types}] (mono-fn-call x-type #(do `(- ~@%))))
-(defmethod codegen-call [:- ArrowType$Null] [_] call-returns-null)
 
 (defmethod codegen-call [:* ArrowType$Int ArrowType$Int] [{:keys [arg-types]}]
   (let [^ArrowType$Int return-type (types/least-upper-bound arg-types)
@@ -718,6 +721,7 @@
   (mono-fn-call (types/least-upper-bound arg-types)
                 #(do `(/ ~@%))))
 
+;; TODO extend min/max to non-numeric
 (defmethod codegen-call [:max ::types/Number ::types/Number] [{:keys [arg-types]}]
   (mono-fn-call (types/least-upper-bound arg-types)
                 #(do `(Math/max ~@%))))
@@ -733,21 +737,8 @@
   (mono-fn-call types/float8-type (fn [[base x]]
                                     `(/ (Math/log ~x) (Math/log ~base)))))
 
-(doseq [f #{:+ :- :* :/ :mod :min :max :power :log}]
-  (defmethod codegen-call [f ::types/Number ArrowType$Null] [_] call-returns-null)
-  (defmethod codegen-call [f ArrowType$Null ::types/Number] [_] call-returns-null)
-  (defmethod codegen-call [f ArrowType$Null ArrowType$Null] [_] call-returns-null))
-
 (defmethod codegen-call [:double ::types/Number] [_]
   (mono-fn-call types/float8-type #(do `(double ~@%))))
-
-(defmethod codegen-call [:double ArrowType$Null] [_] call-returns-null)
-
-;; TODO extend min/max to non-numeric - numeric handled by `java.lang.Math`, below
-(doseq [f #{:min :max}]
-  (defmethod codegen-call [f ::types/Number ArrowType$Null] [_] call-returns-null)
-  (defmethod codegen-call [f ArrowType$Null ::types/Number] [_] call-returns-null)
-  (defmethod codegen-call [f ArrowType$Null ArrowType$Null] [_] call-returns-null))
 
 (defn like->regex [like-pattern]
   (-> like-pattern
@@ -765,10 +756,6 @@
                                              (like->regex literal)
                                              `(like->regex (resolve-string ~needle-code)))
                                           (resolve-string ~haystack-code)))))})
-
-(defmethod codegen-call [:like ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
-(defmethod codegen-call [:like ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
-(defmethod codegen-call [:like ArrowType$Null ArrowType$Null] [_] call-returns-null)
 
 (defn binary->hex-like-pattern
   "Returns a like pattern that will match on binary encoded to hex.
@@ -822,9 +809,6 @@
                                              `(like->regex (binary->hex-like-pattern (buf->bytes ~needle-code))))
                                           (Hex/encodeHexString (buf->bytes ~haystack-code))))))})
 
-(defmethod codegen-call [:like ArrowType$Binary ArrowType$Null] [_] call-returns-null)
-(defmethod codegen-call [:like ArrowType$Null ArrowType$Binary] [_] call-returns-null)
-
 (defmethod codegen-call [:like-regex ArrowType$Utf8 ArrowType$Utf8 ArrowType$Utf8]
   [{:keys [args]}]
   (let [[_ re-literal flags] (map :literal args)
@@ -843,10 +827,6 @@
                                                (Pattern/compile re-literal flag-int)
                                                `(Pattern/compile (resolve-string ~needle-code) ~flag-int))
                                             (resolve-string ~haystack-code)))))}))
-
-(defmethod codegen-call [:like-regex ArrowType$Utf8 ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
-(defmethod codegen-call [:like-regex ArrowType$Null ArrowType$Utf8 ArrowType$Utf8] [_] call-returns-null)
-(defmethod codegen-call [:like-regex ArrowType$Null ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 
 ;; apache commons has these functions but did not think they were worth the dep.
 ;; replace if we ever put commons on classpath.
@@ -909,12 +889,6 @@
                        `(ByteBuffer/wrap (.getBytes (sql-trim (resolve-string ~s) (resolve-string ~trim-spec) (resolve-string ~trim-char))
                                                     StandardCharsets/UTF_8))))})
 
-(defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ArrowType$Utf8] [_] call-returns-null)
-
-(defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
-
-(defmethod codegen-call [:trim ArrowType$Utf8 ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
-
 (defn- binary-trim-leading
   [^bytes bin trim-octet]
   (let [trim-octet (byte trim-octet)]
@@ -962,12 +936,6 @@
                     (f types/varbinary-type
                        `(ByteBuffer/wrap (binary-trim (resolve-bytes ~s) (resolve-string ~trim-spec) (first (resolve-bytes ~trim-octet))))))})
 
-(defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ArrowType$Binary] [_] call-returns-null)
-
-(defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
-
-(defmethod codegen-call [:trim ArrowType$Binary ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
-
 (defmethod codegen-call [:trim ArrowType$Binary ArrowType$Utf8 ::types/Number] [_]
   {:return-types #{types/varbinary-type}
    :continue-call (fn [f [s trim-spec trim-octet]]
@@ -975,15 +943,11 @@
                        ;; should we throw an explicit error if no good cast to byte is possible?
                        `(ByteBuffer/wrap (binary-trim (resolve-bytes ~s) (resolve-string ~trim-spec) (byte ~trim-octet)))))})
 
-(defmethod codegen-call [:trim ArrowType$Null ArrowType$Utf8 ::types/Number] [_] call-returns-null)
-
 (defmethod codegen-call [:upper ArrowType$Utf8] [_]
   (mono-fn-call
     types/varchar-type
     (fn [[code]]
       `(ByteBuffer/wrap (.getBytes (.toUpperCase (resolve-string ~code)) StandardCharsets/UTF_8)))))
-
-(defmethod codegen-call [:upper ArrowType$Null] [_] call-returns-null)
 
 (defmethod codegen-call [:lower ArrowType$Utf8] [_]
   (mono-fn-call
@@ -991,17 +955,11 @@
     (fn [[code]]
       `(ByteBuffer/wrap (.getBytes (.toLowerCase (resolve-string ~code)) StandardCharsets/UTF_8)))))
 
-(defmethod codegen-call [:lower ArrowType$Null] [_] call-returns-null)
-
 ;; todo high perf variadic version, or specialisation for arity up to N.
 (defmethod codegen-call [:concat ArrowType$Utf8 ArrowType$Utf8] [_]
   (mono-fn-call types/varchar-type (fn [[a b]]
                                      `(ByteBuffer/wrap (.getBytes (str (resolve-string ~a) (resolve-string ~b))
                                                                   StandardCharsets/UTF_8)))))
-
-(defmethod codegen-call [:concat ArrowType$Null ArrowType$Null] [_] call-returns-null)
-(defmethod codegen-call [:concat ArrowType$Utf8 ArrowType$Null] [_] call-returns-null)
-(defmethod codegen-call [:concat ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
 
 (defn bconcat ^bytes [^bytes b1 ^bytes b2]
   (let [ret (byte-array (+ (alength b1) (alength b2)))]
@@ -1011,9 +969,6 @@
 
 (defmethod codegen-call [:concat ArrowType$Binary ArrowType$Binary] [_]
   (mono-fn-call types/varbinary-type (fn [[a b]] `(ByteBuffer/wrap (bconcat (resolve-bytes ~a) (resolve-bytes ~b))))))
-
-(defmethod codegen-call [:concat ArrowType$Binary ArrowType$Null] [_] call-returns-null)
-(defmethod codegen-call [:concat ArrowType$Null ArrowType$Binary] [_] call-returns-null)
 
 (defn resolve-utf8-buf ^ByteBuffer [s-or-buf]
   (if (instance? ByteBuffer s-or-buf)
@@ -1030,28 +985,17 @@
    :continue-call (fn [f [x start length use-len]]
                     (f types/varbinary-type `(StringUtil/sqlBinSubstring (resolve-buf ~x) ~start ~length ~use-len)))})
 
-;; nil specialisation for substring
-(doseq [a [ArrowType$Utf8 ArrowType$Binary ArrowType$Null]
-        b [ArrowType$Int ArrowType$Null]
-        c [ArrowType$Int ArrowType$Null]
-        :when (some #(= ArrowType$Null %) [a b c])]
-  (defmethod codegen-call [:substring a b c ArrowType$Bool] [_] call-returns-null))
-
 (defmethod codegen-call [:character-length ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
   (let [[_ unit] (map :literal args)]
     (mono-fn-call types/int-type (case unit
                                    "CHARACTERS" #(do `(StringUtil/utf8Length (resolve-utf8-buf ~(first %))))
                                    "OCTETS" #(do `(.remaining (resolve-utf8-buf ~(first %))))))))
 
-(defmethod codegen-call [:character-length ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
-
 (defmethod codegen-call [:octet-length ArrowType$Utf8] [_]
   (mono-fn-call types/int-type #(do `(.remaining (resolve-utf8-buf ~@%)))))
 
 (defmethod codegen-call [:octet-length ArrowType$Binary] [_]
   (mono-fn-call types/int-type #(do `(.remaining (resolve-buf ~@%)))))
-
-(defmethod codegen-call [:octet-length ArrowType$Null] [_] call-returns-null)
 
 (defmethod codegen-call [:position ArrowType$Utf8 ArrowType$Utf8 ArrowType$Utf8] [{:keys [args]}]
   (let [[_ _ unit] (map :literal args)]
@@ -1064,24 +1008,8 @@
          "OCTETS"
          (f types/int-type `(StringUtil/SqlBinPosition (resolve-utf8-buf ~needle) (resolve-utf8-buf ~haystack)))))}))
 
-(defmethod codegen-call [:position ArrowType$Utf8 ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
-(defmethod codegen-call [:position ArrowType$Null ArrowType$Utf8 ArrowType$Utf8] [_] call-returns-null)
-(defmethod codegen-call [:position ArrowType$Null ArrowType$Null ArrowType$Utf8] [_] call-returns-null)
-
 (defmethod codegen-call [:position ArrowType$Binary ArrowType$Binary] [_]
   (mono-fn-call types/int-type (fn [[needle haystack]] `(StringUtil/SqlBinPosition (resolve-buf ~needle) (resolve-buf ~haystack)))))
-
-(defmethod codegen-call [:position ArrowType$Binary ArrowType$Null] [_] call-returns-null)
-(defmethod codegen-call [:position ArrowType$Null ArrowType$Binary] [_] call-returns-null)
-(defmethod codegen-call [:position ArrowType$Null ArrowType$Null] [_] call-returns-null)
-
-;; instantiate defaults for overlay, 4 nilable args is too much to list!
-(doseq [target [ArrowType$Utf8 ArrowType$Binary ArrowType$Null]
-        replacement [ArrowType$Utf8 ArrowType$Binary ArrowType$Null]
-        start [ArrowType$Int ArrowType$Null]
-        len [ArrowType$Int ArrowType$Null]
-        :when (some #(= ArrowType$Null %) [target replacement start len])]
-  (defmethod codegen-call [:overlay target replacement start len] [_] call-returns-null))
 
 (defmethod codegen-call [:overlay ArrowType$Utf8 ArrowType$Utf8 ArrowType$Int ArrowType$Int] [_]
   (mono-fn-call
@@ -1094,8 +1022,6 @@
     types/varbinary-type
     (fn [[target replacement from len]]
       `(StringUtil/sqlBinOverlay (resolve-buf ~target) (resolve-buf ~replacement) ~from ~len))))
-
-(defmethod codegen-call [:default-overlay-length ArrowType$Null] [_] call-returns-null)
 
 (defmethod codegen-call [:default-overlay-length ArrowType$Utf8] [_]
   (mono-fn-call types/int-type #(do `(StringUtil/utf8Length (resolve-utf8-buf ~@%)))))
@@ -1118,8 +1044,6 @@
       (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofMinutes ~(first %)))))
       "SECOND"
       (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofSeconds ~(first %))))))))
-
-(defmethod codegen-call [:single-field-interval ArrowType$Null ArrowType$Utf8 ArrowType$Int ArrowType$Int] [_] call-returns-null)
 
 (defn- parse-year-month-literal [s]
   (let [[match part1 _ part2] (re-find #"^((-|)\d+)\-((-|)\d+)" s)]
@@ -1222,8 +1146,6 @@
         ;; todo choose a more specific representation when possible
         return-type types/interval-month-day-nano-type]
     (mono-fn-call return-type (fn [[s & _]] `(parse-multi-field-interval (resolve-string ~s) ~unit1 ~unit2)))))
-
-(defmethod codegen-call [:multi-field-interval ArrowType$Null ArrowType$Utf8 ArrowType$Int ArrowType$Utf8 ArrowType$Int] [_] call-returns-null)
 
 (defmethod codegen-call [:extract ArrowType$Utf8 ArrowType$Timestamp] [{[{field :literal} _] :args}]
   {:return-types #{types/bigint-type}
@@ -1407,8 +1329,6 @@
                     (f numeric-type
                        `(Math/abs ~@emitted-args)))})
 
-(defmethod codegen-call [:abs ArrowType$Null] [_] call-returns-null)
-
 (doseq [[math-op math-method] {:sin 'Math/sin
                                :cos 'Math/cos
                                :tan 'Math/tan
@@ -1428,9 +1348,7 @@
     {:return-types #{types/float8-type}
      :continue-call (fn [f emitted-args]
                       (f types/float8-type
-                         `(~math-method ~@emitted-args)))})
-
-  (defmethod codegen-call [math-op ArrowType$Null] [_] call-returns-null))
+                         `(~math-method ~@emitted-args)))}))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti set-value-form

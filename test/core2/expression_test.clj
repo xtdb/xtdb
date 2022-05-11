@@ -264,6 +264,29 @@
     (t/is (= [3 nil nil nil]
              (run-test '+ [1 1 nil nil] [2 nil 2 nil])))))
 
+(t/deftest test-method-too-large-147
+  (letfn [(run-test [form]
+            (with-open [rel (open-rel [(tu/->mono-vec "a" (FieldType/nullable types/bigint-type) [1 nil 3])
+                                       (tu/->mono-vec "b" (FieldType/nullable types/float8-type) [1.2 5.3 nil])
+                                       (tu/->mono-vec "c" (FieldType/nullable types/bigint-type) [2 nil 8])
+                                       (tu/->mono-vec "d" (FieldType/nullable types/float8-type) [3.4 nil 5.3])
+                                       (tu/->mono-vec "e" (FieldType/nullable types/bigint-type) [8 5 3])])]
+              (-> (run-projection rel form)
+                  :res)))]
+
+    ;; SLT select2
+
+    (t/is (= [63.0 nil nil]
+             (run-test '(+ a (* b 2) (* c 3) (* d 4) (* e 5)))))
+
+    (t/is (= [1 5.3 3]
+             (run-test '(coalesce a b c d e))))
+
+    (t/is (= [false nil true]
+             (run-test '(and (<> (coalesce a b c d e) 0)
+                             (> c d)
+                             (or (<= c (- d 2)) (>= c (+ d 2)))))))))
+
 (t/deftest test-variadics
   (letfn [(run-test [f x y z]
             (with-open [rel (open-rel [(tu/->mono-vec "x" types/bigint-type [x])
