@@ -118,6 +118,10 @@
 
     (let [db (xt/db *api* {::xt/tx-id 0})]
       (t/is (= 1 (:version (xt/entity db :foo))))
+      (t/is (= 1 (count (xt/entity-history db :foo :asc {}))))
 
       (t/is (= #{[1]} (xt/q db '{:find [?version]
-                                 :where [[?e :version ?version]]}))))))
+                                 :where [[?e :version ?version]]}))))
+
+    (let [db (xt/db *api* {::xt/tx-id 1})]
+      (t/is (= 1 (count (xt/entity-history db :foo :asc {:start-tx {::xt/tx-id 1}})))))))

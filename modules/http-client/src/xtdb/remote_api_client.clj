@@ -170,8 +170,6 @@
                   eids)
            (mapv first))))
 
-  ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
-  ;; as the new Java ones?
   (entity-history [this eid sort-order] (xt/entity-history this eid sort-order {}))
 
   (entity-history [this eid sort-order opts]
