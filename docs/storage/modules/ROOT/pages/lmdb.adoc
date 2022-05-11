@@ -30,6 +30,9 @@ pom.xml::
 ----
 ====
 
+If you're using LMDB and seeing out-of-memory issues, you will likely want to configure the JVM parameter `MaxDirectMemorySize` (e.g. `-XX:MaxDirectMemorySize=1024m`), because the default value varies by JVM and could be unbounded (e.g. in the case of `openjdk-11`, confirmed using `-XX:+PrintFinalFlags`).
+Ensure that the sum of `MaxDirectMemorySize` and `Xmx` memory is available from the system, and be aware that consumption of direct memory may be shared with any other processes running on the system.
+
 == Using LMDB
 
 Replace the implementation of the desired component with `+xtdb.lmdb/->kv-store+`
