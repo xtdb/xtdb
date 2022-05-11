@@ -1650,6 +1650,20 @@
     (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "DAY" "DAY")))
     (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "MINUTE" "HOUR")))))
 
+(tct/defspec single-field-interval-string-parse-same-as-int-prop
+  (tcp/for-all [i (tcg/choose -99 99)
+                unit (tcg/elements ["YEAR" "MONTH" "DAY" "HOUR" "MINUTE" "SECOND"])
+                include-plus tcg/boolean]
+    (= (project1 (list 'single-field-interval i unit 2 (if (= "SECOND" unit) 6 0)) {})
+       (project1 (list 'single-field-interval
+                       (cond (neg? i) (str i)
+                             include-plus (str "+" i)
+                             :else (str i))
+                       unit
+                       2
+                       (if (= "SECOND" unit) 6 0))
+                 {}))))
+
 (t/deftest test-interval-arithmetic
   (t/are [expected expr]
     (= (some-> expected edn/period-duration-reader) (project1 expr {}))
