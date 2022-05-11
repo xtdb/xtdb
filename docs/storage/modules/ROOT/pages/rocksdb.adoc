@@ -29,6 +29,8 @@ pom.xml::
 ====
 
 If you're using RocksDB and seeing out-of-memory issues, we recommend setting the environment variable `MALLOC_ARENA_MAX=2` - see link:https://github.com/facebook/rocksdb/issues/4112[this issue] for more details.
+You will likely also want to configure the JVM parameter `MaxDirectMemorySize` (e.g. `-XX:MaxDirectMemorySize=1024m`), because the default value varies by JVM and could be unbounded (e.g. in the case of `openjdk-11`, confirmed using `-XX:+PrintFinalFlags`).
+Ensure that the sum of `MaxDirectMemorySize` and `Xmx` memory is available from the system, and be aware that consumption of direct memory may be shared with any other processes running on the system.
 
 == Using RocksDB
 
