@@ -207,7 +207,8 @@
   IParser
   (parse [_ in idx memos errors?]
     (let [m (.matcher pattern in)
-          m (.region m idx (.length in))]
+          m (.region m idx (.length in))
+          m (.useTransparentBounds m true)]
       (if (.lookingAt m)
         (ParseState. (matcher-fn m) nil (.end m))
         (ParseState. nil errs idx)))))
@@ -412,7 +413,7 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 (def sql-cfg (insta-cfg/ebnf (slurp (io/resource "core2/sql/SQL2011.ebnf"))))
 
 (def sql-parser (build-ebnf-parser sql-cfg
-                                   #"(?:\s+|(?<=\p{Punct})|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
+                                   #"(?:\s+|(?<=\p{Punct}|\s)|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
                                    (fn [rule-name]
                                      (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
                                               (re-find #"(^|_)(term|factor|primary|expression|query_expression_body)$" (name rule-name)))
@@ -437,13 +438,23 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
 
   (sql-parser "a[0]" :value_expression_primary)
 
+  (sql-parser "- - 2" :factor)
+
+  (sql-parser "IN ( col0 * col0 )" :in_predicate_part_2)
+
   (doseq [sql ["SELECT u.a[0] AS first_el FROM uo"
                "SELECT u.b[u.a[0]] AS dyn_idx FROM u"
                "SELECT 1 YEAR + 3 MONTH + 4 DAY t FROM foo WHERE foo.a = 42"
                "SELECT 3 * 1 YEAR t FROM foo WHERE foo.a = 42"
                "SELECT foo.a YEAR + 1 MONTH + 2 DAY t FROM foo WHERE foo.a = 42"
                "SELECT foo.a YEAR + 1 MONTH - 2 DAY t FROM foo WHERE foo.a = 42"
-               "SELECT foo.a || 'a' || 'b' t FROM foo WHERE foo.a = 42"]
+               "SELECT foo.a || 'a' || 'b' t FROM foo WHERE foo.a = 42"
+               "SELECT ALL 4 AS col1 FROM tab2 AS cor0 WHERE NULL IS NULL"
+               "SELECT ALL 74 * - COALESCE ( + CASE - CASE WHEN NOT ( NOT - 79 >= NULL ) THEN 48 END WHEN + + COUNT ( * ) THEN 6 END, MIN ( ALL + - 30 ) * 45 * 77 ) * - 14 FROM (VALUES 0) AS no_from"
+               "SELECT cor0.col2 AS col2 FROM tab2 AS cor0 GROUP BY col2 HAVING NOT NULL < NULL"
+               "SELECT DISTINCT col2 FROM tab1 WHERE NULL BETWEEN NULL AND - col2"
+               ;; spec doesn't seem to allow expressions inside IN.
+               "SELECT * FROM tab1 WHERE NULL NOT IN ( col0 * col0 )"]
           :let [tree (sql-parser sql :directly_executable_statement)]
           :when (failure? tree)]
     (println (failure->str tree)))
