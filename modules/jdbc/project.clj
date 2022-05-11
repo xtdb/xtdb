@@ -17,7 +17,7 @@
                  [pro.juxt.clojars-mirrors.com.github.seancorfield/next.jdbc "1.2.674"]
                  [org.clojure/java.data "1.0.86"]
                  [com.zaxxer/HikariCP "3.4.5"]
-                 [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1"]
+                 [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1-2"]
 
                  ;; Sample driver dependencies
                  [org.postgresql/postgresql "42.2.18" :scope "provided"]

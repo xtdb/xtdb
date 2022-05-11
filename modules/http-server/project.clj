@@ -20,7 +20,7 @@
                  [com.nimbusds/nimbus-jose-jwt "9.7"]
 
                  [pro.juxt.clojars-mirrors.hiccup/hiccup "2.0.0-alpha2"]
-                 [pro.juxt.clojars-mirrors.crux/crux-http-server-deps "0.0.2"]
+                 [pro.juxt.clojars-mirrors.xtdb/xtdb-http-server-deps "0.0.2"]
                  [pro.juxt.clojars-mirrors.camel-snake-kebab/camel-snake-kebab "0.4.2"]]
 
   :clean-targets ^{:protect false} ["target"]

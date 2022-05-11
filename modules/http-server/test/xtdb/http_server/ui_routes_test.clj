@@ -10,7 +10,7 @@
             [xtdb.fixtures :as fix :refer [*api*]]
             [xtdb.fixtures.http-server :as fh :refer [*api-url*]]
             [xtdb.http-server.entity-ref :as entity-ref]
-            [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as json]
+            [juxt.clojars-mirrors.jsonista.v0v3v5.jsonista.core :as json]
             [xtdb.query-state :as cqs])
   (:import java.io.InputStream))
 

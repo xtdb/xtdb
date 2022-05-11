@@ -9,7 +9,7 @@
             [xtdb.http-server.json :as http-json]
             [xtdb.http-server.util :as util]
             [xtdb.io :as xio]
-            [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as j]
+            [juxt.clojars-mirrors.jsonista.v0v3v5.jsonista.core :as j]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
             [juxt.clojars-mirrors.spec-tools.v0v10v5.spec-tools.core :as st])

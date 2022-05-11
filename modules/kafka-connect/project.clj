@@ -23,7 +23,7 @@
                  [com.xtdb/xtdb-http-client]
                  [org.clojure/tools.logging "1.1.0"]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
-                 [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1"]
+                 [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1-2"]
                  [com.cognitect/transit-clj "1.0.324"]
                  [org.slf4j/slf4j-api "1.7.30"]]
 

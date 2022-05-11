@@ -3,7 +3,7 @@
             [xtdb.codec :as c]
             [xtdb.http-server.entity-ref :as entity-ref]
             [xtdb.io :as xio]
-            [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as j]
+            [juxt.clojars-mirrors.jsonista.v0v3v5.jsonista.core :as j]
             [juxt.clojars-mirrors.camel-snake-kebab.v0v4v2.camel-snake-kebab.core :as csk]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc])
   (:import clojure.lang.IPersistentList
