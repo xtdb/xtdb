@@ -30,7 +30,7 @@
                o_orderdate
                (+
                 #time/date "1994-01-01"
-                #time/period-duration "P1Y PT0S"))
+                (single-field-interval 1 "YEAR" 2 0)))
               (>= o_orderdate #time/date "1994-01-01"))}]]]]
         [:rename
          {l_extendedprice x8,

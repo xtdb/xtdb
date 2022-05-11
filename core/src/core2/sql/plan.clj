@@ -165,28 +165,75 @@
 
      [:date_literal _
       [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]
-     ;;=>
+     ;;=
      (LocalDate/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day))
 
      [:interval_literal _
       [:interval_string [:unquoted_interval_string
-                         [_ [:unsigned_integer year-month-literal]]]]
+                         [:year_month_literal [:unsigned_integer year-month-literal]]]]
       [:interval_qualifier
        [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]]
      ;;=>
-     (case datetime-field
-       "DAY" (PeriodDuration. (Period/ofDays (Long/parseLong year-month-literal)) Duration/ZERO)
-       "MONTH" (PeriodDuration. (Period/ofMonths (Long/parseLong year-month-literal)) Duration/ZERO)
-       "YEAR" (PeriodDuration. (Period/ofYears (Long/parseLong year-month-literal)) Duration/ZERO))
+     (list 'single-field-interval (Integer/parseInt year-month-literal) datetime-field 2 0)
+
+     [:interval_literal _
+      [:interval_string [:unquoted_interval_string
+                         [:plus_sign "+"]
+                         [:year_month_literal [:unsigned_integer year-month-literal]]]]
+      [:interval_qualifier
+       [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]]
+     ;;=>
+     (list 'single-field-interval (Integer/parseInt year-month-literal) datetime-field 2 0)
+
+     [:interval_literal _
+      [:interval_string [:unquoted_interval_string
+                         [:minus_sign "-"]
+                         [:year_month_literal [:unsigned_integer year-month-literal]]]]
+      [:interval_qualifier
+       [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]]
+     ;;=>
+     (list 'single-field-interval (- (Integer/parseInt year-month-literal)) datetime-field 2 0)
+
+     [:interval_literal _
+      [:interval_string [:unquoted_interval_string
+                         [:year_month_literal [:unsigned_integer year-month-literal]]]]
+      [:interval_qualifier
+       [:single_datetime_field "SECOND"]]]
+     ;;=>
+     (list 'single-field-interval (Integer/parseInt year-month-literal) "SECOND" 2 6)
+
+     [:interval_literal _
+      [:interval_string [:unquoted_interval_string
+                         [:plus_sign "+"]
+                         [:year_month_literal [:unsigned_integer year-month-literal]]]]
+      [:interval_qualifier
+       [:single_datetime_field "SECOND"]]]
+     ;;=>
+     (list 'single-field-interval (Integer/parseInt year-month-literal) "SECOND" 2 6)
+
+     [:interval_literal _
+      [:interval_string [:unquoted_interval_string
+                         [:minus_sign "-"]
+                         [:year_month_literal [:unsigned_integer year-month-literal]]]]
+      [:interval_qualifier
+       [:single_datetime_field "SECOND"]]]
+     ;;=>
+     (list 'single-field-interval (- (Integer/parseInt year-month-literal)) "SECOND" 2 6)
 
      [:interval_primary ^:z n [:interval_qualifier [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]]
      ;; =>
      (list 'single-field-interval (expr n) datetime-field 2 0)
 
+     [:interval_primary ^:z n [:interval_qualifier [:single_datetime_field "SECOND"]]]
+     ;; =>
+     (list 'single-field-interval (expr n) "SECOND" 2 6)
+
      [:interval_term ^:z i [:asterisk "*"] ^:z n]
+     ;; =>
      (list '* (expr i) (expr n))
 
      [:interval_term ^:z i [:solidus "/"] ^:z n]
+     ;; =>
      (list '/ (expr i) (expr n))
 
      [:interval_factor [:minus_sign "-"] ^:z i]
@@ -196,10 +243,6 @@
      [:interval_factor [:plus_sign "+"] ^:z i]
      ;; =>
      (expr i)
-
-     [:interval_primary ^:z n [:interval_qualifier [:single_datetime_field "SECOND"]]]
-     ;; =>
-     (list 'single-field-interval (expr n) "SECOND" 2 6)
 
      [:interval_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
      ;; =>

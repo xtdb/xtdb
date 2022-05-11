@@ -18,7 +18,7 @@
            o_orderdate
            (+
             #time/date "1993-07-01"
-            #time/period-duration "P3M PT0S"))
+            (single-field-interval 3 "MONTH" 2 0)))
           (>= o_orderdate #time/date "1993-07-01"))}
         o_orderkey]]]
      [:rename

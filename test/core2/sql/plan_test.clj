@@ -416,7 +416,11 @@
 
 (defn- plan-expr [sql]
   (let [plan (plan-sql (format "SELECT %s t FROM foo WHERE foo.a = 42" sql))
-        [expr] (filter (fn [form] (and (list? form) (symbol? (first form)))) (tree-seq seqable? seq plan))]
+        expr (some (fn [form]
+                       (when (and (vector? form) (= :project (first form)))
+                         (let [[_ projections] form]
+                           (val (ffirst projections)))))
+                     (tree-seq seqable? seq plan))]
     expr))
 
 (t/deftest test-trim-expr
@@ -599,7 +603,31 @@
     "foo.a + -1 MONTH" '(+ x1 (- (single-field-interval 1 "MONTH" 2 0)))
 
     "foo.a YEAR TO MONTH" '(multi-field-interval x1 "YEAR" 2 "MONTH" 2)
-    "foo.a DAY TO SECOND" '(multi-field-interval x1 "DAY" 2 "SECOND" 6)))
+    "foo.a DAY TO SECOND" '(multi-field-interval x1 "DAY" 2 "SECOND" 6)
+
+    "INTERVAL '3' YEAR" '(single-field-interval 3 "YEAR" 2 0)
+    "INTERVAL '-3' YEAR" '(single-field-interval -3 "YEAR" 2 0)
+    "INTERVAL '+3' YEAR" '(single-field-interval 3 "YEAR" 2 0)
+
+    "INTERVAL '3' MONTH" '(single-field-interval 3 "MONTH" 2 0)
+    "INTERVAL '-3' MONTH" '(single-field-interval -3 "MONTH" 2 0)
+    "INTERVAL '+3' MONTH" '(single-field-interval 3 "MONTH" 2 0)
+
+    "INTERVAL '3' DAY" '(single-field-interval 3 "DAY" 2 0)
+    "INTERVAL '-3' DAY" '(single-field-interval -3 "DAY" 2 0)
+    "INTERVAL '+3' DAY" '(single-field-interval 3 "DAY" 2 0)
+
+    "INTERVAL '3' HOUR" '(single-field-interval 3 "HOUR" 2 0)
+    "INTERVAL '-3' HOUR" '(single-field-interval -3 "HOUR" 2 0)
+    "INTERVAL '+3' HOUR" '(single-field-interval 3 "HOUR" 2 0)
+
+    "INTERVAL '3' MINUTE" '(single-field-interval 3 "MINUTE" 2 0)
+    "INTERVAL '-3' MINUTE" '(single-field-interval -3 "MINUTE" 2 0)
+    "INTERVAL '+3' MINUTE" '(single-field-interval 3 "MINUTE" 2 0)
+
+    "INTERVAL '3' SECOND" '(single-field-interval 3 "SECOND" 2 6)
+    "INTERVAL '-3' SECOND" '(single-field-interval -3 "SECOND" 2 6)
+    "INTERVAL '+3' SECOND" '(single-field-interval 3 "SECOND" 2 6)))
 
 (deftest test-interval-abs
   (t/are [sql expected]

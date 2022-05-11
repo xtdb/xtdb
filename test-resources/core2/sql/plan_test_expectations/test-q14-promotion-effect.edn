@@ -21,6 +21,6 @@
            l_shipdate
            (+
             #time/date "1995-09-01"
-            #time/period-duration "P1M PT0S"))
+            (single-field-interval 1 "MONTH" 2 0)))
           (>= l_shipdate #time/date "1995-09-01"))}]]]
      [:rename {p_type x6, p_partkey x7} [:scan [p_type p_partkey]]]]]]]]
