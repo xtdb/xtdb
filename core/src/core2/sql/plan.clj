@@ -1249,6 +1249,33 @@
 (defn- next-name []
   (with-meta (symbol (str 'x (swap! *name-counter* inc))) {:column? true}))
 
+(defn rename-walk
+  "Some rename steps require a walk of a relation to replace names. This is usually fine, but it is possible
+  user column names can collide with our 'x1', 'x2' symbols that are generated as part of the remove names step.
+
+  This function is a version of postwalk-replace that does not rename the elements of a `:scan` operator if encountered
+  during the walk."
+  [smap form]
+  ;; consider in the future just ensuring that generated names cannot collide with columns and we
+  ;; can go back to clojure.walk
+  (letfn [(conditional-walk [pred inner outer form]
+            (cond
+              (not (pred form)) form
+              (list? form) (outer (apply list (map inner form)))
+              (instance? clojure.lang.IMapEntry form)
+              (outer (clojure.lang.MapEntry/create (inner (key form)) (inner (val form))))
+              (seq? form) (outer (doall (map inner form)))
+              (instance? clojure.lang.IRecord form)
+              (outer (reduce (fn [r x] (conj r (inner x))) form form))
+              (coll? form) (outer (into (empty form) (map inner form)))
+              :else (outer form)))
+          (conditional-postwalk [pred f form] (conditional-walk pred (partial conditional-postwalk pred f) f form))
+          (not-scan? [form] (if (vector? form)
+                              (not= :scan (nth form 0 nil))
+                              true))
+          (replace [form] (if (contains? smap form) (smap form) form))]
+    (conditional-postwalk not-scan? replace form)))
+
 (defn- remove-names-step [relation-in]
   (letfn [(with-smap [relation smap]
             (vary-meta relation assoc :smap smap))
@@ -1367,21 +1394,21 @@
       (with-smap [:distinct relation] (->smap relation))
 
       [:intersect lhs rhs]
-      (with-smap [:intersect lhs (w/postwalk-replace (zipmap (relation-columns rhs)
-                                                             (relation-columns lhs))
-                                                     rhs)]
+      (with-smap [:intersect lhs (rename-walk (zipmap (relation-columns rhs)
+                                                      (relation-columns lhs))
+                                              rhs)]
         (->smap lhs))
 
       [:difference lhs rhs]
-      (with-smap [:difference lhs (w/postwalk-replace (zipmap (relation-columns rhs)
-                                                              (relation-columns lhs))
-                                                      rhs)]
+      (with-smap [:difference lhs (rename-walk (zipmap (relation-columns rhs)
+                                                       (relation-columns lhs))
+                                               rhs)]
         (->smap lhs))
 
       [:union-all lhs rhs]
-      (with-smap [:union-all lhs (w/postwalk-replace (zipmap (relation-columns rhs)
-                                                             (relation-columns lhs))
-                                                     rhs)]
+      (with-smap [:union-all lhs (rename-walk (zipmap (relation-columns rhs)
+                                                      (relation-columns lhs))
+                                              rhs)]
         (->smap lhs))
 
       [:apply mode columns dependent-column-names independent-relation dependent-relation]
@@ -1402,7 +1429,7 @@
                     (w/postwalk-replace new-smap columns)
                     (w/postwalk-replace new-smap dependent-column-names)
                     independent-relation
-                    (w/postwalk-replace new-smap dependent-relation)]
+                    (rename-walk new-smap dependent-relation)]
           (case mode
            (:cross-join :left-outer-join) new-smap
            (:semi-join :anti-join) (merge (->smap independent-relation) params))))
