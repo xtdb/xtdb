@@ -2,7 +2,7 @@
 
 We use https://docs.antora.org/antora/2.3/[Antora] to build the XTDB documentation.
 
-The full website build/deploy is available (to JUXTers) in the private https://github.com/xtdb/website-old[website-old] repo - for more details, see the README over there.
+The full website build/deploy is available (to JUXTers) in the private https://github.com/xtdb/website[website] repo - for more details, see the README over there.
 
 From here, though, you can build the documentation section in isolation, to check any changes.
 
@@ -25,8 +25,12 @@ These are located by branch name convention - branches prefixed with `docs-v*` w
 === Release checklist:
 
 1. Create a `docs-v<new-version>` branch
-2. Update docs/reference/antora.yml:
-  a. Delete `prerelease: indeed` and `display-version: master` lines
-  b. Update `version: master` to `version: <new-version>`
-3. Commit, push branch to the main JUXT XTDB repo
-4. Head over to `website-old` to deploy the docs.
+2. Update `docs/**/antora.yml`:
+  a. Delete `prerelease: indeed`
+  b. Delete `display_version: master`
+  c. Replace `version: master` with `version: <new-version>`
+3. Update `docs/**/*.adoc`:
+  a. Replace `:page-alias: zig` with `:page-alias: <new-version>@zig`
+3. Commit, push branch to https://github.com/xtdb/xtdb
+4. Run `./bin/build.sh`. You should not get any errors.
+5. Run `./bin/deploy.sh`. You will need AWS credentials.
