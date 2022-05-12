@@ -89,36 +89,38 @@
                            :end-idx (.idx state)})]))
                    (.idx state)))))
 
+(def ^:private not-found (Object.))
+
 (defrecord MemoizeParser [^RuleParser parser]
   IParser
   (parse [_ in idx memos errors]
     (let [memo-key (IntBuffer/wrap (doto (int-array 2)
                                      (aset 0 idx)
-                                     (aset 1 (.rule-id parser))))]
-      (let [state (.getOrDefault memos memo-key ::not-found)]
-        (if (= ::not-found state)
-          (doto (.parse parser in idx memos errors)
-            (->> (.put memos memo-key)))
-          state)))))
+                                     (aset 1 (.rule-id parser))))
+          state (.getOrDefault memos memo-key not-found)]
+      (if (identical? not-found state)
+        (doto (.parse parser in idx memos errors)
+          (->> (.put memos memo-key)))
+        state))))
 
 (defrecord MemoizeLeftRecParser [^RuleParser parser]
   IParser
   (parse [_ in idx memos errors]
     (let [memo-key (IntBuffer/wrap (doto (int-array 2)
                                      (aset 0 idx)
-                                     (aset 1 (.rule-id parser))))]
-      (let [state (.getOrDefault memos memo-key ::not-found)]
-        (if (= ::not-found state)
-          (loop [^ParseState last-state nil]
-            (.put memos memo-key last-state)
-            (if-let [^ParseState new-state (.parse parser in idx memos errors)]
-              (if (and last-state (<= (.idx new-state) (.idx last-state)))
-                (do (.remove memos memo-key)
-                    last-state)
-                (recur new-state))
+                                     (aset 1 (.rule-id parser))))
+          state (.getOrDefault memos memo-key not-found)]
+      (if (identical? not-found state)
+        (loop [^ParseState last-state nil]
+          (.put memos memo-key last-state)
+          (if-let [^ParseState new-state (.parse parser in idx memos errors)]
+            (if (and last-state (<= (.idx new-state) (.idx last-state)))
               (do (.remove memos memo-key)
-                  last-state)))
-          state)))))
+                  last-state)
+              (recur new-state))
+            (do (.remove memos memo-key)
+                last-state)))
+        state))))
 
 (defrecord HideParser [^IParser parser]
   IParser
