@@ -11,8 +11,7 @@
             [clojure.test.check.properties :as tcp]
             [clojure.test.check.generators :as tcg]
             [clojure.string :as str]
-            [core2.edn :as edn]
-            [clojure.spec.alpha :as s])
+            [core2.edn :as edn])
   (:import core2.types.LegType
            core2.vector.IIndirectVector
            (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId Period)
