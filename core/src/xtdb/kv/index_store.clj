@@ -460,7 +460,7 @@
   (let [^long hll-size (/ (- (.capacity b) Long/BYTES Long/BYTES) 2)]
     (mem/slice-buffer b (+ Long/BYTES Long/BYTES hll-size) hll-size)))
 
-(defn stats-kvs [transient-kv-snapshot persistent-kv-snapshot docs]
+(defn stats-kvs [transient-kv-snapshot stats-kvs-cache persistent-kv-snapshot docs]
   (let [attr-key-bufs (->> docs
                            (into {} (comp (mapcat keys)
                                           (distinct)
@@ -472,8 +472,10 @@
                                   (let [k-buf (get attr-key-bufs k)
                                         stats-buf (or (get acc k-buf)
                                                       (kv/get-value transient-kv-snapshot k-buf)
-                                                      (some-> (kv/get-value persistent-kv-snapshot k-buf) mem/copy-buffer)
-                                                      (new-stats-value))]
+                                                      (cache/compute-if-absent stats-kvs-cache k-buf mem/copy-to-unpooled-buffer
+                                                                               (fn [_k-buf]
+                                                                                 (or (some-> (kv/get-value persistent-kv-snapshot k-buf) mem/copy-buffer)
+                                                                                     (new-stats-value)))))]
                                     (doto stats-buf
                                       (inc-stats-value-doc-count)
                                       (-> decode-stats-value->eid-hll-buffer-from (hll/add e)))
@@ -992,14 +994,14 @@
                       (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer)
                                              (mem/->nippy-buffer v))))))))))
 
-(defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache]
+(defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStoreTx
   (index-docs [_ docs]
     (with-open [persistent-kv-snapshot (kv/new-snapshot persistent-kv-store)
                 transient-kv-snapshot (kv/new-snapshot transient-kv-store)]
       (let [content-idx-kvs (->content-idx-kvs docs)
             stats-kvs (when (seq docs)
-                        (stats-kvs transient-kv-snapshot persistent-kv-snapshot (vals docs)))]
+                        (stats-kvs transient-kv-snapshot stats-kvs-cache persistent-kv-snapshot (vals docs)))]
 
         ;; we can write to the transient-kv-store here within an open read snapshot
         ;; on the assumption that the transient-kv-store is always in-memory
@@ -1096,7 +1098,7 @@
                                                        cav-cache canonical-buffer-cache)
                                 @!evicted-eids)))
 
-(defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache]
+(defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStore
   (begin-index-tx [_ tx fork-at]
     (let [{::xt/keys [tx-id tx-time]} tx
@@ -1105,7 +1107,7 @@
                 [(MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)])
       (->KvIndexStoreTx kv-store transient-kv-store tx fork-at
                         (atom #{}) thread-mgr
-                        (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))))
+                        (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache)))
 
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
@@ -1137,9 +1139,10 @@
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'xtdb.mem-kv/->kv-store
                                     :cav-cache 'xtdb.cache/->cache
-                                    :canonical-buffer-cache 'xtdb.cache/->cache}
+                                    :canonical-buffer-cache 'xtdb.cache/->cache
+                                    :stats-kvs-cache 'xtdb.cache/->cache}
                         ::sys/args {:skip-index-version-bump {:spec (s/tuple int? int?)
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
-  [{:keys [kv-store cav-cache canonical-buffer-cache] :as opts}]
+  [{:keys [kv-store cav-cache canonical-buffer-cache stats-kvs-cache] :as opts}]
   (check-and-store-index-version opts)
-  (->KvIndexStore kv-store (ThreadManager. (HashMap.) nil) cav-cache canonical-buffer-cache))
+  (->KvIndexStore kv-store (ThreadManager. (HashMap.) nil) cav-cache canonical-buffer-cache stats-kvs-cache))
