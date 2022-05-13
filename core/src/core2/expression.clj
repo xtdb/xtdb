@@ -1465,13 +1465,19 @@
     IntervalUnit/DAY_TIME
     `(let [^PeriodDuration period-duration# ~code
            period# (.getPeriod period-duration#)
-           duration# (.getDuration period-duration#)]
-       (.set ^IntervalDayVector ~out-vec-sym ~idx-sym (.getDays period#) (.toMillis duration#)))
+           duration# (.getDuration period-duration#)
+           ddays# (.toDaysPart duration#)
+           dsecs# (- (.getSeconds duration#) (* ddays# 86400))
+           dmillis# (.toMillisPart duration#)]
+       (.set ^IntervalDayVector ~out-vec-sym ~idx-sym (+ (.getDays period#) ddays#) (+ (* dsecs# 1000) dmillis#)))
     IntervalUnit/MONTH_DAY_NANO
     `(let [^PeriodDuration period-duration# ~code
            period# (.getPeriod period-duration#)
-           duration# (.getDuration period-duration#)]
-       (.set ~out-vec-sym ~idx-sym (.toTotalMonths period#) (.getDays period#) (.toNanos duration#)))))
+           duration# (.getDuration period-duration#)
+           ddays# (.toDaysPart duration#)
+           dsecs# (- (.getSeconds duration#) (* ddays# 86400))
+           dnanos# (.toNanosPart duration#)]
+       (.set ~out-vec-sym ~idx-sym (.toTotalMonths period#) (+ (.getDays period#) ddays#) (+ (* dsecs# 1000000000) dnanos#)))))
 
 (def ^:private out-vec-sym (gensym 'out-vec))
 (def ^:private out-writer-sym (gensym 'out-writer-sym))
