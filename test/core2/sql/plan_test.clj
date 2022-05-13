@@ -608,29 +608,37 @@
     "INTERVAL '3' YEAR" '(single-field-interval "3" "YEAR" 2 0)
     "INTERVAL '-3' YEAR" '(single-field-interval "-3" "YEAR" 2 0)
     "INTERVAL '+3' YEAR" '(single-field-interval "+3" "YEAR" 2 0)
+    "INTERVAL '333' YEAR(3)" '(single-field-interval "333" "YEAR" 3 0)
 
     "INTERVAL '3' MONTH" '(single-field-interval "3" "MONTH" 2 0)
     "INTERVAL '-3' MONTH" '(single-field-interval "-3" "MONTH" 2 0)
     "INTERVAL '+3' MONTH" '(single-field-interval "+3" "MONTH" 2 0)
+    "INTERVAL '333' MONTH(3)" '(single-field-interval "333" "MONTH" 3 0)
 
     "INTERVAL '3' DAY" '(single-field-interval "3" "DAY" 2 0)
     "INTERVAL '-3' DAY" '(single-field-interval "-3" "DAY" 2 0)
     "INTERVAL '+3' DAY" '(single-field-interval "+3" "DAY" 2 0)
+    "INTERVAL '333' DAY(3)" '(single-field-interval "333" "DAY" 3 0)
 
     "INTERVAL '3' HOUR" '(single-field-interval "3" "HOUR" 2 0)
     "INTERVAL '-3' HOUR" '(single-field-interval "-3" "HOUR" 2 0)
     "INTERVAL '+3' HOUR" '(single-field-interval "+3" "HOUR" 2 0)
+    "INTERVAL '333' HOUR(3)" '(single-field-interval "333" "HOUR" 3 0)
 
     "INTERVAL '3' MINUTE" '(single-field-interval "3" "MINUTE" 2 0)
     "INTERVAL '-3' MINUTE" '(single-field-interval "-3" "MINUTE" 2 0)
     "INTERVAL '+3' MINUTE" '(single-field-interval "+3" "MINUTE" 2 0)
+    "INTERVAL '333' MINUTE(3)" '(single-field-interval "333" "MINUTE" 3 0)
 
     "INTERVAL '3' SECOND" '(single-field-interval "3" "SECOND" 2 6)
     "INTERVAL '-3' SECOND" '(single-field-interval "-3" "SECOND" 2 6)
     "INTERVAL '+3' SECOND" '(single-field-interval "+3" "SECOND" 2 6)
+    "INTERVAL '333' SECOND(3)" '(single-field-interval "333" "SECOND" 3 6)
+    "INTERVAL '333.22' SECOND(3, 2)" '(single-field-interval "333.22" "SECOND" 3 2)
 
     "INTERVAL '3-4' YEAR TO MONTH" '(multi-field-interval "3-4" "YEAR" 2 "MONTH" 2)
     "INTERVAL '3-4' YEAR TO MONTH" '(multi-field-interval "3-4" "YEAR" 2 "MONTH" 2)
+    "INTERVAL '3-4' YEAR(3) TO MONTH" '(multi-field-interval "3-4" "YEAR" 3 "MONTH" 2)
 
     "INTERVAL '-3-4' YEAR TO MONTH" '(multi-field-interval "-3-4" "YEAR" 2 "MONTH" 2)
     "INTERVAL '+3-4' YEAR TO MONTH" '(multi-field-interval "+3-4" "YEAR" 2 "MONTH" 2)
@@ -638,12 +646,14 @@
     "INTERVAL '3 4' DAY TO HOUR" '(multi-field-interval "3 4" "DAY" 2 "HOUR" 2)
     "INTERVAL '3 04' DAY TO HOUR" '(multi-field-interval "3 04" "DAY" 2 "HOUR" 2)
     "INTERVAL '3 04:20' DAY TO MINUTE" '(multi-field-interval "3 04:20" "DAY" 2 "MINUTE" 2)
-    "INTERVAL '3 04:20:34' DAY TO SECOND" '(multi-field-interval "3 04:20:34" "DAY" 2 "SECOND" 2)
+    "INTERVAL '3 04:20:34' DAY TO SECOND" '(multi-field-interval "3 04:20:34" "DAY" 2 "SECOND" 6)
+    "INTERVAL '3 04:20:34' DAY(3) TO SECOND(4)" '(multi-field-interval "3 04:20:34" "DAY" 3 "SECOND" 4)
+    "INTERVAL '3 04:20:34' DAY TO SECOND(4)" '(multi-field-interval "3 04:20:34" "DAY" 2 "SECOND" 4)
 
     "INTERVAL '04:20' HOUR TO MINUTE" '(multi-field-interval "04:20" "HOUR" 2 "MINUTE" 2)
-    "INTERVAL '04:20:34' HOUR TO SECOND" '(multi-field-interval "04:20:34" "HOUR" 2 "SECOND" 2)
+    "INTERVAL '04:20:34' HOUR TO SECOND" '(multi-field-interval "04:20:34" "HOUR" 2 "SECOND" 6)
 
-    "INTERVAL '20:34' MINUTE TO SECOND" '(multi-field-interval "20:34" "MINUTE" 2 "SECOND" 2)))
+    "INTERVAL '20:34' MINUTE TO SECOND" '(multi-field-interval "20:34" "MINUTE" 2 "SECOND" 6)))
 
 (deftest test-interval-abs
   (t/are [sql expected]

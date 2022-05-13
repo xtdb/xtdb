@@ -68,6 +68,78 @@
 
 ;; Expressions.
 
+(defn- interval-expr
+  [e qualifier]
+  (r/zmatch qualifier
+
+    [:interval_qualifier
+     [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]
+    ;; =>
+    (list 'single-field-interval e datetime-field 2 0)
+
+    [:interval_qualifier
+     [:single_datetime_field [:non_second_primary_datetime_field datetime-field] [:unsigned_integer leading-precision]]]
+    ;; =>
+    (list 'single-field-interval e datetime-field (parse-long leading-precision) 0)
+
+    [:interval_qualifier
+     [:single_datetime_field "SECOND"]]
+    ;; =>
+    (list 'single-field-interval e "SECOND" 2 6)
+
+    [:interval_qualifier
+     [:single_datetime_field "SECOND" [:unsigned_integer leading-precision]]]
+    ;; =>
+    (list 'single-field-interval e "SECOND" (parse-long leading-precision) 6)
+
+    [:interval_qualifier
+     [:single_datetime_field "SECOND" [:unsigned_integer leading-precision] [:unsigned_integer fractional-precision]]]
+    ;; =>
+    (list 'single-field-interval e "SECOND" (parse-long leading-precision) (parse-long fractional-precision))
+
+    [:interval_qualifier
+     [:start_field [:non_second_primary_datetime_field leading-field]]
+     "TO"
+     [:end_field [:non_second_primary_datetime_field trailing-field]]]
+    ;; =>
+    (list 'multi-field-interval e leading-field 2 trailing-field 2)
+
+    [:interval_qualifier
+     [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer leading-precision]]
+     "TO"
+     [:end_field [:non_second_primary_datetime_field trailing-field]]]
+    ;; =>
+    (list 'multi-field-interval e leading-field (parse-long leading-precision) trailing-field 2)
+
+    [:interval_qualifier
+     [:start_field [:non_second_primary_datetime_field leading-field]]
+     "TO"
+     [:end_field "SECOND"]]
+    ;; =>
+    (list 'multi-field-interval e leading-field 2 "SECOND" 6)
+
+    [:interval_qualifier
+     [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer leading-precision]]
+     "TO"
+     [:end_field "SECOND"]]
+    ;; =>
+    (list 'multi-field-interval e leading-field (parse-long leading-precision) "SECOND" 6)
+
+    [:interval_qualifier
+     [:start_field [:non_second_primary_datetime_field leading-field] [:unsigned_integer leading-precision]]
+     "TO"
+     [:end_field "SECOND" [:unsigned_integer fractional-precision]]]
+    ;; =>
+    (list 'multi-field-interval e leading-field (parse-long leading-precision) "SECOND" (parse-long fractional-precision))
+
+    [:interval_qualifier
+     [:start_field [:non_second_primary_datetime_field leading-field]]
+     "TO"
+     [:end_field "SECOND" [:unsigned_integer fractional-precision]]]
+    ;; =>
+    (list 'multi-field-interval e leading-field 2 "SECOND" (parse-long fractional-precision))
+    (throw (IllegalArgumentException. (str "Cannot build interval for: "  (pr-str qualifier))))))
+
 (defn expr [z]
   (maybe-add-ref
    z
@@ -169,46 +241,13 @@
      (LocalDate/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day))
 
      [:interval_literal _
-      [:interval_string [:unquoted_interval_string s]]
-      [:interval_qualifier
-       [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]]
+      [:interval_string [:unquoted_interval_string s]] q]
      ;;=>
-     (list 'single-field-interval s datetime-field 2 0)
+     (interval-expr s q)
 
-     [:interval_literal _
-      [:interval_string [:unquoted_interval_string s]]
-      [:interval_qualifier
-       [:single_datetime_field "SECOND"]]]
-     ;;=>
-     (list 'single-field-interval s "SECOND" 2 6)
-
-     [:interval_literal _
-      [:interval_string
-       [:unquoted_interval_string s]]
-      [:interval_qualifier
-       [:start_field [:non_second_primary_datetime_field start-field]]
-       "TO"
-       [:end_field [:non_second_primary_datetime_field end-field]]]]
-     ;;=>
-     (list 'multi-field-interval s start-field 2 end-field 2)
-
-     [:interval_literal _
-      [:interval_string
-       [:unquoted_interval_string s]]
-      [:interval_qualifier
-       [:start_field [:non_second_primary_datetime_field start-field]]
-       "TO"
-       [:end_field "SECOND"]]]
-     ;;=>
-     (list 'multi-field-interval s start-field 2 "SECOND" 2)
-
-     [:interval_primary ^:z n [:interval_qualifier [:single_datetime_field [:non_second_primary_datetime_field datetime-field]]]]
+     [:interval_primary ^:z n q]
      ;; =>
-     (list 'single-field-interval (expr n) datetime-field 2 0)
-
-     [:interval_primary ^:z n [:interval_qualifier [:single_datetime_field "SECOND"]]]
-     ;; =>
-     (list 'single-field-interval (expr n) "SECOND" 2 6)
+     (interval-expr (expr n) q)
 
      [:interval_term ^:z i [:asterisk "*"] ^:z n]
      ;; =>
@@ -229,20 +268,6 @@
      [:interval_value_expression ^:z i1 [:plus_sign "+"] ^:z i2]
      ;; =>
      (list '+ (expr i1) (expr i2))
-
-     [:interval_primary ^:z i [:interval_qualifier
-                               [:start_field [:non_second_primary_datetime_field start-field]]
-                               "TO"
-                               [:end_field [:non_second_primary_datetime_field end-field]]]]
-     ;; =>
-     (list 'multi-field-interval (expr i) start-field 2 end-field 2)
-
-     [:interval_primary ^:z i [:interval_qualifier
-                               [:start_field [:non_second_primary_datetime_field start-field]]
-                               "TO"
-                               [:end_field "SECOND"]]]
-     ;; =>
-     (list 'multi-field-interval (expr i) start-field 2 "SECOND" 6)
 
      [:interval_absolute_value_function "ABS" ^:z i]
      (list 'abs (expr i))
