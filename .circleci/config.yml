@@ -222,7 +222,7 @@ jobs:
           arguments: |
             --acl public-read
           from: xtdb-javadoc
-          to: 's3://xtdb-website-javadocs/clients/java/${DOCS_PREFIX}'
+          to: 's3://xtdb-website-javadocs/clients/java/javadoc/${DOCS_PREFIX}'
       - node/install
       - run:
           command: |
