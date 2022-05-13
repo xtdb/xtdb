@@ -5,6 +5,9 @@
            [java.util ArrayDeque ArrayList Arrays HashMap HashSet List Map Set]
            [java.util.regex Matcher Pattern]))
 
+;; TODO:
+;; attempt moving the records to Java to get proper control over primitives.
+
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
 ;; https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
 ;; https://bford.info/pub/lang/thesis.pdf
