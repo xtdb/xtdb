@@ -11,7 +11,8 @@
             [clojure.test.check.properties :as tcp]
             [clojure.test.check.generators :as tcg]
             [clojure.string :as str]
-            [core2.edn :as edn])
+            [core2.edn :as edn]
+            [clojure.spec.alpha :as s])
   (:import core2.types.LegType
            core2.vector.IIndirectVector
            (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId Period)
@@ -1782,3 +1783,133 @@
     '(= (single-field-interval 0 "YEAR" 2 0) (single-field-interval 1 "DAY" 2 0)) false
 
     '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0)) true))
+
+(def single-interval-constructor-gen
+  (->> (tcg/hash-map
+         :unit (tcg/elements ["YEAR" "MONTH" "DAY" "HOUR" "MINUTE" "SECOND"])
+         :sign (tcg/elements [nil "-" "+"])
+         :force-string tcg/boolean
+         :leading-value (tcg/choose 0 999999999)
+         :fractional-value (tcg/choose 0 99999999)
+         :use-fractional-value tcg/boolean
+         :precision (tcg/choose 1 9)
+         :use-precision tcg/boolean
+         :fractional-precision (tcg/choose 1 9)
+         :use-fractional-precision tcg/boolean)
+       (tcg/fmap
+         (fn [{:keys [unit
+                      sign
+                      force-string
+                      leading-value
+                      fractional-value
+                      use-fractional-value
+                      precision
+                      use-precision
+                      fractional-precision
+                      use-fractional-precision]}]
+
+           (let [precision (if use-precision precision 2)
+                 fractional-precision
+                 (cond
+                   (not= "SECOND" unit) 0
+                   use-fractional-precision fractional-precision
+                   :else 2)
+
+                 leading-value (mod leading-value (parse-long (str/join (repeat precision "9"))))
+
+                 fractional-value
+                 (if (pos? fractional-precision)
+                   (mod fractional-value (parse-long (str/join (repeat fractional-precision "9"))))
+                   0)
+
+                 use-fractional-value (and (= "SECOND" unit) use-fractional-value)
+
+                 v
+                 (cond
+                   force-string (str sign leading-value (when use-fractional-value (str "." fractional-value)))
+                   use-fractional-value (str sign leading-value (when use-fractional-value (str "." fractional-value)))
+                   :else leading-value)]
+
+             (list 'single-field-interval v unit precision fractional-precision))))))
+
+(def multi-interval-fields-gen
+  (tcg/bind
+    (tcg/elements ["YEAR" "DAY" "HOUR" "MINUTE"])
+    (fn [start]
+      (tcg/tuple (tcg/return start)
+                 (case start
+                   "YEAR" (tcg/return "MONTH")
+                   "DAY" (tcg/elements ["HOUR" "MINUTE" "SECOND"])
+                   "HOUR" (tcg/elements ["MINUTE" "SECOND"])
+                   "MINUTE" (tcg/return "SECOND"))))))
+
+(def multi-interval-constructor-gen
+  (->> (tcg/hash-map
+         :fields multi-interval-fields-gen
+         :sign (tcg/elements [nil "-" "+"])
+         :time-values (tcg/hash-map
+                        "YEAR" (tcg/choose 0 999999999)
+                        "MONTH" (tcg/choose 0 999999999)
+                        "DAY" (tcg/choose 0 999999999)
+                        "HOUR" (tcg/choose 0 23)
+                        "MINUTE" (tcg/choose 0 59)
+                        "SECOND" (tcg/choose 0 59))
+         :fractional-value (tcg/choose 0 99999999)
+         :use-fractional-value tcg/boolean
+         :precision (tcg/choose 1 9)
+         :use-precision tcg/boolean
+         :fractional-precision (tcg/choose 1 9)
+         :use-fractional-precision tcg/boolean)
+       (tcg/fmap
+         (fn [{:keys [fields
+                      sign
+                      time-values
+                      fractional-value
+                      use-fractional-value
+                      precision
+                      use-precision
+                      fractional-precision
+                      use-fractional-precision]}]
+
+           (let [[leading-unit ending-unit] fields
+
+                 precision (if use-precision precision 2)
+
+                 fractional-precision
+                 (cond
+                   (not= "SECOND" ending-unit) 0
+                   use-fractional-precision fractional-precision
+                   :else 2)
+
+                 fractional-value
+                 (if (pos? fractional-precision)
+                   (mod fractional-value (parse-long (str/join (repeat fractional-precision "9"))))
+                   0)
+
+                 use-fractional-value (and (= "SECOND" ending-unit) use-fractional-value)
+
+                 v (str sign
+                        (loop [fields (drop-while #(not= leading-unit %) ["YEAR" "MONTH" "DAY" "HOUR" "MINUTE" "SECOND"])
+                               s ""]
+                          (if-some [field (first fields)]
+                            (let [prefix (case field
+                                           "MONTH" "-"
+                                           "HOUR" " "
+                                           ":")]
+                              (if (= ending-unit field)
+                                (str s prefix (time-values field))
+                                (recur (rest fields) (if (= field leading-unit)
+                                                       (mod (time-values leading-unit) (parse-long (str/join (repeat precision "9"))))
+                                                       (str s prefix (time-values field))))))
+                            (throw (Exception. "Unreachable"))))
+                        (when use-fractional-value (str "." fractional-value)))]
+
+             (list 'multi-field-interval v leading-unit precision ending-unit fractional-precision))))))
+
+(def interval-constructor-gen
+  (tcg/one-of [single-interval-constructor-gen multi-interval-constructor-gen]))
+
+(comment
+  (tct/defspec all-possible-interval-literals-can-be-constructed-prop
+    (tcp/for-all [form interval-constructor-gen]
+      (instance? PeriodDuration (project1 form {})))))
