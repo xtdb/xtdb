@@ -2,8 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str])
   (:import java.io.File
-           java.nio.IntBuffer
-           [java.util ArrayDeque ArrayList HashMap HashSet List Map Set]
+           [java.util ArrayDeque ArrayList Arrays HashMap HashSet List Map Set]
            [java.util.regex Matcher Pattern]))
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
@@ -42,7 +41,7 @@
   (getIndex [_] idx))
 
 (definterface IParser
-  (^core2.sql.parser.ParseState parse [^String in ^int idx ^java.util.Map memos ^core2.sql.parser.IParseErrors errors]))
+  (^core2.sql.parser.ParseState parse [^String in ^int idx ^"[Lcore2.sql.parser.ParseState;" memos ^core2.sql.parser.IParseErrors errors]))
 
 (def ^:private epsilon-err [:expected "<EOF>"])
 
@@ -89,36 +88,32 @@
                            :end-idx (.idx state)})]))
                    (.idx state)))))
 
-(def ^:private not-found (Object.))
+(def ^:private not-found (ParseState. nil -1))
 
 (defrecord MemoizeParser [^RuleParser parser]
   IParser
   (parse [_ in idx memos errors]
-    (let [memo-key (IntBuffer/wrap (doto (int-array 2)
-                                     (aset 0 idx)
-                                     (aset 1 (.rule-id parser))))
-          state (.getOrDefault memos memo-key not-found)]
+    (let [memo-idx (bit-or (.rule-id parser) (bit-shift-left idx 9))
+          state (aget memos memo-idx)]
       (if (identical? not-found state)
         (doto (.parse parser in idx memos errors)
-          (->> (.put memos memo-key)))
+          (->> (aset memos memo-idx)))
         state))))
 
 (defrecord MemoizeLeftRecParser [^RuleParser parser]
   IParser
   (parse [_ in idx memos errors]
-    (let [memo-key (IntBuffer/wrap (doto (int-array 2)
-                                     (aset 0 idx)
-                                     (aset 1 (.rule-id parser))))
-          state (.getOrDefault memos memo-key not-found)]
+    (let [memo-idx (bit-or (.rule-id parser) (bit-shift-left idx 9))
+          state (aget memos memo-idx)]
       (if (identical? not-found state)
         (loop [^ParseState last-state nil]
-          (.put memos memo-key last-state)
+          (aset memos memo-idx last-state)
           (if-let [^ParseState new-state (.parse parser in idx memos errors)]
             (if (and last-state (<= (.idx new-state) (.idx last-state)))
-              (do (.remove memos memo-key)
+              (do (aset memos memo-idx not-found)
                   last-state)
               (recur new-state))
-            (do (.remove memos memo-key)
+            (do (aset memos memo-idx not-found)
                 last-state)))
         state))))
 
@@ -320,10 +315,13 @@
                                ->MemoizeParser)
                      parser (->RuleParser k [k] rule-id raw? (build-parser k v))]]
          (aset rules rule-id (memo-fn parser)))
-       (fn [in start-rule]
-         (let [errors (ParseErrors. (HashSet.) 0)]
+       (fn [^String in start-rule]
+         (let [errors (ParseErrors. (HashSet.) 0)
+               m-size (bit-shift-left (inc (.length in)) 9)
+               memos (make-array ParseState m-size)
+               _ (Arrays/fill ^objects memos not-found)]
            (if-let [state (-> ^IParser (build-parser nil (->trailing-ws-parser start-rule))
-                              (.parse in 0 (HashMap.) errors))]
+                              (.parse in 0 memos errors))]
              (first (.ast state))
              (ParseFailure. in (.errs errors) (.getIndex errors)))))))))
 
