@@ -1031,6 +1031,20 @@
 (defmethod codegen-call [:default-overlay-length ArrowType$Binary] [_]
   (mono-fn-call types/int-type #(do `(.remaining (resolve-buf ~@%)))))
 
+(defn interval-eq
+  "Override equality for intervals as we want 1 year to = 12 months, and this is not true by for Period.equals."
+  ;; we might be able to enforce this differently (e.g all constructs, reads and calcs only use the month component).
+  [^PeriodDuration pd1 ^PeriodDuration pd2]
+  (let [p1 (.getPeriod pd1)
+        p2 (.getPeriod pd2)]
+    (and (= (.toTotalMonths p1) (.toTotalMonths p2))
+         (= (.getDays p1) (.getDays p2))
+         (= (.getDuration pd1) (.getDuration pd2)))))
+
+;; interval equality specialisation, see interval-eq.
+(defmethod codegen-call [:= ArrowType$Interval ArrowType$Interval] [_]
+  (mono-fn-call types/bool-type #(do `(boolean (interval-eq ~@%)))))
+
 (defmethod codegen-call [:single-field-interval ArrowType$Int ArrowType$Utf8 ArrowType$Int ArrowType$Int] [{:keys [args]}]
   (let [[_ unit] (map :literal args)]
     (case unit

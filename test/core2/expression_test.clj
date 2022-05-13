@@ -1772,3 +1772,13 @@
 
     "P11M PT0S" '(abs (+ (single-field-interval -1 "YEAR" 2 0) (single-field-interval 1 "MONTH" 2 0)))
     "P1D PT-1S" '(abs (+ (single-field-interval -1 "DAY" 2 0) (single-field-interval 1 "SECOND" 2 6)))))
+
+(t/deftest test-interval-equality-quirks
+  (t/are [expr expected]
+    (= expected (project1 expr {}))
+
+    '(= (single-field-interval 0 "YEAR" 2 0)) true
+    '(= (single-field-interval 0 "YEAR" 2 0) (single-field-interval 0 "DAY" 2 0)) true
+    '(= (single-field-interval 0 "YEAR" 2 0) (single-field-interval 1 "DAY" 2 0)) false
+
+    '(= (single-field-interval 1 "YEAR" 2 0) (single-field-interval 12 "MONTH" 2 0)) true))
