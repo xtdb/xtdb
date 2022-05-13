@@ -1614,6 +1614,9 @@
     "P0D PT1S" '(single-field-interval 1 "SECOND" 2 6) {}
     "P0D PT-2S" '(single-field-interval -2 "SECOND" 2 6) {}
 
+    ;; fractional seconds
+    "P0D PT1.34S" '(single-field-interval "1.34" "SECOND" 2 6) {}
+
     ;; multi part parsing
     nil '(multi-field-interval nil "YEAR" 2 "MONTH" 2) {}
 
@@ -1792,9 +1795,9 @@
          :leading-value (tcg/choose 0 999999999)
          :fractional-value (tcg/choose 0 99999999)
          :use-fractional-value tcg/boolean
-         :precision (tcg/choose 1 9)
+         :precision (tcg/choose 1 8)
          :use-precision tcg/boolean
-         :fractional-precision (tcg/choose 1 9)
+         :fractional-precision (tcg/choose 0 9)
          :use-fractional-precision tcg/boolean)
        (tcg/fmap
          (fn [{:keys [unit
@@ -1809,6 +1812,7 @@
                       use-fractional-precision]}]
 
            (let [precision (if use-precision precision 2)
+
                  fractional-precision
                  (cond
                    (not= "SECOND" unit) 0
@@ -1856,9 +1860,9 @@
                         "SECOND" (tcg/choose 0 59))
          :fractional-value (tcg/choose 0 99999999)
          :use-fractional-value tcg/boolean
-         :precision (tcg/choose 1 9)
+         :precision (tcg/choose 1 8)
          :use-precision tcg/boolean
-         :fractional-precision (tcg/choose 1 9)
+         :fractional-precision (tcg/choose 0 9)
          :use-fractional-precision tcg/boolean)
        (tcg/fmap
          (fn [{:keys [fields
@@ -1909,7 +1913,8 @@
 (def interval-constructor-gen
   (tcg/one-of [single-interval-constructor-gen multi-interval-constructor-gen]))
 
-(comment
-  (tct/defspec all-possible-interval-literals-can-be-constructed-prop
-    (tcp/for-all [form interval-constructor-gen]
-      (instance? PeriodDuration (project1 form {})))))
+(tct/defspec all-possible-interval-literals-can-be-constructed-prop
+  ;; gonna give this a few more rounds by default due to domain size
+  1000
+  (tcp/for-all [form interval-constructor-gen]
+    (instance? PeriodDuration (project1 form {}))))
