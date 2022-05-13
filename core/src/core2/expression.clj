@@ -1092,14 +1092,15 @@
 
   e.g INTERVAL '3.14' SECOND
 
-  Throws a parse error if the string does not contain an integer."
+  Throws a parse error if the string does not contain an integer / decimal. Throws on overflow."
   ^Duration [string-or-buf]
   (try
     (let [s (resolve-string string-or-buf)
           bd (bigdec s)
+          ;; will throw on overflow, is a custom error message needed?
           secs (.setScale bd 0 BigDecimal/ROUND_DOWN)
-          nanos (.longValueExact (.setScale (.multiply (.subtract bd (bigdec secs)) 1e9M) 0 BigDecimal/ROUND_DOWN))]
-      (Duration/ofSeconds secs nanos))
+          nanos (.longValueExact (.setScale (.multiply (.subtract bd secs) 1e9M) 0 BigDecimal/ROUND_DOWN))]
+      (Duration/ofSeconds (.longValueExact secs) nanos))
     (catch NumberFormatException _
       (throw (IllegalArgumentException. "Parse error. SECOND INTERVAL string must contain a positive or negative integer or decimal.")))))
 
