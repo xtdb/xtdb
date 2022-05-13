@@ -1045,8 +1045,24 @@
 (defmethod codegen-call [:= ArrowType$Interval ArrowType$Interval] [_]
   (mono-fn-call types/bool-type #(do `(boolean (interval-eq ~@%)))))
 
+(defn- ensure-interval-precision-valid [^long precision]
+  (when-not (< 0 precision)
+    (throw (IllegalArgumentException. "The minimum leading field precision is 1.")))
+
+  (when-not (< 0 precision 9)
+    (throw (IllegalArgumentException. "The maximum leading field precision is 8."))))
+
+(defn- ensure-interval-fractional-precision-valid [^long fractional-precision]
+  (when-not (< -1 fractional-precision)
+    (throw (IllegalArgumentException. "The minimum fractional seconds precision is 0.")))
+
+  (when-not (< fractional-precision 10)
+    (throw (IllegalArgumentException. "The maximum fractional seconds precision is 9."))))
+
 (defmethod codegen-call [:single-field-interval ArrowType$Int ArrowType$Utf8 ArrowType$Int ArrowType$Int] [{:keys [args]}]
-  (let [[_ unit] (map :literal args)]
+  (let [[_ unit precision fractional-precision] (map :literal args)]
+    (ensure-interval-precision-valid precision)
+    (when (= "SECOND" unit) (ensure-interval-fractional-precision-valid fractional-precision))
     (case unit
       "YEAR"
       (mono-fn-call types/interval-year-month-type #(do `(PeriodDuration. (Period/ofYears ~(first %)) Duration/ZERO)))
@@ -1072,7 +1088,9 @@
       (throw (IllegalArgumentException. "Parse error. Single field INTERVAL string must contain a positive or negative integer.")))))
 
 (defmethod codegen-call [:single-field-interval ArrowType$Utf8 ArrowType$Utf8 ArrowType$Int ArrowType$Int] [{:keys [args]}]
-  (let [[_ unit] (map :literal args)]
+  (let [[_ unit precision fractional-precision] (map :literal args)]
+    (ensure-interval-precision-valid precision)
+    (when (= "SECOND" unit) (ensure-interval-fractional-precision-valid fractional-precision))
     (case unit
       "YEAR"
       (mono-fn-call types/interval-year-month-type #(do `(PeriodDuration. (Period/ofYears (ensure-single-field-interval-int ~(first %))) Duration/ZERO)))
@@ -1102,7 +1120,6 @@
           exp (- 9 num-digits)]
       (* (Math/pow 10 exp) (Long/parseLong fractional-secs)))
     0))
-
 
 (defn- parse-day-to-second-literal [s unit1 unit2]
   (letfn [(negate-if-minus [plus-minus ^PeriodDuration pd]
@@ -1205,7 +1222,9 @@
       (throw (IllegalArgumentException. "Cannot parse interval, incorrect format."))))
 
 (defmethod codegen-call [:multi-field-interval ArrowType$Utf8 ArrowType$Utf8 ArrowType$Int ArrowType$Utf8 ArrowType$Int] [{:keys [args]}]
-  (let [[_ unit1 _prec1 unit2 _prec2] (map :literal args)
+  (let [[_ unit1 precision unit2 fractional-precision] (map :literal args)
+        _ (ensure-interval-precision-valid precision)
+        _ (when (= "SECOND" unit2) (ensure-interval-fractional-precision-valid fractional-precision))
         ;; todo choose a more specific representation when possible
         return-type types/interval-month-day-nano-type]
     (mono-fn-call return-type (fn [[s & _]] `(parse-multi-field-interval (resolve-string ~s) ~unit1 ~unit2)))))
