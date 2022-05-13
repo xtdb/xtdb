@@ -8,6 +8,8 @@
            [java.util.concurrent CompletableFuture Semaphore]
            java.util.function.BiConsumer))
 
+(def ^:private ^:const tx-batch-size 50)
+
 (def ^java.util.concurrent.ThreadFactory subscription-thread-factory
   (xio/thread-factory "xtdb-tx-subscription"))
 
@@ -23,21 +25,21 @@
                  (.start))]
     (doto fut
       (.whenComplete (reify BiConsumer
-                       (accept [_ v e]
+                       (accept [_ _v e]
                          (when-not (instance? InterruptedException e)
                            (.interrupt thread))))))))
 
 (defn- tx-handler [f ^CompletableFuture fut]
-  (fn [_last-tx-id tx]
+  (fn [_last-tx-id txs]
     (when (Thread/interrupted)
       (throw (InterruptedException.)))
 
     (when (.isDone fut)
       (reduced nil))
 
-    (f fut tx)
+    (f fut txs)
 
-    (::xt/tx-id tx)))
+    (::xt/tx-id (last txs))))
 
 (defn handle-polling-subscription [tx-log after-tx-id {:keys [^Duration poll-sleep-duration]} f]
   (completable-thread
@@ -51,7 +53,7 @@
                           (try
                             (reduce (tx-handler f fut)
                                     after-tx-id
-                                    (some-> log iterator-seq))
+                                    (some->> log iterator-seq (partition-all tx-batch-size)))
                             (finally
                               (.close log)))
 
@@ -82,36 +84,37 @@
       (completable-thread
        (fn [^CompletableFuture fut]
          (try
-           (loop [after-tx-id after-tx-id]
-             (let [last-tx-id (if (and latest-submitted-tx-id
-                                       (or (nil? after-tx-id)
-                                           (< after-tx-id latest-submitted-tx-id)))
+           (let [handle-txs (tx-handler f fut)]
+             (loop [after-tx-id after-tx-id]
+               (let [last-tx-id (if (and latest-submitted-tx-id
+                                         (or (nil? after-tx-id)
+                                             (< after-tx-id latest-submitted-tx-id)))
 
-                                ;; catching up
-                                (with-open [log (db/open-tx-log tx-log after-tx-id)]
-                                  (reduce (tx-handler f fut)
-                                          after-tx-id
-                                          (->> (iterator-seq log)
-                                               (take-while #(<= (::xt/tx-id %) latest-submitted-tx-id)))))
-
-                                ;; running live
-                                (reduce (tx-handler f fut)
-                                        after-tx-id
-                                        (let [permits (do
-                                                        (.acquire semaphore)
-                                                        (inc (.drainPermits semaphore)))
-                                              limit (if (> permits 100)
-                                                      (do
-                                                        (.release semaphore (- permits 100))
-                                                        100)
-                                                      permits)]
-                                          (with-open [log (db/open-tx-log tx-log after-tx-id)]
+                                  ;; catching up
+                                  (with-open [log (db/open-tx-log tx-log after-tx-id)]
+                                    (reduce handle-txs
+                                            after-tx-id
                                             (->> (iterator-seq log)
-                                                 (into [] (take limit)))))))]
-               (cond
-                 (.isDone fut) nil
-                 (Thread/interrupted) (throw (InterruptedException.))
-                 :else (recur last-tx-id))))
+                                                 (take-while #(<= (::xt/tx-id %) latest-submitted-tx-id))
+                                                 (partition-all tx-batch-size))))
+
+                                  ;; running live
+                                  (let [permits (do
+                                                  (.acquire semaphore)
+                                                  (inc (.drainPermits semaphore)))
+                                        limit (if (> permits tx-batch-size)
+                                                (do
+                                                  (.release semaphore (- permits tx-batch-size))
+                                                  tx-batch-size)
+                                                permits)]
+                                    (with-open [log (db/open-tx-log tx-log after-tx-id)]
+                                      (handle-txs after-tx-id
+                                                  (->> (iterator-seq log)
+                                                       (into [] (take limit)))))))]
+                 (cond
+                   (.isDone fut) nil
+                   (Thread/interrupted) (throw (InterruptedException.))
+                   :else (recur last-tx-id)))))
 
            (finally
              (swap! !state update :semaphores disj semaphore))))))))

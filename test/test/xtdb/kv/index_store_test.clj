@@ -4,6 +4,7 @@
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [xtdb.api :as xt]
+            [xtdb.cache :as cache]
             [xtdb.cache.nop :as nop-cache]
             [xtdb.codec :as c]
             [xtdb.db :as db]
@@ -23,7 +24,8 @@
   `(fkv/with-kv-store [kv-store#]
      (binding [*index-store* (kvi/->kv-index-store {:kv-store kv-store#
                                                     :cav-cache  (nop-cache/->nop-cache {})
-                                                    :canonical-buffer-cache (nop-cache/->nop-cache {})})]
+                                                    :canonical-buffer-cache (nop-cache/->nop-cache {})
+                                                    :stats-kvs-cache (cache/->cache {})})]
        ~@body)))
 
 ;; NOTE: These tests does not go via the TxLog, but writes its own

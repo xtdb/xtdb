@@ -11,8 +11,7 @@
             [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx.conform :as txc]
-            [xtdb.tx.event :as txe]
-            [xtdb.tx :as tx])
+            [xtdb.tx.event :as txe])
   (:import clojure.lang.MapEntry
            xtdb.codec.EntityTx
            java.io.Closeable
@@ -48,9 +47,9 @@
 (defn- without-tx-fn-docs [docs]
   (into {} (remove (comp tx-fn-doc? val)) docs))
 
-(defn- strict-fetch-docs [{:keys [document-store-tx]} doc-hashes]
+(defn- strict-fetch-docs [document-store doc-hashes]
   (let [doc-hashes (set doc-hashes)
-        docs (db/fetch-docs document-store-tx doc-hashes)
+        docs (db/fetch-docs document-store doc-hashes)
         fetched-doc-hashes (set (keys docs))]
     (when-not (= fetched-doc-hashes doc-hashes)
       (throw (IllegalStateException. (str "missing docs: " (pr-str (set/difference doc-hashes fetched-doc-hashes))))))
@@ -147,7 +146,7 @@
 
 (defmethod index-tx-event :crux.tx/cas [[_op k old-v new-v at-valid-time :as cas-op]
                                         {::xt/keys [tx-time tx-id valid-time] :as tx}
-                                        {:keys [index-snapshot] :as in-flight-tx}]
+                                        {:keys [document-store-tx index-snapshot] :as in-flight-tx}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time valid-time tx-time)
         content-hash (db/entity-as-of-resolver index-snapshot eid valid-time tx-id)
@@ -156,7 +155,7 @@
     (if (or (= current-id expected-id)
             ;; see xtdb/xtdb#362 - we'd like to just compare content hashes here, but
             ;; can't rely on the old content-hashing returning the same hash for the same document
-            (let [docs (strict-fetch-docs in-flight-tx #{current-id expected-id})]
+            (let [docs (strict-fetch-docs document-store-tx #{current-id expected-id})]
               (= (get docs current-id)
                  (get docs expected-id))))
       {:etxs (put-delete-etxs eid valid-time nil (c/new-id new-v) tx in-flight-tx)}
@@ -202,17 +201,17 @@
   xt/TransactionFnContext
   (indexing-tx [_] indexing-tx))
 
-(defmethod index-tx-event :crux.tx/fn [[_op k args-content-hash] tx in-flight-tx]
+(defmethod index-tx-event :crux.tx/fn [[_op k args-content-hash] tx {:keys [document-store-tx] :as in-flight-tx}]
   (let [fn-id (c/new-id k)
         {args-doc-id :xt/id,
          :crux.db.fn/keys [args tx-events failed?]
          :as args-doc} (when args-content-hash
-                         (-> (strict-fetch-docs in-flight-tx #{args-content-hash})
+                         (-> (strict-fetch-docs document-store-tx #{args-content-hash})
                              (get args-content-hash)
                              c/crux->xt))]
     (cond
       tx-events {:tx-events tx-events
-                 :docs (strict-fetch-docs in-flight-tx (txc/tx-events->doc-hashes tx-events))}
+                 :docs (strict-fetch-docs document-store-tx (txc/tx-events->doc-hashes tx-events))}
 
       failed? (do
                 (log/warn "Transaction function failed when originally evaluated:"
@@ -295,7 +294,7 @@
   (open-db [_ valid-time tx-time] (xt/open-db db-provider valid-time tx-time))
 
   db/InFlightTx
-  (index-tx-events [this tx-events]
+  (index-tx-events [this tx-events prefetched-docs]
     (try
       (let [tx-state @!tx-state]
         (when (not= tx-state :open)
@@ -303,7 +302,7 @@
 
       (swap! !tx update :tx-events into tx-events)
 
-      (index-docs this (-> (strict-fetch-docs this (txc/tx-events->doc-hashes tx-events))
+      (index-docs this (-> (select-keys prefetched-docs (txc/tx-events->doc-hashes tx-events))
                            without-tx-fn-docs))
 
       (with-open [index-snapshot (db/open-index-snapshot index-store-tx)]
@@ -478,41 +477,55 @@
       ;; moving on...
       (let [job (db/subscribe tx-log
                               latest-xtdb-tx-id
-                              (fn [_fut tx]
+                              (fn [_fut txs]
                                 (try
-                                  (let [[tx committing?] (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
-                                                           (let [tx-log-time (::xt/tx-time tx)
-                                                                 {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
-                                                             (cond
-                                                               (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
-                                                               (do
-                                                                 (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
-                                                                           (pr-str {:latest-completed-tx lctx
-                                                                                    :new-tx (dissoc tx ::txe/tx-events)}))
-                                                                 [tx false])
+                                (let [prefetched-docs
+                                      (strict-fetch-docs document-store
+                                                         (->> txs
+                                                              (into #{} (comp (map ::txe/tx-events)
+                                                                              (mapcat txc/tx-events->doc-hashes)))))]
+                                  (doseq [tx txs]
+                                    (when (Thread/interrupted)
+                                      (throw (InterruptedException.)))
 
-                                                               (neg? (compare tx-log-time tx-time-override))
-                                                               (do
-                                                                 (log/warn "overridden tx-time after tx-log clock time, aborting tx"
-                                                                           (pr-str {:tx-log-time tx-log-time
-                                                                                    :new-tx (dissoc tx ::txe/tx-events)}))
-                                                                 [tx false])
+                                      (let [[{::txe/keys [tx-events] :as tx} committing?]
+                                            (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
+                                              (let [tx-log-time (::xt/tx-time tx)
+                                                    {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
+                                                (cond
+                                                  (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
+                                                  (do
+                                                    (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
+                                                              (pr-str {:latest-completed-tx lctx
+                                                                       :new-tx (dissoc tx ::txe/tx-events)}))
+                                                    [tx false])
 
-                                                               :else [(assoc tx ::xt/tx-time tx-time-override) true]))
+                                                  (neg? (compare tx-log-time tx-time-override))
+                                                  (do
+                                                    (log/warn "overridden tx-time after tx-log clock time, aborting tx"
+                                                              (pr-str {:tx-log-time tx-log-time
+                                                                       :new-tx (dissoc tx ::txe/tx-events)}))
+                                                    [tx false])
 
-                                                           [tx true])
-                                        in-flight-tx (db/begin-tx tx-indexer
-                                                                  (select-keys tx [::xt/tx-time ::xt/tx-id])
-                                                                  nil)
-                                        committing? (and committing? (db/index-tx-events in-flight-tx (::txe/tx-events tx)))]
-                                    (process-tx-f in-flight-tx (assoc tx :committing? committing?))
+                                                  :else [(assoc tx ::xt/tx-time tx-time-override) true]))
 
-                                    (if committing?
-                                      (db/commit in-flight-tx)
-                                      (db/abort in-flight-tx)))
+                                              [tx true])
 
-                                  (catch Throwable t
-                                    (set-ingester-error! t)
+                                            in-flight-tx (db/begin-tx tx-indexer
+                                                                      (select-keys tx [::xt/tx-time ::xt/tx-id])
+                                                                      nil)
+
+                                            committing? (and committing?
+                                                             (db/index-tx-events in-flight-tx tx-events prefetched-docs))]
+
+                                        (process-tx-f in-flight-tx (assoc tx :committing? committing?))
+
+                                        (if committing?
+                                          (db/commit in-flight-tx)
+                                          (db/abort in-flight-tx)))))
+
+                                      (catch Throwable t
+                                        (set-ingester-error! t)
                                     (throw t)))))]
 
         (->TxIngester index-store !error job)))))

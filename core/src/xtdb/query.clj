@@ -2113,14 +2113,17 @@
           conformed-tx-ops (map txc/conform-tx-op tx-ops)
           in-flight-tx (db/begin-tx tx-indexer tx {::xt/valid-time valid-time
                                                    ::xt/tx-time tx-time
-                                                   ::xt/tx-id tx-id})]
+                                                   ::xt/tx-id tx-id})
 
-      (db/submit-docs in-flight-tx (->> conformed-tx-ops
-                                        (into {} (comp (mapcat :docs)
-                                                       (xio/map-vals c/xt->crux)))))
+          docs (->> conformed-tx-ops
+                    (into {} (comp (mapcat :docs)
+                                   (xio/map-vals c/xt->crux))))]
 
-      (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
-        (xt/db in-flight-tx valid-time)))))
+      (db/submit-docs in-flight-tx docs)
+
+      (let [tx-events (map txc/->tx-event conformed-tx-ops)]
+        (when (db/index-tx-events in-flight-tx tx-events docs)
+          (xt/db in-flight-tx valid-time))))))
 
 (defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
   (.write w (format "#<XtdbDB %s>" (xio/pr-edn-str {::xt/valid-time valid-time, ::xt/tx-id tx-id}))))

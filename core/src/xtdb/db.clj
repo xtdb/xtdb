@@ -62,11 +62,12 @@
   (open-tx-log ^xtdb.api.ICursor [this after-tx-id])
   (latest-submitted-tx [this])
   (^java.util.concurrent.CompletableFuture subscribe [_ after-tx-id f]
-   "f takes Future + tx - complete the future to stop the subscription.
+   "f takes Future + txs - complete the future to stop the subscription.
     or, outside of f, complete the future returned from this function to stop the subscription."))
 
 (defprotocol InFlightTx
-  (index-tx-events [in-flight-tx tx-events])
+  (index-tx-events [in-flight-tx tx-events prefetched-docs]
+    "prefetched-docs :: docs from the batch of transactions")
   (commit [in-flight-tx])
   (abort [in-flight-tx]))
 

@@ -149,19 +149,9 @@
    (fn [^CompletableFuture fut]
      (with-open [consumer (open-consumer tx-log after-tx-id)]
        (loop []
+         (f fut
          (->> (poll-consumer consumer poll-wait-duration)
-              (map tx-record->tx-log-entry)
-              (reduce (fn [_ tx]
-                        (when (Thread/interrupted)
-                          (throw (InterruptedException.)))
-
-                        (when (.isDone fut)
-                          (reduced nil))
-
-                        (f fut tx)
-
-                        true)
-                      false))
+                 (map tx-record->tx-log-entry)))
 
          (cond
            (.isDone fut) nil

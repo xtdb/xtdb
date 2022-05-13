@@ -258,10 +258,10 @@
         (t/testing "eviction removes tx history"
           (t/is (empty? history)))))))
 
-(defn index-tx [tx tx-events]
+(defn index-tx [tx tx-events docs]
   (let [{:keys [xtdb/tx-indexer]} @(:!system *api*)
         in-flight-tx (db/begin-tx tx-indexer tx nil)]
-    (db/index-tx-events in-flight-tx tx-events)
+    (db/index-tx-events in-flight-tx tx-events docs)
     (db/commit in-flight-tx)))
 
 (t/deftest test-handles-legacy-evict-events
@@ -273,7 +273,8 @@
         index-evict! (fn []
                        (index-tx {::xt/tx-time evict-tx-time
                                   ::xt/tx-id evict-tx-id}
-                                 [[:crux.tx/evict picasso-id #inst "2018-05-23"]]))]
+                                 [[:crux.tx/evict picasso-id #inst "2018-05-23"]]
+                                 {}))]
 
     ;; we have to index these manually because the new evict API won't allow docs
     ;; with the legacy valid-time range
@@ -306,14 +307,17 @@
   (let [ivan {:crux.db/id :ivan}
         ivan1 (assoc ivan :value 1)
         ivan2 (assoc ivan :value 2)
-        t #inst "2019-11-29"]
-    (db/submit-docs (:document-store *api*) {(c/hash-doc ivan1) ivan1
-                                             (c/hash-doc ivan2) ivan2})
+        t #inst "2019-11-29"
+        docs {(c/hash-doc ivan1) ivan1
+              (c/hash-doc ivan2) ivan2}]
+    (db/submit-docs (:document-store *api*) docs)
 
     (index-tx {::xt/tx-time t, ::xt/tx-id 1}
-              [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan1))]])
+              [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan1))]]
+              docs)
     (index-tx {::xt/tx-time t, ::xt/tx-id 2}
-              [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan2))]])
+              [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan2))]]
+              docs)
 
     (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (t/is (= [(c/->EntityTx (c/new-id :ivan) t t 2 (c/hash-doc ivan2))
@@ -336,15 +340,18 @@
         ivan1 (assoc ivan :value 1)
         ivan2 (assoc ivan :value 2)
         t1 #inst "2020-05-01"
-        t2 #inst "2020-05-02"]
-    (db/submit-docs (:document-store *api*) {(c/hash-doc ivan1) ivan1
-                                             (c/hash-doc ivan2) ivan2})
+        t2 #inst "2020-05-02"
+        docs {(c/hash-doc ivan1) ivan1
+              (c/hash-doc ivan2) ivan2}]
+    (db/submit-docs (:document-store *api*) docs)
 
     (index-tx {::xt/tx-time t1, ::xt/tx-id 1}
-              [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan1)) t1]])
+              [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan1)) t1]]
+              docs)
     (index-tx {::xt/tx-time t2, ::xt/tx-id 2}
               [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan2)) t1]
-               [:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan2))]])
+               [:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan2))]]
+              docs)
 
     (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (let [etx-v1-t1 (c/->EntityTx (c/new-id :ivan) t1 t1 1 (c/hash-doc ivan1))
@@ -1150,14 +1157,17 @@
   (let [tx-fn (-> {:xt/id :tx-fn,
                    :xt/fn '(fn [ctx]
                              [[::xt/put {:xt/id :ivan}]])}
-                  (c/xt->crux))]
-    (db/submit-docs (:document-store *api*) {(c/hash-doc tx-fn) tx-fn})
+                  (c/xt->crux))
+        docs {(c/hash-doc tx-fn) tx-fn}]
+    (db/submit-docs (:document-store *api*) docs)
 
     (index-tx {::xt/tx-time (Date.), ::xt/tx-id 0}
-              [[:crux.tx/put (c/new-id :tx-fn) tx-fn]])
+              [[:crux.tx/put (c/new-id :tx-fn) tx-fn]]
+              docs)
 
     (index-tx {::xt/tx-time (Date.), ::xt/tx-id 1}
-              [[:crux.tx/fn :tx-fn]])
+              [[:crux.tx/fn :tx-fn]]
+              docs)
 
     (t/is (= {:xt/id :ivan}
              (xt/entity (xt/db *api*) :ivan)))))
