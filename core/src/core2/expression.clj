@@ -1046,17 +1046,17 @@
   (mono-fn-call types/bool-type #(do `(boolean (interval-eq ~@%)))))
 
 (defn- ensure-interval-precision-valid [^long precision]
-  (when-not (< 0 precision)
-    (throw (IllegalArgumentException. "The minimum leading field precision is 1.")))
-
-  (when-not (< 0 precision 9)
+  (cond
+    (< precision 1)
+    (throw (IllegalArgumentException. "The minimum leading field precision is 1."))
+    (< 8 precision)
     (throw (IllegalArgumentException. "The maximum leading field precision is 8."))))
 
 (defn- ensure-interval-fractional-precision-valid [^long fractional-precision]
-  (when-not (< -1 fractional-precision)
-    (throw (IllegalArgumentException. "The minimum fractional seconds precision is 0.")))
-
-  (when-not (< fractional-precision 10)
+  (cond
+    (< fractional-precision 0)
+    (throw (IllegalArgumentException. "The minimum fractional seconds precision is 0."))
+    (< 9 fractional-precision)
     (throw (IllegalArgumentException. "The maximum fractional seconds precision is 9."))))
 
 (defmethod codegen-call [:single-field-interval ArrowType$Int ArrowType$Utf8 ArrowType$Int ArrowType$Int] [{:keys [args]}]
