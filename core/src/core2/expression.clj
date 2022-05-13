@@ -1088,9 +1088,11 @@
       (throw (IllegalArgumentException. "Parse error. Single field INTERVAL string must contain a positive or negative integer.")))))
 
 (defn second-interval-fractional-duration
-  "Takes a string or UTF8 ByteBuffer and returns an [secs, , throws a parse error if the string does not contain an integer.
+  "Takes a string or UTF8 ByteBuffer and returns Duration for a fractional seconds INTERVAL literal.
 
-  This is used to parse INTERVAL literal strings, e.g INTERVAL '3' DAY, as the grammar has been overriden to emit a plain string."
+  e.g INTERVAL '3.14' SECOND
+
+  Throws a parse error if the string does not contain an integer."
   ^Duration [string-or-buf]
   (try
     (let [s (resolve-string string-or-buf)
