@@ -1087,6 +1087,20 @@
     (catch NumberFormatException _
       (throw (IllegalArgumentException. "Parse error. Single field INTERVAL string must contain a positive or negative integer.")))))
 
+(defn second-interval-fractional-duration
+  "Takes a string or UTF8 ByteBuffer and returns an [secs, , throws a parse error if the string does not contain an integer.
+
+  This is used to parse INTERVAL literal strings, e.g INTERVAL '3' DAY, as the grammar has been overriden to emit a plain string."
+  ^Duration [string-or-buf]
+  (try
+    (let [s (resolve-string string-or-buf)
+          bd (bigdec s)
+          secs (.setScale bd 0 BigDecimal/ROUND_DOWN)
+          nanos (.longValueExact (.setScale (.multiply (.subtract bd (bigdec secs)) 1e9M) 0 BigDecimal/ROUND_DOWN))]
+      (Duration/ofSeconds secs nanos))
+    (catch NumberFormatException _
+      (throw (IllegalArgumentException. "Parse error. SECOND INTERVAL string must contain a positive or negative integer or decimal.")))))
+
 (defmethod codegen-call [:single-field-interval ArrowType$Utf8 ArrowType$Utf8 ArrowType$Int ArrowType$Int] [{:keys [args]}]
   (let [[_ unit precision fractional-precision] (map :literal args)]
     (ensure-interval-precision-valid precision)
@@ -1103,7 +1117,7 @@
       "MINUTE"
       (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofMinutes (ensure-single-field-interval-int ~(first %))))))
       "SECOND"
-      (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (Duration/ofSeconds (ensure-single-field-interval-int ~(first %)))))))))
+      (mono-fn-call types/interval-day-time-type #(do `(PeriodDuration. Period/ZERO (second-interval-fractional-duration ~(first %))))))))
 
 (defn- parse-year-month-literal [s]
   (let [[match plus-minus part1 part2] (re-find #"^([-+]|)(\d+)\-(\d+)" s)]
