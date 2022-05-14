@@ -127,10 +127,10 @@
                      raw? (if (= {:reduction-type :raw} (:red v))
                             Parser/ALWAYS_RAW
                             (->raw? k))
-                     parser (Parser$RuleParser. k rule-id raw? (build-parser k v))
+                     parser (Parser$RuleParser. k raw? (build-parser k v))
                      parser (if (left-recursive? grammar k)
-                              (Parser$MemoizeLeftRecParser. parser)
-                              (Parser$MemoizeParser. parser))]]
+                              (Parser$MemoizeLeftRecParser. parser rule-id)
+                              (Parser$MemoizeParser. parser rule-id))]]
          (aset rules rule-id ^Parser$AParser parser))
 
        (doseq [^Parser$AParser rule-parser rules]

@@ -190,11 +190,9 @@ public final class Parser {
         private final Keyword ruleName;
         private final Predicate<IPersistentVector> rawPred;
         private AParser parser;
-        public final int ruleId;
 
-        public RuleParser(final Keyword ruleName, final int ruleId, Predicate<IPersistentVector> rawPred, final AParser parser) {
+        public RuleParser(final Keyword ruleName, Predicate<IPersistentVector> rawPred, final AParser parser) {
             this.ruleName = ruleName;
-            this.ruleId = ruleId;
             this.rawPred = rawPred;
             this.parser = parser;
         }
@@ -231,13 +229,15 @@ public final class Parser {
 
     public static final class MemoizeParser extends AParser {
         private final RuleParser parser;
+        private final int ruleId;
 
-        public MemoizeParser(final RuleParser parser) {
+        public MemoizeParser(final RuleParser parser, final int ruleId) {
             this.parser = parser;
+            this.ruleId = ruleId;
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            final int memoIdx = parser.ruleId | (idx << RULE_ID_SHIFT);
+            final int memoIdx = ruleId | (idx << RULE_ID_SHIFT);
             ParseState state = memos[memoIdx];
             if (NOT_FOUND == state) {
                 state = parser.parse(in, idx, memos, errors);
@@ -256,13 +256,15 @@ public final class Parser {
 
     public static final class MemoizeLeftRecParser extends AParser {
         private final RuleParser parser;
+        private final int ruleId;
 
-        public MemoizeLeftRecParser(final RuleParser parser) {
+        public MemoizeLeftRecParser(final RuleParser parser, final int ruleId) {
             this.parser = parser;
+            this.ruleId = ruleId;
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            final int memoIdx = parser.ruleId | (idx << RULE_ID_SHIFT);
+            final int memoIdx = ruleId | (idx << RULE_ID_SHIFT);
             ParseState state = memos[memoIdx];
             if (NOT_FOUND == state) {
                 state = null;
