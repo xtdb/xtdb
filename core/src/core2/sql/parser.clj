@@ -2,11 +2,13 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str])
   (:import java.io.File
-           [java.util ArrayDeque ArrayList Arrays HashMap HashSet List Map Set]
-           [java.util.regex Matcher Pattern]))
-
-;; TODO:
-;; attempt moving the records to Java to get proper control over primitives.
+           [java.util ArrayDeque Arrays HashSet Map]
+           [java.util.regex Matcher Pattern]
+           java.util.function.Function
+           [core2.sql.parser Parser$ParseState Parser$ParseFailure Parser$ParseErrors Parser$AParser
+            Parser$WhitespaceParser Parser$EpsilonParser Parser$RuleParser Parser$MemoizeParser Parser$MemoizeLeftRecParser Parser$NonTerminalParser
+            Parser$HideParser Parser$OptParser Parser$NegParser Parser$RepeatParser Parser$CatParser Parser$AltParser
+            Parser$RegexpParser Parser$StringParser Parser]))
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
 ;; https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
@@ -14,193 +16,6 @@
 ;; https://arxiv.org/pdf/1806.11150.pdf
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defrecord ParseState [ast ^int idx])
-
-(defrecord ParseFailure [^String in errs ^int idx])
-
-(definterface IParseErrors
-  (^void addError [error ^int idx])
-
-  (^int getIndex []))
-
-(def ^:private null-parse-errors
-  (reify IParseErrors
-    (addError [_ _ _])
-    (getIndex [_] 0)))
-
-(deftype ParseErrors [^Set errs ^:unsynchronized-mutable ^int idx]
-  IParseErrors
-  (addError [this error idx]
-    (cond
-      (= idx (.idx this))
-      (.add errs error)
-
-      (> idx (.idx this))
-      (do (.clear errs)
-          (.add errs error)
-          (set! (.idx this) idx))))
-
-  (getIndex [_] idx))
-
-(definterface IParser
-  (^core2.sql.parser.ParseState parse [^String in ^int idx ^"[Lcore2.sql.parser.ParseState;" memos ^core2.sql.parser.IParseErrors errors]))
-
-(def ^:private epsilon-err [:expected "<EOF>"])
-
-(defrecord EpsilonParser []
-  IParser
-  (parse [_ in idx memos errors]
-    (if (= (.length in) idx)
-      (ParseState. [] idx)
-      (.addError errors epsilon-err idx))))
-
-(def ^:private ws-err [:expected "<WS>"])
-
-(defrecord WhitespaceParser [^Pattern pattern ^IParser parser]
-  IParser
-  (parse [_ in idx memos errors]
-    (let [m (.matcher pattern in)
-          m (.region m idx (.length in))
-          m (.useTransparentBounds m true)]
-      (cond
-        (.lookingAt m)
-        (.parse parser in (.end m) memos errors)
-
-        (zero? idx)
-        (.parse parser in idx memos errors)
-
-        :else
-        (.addError errors ws-err idx)))))
-
-(defrecord NonTerminalParser [^int rule-id ^"[Lcore2.sql.parser.IParser;" rules]
-  IParser
-  (parse [_ in idx memos errors]
-    (.parse ^IParser (aget rules rule-id) in idx memos errors)))
-
-(defrecord RuleParser [rule-name ast-head ^int rule-id raw? ^IParser parser]
-  IParser
-  (parse [_ in idx memos errors]
-    (when-let [state (.parse parser in idx memos errors)]
-      (ParseState. (let [ast (.ast state)]
-                     (if (raw? ast)
-                       ast
-                       [(with-meta
-                          (into ast-head ast)
-                          {:start-idx idx
-                           :end-idx (.idx state)})]))
-                   (.idx state)))))
-
-(def ^:private not-found (ParseState. nil -1))
-
-(defrecord MemoizeParser [^RuleParser parser]
-  IParser
-  (parse [_ in idx memos errors]
-    (let [memo-idx (bit-or (.rule-id parser) (bit-shift-left idx 9))
-          state (aget memos memo-idx)]
-      (if (identical? not-found state)
-        (doto (.parse parser in idx memos errors)
-          (->> (aset memos memo-idx)))
-        state))))
-
-(defrecord MemoizeLeftRecParser [^RuleParser parser]
-  IParser
-  (parse [_ in idx memos errors]
-    (let [memo-idx (bit-or (.rule-id parser) (bit-shift-left idx 9))
-          state (aget memos memo-idx)]
-      (if (identical? not-found state)
-        (loop [^ParseState last-state nil]
-          (aset memos memo-idx last-state)
-          (if-let [^ParseState new-state (.parse parser in idx memos errors)]
-            (if (and last-state (<= (.idx new-state) (.idx last-state)))
-              (do (aset memos memo-idx not-found)
-                  last-state)
-              (recur new-state))
-            (do (aset memos memo-idx not-found)
-                last-state)))
-        state))))
-
-(defrecord HideParser [^IParser parser]
-  IParser
-  (parse [_ in idx memos errors]
-    (when-let [state (.parse parser in idx memos errors)]
-      (ParseState. [] (.idx state)))))
-
-(defrecord OptParser [^IParser parser]
-  IParser
-  (parse [_ in idx memos errors]
-    (if-let [state (.parse parser in idx memos errors)]
-      state
-      (ParseState. [] idx))))
-
-(defrecord NegParser [^IParser parser]
-  IParser
-  (parse [_ in idx memos errors]
-    (if-let [state (.parse parser in idx memos null-parse-errors)]
-      (.addError errors [:unexpected (subs in idx (.idx state))] idx)
-      (ParseState. [] idx))))
-
-(defrecord RepeatParser [^IParser parser ^boolean star?]
-  IParser
-  (parse [_ in idx memos errors]
-    (loop [ast (ArrayList.)
-           idx idx
-           n 0]
-      (if-let [state (.parse parser in idx memos errors)]
-        (recur (doto ast
-                 (.addAll (.ast state)))
-               (.idx state)
-               (inc n))
-        (when (or star? (pos? n))
-          (ParseState. (vec ast) idx))))))
-
-(defrecord CatParser [^List parsers]
-  IParser
-  (parse [_ in idx memos errors]
-    (loop [ast (ArrayList.)
-           idx idx
-           n 0]
-      (if (< n (.size parsers))
-        (when-let [state (.parse ^IParser (.get parsers n) in idx memos errors)]
-          (recur (doto ast
-                   (.addAll (.ast state)))
-                 (.idx state)
-                 (inc n)))
-        (ParseState. (vec ast) idx)))))
-
-(defrecord AltParser [^List parsers]
-  IParser
-  (parse [_ in idx memos errors]
-    (loop [^ParseState state1 nil
-           n 0]
-      (if (= n (.size parsers))
-        state1
-        (let [state2 (.parse ^IParser (.get parsers n) in idx memos errors)]
-          (recur (if state1
-                   (if state2
-                     (if (<= (.idx state2) (.idx state1))
-                       state1
-                       state2)
-                     state1)
-                   state2)
-                 (inc n)))))))
-
-(defrecord StringParser [^String string ast errs]
-  IParser
-  (parse [_ in idx memos errors]
-    (if (.regionMatches in true idx string 0 (.length string))
-      (ParseState. ast (+ idx (.length string)))
-      (.addError errors errs idx))))
-
-(defrecord RegexpParser [^Pattern pattern errs matcher-fn]
-  IParser
-  (parse [_ in idx memos errors]
-    (let [m (.matcher pattern in)
-          m (.region m idx (.length in))
-          m (.useTransparentBounds m true)]
-      (if (.lookingAt m)
-        (ParseState. (matcher-fn m) (.end m))
-        (.addError errors errs idx)))))
 
 (defn- left-recursive? [grammar rule-name]
   (let [visited (HashSet.)
@@ -253,9 +68,9 @@
       :else (recur line (inc col) (inc n)))))
 
 (defn failure? [x]
-  (instance? ParseFailure x))
+  (instance? Parser$ParseFailure x))
 
-(defn failure->str ^String [^ParseFailure failure]
+(defn failure->str ^String [^Parser$ParseFailure failure]
   (let [{:keys [^long line ^long column]} (index->line-column (.in failure) (.idx failure))]
     (with-out-str
       (println (str "Parse error at line " line ", column " column ":"))
@@ -274,59 +89,68 @@
 (defn build-ebnf-parser
   ([grammar ws-pattern]
    (build-ebnf-parser grammar ws-pattern (fn [rule-name]
-                                           (fn [ast]
-                                             false))))
+                                           Parser/NEVER_RAW)))
   ([grammar ws-pattern ->raw?]
    (let [rule->id (zipmap (keys grammar) (range))
-         ^"[Lcore2.sql.parser.IParser;" rules (make-array IParser (count rule->id))]
+         ^"[Lcore2.sql.parser.Parser$AParser;" rules (make-array Parser$AParser (count rule->id))]
      (letfn [(build-parser [rule-name {:keys [tag hide] :as parser}]
-               (cond-> (case tag
-                         :nt (->NonTerminalParser (get rule->id (:keyword parser)) rules)
-                         :star (->RepeatParser (build-parser rule-name (:parser parser)) true)
-                         :plus (->RepeatParser (build-parser rule-name (:parser parser)) false)
-                         :opt (->OptParser (build-parser rule-name (:parser parser)))
-                         :cat (->CatParser (mapv (partial build-parser rule-name) (:parsers parser)))
-                         :alt (->AltParser (mapv (partial build-parser rule-name) (:parsers parser)))
-                         :ord (->AltParser (->> ((fn step [{:keys [parser1 parser2]}]
-                                                   (cons parser1 (if (= :ord (:tag parser2))
-                                                                   (step parser2)
-                                                                   [parser2])))
-                                                 parser)
-                                                (mapv (partial build-parser rule-name))))
-                         :neg (->WhitespaceParser ws-pattern (->NegParser (build-parser rule-name (:parser parser))))
-                         :epsilon (->WhitespaceParser ws-pattern (->EpsilonParser))
-                         :regexp (->WhitespaceParser ws-pattern (->RegexpParser (:regexp parser)
-                                                                                [:expected (rule-kw->name rule-name)]
-                                                                                (fn [^Matcher m]
-                                                                                  [(.group m)])))
-                         :string (->WhitespaceParser ws-pattern
-                                                     (if (re-find #"^\w+$" (:string parser))
-                                                       (->RegexpParser (Pattern/compile (str (Pattern/quote (:string parser)) "\\b")
-                                                                                        Pattern/CASE_INSENSITIVE)
-                                                                       [:expected (:string parser)]
-                                                                       (constantly [(:string parser)]))
-                                                       (->StringParser (:string parser) [(:string parser)] [:expected (:string parser)]))))
-                 hide (->HideParser)))]
+               (let [parser (case tag
+                              :nt (Parser$NonTerminalParser. (get rule->id (:keyword parser)))
+                              :star (Parser$RepeatParser. (build-parser rule-name (:parser parser)) true)
+                              :plus (Parser$RepeatParser. (build-parser rule-name (:parser parser)) false)
+                              :opt (Parser$OptParser. (build-parser rule-name (:parser parser)))
+                              :cat (Parser$CatParser. (mapv (partial build-parser rule-name) (:parsers parser)))
+                              :alt (Parser$AltParser. (mapv (partial build-parser rule-name) (:parsers parser)))
+                              :ord (Parser$AltParser. (->> ((fn step [{:keys [parser1 parser2]}]
+                                                              (cons parser1 (if (= :ord (:tag parser2))
+                                                                              (step parser2)
+                                                                              [parser2])))
+                                                            parser)
+                                                           (mapv (partial build-parser rule-name))))
+                              :neg (Parser$WhitespaceParser. ws-pattern (Parser$NegParser. (build-parser rule-name (:parser parser))))
+                              :epsilon (Parser$WhitespaceParser. ws-pattern (Parser$EpsilonParser.))
+                              :regexp (Parser$WhitespaceParser. ws-pattern (Parser$RegexpParser. (:regexp parser)
+                                                                                                 [:expected (rule-kw->name rule-name)]
+                                                                                                 (reify Function
+                                                                                                   (apply [_ m]
+                                                                                                     [(.group ^Matcher m)]))))
+                              :string (Parser$WhitespaceParser. ws-pattern
+                                                                (if (re-find #"^\w+$" (:string parser))
+                                                                  (Parser$RegexpParser. (Pattern/compile (str (Pattern/quote (:string parser)) "\\b")
+                                                                                                         Pattern/CASE_INSENSITIVE)
+                                                                                        [:expected (:string parser)]
+                                                                                        (let [ast [(:string parser)]]
+                                                                                          (reify Function
+                                                                                            (apply [_ m]
+                                                                                              ast))))
+                                                                  (Parser$StringParser. (:string parser)))))]
+                 (if hide
+                   (Parser$HideParser. parser)
+                   parser)))]
        (doseq [[k v] grammar
                :let [rule-id (int (get rule->id k))
                      raw? (if (= {:reduction-type :raw} (:red v))
-                            (fn [ast]
-                              true)
+                            Parser/ALWAYS_RAW
                             (->raw? k))
-                     memo-fn (if (left-recursive? grammar k)
-                               ->MemoizeLeftRecParser
-                               ->MemoizeParser)
-                     parser (->RuleParser k [k] rule-id raw? (build-parser k v))]]
-         (aset rules rule-id ^IParser (memo-fn parser)))
+                     parser (Parser$RuleParser. k rule-id raw? (build-parser k v))
+                     parser (if (left-recursive? grammar k)
+                              (Parser$MemoizeLeftRecParser. parser)
+                              (Parser$MemoizeParser. parser))]]
+         (aset rules rule-id ^Parser$AParser parser))
+
+       (doseq [^Parser$AParser rule-parser rules]
+         (.init rule-parser rules))
+
        (fn [^String in start-rule]
-         (let [errors (ParseErrors. (HashSet.) 0)
+         (let [errors (Parser$ParseErrors.)
                m-size (bit-shift-left (inc (.length in)) 9)
-               memos (make-array ParseState m-size)
-               _ (Arrays/fill ^objects memos not-found)]
-           (if-let [state (-> ^IParser (build-parser nil (->trailing-ws-parser start-rule))
-                              (.parse in 0 memos errors))]
+               memos (make-array Parser$ParseState m-size)
+               _ (Arrays/fill ^objects memos Parser/NOT_FOUND)
+               ^Parser$AParser parser (build-parser nil (->trailing-ws-parser start-rule))]
+           (.init parser rules)
+           (if-let [state (.parse parser in 0 memos errors)]
              (first (.ast state))
-             (ParseFailure. in (.errs errors) (.getIndex errors)))))))))
+             (Parser$ParseFailure. in (.getErrors errors) (.getIndex errors) nil))))))))
 
 (comment
 
@@ -406,10 +230,8 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
                                    (fn [rule-name]
                                      (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
                                               (re-find #"(^|_)(term|factor|primary|expression|query_expression_body)$" (name rule-name)))
-                                       (fn [ast]
-                                         (= 1 (count ast)))
-                                       (fn [ast]
-                                         false)))))
+                                       Parser/SINGLE_CHILD
+                                       Parser/NEVER_RAW))))
 
 (def parse (memoize
             (fn self
