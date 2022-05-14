@@ -102,7 +102,8 @@ public final class Parser {
     public static abstract class AParser {
         public abstract ParseState parse(String in, int idx, ParseState[] memos, IParseErrors errors);
 
-        public void init(final AParser[] rules) {
+        public AParser init(final AParser[] rules) {
+            return this;
         }
     }
 
@@ -122,7 +123,7 @@ public final class Parser {
         private static final IPersistentVector ERROR = PersistentVector.create(Keyword.intern("expected"), "<WS>");
 
         private final Pattern pattern;
-        private final AParser parser;
+        private AParser parser;
 
         public WhitespaceParser(final Pattern pattern, final AParser parser) {
             this.pattern = pattern;
@@ -142,25 +143,25 @@ public final class Parser {
             }
         }
 
-        public void init(final AParser[] rules) {
-            parser.init(rules);
+        public AParser init(final AParser[] rules) {
+            parser = parser.init(rules);
+            return this;
         }
     }
 
     public static final class NonTerminalParser extends AParser {
         private final int ruleId;
-        private AParser parser;
 
         public NonTerminalParser(final int ruleId) {
             this.ruleId = ruleId;
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            return parser.parse(in, idx, memos, errors);
+            throw new UnsupportedOperationException();
         }
 
-        public void init(final AParser[] rules) {
-            parser = rules[ruleId];
+        public AParser init(final AParser[] rules) {
+            return rules[ruleId];
         }
     }
 
@@ -188,7 +189,7 @@ public final class Parser {
 
         private final Keyword ruleName;
         private final Predicate<IPersistentVector> rawPred;
-        private final AParser parser;
+        private AParser parser;
         public final int ruleId;
 
         public RuleParser(final Keyword ruleName, final int ruleId, Predicate<IPersistentVector> rawPred, final AParser parser) {
@@ -217,8 +218,9 @@ public final class Parser {
             }
         }
 
-        public void init(final AParser[] rules) {
-            parser.init(rules);
+        public AParser init(final AParser[] rules) {
+            parser = parser.init(rules);
+            return this;
         }
     }
 
@@ -246,8 +248,9 @@ public final class Parser {
             }
         }
 
-        public void init(final AParser[] rules) {
+        public AParser init(final AParser[] rules) {
             parser.init(rules);
+            return this;
         }
     }
 
@@ -283,13 +286,14 @@ public final class Parser {
             }
         }
 
-        public void init(final AParser[] rules) {
+        public AParser init(final AParser[] rules) {
             parser.init(rules);
+            return this;
         }
     }
 
     public static final class HideParser extends AParser {
-        private final AParser parser;
+        private AParser parser;
 
         public HideParser(final AParser parser) {
             this.parser = parser;
@@ -304,13 +308,14 @@ public final class Parser {
             }
         }
 
-        public void init(final AParser[] rules) {
-            parser.init(rules);
+        public AParser init(final AParser[] rules) {
+            parser = parser.init(rules);
+            return this;
         }
     }
 
     public static final class OptParser extends AParser {
-        private final AParser parser;
+        private AParser parser;
 
         public OptParser(final AParser parser) {
             this.parser = parser;
@@ -325,15 +330,16 @@ public final class Parser {
             }
         }
 
-        public void init(final AParser[] rules) {
-            parser.init(rules);
+        public AParser init(final AParser[] rules) {
+            parser = parser.init(rules);
+            return this;
         }
     }
 
     public static final class NegParser extends AParser {
         private static final Keyword UNEXPECTED = Keyword.intern("unexpected");
 
-        private final AParser parser;
+        private AParser parser;
 
         public NegParser(final AParser parser) {
             this.parser = parser;
@@ -349,13 +355,14 @@ public final class Parser {
             }
         }
 
-        public void init(final AParser[] rules) {
-            parser.init(rules);
+        public AParser init(final AParser[] rules) {
+            parser = parser.init(rules);
+            return this;
         }
     }
 
     public static final class RepeatParser extends AParser {
-        private final AParser parser;
+        private AParser parser;
         private final boolean isStar;
 
         public RepeatParser(final AParser parser, final boolean isStar) {
@@ -382,22 +389,23 @@ public final class Parser {
             }
         }
 
-        public void init(final AParser[] rules) {
-            parser.init(rules);
+        public AParser init(final AParser[] rules) {
+            parser = parser.init(rules);
+            return this;
         }
     }
 
     public static final class CatParser extends AParser {
-        private final List<AParser> parsers;
+        private final AParser[] parsers;
 
         public CatParser(final List<AParser> parsers) {
-            this.parsers = parsers;
+            this.parsers = parsers.toArray(new AParser[parsers.size()]);
         }
 
         public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors) {
             final List<Object> ast = new ArrayList<>();
-            for (AParser parser : parsers) {
-                final ParseState state = parser.parse(in, idx, memos, errors);
+            for (int i = 0; i < parsers.length; i++) {
+                final ParseState state = parsers[i].parse(in, idx, memos, errors);
                 if (state != null) {
                     idx = state.idx;
                     ast.addAll((List<?>) state.ast);
@@ -408,24 +416,25 @@ public final class Parser {
             return new ParseState(PersistentVector.create(ast), idx);
         }
 
-        public void init(final AParser[] rules) {
-            for (AParser parser : parsers) {
-                parser.init(rules);
+        public AParser init(final AParser[] rules) {
+            for (int i = 0; i < parsers.length; i++) {
+                parsers[i] = parsers[i].init(rules);
             }
+            return this;
         }
     }
 
     public static final class AltParser extends AParser {
-        private final List<AParser> parsers;
+        private final AParser[] parsers;
 
         public AltParser(final List<AParser> parsers) {
-            this.parsers = parsers;
+            this.parsers = parsers.toArray(new AParser[parsers.size()]);
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
             ParseState state1 = null;
-            for (AParser parser : parsers) {
-                final ParseState state2 = parser.parse(in, idx, memos, errors);
+            for (int i = 0; i < parsers.length; i++) {
+                final ParseState state2 = parsers[i].parse(in, idx, memos, errors);
                 if (state1 == null || (state2 != null && state2.idx > state1.idx)) {
                     state1 = state2;
                 }
@@ -433,10 +442,11 @@ public final class Parser {
             return state1;
         }
 
-        public void init(final AParser[] rules) {
-            for (AParser parser : parsers) {
-                parser.init(rules);
+        public AParser init(final AParser[] rules) {
+            for (int i = 0; i < parsers.length; i++) {
+                parsers[i] = parsers[i].init(rules);
             }
+            return this;
         }
     }
 
