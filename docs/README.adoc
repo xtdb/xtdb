@@ -22,15 +22,7 @@ From here, though, you can build the documentation section in isolation, to chec
 The documentation site includes documentation for previous releases as well as the current main branch.
 These are located by branch name convention - branches prefixed with `docs-v*` will be included.
 
-=== Release checklist:
+== Release checklist:
 
-1. Create a `docs-v<new-version>` branch
-2. Update `docs/**/antora.yml`:
-  a. Delete `prerelease: indeed`
-  b. Delete `display_version: master`
-  c. Replace `version: master` with `version: <new-version>`
-3. Update `docs/**/*.adoc`:
-  a. Replace `:page-alias: zig` with `:page-alias: <new-version>@zig`
-3. Commit, push branch to https://github.com/xtdb/xtdb
-4. Run `./bin/build.sh`. You should not get any errors.
-5. Run `./bin/deploy.sh`. You will need AWS credentials.
+To follow the docs release checklist, please read
+https://github.com/xtdb/xtdb/blob/master/dev/RELEASING.adoc#Docs[RELEASING.adoc]

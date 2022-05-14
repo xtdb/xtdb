@@ -2,10 +2,17 @@
 
 link:./styles.css[`styles.css`] is stylesheets to use with Javadoc.
 
+== Automated Build
+
+The standard build for XTDB javadocs can be found under the `deploy-api-docs` target in the CircleCI config:
+https://github.com/xtdb/xtdb/blob/44303aa35ff5843b2e1130d1bb4a943bc3f8b3be/.circleci/config.yml#L201[.circleci/config.yml]
+
 == Usage
 
 [source,sh]
 ----
 # Add these parameters to your javadoc command to generate docs with XTDB CSS styles.
 -encoding UTF-8 -docencoding utf-8 -charset utf-8 -stylesheetfile <path_to_styles.css>
+# such as:
+javadoc -Xdoclint:none -d xtdb-javadoc/ -cp `lein classpath` -sourcepath core/src xtdb.api -subpackages xtdb.api.tx -encoding UTF-8 -docencoding utf-8 -charset utf-8 -stylesheetfile docs/javadocs/styles.css
 ----
