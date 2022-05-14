@@ -50,11 +50,6 @@
                 (recur))))
         false))))
 
-(defn- ->trailing-ws-parser [start-rule]
-  {:tag :cat
-   :parsers [{:tag :nt :keyword start-rule}
-             {:tag :epsilon}]})
-
 (defn- rule-kw->name [kw]
   (str "<" (str/replace (name kw) "_" " ") ">"))
 
@@ -146,8 +141,8 @@
                m-size (bit-shift-left (inc (.length in)) 9)
                memos (make-array Parser$ParseState m-size)
                _ (Arrays/fill ^objects memos Parser/NOT_FOUND)
-               ^Parser$AParser parser (build-parser nil (->trailing-ws-parser start-rule))]
-           (.init parser rules)
+               parser (Parser$CatParser. [(aget rules (get rule->id start-rule))
+                                          (Parser$WhitespaceParser. ws-pattern (Parser$EpsilonParser.))])]
            (if-let [state (.parse parser in 0 memos errors)]
              (first (.ast state))
              (Parser$ParseFailure. in (.getErrors errors) (.getIndex errors) nil))))))))
