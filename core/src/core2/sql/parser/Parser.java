@@ -13,8 +13,8 @@ import clojure.lang.IPersistentMap;
 import clojure.lang.IPersistentVector;
 import clojure.lang.ITransientCollection;
 import clojure.lang.Keyword;
+import clojure.lang.PersistentArrayMap;
 import clojure.lang.PersistentVector;
-import clojure.lang.RT;
 
 public final class Parser {
 
@@ -205,7 +205,7 @@ public final class Parser {
                 if (rawPred.test(state.ast)) {
                     return state;
                 } else {
-                    final IPersistentMap meta = RT.map(START_IDX, idx, END_IDX, state.idx);
+                    final IPersistentMap meta = new PersistentArrayMap(new Object[] {START_IDX, idx, END_IDX, state.idx});
                     ITransientCollection newAst = PersistentVector.EMPTY.asTransient();
                     newAst = newAst.conj(ruleName);
                     for (Object x : ((List<?>) state.ast)) {
