@@ -224,6 +224,9 @@ public final class Parser {
 
     public static final ParseState NOT_FOUND = new ParseState(null, -1);
 
+    private static final int MAX_RULE_ID = 512;
+    private static final int RULE_ID_SHIFT = Integer.numberOfTrailingZeros(MAX_RULE_ID);
+
     public static final class MemoizeParser extends AParser {
         private final RuleParser parser;
 
@@ -232,7 +235,7 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            final int memoIdx = parser.ruleId | (idx << 9);
+            final int memoIdx = parser.ruleId | (idx << RULE_ID_SHIFT);
             ParseState state = memos[memoIdx];
             if (NOT_FOUND == state) {
                 state = parser.parse(in, idx, memos, errors);
@@ -256,7 +259,7 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            final int memoIdx = parser.ruleId | (idx << 9);
+            final int memoIdx = parser.ruleId | (idx << RULE_ID_SHIFT);
             ParseState state = memos[memoIdx];
             if (NOT_FOUND == state) {
                 state = null;
