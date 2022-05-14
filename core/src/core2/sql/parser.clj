@@ -73,7 +73,7 @@
         :else
         (.addError errors ws-err idx)))))
 
-(defrecord NonTerminalParser [^int rule-id ^objects rules]
+(defrecord NonTerminalParser [^int rule-id ^"[Lcore2.sql.parser.IParser;" rules]
   IParser
   (parse [_ in idx memos errors]
     (.parse ^IParser (aget rules rule-id) in idx memos errors)))
@@ -278,7 +278,7 @@
                                              false))))
   ([grammar ws-pattern ->raw?]
    (let [rule->id (zipmap (keys grammar) (range))
-         rules (object-array (count rule->id))]
+         ^"[Lcore2.sql.parser.IParser;" rules (make-array IParser (count rule->id))]
      (letfn [(build-parser [rule-name {:keys [tag hide] :as parser}]
                (cond-> (case tag
                          :nt (->NonTerminalParser (get rule->id (:keyword parser)) rules)
@@ -317,7 +317,7 @@
                                ->MemoizeLeftRecParser
                                ->MemoizeParser)
                      parser (->RuleParser k [k] rule-id raw? (build-parser k v))]]
-         (aset rules rule-id (memo-fn parser)))
+         (aset rules rule-id ^IParser (memo-fn parser)))
        (fn [^String in start-rule]
          (let [errors (ParseErrors. (HashSet.) 0)
                m-size (bit-shift-left (inc (.length in)) 9)
