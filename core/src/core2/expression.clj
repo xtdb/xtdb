@@ -1534,17 +1534,17 @@
            period# (.getPeriod period-duration#)
            duration# (.getDuration period-duration#)
            ddays# (.toDaysPart duration#)
-           dsecs# (- (.getSeconds duration#) (* ddays# 86400))
+           dsecs# (Math/subtractExact (.getSeconds duration#) (Math/multiplyExact ddays# (long 86400)))
            dmillis# (.toMillisPart duration#)]
-       (.set ^IntervalDayVector ~out-vec-sym ~idx-sym (+ (.getDays period#) ddays#) (+ (* dsecs# 1000) dmillis#)))
+       (.set ^IntervalDayVector ~out-vec-sym ~idx-sym (Math/addExact (.getDays period#) (int ddays#)) (Math/addExact (Math/multiplyExact (int dsecs#) (int 1000)) dmillis#)))
     IntervalUnit/MONTH_DAY_NANO
     `(let [^PeriodDuration period-duration# ~code
            period# (.getPeriod period-duration#)
            duration# (.getDuration period-duration#)
            ddays# (.toDaysPart duration#)
-           dsecs# (- (.getSeconds duration#) (* ddays# 86400))
+           dsecs# (Math/subtractExact (.getSeconds duration#) (Math/multiplyExact ddays# (long 86400)))
            dnanos# (.toNanosPart duration#)]
-       (.set ~out-vec-sym ~idx-sym (.toTotalMonths period#) (+ (.getDays period#) ddays#) (+ (* dsecs# 1000000000) dnanos#)))))
+       (.set ~out-vec-sym ~idx-sym (.toTotalMonths period#) (Math/addExact (.getDays period#) (int ddays#)) (Math/addExact (Math/multiplyExact dsecs# (long 1000000000)) (long dnanos#))))))
 
 (def ^:private out-vec-sym (gensym 'out-vec))
 (def ^:private out-writer-sym (gensym 'out-writer-sym))
