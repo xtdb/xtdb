@@ -1,0 +1,56 @@
+= 32. Interval
+
+Date: 2022-05-16
+
+== Status
+
+Proposed
+
+== Context
+
+The SQL spec defines INTERVAL types which denote both calendar periods of time (like java.time.Period) and something like an absolute duration of time, such as a quantity of seconds in other instances.
+
+You have two classes of INTERVAL in SQL, YEAR_MONTH (which can have fields for years and months) and DAY_TIME (which can contain days, hours, minutes and seconds with a fractional component.)
+
+You cannot compare a YEAR_MONTH interval to a DAY_TIME interval, they behave as if different types.
+
+Along with the SQL spec, we have to consider the canonical arrow representation of interval, which consists of 3 different possible representations:
+
+- YEAR_MONTH an int32 containing months
+- DAY_TIME an int32 containing days, and an int32 containing millis.
+- MONTH_DAY_NANO an int32 for months, int32 for days and int64 for nanos.
+
+Immediately we are struck with some problems
+
+- You can represent intervals in arrow that are considered mixed type in SQL, e.g MONTH_DAY_NANO can contain months as well as seconds.
+- You have to treat 12 months as 1 year as there is only storage for months in arrow.
+
+For reference, postgres allows mixed type intervals, months with seconds is totally fine. You can even compare DAYS to MONTHS (30 days = 1 month). postgres also appears to treat 12 months as 1 year.
+
+`java.time.Period` seems to go for the unambiguous and correct route - Period is not comparable, and years are stored seperately to months. 12 months are not equal to 1 year.
+
+== Option A: Go with SQL
+
+Create custom arrow types to represent SQL intervals distinct from arrow. Go with the spec for comparison rules, disallow mixed type intervals.
+
+Arrow intervals can then have their own semantics and require a CAST to participate.
+
+== Option B: Go with arrow
+
+This requires mixed type intervals to be supported, permits a wider range of arithmetic operations (such as adding seconds to months).
+
+12 months would have to equal 1 year.
+
+We would then decide on how to deal with ambiguity in comparison, e.g disallow comparison (like java.time) or perhaps we could implement some equivalence rules like postgres e.g 1 month = 30 days.
+
+== Option C: 'Correct' and unambiguous
+
+Take inspiration from java.time, create an ArrowType that allows distinguishing years from months.
+
+Disallow comparison as it is ambiguous.
+
+Require some kind of CAST from external arrow to participate.
+
+== Decision
+
+== Consequences
