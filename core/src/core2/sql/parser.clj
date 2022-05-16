@@ -2,10 +2,10 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str])
   (:import java.io.File
-           [java.util ArrayDeque Arrays HashSet Map]
+           [java.util ArrayDeque Arrays HashSet Map Set]
            [java.util.regex Matcher Pattern]
            java.util.function.Function
-           [core2.sql.parser Parser$ParseState Parser$ParseFailure Parser$ParseErrors Parser$AParser
+           [core2.sql.parser Parser$ParseState Parser$ParseErrors Parser$AParser
             Parser$WhitespaceParser Parser$EpsilonParser Parser$RuleParser Parser$MemoizeParser Parser$MemoizeLeftRecParser Parser$NonTerminalParser
             Parser$HideParser Parser$OptParser Parser$NegParser Parser$RepeatParser Parser$CatParser Parser$AltParser
             Parser$RegexpParser Parser$StringParser Parser]))
@@ -16,6 +16,8 @@
 ;; https://arxiv.org/pdf/1806.11150.pdf
 
 (set! *unchecked-math* :warn-on-boxed)
+
+(defrecord ParseFailure [^String in ^Set errs ^int idx])
 
 (defn- left-recursive? [grammar rule-name]
   (let [visited (HashSet.)
@@ -63,9 +65,9 @@
       :else (recur line (inc col) (inc n)))))
 
 (defn failure? [x]
-  (instance? Parser$ParseFailure x))
+  (instance? ParseFailure x))
 
-(defn failure->str ^String [^Parser$ParseFailure failure]
+(defn failure->str ^String [^ParseFailure failure]
   (let [{:keys [^long line ^long column]} (index->line-column (.in failure) (.idx failure))]
     (with-out-str
       (println (str "Parse error at line " line ", column " column ":"))
@@ -145,7 +147,7 @@
                                           (Parser$WhitespaceParser. ws-pattern (Parser$EpsilonParser.))])]
            (if-let [state (.parse parser in 0 memos errors)]
              (first (.ast state))
-             (Parser$ParseFailure. in (.getErrors errors) (.getIndex errors) nil))))))))
+             (ParseFailure. in (.getErrors errors) (.getIndex errors)))))))))
 
 (comment
 

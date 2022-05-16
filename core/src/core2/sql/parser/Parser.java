@@ -28,28 +28,6 @@ public final class Parser {
         }
     }
 
-    public static final class ParseFailure implements IObj {
-        public final String in;
-        public final Set<IPersistentVector> errs;
-        public final int idx;
-        private final IPersistentMap meta;
-
-        public ParseFailure(final String in, final Set<IPersistentVector> errs, int idx, final IPersistentMap meta) {
-            this.in = in;
-            this.errs = errs;
-            this.idx = idx;
-            this.meta = meta;
-        }
-
-        public IObj withMeta(final IPersistentMap meta) {
-            return new ParseFailure(in, errs, idx, meta);
-        }
-
-        public IPersistentMap meta() {
-            return meta;
-        }
-    }
-
     public interface IParseErrors {
         void addError(IPersistentVector error, int idx);
 
