@@ -47,7 +47,7 @@ We would then decide on how to deal with ambiguity in comparison, e.g disallow c
 
 Take inspiration from java.time, create an ArrowType that allows distinguishing years from months.
 
-Disallow comparison as it is ambiguous.
+We could then either follow SQL, require the YEAR_MONTH / DAY_TIME distinction, or permit mixed fields like postgres and disallow comparison as it is ambiguous.
 
 Require some kind of CAST from external arrow to participate.
 
