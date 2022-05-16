@@ -956,25 +956,57 @@
     (fn [[code]]
       `(ByteBuffer/wrap (.getBytes (.toLowerCase (resolve-string ~code)) StandardCharsets/UTF_8)))))
 
-;; todo high perf variadic version, or specialisation for arity up to N.
-(defmethod codegen-mono-call [:concat ArrowType$Utf8 ArrowType$Utf8] [_]
-  (mono-fn-call types/varchar-type (fn [[a b]]
-                                     `(ByteBuffer/wrap (.getBytes (str (resolve-string ~a) (resolve-string ~b))
-                                                                  StandardCharsets/UTF_8)))))
+(defn- allocate-concat-out-buffer ^ByteBuffer [bufs]
+  (loop [i (int 0)
+         capacity (int 0)]
+    (if (< i (count bufs))
+      (let [^ByteBuffer buf (nth bufs i)]
+        (recur (unchecked-inc-int i) (Math/addExact (int capacity) (.remaining buf))))
+      (ByteBuffer/allocate capacity))))
 
-(defn bconcat ^bytes [^bytes b1 ^bytes b2]
-  (let [ret (byte-array (+ (alength b1) (alength b2)))]
-    (System/arraycopy b1 0 ret 0 (alength b1))
-    (System/arraycopy b2 0 ret (alength b1) (alength b2))
-    ret))
-
-(defmethod codegen-mono-call [:concat ArrowType$Binary ArrowType$Binary] [_]
-  (mono-fn-call types/varbinary-type (fn [[a b]] `(ByteBuffer/wrap (bconcat (resolve-bytes ~a) (resolve-bytes ~b))))))
+(defn buf-concat
+  "Concatenates multiple byte buffers, to implement variadic string / binary concat."
+  ^ByteBuffer [bufs]
+  (let [out (allocate-concat-out-buffer bufs)
+        ;; this does not reset position of input bufs, but it should be ok to consume them, if caller cares, it is possible
+        ;; to reset their positions.
+        _ (reduce (fn [^ByteBuffer out ^ByteBuffer buf] (.put out buf) out) out bufs)]
+    (.position out 0)
+    out))
 
 (defn resolve-utf8-buf ^ByteBuffer [s-or-buf]
   (if (instance? ByteBuffer s-or-buf)
     s-or-buf
     (ByteBuffer/wrap (.getBytes ^String s-or-buf StandardCharsets/UTF_8))))
+
+;; concat is not a simple mono-call, as it permits a variable number of arguments so we can avoid intermediate alloc
+(defmethod codegen-call :concat [{:keys [emitted-args]}]
+  (when (< (count emitted-args) 2)
+    (throw (IllegalArgumentException. "Arity error, concat requires at least two arguments")))
+  (let [possible-types (into #{} (mapcat :return-types) emitted-args)
+        value-types (disj possible-types types/null-type)
+        _ (when (< 1 (count value-types)) (throw (IllegalArgumentException. "All arguments to concat must be of the same type.")))
+        value-type (first value-types)
+        continue-concat
+        (condp = value-type
+          types/varchar-type (fn [f string-args] (f types/varchar-type `(buf-concat (mapv resolve-utf8-buf [~@string-args]))))
+          types/varbinary-type (fn [f binary-args] (f types/varbinary-type `(buf-concat (mapv resolve-buf [~@binary-args]))))
+          nil (fn [f _] (f types/null-type nil))
+          (throw (IllegalArgumentException. "Type error, concat not supported on argument types.")))]
+    {:return-types possible-types
+     :continue (fn continue-call-expr [handle-emitted-expr]
+                 (let [build-args-then-call
+                       (reduce (fn step [build-next-arg {continue-this-arg :continue}]
+                                 (fn continue-building-args [arg-types emitted-args]
+                                   (continue-this-arg (fn [arg-type emitted-arg]
+                                                        (if (= arg-type types/null-type)
+                                                          (handle-emitted-expr types/null-type nil)
+                                                          (build-next-arg (conj arg-types arg-type)
+                                                                          (conj emitted-args emitted-arg)))))))
+                               (fn call-with-built-args [_ emitted-args]
+                                 (continue-concat handle-emitted-expr emitted-args))
+                               (reverse emitted-args))]
+                   (build-args-then-call [] [])))}))
 
 (defmethod codegen-mono-call [:substring ArrowType$Utf8 ArrowType$Int ArrowType$Int ArrowType$Bool] [_]
   {:return-type types/varchar-type

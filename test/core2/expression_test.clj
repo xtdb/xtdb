@@ -765,6 +765,14 @@
                 ^String s2 tcg/string]
     (= (str s1 s2) (String. (byte-array (bconcat (.getBytes s1 "utf-8") (.getBytes s2 "utf-8"))) "utf-8"))))
 
+(tct/defspec variadic-str-concat-prop
+  (tcp/for-all [^String strs (tcg/vector tcg/string 2 99)]
+    (= (apply str strs) (project1 (list* 'concat strs) {}))))
+
+(tct/defspec variadic-bin-concat-prop
+  (tcp/for-all [^bytes barrs (tcg/vector tcg/bytes 2 99)]
+    (= (vec (apply concat barrs)) (vec (expr/resolve-bytes (project1 (list* 'concat barrs) {}))))))
+
 (t/deftest position-test
   (t/are [s1 s2 unit expected]
     (= expected (project1 (list 'position 'a 'b unit) {:a s1, :b s2}))
