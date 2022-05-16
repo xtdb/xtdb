@@ -10,50 +10,50 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defmethod expr/codegen-call [:compare ArrowType$Bool ArrowType$Bool] [_]
+(defmethod expr/codegen-mono-call [:compare ArrowType$Bool ArrowType$Bool] [_]
   {:continue-call (fn [f emitted-args]
                     (f types/int-type
                        `(Boolean/compare ~@emitted-args)))
-   :return-types #{types/int-type}})
+   :return-type types/int-type})
 
-(defmethod expr/codegen-call [:compare ArrowType$Int ArrowType$Int] [_]
+(defmethod expr/codegen-mono-call [:compare ArrowType$Int ArrowType$Int] [_]
   {:continue-call (fn [f emitted-args]
                     (f types/int-type
                        `(Long/compare ~@emitted-args)))
-   :return-types #{types/int-type}})
+   :return-type types/int-type})
 
-(defmethod expr/codegen-call [:compare ::types/Number ::types/Number] [_]
+(defmethod expr/codegen-mono-call [:compare ::types/Number ::types/Number] [_]
   {:continue-call (fn [f emitted-args]
                     (f types/int-type
                        `(Double/compare ~@emitted-args)))
-   :return-types #{types/int-type}})
+   :return-type types/int-type})
 
-(defmethod expr/codegen-call [:compare ArrowType$Date ArrowType$Date] [_]
+(defmethod expr/codegen-mono-call [:compare ArrowType$Date ArrowType$Date] [_]
   ;; TODO different scales
   {:continue-call (fn [f emitted-args]
                     (f types/int-type
                        `(Long/compare ~@emitted-args)))
-   :return-types #{types/int-type}})
+   :return-type types/int-type})
 
-(defmethod expr/codegen-call [:compare ArrowType$Timestamp ArrowType$Timestamp] [_]
+(defmethod expr/codegen-mono-call [:compare ArrowType$Timestamp ArrowType$Timestamp] [_]
   ;; TODO different scales
   {:continue-call (fn [f emitted-args]
                     (f types/int-type
                        `(Long/compare ~@emitted-args)))
-   :return-types #{types/int-type}})
+   :return-type types/int-type})
 
 (doseq [arrow-type #{ArrowType$Binary ArrowType$Utf8}]
-  (defmethod expr/codegen-call [:compare arrow-type arrow-type] [_]
+  (defmethod expr/codegen-mono-call [:compare arrow-type arrow-type] [_]
     {:continue-call (fn [f emitted-args]
                       (f types/int-type
                          `(util/compare-nio-buffers-unsigned ~@emitted-args)))
-     :return-types #{types/int-type}}))
+     :return-type types/int-type}))
 
 (doseq [arrow-type #{KeywordType UuidType}]
-  (defmethod expr/codegen-call [:compare arrow-type arrow-type] [_]
+  (defmethod expr/codegen-mono-call [:compare arrow-type arrow-type] [_]
     {:continue-call (fn [f emitted-args]
                       (f types/int-type `(.compareTo ~@(map #(expr/with-tag % Comparable) emitted-args))))
-     :return-types #{types/int-type}}))
+     :return-type types/int-type}))
 
 (doseq [[f left-type right-type res] [[:compare-nulls-first ArrowType$Null ArrowType$Null 0]
                                       [:compare-nulls-first ArrowType$Null ::types/Object -1]
@@ -61,14 +61,14 @@
                                       [:compare-nulls-last ArrowType$Null ArrowType$Null 0]
                                       [:compare-nulls-last ArrowType$Null ::types/Object 1]
                                       [:compare-nulls-last ::types/Object ArrowType$Null -1]]]
-  (defmethod expr/codegen-call [f left-type right-type] [_]
-    {:return-types #{types/int-type}
+  (defmethod expr/codegen-mono-call [f left-type right-type] [_]
+    {:return-type types/int-type
      :continue-call (fn [f _]
                       (f types/int-type res))}))
 
 (doseq [f [:compare-nulls-first :compare-nulls-last]]
-  (defmethod expr/codegen-call [f ::types/Object ::types/Object] [expr]
-    (expr/codegen-call (assoc expr :f :compare))))
+  (defmethod expr/codegen-mono-call [f ::types/Object ::types/Object] [expr]
+    (expr/codegen-mono-call (assoc expr :f :compare))))
 
 (def ^:private build-comparator
   (-> (fn [left-col-types right-col-types null-ordering]
@@ -92,7 +92,7 @@
                       ~(cont-l (fn continue-left [left-type left-code]
                                  (cont-r (fn continue-right [right-type right-code]
                                            (let [{cont :continue}
-                                                 (expr/codegen-call* {:f (case null-ordering
+                                                 (expr/codegen-call {:f (case null-ordering
                                                                            :nulls-first :compare-nulls-first
                                                                            :nulls-last :compare-nulls-last)
                                                                       :emitted-args [{:return-types #{left-type}

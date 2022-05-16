@@ -96,7 +96,7 @@
                         (continue-right
                          (fn [right-type right-code]
                            (let [{continue-= :continue-call}
-                                 (expr/codegen-call {:op :call, :f eq-fn,
+                                 (expr/codegen-mono-call {:op :call, :f eq-fn,
                                                      :arg-types [left-type right-type]})]
                              (continue-=
                               (fn [out-type out-code]

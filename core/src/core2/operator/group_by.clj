@@ -244,7 +244,7 @@
     (fn emit-sum-step [acc-type var-type acc-sym group-idx-sym val-code]
       ;; TODO `DoubleSummaryStatistics` uses 'Kahan's summation algorithm'
       ;; to compensate for rounding errors - should we?
-      (let [{:keys [continue]} (expr/codegen-call*
+      (let [{:keys [continue]} (expr/codegen-call
                                 {:op :call, :f :+,
                                  :emitted-args [{:return-types #{acc-type}
                                                  :continue (fn [f]
@@ -373,7 +373,7 @@
       )
 
     (fn emit-min-max-step [acc-type var-type acc-sym group-idx-sym val-code]
-      (let [{:keys [continue-call]} (expr/codegen-call {:op :call, :f update-if-f-kw,
+      (let [{:keys [continue-call]} (expr/codegen-mono-call {:op :call, :f update-if-f-kw,
                                                         :arg-types [var-type acc-type]})
             val-sym (gensym 'val)]
         `(let [~(-> acc-sym (expr/with-tag (types/arrow-type->vector-type acc-type))) ~acc-sym
@@ -517,7 +517,7 @@
          ~(expr/set-value-form types/bool-type acc-sym group-idx-sym zero-value)))
 
     (fn emit-bool-agg-step [var-type acc-sym group-idx-sym val-code]
-      (let [{:keys [continue]} (expr/codegen-call* {:op :call, :f step-f-kw
+      (let [{:keys [continue]} (expr/codegen-call {:op :call, :f step-f-kw
                                                     :emitted-args [{:return-types #{types/null-type types/bool-type}
                                                                     :continue (fn [f]
                                                                                 `(if (.isNull ~acc-sym ~group-idx-sym)
