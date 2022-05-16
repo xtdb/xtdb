@@ -7,7 +7,7 @@
            java.util.function.Function
            [core2.sql.parser Parser$ParseState Parser$ParseErrors Parser$AParser
             Parser$WhitespaceParser Parser$EpsilonParser Parser$RuleParser Parser$MemoizeParser Parser$MemoizeLeftRecParser Parser$NonTerminalParser
-            Parser$HideParser Parser$OptParser Parser$NegParser Parser$RepeatParser Parser$CatParser Parser$AltParser
+            Parser$HideParser Parser$OptParser Parser$NegParser Parser$RepeatParser Parser$CatParser Parser$AltParser Parser$OrdParser
             Parser$RegexpParser Parser$StringParser Parser]))
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
@@ -98,12 +98,14 @@
                               :opt (Parser$OptParser. (build-parser rule-name (:parser parser)))
                               :cat (Parser$CatParser. (mapv (partial build-parser rule-name) (:parsers parser)))
                               :alt (Parser$AltParser. (mapv (partial build-parser rule-name) (:parsers parser)))
-                              :ord (Parser$AltParser. (->> ((fn step [{:keys [parser1 parser2]}]
-                                                              (cons parser1 (if (= :ord (:tag parser2))
-                                                                              (step parser2)
-                                                                              [parser2])))
-                                                            parser)
-                                                           (mapv (partial build-parser rule-name))))
+                              :ord (let [parsers ((fn step [{:keys [parser1 parser2]}]
+                                                    (cons parser1 (if (= :ord (:tag parser2))
+                                                                    (step parser2)
+                                                                    [parser2])))
+                                                  parser)]
+                                     (if (every? (comp #{:string :regexp} :tag) parsers)
+                                       (Parser$OrdParser. (mapv (partial build-parser rule-name) parsers))
+                                       (Parser$AltParser. (mapv (partial build-parser rule-name) parsers))))
                               :neg (Parser$WhitespaceParser. ws-pattern (Parser$NegParser. (build-parser rule-name (:parser parser))))
                               :epsilon (Parser$WhitespaceParser. ws-pattern (Parser$EpsilonParser.))
                               :regexp (Parser$WhitespaceParser. ws-pattern (Parser$RegexpParser. (:regexp parser)

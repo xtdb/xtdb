@@ -430,6 +430,31 @@ public final class Parser {
         }
     }
 
+    public static final class OrdParser extends AParser {
+        private final AParser[] parsers;
+
+        public OrdParser(final List<AParser> parsers) {
+            this.parsers = parsers.toArray(new AParser[parsers.size()]);
+        }
+
+        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
+            for (int i = 0; i < parsers.length; i++) {
+                final ParseState state = parsers[i].parse(in, idx, memos, errors);
+                if (state != null) {
+                    return state;
+                }
+            }
+            return null;
+        }
+
+        public AParser init(final AParser[] rules) {
+            for (int i = 0; i < parsers.length; i++) {
+                parsers[i] = parsers[i].init(rules);
+            }
+            return this;
+        }
+    }
+
     public static final class StringParser extends AParser {
         private final String string;
         private final IPersistentVector ast;
