@@ -489,6 +489,10 @@
      ;;=>
      (list 'not (exists-symbol qe))
 
+     [:array_value_constructor_by_enumeration _ ^:z list]
+     ;; =>
+     (vec (expr list))
+
      [:array_element_reference ^:z ave ^:z nve]
      ;;=>
      (list 'nth (expr ave) (expr nve))
@@ -498,6 +502,14 @@
      (symbol (str "?_" (sem/dynamic-param-idx z)))
 
      (r/zcase z
+       :array_element_list
+       (r/collect-stop
+         (fn [z]
+           (r/zcase z
+             (:array_element_list nil) nil
+             [(expr z)]))
+         z)
+
        :case_abbreviation
        (->> (r/collect-stop
              (fn [z]

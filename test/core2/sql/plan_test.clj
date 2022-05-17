@@ -661,3 +661,21 @@
 
     "ABS(foo.a)" '(abs x1)
     "ABS(1 YEAR)" '(abs (single-field-interval 1 "YEAR" 2 0))))
+
+(deftest test-array-construction
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+
+    ;; todo I think this should work (<empty specification>)
+    #_#_
+    "ARRAY []" []
+
+    "ARRAY [1]" [1]
+    "ARRAY [NULL]" [nil]
+    "ARRAY [ARRAY [1]]" [[1]]
+
+    "ARRAY [foo.x, foo.y + 1]" '[x1 (+ x2 1)]
+
+    "ARRAY [1, 42]" [1 42]
+    "ARRAY [1, NULL]" [1 nil]
+    "ARRAY [1, 1.2, '42!']" [1 1.2 "42!"]))
