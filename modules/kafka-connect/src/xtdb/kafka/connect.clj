@@ -74,7 +74,7 @@
 
       (string? value)
       (try
-        (json/parse-string value true)
+        (doall (json/parse-string value true))
         (catch JsonParseException e
           (log/debug e "Failed to parse as JSON, trying EDN: " value)
           (c/read-edn-string-with-readers value)))
@@ -100,14 +100,25 @@
     (or (coerce-eid id)
         (UUID/randomUUID))))
 
+(defn- value->tx-op [edn-record-value props ^SinkRecord record]
+  (cond
+    (map? edn-record-value)
+    (let [id (find-eid props record edn-record-value)]
+      [::xt/put (assoc edn-record-value :xt/id id)])
+
+    (vector? edn-record-value)
+    (first edn-record-value)
+
+    :else (throw (err/illegal-arg :unknown-message-type
+                                  {::err/message (str "Unknown edn-record-value: " edn-record-value)}))))
+
 (defn transform-sink-record [props ^SinkRecord record]
   (log/info "sink record:" record)
   (let [tx-op (if (and (nil? (.value record))
                        (.key record))
                 [::xt/delete (coerce-eid (.key record))]
-                (let [doc (record->edn record)
-                      id (find-eid props record doc)]
-                  [::xt/put (assoc doc :xt/id id)]))]
+                (let [edn-record-value (record->edn record)]
+                  (value->tx-op edn-record-value props record)))]
     (log/info "tx op:" tx-op)
     tx-op))
 
