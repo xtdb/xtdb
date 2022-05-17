@@ -180,7 +180,7 @@
 (defn preprocess-query [^String query]
   (let [query (str/replace query #"\(((?:[^(].)+?CROSS\s+JOIN.+?)\)" "$1")
         query (str/replace query "CROSS JOIN" ",")]
-    (if (re-find #"(?i) FROM " query)
+    (if (re-find #"(?i)( FROM |^\s*VALUES)" query)
       query
       (str query " FROM (VALUES 0) AS no_from"))))
 

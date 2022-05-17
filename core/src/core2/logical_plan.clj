@@ -28,7 +28,7 @@
       (symbol? expr) :relation))
   :default ::default)
 
-(s/def ::expression some?)
+(s/def ::expression any?)
 
 (s/def ::column-expression (s/map-of ::column ::expression :conform-keys true :count 1))
 

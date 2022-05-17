@@ -773,7 +773,7 @@
             (apply-predicative-subquery new-relation (interpret-subquery sq) predicate-set))
           [relation predicate-set]
           (find-sub-queries sc))
-        unused-predicates (filter predicate-set predicates)]
+        unused-predicates (filter #(contains? predicate-set %) predicates)]
     (reduce
       (fn [acc predicate]
         [:select predicate acc])
