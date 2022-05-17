@@ -686,3 +686,12 @@
 
     "test-array-subquery1" "SELECT ARRAY(select b.b1 from b where b.b2 = 42) FROM a where a.a = 42"
     "test-array-subquery2" "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42"))
+
+(t/deftest test-array-trim
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+
+    "TRIM_ARRAY(NULL, 2)" '(trim-array nil 2)
+    "TRIM_ARRAY(foo.a, 2)" '(trim-array x1 2)
+    "TRIM_ARRAY(ARRAY [42, 43], 1)" '(trim-array [42, 43] 1)
+    "TRIM_ARRAY(foo.a, foo.b)" '(trim-array x1 x2)))

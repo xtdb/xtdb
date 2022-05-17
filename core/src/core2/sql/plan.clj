@@ -507,6 +507,9 @@
      ;;=>
      (list 'nth (expr ave) (expr nve))
 
+     [:trim_array_function _ ^:z a, ^:z n]
+     (list 'trim-array (expr a) (expr n))
+
      [:dynamic_parameter_specification _]
      ;;=>
      (symbol (str "?_" (sem/dynamic-param-idx z)))
