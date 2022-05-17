@@ -1435,7 +1435,10 @@
       (t/is (= {:res [nil 2 5 nil]
                 :leg-type #{LegType/BIGINT LegType/NULL}
                 :nullable? false}
-               (run-projection rel '(nth x 1)))))))
+               (run-projection rel '(nth x 1))))))
+
+  (t/testing "Nested expr"
+    (t/is (= [42] (project1 '[(+ 1 a)] {:a 41})))))
 
 (t/deftest test-mixing-prims-with-non-prims
   (with-open [rel (open-rel [(tu/->mono-vec "x" types/struct-type
