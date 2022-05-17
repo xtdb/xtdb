@@ -1,0 +1,10 @@
+[:rename
+ {x10 $column_1$}
+ [:project
+  [{x10 x7}]
+  [:group-by
+   [x1 x2 $row_number$ {x7 (array-agg x4)}]
+   [:join
+    [{x1 x5}]
+    [:map [{$row_number$ (row-number)}] [:rename {b x1, a x2} [:scan [b {a (= a 42)}]]]]
+    [:rename {b1 x4, b2 x5} [:scan [b1 b2]]]]]]]

@@ -66,6 +66,12 @@
     (vec (for [projection (first (sem/projected-columns qe))]
            (id-symbol "subquery" subquery-id (unqualified-projection-symbol projection))))))
 
+(defn- subquery-array-symbol
+  "When you have a ARRAY ( subquery ) expression, use this to reference the projected column
+  containing the array."
+  [qe]
+  (some-> (subquery-projection-symbols qe) first (str "-array")))
+
 ;; Expressions.
 
 (defn- interval-expr
@@ -493,6 +499,10 @@
      ;; =>
      (vec (expr list))
 
+     [:array_value_constructor_by_query _ [:subquery ^:z qe]]
+     ;; =>
+     (subquery-array-symbol qe)
+
      [:array_element_reference ^:z ave ^:z nve]
      ;;=>
      (list 'nth (expr ave) (expr nve))
@@ -707,6 +717,16 @@
          :column->param column->param
          :sym exists-symbol})
 
+      [:array_value_constructor_by_query _ [:subquery ^:z qe]]
+      (let [subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
+            column->param (correlated-column->param qe scope-id)
+            projected-columns (set (subquery-projection-symbols qe))]
+        (when-not (= 1 (count projected-columns)) (throw (IllegalArgumentException. "ARRAY subquery must return exactly 1 column/")))
+        {:type :array
+         :plan [:group-by [{(subquery-array-symbol qe) (list 'array-agg (first projected-columns))}] subquery-plan]
+         :projected-columns projected-columns
+         :column->param column->param})
+
       (throw (IllegalArgumentException. "unknown subquery type")))))
 
 (defn- apply-subquery
@@ -749,7 +769,7 @@
 
 (defn- find-sub-queries [z]
   (r/collect-stop
-    (fn [z] (r/zcase z (:subquery :exists_predicate :in_predicate :quantified_comparison_predicate) [z] nil))
+    (fn [z] (r/zcase z (:subquery :exists_predicate :in_predicate :quantified_comparison_predicate :array_value_constructor_by_query) [z] nil))
     z))
 
 ;; TODO: deal with row subqueries.

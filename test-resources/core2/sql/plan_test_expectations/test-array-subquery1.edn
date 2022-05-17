@@ -1,0 +1,7 @@
+[:rename
+ {x8 $column_1$}
+ [:project
+  [{x8 x6}]
+  [:cross-join
+   [:rename {a x1} [:scan [{a (= a 42)}]]]
+   [:group-by [{x6 (array-agg x3)}] [:rename {b1 x3, b2 x4} [:scan [b1 {b2 (= b2 42)}]]]]]]]

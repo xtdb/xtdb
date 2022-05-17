@@ -679,3 +679,10 @@
     "ARRAY [1, 42]" [1 42]
     "ARRAY [1, NULL]" [1 nil]
     "ARRAY [1, 1.2, '42!']" [1 1.2 "42!"]))
+
+(deftest test-array-subqueries
+  (t/are [file q]
+    (=plan-file file (plan-sql q))
+
+    "test-array-subquery1" "SELECT ARRAY(select b.b1 from b where b.b2 = 42) FROM a where a.a = 42"
+    "test-array-subquery2" "SELECT ARRAY(select b.b1 from b where b.b2 = a.b) FROM a where a.a = 42"))
