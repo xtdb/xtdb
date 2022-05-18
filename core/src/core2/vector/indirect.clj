@@ -249,7 +249,10 @@
     (mapv (fn [idx]
             (zipmap ks
                     (for [^IIndirectVector col rel]
-                      (ty/get-object (.getVector col) (.getIndex col idx)))))
+                      (let [v (.getVector col)
+                            i (.getIndex col idx)]
+                        (when-not (.isNull v i)
+                          (ty/get-object v i))))))
           (range (.rowCount rel)))))
 
 (deftype DuvChildReader [^IIndirectVector parent-col
