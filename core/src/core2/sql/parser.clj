@@ -6,7 +6,7 @@
            [java.util.regex Matcher Pattern]
            java.util.function.Function
            [core2.sql.parser Parser$ParseState Parser$ParseErrors Parser$AParser
-            Parser$WhitespaceParser Parser$EpsilonParser Parser$RuleParser Parser$MemoizeParser Parser$MemoizeLeftRecParser Parser$NonTerminalParser
+            Parser$EpsilonParser Parser$RuleParser Parser$MemoizeParser Parser$MemoizeLeftRecParser Parser$NonTerminalParser
             Parser$HideParser Parser$OptParser Parser$NegParser Parser$RepeatParser Parser$CatParser Parser$AltParser Parser$OrdParser
             Parser$RegexpParser Parser$StringParser Parser]))
 
@@ -106,23 +106,24 @@
                                      (if (every? (comp #{:string :regexp} :tag) parsers)
                                        (Parser$OrdParser. (mapv (partial build-parser rule-name) parsers))
                                        (Parser$AltParser. (mapv (partial build-parser rule-name) parsers))))
-                              :neg (Parser$WhitespaceParser. ws-pattern (Parser$NegParser. (build-parser rule-name (:parser parser))))
-                              :epsilon (Parser$WhitespaceParser. ws-pattern (Parser$EpsilonParser.))
-                              :regexp (Parser$WhitespaceParser. ws-pattern (Parser$RegexpParser. (:regexp parser)
-                                                                                                 [:expected (rule-kw->name rule-name)]
-                                                                                                 (reify Function
-                                                                                                   (apply [_ m]
-                                                                                                     [(.group ^Matcher m)]))))
-                              :string (Parser$WhitespaceParser. ws-pattern
-                                                                (if (re-find #"^\w+$" (:string parser))
-                                                                  (Parser$RegexpParser. (Pattern/compile (str (Pattern/quote (:string parser)) "\\b")
-                                                                                                         Pattern/CASE_INSENSITIVE)
-                                                                                        [:expected (:string parser)]
-                                                                                        (let [ast [(:string parser)]]
-                                                                                          (reify Function
-                                                                                            (apply [_ m]
-                                                                                              ast))))
-                                                                  (Parser$StringParser. (:string parser)))))]
+                              :neg (Parser$NegParser. (build-parser rule-name (:parser parser)))
+                              :epsilon (Parser$EpsilonParser. ws-pattern)
+                              :regexp (Parser$RegexpParser. (:regexp parser)
+                                                            [:expected (rule-kw->name rule-name)]
+                                                            (reify Function
+                                                              (apply [_ m]
+                                                                [(.group ^Matcher m)]))
+                                                            ws-pattern)
+                              :string (if (re-find #"^\w+$" (:string parser))
+                                        (Parser$RegexpParser. (Pattern/compile (str (Pattern/quote (:string parser)) "\\b")
+                                                                               Pattern/CASE_INSENSITIVE)
+                                                              [:expected (:string parser)]
+                                                              (let [ast [(:string parser)]]
+                                                                (reify Function
+                                                                  (apply [_ m]
+                                                                    ast)))
+                                                              ws-pattern)
+                                        (Parser$StringParser. (:string parser) ws-pattern)))]
                  (if hide
                    (Parser$HideParser. parser)
                    parser)))]
@@ -146,8 +147,8 @@
                memos (make-array Parser$ParseState m-size)
                _ (Arrays/fill ^objects memos Parser/NOT_FOUND)
                parser (Parser$CatParser. [(aget rules (get rule->id start-rule))
-                                          (Parser$WhitespaceParser. ws-pattern (Parser$EpsilonParser.))])]
-           (if-let [state (.parse parser in 0 memos errors)]
+                                          (Parser$EpsilonParser. ws-pattern)])]
+           (if-let [state (.parse parser in 0 memos errors false)]
              (first (.ast state))
              (ParseFailure. in (.getErrors errors) (.getIndex errors)))))))))
 

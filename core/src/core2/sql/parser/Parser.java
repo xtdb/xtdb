@@ -77,8 +77,22 @@ public final class Parser {
         }
     }
 
+    private static final IPersistentVector WS_ERROR = PersistentVector.create(Keyword.intern("expected"), "<WS>");
+
+    private static int skipWhitespace(final Pattern pattern, final String in, final int idx, final IParseErrors errors) {
+        final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
+        if (m.lookingAt()) {
+            return m.end();
+        } else if (0 == idx) {
+            return 0;
+        } else {
+            errors.addError(WS_ERROR, idx);
+            return -1;
+        }
+    }
+
     public static abstract class AParser {
-        public abstract ParseState parse(String in, int idx, ParseState[] memos, IParseErrors errors);
+        public abstract ParseState parse(String in, int idx, ParseState[] memos, IParseErrors errors, final boolean hide);
 
         public AParser init(final AParser[] rules) {
             return this;
@@ -87,43 +101,24 @@ public final class Parser {
 
     public static final class EpsilonParser extends AParser {
         private static final IPersistentVector ERROR = PersistentVector.create(Keyword.intern("expected"), "<EOF>");
+        private final Pattern wsPattern;
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            if (idx == in.length()) {
-                return new ParseState(PersistentVector.EMPTY, idx);
-            }
-            errors.addError(ERROR, idx);
-            return null;
-        }
-    }
-
-    public static final class WhitespaceParser extends AParser {
-        private static final IPersistentVector ERROR = PersistentVector.create(Keyword.intern("expected"), "<WS>");
-
-        private final Pattern pattern;
-        private AParser parser;
-
-        public WhitespaceParser(final Pattern pattern, final AParser parser) {
-            this.pattern = pattern;
-            this.parser = parser;
+        public EpsilonParser(final Pattern wsPattern) {
+            this.wsPattern = wsPattern;
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
-
-            if (m.lookingAt()) {
-                return parser.parse(in, m.end(), memos, errors);
-            } else if (0 == idx) {
-                return parser.parse(in, idx, memos, errors);
+        public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
+            idx = skipWhitespace(wsPattern, in, idx, errors);
+            if (idx != -1) {
+                if (idx == in.length()) {
+                    return new ParseState(PersistentVector.EMPTY, idx);
+                } else {
+                    errors.addError(ERROR, idx);
+                    return null;
+                }
             } else {
-                errors.addError(ERROR, idx);
                 return null;
             }
-        }
-
-        public AParser init(final AParser[] rules) {
-            parser = parser.init(rules);
-            return this;
         }
     }
 
@@ -134,7 +129,7 @@ public final class Parser {
             this.ruleId = ruleId;
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
+        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
             throw new UnsupportedOperationException();
         }
 
@@ -175,10 +170,12 @@ public final class Parser {
             this.parser = parser;
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            final ParseState state = parser.parse(in, idx, memos, errors);
+        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
+            final ParseState state = parser.parse(in, idx, memos, errors, hide);
             if (state != null) {
-                if (rawPred.test(state.ast)) {
+                if (hide) {
+                    return new ParseState(PersistentVector.EMPTY, state.idx);
+                } else if (rawPred.test(state.ast)) {
                     return state;
                 } else {
                     final IPersistentMap meta = new PersistentArrayMap(new Object[] {START_IDX, idx, END_IDX, state.idx});
@@ -214,11 +211,11 @@ public final class Parser {
             this.ruleId = ruleId;
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
+        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
             final int memoIdx = ruleId | (idx << RULE_ID_SHIFT);
             ParseState state = memos[memoIdx];
             if (NOT_FOUND == state) {
-                state = parser.parse(in, idx, memos, errors);
+                state = parser.parse(in, idx, memos, errors, hide);
                 memos[memoIdx] = state;
                 return state;
             } else {
@@ -241,14 +238,14 @@ public final class Parser {
             this.ruleId = ruleId;
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
+        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
             final int memoIdx = ruleId | (idx << RULE_ID_SHIFT);
             ParseState state = memos[memoIdx];
             if (NOT_FOUND == state) {
                 state = null;
                 while (true) {
                     memos[memoIdx] = state;
-                    final ParseState newState = parser.parse(in, idx, memos, errors);
+                    final ParseState newState = parser.parse(in, idx, memos, errors, hide);
                     if (newState != null) {
                         if (state != null && newState.idx <= state.idx) {
                             memos[memoIdx] = NOT_FOUND;
@@ -279,13 +276,8 @@ public final class Parser {
             this.parser = parser;
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            final ParseState state = parser.parse(in, idx, memos, errors);
-            if (state != null) {
-                return new ParseState(PersistentVector.EMPTY, state.idx);
-            } else {
-                return null;
-            }
+        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
+            return parser.parse(in, idx, memos, errors, true);
         }
 
         public AParser init(final AParser[] rules) {
@@ -301,8 +293,8 @@ public final class Parser {
             this.parser = parser;
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            final ParseState state = parser.parse(in, idx, memos, errors);
+        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
+            final ParseState state = parser.parse(in, idx, memos, errors, hide);
             if (state != null) {
                 return state;
             } else {
@@ -325,8 +317,8 @@ public final class Parser {
             this.parser = parser;
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            final ParseState state = parser.parse(in, idx, memos, NULL_PARSE_ERRORS);
+        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
+            final ParseState state = parser.parse(in, idx, memos, NULL_PARSE_ERRORS, true);
             if (state != null) {
                 errors.addError(PersistentVector.create(UNEXPECTED, in.substring(idx, state.idx)), idx);
                 return null;
@@ -350,15 +342,17 @@ public final class Parser {
             this.isStar = isStar;
         }
 
-        public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors) {
+        public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
             final List<Object> ast = new ArrayList<>();
             boolean isMatch = false;
             while (true) {
-                final ParseState state = parser.parse(in, idx, memos, errors);
+                final ParseState state = parser.parse(in, idx, memos, errors, hide);
                 if (state != null) {
                     isMatch = true;
                     idx = state.idx;
-                    ast.addAll((List<?>) state.ast);
+                    if (!hide) {
+                        ast.addAll((List<?>) state.ast);
+                    }
                 } else {
                     if (isStar || isMatch) {
                         return new ParseState(PersistentVector.create(ast), idx);
@@ -382,13 +376,15 @@ public final class Parser {
             this.parsers = parsers.toArray(new AParser[parsers.size()]);
         }
 
-        public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors) {
+        public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
             final List<Object> ast = new ArrayList<>();
             for (int i = 0; i < parsers.length; i++) {
-                final ParseState state = parsers[i].parse(in, idx, memos, errors);
+                final ParseState state = parsers[i].parse(in, idx, memos, errors, hide);
                 if (state != null) {
                     idx = state.idx;
-                    ast.addAll((List<?>) state.ast);
+                    if (!hide) {
+                        ast.addAll((List<?>) state.ast);
+                    }
                 } else {
                     return null;
                 }
@@ -411,10 +407,10 @@ public final class Parser {
             this.parsers = parsers.toArray(new AParser[parsers.size()]);
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
+        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
             ParseState state1 = null;
             for (int i = 0; i < parsers.length; i++) {
-                final ParseState state2 = parsers[i].parse(in, idx, memos, errors);
+                final ParseState state2 = parsers[i].parse(in, idx, memos, errors, hide);
                 if (state1 == null || (state2 != null && state2.idx > state1.idx)) {
                     state1 = state2;
                 }
@@ -437,9 +433,9 @@ public final class Parser {
             this.parsers = parsers.toArray(new AParser[parsers.size()]);
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
+        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
             for (int i = 0; i < parsers.length; i++) {
-                final ParseState state = parsers[i].parse(in, idx, memos, errors);
+                final ParseState state = parsers[i].parse(in, idx, memos, errors, hide);
                 if (state != null) {
                     return state;
                 }
@@ -459,18 +455,25 @@ public final class Parser {
         private final String string;
         private final IPersistentVector ast;
         private final IPersistentVector err;
+        private final Pattern wsPattern;
 
-        public StringParser(final String string) {
+        public StringParser(final String string, final Pattern wsPattern) {
             this.string = string;
             this.ast = PersistentVector.create(string);
             this.err = PersistentVector.create(Keyword.intern("expected"), string);
+            this.wsPattern = wsPattern;
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            if (in.regionMatches(true, idx, string, 0, string.length())) {
-                return new ParseState(ast, idx + string.length());
+        public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
+            idx = skipWhitespace(wsPattern, in, idx, errors);
+            if (idx != -1) {
+                if (in.regionMatches(true, idx, string, 0, string.length())) {
+                    return new ParseState(hide ? PersistentVector.EMPTY : ast, idx + string.length());
+                } else {
+                    errors.addError(err, idx);
+                    return null;
+                }
             } else {
-                errors.addError(err, idx);
                 return null;
             }
         }
@@ -480,19 +483,26 @@ public final class Parser {
         private final Pattern pattern;
         private final IPersistentVector err;
         private final Function<Matcher, IPersistentVector> matcherFn;
+        private final Pattern wsPattern;
 
-        public RegexpParser(final Pattern pattern, final IPersistentVector err, final Function<Matcher, IPersistentVector> matcherFn) {
+        public RegexpParser(final Pattern pattern, final IPersistentVector err, final Function<Matcher, IPersistentVector> matcherFn, final Pattern wsPattern) {
             this.pattern = pattern;
             this.err = err;
             this.matcherFn = matcherFn;
+            this.wsPattern = wsPattern;
         }
 
-        public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors) {
-            final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
-            if (m.lookingAt()) {
-                return new ParseState(matcherFn.apply(m), m.end());
+        public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
+            idx = skipWhitespace(wsPattern, in, idx, errors);
+            if (idx != -1) {
+                final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
+                if (m.lookingAt()) {
+                    return new ParseState(hide ? PersistentVector.EMPTY : matcherFn.apply(m), m.end());
+                } else {
+                    errors.addError(err, idx);
+                    return null;
+                }
             } else {
-                errors.addError(err, idx);
                 return null;
             }
         }
