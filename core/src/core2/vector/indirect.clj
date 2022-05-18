@@ -108,16 +108,25 @@
             rdrs (mapv ->list-reader (.getChildrenFromFields v))]
         (reify IListReader
           (isPresent [_ idx]
-            (boolean (nth rdrs (.getTypeId v idx))))
+            (.isPresent ^IListReader (nth rdrs (.getTypeId v idx)) idx))
 
-          (elementCopier [_ w]
+          (elementCopier [this w]
             (let [copiers (mapv #(some-> ^IListReader % (.elementCopier w)) rdrs)
                   !null-writer (delay (.writerForType (.asDenseUnion w) LegType/NULL))]
               (reify IListElementCopier
                 (copyElement [_ idx n]
-                  (if-let [^IListElementCopier copier (nth copiers (.getTypeId v idx))]
-                    (.copyElement copier (.getOffset v idx) n)
-                    (doto ^IVectorWriter @!null-writer (.startValue) (.endValue))))))))))))
+                  (let [^IListElementCopier copier (nth copiers (.getTypeId v idx))]
+                    (if (.isPresent this idx)
+                      (.copyElement copier (.getOffset v idx) n)
+                      (doto ^IVectorWriter @!null-writer (.startValue) (.endValue))))))))))
+
+      :else
+      (reify IListReader
+        (isPresent [_ _idx] false)
+        (elementCopier [_ _w]
+          (reify IListElementCopier
+            (copyElement [_ _idx _n]
+              (throw (UnsupportedOperationException. "Not implemented")))))))))
 
 (defrecord DirectVector [^ValueVector v, ^String name]
   IIndirectVector

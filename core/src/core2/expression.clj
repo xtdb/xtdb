@@ -1899,7 +1899,7 @@
                           ^ListVector (.createVector al))
               out-writer (.asList (vw/vec->writer out-vec))
               out-data-writer (.getDataWriter out-writer)
-              copier (when list-rdr (.elementCopier list-rdr out-data-writer))
+              copier (.elementCopier list-rdr out-data-writer)
               ->n (when-not (instance? NullVector n-res) (long-getter n-res))]
           (try
             (.setValueCount out-vec n-arrays)
