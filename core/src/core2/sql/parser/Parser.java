@@ -197,7 +197,7 @@ public final class Parser {
         }
     }
 
-    public static final ParseState NOT_FOUND = new ParseState(null, -1);
+    private static final ParseState NOT_FOUND = new ParseState(null, -1);
 
     private static final int MAX_RULE_ID = 512;
     public static final int RULE_ID_SHIFT = Integer.numberOfTrailingZeros(MAX_RULE_ID);
@@ -214,12 +214,12 @@ public final class Parser {
         public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
             final int memoIdx = ruleId | (idx << RULE_ID_SHIFT);
             ParseState state = memos[memoIdx];
-            if (NOT_FOUND == state) {
+            if (null == state) {
                 state = parser.parse(in, idx, memos, errors, hide);
-                memos[memoIdx] = state;
+                memos[memoIdx] = state == null ? NOT_FOUND : state;
                 return state;
             } else {
-                return state;
+                return state == NOT_FOUND ? null : state;
             }
         }
 
@@ -241,25 +241,25 @@ public final class Parser {
         public ParseState parse(final String in, final int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
             final int memoIdx = ruleId | (idx << RULE_ID_SHIFT);
             ParseState state = memos[memoIdx];
-            if (NOT_FOUND == state) {
-                state = null;
+            if (null == state) {
+                state = NOT_FOUND;
                 while (true) {
                     memos[memoIdx] = state;
                     final ParseState newState = parser.parse(in, idx, memos, errors, hide);
                     if (newState != null) {
-                        if (state != null && newState.idx <= state.idx) {
-                            memos[memoIdx] = NOT_FOUND;
+                        if (state != NOT_FOUND && newState.idx <= state.idx) {
+                            memos[memoIdx] = null;
                             return state;
                         } else {
                             state = newState;
                         }
                     } else {
-                        memos[memoIdx] = NOT_FOUND;
-                        return state;
+                        memos[memoIdx] = null;
+                        return state == NOT_FOUND ? null : state;
                     }
                 }
             } else {
-                return state;
+                return state == NOT_FOUND ? null : state;
             }
         }
 

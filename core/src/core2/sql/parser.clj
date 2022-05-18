@@ -143,9 +143,8 @@
 
        (fn [^String in start-rule]
          (let [errors (Parser$ParseErrors.)
-               m-size (bit-shift-left (inc (.length in)) 9)
+               m-size (bit-shift-left (inc (.length in)) Parser/RULE_ID_SHIFT)
                memos (make-array Parser$ParseState m-size)
-               _ (Arrays/fill ^objects memos Parser/NOT_FOUND)
                parser (Parser$CatParser. [(aget rules (get rule->id start-rule))
                                           (Parser$EpsilonParser. ws-pattern)])]
            (if-let [state (.parse parser in 0 memos errors false)]
