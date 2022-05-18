@@ -200,7 +200,7 @@ public final class Parser {
     public static final ParseState NOT_FOUND = new ParseState(null, -1);
 
     private static final int MAX_RULE_ID = 512;
-    private static final int RULE_ID_SHIFT = Integer.numberOfTrailingZeros(MAX_RULE_ID);
+    public static final int RULE_ID_SHIFT = Integer.numberOfTrailingZeros(MAX_RULE_ID);
 
     public static final class MemoizeParser extends AParser {
         private final RuleParser parser;
