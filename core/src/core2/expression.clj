@@ -1905,9 +1905,8 @@
             (.setValueCount out-vec n-arrays)
             (dotimes [idx n-arrays]
               (.startValue out-writer)
-              (if (or (.isNull array-res idx)
-                      (.isNull n-res idx)
-                      (not (.isPresent list-rdr idx)))
+              (if (or (not (.isPresent list-rdr idx))
+                      (.isNull n-res idx))
                 (.setNull out-vec idx)
                 (let [element-count (.applyAsInt ->n idx)]
                   (dotimes [n element-count]

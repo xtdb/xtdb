@@ -72,19 +72,21 @@
 (definterface IAbstractListVector
   (^int getElementStartIndex [^int idx])
   (^int getElementEndIndex [^int idx])
+  (^org.apache.arrow.vector.ValueVector getVector [])
   (^org.apache.arrow.vector.ValueVector getDataVector []))
 
 (defn- ->list-reader [^ValueVector v]
-  (letfn [(->list-reader* [^IAbstractListVector v]
-            (let [data-vec (->direct-vec (.getDataVector v))]
+  (letfn [(->list-reader* [^IAbstractListVector alv]
+            (let [list-vec (.getVector alv)
+                  data-vec (->direct-vec (.getDataVector alv))]
               (reify IListReader
-                (isPresent [_ _] true)
+                (isPresent [_ idx] (not (.isNull list-vec idx)))
                 (elementCopier [_ w]
                   (let [copier (.rowCopier data-vec w)]
                     (reify IListElementCopier
                       (copyElement [_ idx n]
-                        (let [copy-idx (+ (.getElementStartIndex v idx) n)]
-                          (if (or (neg? n) (>= copy-idx (.getElementEndIndex v idx)))
+                        (let [copy-idx (+ (.getElementStartIndex alv idx) n)]
+                          (if (or (neg? n) (>= copy-idx (.getElementEndIndex alv idx)))
                             (throw (IndexOutOfBoundsException.))
                             (.copyRow copier copy-idx))))))))))]
     (cond
@@ -94,6 +96,7 @@
         (->list-reader* (reify IAbstractListVector
                           (getElementStartIndex [_ idx] (.getElementStartIndex v idx))
                           (getElementEndIndex [_ idx] (.getElementEndIndex v idx))
+                          (getVector [_] v)
                           (getDataVector [_] (.getDataVector v)))))
 
       (instance? FixedSizeListVector v)
@@ -101,6 +104,7 @@
         (->list-reader* (reify IAbstractListVector
                           (getElementStartIndex [_ idx] (.getElementStartIndex v idx))
                           (getElementEndIndex [_ idx] (.getElementEndIndex v idx))
+                          (getVector [_] v)
                           (getDataVector [_] (.getDataVector v)))))
 
       (instance? DenseUnionVector v)
@@ -108,7 +112,7 @@
             rdrs (mapv ->list-reader (.getChildrenFromFields v))]
         (reify IListReader
           (isPresent [_ idx]
-            (.isPresent ^IListReader (nth rdrs (.getTypeId v idx)) idx))
+            (.isPresent ^IListReader (nth rdrs (.getTypeId v idx)) (.getOffset v idx)))
 
           (elementCopier [this w]
             (let [copiers (mapv #(some-> ^IListReader % (.elementCopier w)) rdrs)
