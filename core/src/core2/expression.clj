@@ -1896,25 +1896,25 @@
         (let [list-rdr (.listReader (iv/->direct-vec array-res))
               n-arrays (.getValueCount array-res)
               out-vec (-> (types/->field col-name types/list-type true (types/->field "$data" types/dense-union-type true))
-                          ^ListVector (.createVector al))
-              out-writer (.asList (vw/vec->writer out-vec))
-              out-data-writer (.getDataWriter out-writer)
-              copier (.elementCopier list-rdr out-data-writer)
-              ->n (when-not (instance? NullVector n-res) (long-getter n-res))]
+                          ^ListVector (.createVector al))]
           (try
-            (.setValueCount out-vec n-arrays)
-            (dotimes [idx n-arrays]
-              (.startValue out-writer)
-              (if (or (not (.isPresent list-rdr idx))
-                      (.isNull n-res idx))
-                (.setNull out-vec idx)
-                (let [element-count (.applyAsInt ->n idx)]
-                  (dotimes [n element-count]
-                    (.startValue out-data-writer)
-                    (.copyElement copier idx n)
-                    (.endValue out-data-writer))))
-              (.endValue out-writer))
-            out-vec
+            (let [out-writer (.asList (vw/vec->writer out-vec))
+                  out-data-writer (.getDataWriter out-writer)
+                  copier (.elementCopier list-rdr out-data-writer)
+                  ->n (when-not (instance? NullVector n-res) (long-getter n-res))]
+              (.setValueCount out-vec n-arrays)
+              (dotimes [idx n-arrays]
+                (.startValue out-writer)
+                (if (or (not (.isPresent list-rdr idx))
+                        (.isNull n-res idx))
+                  (.setNull out-vec idx)
+                  (let [element-count (.applyAsInt ->n idx)]
+                    (dotimes [n element-count]
+                      (.startValue out-data-writer)
+                      (.copyElement copier idx n)
+                      (.endValue out-data-writer))))
+                (.endValue out-writer))
+              out-vec)
             (catch Throwable e
               (.close out-vec)
               (throw e))))))))
