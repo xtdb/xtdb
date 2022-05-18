@@ -1928,3 +1928,21 @@
   1000
   (tcp/for-all [form interval-constructor-gen]
     (instance? PeriodDuration (project1 form {}))))
+
+(t/deftest test-trim-array
+  (t/are [expected expr variables]
+    (= expected (project1 expr variables))
+
+    nil '(trim-array nil nil) {}
+    nil '(trim-array nil 42) {}
+    nil '(trim-array [42] nil) {}
+
+    [] '(trim-array [] 0) {}
+    [] '(trim-array [42] 0) {}
+    [42] '(trim-array [42] 1) {}
+    [42] '(trim-array [42, 43] 1) {}
+    [42, 43] '(trim-array [42, 43] 2) {}
+
+    [] '(trim-array a 0) {:a []}
+    nil '(trim-array a 0) {:a nil}
+    [42] '(trim-array a 1) {:a [42, 43]}))

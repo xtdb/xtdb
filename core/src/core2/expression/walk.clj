@@ -18,6 +18,7 @@
 (defmethod direct-child-exprs :list [e] (:elements e))
 (defmethod direct-child-exprs :nth-const-n [e] (map e [:coll-expr]))
 (defmethod direct-child-exprs :nth [e] (map e [:coll-expr :n-expr]))
+(defmethod direct-child-exprs :trim-array [e] (map e [:array-expr :n-expr]))
 
 (defn expr-seq [expr]
   (lazy-seq
@@ -64,6 +65,9 @@
 
 (defmethod walk-expr :nth [inner outer {:keys [coll-expr n-expr]}]
   (outer {:op :nth, :coll-expr (inner coll-expr), :n-expr (inner n-expr)}))
+
+(defmethod walk-expr :trim-array [inner outer {:keys [array-expr n-expr]}]
+  (outer {:op :trim-array, :array-expr (inner array-expr), :n-expr (inner n-expr)}))
 
 ;; from clojure.walk
 (defn postwalk-expr [f expr]

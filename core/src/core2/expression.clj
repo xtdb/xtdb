@@ -23,8 +23,8 @@
            (java.util.function IntUnaryOperator Function)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
-           (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector IntervalDayVector IntervalYearVector PeriodDuration ValueVector)
-           (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector)
+           (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector IntervalDayVector IntervalYearVector PeriodDuration ValueVector NullVector)
+           (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector ListVector)
            (org.apache.arrow.vector.types DateUnit IntervalUnit TimeUnit Types Types$MinorType)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$Null ArrowType$Time ArrowType$Timestamp ArrowType$Utf8 Field FieldType)
            (org.apache.commons.codec.binary Hex)))
@@ -137,6 +137,11 @@
       {:op :nth
        :coll-expr (form->expr coll-form env)
        :n-expr (form->expr n-form env)})))
+
+(defmethod parse-list-form 'trim-array [[_ arr n] env]
+  {:op :trim-array
+   :array-expr (form->expr arr env)
+   :n-expr (form->expr n env)})
 
 (defmethod parse-list-form ::default [[f & args] env]
   {:op :call, :f f, :args (mapv #(form->expr % env) args)})
@@ -1878,6 +1883,39 @@
                     (.copyElement copier idx (.applyAsInt ->n idx)))
                   (.endValue out-writer)))
               out-vec)
+            (catch Throwable e
+              (.close out-vec)
+              (throw e))))))))
+
+(defmethod emit-expr :trim-array [{:keys [array-expr n-expr]} col-name opts]
+  (let [eval-array (emit-expr array-expr "trim-array-array" opts)
+        eval-n (emit-expr n-expr "trim-array-n" opts)]
+    (fn [in-rel al params]
+      (with-open [^FieldVector array-res (eval-array in-rel al params)
+                  ^FieldVector n-res (eval-n in-rel al params)]
+        (let [list-rdr (.listReader (iv/->direct-vec array-res))
+              n-arrays (.getValueCount array-res)
+              out-vec (-> (types/->field col-name types/list-type true (types/->field "$data" types/dense-union-type true))
+                          ^ListVector (.createVector al))
+              out-writer (.asList (vw/vec->writer out-vec))
+              out-data-writer (.getDataWriter out-writer)
+              copier (when list-rdr (.elementCopier list-rdr out-data-writer))
+              ->n (when-not (instance? NullVector n-res) (long-getter n-res))]
+          (try
+            (.setValueCount out-vec n-arrays)
+            (dotimes [idx n-arrays]
+              (.startValue out-writer)
+              (if (or (.isNull array-res idx)
+                      (.isNull n-res idx)
+                      (not (.isPresent list-rdr idx)))
+                (.setNull out-vec idx)
+                (let [element-count (.applyAsInt ->n idx)]
+                  (dotimes [n element-count]
+                    (.startValue out-data-writer)
+                    (.copyElement copier idx n)
+                    (.endValue out-data-writer))))
+              (.endValue out-writer))
+            out-vec
             (catch Throwable e
               (.close out-vec)
               (throw e))))))))
