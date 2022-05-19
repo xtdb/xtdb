@@ -32,9 +32,10 @@
     (bus/listen bus
                 {::xt/event-types #{::tx/indexed-tx}}
                 (fn [{:keys [doc-ids av-count bytes-indexed]}]
-                  (dropwizard/mark! docs-ingested-meter (count doc-ids))
-                  (dropwizard/mark! av-ingested-meter av-count)
-                  (dropwizard/mark! bytes-ingested-meter bytes-indexed)))
+                  (when (seq doc-ids)
+                    (dropwizard/mark! docs-ingested-meter (count doc-ids))
+                    (dropwizard/mark! av-ingested-meter av-count)
+                    (dropwizard/mark! bytes-ingested-meter bytes-indexed))))
     {:docs-ingested-meter docs-ingested-meter
      :av-ingested-meter av-ingested-meter
      :bytes-ingested-meter bytes-ingested-meter}))
