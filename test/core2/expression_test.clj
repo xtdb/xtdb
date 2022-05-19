@@ -1938,10 +1938,10 @@
     nil '(trim-array [42] nil) {}
 
     [] '(trim-array [] 0) {}
-    [] '(trim-array [42] 0) {}
-    [42] '(trim-array [42] 1) {}
+    [42] '(trim-array [42] 0) {}
+    [] '(trim-array [42] 1) {}
     [42] '(trim-array [42, 43] 1) {}
-    [42, 43] '(trim-array [42, 43] 2) {}
+    [] '(trim-array [42, 43] 2) {}
 
     [] '(trim-array a 0) {:a []}
     nil '(trim-array a 0) {:a nil}

@@ -1908,8 +1908,11 @@
                 (if (or (not (.isPresent list-rdr idx))
                         (.isNull n-res idx))
                   (.setNull out-vec idx)
-                  (let [element-count (.applyAsInt ->n idx)]
-                    (dotimes [n element-count]
+                  (let [element-count (.applyAsInt ->n idx)
+                        end (.getElementEndIndex list-rdr idx)
+                        start (.getElementStartIndex list-rdr idx)
+                        nlen (- end start element-count)]
+                    (dotimes [n nlen]
                       (.startValue out-data-writer)
                       (.copyElement copier idx n)
                       (.endValue out-data-writer))))

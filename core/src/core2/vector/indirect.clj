@@ -81,6 +81,8 @@
                   data-vec (->direct-vec (.getDataVector alv))]
               (reify IListReader
                 (isPresent [_ idx] (not (.isNull list-vec idx)))
+                (getElementStartIndex [_ idx] (.getElementStartIndex alv idx))
+                (getElementEndIndex [_ idx] (.getElementEndIndex alv idx))
                 (elementCopier [_ w]
                   (let [copier (.rowCopier data-vec w)]
                     (reify IListElementCopier
@@ -113,7 +115,12 @@
         (reify IListReader
           (isPresent [_ idx]
             (.isPresent ^IListReader (nth rdrs (.getTypeId v idx)) (.getOffset v idx)))
-
+          (getElementStartIndex [_ idx]
+            (let [^IListReader rdr (nth rdrs (.getTypeId v idx))]
+              (.getElementStartIndex rdr idx)))
+          (getElementEndIndex [_ idx]
+            (let [^IListReader rdr (nth rdrs (.getTypeId v idx))]
+              (.getElementEndIndex rdr idx)))
           (elementCopier [this w]
             (let [copiers (mapv #(some-> ^IListReader % (.elementCopier w)) rdrs)
                   !null-writer (delay (.writerForType (.asDenseUnion w) LegType/NULL))]
@@ -127,6 +134,8 @@
       :else
       (reify IListReader
         (isPresent [_ _idx] false)
+        (getElementStartIndex [_ _idx] (throw (UnsupportedOperationException. "Not implemented")))
+        (getElementEndIndex [_ _idx] (throw (UnsupportedOperationException. "Not implemented")))
         (elementCopier [_ _w]
           (reify IListElementCopier
             (copyElement [_ _idx _n]
