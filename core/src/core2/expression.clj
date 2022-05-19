@@ -1912,6 +1912,8 @@
                         end (.getElementEndIndex list-rdr idx)
                         start (.getElementStartIndex list-rdr idx)
                         nlen (- end start element-count)]
+                    ;; this exception is required by spec, but it would be sensible to just return an empty array
+                    (when (< nlen 0) (throw (IllegalArgumentException. "Data exception - array element error.")))
                     (dotimes [n nlen]
                       (.startValue out-data-writer)
                       (.copyElement copier idx n)

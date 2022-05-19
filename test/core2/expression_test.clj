@@ -1946,3 +1946,6 @@
     [] '(trim-array a 0) {:a []}
     nil '(trim-array a 0) {:a nil}
     [42] '(trim-array a 1) {:a [42, 43]}))
+
+(t/deftest test-trim-array-offset-over-trim-exception
+  (t/is (thrown-with-msg? IllegalArgumentException #"Data exception - array element error\." (project1 '(trim-array [1 2 3] 4) {}))))
