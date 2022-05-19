@@ -462,7 +462,7 @@
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
   (->field "_row-id" bigint-type false))
 
-(defn type->field-name [^ArrowType arrow-type]
+(defn type->field-name ^String [^ArrowType arrow-type]
   (let [minor-type-name (.toLowerCase (.name (Types/getMinorTypeForArrowType arrow-type)))]
     (case minor-type-name
       "duration" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))

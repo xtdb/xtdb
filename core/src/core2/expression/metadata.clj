@@ -120,11 +120,12 @@
 (def ^:private metadata-root-sym (gensym "metadata-root"))
 (def ^:private metadata-idxs-sym (gensym "metadata-idxs"))
 (def ^:private block-idx-sym (gensym "block-idx"))
+(def ^:private types-vec-sym (gensym "types-vec"))
+(def ^:private bloom-vec-sym (gensym "bloom-vec"))
 
 (def ^:private metadata-vec-syms
   {:min (gensym "min-vec")
-   :max (gensym "max-vec")
-   :bloom (gensym "bloom-vec")})
+   :max (gensym "max-vec")})
 
 (defmethod expr/codegen-expr :metadata-field-present [{:keys [field]} _]
   (let [field-name (str field)]
@@ -147,12 +148,13 @@
                                           (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
                                           (.columnIndex ~metadata-idxs-sym ~field-name))]
                  ~(if (= meta-value :bloom-filter)
-                    `(bloom/bloom-contains? ~(:bloom metadata-vec-syms) ~expr/idx-sym ~bloom-hash-sym)
+                    `(bloom/bloom-contains? ~bloom-vec-sym ~expr/idx-sym ~bloom-hash-sym)
 
                     (let [vec-sym (get metadata-vec-syms meta-value)
                           col-sym (gensym 'meta-col)]
                       `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
-                                  (.getChild ~vec-sym ~(types/type->field-name arrow-type))]
+                                  (some-> ^StructVector (.getChild ~types-vec-sym ~(types/type->field-name arrow-type))
+                                          (.getChild ~(name meta-value)))]
                          (when-not (.isNull ~vec-sym ~expr/idx-sym)
                            (let [~(-> col-sym (expr/with-tag IIndirectVector)) (iv/->direct-vec ~vec-sym)]
                              ~((:continue (expr/codegen-expr
@@ -169,21 +171,11 @@
 
 (defmethod ewalk/direct-child-exprs :metadata-vp-call [{:keys [param-expr]}] #{param-expr})
 
-(defn check-meta [chunk-idx ^VectorSchemaRoot metadata-root ^IMetadataIndices metadata-idxs check-meta-f]
-  (when (check-meta-f (.getVector metadata-root "min")
-                      (.getVector metadata-root "max")
-                      (.getVector metadata-root "bloom")
-                      nil)
-    (let [block-idxs (RoaringBitmap.)
-          ^ListVector blocks-vec (.getVector metadata-root "blocks")
-          ^StructVector blocks-data-vec (.getDataVector blocks-vec)
-
-          blocks-min-vec (.getChild blocks-data-vec "min")
-          blocks-max-vec (.getChild blocks-data-vec "max")
-          blocks-bloom-vec (.getChild blocks-data-vec "bloom")]
-
+(defn check-meta [chunk-idx ^IMetadataIndices metadata-idxs check-meta-f]
+  (when (check-meta-f nil)
+    (let [block-idxs (RoaringBitmap.)]
       (dotimes [block-idx (.blockCount metadata-idxs)]
-        (when (check-meta-f blocks-min-vec blocks-max-vec blocks-bloom-vec block-idx)
+        (when (check-meta-f block-idx)
           (.add block-idxs block-idx)))
 
       (when-not (.isEmpty block-idxs)
@@ -196,20 +188,22 @@
                         (ewalk/postwalk-expr (comp expr/with-batch-bindings expr/lit->param))
                         (meta-expr))]
           {:expr expr
-           :f (eval
-               `(fn [chunk-idx#
-                     ~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))
-                     ~expr/params-sym
-                     [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
-                  (let [~(-> metadata-idxs-sym (expr/with-tag IMetadataIndices)) (meta/->metadata-idxs ~metadata-root-sym)
-                        ~@(expr/batch-bindings expr)]
-                    (check-meta chunk-idx# ~metadata-root-sym ~metadata-idxs-sym
-                                (fn check-meta# [~(-> (:min metadata-vec-syms) (expr/with-tag StructVector))
-                                                 ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
-                                                 ~(-> (:bloom metadata-vec-syms) (expr/with-tag VarBinaryVector))
-                                                 ~block-idx-sym]
-                                  ~(let [{:keys [continue]} (expr/codegen-expr expr {})]
-                                     (continue (fn [_ code] code))))))))}))
+           :f (-> `(fn [chunk-idx#
+                        ~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))
+                        ~expr/params-sym
+                        [~@(keep :bloom-hash-sym (ewalk/expr-seq expr))]]
+                     (let [~(-> metadata-idxs-sym (expr/with-tag IMetadataIndices)) (meta/->metadata-idxs ~metadata-root-sym)
+
+                           ~(-> types-vec-sym (expr/with-tag StructVector)) (.getVector ~metadata-root-sym "types")
+                           ~(-> bloom-vec-sym (expr/with-tag VarBinaryVector)) (.getVector ~metadata-root-sym "bloom")
+
+                           ~@(expr/batch-bindings expr)]
+                       (check-meta chunk-idx# ~metadata-idxs-sym
+                                   (fn check-meta# [~block-idx-sym]
+                                     ~(let [{:keys [continue]} (expr/codegen-expr expr {})]
+                                        (continue (fn [_ code] code)))))))
+                  #_(doto clojure.pprint/pprint)
+                  (eval))}))
 
       ;; TODO passing gensym'd bloom-hash-syms into the memoized fn means we're unlikely to get cache hits
       ;; pass values instead?

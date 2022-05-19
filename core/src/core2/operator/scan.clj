@@ -127,17 +127,14 @@
                ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
            (when (MutableRoaringBitmap/intersects pushdown-bloom
                                                   (bloom/bloom->bitmap bloom-vec (.columnIndex metadata-idxs col-name)))
-             (let [filtered-block-idxs (RoaringBitmap.)
-                   ^ListVector blocks-vec (.getVector metadata-root "blocks")
-                   ^StructVector blocks-data-vec (.getDataVector blocks-vec)
-                   ^VarBinaryVector blocks-bloom-vec (.getChild blocks-data-vec "bloom")]
+             (let [filtered-block-idxs (RoaringBitmap.)]
                (.forEach block-idxs
                          (reify IntConsumer
                            (accept [_ block-idx]
                              (when-let [bloom-vec-idx (.blockIndex metadata-idxs col-name block-idx)]
-                               (when (and (not (.isNull blocks-data-vec bloom-vec-idx))
+                               (when (and (not (.isNull bloom-vec bloom-vec-idx))
                                           (MutableRoaringBitmap/intersects pushdown-bloom
-                                                                           (bloom/bloom->bitmap blocks-bloom-vec bloom-vec-idx)))
+                                                                           (bloom/bloom->bitmap bloom-vec bloom-vec-idx)))
                                  (.add filtered-block-idxs block-idx))))))
 
                (when-not (.isEmpty filtered-block-idxs)

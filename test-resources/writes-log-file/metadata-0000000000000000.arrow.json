@@ -8,6 +8,15 @@
       },
       "children" : [ ]
     },{
+      "name" : "block-idx",
+      "nullable" : true,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 32,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
       "name" : "count",
       "nullable" : false,
       "type" : {
@@ -18,7 +27,7 @@
       "children" : [ ]
     },{
       "name" : "min-row-id",
-      "nullable" : false,
+      "nullable" : true,
       "type" : {
         "name" : "int",
         "bitWidth" : 64,
@@ -27,7 +36,7 @@
       "children" : [ ]
     },{
       "name" : "max-row-id",
-      "nullable" : false,
+      "nullable" : true,
       "type" : {
         "name" : "int",
         "bitWidth" : 64,
@@ -35,181 +44,102 @@
       },
       "children" : [ ]
     },{
-      "name" : "min",
-      "nullable" : false,
+      "name" : "types",
+      "nullable" : true,
       "type" : {
         "name" : "struct"
       },
       "children" : [{
         "name" : "varchar",
-        "nullable" : false,
-        "type" : {
-          "name" : "utf8"
-        },
-        "children" : [ ]
-      }]
-    },{
-      "name" : "max",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "varchar",
-        "nullable" : false,
-        "type" : {
-          "name" : "utf8"
-        },
-        "children" : [ ]
-      }]
-    },{
-      "name" : "bloom",
-      "nullable" : false,
-      "type" : {
-        "name" : "binary"
-      },
-      "children" : [ ]
-    },{
-      "name" : "blocks",
-      "nullable" : false,
-      "type" : {
-        "name" : "list"
-      },
-      "children" : [{
-        "name" : "$data$",
         "nullable" : true,
         "type" : {
           "name" : "struct"
         },
         "children" : [{
           "name" : "min",
-          "nullable" : false,
+          "nullable" : true,
           "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "varchar",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "struct"
-          },
-          "children" : [{
-            "name" : "varchar",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
-        },{
-          "name" : "bloom",
-          "nullable" : false,
-          "type" : {
-            "name" : "binary"
+            "name" : "utf8"
           },
           "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : true,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        }],
+        "metadata" : [{
+          "value" : "VARCHAR",
+          "key" : "minor-type"
         }]
-      }]
-    }]
-  },
-  "batches" : [{
-    "count" : 2,
-    "columns" : [{
-      "name" : "column",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "OFFSET" : [0,3,8],
-      "DATA" : ["_id","month"]
-    },{
-      "name" : "count",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : ["3","1"]
-    },{
-      "name" : "min-row-id",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : ["0","3"]
-    },{
-      "name" : "max-row-id",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : ["3","3"]
-    },{
-      "name" : "min",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "children" : [{
-        "name" : "varchar",
-        "count" : 2,
-        "VALIDITY" : [1,1],
-        "OFFSET" : [0,3,8],
-        "DATA" : ["bar","april"]
-      }]
-    },{
-      "name" : "max",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "children" : [{
-        "name" : "varchar",
-        "count" : 2,
-        "VALIDITY" : [1,1],
-        "OFFSET" : [0,3,8],
-        "DATA" : ["foo","april"]
       }]
     },{
       "name" : "bloom",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "OFFSET" : [0,38,76],
-      "DATA" : ["3a3000000300000006000000090000000b000000200000002200000024000000a9e94357ddc4","3a3000000300000003000000070000000e00000020000000220000002400000030112c5a34c8"]
+      "nullable" : true,
+      "type" : {
+        "name" : "binary"
+      },
+      "children" : [ ]
+    }]
+  },
+  "batches" : [{
+    "count" : 4,
+    "columns" : [{
+      "name" : "column",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "OFFSET" : [0,3,6,11,16],
+      "DATA" : ["_id","_id","month","month"]
     },{
-      "name" : "blocks",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "OFFSET" : [0,1,2],
+      "name" : "block-idx",
+      "count" : 4,
+      "VALIDITY" : [0,1,0,1],
+      "DATA" : [0,0,0,0]
+    },{
+      "name" : "count",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : ["3","3","1","1"]
+    },{
+      "name" : "min-row-id",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : ["0","0","3","3"]
+    },{
+      "name" : "max-row-id",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "DATA" : ["3","3","3","3"]
+    },{
+      "name" : "types",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
       "children" : [{
-        "name" : "$data$",
-        "count" : 2,
-        "VALIDITY" : [1,1],
+        "name" : "varchar",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
         "children" : [{
           "name" : "min",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "children" : [{
-            "name" : "varchar",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,3,8],
-            "DATA" : ["bar","april"]
-          }]
+          "count" : 4,
+          "VALIDITY" : [1,1,1,1],
+          "OFFSET" : [0,3,6,11,16],
+          "DATA" : ["bar","bar","april","april"]
         },{
           "name" : "max",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "children" : [{
-            "name" : "varchar",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,3,8],
-            "DATA" : ["foo","april"]
-          }]
-        },{
-          "name" : "bloom",
-          "count" : 2,
-          "VALIDITY" : [1,1],
-          "OFFSET" : [0,38,76],
-          "DATA" : ["3a3000000300000006000000090000000b000000200000002200000024000000a9e94357ddc4","3a3000000300000003000000070000000e00000020000000220000002400000030112c5a34c8"]
+          "count" : 4,
+          "VALIDITY" : [1,1,1,1],
+          "OFFSET" : [0,3,6,11,16],
+          "DATA" : ["foo","foo","april","april"]
         }]
       }]
+    },{
+      "name" : "bloom",
+      "count" : 4,
+      "VALIDITY" : [1,1,1,1],
+      "OFFSET" : [0,38,76,114,152],
+      "DATA" : ["3a3000000300000006000000090000000b000000200000002200000024000000a9e94357ddc4","3a3000000300000006000000090000000b000000200000002200000024000000a9e94357ddc4","3a3000000300000003000000070000000e00000020000000220000002400000030112c5a34c8","3a3000000300000003000000070000000e00000020000000220000002400000030112c5a34c8"]
     }]
   }]
 }

@@ -10,50 +10,37 @@
             [core2.vector.indirect :as iv]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
-           core2.ICursor
            core2.object_store.ObjectStore
            core2.tx.Watermark
+           core2.ICursor
            java.io.Closeable
-           [java.util HashMap List Map SortedSet]
+           (java.util HashMap List SortedSet)
            java.util.concurrent.ConcurrentSkipListSet
-           [java.util.function Consumer Function]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
-           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List ArrowType$Struct FieldType Schema]
+           (java.util.function Consumer Function)
+           (org.apache.arrow.memory ArrowBuf BufferAllocator)
+           (org.apache.arrow.vector BigIntVector BitVector IntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
+           (org.apache.arrow.vector.complex DenseUnionVector StructVector)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$List
+                                               ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Utf8 Field FieldType Schema)
+           org.apache.arrow.vector.types.Types
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IMetadataManager
   (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx, ^long max-rows-per-block])
   (^java.util.SortedSet knownChunks [])
   (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^java.util.function.BiFunction f]))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IMetadataIndices
   (^Long columnIndex [^String columnName])
-  (^Long blockIndex [^String column-name, ^long blockIdx])
+  (^Long blockIndex [^String column-name, ^int blockIdx])
   (^long blockCount []))
 
 (defrecord ChunkMatch [^long chunk-idx, ^RoaringBitmap block-idxs])
-
-(def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
-  (Schema. [(t/->field "column" t/varchar-type false)
-
-            (t/->field "count" t/bigint-type false)
-            (t/->field "min-row-id" t/bigint-type false)
-            (t/->field "max-row-id" t/bigint-type false)
-
-            (t/->field "min" t/struct-type false)
-            (t/->field "max" t/struct-type false)
-            (t/->field "bloom" t/varbinary-type false)
-
-            (t/->field "blocks" (ArrowType$List.) false
-                       (t/->field "block-meta" t/struct-type true
-                                  (t/->field "min" t/struct-type false)
-                                  (t/->field "max" t/struct-type false)
-                                  (t/->field "bloom" t/varbinary-type false)))]))
 
 (defn- ->metadata-obj-key [chunk-idx]
   (format "metadata-%016x.arrow" chunk-idx))
@@ -65,144 +52,175 @@
   (some-> (second (re-matches #"metadata-(\p{XDigit}{16}).arrow" obj-key))
           (Long/parseLong 16)))
 
-(defn- get-or-add-child ^org.apache.arrow.vector.ValueVector [^StructVector parent, ^ArrowType arrow-type]
-  (let [field-name (t/type->field-name arrow-type)]
-    (or (.getChild parent field-name)
-        (doto (.addOrGet parent field-name (FieldType/notNullable arrow-type) ValueVector)
-          (.setValueCount (.getValueCount parent))))))
+(def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
+  (Schema. [(t/->field "column" t/varchar-type false)
+            (t/->field "block-idx" t/int-type true)
 
-(defn- write-min-max [^ValueVector field-vec,
-                      ^StructVector min-meta-vec, ^StructVector max-meta-vec,
-                      ^long meta-idx]
-  (when (pos? (.getValueCount field-vec))
-    (let [arrow-type (.getType (.getField field-vec))]
-      (when-not (or (instance? ArrowType$List arrow-type)
-                    (instance? ArrowType$Struct arrow-type))
-        (let [min-vec (get-or-add-child min-meta-vec arrow-type)
-              max-vec (get-or-add-child max-meta-vec arrow-type)
+            (t/->field "count" t/bigint-type false)
+            (t/->field "min-row-id" t/bigint-type true)
+            (t/->field "max-row-id" t/bigint-type true)
 
-              min-comparator (expr.comp/->comparator (iv/->direct-vec field-vec) (iv/->direct-vec min-vec) :nulls-last)
-              max-comparator (expr.comp/->comparator (iv/->direct-vec field-vec) (iv/->direct-vec max-vec) :nulls-last)]
+            (t/->field "types" t/struct-type true)
 
-          (.setIndexDefined min-meta-vec meta-idx)
-          (.setIndexDefined max-meta-vec meta-idx)
+            (t/->field "bloom" t/varbinary-type true)]))
 
-          (dotimes [field-idx (.getValueCount field-vec)]
-            (when (or (.isNull min-vec meta-idx)
-                      (and (not (.isNull field-vec field-idx))
-                           (neg? (.applyAsInt min-comparator field-idx meta-idx))))
-              (.copyFromSafe min-vec field-idx meta-idx field-vec))
+(definterface MetadataTypeHandler
+  (^void writeMetadataForType [^int typesVecIdx, ^org.apache.arrow.vector.ValueVector valueVector]))
 
-            (when (or (.isNull max-vec meta-idx)
-                      (and (not (.isNull field-vec field-idx))
-                           (pos? (.applyAsInt max-comparator field-idx meta-idx))))
-              (.copyFromSafe max-vec field-idx meta-idx field-vec))))))))
+#_{:clj-kondo/ignore [:unused-binding]}
+(defmulti ->metadata-type-handler (fn [types-vec arrow-type] (class arrow-type)))
+(defmulti type->type-metadata class)
+
+(defmethod type->type-metadata :default [^ArrowType arrow-type]
+  {"minor-type" (str (Types/getMinorTypeForArrowType arrow-type))})
+
+(defn- add-struct-child ^org.apache.arrow.vector.ValueVector [^StructVector parent, ^Field field]
+  (doto (.addOrGet parent (.getName field) (.getFieldType field) ValueVector)
+    (.initializeChildrenFromFields (.getChildren field))
+    (.setValueCount (.getValueCount parent))))
+
+(defn- ->bool-type-handler [^StructVector types-vec, ^ArrowType arrow-type]
+  (let [^BitVector bit-vec (add-struct-child types-vec
+                                             (Field. (t/type->field-name arrow-type)
+                                                     (FieldType. true t/bool-type nil (type->type-metadata arrow-type))
+                                                     []))]
+    (reify MetadataTypeHandler
+      (writeMetadataForType [_ types-vec-idx _values-vec]
+        (.setSafeToOne bit-vec types-vec-idx)))))
+
+(defmethod ->metadata-type-handler ArrowType$Null [types-vec arrow-type] (->bool-type-handler types-vec arrow-type))
+(defmethod ->metadata-type-handler ArrowType$Bool [types-vec arrow-type] (->bool-type-handler types-vec arrow-type))
+
+;; TODO these need to be more than bool flags when we properly support nested types
+(defmethod ->metadata-type-handler ArrowType$List [types-vec arrow-type] (->bool-type-handler types-vec arrow-type))
+(defmethod ->metadata-type-handler ArrowType$Struct [types-vec arrow-type] (->bool-type-handler types-vec arrow-type))
+(defmethod ->metadata-type-handler ArrowType$ExtensionType [types-vec arrow-type] (->bool-type-handler types-vec arrow-type))
+
+(defn- ->min-max-type-handler [^StructVector types-vec, ^ArrowType arrow-type]
+  (let [^StructVector struct-vec (add-struct-child types-vec
+                                                   (Field. (t/type->field-name arrow-type)
+                                                           (FieldType. true t/struct-type nil (type->type-metadata arrow-type))
+                                                           [(t/->field "min" arrow-type true)
+                                                            (t/->field "max" arrow-type true)]))
+        min-vec (.getChild struct-vec "min")
+        max-vec (.getChild struct-vec "max")]
+    (reify MetadataTypeHandler
+      (writeMetadataForType [_ types-vec-idx values-vec]
+        (.setIndexDefined struct-vec types-vec-idx)
+
+        (let [min-comparator (expr.comp/->comparator (iv/->direct-vec values-vec) (iv/->direct-vec min-vec) :nulls-last)
+              max-comparator (expr.comp/->comparator (iv/->direct-vec values-vec) (iv/->direct-vec max-vec) :nulls-last)]
+
+          (dotimes [values-idx (.getValueCount values-vec)]
+            (when (or (.isNull min-vec types-vec-idx)
+                      (and (not (.isNull values-vec values-idx))
+                           (neg? (.applyAsInt min-comparator values-idx types-vec-idx))))
+              (.copyFromSafe min-vec values-idx types-vec-idx values-vec))
+
+            (when (or (.isNull max-vec types-vec-idx)
+                      (and (not (.isNull values-vec values-idx))
+                           (pos? (.applyAsInt max-comparator values-idx types-vec-idx))))
+              (.copyFromSafe max-vec values-idx types-vec-idx values-vec))))))))
+
+(defmethod ->metadata-type-handler ArrowType$Int [types-vec arrow-type] (->min-max-type-handler types-vec arrow-type))
+(defmethod ->metadata-type-handler ArrowType$FloatingPoint [types-vec arrow-type] (->min-max-type-handler types-vec arrow-type))
+(defmethod ->metadata-type-handler ArrowType$Utf8 [types-vec arrow-type] (->min-max-type-handler types-vec arrow-type))
+(defmethod ->metadata-type-handler ArrowType$Binary [types-vec arrow-type] (->min-max-type-handler types-vec arrow-type))
+(defmethod ->metadata-type-handler ArrowType$Timestamp [types-vec arrow-type] (->min-max-type-handler types-vec arrow-type))
+(defmethod ->metadata-type-handler ArrowType$Date [types-vec arrow-type] (->min-max-type-handler types-vec arrow-type))
 
 (defn write-meta [^VectorSchemaRoot metadata-root, live-roots, ^long chunk-idx, ^long max-rows-per-block]
   (let [col-count (count live-roots)
 
         ^VarCharVector column-name-vec (.getVector metadata-root "column")
+
+        ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
+
         ^BigIntVector count-vec (.getVector metadata-root "count")
         ^BigIntVector min-row-id-vec (.getVector metadata-root "min-row-id")
         ^BigIntVector max-row-id-vec (.getVector metadata-root "max-row-id")
 
-        ^StructVector min-vec (.getVector metadata-root "min")
-        ^StructVector max-vec (.getVector metadata-root "max")
+        ^StructVector types-vec (.getVector metadata-root "types")
+
         ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")
 
-        ^ListVector blocks-vec (.getVector metadata-root "blocks")
-        ^StructVector blocks-data-vec (.getDataVector blocks-vec)
-        ^StructVector blocks-min-vec (.getChild blocks-data-vec "min")
-        ^StructVector blocks-max-vec (.getChild blocks-data-vec "max")
-        ^VarBinaryVector blocks-bloom-vec (.getChild blocks-data-vec "bloom")]
+        metadata-type-handlers (HashMap.)]
 
     (.setRowCount metadata-root col-count)
 
-    (dorun
-     (->> (sort-by key live-roots)
-          (map-indexed
-           (fn [^long column-idx [^String col-name, ^VectorSchemaRoot live-root]]
-             (let [row-count (.getRowCount live-root)
-                   ^DenseUnionVector column-vec (.getVector live-root col-name)
-                   ^BigIntVector row-id-vec (.getVector live-root "_row-id")]
-               (.setSafe column-name-vec column-idx (Text. col-name))
-               (.setSafe count-vec column-idx row-count)
-               (.setSafe min-row-id-vec column-idx (.get row-id-vec 0))
-               (.setSafe max-row-id-vec column-idx (.get row-id-vec (dec row-count)))
+    (letfn [(write-block-meta! [^String col-name ^VectorSchemaRoot live-slice ^long meta-idx]
+              (let [row-count (.getRowCount live-slice)
+                    ^DenseUnionVector column-vec (.getVector live-slice col-name)
+                    ^BigIntVector row-id-vec (.getVector live-slice "_row-id")]
 
-               (.setIndexDefined min-vec column-idx)
-               (.setIndexDefined max-vec column-idx)
+                (.setSafe column-name-vec meta-idx (Text. col-name))
+                (.setSafe count-vec meta-idx (.getRowCount live-slice))
 
-               (let [row-counts (blocks/row-id-aligned-blocks live-root chunk-idx max-rows-per-block)]
-                 (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
-                   (let [start-block-idx (.startNewValue blocks-vec column-idx)
+                (when (pos? (.getRowCount live-slice))
+                  (.setSafe min-row-id-vec meta-idx (.get row-id-vec 0))
+                  (.setSafe max-row-id-vec meta-idx (.get row-id-vec (dec row-count)))
 
-                         ^long end-block-idx
-                         (loop [block-idx start-block-idx]
-                           (if (.tryAdvance slices
-                                            (reify Consumer
-                                              (accept [_ sliced-root]
-                                                (let [^VectorSchemaRoot sliced-root sliced-root
-                                                      ^DenseUnionVector column-vec (.getVector sliced-root col-name)]
-                                                  (.setValueCount blocks-data-vec (inc block-idx))
+                  (.setIndexDefined types-vec meta-idx)
 
-                                                  (.setValueCount column-vec (.getRowCount sliced-root))
+                  (doseq [^ValueVector values-vec (seq column-vec)]
+                    (let [value-count (.getValueCount values-vec)]
+                      (when-not (zero? value-count)
+                        (let [^MetadataTypeHandler type-handler
+                              (.computeIfAbsent metadata-type-handlers (.getType (.getField values-vec))
+                                                (reify Function
+                                                  (apply [_ arrow-type]
+                                                    (->metadata-type-handler types-vec arrow-type))))]
 
-                                                  (when (pos? (.getRowCount sliced-root))
-                                                    (.setIndexDefined blocks-data-vec block-idx)
+                          (.setIndexDefined types-vec meta-idx)
+                          (.writeMetadataForType type-handler meta-idx values-vec)
 
-                                                    (doseq [child-vec (.getChildrenFromFields column-vec)]
-                                                      (write-min-max child-vec blocks-min-vec blocks-max-vec block-idx)
+                          (bloom/write-bloom bloom-vec meta-idx column-vec))))))))]
+      (->> live-roots
+           (reduce
+            (fn [^long meta-idx [^String col-name, ^VectorSchemaRoot live-root]]
+              (let [block-row-counts (blocks/row-id-aligned-blocks live-root chunk-idx max-rows-per-block)
+                    block-count (count block-row-counts)]
 
-                                                      (write-min-max child-vec min-vec max-vec column-idx))
+                (.setRowCount metadata-root (+ meta-idx (inc block-count)))
 
-                                                    (bloom/write-bloom blocks-bloom-vec block-idx column-vec))))))
-                             (recur (inc block-idx))
-                             block-idx))]
+                (write-block-meta! col-name live-root meta-idx)
 
-                     (.endValue blocks-vec column-idx (- end-block-idx start-block-idx)))))
+                (let [meta-idx (inc meta-idx)]
+                  (with-open [^ICursor slices (blocks/->slices live-root block-row-counts)]
+                    (loop [block-idx 0]
+                      (let [meta-idx (+ meta-idx block-idx)]
+                        (if (.tryAdvance slices
+                                           (reify Consumer
+                                             (accept [_ live-slice]
+                                               (write-block-meta! col-name live-slice meta-idx))))
+                          (do
+                            (.setSafe block-idx-vec meta-idx block-idx)
+                            (recur (inc block-idx)))
+                          meta-idx)))))))
+            0)))
 
-               (bloom/write-bloom bloom-vec column-idx column-vec))))))
-
-    ;; we set row-count twice in this function
-    ;; - at the beginning to allocate memory
-    ;; - at the end to finalise the offset vectors of the variable width vectors
-    ;; there may be a more idiomatic way to achieve this
-    (.setRowCount metadata-root col-count)
     (.syncSchema metadata-root)))
 
-(deftype MetadataIndices [^Map col-idx-cache
-                          ^long col-count
-                          ^VarCharVector column-name-vec
-                          ^ListVector blocks-vec]
-  IMetadataIndices
-  (columnIndex [_ col-name]
-    (.computeIfAbsent col-idx-cache col-name
-                      (reify Function
-                        (apply [_ field-name]
-                          (loop [idx 0]
-                            (when (< idx col-count)
-                              (if (= col-name (t/get-object column-name-vec idx))
-                                idx
-                                (recur (inc idx)))))))))
-
-  (blockIndex [this col-name block-idx]
-    (when-let [col-idx (.columnIndex this col-name)]
-      (let [block-idx (+ (.getElementStartIndex blocks-vec col-idx) block-idx)]
-        (when (< block-idx (.getElementEndIndex blocks-vec col-idx))
-          (when-not (.isNull (.getDataVector blocks-vec) block-idx)
-            block-idx)))))
-
-  (blockCount [this]
-    (let [id-idx (.columnIndex this "_id")]
-      (- (.getElementEndIndex blocks-vec id-idx)
-         (.getElementStartIndex blocks-vec id-idx)))))
-
 (defn ->metadata-idxs ^core2.metadata.IMetadataIndices [^VectorSchemaRoot metadata-root]
-  (MetadataIndices. (HashMap.)
-                    (.getRowCount metadata-root)
-                    (.getVector metadata-root "column")
-                    (.getVector metadata-root "blocks")))
+  (let [col-idx-cache (HashMap.)
+        block-idx-cache (HashMap.)
+        ^VarCharVector column-name-vec (.getVector metadata-root "column")
+        ^IntVector block-idx-vec (.getVector metadata-root "block-idx")]
+    (dotimes [meta-idx (.getRowCount metadata-root)]
+      (let [col-name (str (.getObject column-name-vec meta-idx))]
+        (if (.isNull block-idx-vec meta-idx)
+          (.put col-idx-cache col-name meta-idx)
+          (.put block-idx-cache [col-name (.get block-idx-vec meta-idx)] meta-idx))))
+
+    (let [block-count (->> (keys block-idx-cache)
+                           (map second)
+                           ^long (apply max)
+                           inc)]
+      (reify IMetadataIndices
+        IMetadataIndices
+        (columnIndex [_ col-name] (get col-idx-cache col-name))
+        (blockIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
+        (blockCount [_] block-count)))))
 
 (defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, f]
   (.withMetadata metadata-mgr chunk-idx (util/->jbifn f)))

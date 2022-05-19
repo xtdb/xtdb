@@ -9,6 +9,7 @@
             [core2.indexer :as idx]
             [core2.json :as c2-json]
             [core2.local-node :as node]
+            [core2.metadata :as meta]
             [core2.object-store :as os]
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd]
@@ -25,8 +26,8 @@
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VarCharVector VectorLoader VectorSchemaRoot]
-           org.apache.arrow.vector.complex.StructVector))
+           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector.complex ListVector StructVector]))
 
 (def txs
   [[[:put {:_id "device-info-demo000000",
@@ -151,19 +152,22 @@
             (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
                         record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
               (.load (VectorLoader. metadata-batch) record-batch)
-              (t/is (= 18 (.getRowCount metadata-batch)))
-              (t/is (= "_id" (-> (.getVector metadata-batch "column")
-                                 (ty/get-object 0))))
-              (t/is (= "device-info-demo000000"
-                       (-> ^StructVector (.getVector metadata-batch "min")
-                           ^VarCharVector (.getChild "varchar")
-                           (ty/get-object 0))))
-              (t/is (= "reading-demo000001"
-                       (-> ^StructVector (.getVector metadata-batch "max")
-                           ^VarCharVector (.getChild "varchar")
-                           (ty/get-object 0))))
-              (t/is (= 4 (-> ^BigIntVector (.getVector metadata-batch "count")
-                             (.get 0))))
+              (t/is (= 36 (.getRowCount metadata-batch)))
+              (let [id-col-idx (-> (meta/->metadata-idxs metadata-batch)
+                                   (.columnIndex "_id"))]
+                (t/is (= "_id" (-> (.getVector metadata-batch "column")
+                                   (ty/get-object id-col-idx))))
+                (let [^StructVector varchar-type-vec (-> ^StructVector (.getVector metadata-batch "types")
+                                                         (.getChild "varchar"))]
+                  (t/is (= "device-info-demo000000"
+                           (-> (.getChild varchar-type-vec "min")
+                               (ty/get-object id-col-idx))))
+                  (t/is (= "reading-demo000001"
+                           (-> (.getChild varchar-type-vec "max")
+                               (ty/get-object id-col-idx)))))
+
+                (t/is (= 4 (-> ^BigIntVector (.getVector metadata-batch "count")
+                               (.get id-col-idx)))))
 
               (let [from (.getVector metadata-batch "count")
                     tp (.getTransferPair from a)]
