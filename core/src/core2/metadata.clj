@@ -56,9 +56,13 @@
   (Schema. [(t/->field "column" t/varchar-type false)
             (t/->field "block-idx" t/int-type true)
 
+            (t/->field "root-column" t/struct-type true
+                       ;; here because they're only easily accessible for non-nested columns.
+                       ;; and we happen to need a marker for root columns anyway.
+                       (t/->field "min-row-id" t/bigint-type true)
+                       (t/->field "max-row-id" t/bigint-type true))
+
             (t/->field "count" t/bigint-type false)
-            (t/->field "min-row-id" t/bigint-type true)
-            (t/->field "max-row-id" t/bigint-type true)
 
             (t/->field "types" t/struct-type true)
 
@@ -136,9 +140,11 @@
 
         ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
 
+        ^StructVector root-col-vec (.getVector metadata-root "root-column")
+        ^BigIntVector min-row-id-vec (.getChild root-col-vec "min-row-id")
+        ^BigIntVector max-row-id-vec (.getChild root-col-vec "max-row-id")
+
         ^BigIntVector count-vec (.getVector metadata-root "count")
-        ^BigIntVector min-row-id-vec (.getVector metadata-root "min-row-id")
-        ^BigIntVector max-row-id-vec (.getVector metadata-root "max-row-id")
 
         ^StructVector types-vec (.getVector metadata-root "types")
 
@@ -148,18 +154,20 @@
 
     (.setRowCount metadata-root col-count)
 
-    (letfn [(write-block-meta! [^String col-name ^VectorSchemaRoot live-slice ^long meta-idx]
-              (let [row-count (.getRowCount live-slice)
-                    ^DenseUnionVector column-vec (.getVector live-slice col-name)
-                    ^BigIntVector row-id-vec (.getVector live-slice "_row-id")]
+    (letfn [(write-root-col-row-ids! [^VectorSchemaRoot live-slice, ^long meta-idx]
+              (let [^BigIntVector row-id-vec (.getVector live-slice "_row-id")
+                    row-count (.getRowCount live-slice)]
+                (.setIndexDefined root-col-vec meta-idx)
+                (when (pos? row-count)
+                  (.setSafe min-row-id-vec meta-idx (.get row-id-vec 0))
+                  (.setSafe max-row-id-vec meta-idx (.get row-id-vec (dec row-count))))))
 
+            (write-block-meta! [^String col-name ^VectorSchemaRoot live-slice ^long meta-idx]
+              (let [^DenseUnionVector column-vec (.getVector live-slice col-name)]
                 (.setSafe column-name-vec meta-idx (Text. col-name))
                 (.setSafe count-vec meta-idx (.getRowCount live-slice))
 
                 (when (pos? (.getRowCount live-slice))
-                  (.setSafe min-row-id-vec meta-idx (.get row-id-vec 0))
-                  (.setSafe max-row-id-vec meta-idx (.get row-id-vec (dec row-count)))
-
                   (.setIndexDefined types-vec meta-idx)
 
                   (doseq [^ValueVector values-vec (seq column-vec)]
@@ -183,6 +191,7 @@
 
                 (.setRowCount metadata-root (+ meta-idx (inc block-count)))
 
+                (write-root-col-row-ids! live-root meta-idx)
                 (write-block-meta! col-name live-root meta-idx)
 
                 (let [meta-idx (inc meta-idx)]
@@ -190,9 +199,10 @@
                     (loop [block-idx 0]
                       (let [meta-idx (+ meta-idx block-idx)]
                         (if (.tryAdvance slices
-                                           (reify Consumer
-                                             (accept [_ live-slice]
-                                               (write-block-meta! col-name live-slice meta-idx))))
+                                         (reify Consumer
+                                           (accept [_ live-slice]
+                                             (write-root-col-row-ids! live-slice meta-idx)
+                                             (write-block-meta! col-name live-slice meta-idx))))
                           (do
                             (.setSafe block-idx-vec meta-idx block-idx)
                             (recur (inc block-idx)))

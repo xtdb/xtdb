@@ -17,26 +17,33 @@
       },
       "children" : [ ]
     },{
+      "name" : "root-column",
+      "nullable" : true,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "min-row-id",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "max-row-id",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      }]
+    },{
       "name" : "count",
       "nullable" : false,
-      "type" : {
-        "name" : "int",
-        "bitWidth" : 64,
-        "isSigned" : true
-      },
-      "children" : [ ]
-    },{
-      "name" : "min-row-id",
-      "nullable" : true,
-      "type" : {
-        "name" : "int",
-        "bitWidth" : 64,
-        "isSigned" : true
-      },
-      "children" : [ ]
-    },{
-      "name" : "max-row-id",
-      "nullable" : true,
       "type" : {
         "name" : "int",
         "bitWidth" : 64,
@@ -176,20 +183,25 @@
       "VALIDITY" : [0,1,0,1,0,1],
       "DATA" : [0,0,0,0,0,0]
     },{
+      "name" : "root-column",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "children" : [{
+        "name" : "min-row-id",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : ["0","0","0","0","3","3"]
+      },{
+        "name" : "max-row-id",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : ["5","5","2","2","5","5"]
+      }]
+    },{
       "name" : "count",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : ["6","6","2","2","2","2"]
-    },{
-      "name" : "min-row-id",
-      "count" : 6,
-      "VALIDITY" : [1,1,1,1,1,1],
-      "DATA" : ["0","0","0","0","3","3"]
-    },{
-      "name" : "max-row-id",
-      "count" : 6,
-      "VALIDITY" : [1,1,1,1,1,1],
-      "DATA" : ["5","5","2","2","5","5"]
     },{
       "name" : "types",
       "count" : 6,
