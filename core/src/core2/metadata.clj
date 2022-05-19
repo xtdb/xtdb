@@ -172,9 +172,9 @@
                                                     (->metadata-type-handler types-vec arrow-type))))]
 
                           (.setIndexDefined types-vec meta-idx)
-                          (.writeMetadataForType type-handler meta-idx values-vec)
+                          (.writeMetadataForType type-handler meta-idx values-vec)))))
 
-                          (bloom/write-bloom bloom-vec meta-idx column-vec))))))))]
+                  (bloom/write-bloom bloom-vec meta-idx column-vec))))]
       (->> live-roots
            (reduce
             (fn [^long meta-idx [^String col-name, ^VectorSchemaRoot live-root]]
