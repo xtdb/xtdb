@@ -222,11 +222,11 @@
         mock-clock (tu/->mock-clock)
         tx0 [[:put {:_id "foo"
                     :list [12.0 "foo"]}]
-             [:put {:_id 24.0}]
+             [:put {:_id #inst "2021-01-01"
+                    :struct {:a 1, :b "b"}}]
              [:put {:_id "bar"
                     :list [#inst "2020-01-01" false]}]
-             [:put {:_id #inst "2021-01-01"
-                    :struct {:a 1, :b "b"}}]]
+             [:put {:_id 24.0}]]
         tx1 [[:put {:_id 52.0}]
              [:put {:_id #inst "2020-01-01"
                     :struct {:a true, :c "c"}}]]]

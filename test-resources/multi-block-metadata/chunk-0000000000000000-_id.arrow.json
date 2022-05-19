@@ -25,20 +25,20 @@
         },
         "children" : [ ]
       },{
-        "name" : "float8",
-        "nullable" : false,
-        "type" : {
-          "name" : "floatingpoint",
-          "precision" : "DOUBLE"
-        },
-        "children" : [ ]
-      },{
         "name" : "timestampmicrotz-utc",
         "nullable" : false,
         "type" : {
           "name" : "timestamp",
           "unit" : "MICROSECOND",
           "timezone" : "UTC"
+        },
+        "children" : [ ]
+      },{
+        "name" : "float8",
+        "nullable" : false,
+        "type" : {
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
         },
         "children" : [ ]
       }]
@@ -63,12 +63,12 @@
         "OFFSET" : [0,3,6],
         "DATA" : ["foo","bar"]
       },{
-        "name" : "float8",
+        "name" : "timestampmicrotz-utc",
         "count" : 1,
         "VALIDITY" : [1],
-        "DATA" : [24.0]
+        "DATA" : [1609459200000000]
       },{
-        "name" : "timestampmicrotz-utc",
+        "name" : "float8",
         "count" : 0,
         "VALIDITY" : [ ],
         "DATA" : [ ]
@@ -84,8 +84,8 @@
     },{
       "name" : "_id",
       "count" : 3,
-      "TYPE_ID" : [2,1,2],
-      "OFFSET" : [0,0,1],
+      "TYPE_ID" : [2,2,1],
+      "OFFSET" : [0,1,0],
       "children" : [{
         "name" : "varchar",
         "count" : 0,
@@ -93,15 +93,15 @@
         "OFFSET" : [0],
         "DATA" : [ ]
       },{
-        "name" : "float8",
+        "name" : "timestampmicrotz-utc",
         "count" : 1,
         "VALIDITY" : [1],
-        "DATA" : [52.0]
+        "DATA" : [1577836800000000]
       },{
-        "name" : "timestampmicrotz-utc",
+        "name" : "float8",
         "count" : 2,
         "VALIDITY" : [1,1],
-        "DATA" : [1609459200000000,1577836800000000]
+        "DATA" : [24.0,52.0]
       }]
     }]
   }]
