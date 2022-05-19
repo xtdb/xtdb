@@ -14,7 +14,7 @@
   (map->ResponseFormat {:read (fn [xhrio]
                                 (reader/read-string
                                  {:readers {'xtdb.http/entity-ref entity-ref/->EntityRef
-                                            'xt/id str}}
+                                            'xtdb/id str}}
                                  (-body xhrio)))
                         :description "EDN"
                         :content-type ["application/edn"]}))

@@ -19,7 +19,7 @@
                               (str "meta[title=" title "]"))
                              (.getAttribute "content"))
          edn-content (reader/read-string {:readers {'object pr-str
-                                                    'xt/id str
+                                                    'xtdb/id str
                                                     'xtdb.http/entity-ref entity-ref/->EntityRef}} result-meta)]
      (if edn-content
        {:db (assoc db handler edn-content)}
