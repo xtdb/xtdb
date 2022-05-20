@@ -77,14 +77,14 @@
     (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
       (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
                                             :docs missing-ids})))
-    (let [indexed-docs (db/index-docs index-store-tx encoded-docs)
-          av-count (->> (vals indexed-docs) (apply concat) (count))]
+    (db/index-docs index-store-tx encoded-docs)
+    (let [av-count (->> (vals docs) (apply concat) (count))]
       (swap! !tx
              (fn [tx]
                (-> tx
                    (update :av-count + av-count)
                    (update :bytes-indexed + (:bytes-indexed (meta encoded-docs)))
-                   (update :doc-ids into (map c/new-id) (keys indexed-docs))))))))
+                   (update :doc-ids into (map c/new-id) (keys docs))))))))
 
 (defn- etx->vt [^EntityTx etx]
   (.vt etx))
