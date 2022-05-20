@@ -70,12 +70,14 @@
                                      {:crux.db/id (:crux.db/id arg-doc)
                                       :crux.db.fn/failed? true}))))))
 
+;; TODO The mix of docs & encoded-docs is hard to grapple with. It can also lead to inconsistency between the two.
+
 (defn- index-docs [{:keys [index-store-tx !tx]} docs encoded-docs]
   (when (seq docs)
     (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
       (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
                                             :docs missing-ids})))
-    (let [{:keys [indexed-docs]} (db/index-docs index-store-tx docs encoded-docs)
+    (let [indexed-docs (db/index-docs index-store-tx encoded-docs)
           av-count (->> (vals indexed-docs) (apply concat) (count))]
       (swap! !tx
              (fn [tx]

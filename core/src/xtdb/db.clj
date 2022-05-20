@@ -10,7 +10,7 @@
   (max-depth [this]))
 
 (defprotocol IndexStoreTx
-  (index-docs [this docs encoded-docs])
+  (index-docs [this encoded-docs])
   (unindex-eids [this eids])
   (index-entity-txs [this entity-txs])
   (commit-index-tx [this])
