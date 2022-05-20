@@ -8,11 +8,11 @@ Proposed
 
 == Context
 
-Consider the container type arrow list, unlike scalar vectors, each element corresponds to a pair of indices into some underlying vector. The elements of a ListVector in some sense exist in the OffsetBuffer of the vector - and those elements are pointers.
+Consider the List container type, unlike scalar vectors, each element corresponds to a pair of indices into some underlying vector. The elements of a ListVector in some sense exist in the offset buffer of the vector - and those elements are pointers.
 
 The type of the list is also parameterized by its element type, which is important for operations where the element type matters - such as comparison.  A list may well contain elements whose type is again a container, or union.
 
-A struct is similar, you have an ordered collection of pointers into other vectors - one for each field, the parameterization of the type is present as with list - it may be easiest to think of each struct type as a unique type, rather than the application of higher-order type constructors - a type dependent operation should be compiled again each new struct type.
+A struct is similar, you have an ordered collection of other vectors - one for each field, the parameterization of the type is present as with list - it may be easiest to think of each struct type as a unique type, rather than the application of higher-order type constructors - a type dependent operation should be compiled again each new struct type.
 
 '''
 
