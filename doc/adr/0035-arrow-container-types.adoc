@@ -1,0 +1,57 @@
+1= 32. Arrow container types
+
+Date: 2022-05-20
+
+== Status
+
+Proposed
+
+== Context
+
+Consider the container type arrow list, unlike scalar vectors, each element corresponds to a pair of indices into some underlying vector. The elements of a ListVector in some sense exist in the OffsetBuffer of the vector - and those elements are pointers.
+
+The type of the list is also parameterized by its element type, which is important for operations where the element type matters - such as comparison.  A list may well contain elements whose type is again a container, or union.
+
+A struct is similar, you have an ordered collection of pointers into other vectors - one for each field, the parameterization of the type is present as with list - it may be easiest to think of each struct type as a unique type, rather than the application of higher-order type constructors - a type dependent operation should be compiled again each new struct type.
+
+'''
+
+In our expression engine, the elements of scalar vectors are passed around as discrete objects (e.g an int, ByteBuffer, PeriodDuration) that can be operated on without knowledge of the underlying vector, validity, type, offset buffers and so on.
+
+Clearly this is advantagous. It means that authoring new functions for XTDB is quite cheap, and it is easy to write performant code that works for all possible vectors - branching for DUV / null is dealt with by the compiler.
+
+The expression engine on scalars also provides leverage over our function suite, in the sense we can change the loop fusion, vector handling compiler without changing the element-wise functions themselves.
+
+'''
+
+Currently the few operations we support on structs & arrays are written as implementations of the `emit-expr` function, they do not participate in codegen like scalar expressions. This allows authoring container functions directly on the vectors, e.g instead of element-wise as in codegen, these functions are written vector-wise.
+
+Some potential problems with this as it stands:
+
+- The vector processing code must deal with different type layouts, nils correctly at runtime.
+
+- The vector processing code often represents boilerplate that must be repeated with minor type specialisation for each operation
+
+- `emit-expr` requires allocation of return data each time such an expression is evaluated, i.e intermediate results are materialized. Consider an expression that operates on a list in a struct, e.g `(nth (dot-const-field s foo) 42)`. Such an expression would copy the contents of every list (whose size is unbounded) in order to dereference a single location in each list, turning a `O(1)` operation per list into `O(N)` operation per list.
+
+- Operations that are dependent on the type parameters of containers would have to be specialised at runtime, or reach out to codegen for potentially nested structures. I cannot see how this can be done without a lot of difficulty with the current implementation.
+
+== Option A: Bring container pointers to codegen as 1st class citizens.
+
+I believe it would be possible to create compile-time specialized variants of pointers for container elements in codegen. `get-object-form` would return a pointer object of some unique type for the concrete type of the container. Such types can be cached and re-used, e.g `List<Int>` would always return the same pointer type.
+
+Such a pointer type can be looked up as part of codegen for List or Struct args. If I have an arrow type instantiation representing `List<Int>`.
+
+A `List<Int>` pointer would have as fields the int indices into the underlying list memory, (e.g start, len) along with a field containing a reference to the data vector.
+
+It would be possible to look up code for an 'IoC continuing' with an element from the list, this is so that branches / BOXES for duv legs / nulls can be generated correctly from the same or similar code that deals continuations from variables.
+
+A `StructTypeA` pointer would hold a reference to the Struct vector, and encode statically field offsets into child vectors. This would be a lean definition from an allocation perspective. Such a layout is possible because we compile new pointer type for each encountered struct type.
+
+Much in the same way as lists, you would want to look up continuation code for a given field as part of a function definition.
+
+Map types if we chose to support them would behave more like lists, considering they would be considered instantations of a higher-order type rather than unique types like structs.
+
+== Decision
+
+== Consequences
