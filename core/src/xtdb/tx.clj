@@ -525,13 +525,10 @@
                                                               without-tx-fn-docs)}))]
                                  (.put txs-docs-encoder-queue txs)))
 
-
             txs-doc-encoder-fn (fn [txs]
                                  (let [txs (doall
                                             (for [{:keys [docs] :as m} txs]
-                                              (let [encoded-docs (db/encode-docs index-store docs)
-                                                    bytes-indexed (->> encoded-docs (transduce (comp cat (map mem/capacity)) +))]
-                                                (assoc m :encoded-docs (with-meta encoded-docs {:bytes-indexed bytes-indexed})))))]
+                                              (assoc m :encoded-docs (db/encode-docs index-store docs))))]
                                    (.put txs-process-queue txs)))
 
             txs-process-fn (fn [txs]

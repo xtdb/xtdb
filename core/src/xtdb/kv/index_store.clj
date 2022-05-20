@@ -1104,7 +1104,9 @@
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStore
   (encode-docs [_ docs]
-    (->content-idx-kvs docs))
+    (let [kvs (->content-idx-kvs docs)
+          bytes-indexed (->> kvs (transduce (comp cat (map mem/capacity)) +))]
+      (with-meta kvs {:bytes-indexed bytes-indexed})))
 
   (begin-index-tx [_ tx fork-at]
     (let [{::xt/keys [tx-id tx-time]} tx
