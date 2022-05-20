@@ -11,10 +11,13 @@
             [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx.conform :as txc]
-            [xtdb.tx.event :as txe])
+            [xtdb.tx.event :as txe]
+            [xtdb.memory :as mem])
   (:import clojure.lang.MapEntry
+           [java.util.concurrent CompletableFuture Semaphore]
            xtdb.codec.EntityTx
            java.io.Closeable
+           [java.util.concurrent ThreadFactory ExecutorService LinkedBlockingQueue BlockingQueue RejectedExecutionHandler ThreadPoolExecutor TimeUnit]
            [java.util.concurrent Future]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -67,18 +70,18 @@
                                      {:crux.db/id (:crux.db/id arg-doc)
                                       :crux.db.fn/failed? true}))))))
 
-(defn- index-docs [{:keys [index-store-tx !tx]} docs]
+(defn- index-docs [{:keys [index-store-tx !tx]} docs encoded-docs]
   (when (seq docs)
     (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
       (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
                                             :docs missing-ids})))
-    (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs index-store-tx docs)
+    (let [{:keys [indexed-docs]} (db/index-docs index-store-tx docs encoded-docs)
           av-count (->> (vals indexed-docs) (apply concat) (count))]
       (swap! !tx
              (fn [tx]
                (-> tx
                    (update :av-count + av-count)
-                   (update :bytes-indexed + bytes-indexed)
+                   (update :bytes-indexed + (:bytes-indexed (meta encoded-docs)))
                    (update :doc-ids into (map c/new-id) (keys indexed-docs))))))))
 
 (defn- etx->vt [^EntityTx etx]
@@ -294,7 +297,7 @@
   (open-db [_ valid-time tx-time] (xt/open-db db-provider valid-time tx-time))
 
   db/InFlightTx
-  (index-tx-events [this tx-events prefetched-docs]
+  (index-tx-events [this tx-events prefetched-docs encoded-docs]
     (try
       (let [tx-state @!tx-state]
         (when (not= tx-state :open)
@@ -303,7 +306,8 @@
       (swap! !tx update :tx-events into tx-events)
 
       (index-docs this (-> (select-keys prefetched-docs (txc/tx-events->doc-hashes tx-events))
-                           without-tx-fn-docs))
+                           without-tx-fn-docs)
+                  encoded-docs)
 
       (with-open [index-snapshot (db/open-index-snapshot index-store-tx)]
         (let [deps (assoc this :index-snapshot index-snapshot)
@@ -319,7 +323,7 @@
                                true)
 
                              (do
-                               (index-docs this (-> docs without-tx-fn-docs))
+                               (index-docs this (-> docs without-tx-fn-docs) encoded-docs)
                                (db/index-entity-txs index-store-tx etxs)
                                (let [{:keys [tombstones]} (when (seq evict-eids)
                                                             (db/unindex-eids index-store-tx evict-eids))]
@@ -434,6 +438,34 @@
     (.cancel job true)
     (log/info "Shut down tx-ingester")))
 
+(def ^ThreadFactory docs-fetcher-thread-factory
+  (xio/thread-factory "xtdb-tx-docs-fetch"))
+
+(def ^ThreadFactory docs-encoder-thread-factory
+  (xio/thread-factory "xtdb-tx-docs-encoder"))
+
+(def ^ThreadFactory txs-processor-thread-factory
+  (xio/thread-factory "xtdb-tx-processor"))
+
+(def ^ThreadFactory stats-processor-thread-factory
+  (xio/thread-factory "xtdb-stats-processor"))
+
+(defn- start-poller! [^ThreadFactory thread-factory thread-count ^BlockingQueue queue ^CompletableFuture job f]
+  (dotimes [_ thread-count]
+    (doto (.newThread thread-factory
+                      (fn []
+                        (try
+                          (loop []
+                            (when-let [item (.poll queue 10 TimeUnit/MILLISECONDS)]
+                              (when (not (.isDone job))
+                                (f item)))
+                            ;; exit here if future is done
+                            (when (not (.isDone job))
+                              (recur)))
+                          (catch Throwable t
+                            (.printStackTrace t)))))
+      (.start))))
+
 (defn ->tx-ingester {::sys/deps {:tx-indexer :xtdb/tx-indexer
                                  :index-store :xtdb/index-store
                                  :document-store :xtdb/document-store
@@ -476,58 +508,94 @@
               (set-ingester-error! t)
               (throw t)))))
 
-      ;; moving on...
-      (let [job (db/subscribe tx-log
+      (let [txs-docs-fetch-queue (LinkedBlockingQueue. 1)
+            txs-docs-encoder-queue (LinkedBlockingQueue. 1)
+            txs-process-queue (LinkedBlockingQueue. 1)
+            stats-queue (LinkedBlockingQueue. 1)
+
+            txs-doc-fetch-fn (fn [txs]
+                               (let [docs (strict-fetch-docs document-store
+                                                             (->> txs
+                                                                  (into #{}
+                                                                        (comp (map ::txe/tx-events)
+                                                                              (mapcat txc/tx-events->doc-hashes)))))
+                                     txs (doall
+                                          (for [tx txs]
+                                            {:tx tx :docs (-> (select-keys docs (txc/tx-events->doc-hashes (::txe/tx-events tx)))
+                                                              without-tx-fn-docs)}))]
+                                 (.put txs-docs-encoder-queue txs)))
+
+
+            txs-doc-encoder-fn (fn [txs]
+                                 (let [txs (doall
+                                            (for [{:keys [docs] :as m} txs]
+                                              (let [encoded-docs (db/encode-docs index-store docs)
+                                                    bytes-indexed (->> encoded-docs (transduce (comp cat (map mem/capacity)) +))]
+                                                (assoc m :encoded-docs (with-meta encoded-docs {:bytes-indexed bytes-indexed})))))]
+                                   (.put txs-process-queue txs)))
+
+            txs-process-fn (fn [txs]
+                             (doseq [{:keys [tx docs encoded-docs]} txs]
+
+                               (let [[{::txe/keys [tx-events] :as tx} committing?]
+                                     (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
+                                       (let [tx-log-time (::xt/tx-time tx)
+                                             {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
+                                         (cond
+                                           (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
+                                           (do
+                                             (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
+                                                       (pr-str {:latest-completed-tx lctx
+                                                                :new-tx (dissoc tx ::txe/tx-events)}))
+                                             [tx false])
+
+                                           (neg? (compare tx-log-time tx-time-override))
+                                           (do
+                                             (log/warn "overridden tx-time after tx-log clock time, aborting tx"
+                                                       (pr-str {:tx-log-time tx-log-time
+                                                                :new-tx (dissoc tx ::txe/tx-events)}))
+                                             [tx false])
+
+                                           :else [(assoc tx ::xt/tx-time tx-time-override) true]))
+
+                                       [tx true])
+
+                                     in-flight-tx (db/begin-tx tx-indexer
+                                                               (select-keys tx [::xt/tx-time ::xt/tx-id])
+                                                               nil)
+
+                                     committing? (and committing?
+                                                      (db/index-tx-events in-flight-tx tx-events docs encoded-docs))]
+
+                                 (process-tx-f in-flight-tx (assoc tx :committing? committing?))
+
+                                 (if committing?
+                                   (db/commit in-flight-tx)
+                                   (db/abort in-flight-tx))))
+
+                             ;; issue with this, don't want unsuccessful txes in here
+                             (.put stats-queue (mapcat :docs txs)))
+
+            stats-fn (fn [docs]
+                       (db/index-stats index-store docs))
+
+            job (db/subscribe tx-log
                               latest-xtdb-tx-id
                               (fn [_fut txs]
                                 (try
-                                (let [prefetched-docs
-                                      (strict-fetch-docs document-store
-                                                         (->> txs
-                                                              (into #{} (comp (map ::txe/tx-events)
-                                                                              (mapcat txc/tx-events->doc-hashes)))))]
-                                  (doseq [tx txs]
-                                    (when (Thread/interrupted)
-                                      (throw (InterruptedException.)))
 
-                                      (let [[{::txe/keys [tx-events] :as tx} committing?]
-                                            (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
-                                              (let [tx-log-time (::xt/tx-time tx)
-                                                    {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
-                                                (cond
-                                                  (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
-                                                  (do
-                                                    (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
-                                                              (pr-str {:latest-completed-tx lctx
-                                                                       :new-tx (dissoc tx ::txe/tx-events)}))
-                                                    [tx false])
+                                  (when (Thread/interrupted)
+                                    (throw (InterruptedException.)))
 
-                                                  (neg? (compare tx-log-time tx-time-override))
-                                                  (do
-                                                    (log/warn "overridden tx-time after tx-log clock time, aborting tx"
-                                                              (pr-str {:tx-log-time tx-log-time
-                                                                       :new-tx (dissoc tx ::txe/tx-events)}))
-                                                    [tx false])
+                                  (.put txs-docs-fetch-queue txs)
 
-                                                  :else [(assoc tx ::xt/tx-time tx-time-override) true]))
-
-                                              [tx true])
-
-                                            in-flight-tx (db/begin-tx tx-indexer
-                                                                      (select-keys tx [::xt/tx-time ::xt/tx-id])
-                                                                      nil)
-
-                                            committing? (and committing?
-                                                             (db/index-tx-events in-flight-tx tx-events prefetched-docs))]
-
-                                        (process-tx-f in-flight-tx (assoc tx :committing? committing?))
-
-                                        (if committing?
-                                          (db/commit in-flight-tx)
-                                          (db/abort in-flight-tx)))))
-
-                                      (catch Throwable t
-                                        (set-ingester-error! t)
+                                  (catch Throwable t
+                                    (set-ingester-error! t)
                                     (throw t)))))]
+
+        (start-poller! docs-fetcher-thread-factory 1 txs-docs-fetch-queue job txs-doc-fetch-fn)
+        (start-poller! docs-encoder-thread-factory 1 txs-docs-encoder-queue job txs-doc-encoder-fn)
+        (start-poller! txs-processor-thread-factory 1 txs-process-queue job txs-process-fn)
+        (start-poller! stats-processor-thread-factory 1 stats-queue job stats-fn)
 
         (->TxIngester index-store !error job)))))

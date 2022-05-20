@@ -10,16 +10,18 @@
   (max-depth [this]))
 
 (defprotocol IndexStoreTx
-  (index-docs [this docs])
+  (index-docs [this docs encoded-docs])
   (unindex-eids [this eids])
   (index-entity-txs [this entity-txs])
   (commit-index-tx [this])
   (abort-index-tx [this]))
 
 (defprotocol IndexStore
+  (encode-docs [_ docs])
   (store-index-meta [this k v])
   (tx-failed? [this tx-id])
-  (begin-index-tx [index-store tx fork-at]))
+  (begin-index-tx [index-store tx fork-at])
+  (index-stats [this docs]))
 
 (defprotocol LatestCompletedTx
   (latest-completed-tx [this]))
@@ -66,7 +68,7 @@
     or, outside of f, complete the future returned from this function to stop the subscription."))
 
 (defprotocol InFlightTx
-  (index-tx-events [in-flight-tx tx-events prefetched-docs]
+  (index-tx-events [in-flight-tx tx-events prefetched-docs encoded-docs]
     "prefetched-docs :: docs from the batch of transactions")
   (commit [in-flight-tx])
   (abort [in-flight-tx]))
