@@ -216,6 +216,7 @@ public class JXtdbNodeTest {
     public void attributeStatsTest() {
         put();
         sync();
+        sleep(100);
         Map<Keyword, ?> stats = node.attributeStats();
         assertEquals(1L, stats.get(DB_ID));
         assertEquals(1L, stats.get(versionId));
