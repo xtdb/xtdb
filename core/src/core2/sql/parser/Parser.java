@@ -1,6 +1,7 @@
 package core2.sql.parser;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.HashSet;
@@ -8,9 +9,12 @@ import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import clojure.lang.APersistentMap;
+import clojure.lang.IMapEntry;
 import clojure.lang.IObj;
 import clojure.lang.IPersistentMap;
 import clojure.lang.IPersistentVector;
+import clojure.lang.ISeq;
 import clojure.lang.ITransientCollection;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
@@ -156,9 +160,76 @@ public final class Parser {
             }
         };
 
-    public static final class RuleParser extends AParser {
+    public static final class PositionInfo extends APersistentMap {
+        private static final long serialVersionUID = -1;
+
         private static final Keyword START_IDX = Keyword.intern("start-idx");
         private static final Keyword END_IDX = Keyword.intern("end-idx");
+
+        private final int startIdx;
+        private final int endIdx;
+
+        public PositionInfo(final int startIdx, final int endIdx) {
+            this.startIdx = startIdx;
+            this.endIdx = endIdx;
+        }
+
+        private IPersistentMap asMap() {
+            return new PersistentArrayMap(new Object[] {START_IDX, startIdx, END_IDX, endIdx});
+        }
+
+        public Object valAt(Object k) {
+            return valAt(k, null);
+        }
+
+        public Object valAt(Object k, Object notFound) {
+            if (START_IDX.equals(k)) {
+                return startIdx;
+            } else if (END_IDX.equals(k)) {
+                return endIdx;
+            } else {
+                return notFound;
+            }
+        }
+
+        public boolean containsKey(Object k) {
+            return START_IDX.equals(k) || END_IDX.equals(k);
+        }
+
+        public IMapEntry entryAt(Object k) {
+            return asMap().entryAt(k);
+        }
+
+        public IPersistentMap without(Object k) {
+            return asMap().without(k);
+        }
+
+        public IPersistentMap assocEx(Object k, Object v) {
+            return asMap().assocEx(k, v);
+        }
+
+        public IPersistentMap assoc(Object k, Object v) {
+            return asMap().assoc(k, v);
+        }
+
+        public Iterator<?> iterator() {
+            return asMap().iterator();
+        }
+
+        public IPersistentMap empty() {
+            return PersistentArrayMap.EMPTY;
+        }
+
+        public int count() {
+            return 2;
+        }
+
+        public ISeq seq() {
+            return asMap().seq();
+        }
+    }
+
+    public static final class RuleParser extends AParser {
 
         private final Keyword ruleName;
         private final Predicate<IPersistentVector> rawPred;
@@ -178,7 +249,7 @@ public final class Parser {
                 } else if (rawPred.test(state.ast)) {
                     return state;
                 } else {
-                    final IPersistentMap meta = new PersistentArrayMap(new Object[] {START_IDX, idx, END_IDX, state.idx});
+                    final PositionInfo meta = new PositionInfo(idx, state.idx);
                     ITransientCollection newAst = PersistentVector.EMPTY.asTransient();
                     newAst = newAst.conj(ruleName);
                     for (Object x : ((List<?>) state.ast)) {
