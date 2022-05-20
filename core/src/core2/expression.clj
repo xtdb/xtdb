@@ -751,7 +751,7 @@
       (Pattern/quote)
       (.replace "%" "\\E.*\\Q")
       (.replace "_" "\\E.\\Q")
-      (->> (format "^%s$"))
+      (->> (format "^%s\\z"))
       re-pattern))
 
 (defmethod codegen-mono-call [:like ArrowType$Utf8 ArrowType$Utf8] [{[_ {:keys [literal]}] :args}]

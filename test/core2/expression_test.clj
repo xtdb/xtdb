@@ -482,6 +482,9 @@
     (t/testing "literal projection"
       (t/is (project1 (list 'like 's (byte-array [p -33 -44])) {:s (byte-array [-22 -21 -21 -33 -44])})))))
 
+(t/deftest test-like-on-newline-str-regress
+  (t/is (not (project1 '(like a b) {:a "\n", :b ""}))))
+
 (tct/defspec binary-like-is-equiv-to-string-like-on-utf8-prop
   (tcp/for-all [^String s tcg/string
                 ^String ptn (tcg/fmap str/join (tcg/vector (tcg/elements [tcg/string (tcg/return "_") (tcg/return "%")])))]
