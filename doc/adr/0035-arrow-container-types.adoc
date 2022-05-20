@@ -18,7 +18,7 @@ A struct is similar, you have an ordered collection of pointers into other vecto
 
 In our expression engine, the elements of scalar vectors are passed around as discrete objects (e.g an int, ByteBuffer, PeriodDuration) that can be operated on without knowledge of the underlying vector, validity, type, offset buffers and so on.
 
-Clearly this is advantagous. It means that authoring new functions for XTDB is quite cheap, and it is easy to write performant code that works for all possible vectors - branching for DUV / null is dealt with by the compiler.
+Clearly this is advantageous. It means that authoring new functions for XTDB is quite cheap, and it is easy to write performant code that works for all possible vectors - branching for DUV / null is dealt with by the compiler.
 
 The expression engine on scalars also provides leverage over our function suite, in the sense we can change the loop fusion, vector handling compiler without changing the element-wise functions themselves.
 
@@ -36,9 +36,11 @@ Some potential problems with this as it stands:
 
 - Operations that are dependent on the type parameters of containers would have to be specialised at runtime, or reach out to codegen for potentially nested structures. I cannot see how this can be done without a lot of difficulty with the current implementation. Again consider fast equality of nested structs / lists.
 
+- Thinking of real futures, if we __ever__ want to support UDF (user-defined-functions). I'd imagine they'd be defined element wise. As it stands we lack a representation for lists and structs that can be used as arguments to a UDF expression.
+
 == Option A: Bring container pointers to codegen as 1st class citizens.
 
-It would may possible to create compile-time specialized variants of pointers for container elements in codegen. `get-object-form` would return a pointer object of some unique type for the instatiated type of the container. Such types can be cached and re-used, e.g `List<Int>` would always return the same pointer type.
+It may be possible to create compile-time specialized variants of pointers for container elements in codegen. `get-object-form` would return a pointer object of some unique type for the instatiated type of the container. Such types can be cached and re-used, e.g `List<Int>` would always return the same pointer type.
 
 Such a pointer type can be looked up as part of codegen for List or Struct args. If I have an arrow type instantiation representing `List<Int>`, I can get access to generated code for the corresponding pointer type, construction, member access and so on.
 
