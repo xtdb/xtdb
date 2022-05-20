@@ -1,4 +1,4 @@
-1= 32. Arrow container types
+= 32. Arrow container types
 
 Date: 2022-05-20
 
@@ -24,23 +24,23 @@ The expression engine on scalars also provides leverage over our function suite,
 
 '''
 
-Currently the few operations we support on structs & arrays are written as implementations of the `emit-expr` function, they do not participate in codegen like scalar expressions. This allows authoring container functions directly on the vectors, e.g instead of element-wise as in codegen, these functions are written vector-wise.
+Currently the few operations we support on structs & arrays are written as implementations of the `emit-expr` function, they do not participate in codegen like scalar expressions. This allows authoring container functions directly on the vectors, instead of element-wise as in codegen.
 
 Some potential problems with this as it stands:
 
-- The vector processing code must deal with different type layouts, nils correctly at runtime.
+- The vector processing code must deal with different type layouts, nils correctly at runtime. There are some helper classes to make this not totally intractable (writers, copiers and readers).
 
-- The vector processing code often represents boilerplate that must be repeated with minor type specialisation for each operation
+- The vector processing code often represents boilerplate that must be repeated with minor type specialisation for each operation. e.g `nth` looks only slightly different to `cardinality`, but different enough due to different ins / out type specialisation.
 
 - `emit-expr` requires allocation of return data each time such an expression is evaluated, i.e intermediate results are materialized. Consider an expression that operates on a list in a struct, e.g `(nth (dot-const-field s foo) 42)`. Such an expression would copy the contents of every list (whose size is unbounded) in order to dereference a single location in each list, turning a `O(1)` operation per list into `O(N)` operation per list.
 
-- Operations that are dependent on the type parameters of containers would have to be specialised at runtime, or reach out to codegen for potentially nested structures. I cannot see how this can be done without a lot of difficulty with the current implementation.
+- Operations that are dependent on the type parameters of containers would have to be specialised at runtime, or reach out to codegen for potentially nested structures. I cannot see how this can be done without a lot of difficulty with the current implementation. Again consider fast equality of nested structs / lists.
 
 == Option A: Bring container pointers to codegen as 1st class citizens.
 
-I believe it would be possible to create compile-time specialized variants of pointers for container elements in codegen. `get-object-form` would return a pointer object of some unique type for the concrete type of the container. Such types can be cached and re-used, e.g `List<Int>` would always return the same pointer type.
+It would may possible to create compile-time specialized variants of pointers for container elements in codegen. `get-object-form` would return a pointer object of some unique type for the instatiated type of the container. Such types can be cached and re-used, e.g `List<Int>` would always return the same pointer type.
 
-Such a pointer type can be looked up as part of codegen for List or Struct args. If I have an arrow type instantiation representing `List<Int>`.
+Such a pointer type can be looked up as part of codegen for List or Struct args. If I have an arrow type instantiation representing `List<Int>`, I can get access to generated code for the corresponding pointer type, construction, member access and so on.
 
 A `List<Int>` pointer would have as fields the int indices into the underlying list memory, (e.g start, len) along with a field containing a reference to the data vector.
 
@@ -51,6 +51,10 @@ A `StructTypeA` pointer would hold a reference to the Struct vector, and encode 
 Much in the same way as lists, you would want to look up continuation code for a given field as part of a function definition.
 
 Map types if we chose to support them would behave more like lists, considering they would be considered instantations of a higher-order type rather than unique types like structs.
+
+In order to write container values in expressions, e.g reversing a list, one would need to be able to construct a new pointer, and backing memory. This may be challenging as allocating new arrow vectors means doing a bit of manual memory management.
+
+Perhaps the allocation of such vectors are tracked as part of the running of a top level expression over rel vectors and are released on exit, maybe using a scoped allocator, or by tracking them in a bound list.
 
 == Decision
 
