@@ -460,35 +460,45 @@
   (let [^long hll-size (/ (- (.capacity b) Long/BYTES Long/BYTES) 2)]
     (mem/slice-buffer b (+ Long/BYTES Long/BYTES hll-size) hll-size)))
 
-(defn stats-kvs [transient-kv-snapshot stats-kvs-cache persistent-kv-snapshot docs]
-  (let [attr-key-bufs (->> docs
-                           (into {} (comp (mapcat keys)
-                                          (distinct)
-                                          (map (juxt identity #(encode-stats-key-to nil (c/->value-buffer %)))))))]
-    (->> docs
-         (reduce (fn [acc doc]
-                   (let [e (:crux.db/id doc)]
-                     (reduce-kv (fn [acc k v]
-                                  (let [k-buf (get attr-key-bufs k)
-                                        stats-buf (or (get acc k-buf)
-                                                      (kv/get-value transient-kv-snapshot k-buf)
-                                                      (cache/compute-if-absent stats-kvs-cache k-buf mem/copy-to-unpooled-buffer
-                                                                               (fn [_k-buf]
-                                                                                 (or (some-> (kv/get-value persistent-kv-snapshot k-buf) mem/copy-buffer)
-                                                                                     (new-stats-value)))))]
-                                    (doto stats-buf
-                                      (inc-stats-value-doc-count)
-                                      (-> decode-stats-value->eid-hll-buffer-from (hll/add e)))
+(defn- stats-kvs [stats-kvs-cache persistent-kv-store docs]
+  (let [persistent-kv-snapshot (atom nil)
+        get-persistent-value (fn [k-buf]
+                               (when (not @persistent-kv-snapshot)
+                                 (reset! persistent-kv-snapshot (kv/new-snapshot persistent-kv-store)))
+                               (kv/get-value @persistent-kv-snapshot k-buf))]
 
-                                    (doseq [v (c/vectorize-value v)]
-                                      (doto stats-buf
-                                        (inc-stats-value-doc-value-count)
-                                        (-> decode-stats-value->value-hll-buffer-from (hll/add v))))
-                                    (assoc! acc k-buf stats-buf)))
-                                acc
-                                doc)))
-                 (transient {}))
-         persistent!)))
+    (try
+      (let [attr-key-bufs (->> docs
+                               (into {} (comp (mapcat keys)
+                                              (distinct)
+                                              (map (juxt identity #(encode-stats-key-to nil (c/->value-buffer %)))))))]
+        (->> docs
+             (reduce (fn [acc doc]
+                       (let [e (:crux.db/id doc)]
+                         (reduce-kv (fn [acc k v]
+                                      (let [k-buf (get attr-key-bufs k)
+                                            stats-buf (or (get acc k-buf)
+;                                                          (kv/get-value transient-kv-snapshot k-buf)
+                                                          (cache/compute-if-absent stats-kvs-cache k-buf mem/copy-to-unpooled-buffer
+                                                                                   (fn [_k-buf]
+                                                                                     (or (some-> (get-persistent-value k-buf) mem/copy-buffer)
+                                                                                         (new-stats-value)))))]
+                                        (doto stats-buf
+                                          (inc-stats-value-doc-count)
+                                          (-> decode-stats-value->eid-hll-buffer-from (hll/add e)))
+
+                                        (doseq [v (c/vectorize-value v)]
+                                          (doto stats-buf
+                                            (inc-stats-value-doc-value-count)
+                                            (-> decode-stats-value->value-hll-buffer-from (hll/add v))))
+                                        (assoc! acc k-buf stats-buf)))
+                                    acc
+                                    doc)))
+                     (transient {}))
+             persistent!))
+      (finally
+        (when @persistent-kv-snapshot
+          (.close ^Closeable @persistent-kv-snapshot))))))
 
 ;;;; Entity as-of
 
@@ -996,19 +1006,12 @@
 
 (defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStoreTx
-  (index-docs [_ docs]
-    (with-open [persistent-kv-snapshot (kv/new-snapshot persistent-kv-store)
-                transient-kv-snapshot (kv/new-snapshot transient-kv-store)]
-      (let [content-idx-kvs (->content-idx-kvs docs)
-            stats-kvs (when (seq docs)
-                        (stats-kvs transient-kv-snapshot stats-kvs-cache persistent-kv-snapshot (vals docs)))]
-
-        ;; we can write to the transient-kv-store here within an open read snapshot
-        ;; on the assumption that the transient-kv-store is always in-memory
-        (some->> (seq (concat content-idx-kvs stats-kvs)) (kv/store transient-kv-store))
-
-        {:bytes-indexed (->> content-idx-kvs (transduce (comp cat (map mem/capacity)) +))
-         :indexed-docs docs})))
+  (index-docs [_ docs content-idx-kvs]
+    (with-open [transient-kv-snapshot (kv/new-snapshot transient-kv-store)]
+      ;; we can write to the transient-kv-store here within an open read snapshot
+      ;; on the assumption that the transient-kv-store is always in-memory
+      (some->> (seq content-idx-kvs) (kv/store transient-kv-store))
+      {:indexed-docs docs}))
 
   (unindex-eids [_ eids]
     (when (seq eids)
@@ -1100,6 +1103,9 @@
 
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStore
+  (encode-docs [_ docs]
+    (->content-idx-kvs docs))
+
   (begin-index-tx [_ tx fork-at]
     (let [{::xt/keys [tx-id tx-time]} tx
           transient-kv-store (mut-kv/->mutable-kv-store)]
@@ -1111,6 +1117,11 @@
 
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
+
+  (index-stats [_ docs]
+    (let [stats-kvs (when (seq docs)
+                      (stats-kvs stats-kvs-cache kv-store (vals docs)))]
+      (some->> (seq stats-kvs) (kv/store kv-store))))
 
   (tx-failed? [_ tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]

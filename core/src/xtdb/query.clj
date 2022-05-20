@@ -2121,8 +2121,9 @@
 
       (db/submit-docs in-flight-tx docs)
 
-      (let [tx-events (map txc/->tx-event conformed-tx-ops)]
-        (when (db/index-tx-events in-flight-tx tx-events docs)
+      (let [tx-events (map txc/->tx-event conformed-tx-ops)
+            encoded-docs (db/encode-docs index-store docs)]
+        (when (db/index-tx-events in-flight-tx tx-events docs encoded-docs)
           (xt/db in-flight-tx valid-time))))))
 
 (defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
