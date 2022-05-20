@@ -15,7 +15,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [0,1]
+        "typeIds" : [0]
       },
       "children" : [{
         "name" : "struct0",
@@ -29,7 +29,7 @@
           "type" : {
             "name" : "union",
             "mode" : "Dense",
-            "typeIds" : [0]
+            "typeIds" : [0,1]
           },
           "children" : [{
             "name" : "bigint",
@@ -40,39 +40,7 @@
               "isSigned" : true
             },
             "children" : [ ]
-          }]
-        },{
-          "name" : "b",
-          "nullable" : false,
-          "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [0]
-          },
-          "children" : [{
-            "name" : "varchar",
-            "nullable" : false,
-            "type" : {
-              "name" : "utf8"
-            },
-            "children" : [ ]
-          }]
-        }]
-      },{
-        "name" : "struct1",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "a",
-          "nullable" : false,
-          "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [0]
-          },
-          "children" : [{
+          },{
             "name" : "bit",
             "nullable" : false,
             "type" : {
@@ -81,12 +49,12 @@
             "children" : [ ]
           }]
         },{
-          "name" : "c",
+          "name" : "b",
           "nullable" : false,
           "type" : {
             "name" : "union",
             "mode" : "Dense",
-            "typeIds" : [0]
+            "typeIds" : [0,1]
           },
           "children" : [{
             "name" : "varchar",
@@ -95,6 +63,45 @@
               "name" : "utf8"
             },
             "children" : [ ]
+          },{
+            "name" : "struct1",
+            "nullable" : false,
+            "type" : {
+              "name" : "struct"
+            },
+            "children" : [{
+              "name" : "c",
+              "nullable" : false,
+              "type" : {
+                "name" : "union",
+                "mode" : "Dense",
+                "typeIds" : [0]
+              },
+              "children" : [{
+                "name" : "varchar",
+                "nullable" : false,
+                "type" : {
+                  "name" : "utf8"
+                },
+                "children" : [ ]
+              }]
+            },{
+              "name" : "d",
+              "nullable" : false,
+              "type" : {
+                "name" : "union",
+                "mode" : "Dense",
+                "typeIds" : [0]
+              },
+              "children" : [{
+                "name" : "varchar",
+                "nullable" : false,
+                "type" : {
+                  "name" : "utf8"
+                },
+                "children" : [ ]
+              }]
+            }]
           }]
         }]
       }]
@@ -126,6 +133,11 @@
             "count" : 1,
             "VALIDITY" : [1],
             "DATA" : ["1"]
+          },{
+            "name" : "bit",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
           }]
         },{
           "name" : "b",
@@ -138,34 +150,35 @@
             "VALIDITY" : [1],
             "OFFSET" : [0,1],
             "DATA" : ["b"]
-          }]
-        }]
-      },{
-        "name" : "struct1",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "children" : [{
-          "name" : "a",
-          "count" : 0,
-          "TYPE_ID" : [ ],
-          "OFFSET" : [ ],
-          "children" : [{
-            "name" : "bit",
+          },{
+            "name" : "struct1",
             "count" : 0,
             "VALIDITY" : [ ],
-            "DATA" : [ ]
-          }]
-        },{
-          "name" : "c",
-          "count" : 0,
-          "TYPE_ID" : [ ],
-          "OFFSET" : [ ],
-          "children" : [{
-            "name" : "varchar",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
+            "children" : [{
+              "name" : "c",
+              "count" : 0,
+              "TYPE_ID" : [ ],
+              "OFFSET" : [ ],
+              "children" : [{
+                "name" : "varchar",
+                "count" : 0,
+                "VALIDITY" : [ ],
+                "OFFSET" : [0],
+                "DATA" : [ ]
+              }]
+            },{
+              "name" : "d",
+              "count" : 0,
+              "TYPE_ID" : [ ],
+              "OFFSET" : [ ],
+              "children" : [{
+                "name" : "varchar",
+                "count" : 0,
+                "VALIDITY" : [ ],
+                "OFFSET" : [0],
+                "DATA" : [ ]
+              }]
+            }]
           }]
         }]
       }]
@@ -180,62 +193,68 @@
     },{
       "name" : "struct",
       "count" : 1,
-      "TYPE_ID" : [1],
+      "TYPE_ID" : [0],
       "OFFSET" : [0],
       "children" : [{
         "name" : "struct0",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "children" : [{
-          "name" : "a",
-          "count" : 0,
-          "TYPE_ID" : [ ],
-          "OFFSET" : [ ],
-          "children" : [{
-            "name" : "bigint",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "DATA" : [ ]
-          }]
-        },{
-          "name" : "b",
-          "count" : 0,
-          "TYPE_ID" : [ ],
-          "OFFSET" : [ ],
-          "children" : [{
-            "name" : "varchar",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "OFFSET" : [0],
-            "DATA" : [ ]
-          }]
-        }]
-      },{
-        "name" : "struct1",
         "count" : 1,
         "VALIDITY" : [1],
         "children" : [{
           "name" : "a",
           "count" : 1,
-          "TYPE_ID" : [0],
+          "TYPE_ID" : [1],
           "OFFSET" : [0],
           "children" : [{
+            "name" : "bigint",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "DATA" : [ ]
+          },{
             "name" : "bit",
             "count" : 1,
             "VALIDITY" : [1],
             "DATA" : [1]
           }]
         },{
-          "name" : "c",
+          "name" : "b",
           "count" : 1,
-          "TYPE_ID" : [0],
+          "TYPE_ID" : [1],
           "OFFSET" : [0],
           "children" : [{
             "name" : "varchar",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          },{
+            "name" : "struct1",
             "count" : 1,
             "VALIDITY" : [1],
-            "OFFSET" : [0,1],
-            "DATA" : ["c"]
+            "children" : [{
+              "name" : "c",
+              "count" : 1,
+              "TYPE_ID" : [0],
+              "OFFSET" : [0],
+              "children" : [{
+                "name" : "varchar",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "OFFSET" : [0,1],
+                "DATA" : ["c"]
+              }]
+            },{
+              "name" : "d",
+              "count" : 1,
+              "TYPE_ID" : [0],
+              "OFFSET" : [0],
+              "children" : [{
+                "name" : "varchar",
+                "count" : 1,
+                "VALIDITY" : [1],
+                "OFFSET" : [0,1],
+                "DATA" : ["d"]
+              }]
+            }]
           }]
         }]
       }]

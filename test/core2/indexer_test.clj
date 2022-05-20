@@ -229,7 +229,7 @@
              [:put {:_id 24.0}]]
         tx1 [[:put {:_id 52.0}]
              [:put {:_id #inst "2020-01-01"
-                    :struct {:a true, :c "c"}}]]]
+                    :struct {:a true, :b {:c "c", :d "d"}}}]]]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock, :max-rows-per-block 3})]
