@@ -217,6 +217,34 @@
 
         (tu/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
 
+(t/deftest test-multi-block-metadata
+  (let [node-dir (util/->path "target/multi-block-metadata")
+        mock-clock (tu/->mock-clock)
+        tx0 [[:put {:_id "foo"
+                    :list [12.0 "foo"]}]
+             [:put {:_id 24.0}]
+             [:put {:_id "bar"
+                    :list [#inst "2020-01-01" false]}]
+             [:put {:_id #inst "2021-01-01"
+                    :struct {:a 1, :b "b"}}]]
+        tx1 [[:put {:_id 52.0}]
+             [:put {:_id #inst "2020-01-01"
+                    :struct {:a true, :c "c"}}]]]
+    (util/delete-dir node-dir)
+
+    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock, :max-rows-per-block 3})]
+      (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
+
+        (-> (c2/submit-tx node tx0)
+            (tu/then-await-tx node (Duration/ofMillis 200)))
+
+        (-> (c2/submit-tx node tx1)
+            (tu/then-await-tx node (Duration/ofMillis 200)))
+
+        (tu/finish-chunk node)
+
+        (tu/check-json (.toPath (io/as-file (io/resource "multi-block-metadata"))) os)))))
+
 (t/deftest round-trips-nils
   (with-open [node (node/start-node {})]
     (-> (c2/submit-tx node [[:put {:_id "nil-bar"
@@ -337,7 +365,7 @@
             (t/is (= 1 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs))))))))
 
-    (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")) #"chunk-.*")
+    (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
 
     (t/testing "blocks are row-id aligned"
       (letfn [(row-id-ranges [^String file-name]

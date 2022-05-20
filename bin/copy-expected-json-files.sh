@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 
 (
-    for x in     writes-log-file \
-                 can-build-chunk-as-arrow-ipc-file-format \
-                 can-handle-dynamic-cols-in-same-block \
+    for x in writes-log-file \
+             can-build-chunk-as-arrow-ipc-file-format \
+             can-handle-dynamic-cols-in-same-block \
+             multi-block-metadata \
              ; do
 
-        echo copying $x...
+        echo "copying $x..."
 
         cp target/$x/objects/*.json \
            $(dirname $0)/../test-resources/$x/
     done
 
-    cp target/can-submit-tpch-docs-0.001/objects/metadata*.json \
-       $(dirname $0)/../test-resources/can-submit-tpch-docs-0.001/
+    for x in can-submit-tpch-docs-0.001 \
+             can-submit-tpch-docs-0.01 \
+             ; do
 
-    cp target/can-submit-tpch-docs-0.01/objects/metadata*.json \
-       $(dirname $0)/../test-resources/can-submit-tpch-docs-0.01/
+        echo "copying $x (metadata only)..."
+
+        cp target/$x/objects/metadata*.json \
+           $(dirname $0)/../test-resources/$x/
+    done
 )

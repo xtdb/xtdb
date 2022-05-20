@@ -1,0 +1,108 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "_row-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "_id",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [0,1,2]
+      },
+      "children" : [{
+        "name" : "varchar",
+        "nullable" : false,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
+        "name" : "float8",
+        "nullable" : false,
+        "type" : {
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
+        },
+        "children" : [ ]
+      },{
+        "name" : "timestampmicrotz-utc",
+        "nullable" : false,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MICROSECOND",
+          "timezone" : "UTC"
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 3,
+    "columns" : [{
+      "name" : "_row-id",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["0","1","2"]
+    },{
+      "name" : "_id",
+      "count" : 3,
+      "TYPE_ID" : [0,1,0],
+      "OFFSET" : [0,0,1],
+      "children" : [{
+        "name" : "varchar",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "OFFSET" : [0,3,6],
+        "DATA" : ["foo","bar"]
+      },{
+        "name" : "float8",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [24.0]
+      },{
+        "name" : "timestampmicrotz-utc",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      }]
+    }]
+  },{
+    "count" : 3,
+    "columns" : [{
+      "name" : "_row-id",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["3","4","5"]
+    },{
+      "name" : "_id",
+      "count" : 3,
+      "TYPE_ID" : [2,1,2],
+      "OFFSET" : [0,0,1],
+      "children" : [{
+        "name" : "varchar",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "float8",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [52.0]
+      },{
+        "name" : "timestampmicrotz-utc",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "DATA" : [1609459200000000,1577836800000000]
+      }]
+    }]
+  }]
+}

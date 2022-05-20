@@ -149,7 +149,8 @@
   IDenseUnionWriter
   (writerForTypeId [this type-id]
     (or (aget writers-by-type-id type-id)
-        (let [inner-vec (or (.getVectorByType dest-duv type-id)
+        (let [^ValueVector
+              inner-vec (or (.getVectorByType dest-duv type-id)
                             (throw (IllegalArgumentException.)))
               inner-writer (vec->writer inner-vec)
               writer (DuvChildWriter. this type-id inner-writer)]
@@ -313,7 +314,7 @@
     (if (instance? NullVector dest-vec)
       ;; `NullVector/.copyFromSafe` throws UOE
       (reify IRowCopier
-        (copyRow [_ src-idx]))
+        (copyRow [_ _src-idx]))
 
       (reify IRowCopier
         (copyRow [_ src-idx]
@@ -322,12 +323,28 @@
                          (.getPosition this-writer)
                          src-vec))))))
 
-(defn ^core2.vector.IVectorWriter vec->writer
-  ([^ValueVector dest-vec] (vec->writer dest-vec (.getValueCount dest-vec)))
-  ([^ValueVector dest-vec, ^long pos]
+(defn vec->writer
+  (^core2.vector.IVectorWriter
+   [^ValueVector dest-vec] (vec->writer dest-vec (.getValueCount dest-vec)))
+
+  (^core2.vector.IVectorWriter
+   [^ValueVector dest-vec, ^long pos]
    (cond
      (instance? DenseUnionVector dest-vec)
-     (DuvWriter. dest-vec (make-array IVectorWriter (inc Byte/MAX_VALUE)) (HashMap.) pos)
+     ;; eugh. we have to initialise the writers map if the DUV is already populated.
+     ;; easiest way to do this (that I can see) is to re-use `.writerForTypeId`.
+     ;; if I'm making a dog's dinner of this, feel free to refactor.
+     (let [writers-by-type (HashMap.)
+           writer (DuvWriter. dest-vec
+                              (make-array IVectorWriter (inc Byte/MAX_VALUE))
+                              writers-by-type
+                              pos)]
+       (dotimes [writer-idx (count (seq dest-vec))]
+         (let [inner-writer (.writerForTypeId writer writer-idx)
+               inner-vec (.getVector inner-writer)]
+           (.put writers-by-type (types/field->leg-type (.getField inner-vec)) inner-writer)))
+
+       writer)
 
      (instance? StructVector dest-vec)
      (StructWriter. dest-vec (HashMap.) pos)

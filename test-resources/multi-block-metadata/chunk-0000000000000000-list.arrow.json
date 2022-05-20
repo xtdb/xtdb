@@ -1,0 +1,118 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "_row-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "list",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [0]
+      },
+      "children" : [{
+        "name" : "list",
+        "nullable" : false,
+        "type" : {
+          "name" : "list"
+        },
+        "children" : [{
+          "name" : "$data$",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [0,1,2,3]
+          },
+          "children" : [{
+            "name" : "float8",
+            "nullable" : false,
+            "type" : {
+              "name" : "floatingpoint",
+              "precision" : "DOUBLE"
+            },
+            "children" : [ ]
+          },{
+            "name" : "varchar",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "timestampmicrotz-utc",
+            "nullable" : false,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MICROSECOND",
+              "timezone" : "UTC"
+            },
+            "children" : [ ]
+          },{
+            "name" : "bit",
+            "nullable" : false,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          }]
+        }]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 2,
+    "columns" : [{
+      "name" : "_row-id",
+      "count" : 2,
+      "VALIDITY" : [1,1],
+      "DATA" : ["0","2"]
+    },{
+      "name" : "list",
+      "count" : 2,
+      "TYPE_ID" : [0,0],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "list",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "OFFSET" : [0,2,4],
+        "children" : [{
+          "name" : "$data$",
+          "count" : 4,
+          "TYPE_ID" : [0,1,2,3],
+          "OFFSET" : [0,0,0,0],
+          "children" : [{
+            "name" : "float8",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [12.0]
+          },{
+            "name" : "varchar",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "OFFSET" : [0,3],
+            "DATA" : ["foo"]
+          },{
+            "name" : "timestampmicrotz-utc",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [1577836800000000]
+          },{
+            "name" : "bit",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "DATA" : [0]
+          }]
+        }]
+      }]
+    }]
+  }]
+}
