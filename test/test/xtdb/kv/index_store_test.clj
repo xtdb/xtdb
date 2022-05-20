@@ -222,6 +222,10 @@
         (t/is (thrown? NodeOutOfSyncException
                        (db/resolve-tx index-snapshot #::xt{:tx-time #inst "2023", :tx-id 1})))))))
 
+(defn- index-docs [index-store-tx docs]
+  (db/index-docs index-store-tx (db/encode-docs *index-store* docs))
+  (db/index-stats *index-store* docs))
+
 (t/deftest test-statistics
   (letfn [(->stats [index-snapshot-factory]
             (with-open [index-snapshot (db/open-index-snapshot index-snapshot-factory)]
@@ -238,12 +242,12 @@
             petr {:crux.db/id :petr, :name "Petr"}]
         (let [index-store-tx (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0} nil)]
 
-          (db/index-docs index-store-tx {(c/new-id ivan) ivan})
-          (t/is (= {:doc-count 1, :doc-value-count 1, :values 1, :eids 1} (:name (->stats index-store-tx))))
-          (t/is (= {:doc-count 1, :doc-value-count 2, :values 2, :eids 1} (:interests (->stats index-store-tx))))
+          (index-docs index-store-tx {(c/new-id ivan) ivan})
+          (t/is (= {:doc-count 1, :doc-value-count 1, :values 1, :eids 1} (:name (->stats *index-store*))))
+          (t/is (= {:doc-count 1, :doc-value-count 2, :values 2, :eids 1} (:interests (->stats *index-store*))))
 
-          (db/index-docs index-store-tx {(c/new-id petr) petr})
-          (t/is (= {:doc-count 2, :doc-value-count 2, :values 2, :eids 2} (:name (->stats index-store-tx))))
+          (index-docs index-store-tx {(c/new-id petr) petr})
+          (t/is (= {:doc-count 2, :doc-value-count 2, :values 2, :eids 2} (:name (->stats *index-store*))))
 
           (db/commit-index-tx index-store-tx))
 
@@ -251,7 +255,7 @@
 
         (t/testing "updated"
           (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1} nil)
-            (db/index-docs {(c/new-id ivan2) ivan2})
+            (index-docs {(c/new-id ivan2) ivan2})
             (db/commit-index-tx))
 
           (t/is (= {:doc-count 3, :doc-value-count 3, :values 3, :eids 2} (:name (->stats *index-store*))))
@@ -262,9 +266,9 @@
 
           (let [index-store-tx (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1} nil)]
 
-            (db/index-docs index-store-tx {(c/new-id petr) petr})
+            (index-docs index-store-tx {(c/new-id petr) petr})
             (t/is (= {:doc-count 4, :doc-value-count 4, :values 3, :eids 2}
-                     (:name (->stats index-store-tx))))
+                     (:name (->stats *index-store*))))
 
             (db/commit-index-tx index-store-tx)))))
 
@@ -278,13 +282,13 @@
                       (MapEntry/create (c/new-id doc) doc))))]
           (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0} nil)
 
-            (db/index-docs (mk-docs 50))
-            (db/index-docs (mk-docs 50))
+            (index-docs (mk-docs 50))
+            (index-docs (mk-docs 50))
 
             (db/commit-index-tx))
 
           (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1} nil)
-            (db/index-docs (mk-docs 50))
+            (index-docs (mk-docs 50))
             (db/commit-index-tx))))
 
       (t/is (= {:crux.db/id {:doc-count 3675, :doc-value-count 3675, :values 3554, :eids 3554}
@@ -299,7 +303,7 @@
                :vec-val [1 4 6 2 6 1]}
           doc-id (c/new-id doc)]
       (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0} nil)
-        (db/index-docs {doc-id doc})
+        (index-docs {doc-id doc})
         (db/commit-index-tx))
 
       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
@@ -317,7 +321,7 @@
           docs {simple-doc-id simple-doc, large-vec-doc-id large-vec-doc}
           doc-store (kvds/->KvDocumentStore (:kv-store *index-store*) false)]
       (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0} nil)
-        (db/index-docs docs)
+        (index-docs docs)
         (db/commit-index-tx))
 
       (db/submit-docs doc-store docs)
