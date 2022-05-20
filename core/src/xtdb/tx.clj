@@ -280,7 +280,7 @@
 (defmethod index-tx-event :default [[op & _] _tx _in-flight-tx]
   (throw (err/illegal-arg :unknown-tx-op {:op op})))
 
-(defrecord InFlightTx [tx fork-at !tx-state !tx
+(defrecord InFlightTx [index-store tx fork-at !tx-state !tx
                        index-store-tx document-store-tx
                        db-provider bus]
   db/DocumentStore
@@ -325,7 +325,9 @@
                                true)
 
                              (do
-                               (index-docs this (-> docs without-tx-fn-docs) encoded-docs)
+                               (let [docs (-> docs without-tx-fn-docs)]
+                                 (index-docs this docs (db/encode-docs index-store docs)))
+
                                (db/index-entity-txs index-store-tx etxs)
                                (let [{:keys [tombstones]} (when (seq evict-eids)
                                                             (db/unindex-eids index-store-tx evict-eids))]
@@ -391,7 +393,7 @@
 
     (let [index-store-tx (db/begin-index-tx index-store tx fork-at)
           document-store-tx (fork/begin-document-store-tx document-store)]
-      (->InFlightTx tx fork-at
+      (->InFlightTx index-store tx fork-at
                     (atom :open)
                     (atom {:doc-ids #{}
                            :av-count 0
