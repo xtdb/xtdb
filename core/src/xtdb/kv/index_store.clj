@@ -1006,12 +1006,11 @@
 
 (defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStoreTx
-  (index-docs [_ docs content-idx-kvs]
+  (index-docs [_ content-idx-kvs]
     (with-open [transient-kv-snapshot (kv/new-snapshot transient-kv-store)]
       ;; we can write to the transient-kv-store here within an open read snapshot
       ;; on the assumption that the transient-kv-store is always in-memory
-      (some->> (seq content-idx-kvs) (kv/store transient-kv-store))
-      {:indexed-docs docs}))
+      (some->> (seq content-idx-kvs) (kv/store transient-kv-store))))
 
   (unindex-eids [_ eids]
     (when (seq eids)
