@@ -454,7 +454,7 @@
 (def ^ThreadFactory stats-processor-thread-factory
   (xio/thread-factory "xtdb-stats-processor"))
 
-(defn- start-poller! [^ThreadFactory thread-factory thread-count ^BlockingQueue queue ^CompletableFuture job f]
+(defn- start-poller! [^ThreadFactory thread-factory thread-count ^BlockingQueue queue ^CompletableFuture job f error-f]
   (dotimes [_ thread-count]
     (doto (.newThread thread-factory
                       (fn []
@@ -467,7 +467,8 @@
                             (when (not (.isDone job))
                               (recur)))
                           (catch Throwable t
-                            (.printStackTrace t)))))
+                            (error-f t)
+                            (.completeExceptionally job t)))))
       (.start))))
 
 (defn ->tx-ingester {::sys/deps {:tx-indexer :xtdb/tx-indexer
@@ -594,9 +595,9 @@
                                     (set-ingester-error! t)
                                     (throw t)))))]
 
-        (start-poller! docs-fetcher-thread-factory 1 txs-docs-fetch-queue job txs-doc-fetch-fn)
-        (start-poller! docs-encoder-thread-factory 1 txs-docs-encoder-queue job txs-doc-encoder-fn)
-        (start-poller! txs-processor-thread-factory 1 txs-process-queue job txs-process-fn)
-        (start-poller! stats-processor-thread-factory 1 stats-queue job stats-fn)
+        (start-poller! docs-fetcher-thread-factory 1 txs-docs-fetch-queue job txs-doc-fetch-fn set-ingester-error!)
+        (start-poller! docs-encoder-thread-factory 1 txs-docs-encoder-queue job txs-doc-encoder-fn set-ingester-error!)
+        (start-poller! txs-processor-thread-factory 1 txs-process-queue job txs-process-fn set-ingester-error!)
+        (start-poller! stats-processor-thread-factory 1 stats-queue job stats-fn set-ingester-error!)
 
         (->TxIngester index-store !error job)))))
