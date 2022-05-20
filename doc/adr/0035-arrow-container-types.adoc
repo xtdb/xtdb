@@ -26,17 +26,31 @@ The expression engine on scalars also provides leverage over our function suite,
 
 Currently the few operations we support on structs & arrays are written as implementations of the `emit-expr` function, they do not participate in codegen like scalar expressions. This allows authoring container functions directly on the vectors, instead of element-wise as in codegen.
 
-Some potential problems with this as it stands:
+Some potential problems with this as it stands...
 
-- The vector processing code must deal with different type layouts, nils correctly at runtime. There are some helper classes to make this not totally intractable (writers, copiers and readers).
+=== Explicit vector wise code is commonly more complicated
 
-- The vector processing code often represents boilerplate that must be repeated with minor type specialisation for each operation. e.g `nth` looks only slightly different to `cardinality`, but different enough due to different ins / out type specialisation.
+The vector processing code often represents boilerplate that must be repeated with minor type specialisation for each operation. e.g `nth` looks only slightly different to `cardinality`, but different enough due to different ins / out type specialisation.
 
-- `emit-expr` requires allocation of return data each time such an expression is evaluated, i.e intermediate results are materialized. Consider an expression that operates on a list in a struct, e.g `(nth (dot-const-field s foo) 42)`. Such an expression would copy the contents of every list (whose size is unbounded) in order to dereference a single location in each list, turning a `O(1)` operation per list into `O(N)` operation per list.
+The vector processing code must deal with different type layouts, nils correctly at runtime. There are some helper classes to make this not totally intractable (writers, copiers and readers).
 
-- Operations that are dependent on the type parameters of containers would have to be specialised at runtime, or reach out to codegen for potentially nested structures. I cannot see how this can be done without a lot of difficulty with the current implementation. Again consider fast equality of nested structs / lists.
+=== Intermediate allocation
 
-- Thinking of real futures, if we __ever__ want to support UDF (user-defined-functions). I'd imagine they'd be defined element wise. As it stands we lack a representation for lists and structs that can be used as arguments to a UDF expression.
+`emit-expr` requires allocation of return data each time such an expression is evaluated, i.e intermediate results are materialized.
+
+Consider an expression that operates on a list in a struct, e.g `(nth (dot-const-field s foo) 42)`. Such an expression would copy the contents of every list (whose size is unbounded) in order to dereference a single location in each list, turning a `O(1)` operation per list into `O(N)` operation per list.
+
+This problem can apply to struct copies, for example `(dot-const-field (dot-const-field s foo) bar)` the struct at `foo` must be completely copied before de-referencing `bar`.
+
+This problem compounds with nesting: `(nth (nth (dot-const-field s foo) 42) 42)`.
+
+=== Type parameters
+
+Operations that are dependent on the type parameters of containers would have to be specialised at runtime, or reach out to codegen for potentially nested structures. I cannot see how this can be done without a lot of difficulty with the current implementation. Again consider fast equality of nested structs / lists.
+
+=== User defined functions
+
+If we want to support UDF. I'd imagine they'd be defined element wise. As it stands we lack a representation for lists and structs that can be used as arguments to a UDF expression.
 
 == Option A: Bring container pointers to codegen as 1st class citizens.
 
