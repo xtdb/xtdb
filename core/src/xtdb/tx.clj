@@ -307,9 +307,7 @@
 
       (swap! !tx update :tx-events into tx-events)
 
-      (index-docs this (-> (select-keys prefetched-docs (txc/tx-events->doc-hashes tx-events))
-                           without-tx-fn-docs)
-                  encoded-docs)
+      (index-docs this prefetched-docs encoded-docs)
 
       (with-open [index-snapshot (db/open-index-snapshot index-store-tx)]
         (let [deps (assoc this :index-snapshot index-snapshot)
