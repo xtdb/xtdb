@@ -34,7 +34,7 @@ public abstract class XtExtensionType extends ArrowType.ExtensionType {
     @Override
     public ArrowType deserialize(ArrowType storageType, String serializedData) {
         if (!storageType.equals(this.storageType)) {
-            throw new UnsupportedOperationException("Cannot construct XtExtensionType from underlying type " + storageType);
+            throw new UnsupportedOperationException(String.format("Cannot construct '%s' from underlying type %s", getClass().getSimpleName(), storageType));
         } else {
             return deserialize(serializedData);
         }

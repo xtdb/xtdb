@@ -1,6 +1,5 @@
 (ns core2.expression.temporal
-  (:require [clojure.walk :as w]
-            [core2.expression :as expr]
+  (:require [core2.expression :as expr]
             [core2.expression.macro :as emacro]
             [core2.expression.metadata :as expr.meta]
             [core2.expression.walk :as ewalk]
@@ -8,7 +7,7 @@
             [core2.types :as types]
             [core2.util :as util])
   (:import java.time.Instant
-           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Int ArrowType$Timestamp ArrowType$Interval ArrowType$Date ArrowType ArrowType$Null]
+           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Int ArrowType$Timestamp ArrowType$Interval ArrowType$Date]
            org.apache.arrow.vector.types.TimeUnit
            [java.time LocalDate Period Duration]
            [org.apache.arrow.vector PeriodDuration]

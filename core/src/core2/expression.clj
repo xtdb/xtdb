@@ -1701,10 +1701,6 @@
     op)
   :default ::default)
 
-(defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, ^String col-name]
-  (apply types/->field col-name (.getType field) (.isNullable field)
-         (.getChildren field)))
-
 (defmethod emit-expr :struct [{:keys [entries]} col-name opts]
   (let [entries (vec (for [[k v] entries]
                        (emit-expr v (name k) opts)))]
@@ -1769,7 +1765,7 @@
 (defmethod emit-expr :variable [{:keys [variable]} col-name {:keys [var-fields]}]
   (let [^Field out-field (-> (or (get var-fields variable)
                                  (throw (IllegalArgumentException. (str "missing variable: " variable ", available " (pr-str (set (keys var-fields)))))))
-                             (field-with-name col-name))]
+                             (types/field-with-name col-name))]
     (fn [^IIndirectRelation in-rel al _params]
       (let [in-vec (.vectorForName in-rel (name variable))
             out-vec (.createVector out-field al)]

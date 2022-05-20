@@ -109,6 +109,9 @@
         "metadata" : [{
           "value" : "TIMESTAMPMICROTZ",
           "key" : "minor-type"
+        },{
+          "value" : "UTC",
+          "key" : "tz"
         }]
       },{
         "name" : "float8",

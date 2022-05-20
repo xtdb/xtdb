@@ -475,6 +475,49 @@
       "interval" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Interval arrow-type))))
       minor-type-name)))
 
+(defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, ^String col-name]
+  (Field. col-name (.getFieldType field) (.getChildren field)))
+
+(defn merge-fields [& fields]
+  (let [new-fields (->> (for [^Field field fields
+                              child-field (if (= dense-union-type (.getType field))
+                                            (.getChildren field)
+                                            [field])]
+                          child-field)
+                        (group-by (fn [^Field field] (.getType field)))
+                        (mapcat (fn [[arrow-type fields]]
+                                  (let [field-name (.getName ^Field (first fields))]
+                                    (condp = arrow-type
+                                      list-type
+                                      [(->field field-name list-type false
+                                                (->> fields
+                                                     (map #(first (.getChildren ^Field %)))
+                                                     (apply merge-fields)))]
+
+                                      struct-type
+                                      (->> fields
+                                           (group-by (fn [^Field struct-field]
+                                                       (->> (.getChildren struct-field)
+                                                            (into #{} (map #(.getName ^Field %))))))
+                                           (map (comp (fn [fields]
+                                                        (apply ->field field-name struct-type false
+                                                               (->> (mapcat #(.getChildren ^Field %) fields)
+                                                                    (group-by #(.getName ^Field %))
+                                                                    (map #(apply merge-fields (val %))))))
+                                                      val)))
+
+                                      [(first fields)])))))]
+    (if (= 1 (count new-fields))
+      (first new-fields)
+      (apply ->field (.getName ^Field (first fields)) dense-union-type false
+             (->> new-fields
+                  (map-indexed (fn [idx ^Field field]
+                                 (let [arrow-type (.getType field)]
+                                   (field-with-name field
+                                                    (if (= struct-type arrow-type)
+                                                      (str "struct" idx)
+                                                      (type->field-name arrow-type)))))))))))
+
 (defn field->leg-type ^core2.types.LegType [^Field field]
   (let [arrow-type (.getType field)]
     (if (instance? ArrowType$Struct arrow-type)

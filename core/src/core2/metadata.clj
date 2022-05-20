@@ -16,14 +16,15 @@
            core2.ICursor
            java.io.Closeable
            (java.util HashMap List SortedSet)
-           java.util.concurrent.ConcurrentSkipListSet
-           (java.util.function Consumer Function)
+           (java.util.concurrent ConcurrentSkipListSet)
+           (java.util.function BiFunction Consumer Function)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector IntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$ExtensionType ArrowType$FloatingPoint ArrowType$Int ArrowType$List
-                                               ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Utf8 Field FieldType Schema)
-           org.apache.arrow.vector.types.Types
+           (org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$ExtensionType ArrowType$FloatingPoint
+                                               ArrowType$Int ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Utf8
+                                               ExtensionTypeRegistry Field FieldType Schema)
+           (org.apache.arrow.vector.types TimeUnit Types Types$MinorType)
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
@@ -33,10 +34,12 @@
 (definterface IMetadataManager
   (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx, ^long max-rows-per-block])
   (^java.util.SortedSet knownChunks [])
-  (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^java.util.function.BiFunction f]))
+  (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^java.util.function.BiFunction f])
+  (^org.apache.arrow.vector.types.pojo.Field columnField [^String colName]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IMetadataIndices
+  (^java.util.Set columnNames [])
   (^Long columnIndex [^String columnName])
   (^Long blockIndex [^String column-name, ^int blockIdx])
   (^long blockCount []))
@@ -77,10 +80,18 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti type->metadata-writer (fn [write-col-meta! types-vec ^LegType leg-type] (class (.arrowType leg-type))))
+
 (defmulti type->type-metadata (fn [^LegType leg-type] (class (.arrowType leg-type))))
 
 (defmethod type->type-metadata :default [^LegType leg-type]
   {"minor-type" (str (Types/getMinorTypeForArrowType (.arrowType leg-type)))})
+
+(defmulti type-metadata->arrow-type
+  (fn [type-metadata]
+    (Types$MinorType/valueOf (get type-metadata "minor-type"))))
+
+(defmethod type-metadata->arrow-type :default [type-metadata]
+  (.getType (Types$MinorType/valueOf (get type-metadata "minor-type"))))
 
 (defn- add-struct-child ^org.apache.arrow.vector.ValueVector [^StructVector parent, ^Field field]
   (doto (.addOrGet parent (.getName field) (.getFieldType field) ValueVector)
@@ -105,6 +116,18 @@
 ;; TODO anything we can do for extension types? I suppose we should probably special case our own...
 ;; they'll get included in the bloom filter, which is sufficient for UUIDs/keywords/etc.
 (defmethod type->metadata-writer ArrowType$ExtensionType [_write-col-meta! metadata-root leg-type] (->bool-type-handler metadata-root leg-type))
+
+(defmethod type->type-metadata ArrowType$ExtensionType [^LegType leg-type]
+  (let [^ArrowType$ExtensionType arrow-type (.arrowType leg-type)]
+    {"minor-type" (str (Types/getMinorTypeForArrowType arrow-type))
+     "extension-name" (.extensionName arrow-type)
+     "extension-metadata" (.serialize arrow-type)}))
+
+(defmethod type-metadata->arrow-type Types$MinorType/EXTENSIONTYPE [tm]
+  (let [^ArrowType$ExtensionType arrow-type (ExtensionTypeRegistry/lookup (get tm "extension-name"))]
+    (.deserialize arrow-type
+                  (.storageType arrow-type)
+                  (get tm "extension-metadata"))))
 
 (defn- ->min-max-type-handler [^VectorSchemaRoot metadata-root, ^LegType leg-type]
   (let [arrow-type (.arrowType leg-type)
@@ -142,6 +165,14 @@
 (defmethod type->metadata-writer ArrowType$Binary [_write-col-meta! metadata-root leg-type] (->min-max-type-handler metadata-root leg-type))
 (defmethod type->metadata-writer ArrowType$Timestamp [_write-col-meta! metadata-root leg-type] (->min-max-type-handler metadata-root leg-type))
 (defmethod type->metadata-writer ArrowType$Date [_write-col-meta! metadata-root leg-type] (->min-max-type-handler metadata-root leg-type))
+
+(defmethod type->type-metadata ArrowType$Timestamp [^LegType leg-type]
+  (let [^ArrowType$Timestamp arrow-type (.arrowType leg-type)]
+    {"minor-type" (str (Types/getMinorTypeForArrowType arrow-type))
+     "tz" (.getTimezone arrow-type)}))
+
+(defmethod type-metadata->arrow-type Types$MinorType/TIMESTAMPMICROTZ [tm]
+  (ArrowType$Timestamp. TimeUnit/MICROSECOND (get tm "tz")))
 
 (defmethod type->metadata-writer ArrowType$List [write-col-meta! ^VectorSchemaRoot metadata-root ^LegType leg-type]
   (let [^StructVector types-vec (.getVector metadata-root "types")
@@ -273,9 +304,115 @@
                            inc)]
       (reify IMetadataIndices
         IMetadataIndices
+        (columnNames [_] (set (keys col-idx-cache)))
         (columnIndex [_ col-name] (get col-idx-cache col-name))
         (blockIndex [_ col-name block-idx] (get block-idx-cache [col-name block-idx]))
         (blockCount [_] block-count)))))
+
+(defn- with-metadata* [^IBufferPool buffer-pool, ^long chunk-idx, ^BiFunction f]
+  (-> (.getBuffer buffer-pool (->metadata-obj-key chunk-idx))
+      (util/then-apply
+        (fn [^ArrowBuf metadata-buffer]
+          (assert metadata-buffer)
+
+          (when metadata-buffer
+            (let [res (promise)]
+              (try
+                (with-open [chunk (util/->chunks metadata-buffer)]
+                  (.tryAdvance chunk
+                               (reify Consumer
+                                 (accept [_ metadata-root]
+                                   (deliver res (.apply f chunk-idx metadata-root))))))
+
+                (assert (realized? res))
+                @res
+
+                (finally
+                  (.close metadata-buffer)))))))))
+
+(defn- ->column-fields [^VectorSchemaRoot metadata-root]
+  (let [^VarCharVector col-name-vec (.getVector metadata-root "column")
+        ^StructVector types-vec (.getVector metadata-root "types")
+        meta-idxs (->metadata-idxs metadata-root)
+        type-vecs (vec
+                   (for [^ValueVector type-vec (seq types-vec)]
+                     {:type-vec type-vec
+                      :arrow-type (type-metadata->arrow-type (.getMetadata (.getField type-vec)))}))]
+    (letfn [(->field [col-name ^long col-idx]
+              (let [type-vecs (->> type-vecs
+                                   (remove (fn [{:keys [^ValueVector type-vec]}]
+                                             (.isNull type-vec col-idx))))]
+                (letfn [(->field* [col-name arrow-type type-vec]
+                          (cond
+                            (instance? ArrowType$List arrow-type)
+                            (t/->field col-name arrow-type false
+                                       (->field "$data" (.get ^IntVector type-vec col-idx)))
+
+                            (instance? ArrowType$Struct arrow-type)
+                            (apply t/->field col-name arrow-type false
+                                   (let [^ListVector type-vec type-vec
+                                         ^IntVector type-vec-data (.getDataVector type-vec)]
+                                     (for [type-vec-data-idx (range (.getElementStartIndex type-vec col-idx)
+                                                                    (.getElementEndIndex type-vec col-idx))
+                                           :let [col-idx (.get type-vec-data type-vec-data-idx)]]
+                                       (->field (str (.getObject col-name-vec col-idx)) col-idx))))
+
+                            :else
+                            (t/->field col-name arrow-type (= arrow-type t/null-type))))]
+
+                  (if (= 1 (count type-vecs))
+                    (let [{:keys [arrow-type type-vec]} (first type-vecs)]
+                      (->field* col-name arrow-type type-vec))
+
+                    (apply t/->field col-name t/dense-union-type false
+                           (for [{:keys [^ValueVector type-vec arrow-type]} type-vecs]
+                             (->field* (.getName type-vec) arrow-type type-vec)))))))]
+
+      (->> (for [col-name (.columnNames meta-idxs)]
+             [col-name (->field col-name (.columnIndex meta-idxs col-name))])
+           (into {})))))
+
+(defn- merge-column-fields [column-fields new-column-fields]
+  (merge-with t/merge-fields column-fields new-column-fields))
+
+(defn- load-column-fields [^IBufferPool buffer-pool, known-chunks]
+  (let [cf-futs (doall (for [chunk-idx known-chunks]
+                         (with-metadata* buffer-pool chunk-idx
+                           (reify BiFunction
+                             (apply [_ _chunk-idx metadata-root]
+                               (->column-fields metadata-root))))))]
+    (->> cf-futs
+         (transduce (map deref)
+                    (completing
+                     (fn
+                       ([] {})
+                       ([cfs new-cfs] (merge-column-fields cfs new-cfs))))))))
+
+(deftype MetadataManager [^BufferAllocator allocator
+                          ^ObjectStore object-store
+                          ^IBufferPool buffer-pool
+                          ^SortedSet known-chunks
+                          ^:unsynchronized-mutable column-fields]
+  IMetadataManager
+  (registerNewChunk [this live-roots chunk-idx max-rows-per-block]
+    (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create metadata-schema allocator)]
+                         (write-meta metadata-root live-roots chunk-idx max-rows-per-block)
+                         (set! (.column-fields this) (merge-column-fields column-fields (->column-fields metadata-root)))
+                         (util/root->arrow-ipc-byte-buffer metadata-root :file))]
+
+      @(.putObject object-store (->metadata-obj-key chunk-idx) metadata-buf)
+
+      (.add known-chunks chunk-idx)))
+
+  (withMetadata [_ chunk-idx f] (with-metadata* buffer-pool chunk-idx f))
+
+  (knownChunks [_] known-chunks)
+
+  (columnField [_ col-name] (get column-fields col-name))
+
+  Closeable
+  (close [_]
+    (.clear known-chunks)))
 
 (defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, f]
   (.withMetadata metadata-mgr chunk-idx (util/->jbifn f)))
@@ -287,48 +424,6 @@
        vec
        (into [] (keep deref))))
 
-(deftype MetadataManager [^BufferAllocator allocator
-                          ^ObjectStore object-store
-                          ^IBufferPool buffer-pool
-                          ^SortedSet known-chunks]
-  IMetadataManager
-  (registerNewChunk [_ live-roots chunk-idx max-rows-per-block]
-    (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create metadata-schema allocator)]
-                         (write-meta metadata-root live-roots chunk-idx max-rows-per-block)
-
-                         (util/root->arrow-ipc-byte-buffer metadata-root :file))]
-
-      @(.putObject object-store (->metadata-obj-key chunk-idx) metadata-buf)
-
-      (.add known-chunks chunk-idx)))
-
-  (withMetadata [_ chunk-idx f]
-    (-> (.getBuffer buffer-pool (->metadata-obj-key chunk-idx))
-        (util/then-apply
-          (fn [^ArrowBuf metadata-buffer]
-            (assert metadata-buffer)
-
-            (when metadata-buffer
-              (let [res (promise)]
-                (try
-                  (with-open [chunk (util/->chunks metadata-buffer)]
-                    (.tryAdvance chunk
-                                 (reify Consumer
-                                   (accept [_ metadata-root]
-                                     (deliver res (.apply f chunk-idx metadata-root))))))
-
-                  (assert (realized? res))
-                  @res
-
-                  (finally
-                    (.close metadata-buffer)))))))))
-
-  (knownChunks [_] known-chunks)
-
-  Closeable
-  (close [_]
-    (.clear known-chunks)))
-
 (defmethod ig/prep-key ::metadata-manager [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
           :object-store (ig/ref :core2/object-store)
@@ -336,8 +431,9 @@
          opts))
 
 (defmethod ig/init-key ::metadata-manager [_ {:keys [allocator ^ObjectStore object-store buffer-pool]}]
-  (MetadataManager. allocator object-store buffer-pool
-                    (ConcurrentSkipListSet. ^List (keep obj-key->chunk-idx (.listObjects object-store "metadata-")))))
+  (let [known-chunks (ConcurrentSkipListSet. ^List (keep obj-key->chunk-idx (.listObjects object-store "metadata-")))
+        column-fields (load-column-fields buffer-pool known-chunks)]
+    (MetadataManager. allocator object-store buffer-pool known-chunks column-fields)))
 
 (defmethod ig/halt-key! ::metadata-manager [_ ^MetadataManager mgr]
   (.close mgr))

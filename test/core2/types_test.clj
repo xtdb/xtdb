@@ -158,3 +158,72 @@
                                                    (fn [^IVectorWriter w, ^PeriodDuration v]
                                                      (.setSafe ^IntervalDayVector (.getVector w) (.getPosition w) (.getDays (.getPeriod v)) (.toMillis (.getDuration v))))
                                                    [period-day-ms])))))))
+
+(t/deftest test-merge-fields
+  (let [varchar-field (types/->field "foo" types/varchar-type false)
+        bigint-field (types/->field "foo" types/bigint-type false)
+        float8-field (types/->field "float8" types/float8-type false)]
+    (t/is (= varchar-field
+             (types/merge-fields varchar-field varchar-field)))
+
+    (t/is (= (types/->field "foo" types/dense-union-type false
+                            (types/field-with-name varchar-field "varchar")
+                            (types/field-with-name bigint-field "bigint"))
+             (types/merge-fields varchar-field bigint-field)))
+
+    (t/is (= (types/->field "foo" types/dense-union-type false
+                            (types/field-with-name varchar-field "varchar")
+                            (types/field-with-name bigint-field "bigint")
+                            (types/field-with-name float8-field "float8"))
+             (types/merge-fields (types/->field "foo" types/dense-union-type false
+                                                (types/field-with-name varchar-field "varchar")
+                                                (types/field-with-name bigint-field "bigint"))
+                                 float8-field))))
+
+  (t/testing "merges list types"
+    (t/is (= (types/->field "foo" types/list-type false
+                            (types/->field "$data" types/varchar-type false))
+             (types/merge-fields (types/->field "foo" types/list-type false
+                                                (types/->field "$data" types/varchar-type false))
+                                 (types/->field "foo" types/list-type false
+                                                (types/->field "$data" types/varchar-type false)))))
+
+    (t/is (= (types/->field "foo" types/list-type false
+                            (types/->field "$data" types/dense-union-type false
+                                           (types/->field "varchar" types/varchar-type false)
+                                           (types/->field "bigint" types/bigint-type false)))
+             (types/merge-fields (types/->field "foo" types/list-type false
+                                                (types/->field "$data" types/varchar-type false))
+                                 (types/->field "foo" types/list-type false
+                                                (types/->field "$data" types/bigint-type false))))))
+
+  (t/testing "merges struct types"
+    (let [struct-field (types/->field "foo" types/struct-type false
+                                      (types/->field "a" types/varchar-type false)
+                                      (types/->field "b" types/varchar-type false))]
+      (t/is (= struct-field
+               (types/merge-fields struct-field struct-field))))
+
+    (t/is (= (types/->field "foo" types/struct-type false
+                            (types/->field "a" types/varchar-type false)
+                            (types/->field "b" types/dense-union-type false
+                                           (types/->field "varchar" types/varchar-type false)
+                                           (types/->field "bigint" types/bigint-type false)))
+
+             (types/merge-fields (types/->field "foo" types/struct-type false
+                                                (types/->field "a" types/varchar-type false)
+                                                (types/->field "b" types/varchar-type false))
+                                 (types/->field "foo" types/struct-type false
+                                                (types/->field "a" types/varchar-type false)
+                                                (types/->field "b" types/bigint-type false)))))
+
+    (let [struct0 (types/->field "foo" types/struct-type false
+                                 (types/->field "a" types/varchar-type false)
+                                 (types/->field "b" types/varchar-type false))
+          struct1 (types/->field "foo" types/struct-type false
+                                 (types/->field "b" types/varchar-type false)
+                                 (types/->field "c" types/bigint-type false))]
+      (t/is (= (types/->field "foo" types/dense-union-type false
+                              (types/field-with-name struct0 "struct0")
+                              (types/field-with-name struct1 "struct1"))
+               (types/merge-fields struct0 struct1))))))

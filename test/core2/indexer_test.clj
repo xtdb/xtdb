@@ -21,6 +21,7 @@
            [core2.buffer_pool BufferPool IBufferPool]
            core2.indexer.IChunkManager
            core2.local_node.Node
+           core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.TemporalManager
            java.nio.file.Files
@@ -243,7 +244,33 @@
 
         (tu/finish-chunk node)
 
-        (tu/check-json (.toPath (io/as-file (io/resource "multi-block-metadata"))) os)))))
+        (tu/check-json (.toPath (io/as-file (io/resource "multi-block-metadata"))) os))
+
+      (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
+        (t/is (= (ty/->field "_id" ty/dense-union-type false
+                             (ty/->field "varchar" ty/varchar-type false)
+                             (ty/->field "timestampmicrotz-utc" ty/timestamp-micro-tz-type false)
+                             (ty/->field "float8" ty/float8-type false))
+                 (.columnField mm "_id")))
+
+        (t/is (= (ty/->field "list" ty/list-type false
+                             (ty/->field "$data" ty/dense-union-type false
+                                         (ty/->field "varchar" ty/varchar-type false)
+                                         (ty/->field "timestampmicrotz-utc" ty/timestamp-micro-tz-type false)
+                                         (ty/->field "float8" ty/float8-type false)
+                                         (ty/->field "bit" ty/bool-type false)))
+                 (.columnField mm "list")))
+
+        (t/is (= (ty/->field "struct" ty/struct-type false
+                             (ty/->field "a" ty/dense-union-type false
+                                         (ty/->field "bit" ty/bool-type false)
+                                         (ty/->field "bigint" ty/bigint-type false))
+                             (ty/->field "b" ty/dense-union-type false
+                                         (ty/->field "varchar" ty/varchar-type false)
+                                         (ty/->field "struct-7" ty/struct-type false
+                                                     (ty/->field "c" ty/varchar-type false)
+                                                     (ty/->field "d" ty/varchar-type false))))
+                 (.columnField mm "struct")))))))
 
 (t/deftest round-trips-nils
   (with-open [node (node/start-node {})]
@@ -269,6 +296,7 @@
           (tu/then-await-tx node (Duration/ofMillis 2000)))
 
       (tu/finish-chunk node)
+
       (t/is (= #{{:id :foo, :uuid uuid}}
                (set (c2/datalog-query node '{:find [?id ?uuid]
                                              :where [[?id :uuid ?uuid]]})))))
@@ -473,7 +501,8 @@
             (let [system @(:!system node)
                   ^ObjectStore os (::os/file-system-object-store system)
                   ^BufferPool bp (::bp/buffer-pool system)
-                  ^TemporalManager tm (::temporal/temporal-manager system)]
+                  ^TemporalManager tm (::temporal/temporal-manager system)
+                  ^IMetadataManager mm (::meta/metadata-manager system)]
               (t/is (= first-half-tx-key
                        (-> first-half-tx-key
                            (tu/then-await-tx node (Duration/ofSeconds 10)))))
@@ -492,6 +521,9 @@
 
                 (t/is (= 2000 (count (.id->internal-id tm)))))
 
+              (t/is (= (ty/->field "_id" ty/varchar-type false)
+                       (.columnField mm "_id")))
+
               (let [^TransactionInstant
                     second-half-tx-key @(reduce
                                          (fn [_ tx-ops]
@@ -505,14 +537,18 @@
 
                 (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "buffers-2"))]
                   (doseq [^Node node [new-node node]
-                          :let [^TemporalManager tm (::temporal/temporal-manager @(:!system node))]]
+                          :let [^TemporalManager tm (tu/component node ::temporal/temporal-manager)
+                                ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
                     (t/is (<= (:tx-id first-half-tx-key)
                               (:tx-id (-> first-half-tx-key
                                          (tu/then-await-tx node (Duration/ofSeconds 10))))
                               (:tx-id second-half-tx-key)))
 
-                    (t/is (>= (count (.id->internal-id tm)) 2000)))
+                    (t/is (>= (count (.id->internal-id tm)) 2000))
+
+                    (t/is (= (ty/->field "_id" ty/varchar-type false)
+                             (.columnField mm "_id"))))
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-key (-> second-half-tx-key
@@ -524,7 +560,8 @@
 
                   (doseq [^Node node [new-node node]
                           :let [^ObjectStore os (::os/file-system-object-store @(:!system node))
-                                ^TemporalManager tm (::temporal/temporal-manager @(:!system node))]]
+                                ^TemporalManager tm (::temporal/temporal-manager @(:!system node))
+                                ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
                     (let [objs (.listObjects os)]
                       (t/is (= 11 (count (filter #(re-matches #"temporal-\p{XDigit}+.*" %) objs))))
@@ -533,7 +570,45 @@
                       (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))
 
+                    (t/is (= (ty/->field "_id" ty/varchar-type false)
+                             (.columnField mm "_id")))
+
                     (t/is (= 2000 (count (.id->internal-id tm))))))))))))))
+
+(t/deftest merges-column-fields-on-restart
+  (let [node-dir (util/->path "target/merges-column-fields")
+        node-opts {:node-dir node-dir, :max-rows-per-chunk 1000, :max-rows-per-block 100}]
+    (util/delete-dir node-dir)
+
+    (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
+      (let [^IMetadataManager mm1 (tu/component node1 ::meta/metadata-manager)]
+
+        (-> (c2/submit-tx node1 [[:put {:_id "foo"}]])
+            (tu/then-await-tx node1 (Duration/ofMillis 200)))
+
+        (tu/finish-chunk node1)
+
+        (t/is (= (ty/->field "_id" ty/varchar-type false)
+                 (.columnField mm1 "_id")))
+
+        (let [tx2 (c2/submit-tx node1 [[:put {:_id :bar}]])]
+          (tu/then-await-tx tx2 node1 (Duration/ofMillis 200))
+
+          (tu/finish-chunk node1)
+
+          (t/is (= (ty/->field "_id" ty/dense-union-type false
+                               (ty/->field "varchar" ty/varchar-type false)
+                               (ty/->field "keyword" ty/keyword-type false))
+                   (.columnField mm1 "_id")))
+
+          (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
+            (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
+              (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
+
+              (t/is (= (ty/->field "_id" ty/dense-union-type false
+                                   (ty/->field "varchar" ty/varchar-type false)
+                                   (ty/->field "keyword" ty/keyword-type false))
+                       (.columnField mm2 "_id"))))))))))
 
 (t/deftest test-await-fails-fast
   (with-redefs [idx/->live-root (fn [& _args]
