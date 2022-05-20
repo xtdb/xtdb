@@ -343,7 +343,7 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
-            final List<Object> ast = new ArrayList<>();
+            final List<IPersistentVector> asts = new ArrayList<>();
             boolean isMatch = false;
             while (true) {
                 final ParseState state = parser.parse(in, idx, memos, errors, hide);
@@ -351,11 +351,17 @@ public final class Parser {
                     isMatch = true;
                     idx = state.idx;
                     if (!hide) {
-                        ast.addAll((List<?>) state.ast);
+                        asts.add(state.ast);
                     }
                 } else {
                     if (isStar || isMatch) {
-                        return new ParseState(PersistentVector.create(ast), idx);
+                        ITransientCollection newAst = PersistentVector.EMPTY.asTransient();
+                        for (IPersistentVector ast : asts) {
+                            for (Object x : ((List<?>) ast)) {
+                                newAst = newAst.conj(x);
+                            }
+                        }
+                        return new ParseState((IPersistentVector) newAst.persistent(), idx);
                     } else {
                         return null;
                     }
@@ -377,19 +383,25 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
-            final List<Object> ast = new ArrayList<>();
+            final List<IPersistentVector> asts = new ArrayList<>(parsers.length);
             for (int i = 0; i < parsers.length; i++) {
                 final ParseState state = parsers[i].parse(in, idx, memos, errors, hide);
                 if (state != null) {
                     idx = state.idx;
                     if (!hide) {
-                        ast.addAll((List<?>) state.ast);
+                        asts.add(state.ast);
                     }
                 } else {
                     return null;
                 }
             }
-            return new ParseState(PersistentVector.create(ast), idx);
+            ITransientCollection newAst = PersistentVector.EMPTY.asTransient();
+            for (IPersistentVector ast : asts) {
+                for (Object x : ((List<?>) ast)) {
+                    newAst = newAst.conj(x);
+                }
+            }
+            return new ParseState((IPersistentVector) newAst.persistent(), idx);
         }
 
         public AParser init(final AParser[] rules) {
