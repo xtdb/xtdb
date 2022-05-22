@@ -146,8 +146,9 @@
                m-size (bit-shift-left (inc (.length in)) Parser/RULE_ID_SHIFT)
                memos (make-array Parser$ParseState m-size)
                parser (Parser$CatParser. [(aget rules (get rule->id start-rule))
-                                          (Parser$EpsilonParser. ws-pattern)])]
-           (if-let [state (.parse parser in 0 memos errors false)]
+                                          (Parser$EpsilonParser. ws-pattern)])
+               idx (Parser/skipWhitespace ws-pattern in 0 errors)]
+           (if-let [^Parser$ParseState state (and (not= -1 idx) (.parse parser in idx memos errors false))]
              (first (.ast state))
              (ParseFailure. in (.getErrors errors) (.getIndex errors)))))))))
 

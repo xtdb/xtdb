@@ -3,23 +3,16 @@
             [core2.rewrite :as r]
             [core2.sql.parser :as p]))
 
-(defn- skip-whitespace ^long [^String s ^long n]
-  (if (Character/isWhitespace (.charAt s n))
-    (recur s (inc n))
-    n))
-
 (defn- ->line-info-str [loc]
   (let [{:keys [sql]} (meta (r/root loc))
         {:keys [start-idx]} (meta (r/node loc))
-        start-idx (skip-whitespace sql start-idx)
         {:keys [line column]} (p/index->line-column sql start-idx)]
     (format "at line %d, column %d" line column)))
 
 (defn- ->src-str [loc]
   (let [{:keys [sql]} (meta (r/root loc))
-        {:keys [start-idx end-idx]} (meta (r/node loc))
-        start-idx (skip-whitespace sql start-idx)]
-    (subs sql start-idx end-idx)))
+        {:keys [start-idx end-idx]} (meta (r/node loc))]
+    (str/trim (subs sql start-idx end-idx))))
 
 ;; Attribute grammar for SQL semantics.
 

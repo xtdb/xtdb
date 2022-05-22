@@ -83,7 +83,7 @@ public final class Parser {
 
     private static final IPersistentVector WS_ERROR = PersistentVector.create(Keyword.intern("expected"), "<WS>");
 
-    private static int skipWhitespace(final Pattern pattern, final String in, final int idx, final IParseErrors errors) {
+    public static int skipWhitespace(final Pattern pattern, final String in, final int idx, final IParseErrors errors) {
         final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
         if (m.lookingAt()) {
             return m.end();
@@ -112,15 +112,10 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
-            idx = skipWhitespace(wsPattern, in, idx, errors);
-            if (idx != -1) {
-                if (idx == in.length()) {
-                    return new ParseState(PersistentVector.EMPTY, idx);
-                } else {
-                    errors.addError(ERROR, idx);
-                    return null;
-                }
+            if (idx == in.length()) {
+                return new ParseState(PersistentVector.EMPTY, idx);
             } else {
+                errors.addError(ERROR, idx);
                 return null;
             }
         }
@@ -548,15 +543,15 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
-            idx = skipWhitespace(wsPattern, in, idx, errors);
-            if (idx != -1) {
-                if (in.regionMatches(true, idx, string, 0, string.length())) {
-                    return new ParseState(hide ? PersistentVector.EMPTY : ast, idx + string.length());
+            if (in.regionMatches(true, idx, string, 0, string.length())) {
+                idx = skipWhitespace(wsPattern, in, idx + string.length(), errors);
+                if (idx != -1) {
+                    return new ParseState(hide ? PersistentVector.EMPTY : ast, idx);
                 } else {
-                    errors.addError(err, idx);
                     return null;
                 }
             } else {
+                errors.addError(err, idx);
                 return null;
             }
         }
@@ -576,16 +571,16 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, int idx, final ParseState[] memos, final IParseErrors errors, final boolean hide) {
-            idx = skipWhitespace(wsPattern, in, idx, errors);
-            if (idx != -1) {
-                final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
-                if (m.lookingAt()) {
-                    return new ParseState(hide ? PersistentVector.EMPTY : matcherFn.apply(m), m.end());
+            final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
+            if (m.lookingAt()) {
+                idx = skipWhitespace(wsPattern, in, m.end(), errors);
+                if (idx != -1) {
+                    return new ParseState(hide ? PersistentVector.EMPTY : matcherFn.apply(m), idx);
                 } else {
-                    errors.addError(err, idx);
                     return null;
                 }
             } else {
+                errors.addError(err, idx);
                 return null;
             }
         }
