@@ -94,7 +94,8 @@
                                            Parser/NEVER_RAW)))
   ([grammar ws-pattern ->raw?]
    (let [rule->id (zipmap (keys grammar) (range))
-         ^"[Lcore2.sql.parser.Parser$AParser;" rules (make-array Parser$AParser (count rule->id))]
+         ^"[Lcore2.sql.parser.Parser$AParser;" rules (make-array Parser$AParser (count rule->id))
+         parse-state-array-class (Class/forName "[Lcore2.sql.parser.Parser$ParseState;")]
      (letfn [(build-parser [rule-name {:keys [tag hide] :as parser}]
                (let [parser (case tag
                               :nt (Parser$NonTerminalParser. (get rule->id (:keyword parser)))
@@ -148,8 +149,7 @@
 
        (fn [^String in start-rule]
          (let [errors (Parser$ParseErrors.)
-               m-size (bit-shift-left (inc (.length in)) Parser/RULE_ID_SHIFT)
-               memos (make-array Parser$ParseState m-size)
+               memos (make-array parse-state-array-class (count grammar))
                parser (surround-parser-with-ws (aget rules (get rule->id start-rule)) ws-pattern)]
            (if-let [state (.parse parser in 0 memos errors false)]
              (first (.ast state))
