@@ -83,7 +83,7 @@ public final class Parser {
 
     private static final IPersistentVector WS_ERROR = PersistentVector.create(Keyword.intern("expected"), "<WS>");
 
-    public static int skipWhitespace(final Pattern pattern, final String in, final int idx, final IParseErrors errors) {
+    private static int skipWhitespace(final Pattern pattern, final String in, final int idx, final IParseErrors errors) {
         final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
         if (m.lookingAt()) {
             return m.end();
