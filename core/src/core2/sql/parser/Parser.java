@@ -171,7 +171,7 @@ public final class Parser {
             this.vectors = vectors;
         }
 
-        private IPersistentVector toVector() {
+        private IPersistentVector asVector() {
             ITransientCollection newVec = PersistentVector.EMPTY.asTransient();
             for (IPersistentVector v : vectors) {
                 for (Object x : ((List<?>) v)) {
@@ -199,7 +199,7 @@ public final class Parser {
         }
 
         public IPersistentVector assocN(int n, Object x) {
-            return toVector().assocN(n, x);
+            return asVector().assocN(n, x);
         }
 
         public Object nth(int n) {
@@ -215,7 +215,7 @@ public final class Parser {
         }
 
         public IPersistentVector pop() {
-            return (IPersistentVector) toVector().pop();
+            return (IPersistentVector) asVector().pop();
         }
 
         public IPersistentVector empty() {
