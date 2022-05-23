@@ -1,6 +1,7 @@
 (ns core2.expression.walk
   (:import clojure.lang.MapEntry))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti direct-child-exprs
   (fn [{:keys [op] :as expr}]
     op)
@@ -13,17 +14,14 @@
 (defmethod direct-child-exprs :let [e] (map e [:expr :body]))
 (defmethod direct-child-exprs :call [e] (:args e))
 (defmethod direct-child-exprs :struct [e] (vals (:entries e)))
-(defmethod direct-child-exprs :dot-const-field [e] (map e [:struct-expr]))
-(defmethod direct-child-exprs :dot [e] (map e [:struct-expr :field-expr]))
 (defmethod direct-child-exprs :list [e] (:elements e))
-(defmethod direct-child-exprs :nth-const-n [e] (map e [:coll-expr]))
-(defmethod direct-child-exprs :nth [e] (map e [:coll-expr :n-expr]))
-(defmethod direct-child-exprs :trim-array [e] (map e [:array-expr :n-expr]))
+(defmethod direct-child-exprs :vectorised-call [e] (:args e))
 
 (defn expr-seq [expr]
   (lazy-seq
    (cons expr (mapcat expr-seq (direct-child-exprs expr)))))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti walk-expr
   (fn [inner outer {:keys [op] :as expr}]
     op)
@@ -51,23 +49,11 @@
                           (MapEntry/create k (inner expr)))
                         (into {}))}))
 
-(defmethod walk-expr :dot-const-field [inner outer {:keys [struct-expr field]}]
-  (outer {:op :dot-const-field, :struct-expr (inner struct-expr), :field field}))
-
-(defmethod walk-expr :dot [inner outer {:keys [struct-expr field-expr]}]
-  (outer {:op :dot, :struct-expr (inner struct-expr), :field-expr (inner field-expr)}))
-
 (defmethod walk-expr :list [inner outer {:keys [elements]}]
   (outer {:op :list, :elements (mapv inner elements)}))
 
-(defmethod walk-expr :nth-const-n [inner outer {:keys [coll-expr n]}]
-  (outer {:op :nth-const-n, :coll-expr (inner coll-expr), :n n}))
-
-(defmethod walk-expr :nth [inner outer {:keys [coll-expr n-expr]}]
-  (outer {:op :nth, :coll-expr (inner coll-expr), :n-expr (inner n-expr)}))
-
-(defmethod walk-expr :trim-array [inner outer {:keys [array-expr n-expr]}]
-  (outer {:op :trim-array, :array-expr (inner array-expr), :n-expr (inner n-expr)}))
+(defmethod walk-expr :vectorised-call [inner outer expr]
+  (outer (update expr :args #(mapv inner %))))
 
 ;; from clojure.walk
 (defn postwalk-expr [f expr]
