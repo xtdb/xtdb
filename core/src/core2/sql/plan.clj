@@ -505,11 +505,11 @@
 
      [:in_predicate _ [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]]
      ;;=>
-     (list 'not (exists-symbol qe))
+     (exists-symbol qe)
 
      [:in_predicate _ [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]]
      ;;=>
-     (list 'not (exists-symbol ivl))
+     (exists-symbol ivl)
 
      [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:some _] [:subquery ^:z qe]]]
      ;;=>
@@ -517,7 +517,7 @@
 
      [:quantified_comparison_predicate _ [:quantified_comparison_predicate_part_2 _ [:all _] [:subquery ^:z qe]]]
      ;;=>
-     (list 'not (exists-symbol qe))
+     (exists-symbol qe)
 
      [:array_value_constructor_by_enumeration _ ^:z list]
      ;; =>
@@ -698,28 +698,30 @@
          :sym exists-symbol})
 
       [:in_predicate ^:z rvp ^:z ipp2]
-      (let [qe (r/zmatch ipp2
+      (let [[qe co] (r/zmatch ipp2
                  [:in_predicate_part_2 _ [:in_predicate_value [:subquery ^:z qe]]]
-                 qe
+                 [qe '=]
 
                  [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]
-                 qe
+                 [qe '<>]
 
                  [:in_predicate_part_2 _ [:in_predicate_value ^:z ivl]]
-                 ivl
+                 [ivl '=]
 
                  [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]
-                 ivl
+                 [ivl '<>]
 
                  (throw (IllegalArgumentException. "unknown in type")))
             exists-symbol (exists-symbol qe)
-            predicate (list '= (expr rvp) (first (subquery-projection-symbols qe)))
-            subquery-plan [:select predicate [:rename (subquery-reference-symbol qe) (plan qe)]]
+            predicate (list co (expr rvp) (first (subquery-projection-symbols qe)))
+            subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
             column->param (merge (correlated-column->param qe scope-id)
                                  (correlated-column->param rvp scope-id))
             projected-columns #{exists-symbol}]
-        {:type :exists
+        {:type :quantified-comparison
+         :quantifier (if (= co '=) :some :all)
          :plan subquery-plan
+         :predicate predicate
          :projected-columns projected-columns
          :column->param column->param
          :sym exists-symbol})
@@ -727,19 +729,15 @@
       [:quantified_comparison_predicate ^:z rvp [:quantified_comparison_predicate_part_2 [_ co] [quantifier _] [:subquery ^:z qe]]]
       (let [exists-symbol (exists-symbol qe)
             projection-symbol (first (subquery-projection-symbols qe))
-            predicate (case quantifier
-                        :all `(~'or (~(flip-comparison (symbol co))
-                                      ~(expr rvp)
-                                      ~projection-symbol)
-                                (~'nil? ~(expr rvp))
-                                (~'nil? ~projection-symbol))
-                        :some (list (symbol co) (expr rvp) projection-symbol))
-            subquery-plan [:select predicate [:rename (subquery-reference-symbol qe) (plan qe)]]
+            predicate (list (symbol co) (expr rvp) projection-symbol)
+            subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
             column->param (merge (correlated-column->param qe scope-id)
                                  (correlated-column->param rvp scope-id))
             projected-columns #{exists-symbol}]
-        {:type :exists
+        {:type :quantified-comparison
+         :quantifier quantifier
          :plan subquery-plan
+         :predicate predicate
          :projected-columns projected-columns
          :column->param column->param
          :sym exists-symbol})
@@ -764,8 +762,9 @@
 
    See (interpret-subquery) for 'subquery info'."
   [relation subquery-info]
-  (let [{:keys [type plan projected-columns column->param sym]} subquery-info]
+  (let [{:keys [type plan projected-columns column->param sym predicate]} subquery-info]
     (case type
+      :quantified-comparison (build-apply :cross-join column->param projected-columns relation (wrap-with-exists sym [:select predicate plan]))
       :exists (build-apply :cross-join column->param projected-columns relation (wrap-with-exists sym plan))
       (build-apply :cross-join column->param projected-columns relation plan))))
 
@@ -787,12 +786,64 @@
 
   See also (wrap-with-select)."
   [relation subquery-info predicate-set]
-  (let [{:keys [type plan column->param sym]} subquery-info]
+  (letfn [(all-some->exists [{:keys [quantifier predicate]}]
+            (let [[co x y] predicate]
+              (case quantifier
+                :all {:negated? true
+                      :predicate `(~(flip-comparison co) ~x ~y)}
+                :some {:negated? false
+                       :predicate predicate}
+                :exists {:negated? false}
+                :cannot-be-exists)))]
+    (let [{:keys [type plan column->param sym quantifier]} subquery-info
+          {:keys [negated? predicate]} (all-some->exists subquery-info)
+          [_ x y] predicate]
     (cond
-      (not= :exists type) [(apply-subquery relation subquery-info) predicate-set]
-      (predicate-set sym) [(build-apply :semi-join column->param #{} relation plan) (disj predicate-set sym)]
-      (predicate-set (list 'not sym)) [(build-apply :anti-join column->param #{} relation plan) (disj predicate-set (list 'not sym))]
-      :else [(apply-subquery relation subquery-info) predicate-set])))
+      (= :subquery type) [(apply-subquery relation subquery-info) predicate-set]
+
+      (predicate-set sym)
+      [(build-apply
+         (if negated?
+           :anti-join
+           :semi-join)
+         column->param
+         #{}
+         relation
+         (if predicate
+           [:select
+            (if negated?
+              `(~'or ~predicate
+                     (~'nil? ~x)
+                     (~'nil? ~y))
+              `(~'and ~predicate
+                     (~'not (~'nil? ~x))
+                     (~'not (~'nil? ~y))))
+            plan]
+           plan))
+       (disj predicate-set sym)]
+
+      (predicate-set (list 'not sym))
+      [(build-apply
+         (if negated?
+           :semi-join
+           :anti-join)
+         column->param
+         #{}
+         relation
+         (if predicate
+           [:select
+            (if negated?
+              `(~'and ~predicate
+                     (~'not (~'nil? ~x))
+                     (~'not (~'nil? ~y)))
+              `(~'or ~predicate
+                     (~'nil? ~x)
+                     (~'nil? ~y)))
+            plan]
+           plan))
+       (disj predicate-set (list 'not sym))]
+
+      :else [(apply-subquery relation subquery-info) predicate-set]))))
 
 (defn- find-sub-queries [z]
   (r/collect-stop
@@ -1607,7 +1658,6 @@
   (and (sequential? predicate)
        (= 4 (count predicate))
        (= 'or (first predicate))
-       (equals-predicate? (second predicate))
        (nil-predicate? (nth predicate 2))
        (nil-predicate? (nth predicate 3))))
 
@@ -1615,6 +1665,20 @@
   (and (sequential? predicate)
        (= 2 (count predicate))
        (= 'not (first predicate))))
+
+(defn- not-nil-predicate? [predicate]
+  (and (sequential? predicate)
+       (= 2 (count predicate))
+       (= 'not (first predicate))
+       (nil-predicate? (second predicate))))
+
+(defn- some-predicate? [predicate]
+  (and (sequential? predicate)
+       (= 4 (count predicate))
+       (= 'and (first predicate))
+       (not-nil-predicate? (nth predicate 2))
+       (not-nil-predicate? (nth predicate 3))))
+
 
 (defn- build-join-map [predicate lhs rhs]
   (when (equals-predicate? predicate)
@@ -2075,7 +2139,7 @@
            :join
            mode)
          [(w/postwalk-replace (set/map-invert columns)
-                              (if (all-predicate? predicate)
+                              (if (or (all-predicate? predicate) (some-predicate? predicate))
                                 (second predicate)
                                 predicate))]
          independent-relation dependent-relation]))))
@@ -2087,7 +2151,7 @@
     [:apply :cross-join columns dependent-column-names independent-relation [:select predicate dependent-relation]]
     ;;=>
     (when (seq (expr-correlated-symbols predicate)) ;; select predicate is correlated
-      [:select (w/postwalk-replace (set/map-invert columns) (if (all-predicate? predicate)
+      [:select (w/postwalk-replace (set/map-invert columns) (if (or (all-predicate? predicate) (some-predicate? predicate))
                                                               (second predicate)
                                                               predicate))
        (let [columns (remove-unused-correlated-columns columns dependent-relation)]
@@ -2369,7 +2433,6 @@
                            (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
                            (r/node)
                            (add-projection-fn))]
-
              (if (s/invalid? (s/conform ::lp/logical-plan plan))
                (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
                {:plan plan
