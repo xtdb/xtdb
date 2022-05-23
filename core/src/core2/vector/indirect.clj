@@ -5,12 +5,10 @@
            core2.types.LegType
            [core2.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader IVectorWriter]
            [java.util LinkedHashMap Map]
-           java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType$Struct ArrowType$Union Field]
-           [core2.operator IRelationSelector]))
+           [org.apache.arrow.vector.types.pojo ArrowType$Struct ArrowType$Union Field]))
 
 (declare ^core2.vector.IIndirectVector ->direct-vec
          ->IndirectVector)
@@ -19,12 +17,8 @@
   IIndirectVector
   (isPresent [_ _] false)
   (rowCopier [_ w]
-    (let [!w (delay
-               (-> (.asDenseUnion w)
-                   (.writerForType LegType/NULL)))]
-      (reify IRowCopier
-        (copyRow [_ _]
-          (doto ^IVectorWriter @!w (.startValue) (.endValue)))))))
+    (reify IRowCopier
+      (copyRow [_ _]))))
 
 (defrecord StructReader [^ValueVector v]
   IStructReader

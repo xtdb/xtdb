@@ -1369,13 +1369,13 @@
              (run-projection rel '{:x x, :y y})))
 
     (t/is (= {:res [3.4 8.25]
-              :leg-type #{LegType/FLOAT8}
+              :leg-type LegType/FLOAT8
               :nullable? false}
              (run-projection rel '(. {:x x, :y y} y))))
 
     (t/is (= {:res [nil nil]
-              :leg-type #{LegType/NULL}
-              :nullable? false}
+              :leg-type LegType/NULL
+              :nullable? true}
              (run-projection rel '(. {:x x, :y y} z))))))
 
 (t/deftest test-nested-structs
@@ -1387,12 +1387,12 @@
              (run-projection rel '{:x {:y y}})))
 
     (t/is (= {:res [{:y 1.2} {:y 3.4}]
-              :leg-type #{(LegType/structOfKeys #{"y"})}
+              :leg-type (LegType/structOfKeys #{"y"})
               :nullable? false}
              (run-projection rel '(. {:x {:y y}} x))))
 
     (t/is (= {:res [1.2 3.4]
-              :leg-type #{LegType/FLOAT8}
+              :leg-type LegType/FLOAT8
               :nullable? false}
              (run-projection rel '(.. {:x {:y y}} x y))))))
 

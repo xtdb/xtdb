@@ -11,7 +11,6 @@
            (org.apache.arrow.util AutoCloseables)
            (org.apache.arrow.vector ExtensionTypeVector NullVector ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
-           (org.apache.arrow.vector.types Types)
            (org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType)))
 
 (deftype DuvChildWriter [^IDenseUnionWriter parent-writer,
@@ -71,7 +70,7 @@
   (rowCopier [this-writer src-col]
     (let [inner-copier (.rowCopier inner-writer src-col)]
       (reify IRowCopier
-        (copyRow [this src-idx]
+        (copyRow [_this src-idx]
           (.startValue this-writer)
           (.copyRow inner-copier src-idx)
           (.endValue this-writer))))))
@@ -131,6 +130,11 @@
     pos)
 
   (endValue [this]
+    (when (neg? (.getTypeId dest-duv pos))
+      (doto (.writerForType this LegType/NULL)
+        (.startValue)
+        (.endValue)))
+
     (set! (.pos this) (inc pos)))
 
   (clear [this]
@@ -164,9 +168,13 @@
                           (let [arrow-type (.arrowType leg-type)
                                 field-name (types/type->field-name arrow-type)
 
-                                ^Field field (case (.name (Types/getMinorTypeForArrowType arrow-type))
-                                               "LIST" (types/->field field-name arrow-type false (types/->field "$data$" types/dense-union-type false))
-                                               "STRUCT" (types/->field (str field-name (count writers-by-type)) arrow-type false)
+                                ^Field field (condp = arrow-type
+                                               types/list-type
+                                               (types/->field field-name arrow-type false (types/->field "$data$" types/dense-union-type false))
+
+                                               types/struct-type
+                                               (types/->field (str field-name (count writers-by-type)) arrow-type false)
+
                                                (types/->field field-name arrow-type false))
 
                                 type-id (or (iv/duv-type-id dest-duv leg-type)
@@ -361,7 +369,7 @@
      :else
      (ScalarWriter. dest-vec pos))))
 
-(defn ^core2.vector.IVectorWriter ->vec-writer [^BufferAllocator allocator, ^String col-name]
+(defn ->vec-writer ^core2.vector.IVectorWriter [^BufferAllocator allocator, ^String col-name]
   (vec->writer (-> (types/->field col-name types/dense-union-type false)
                    (.createVector allocator))))
 

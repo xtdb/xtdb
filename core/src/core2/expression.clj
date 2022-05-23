@@ -26,7 +26,9 @@
            (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector IntervalDayVector IntervalYearVector PeriodDuration ValueVector NullVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector ListVector)
            (org.apache.arrow.vector.types DateUnit IntervalUnit TimeUnit Types Types$MinorType)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$Null ArrowType$Time ArrowType$Timestamp ArrowType$Utf8 Field FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary
+                                               ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Time
+                                               ArrowType$Timestamp ArrowType$Utf8 ArrowType$Union Field FieldType)
            (org.apache.commons.codec.binary Hex)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -98,21 +100,17 @@
 
       (form->expr body env))))
 
-(defn- ->dot-expr [struct-expr field-form env]
-  (if (symbol? field-form)
-    {:op :dot-const-field
-     :struct-expr struct-expr
-     :field field-form}
-    {:op :dot
-     :struct-expr struct-expr
-     :field-expr (form->expr field-form env)}))
-
 (defmethod parse-list-form '. [[_ & args :as form] env]
   (when-not (= 2 (count args))
     (throw (IllegalArgumentException. (str "'.' expects 2 args: " (pr-str form)))))
 
   (let [[struct field] args]
-    (->dot-expr (form->expr struct env) field env)))
+    (when-not (symbol? field)
+      (throw (IllegalArgumentException. (str "'.' expects symbol fields: " (pr-str form)))))
+
+    {:op :dot-const-field
+     :struct-expr (form->expr struct env)
+     :field field}))
 
 (defmethod parse-list-form '.. [[_ & args :as form] env]
   (let [[struct & fields] args]
@@ -120,8 +118,10 @@
       (throw (IllegalArgumentException. (str "'..' expects at least 2 args: " (pr-str form)))))
     (when-not (every? symbol? fields)
       (throw (IllegalArgumentException. (str "'..' expects symbol fields: " (pr-str form)))))
-    (reduce (fn [struct-expr field-form]
-              (->dot-expr struct-expr field-form env))
+    (reduce (fn [struct-expr field]
+              {:op :dot-const-field
+               :struct-expr struct-expr
+               :field field})
             (form->expr struct env)
             (rest args))))
 
@@ -1703,143 +1703,172 @@
 
 (defmethod emit-expr :struct [{:keys [entries]} col-name opts]
   (let [entries (vec (for [[k v] entries]
-                       (emit-expr v (name k) opts)))]
+                       (emit-expr v (name k) opts)))
+        ^Field return-field (apply types/->field col-name types/struct-type false
+                                   (map :return-field entries))]
 
-    (fn [^IIndirectRelation in-rel, al params]
-      (let [evald-entries (LinkedList.)]
-        (try
-          (doseq [eval-entry entries]
-            (.add evald-entries (eval-entry in-rel al params)))
+    {:return-field return-field
+     :eval-expr
+     (fn [^IIndirectRelation in-rel, al params]
+       (let [evald-entries (LinkedList.)]
+         (try
+           (doseq [{:keys [eval-expr]} entries]
+             (.add evald-entries (eval-expr in-rel al params)))
 
-          (let [row-count (.rowCount in-rel)
+           (let [row-count (.rowCount in-rel)
+                 ^StructVector out-vec (.createVector return-field al)]
+             (try
+               (.setValueCount out-vec row-count)
 
-                ^Field out-field (apply types/->field col-name types/struct-type false
-                                        (map #(.getField ^ValueVector %) evald-entries))
+               (dotimes [idx row-count]
+                 (.setIndexDefined out-vec idx))
 
-                ^StructVector out-vec (.createVector out-field al)]
-            (try
-              (.setValueCount out-vec row-count)
+               (doseq [^ValueVector in-child-vec evald-entries
+                       :let [out-child-vec (.getChild out-vec (.getName in-child-vec) ValueVector)]]
+                 (doto (.makeTransferPair in-child-vec out-child-vec)
+                   (.splitAndTransfer 0 row-count)))
 
-              (dotimes [idx row-count]
-                (.setIndexDefined out-vec idx))
+               out-vec
+               (catch Throwable e
+                 (util/try-close out-vec)
+                 (throw e))))
 
-              (doseq [^ValueVector in-child-vec evald-entries
-                      :let [out-child-vec (.getChild out-vec (.getName in-child-vec) ValueVector)]]
-                (doto (.makeTransferPair in-child-vec out-child-vec)
-                  (.splitAndTransfer 0 row-count)))
-
-              out-vec
-              (catch Throwable e
-                (util/try-close out-vec)
-                (throw e))))
-
-
-          (finally
-            (run! util/try-close evald-entries)))))))
+           (finally
+             (run! util/try-close evald-entries)))))}))
 
 (defmethod emit-expr :dot-const-field [{:keys [struct-expr field]} ^String col-name opts]
-  (let [eval-expr (emit-expr struct-expr "dot" opts)]
-    (fn [in-rel al params]
-      (with-open [^FieldVector in-vec (eval-expr in-rel al params)]
-        (let [out-field (types/->field col-name types/dense-union-type false)
-              out-vec (.createVector out-field al)
-              out-writer (vw/vec->writer out-vec)]
-          (try
-            (.setValueCount out-vec (.getValueCount in-vec))
+  (let [{^Field struct-field :return-field, :keys [eval-expr]} (emit-expr struct-expr "dot" opts)
+        out-field (-> (letfn [(get-struct-child [^Field struct-field]
+                                (first
+                                 (for [^Field child-field (.getChildren struct-field)
+                                       :when (= (name field) (.getName child-field))]
+                                   child-field)))]
+                        (if (instance? ArrowType$Union (.getType struct-field))
+                          (apply types/merge-fields
+                                 (->> (.getChildren struct-field)
+                                      (filter (fn [^Field child-field]
+                                                (= types/struct-type (.getType child-field))))
+                                      (keep get-struct-child)))
+                          (or (get-struct-child struct-field)
+                              (types/->field col-name types/null-type true))))
+                      (types/field-with-name col-name))]
+    {:return-field out-field
+     :eval-expr
+     (fn [in-rel al params]
+       (with-open [^FieldVector in-vec (eval-expr in-rel al params)]
+         (let [out-vec (.createVector out-field al)
+               out-writer (vw/vec->writer out-vec)]
+           (try
+             (.setValueCount out-vec (.getValueCount in-vec))
 
-            (let [col-rdr (-> (.structReader (iv/->direct-vec in-vec))
-                              (.readerForKey (name field)))
-                  copier (.rowCopier col-rdr out-writer)]
+             (let [col-rdr (-> (.structReader (iv/->direct-vec in-vec))
+                               (.readerForKey (name field)))
+                   copier (.rowCopier col-rdr out-writer)]
 
-              (dotimes [idx (.getValueCount in-vec)]
-                (.startValue out-writer)
-                (.copyRow copier idx)
-                (.endValue out-writer)))
+               (dotimes [idx (.getValueCount in-vec)]
+                 (.startValue out-writer)
+                 (.copyRow copier idx)
+                 (.endValue out-writer)))
 
-            out-vec
+             out-vec
 
-            (catch Throwable e
-              (.close out-vec)
-              (throw e))))))))
+             (catch Throwable e
+               (.close out-vec)
+               (throw e))))))}))
 
 (defmethod emit-expr :variable [{:keys [variable]} col-name {:keys [var-fields]}]
   (let [^Field out-field (-> (or (get var-fields variable)
                                  (throw (IllegalArgumentException. (str "missing variable: " variable ", available " (pr-str (set (keys var-fields)))))))
                              (types/field-with-name col-name))]
-    (fn [^IIndirectRelation in-rel al _params]
-      (let [in-vec (.vectorForName in-rel (name variable))
-            out-vec (.createVector out-field al)]
-        (.copyTo in-vec out-vec)
-        (try
-          out-vec
-          (catch Throwable e
-            (.close out-vec)
-            (throw e)))))))
+    {:return-field out-field
+     :eval-expr
+     (fn [^IIndirectRelation in-rel al _params]
+       (let [in-vec (.vectorForName in-rel (name variable))
+             out-vec (.createVector out-field al)]
+         (.copyTo in-vec out-vec)
+         (try
+           out-vec
+           (catch Throwable e
+             (.close out-vec)
+             (throw e)))))}))
 
 (defmethod emit-expr :list [{:keys [elements]} ^String col-name opts]
   (let [el-count (count elements)
-        emitted-els (mapv #(emit-expr % "list-el" opts) elements)]
-    (fn [^IIndirectRelation in-rel al params]
-      (let [els (LinkedList.)]
-        (try
-          (doseq [eval-expr emitted-els]
-            (.add els (eval-expr in-rel al params)))
+        emitted-els (mapv #(emit-expr % "list-el" opts) elements)
+        out-field (types/->field col-name (ArrowType$FixedSizeList. el-count) false
+                                 (-> (apply types/merge-fields (map :return-field emitted-els))
+                                     (types/field-with-name "$data")))]
+    {:return-field out-field
+     :eval-expr
+     (fn [^IIndirectRelation in-rel al params]
+       (let [els (LinkedList.)]
+         (try
+           (doseq [{:keys [eval-expr]} emitted-els]
+             (.add els (eval-expr in-rel al params)))
 
-          (let [out-vec (-> (types/->field col-name (ArrowType$FixedSizeList. el-count) false
-                                           (types/->field "$data" types/dense-union-type false))
-                            ^FixedSizeListVector (.createVector al))
+           (let [out-vec (-> out-field
+                             ^FixedSizeListVector (.createVector al))
 
-                out-writer (.asList (vw/vec->writer out-vec))
-                out-data-writer (.getDataWriter out-writer)]
-            (try
-              (let [child-row-count (.rowCount in-rel)
-                    copiers (mapv (fn [res]
-                                    (.rowCopier out-data-writer res))
-                                  els)]
-                (.setValueCount out-vec child-row-count)
+                 out-writer (.asList (vw/vec->writer out-vec))
+                 out-data-writer (.getDataWriter out-writer)]
+             (try
+               (let [child-row-count (.rowCount in-rel)
+                     copiers (mapv (fn [res]
+                                     (.rowCopier out-data-writer res))
+                                   els)]
+                 (.setValueCount out-vec child-row-count)
 
-                (dotimes [idx child-row-count]
-                  (.setNotNull out-vec idx)
-                  (.startValue out-writer)
+                 (dotimes [idx child-row-count]
+                   (.setNotNull out-vec idx)
+                   (.startValue out-writer)
 
-                  (dotimes [el-idx el-count]
-                    (.startValue out-data-writer)
-                    (doto ^IRowCopier (nth copiers el-idx)
-                      (.copyRow idx))
-                    (.endValue out-data-writer))
+                   (dotimes [el-idx el-count]
+                     (.startValue out-data-writer)
+                     (doto ^IRowCopier (nth copiers el-idx)
+                       (.copyRow idx))
+                     (.endValue out-data-writer))
 
-                  (.endValue out-writer)))
+                   (.endValue out-writer)))
 
-              out-vec
-              (catch Throwable e
-                (.close out-vec)
-                (throw e))))
+               out-vec
+               (catch Throwable e
+                 (.close out-vec)
+                 (throw e))))
 
-          (finally
-            (run! util/try-close els)))))))
+           (finally
+             (run! util/try-close els)))))}))
 
 (defmethod emit-expr :nth-const-n [{:keys [coll-expr ^long n]} col-name opts]
-  (let [eval-coll (emit-expr coll-expr "nth-coll" opts)]
-    (fn [in-rel al params]
-      (with-open [^FieldVector coll-res (eval-coll in-rel al params)]
-        (let [list-rdr (.listReader (iv/->direct-vec coll-res))
-              coll-count (.getValueCount coll-res)
-              out-vec (-> (types/->field col-name types/dense-union-type false)
-                          (.createVector al))]
-          (try
-            (let [out-writer (vw/vec->writer out-vec)
-                  copier (.elementCopier list-rdr out-writer)]
+  (let [{^Field coll-field :return-field, eval-coll :eval-expr} (emit-expr coll-expr "nth-coll" opts)
+        out-field (-> (if (instance? ArrowType$Union (.getType coll-field))
+                        (apply types/merge-fields
+                               (for [^Field child-field (.getChildren coll-field)
+                                     :when (= types/list-type (.getType child-field))]
+                                 (first (.getChildren child-field))))
+                        (first (.getChildren coll-field)))
+                      (types/field-with-name col-name))]
+    {:return-field out-field
+     :eval-expr
+     (fn [in-rel al params]
+       (with-open [^FieldVector coll-res (eval-coll in-rel al params)]
+         (let [list-rdr (.listReader (iv/->direct-vec coll-res))
+               coll-count (.getValueCount coll-res)
+               out-vec (-> out-field
+                           (.createVector al))]
+           (try
+             (let [out-writer (vw/vec->writer out-vec)
+                   copier (.elementCopier list-rdr out-writer)]
 
-              (.setValueCount out-vec coll-count)
+               (.setValueCount out-vec coll-count)
 
-              (dotimes [idx coll-count]
-                (.startValue out-writer)
-                (.copyElement copier idx n)
-                (.endValue out-writer))
-              out-vec)
-            (catch Throwable e
-              (.close out-vec)
-              (throw e))))))))
+               (dotimes [idx coll-count]
+                 (.startValue out-writer)
+                 (.copyElement copier idx n)
+                 (.endValue out-writer))
+               out-vec)
+             (catch Throwable e
+               (.close out-vec)
+               (throw e))))))}))
 
 (defn- long-getter ^java.util.function.IntUnaryOperator [n-res]
   (condp = (class n-res)
@@ -1851,74 +1880,90 @@
                      (int (.get ^BigIntVector n-res idx))))))
 
 (defmethod emit-expr :nth [{:keys [coll-expr n-expr]} col-name opts]
-  (let [eval-coll (emit-expr coll-expr "nth-coll" opts)
-        eval-n (emit-expr n-expr "nth-n" opts)]
-    (fn [in-rel al params]
-      (with-open [^FieldVector coll-res (eval-coll in-rel al params)
-                  ^FieldVector n-res (eval-n in-rel al params)]
-        (let [list-rdr (.listReader (iv/->direct-vec coll-res))
-              coll-count (.getValueCount coll-res)
-              out-vec (-> (types/->field col-name types/dense-union-type
-                                         (or (.isNullable (.getField coll-res))
-                                             (.isNullable (.getField n-res))))
-                          (.createVector al))]
-          (try
-            (let [out-writer (vw/vec->writer out-vec)
-                  copier (.elementCopier list-rdr out-writer)
-                  !null-writer (delay (.writerForType (.asDenseUnion out-writer) LegType/NULL))]
+  (let [{coll-field :return-field, eval-coll :eval-expr} (emit-expr coll-expr "nth-coll" opts)
+        {n-field :return-field, eval-n :eval-expr} (emit-expr n-expr "nth-n" opts)
+        out-field (types/->field col-name types/dense-union-type
+                                 (or (.isNullable ^Field coll-field)
+                                     (.isNullable ^Field n-field)))]
+    {:return-field out-field
+     :eval-expr
+     (fn [in-rel al params]
+       (with-open [^FieldVector coll-res (eval-coll in-rel al params)
+                   ^FieldVector n-res (eval-n in-rel al params)]
+         (let [list-rdr (.listReader (iv/->direct-vec coll-res))
+               coll-count (.getValueCount coll-res)
+               out-vec (.createVector out-field al)]
+           (try
+             (let [out-writer (vw/vec->writer out-vec)
+                   copier (.elementCopier list-rdr out-writer)
+                   !null-writer (delay
+                                  (if (= types/null-type (.getType out-field))
+                                    out-writer
+                                    (.writerForType (.asDenseUnion out-writer) LegType/NULL)))]
 
-              (.setValueCount out-vec coll-count)
+               (.setValueCount out-vec coll-count)
 
-              (let [->n (long-getter n-res)]
-                (dotimes [idx coll-count]
-                  (.startValue out-writer)
-                  (if (.isNull n-res idx)
-                    (doto ^IVectorWriter @!null-writer
-                      (.startValue)
-                      (.endValue))
-                    (.copyElement copier idx (.applyAsInt ->n idx)))
-                  (.endValue out-writer)))
-              out-vec)
-            (catch Throwable e
-              (.close out-vec)
-              (throw e))))))))
+               (let [->n (long-getter n-res)]
+                 (dotimes [idx coll-count]
+                   (.startValue out-writer)
+                   (if (.isNull n-res idx)
+                     (doto ^IVectorWriter @!null-writer
+                       (.startValue)
+                       (.endValue))
+                     (.copyElement copier idx (.applyAsInt ->n idx)))
+                   (.endValue out-writer)))
+               out-vec)
+             (catch Throwable e
+               (.close out-vec)
+               (throw e))))))}))
 
 (defmethod emit-expr :trim-array [{:keys [array-expr n-expr]} col-name opts]
-  (let [eval-array (emit-expr array-expr "trim-array-array" opts)
-        eval-n (emit-expr n-expr "trim-array-n" opts)]
-    (fn [in-rel al params]
-      (with-open [^FieldVector array-res (eval-array in-rel al params)
-                  ^FieldVector n-res (eval-n in-rel al params)]
-        (let [list-rdr (.listReader (iv/->direct-vec array-res))
-              n-arrays (.getValueCount array-res)
-              out-vec (-> (types/->field col-name types/list-type true (types/->field "$data" types/dense-union-type true))
-                          ^ListVector (.createVector al))]
-          (try
-            (let [out-writer (.asList (vw/vec->writer out-vec))
-                  out-data-writer (.getDataWriter out-writer)
-                  copier (.elementCopier list-rdr out-data-writer)
-                  ->n (when-not (instance? NullVector n-res) (long-getter n-res))]
-              (.setValueCount out-vec n-arrays)
-              (dotimes [idx n-arrays]
-                (.startValue out-writer)
-                (if (or (not (.isPresent list-rdr idx))
-                        (.isNull n-res idx))
-                  (.setNull out-vec idx)
-                  (let [element-count (.applyAsInt ->n idx)
-                        end (.getElementEndIndex list-rdr idx)
-                        start (.getElementStartIndex list-rdr idx)
-                        nlen (- end start element-count)]
-                    ;; this exception is required by spec, but it would be sensible to just return an empty array
-                    (when (< nlen 0) (throw (IllegalArgumentException. "Data exception - array element error.")))
-                    (dotimes [n nlen]
-                      (.startValue out-data-writer)
-                      (.copyElement copier idx n)
-                      (.endValue out-data-writer))))
-                (.endValue out-writer))
-              out-vec)
-            (catch Throwable e
-              (.close out-vec)
-              (throw e))))))))
+  (let [{^Field array-field :return-field, eval-array :eval-expr} (emit-expr array-expr "trim-array-array" opts)
+        {eval-n :eval-expr} (emit-expr n-expr "trim-array-n" opts)
+        out-field (types/->field col-name types/list-type true
+                                 (-> (if (or (instance? ArrowType$List (.getType array-field))
+                                             (instance? ArrowType$FixedSizeList (.getType array-field)))
+                                       (first (.getChildren array-field))
+
+                                       (apply types/merge-fields
+                                              (for [^Field child-field (.getChildren array-field)
+                                                    :when (= types/list-type (.getType child-field))]
+                                                (first (.getChildren child-field)))))
+                                     (types/field-with-name "$data")))]
+    {:return-field out-field
+     :eval-expr
+     (fn [in-rel al params]
+       (with-open [^FieldVector array-res (eval-array in-rel al params)
+                   ^FieldVector n-res (eval-n in-rel al params)]
+         (let [list-rdr (.listReader (iv/->direct-vec array-res))
+               n-arrays (.getValueCount array-res)
+               ^ListVector out-vec (.createVector out-field al)]
+           (try
+             (let [out-writer (.asList (vw/vec->writer out-vec))
+                   out-data-writer (.getDataWriter out-writer)
+                   copier (.elementCopier list-rdr out-data-writer)
+                   ->n (when-not (instance? NullVector n-res) (long-getter n-res))]
+               (.setValueCount out-vec n-arrays)
+               (dotimes [idx n-arrays]
+                 (.startValue out-writer)
+                 (if (or (not (.isPresent list-rdr idx))
+                         (.isNull n-res idx))
+                   (.setNull out-vec idx)
+                   (let [element-count (.applyAsInt ->n idx)
+                         end (.getElementEndIndex list-rdr idx)
+                         start (.getElementStartIndex list-rdr idx)
+                         nlen (- end start element-count)]
+                     ;; this exception is required by spec, but it would be sensible to just return an empty array
+                     (when (< nlen 0) (throw (IllegalArgumentException. "Data exception - array element error.")))
+                     (dotimes [n nlen]
+                       (.startValue out-data-writer)
+                       (.copyElement copier idx n)
+                       (.endValue out-data-writer))))
+                 (.endValue out-writer))
+               out-vec)
+             (catch Throwable e
+               (.close out-vec)
+               (throw e))))))}))
 
 (def ^:private primitive-ops
   #{:variable :param :literal
@@ -1935,46 +1980,48 @@
                                                :variable (gensym 'var)
                                                :idx idx-sym
                                                :expr expr}))))
-        var-sub-exprs (->> (walk/expr-seq prim-expr)
-                           (filter #(= :variable (:op %))))
-        emitted-sub-exprs (->> (for [{:keys [variable expr]} var-sub-exprs
-                                     :when expr]
-                                 (MapEntry/create variable
-                                                  (emit-expr expr (name variable) opts)))
-                               (into {}))]
+
+        emitted-sub-exprs (for [{:keys [variable expr]} (->> (walk/expr-seq prim-expr)
+                                                             (filter #(= :variable (:op %))))
+                                :when expr]
+                            (-> (emit-expr expr (name variable) opts)
+                                (assoc :variable variable)))
+
+        var->types (->> (concat (for [[variable field] var-fields]
+                                  (MapEntry/create variable (field->value-types field)))
+                                (for [{:keys [variable return-field]} emitted-sub-exprs]
+                                  (MapEntry/create variable (field->value-types return-field))))
+                        (into {}))
+
+        {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection prim-expr {:var->types var->types})
+
+        out-field (Field. col-name field-type [])]
 
     ;; TODO what are we going to do about needing to close over locals?
-    (fn [^IIndirectRelation in-rel al params]
-      (let [evald-sub-exprs (HashMap.)]
-        (try
-          (doseq [[variable eval-expr] emitted-sub-exprs]
-            (.put evald-sub-exprs variable (eval-expr in-rel al params)))
+    {:return-field out-field
+     :eval-expr
+     (fn [^IIndirectRelation in-rel al params]
+       (let [evald-sub-exprs (HashMap.)]
+         (try
+           (doseq [{:keys [variable eval-expr]} emitted-sub-exprs]
+             (.put evald-sub-exprs variable (eval-expr in-rel al params)))
 
-          (let [var->types (->> (concat (for [[variable field] var-fields]
-                                          (MapEntry/create variable (field->value-types field)))
-                                        (for [[variable ^ValueVector out-vec] evald-sub-exprs]
-                                          (MapEntry/create variable (field->value-types (.getField out-vec)))))
-                                (into {}))
+           (let [out-vec (.createVector out-field al)]
+             (try
+               (let [in-rel (-> (concat in-rel (for [[variable sub-expr-vec] evald-sub-exprs]
+                                                 (-> (iv/->direct-vec sub-expr-vec)
+                                                     (.withName (name variable)))))
+                                (iv/->indirect-rel (.rowCount in-rel)))]
 
-                {:keys [expr-fn ^FieldType field-type]} (memo-generate-projection prim-expr {:var->types var->types})
-                out-field (Field. col-name field-type [])
-                out-vec (.createVector out-field al)]
+                 (expr-fn out-vec in-rel params))
 
-            (try
-              (let [in-rel (-> (concat in-rel (for [[variable sub-expr-vec] evald-sub-exprs]
-                                                (-> (iv/->direct-vec sub-expr-vec)
-                                                    (.withName (name variable)))))
-                               (iv/->indirect-rel (.rowCount in-rel)))]
+               out-vec
+               (catch Throwable e
+                 (.close out-vec)
+                 (throw e))))
 
-                (expr-fn out-vec in-rel params))
-
-              out-vec
-              (catch Throwable e
-                (.close out-vec)
-                (throw e))))
-
-          (finally
-            (run! util/try-close (vals evald-sub-exprs))))))))
+           (finally
+             (run! util/try-close (vals evald-sub-exprs))))))}))
 
 (doseq [op (-> (set (keys (methods codegen-expr)))
                (disj :variable))]
@@ -1996,7 +2043,7 @@
       (getColumnName [_] col-name)
 
       (project [_ allocator in-rel]
-        (let [eval-expr (emit-expr expr col-name {:var-fields (->var-fields in-rel expr)})]
+        (let [{:keys [eval-expr]} (emit-expr expr col-name {:var-fields (->var-fields in-rel expr)})]
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))
 
 (defn ->expression-relation-selector ^core2.operator.IRelationSelector [form col-names params]
