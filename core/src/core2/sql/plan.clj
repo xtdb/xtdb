@@ -160,6 +160,8 @@
 
     [:approximate_numeric_type "FLOAT"]
     (list 'cast e types/float4-type)
+    [:approximate_numeric_type "REAL"]
+    (list 'cast e types/float4-type)
     [:approximate_numeric_type "DOUBLE" "PRECISION"]
     (list 'cast e types/float8-type)
 

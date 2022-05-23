@@ -706,6 +706,7 @@
     "CAST(NULL AS BIGINT)" (list 'cast nil types/bigint-type)
     "CAST(NULL AS SMALLINT)" (list 'cast nil types/smallint-type)
     "CAST(NULL AS FLOAT)" (list 'cast nil types/float4-type)
+    "CAST(NULL AS REAL)" (list 'cast nil types/float4-type)
     "CAST(NULL AS DOUBLE PRECISION)" (list 'cast nil types/float8-type)
 
     "CAST(foo.a AS INT)" (list 'cast 'x1 types/int-type)
