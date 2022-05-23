@@ -10,6 +10,7 @@ import java.util.regex.Matcher;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import clojure.lang.APersistentMap;
+import clojure.lang.APersistentVector;
 import clojure.lang.IMapEntry;
 import clojure.lang.IObj;
 import clojure.lang.IPersistentMap;
@@ -155,6 +156,81 @@ public final class Parser {
             }
         };
 
+    public static final class CatPersistentVector extends APersistentVector implements IObj {
+        private static final long serialVersionUID = -1;
+
+        private final IPersistentVector[] vectors;
+        private final IPersistentMap meta;
+
+        public CatPersistentVector(IPersistentVector... vectors) {
+            this(null, vectors);
+        }
+
+        public CatPersistentVector(IPersistentMap meta, IPersistentVector... vectors) {
+            this.meta = meta;
+            this.vectors = vectors;
+        }
+
+        private IPersistentVector toVector() {
+            ITransientCollection newVec = PersistentVector.EMPTY.asTransient();
+            for (IPersistentVector v : vectors) {
+                for (Object x : ((List<?>) v)) {
+                    newVec = newVec.conj(x);
+                }
+            }
+            return (IPersistentVector) ((IObj) newVec.persistent()).withMeta(meta);
+        }
+
+        public IPersistentMap meta() {
+            return meta;
+        }
+
+        public IObj withMeta(IPersistentMap meta) {
+            return new CatPersistentVector(meta, vectors);
+        }
+
+        public IPersistentVector cons(Object x) {
+            IPersistentVector[] newVectors = new IPersistentVector[vectors.length + 1];
+            for (int i = 0; i < vectors.length; i++) {
+                newVectors[i] = vectors[i];
+            }
+            newVectors[vectors.length] = PersistentVector.create(x);
+            return new CatPersistentVector(newVectors);
+        }
+
+        public IPersistentVector assocN(int n, Object x) {
+            return toVector().assocN(n, x);
+        }
+
+        public Object nth(int n) {
+            for (int i = 0; i < vectors.length; i++) {
+                final IPersistentVector vec = vectors[i];
+                if (n < vec.count()) {
+                    return vec.nth(n);
+                } else {
+                    n -= vec.count();
+                }
+            }
+            throw new IndexOutOfBoundsException();
+        }
+
+        public IPersistentVector pop() {
+            return (IPersistentVector) toVector().pop();
+        }
+
+        public IPersistentVector empty() {
+            return PersistentVector.EMPTY;
+        }
+
+        public int count() {
+            int n = 0;
+            for (IPersistentVector v : vectors) {
+                n += v.count();
+            }
+            return n;
+        }
+    }
+
     public static final class PositionInfo extends APersistentMap {
         private static final long serialVersionUID = -1;
 
@@ -245,12 +321,11 @@ public final class Parser {
                     return state;
                 } else {
                     final PositionInfo meta = new PositionInfo(idx, state.idx);
-                    ITransientCollection newAst = PersistentVector.EMPTY.asTransient();
-                    newAst = newAst.conj(ruleName);
-                    for (Object x : ((List<?>) state.ast)) {
-                        newAst = newAst.conj(x);
-                    }
-                    return new ParseState(PersistentVector.create((Object) ((IObj) newAst.persistent()).withMeta(meta)), state.idx);
+                    IPersistentVector[] newVectors = new IPersistentVector[2];
+                    newVectors[0] = PersistentVector.create(ruleName);
+                    newVectors[1] = state.ast;
+                    IPersistentVector newAst = new CatPersistentVector(meta, newVectors);
+                    return new ParseState(PersistentVector.create((Object) newAst), state.idx);
                 }
             } else {
                 return null;
@@ -427,13 +502,8 @@ public final class Parser {
                     }
                 } else {
                     if (isStar || isMatch) {
-                        ITransientCollection newAst = PersistentVector.EMPTY.asTransient();
-                        for (IPersistentVector ast : asts) {
-                            for (Object x : ((List<?>) ast)) {
-                                newAst = newAst.conj(x);
-                            }
-                        }
-                        return new ParseState((IPersistentVector) newAst.persistent(), idx);
+                        IPersistentVector newAst = new CatPersistentVector(asts.toArray(new IPersistentVector[asts.size()]));
+                        return new ParseState(newAst, idx);
                     } else {
                         return null;
                     }
@@ -455,25 +525,20 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, int idx, final ParseState[][] memos, final IParseErrors errors, final boolean hide) {
-            final List<IPersistentVector> asts = new ArrayList<>(parsers.length);
+            final IPersistentVector[] asts = hide ? null : new IPersistentVector[parsers.length];
             for (int i = 0; i < parsers.length; i++) {
                 final ParseState state = parsers[i].parse(in, idx, memos, errors, hide);
                 if (state != null) {
                     idx = state.idx;
                     if (!hide) {
-                        asts.add(state.ast);
+                        asts[i] = state.ast;
                     }
                 } else {
                     return null;
                 }
             }
-            ITransientCollection newAst = PersistentVector.EMPTY.asTransient();
-            for (IPersistentVector ast : asts) {
-                for (Object x : ((List<?>) ast)) {
-                    newAst = newAst.conj(x);
-                }
-            }
-            return new ParseState((IPersistentVector) newAst.persistent(), idx);
+            IPersistentVector newAst = hide ? PersistentVector.EMPTY : new CatPersistentVector(asts);
+            return new ParseState(newAst, idx);
         }
 
         public AParser init(final AParser[] rules) {
