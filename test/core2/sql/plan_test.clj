@@ -1,10 +1,11 @@
 (ns core2.sql.plan-test
   (:require [clojure.test :as t :refer [deftest]]
             [clojure.java.io :as io]
-            [core2.edn :as edn] ;; Enables data literals
+            [core2.edn :as edn]                             ;; Enables data literals
             [core2.operator :as op]
             [core2.sql.parser :as p]
-            [core2.sql.plan :as plan]))
+            [core2.sql.plan :as plan]
+            [core2.types :as types]))
 
 (defn plan-sql
   ([sql] (plan-sql sql {:decorrelate? true}))
@@ -695,3 +696,17 @@
     "TRIM_ARRAY(foo.a, 2)" '(trim-array x1 2)
     "TRIM_ARRAY(ARRAY [42, 43], 1)" '(trim-array [42, 43] 1)
     "TRIM_ARRAY(foo.a, foo.b)" '(trim-array x1 x2)))
+
+(t/deftest test-cast
+  (t/are [sql expected]
+    (= expected (plan-expr sql))
+
+    "CAST(NULL AS INT)" (list 'cast nil types/int-type)
+    "CAST(NULL AS INTEGER)" (list 'cast nil types/int-type)
+    "CAST(NULL AS BIGINT)" (list 'cast nil types/bigint-type)
+    "CAST(NULL AS SMALLINT)" (list 'cast nil types/smallint-type)
+    "CAST(NULL AS FLOAT)" (list 'cast nil types/float4-type)
+    "CAST(NULL AS DOUBLE PRECISION)" (list 'cast nil types/float8-type)
+
+    "CAST(foo.a AS INT)" (list 'cast 'x1 types/int-type)
+    "CAST(42.0 AS INT)" (list 'cast 42.0 types/int-type)))

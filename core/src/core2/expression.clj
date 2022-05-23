@@ -25,7 +25,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector BigIntVector BitVector DurationVector FieldVector IntVector IntervalDayVector IntervalYearVector PeriodDuration ValueVector NullVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector ListVector)
-           (org.apache.arrow.vector.types DateUnit IntervalUnit TimeUnit Types Types$MinorType)
+           (org.apache.arrow.vector.types DateUnit IntervalUnit TimeUnit Types Types$MinorType FloatingPointPrecision)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary
                                                ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Time
                                                ArrowType$Timestamp ArrowType$Utf8 ArrowType$Union Field FieldType)
@@ -147,6 +147,12 @@
    :f :trim-array
    :args [(form->expr arr env)
           (form->expr n env)]})
+
+(defmethod parse-list-form 'cast [[_ expr arrow-type] env]
+  {:op :call
+   :f :cast
+   :args [(form->expr expr env)]
+   :cast-arrow-type arrow-type})
 
 (defmethod parse-list-form ::default [[f & args] env]
   {:op :call, :f f, :args (mapv #(form->expr % env) args)})
@@ -1489,6 +1495,48 @@
      :continue-call (fn [f emitted-args]
                       (f types/float8-type
                          `(~math-method ~@emitted-args)))}))
+
+(defmethod codegen-mono-call [:cast ArrowType$Int] [{:keys [cast-arrow-type]}]
+  (condp instance? cast-arrow-type
+    ArrowType$Int
+    (let [^ArrowType$Int int-type cast-arrow-type
+          bw (.getBitWidth int-type)
+          signed (.getIsSigned int-type)]
+      (case [bw signed]
+        ;; todo unsigned casts
+        [16 true] (mono-fn-call types/smallint-type #(do `(short ~@%)) )
+        [32 true] (mono-fn-call types/int-type #(do `(int ~@%)))
+        [64 true] (mono-fn-call types/bigint-type #(do `(long ~@%)))
+        (throw (IllegalArgumentException. "Unsupported cast"))))
+
+    ArrowType$FloatingPoint
+    (util/case-enum (.getPrecision ^ArrowType$FloatingPoint cast-arrow-type)
+      ;; todo support HALF precision ...
+      FloatingPointPrecision/SINGLE (mono-fn-call types/float4-type #(do `(float ~@%)))
+      FloatingPointPrecision/DOUBLE (mono-fn-call types/float8-type #(do `(double ~@%))))
+
+    (throw (IllegalArgumentException. "Unsupported cast"))))
+
+(defmethod codegen-mono-call [:cast ArrowType$FloatingPoint] [{:keys [cast-arrow-type]}]
+  (condp instance? cast-arrow-type
+    ArrowType$Int
+    (let [^ArrowType$Int int-type cast-arrow-type
+          bw (.getBitWidth int-type)
+          signed (.getIsSigned int-type)]
+      (case [bw signed]
+        ;; todo unsigned casts
+        [16 true] (mono-fn-call types/smallint-type #(do `(short ~@%)) )
+        [32 true] (mono-fn-call types/int-type #(do `(int ~@%)))
+        [64 true] (mono-fn-call types/bigint-type #(do `(long ~@%)))
+        (throw (IllegalArgumentException. "Unsupported cast"))))
+
+    ArrowType$FloatingPoint
+    (util/case-enum (.getPrecision ^ArrowType$FloatingPoint cast-arrow-type)
+      ;; todo support HALF precision ...
+      FloatingPointPrecision/SINGLE (mono-fn-call types/float4-type #(do `(float ~@%)))
+      FloatingPointPrecision/DOUBLE (mono-fn-call types/float8-type #(do `(double ~@%))))
+
+    (throw (IllegalArgumentException. "Unsupported cast"))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti set-value-form

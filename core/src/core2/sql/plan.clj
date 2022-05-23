@@ -7,7 +7,8 @@
             [core2.logical-plan :as lp]
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
-            [core2.sql.parser :as p])
+            [core2.sql.parser :as p]
+            [core2.types :as types])
   (:import (clojure.lang IObj Var)
            (java.time LocalDate Period Duration)
            (org.apache.arrow.vector PeriodDuration)))
@@ -146,6 +147,24 @@
     (list 'multi-field-interval e leading-field 2 "SECOND" (parse-long fractional-precision))
     (throw (IllegalArgumentException. (str "Cannot build interval for: "  (pr-str qualifier))))))
 
+(defn cast-expr [e cast-spec]
+  (r/zmatch cast-spec
+    [:exact_numeric_type "INTEGER"]
+    (list 'cast e types/int-type)
+    [:exact_numeric_type "INT"]
+    (list 'cast e types/int-type)
+    [:exact_numeric_type "BIGINT"]
+    (list 'cast e types/bigint-type)
+    [:exact_numeric_type "SMALLINT"]
+    (list 'cast e types/smallint-type)
+
+    [:approximate_numeric_type "FLOAT"]
+    (list 'cast e types/float4-type)
+    [:approximate_numeric_type "DOUBLE" "PRECISION"]
+    (list 'cast e types/float8-type)
+
+    (throw (IllegalArgumentException. (str "Cannot build cast for: " (pr-str cast-spec))))))
+
 (defn expr [z]
   (maybe-add-ref
    z
@@ -153,6 +172,9 @@
      [:column_reference _]
      ;;=>
      (column-reference-symbol (sem/column-reference z))
+
+     [:cast_specification _ ^:z e _ cast-spec]
+     (cast-expr (expr e) cast-spec)
 
      [:boolean_value_expression ^:z bve _ ^:z bt]
      ;;=>

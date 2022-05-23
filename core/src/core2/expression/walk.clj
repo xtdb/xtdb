@@ -40,8 +40,8 @@
 (defmethod walk-expr :let [inner outer {:keys [local expr body]}]
   (outer {:op :let, :local local, :expr (inner expr), :body (inner body)}))
 
-(defmethod walk-expr :call [inner outer {expr-f :f, :keys [args]}]
-  (outer {:op :call, :f expr-f, :args (mapv inner args)}))
+(defmethod walk-expr :call [inner outer {:keys [args] :as call}]
+  (outer (assoc call :args (mapv inner args))))
 
 (defmethod walk-expr :struct [inner outer {:keys [entries]}]
   (outer {:op :struct

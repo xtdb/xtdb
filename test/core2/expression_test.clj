@@ -1952,3 +1952,24 @@
 
 (t/deftest test-trim-array-offset-over-trim-exception
   (t/is (thrown-with-msg? IllegalArgumentException #"Data exception - array element error\." (project1 '(trim-array [1 2 3] 4) {}))))
+
+(t/deftest test-cast
+  (t/are [expected expr variables]
+    (= expected (project1 expr variables))
+
+    nil (list 'cast nil types/int-type) {}
+    nil (list 'cast nil types/bigint-type) {}
+    nil (list 'cast nil types/smallint-type) {}
+    nil (list 'cast nil types/float4-type) {}
+    nil (list 'cast nil types/float8-type) {}
+
+    42 (list 'cast 42 types/int-type) {}
+
+    42 (list 'cast 42.0 types/int-type) {}
+    42 (list 'cast 42.0 types/smallint-type) {}
+    42 (list 'cast 42.0 types/bigint-type) {}
+
+    42.0 (list 'cast 42 types/float4-type) {}
+    42.0 (list 'cast 42 types/float8-type) {}
+
+    42 (list 'cast 'a types/int-type) {:a 42.0}))
