@@ -70,8 +70,6 @@
                                      {:crux.db/id (:crux.db/id arg-doc)
                                       :crux.db.fn/failed? true}))))))
 
-;; TODO The mix of docs & encoded-docs is hard to grapple with. It can also lead to inconsistency between the two.
-
 (defn- index-docs [{:keys [index-store-tx !tx]} docs encoded-docs]
   (when (seq docs)
     (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
