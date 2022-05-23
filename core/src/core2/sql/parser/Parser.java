@@ -22,7 +22,6 @@ import clojure.lang.PersistentArrayMap;
 import clojure.lang.PersistentVector;
 
 public final class Parser {
-
     public static final class ParseState {
         public final IPersistentVector ast;
         public final int idx;
@@ -308,7 +307,6 @@ public final class Parser {
     }
 
     public static final class RuleParser extends AParser {
-
         private final Keyword ruleName;
         private final Predicate<IPersistentVector> rawPred;
         private AParser parser;
