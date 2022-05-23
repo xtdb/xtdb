@@ -1496,28 +1496,7 @@
                       (f types/float8-type
                          `(~math-method ~@emitted-args)))}))
 
-(defmethod codegen-mono-call [:cast ArrowType$Int] [{:keys [cast-arrow-type]}]
-  (condp instance? cast-arrow-type
-    ArrowType$Int
-    (let [^ArrowType$Int int-type cast-arrow-type
-          bw (.getBitWidth int-type)
-          signed (.getIsSigned int-type)]
-      (case [bw signed]
-        ;; todo unsigned casts
-        [16 true] (mono-fn-call types/smallint-type #(do `(short ~@%)) )
-        [32 true] (mono-fn-call types/int-type #(do `(int ~@%)))
-        [64 true] (mono-fn-call types/bigint-type #(do `(long ~@%)))
-        (throw (IllegalArgumentException. "Unsupported cast"))))
-
-    ArrowType$FloatingPoint
-    (util/case-enum (.getPrecision ^ArrowType$FloatingPoint cast-arrow-type)
-      ;; todo support HALF precision ...
-      FloatingPointPrecision/SINGLE (mono-fn-call types/float4-type #(do `(float ~@%)))
-      FloatingPointPrecision/DOUBLE (mono-fn-call types/float8-type #(do `(double ~@%))))
-
-    (throw (IllegalArgumentException. "Unsupported cast"))))
-
-(defmethod codegen-mono-call [:cast ArrowType$FloatingPoint] [{:keys [cast-arrow-type]}]
+(defmethod codegen-mono-call [:cast ::types/Number] [{:keys [cast-arrow-type]}]
   (condp instance? cast-arrow-type
     ArrowType$Int
     (let [^ArrowType$Int int-type cast-arrow-type
