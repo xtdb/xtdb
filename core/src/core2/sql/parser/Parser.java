@@ -185,7 +185,7 @@ public final class Parser {
             return meta;
         }
 
-        public IObj withMeta(IPersistentMap meta) {
+        public IObj withMeta(final IPersistentMap meta) {
             return new CatPersistentVector(meta, vectors);
         }
 
@@ -230,7 +230,7 @@ public final class Parser {
         }
     }
 
-    public static final class PositionInfo extends APersistentMap {
+    public static final class PositionInfo extends APersistentMap implements IObj {
         private static final long serialVersionUID = -1;
 
         private static final Keyword START_IDX = Keyword.intern("start-idx");
@@ -248,11 +248,19 @@ public final class Parser {
             return new PersistentArrayMap(new Object[] {START_IDX, startIdx, END_IDX, endIdx});
         }
 
+        public IPersistentMap meta() {
+            return null;
+        }
+
+        public IObj withMeta(final IPersistentMap meta) {
+            return ((IObj) asMap()).withMeta(meta);
+        }
+
         public Object valAt(Object k) {
             return valAt(k, null);
         }
 
-        public Object valAt(Object k, Object notFound) {
+        public Object valAt(final Object k, final Object notFound) {
             if (START_IDX.equals(k)) {
                 return startIdx;
             } else if (END_IDX.equals(k)) {
@@ -262,23 +270,23 @@ public final class Parser {
             }
         }
 
-        public boolean containsKey(Object k) {
+        public boolean containsKey(final Object k) {
             return START_IDX.equals(k) || END_IDX.equals(k);
         }
 
-        public IMapEntry entryAt(Object k) {
+        public IMapEntry entryAt(final Object k) {
             return asMap().entryAt(k);
         }
 
-        public IPersistentMap without(Object k) {
+        public IPersistentMap without(final Object k) {
             return asMap().without(k);
         }
 
-        public IPersistentMap assocEx(Object k, Object v) {
+        public IPersistentMap assocEx(final Object k, final Object v) {
             return asMap().assocEx(k, v);
         }
 
-        public IPersistentMap assoc(Object k, Object v) {
+        public IPersistentMap assoc(final Object k, final Object v) {
             return asMap().assoc(k, v);
         }
 
