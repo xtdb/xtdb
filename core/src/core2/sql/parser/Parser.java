@@ -162,11 +162,11 @@ public final class Parser {
         private final IPersistentVector[] vectors;
         private final IPersistentMap meta;
 
-        public CatPersistentVector(IPersistentVector... vectors) {
+        public CatPersistentVector(final IPersistentVector... vectors) {
             this(null, vectors);
         }
 
-        public CatPersistentVector(IPersistentMap meta, IPersistentVector... vectors) {
+        public CatPersistentVector(final IPersistentMap meta, final IPersistentVector... vectors) {
             this.meta = meta;
             this.vectors = vectors;
         }
@@ -189,7 +189,7 @@ public final class Parser {
             return new CatPersistentVector(meta, vectors);
         }
 
-        public IPersistentVector cons(Object x) {
+        public IPersistentVector cons(final Object x) {
             IPersistentVector[] newVectors = new IPersistentVector[vectors.length + 1];
             for (int i = 0; i < vectors.length; i++) {
                 newVectors[i] = vectors[i];
@@ -198,17 +198,16 @@ public final class Parser {
             return new CatPersistentVector(newVectors);
         }
 
-        public IPersistentVector assocN(int n, Object x) {
+        public IPersistentVector assocN(final int n, final Object x) {
             return asVector().assocN(n, x);
         }
 
         public Object nth(int n) {
-            for (int i = 0; i < vectors.length; i++) {
-                final IPersistentVector vec = vectors[i];
-                if (n < vec.count()) {
-                    return vec.nth(n);
+            for (final IPersistentVector v : vectors) {
+                if (n < v.count()) {
+                    return v.nth(n);
                 } else {
-                    n -= vec.count();
+                    n -= v.count();
                 }
             }
             throw new IndexOutOfBoundsException();
@@ -224,7 +223,7 @@ public final class Parser {
 
         public int count() {
             int n = 0;
-            for (IPersistentVector v : vectors) {
+            for (final IPersistentVector v : vectors) {
                 n += v.count();
             }
             return n;
