@@ -11,15 +11,14 @@
             [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx.conform :as txc]
-            [xtdb.tx.event :as txe]
-            [xtdb.memory :as mem])
+            [xtdb.tx.event :as txe])
   (:import clojure.lang.MapEntry
-           [java.util.concurrent CompletableFuture Semaphore]
-           xtdb.codec.EntityTx
            java.io.Closeable
+           [java.util.concurrent CompletableFuture]
+           [java.util.concurrent ExecutorService ThreadFactory]
+           [java.util.concurrent Future]
            java.util.function.BiConsumer
-           [java.util.concurrent ThreadFactory ExecutorService LinkedBlockingQueue BlockingQueue RejectedExecutionHandler ThreadPoolExecutor TimeUnit]
-           [java.util.concurrent Future]))
+           xtdb.codec.EntityTx))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -451,16 +450,6 @@
 (def ^ThreadFactory stats-processor-thread-factory
   (xio/thread-factory "xtdb-stats-processor"))
 
-(defn- ^ExecutorService bounded-thread-pool [^long pool-size, ^long queue-size thread-factory]
-  (let [queue (LinkedBlockingQueue. queue-size)]
-    (ThreadPoolExecutor. 1 1
-                         0 TimeUnit/MILLISECONDS
-                         queue
-                         thread-factory
-                         (reify RejectedExecutionHandler
-                           (rejectedExecution [_ runnable executor]
-                             (.put queue runnable))))))
-
 (defn ->tx-ingester {::sys/deps {:tx-indexer :xtdb/tx-indexer
                                  :index-store :xtdb/index-store
                                  :document-store :xtdb/document-store
@@ -503,10 +492,10 @@
               (set-ingester-error! t)
               (throw t)))))
 
-      (let [txs-docs-fetch-executor (bounded-thread-pool 1 1 docs-fetcher-thread-factory)
-            txs-docs-encode-executor (bounded-thread-pool 1 1 docs-encoder-thread-factory)
-            txs-index-executor (bounded-thread-pool 1 1 txs-processor-thread-factory)
-            stats-executor (bounded-thread-pool 1 1 stats-processor-thread-factory)
+      (let [txs-docs-fetch-executor (xio/bounded-thread-pool 1 1 docs-fetcher-thread-factory)
+            txs-docs-encode-executor (xio/bounded-thread-pool 1 1 docs-encoder-thread-factory)
+            txs-index-executor (xio/bounded-thread-pool 1 1 txs-processor-thread-factory)
+            stats-executor (xio/bounded-thread-pool 1 1 stats-processor-thread-factory)
 
             job (db/subscribe tx-log
                               latest-xtdb-tx-id

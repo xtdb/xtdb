@@ -11,7 +11,7 @@
             [xtdb.tx.subscribe :as tx-sub])
   (:import java.io.Closeable
            java.nio.ByteOrder
-           [java.util.concurrent ExecutorService LinkedBlockingQueue RejectedExecutionHandler ThreadPoolExecutor TimeUnit]
+           [java.util.concurrent ExecutorService TimeUnit]
            java.util.Date
            [org.agrona DirectBuffer MutableDirectBuffer]))
 
@@ -116,18 +116,8 @@
     (or (.awaitTermination tx-submit-executor 5 TimeUnit/SECONDS)
         (log/warn "waited 5s for tx-submit-executor to exit, no dice."))))
 
-(defn- bounded-solo-thread-pool [^long queue-size thread-factory]
-  (let [queue (LinkedBlockingQueue. queue-size)]
-    (ThreadPoolExecutor. 1 1
-                         0 TimeUnit/MILLISECONDS
-                         queue
-                         thread-factory
-                         (reify RejectedExecutionHandler
-                           (rejectedExecution [_ runnable executor]
-                             (.put queue runnable))))))
-
 (defn ->tx-log {::sys/deps {:kv-store 'xtdb.mem-kv/->kv-store}}
   [{:keys [kv-store]}]
-  (map->KvTxLog {:tx-submit-executor (bounded-solo-thread-pool 16 (xio/thread-factory "xtdb-standalone-submit-tx"))
+  (map->KvTxLog {:tx-submit-executor (xio/bounded-thread-pool 1 16 (xio/thread-factory "xtdb-standalone-submit-tx"))
                  :kv-store kv-store
                  :subscriber-handler (tx-sub/->notifying-subscriber-handler (latest-submitted-tx kv-store))}))
