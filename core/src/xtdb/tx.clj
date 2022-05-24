@@ -450,22 +450,15 @@
 (def ^ThreadFactory stats-processor-thread-factory
   (xio/thread-factory "xtdb-stats-processor"))
 
-(defn- start-poller! [^ThreadFactory thread-factory thread-count ^BlockingQueue queue ^CompletableFuture job f error-f]
-  (dotimes [_ thread-count]
-    (doto (.newThread thread-factory
-                      (fn []
-                        (try
-                          (loop []
-                            (when-let [item (.poll queue 10 TimeUnit/MILLISECONDS)]
-                              (when (not (.isDone job))
-                                (f item)))
-                            ;; exit here if future is done
-                            (when (not (.isDone job))
-                              (recur)))
-                          (catch Throwable t
-                            (error-f t)
-                            (.completeExceptionally job t)))))
-      (.start))))
+(defn- ^ExecutorService bounded-thread-pool [^long pool-size, ^long queue-size thread-factory]
+  (let [queue (LinkedBlockingQueue. queue-size)]
+    (ThreadPoolExecutor. 1 1
+                         0 TimeUnit/MILLISECONDS
+                         queue
+                         thread-factory
+                         (reify RejectedExecutionHandler
+                           (rejectedExecution [_ runnable executor]
+                             (.put queue runnable))))))
 
 (defn ->tx-ingester {::sys/deps {:tx-indexer :xtdb/tx-indexer
                                  :index-store :xtdb/index-store
@@ -509,12 +502,71 @@
               (set-ingester-error! t)
               (throw t)))))
 
-      (let [txs-docs-fetch-queue (LinkedBlockingQueue. 1)
-            txs-docs-encoder-queue (LinkedBlockingQueue. 1)
-            txs-process-queue (LinkedBlockingQueue. 1)
-            stats-queue (LinkedBlockingQueue. 1)
+      (let [txs-docs-fetch-executor (bounded-thread-pool 1 1 docs-fetcher-thread-factory)
+            txs-docs-encode-executor (bounded-thread-pool 1 1 docs-encoder-thread-factory)
+            txs-index-executor (bounded-thread-pool 1 1 txs-processor-thread-factory)
+            stats-executor (bounded-thread-pool 1 1 stats-processor-thread-factory)
 
-            txs-doc-fetch-fn (fn [txs]
+            submit-job! (fn [^ExecutorService executor ^CompletableFuture fut ^Callable f]
+                          (.submit executor ^Callable (fn []
+                                                        (try
+                                                          (when-not (.isDone fut)
+                                                            (f))
+                                                          (catch Throwable t
+                                                            (set-ingester-error! t)
+                                                            (.completeExceptionally fut t))))))
+
+            stats-fn (fn [docs]
+                       (db/index-stats index-store docs))
+
+            txs-index-fn (fn [fut txs]
+                           (doseq [{:keys [tx docs encoded-docs]} txs]
+
+                             (let [[{::txe/keys [tx-events] :as tx} committing?]
+                                   (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
+                                     (let [tx-log-time (::xt/tx-time tx)
+                                           {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
+                                       (cond
+                                         (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
+                                         (do
+                                           (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
+                                                     (pr-str {:latest-completed-tx lctx
+                                                              :new-tx (dissoc tx ::txe/tx-events)}))
+                                           [tx false])
+
+                                         (neg? (compare tx-log-time tx-time-override))
+                                         (do
+                                           (log/warn "overridden tx-time after tx-log clock time, aborting tx"
+                                                     (pr-str {:tx-log-time tx-log-time
+                                                              :new-tx (dissoc tx ::txe/tx-events)}))
+                                           [tx false])
+
+                                         :else [(assoc tx ::xt/tx-time tx-time-override) true]))
+
+                                     [tx true])
+
+                                   in-flight-tx (db/begin-tx tx-indexer
+                                                             (select-keys tx [::xt/tx-time ::xt/tx-id])
+                                                             nil)
+
+                                   committing? (and committing?
+                                                    (db/index-tx-events in-flight-tx tx-events docs encoded-docs))]
+
+                               (process-tx-f in-flight-tx (assoc tx :committing? committing?))
+
+                               (if committing?
+                                 (db/commit in-flight-tx)
+                                 (db/abort in-flight-tx))))
+
+                           (submit-job! stats-executor fut #(stats-fn (mapcat :docs txs))))
+
+            txs-doc-encoder-fn (fn [fut txs]
+                                 (let [txs (doall
+                                            (for [{:keys [docs] :as m} txs]
+                                              (assoc m :encoded-docs (db/encode-docs index-store docs))))]
+                                   (submit-job! txs-index-executor fut #(txs-index-fn fut txs))))
+
+            txs-doc-fetch-fn (fn [fut txs]
                                (let [docs (strict-fetch-docs document-store
                                                              (->> txs
                                                                   (into #{}
@@ -524,76 +576,20 @@
                                           (for [tx txs]
                                             {:tx tx :docs (-> (select-keys docs (txc/tx-events->doc-hashes (::txe/tx-events tx)))
                                                               without-tx-fn-docs)}))]
-                                 (.put txs-docs-encoder-queue txs)))
-
-            txs-doc-encoder-fn (fn [txs]
-                                 (let [txs (doall
-                                            (for [{:keys [docs] :as m} txs]
-                                              (assoc m :encoded-docs (db/encode-docs index-store docs))))]
-                                   (.put txs-process-queue txs)))
-
-            txs-process-fn (fn [txs]
-                             (doseq [{:keys [tx docs encoded-docs]} txs]
-
-                               (let [[{::txe/keys [tx-events] :as tx} committing?]
-                                     (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
-                                       (let [tx-log-time (::xt/tx-time tx)
-                                             {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
-                                         (cond
-                                           (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
-                                           (do
-                                             (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
-                                                       (pr-str {:latest-completed-tx lctx
-                                                                :new-tx (dissoc tx ::txe/tx-events)}))
-                                             [tx false])
-
-                                           (neg? (compare tx-log-time tx-time-override))
-                                           (do
-                                             (log/warn "overridden tx-time after tx-log clock time, aborting tx"
-                                                       (pr-str {:tx-log-time tx-log-time
-                                                                :new-tx (dissoc tx ::txe/tx-events)}))
-                                             [tx false])
-
-                                           :else [(assoc tx ::xt/tx-time tx-time-override) true]))
-
-                                       [tx true])
-
-                                     in-flight-tx (db/begin-tx tx-indexer
-                                                               (select-keys tx [::xt/tx-time ::xt/tx-id])
-                                                               nil)
-
-                                     committing? (and committing?
-                                                      (db/index-tx-events in-flight-tx tx-events docs encoded-docs))]
-
-                                 (process-tx-f in-flight-tx (assoc tx :committing? committing?))
-
-                                 (if committing?
-                                   (db/commit in-flight-tx)
-                                   (db/abort in-flight-tx))))
-
-                             ;; issue with this, don't want unsuccessful txes in here
-                             (.put stats-queue (mapcat :docs txs)))
-
-            stats-fn (fn [docs]
-                       (db/index-stats index-store docs))
+                                 (submit-job! txs-docs-encode-executor fut #(txs-doc-encoder-fn fut txs))))
 
             job (db/subscribe tx-log
                               latest-xtdb-tx-id
-                              (fn [_fut txs]
+                              (fn [fut txs]
                                 (try
 
                                   (when (Thread/interrupted)
                                     (throw (InterruptedException.)))
 
-                                  (.put txs-docs-fetch-queue txs)
+                                  (submit-job! txs-docs-fetch-executor fut #(txs-doc-fetch-fn fut txs))
 
                                   (catch Throwable t
                                     (set-ingester-error! t)
                                     (throw t)))))]
-
-        (start-poller! docs-fetcher-thread-factory 1 txs-docs-fetch-queue job txs-doc-fetch-fn set-ingester-error!)
-        (start-poller! docs-encoder-thread-factory 1 txs-docs-encoder-queue job txs-doc-encoder-fn set-ingester-error!)
-        (start-poller! txs-processor-thread-factory 1 txs-process-queue job txs-process-fn set-ingester-error!)
-        (start-poller! stats-processor-thread-factory 1 stats-queue job stats-fn set-ingester-error!)
 
         (->TxIngester index-store !error job)))))
