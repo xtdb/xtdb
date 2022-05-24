@@ -455,6 +455,8 @@
                   (process-tx-f tx))))
 
             (set-ingester-error! [t]
+              (when-not (instance? InterruptedException t)
+                (log/fatal t "Ingester error occurred"))
               (reset! !error t)
               (bus/send bus {::xt/event-type ::ingester-error, :ingester-error t}))]
 
