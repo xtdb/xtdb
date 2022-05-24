@@ -481,10 +481,10 @@
                   (process-tx-f tx))))
 
             (set-ingester-error! [t]
-              (when-not (instance? InterruptedException t)
-                (log/fatal t "Ingester error occurred"))
-              (reset! !error t)
-              (bus/send bus {::xt/event-type ::ingester-error, :ingester-error t}))]
+              (when (compare-and-set! !error nil t)
+                (when-not (instance? InterruptedException t)
+                  (log/fatal t "Ingester error occurred"))
+                (bus/send bus {::xt/event-type ::ingester-error, :ingester-error t})))]
 
       ;; catching all the secondary indices up to where XTDB is
       (when (and latest-xtdb-tx-id (seq secondary-indices))
@@ -507,89 +507,91 @@
             txs-index-executor (bounded-thread-pool 1 1 txs-processor-thread-factory)
             stats-executor (bounded-thread-pool 1 1 stats-processor-thread-factory)
 
-            submit-job! (fn [^ExecutorService executor ^CompletableFuture fut ^Callable f]
-                          (.submit executor ^Callable (fn []
-                                                        (try
-                                                          (when-not (.isDone fut)
-                                                            (f))
-                                                          (catch Throwable t
-                                                            (set-ingester-error! t)
-                                                            (.completeExceptionally fut t))))))
-
-            stats-fn (fn [docs]
-                       (db/index-stats index-store docs))
-
-            txs-index-fn (fn [fut txs]
-                           (doseq [{:keys [tx docs encoded-docs]} txs]
-
-                             (let [[{::txe/keys [tx-events] :as tx} committing?]
-                                   (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
-                                     (let [tx-log-time (::xt/tx-time tx)
-                                           {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
-                                       (cond
-                                         (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
-                                         (do
-                                           (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
-                                                     (pr-str {:latest-completed-tx lctx
-                                                              :new-tx (dissoc tx ::txe/tx-events)}))
-                                           [tx false])
-
-                                         (neg? (compare tx-log-time tx-time-override))
-                                         (do
-                                           (log/warn "overridden tx-time after tx-log clock time, aborting tx"
-                                                     (pr-str {:tx-log-time tx-log-time
-                                                              :new-tx (dissoc tx ::txe/tx-events)}))
-                                           [tx false])
-
-                                         :else [(assoc tx ::xt/tx-time tx-time-override) true]))
-
-                                     [tx true])
-
-                                   in-flight-tx (db/begin-tx tx-indexer
-                                                             (select-keys tx [::xt/tx-time ::xt/tx-id])
-                                                             nil)
-
-                                   committing? (and committing?
-                                                    (db/index-tx-events in-flight-tx tx-events docs encoded-docs))]
-
-                               (process-tx-f in-flight-tx (assoc tx :committing? committing?))
-
-                               (if committing?
-                                 (db/commit in-flight-tx)
-                                 (db/abort in-flight-tx))))
-
-                           (submit-job! stats-executor fut #(stats-fn (mapcat :docs txs))))
-
-            txs-doc-encoder-fn (fn [fut txs]
-                                 (let [txs (doall
-                                            (for [{:keys [docs] :as m} txs]
-                                              (assoc m :encoded-docs (db/encode-docs index-store docs))))]
-                                   (submit-job! txs-index-executor fut #(txs-index-fn fut txs))))
-
-            txs-doc-fetch-fn (fn [fut txs]
-                               (let [docs (strict-fetch-docs document-store
-                                                             (->> txs
-                                                                  (into #{}
-                                                                        (comp (map ::txe/tx-events)
-                                                                              (mapcat txc/tx-events->doc-hashes)))))
-                                     txs (doall
-                                          (for [tx txs]
-                                            {:tx tx :docs (-> (select-keys docs (txc/tx-events->doc-hashes (::txe/tx-events tx)))
-                                                              without-tx-fn-docs)}))]
-                                 (submit-job! txs-docs-encode-executor fut #(txs-doc-encoder-fn fut txs))))
-
             job (db/subscribe tx-log
                               latest-xtdb-tx-id
                               (fn [fut txs]
-                                (try
+                                (letfn [(submit-job! [^ExecutorService executor ^Callable f & args]
+                                          (.submit executor ^Callable (fn []
+                                                                        (try
+                                                                          (when-not (.isDone fut)
+                                                                            (apply f args))
 
-                                  (when (Thread/interrupted)
-                                    (throw (InterruptedException.)))
+                                                                          (catch Throwable t
+                                                                            (set-ingester-error! t)
+                                                                            (.completeExceptionally fut t))))))
 
-                                  (submit-job! txs-docs-fetch-executor fut #(txs-doc-fetch-fn fut txs))
+                                        (stats-fn [docs]
+                                          (db/index-stats index-store docs))
 
-                                  (catch Throwable t
-                                    (set-ingester-error! t)
-                                    (throw t)))))]
+                                        (txs-index-fn [txs]
+                                          (doseq [{:keys [tx docs encoded-docs]} txs]
+
+                                            (let [[{::txe/keys [tx-events] :as tx} committing?]
+                                                  (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
+                                                    (let [tx-log-time (::xt/tx-time tx)
+                                                          {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
+                                                      (cond
+                                                        (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
+                                                        (do
+                                                          (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
+                                                                    (pr-str {:latest-completed-tx lctx
+                                                                             :new-tx (dissoc tx ::txe/tx-events)}))
+                                                          [tx false])
+
+                                                        (neg? (compare tx-log-time tx-time-override))
+                                                        (do
+                                                          (log/warn "overridden tx-time after tx-log clock time, aborting tx"
+                                                                    (pr-str {:tx-log-time tx-log-time
+                                                                             :new-tx (dissoc tx ::txe/tx-events)}))
+                                                          [tx false])
+
+                                                        :else [(assoc tx ::xt/tx-time tx-time-override) true]))
+
+                                                    [tx true])
+
+                                                  in-flight-tx (db/begin-tx tx-indexer
+                                                                            (select-keys tx [::xt/tx-time ::xt/tx-id])
+                                                                            nil)
+
+                                                  committing? (and committing?
+                                                                   (db/index-tx-events in-flight-tx tx-events docs encoded-docs))]
+
+                                              (process-tx-f in-flight-tx (assoc tx :committing? committing?))
+
+                                              (if committing?
+                                                (db/commit in-flight-tx)
+                                                (db/abort in-flight-tx))))
+
+                                          (submit-job! stats-executor stats-fn (mapcat :docs txs)))
+
+                                        (txs-doc-encoder-fn [txs]
+                                          (let [txs (doall
+                                                     (for [{:keys [docs] :as m} txs]
+                                                       (assoc m :encoded-docs (db/encode-docs index-store docs))))]
+                                            (submit-job! txs-index-executor txs-index-fn txs)))
+
+                                        (txs-doc-fetch-fn [txs]
+                                          (let [docs (strict-fetch-docs document-store
+                                                                        (->> txs
+                                                                             (into #{}
+                                                                                   (comp (map ::txe/tx-events)
+                                                                                         (mapcat txc/tx-events->doc-hashes)))))
+                                                txs (doall
+                                                     (for [tx txs]
+                                                       {:tx tx
+                                                        :docs (-> (select-keys docs (txc/tx-events->doc-hashes (::txe/tx-events tx)))
+                                                                  without-tx-fn-docs)}))]
+                                            (submit-job! txs-docs-encode-executor txs-doc-encoder-fn txs)))]
+                                  (try
+                                    (when (Thread/interrupted)
+                                      (throw (InterruptedException.)))
+
+                                    (submit-job! txs-docs-fetch-executor txs-doc-fetch-fn txs)
+
+                                    (catch Throwable t
+                                      (set-ingester-error! t)
+                                      (throw t))))))]
+
+        ;; TODO shutdown pools on job completion
 
         (->TxIngester index-store !error job)))))
