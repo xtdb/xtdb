@@ -12,7 +12,7 @@
 (defn ->zipper [x]
   (if (instance? Zip x)
     x
-    (->Zip x -1 nil)))
+    (Zip. x -1 nil)))
 
 (defn- zupdate-parent [^Zip z]
   (when-let [^Zip parent (.parent z)]
@@ -21,7 +21,7 @@
           idx (.idx z)]
       (if (identical? node (.get level idx))
         parent
-        (->Zip (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent))))))
+        (Zip. (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent))))))
 
 (defn znode [^Zip z]
   (when z
@@ -37,7 +37,7 @@
         (when-not (neg? idx)
           (let [^List level (.node parent)]
             (with-meta
-              (->Zip (.get level idx) idx parent)
+              (Zip. (.get level idx) idx parent)
               (meta z))))))))
 
 (defn zright [^Zip z]
@@ -45,22 +45,22 @@
     (when-let [^Zip parent (zupdate-parent z)]
       (let [idx (inc (.idx z))
             ^List level (.node parent)]
-        (when (< idx (count level))
+        (when (< idx (.size level))
           (with-meta
-            (->Zip (.get level idx) idx parent)
+            (Zip. (.get level idx) idx parent)
             (meta z)))))))
 
 (defn znth [^Zip z ^long idx]
   (when z
     (when (zbranch? z)
-      (let [node (.node z)
+      (let [^List node (.node z)
             idx (if (neg? idx)
-                  (+ (count node) idx)
+                  (+ (.size node) idx)
                   idx)]
-        (when (and (< idx (count node))
+        (when (and (< idx (.size node))
                    (not (neg? idx)))
           (with-meta
-            (->Zip (.get ^List node idx) idx z)
+            (Zip. (.get node idx) idx z)
             (meta z)))))))
 
 (defn zdown [^Zip z]
@@ -69,7 +69,7 @@
       (when (and (zbranch? z)
                  (not (.isEmpty ^List node)))
         (with-meta
-          (->Zip (.get ^List node 0) 0 z)
+          (Zip. (.get ^List node 0) 0 z)
           (meta z))))))
 
 (defn zup [^Zip z]
@@ -102,8 +102,8 @@
 
 (defn zrights [^Zip z]
   (let [idx (inc (.idx z))
-        children (zchildren z)]
-    (when (< idx (count children))
+        ^List children (zchildren z)]
+    (when (< idx (.size children))
       (seq (subvec children idx)))))
 
 (defn zlefts [^Zip z]
@@ -121,14 +121,14 @@
   [t ocr i]
   `(let [^Zip z# ~ocr]
      (with-meta
-       (->Zip (.get ^List (.node z#) ~i) ~i z#)
+       (Zip. (.get ^List (.node z#) ~i) ~i z#)
        (meta z#))))
 
 (defmethod m/count-inline ::m/zip
   [t ocr]
   `(let [^Zip z# ~ocr]
      (if (zbranch? z#)
-       (count (znode z#))
+       (.size ^List (znode z#))
        0)))
 
 (defmethod m/subvec-inline ::m/zip
@@ -192,8 +192,8 @@
 (defn ctor [ag]
   (when ag
     (let [node (znode ag)]
-      (when (sequential? node)
-        (first node)))))
+      (when (vector? node)
+        (.nth ^IPersistentVector node 0 nil)))))
 
 (defn ctor? [kw ag]
   (= kw (ctor ag)))
