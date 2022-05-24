@@ -379,7 +379,7 @@
                           (:xtdb.api/valid-time up-to-date-doc)
                           (:xtdb.api/tx-time up-to-date-doc)]]
                         (for [{:keys [additions deletions
-                                      xt/tx-time xt/valid-time]
+                                      xtdb.api/tx-time xtdb.api/valid-time]
                                :as history-elem} history-diffs]
                           ^{:key history-elem}
                           [:div.entity-history__container
