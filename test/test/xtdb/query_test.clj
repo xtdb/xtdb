@@ -1,14 +1,14 @@
 (ns xtdb.query-test
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.test :as t]
             [clojure.walk :as w]
             [xtdb.api :as xt]
             [xtdb.fixtures :as fix :refer [*api*]]
             [xtdb.fixtures.tpch :as tpch]
             [xtdb.index :as idx]
-            [xtdb.query :as q]
-            [clojure.java.io :as io]
-            [clojure.string :as str])
+            [xtdb.query :as q])
   (:import (java.util Arrays Date UUID)
            (java.util.concurrent TimeoutException)))
 

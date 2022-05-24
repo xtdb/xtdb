@@ -7,7 +7,7 @@
             [clojure.tools.logging :as log]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
   (:import (clojure.lang MapEntry)
-           (java.io DataInputStream DataOutputStream File IOException Reader)
+           [java.io DataInputStream DataOutputStream File IOException Reader]
            (java.lang AutoCloseable)
            (java.lang.management BufferPoolMXBean ManagementFactory)
            (java.lang.ref PhantomReference ReferenceQueue)
@@ -17,7 +17,7 @@
            (java.text SimpleDateFormat)
            (java.time Duration)
            (java.util Collections Comparator Date IdentityHashMap Iterator Map PriorityQueue Properties)
-           (java.util.concurrent ThreadFactory)
+           [java.util.concurrent ThreadFactory ExecutorService LinkedBlockingQueue ThreadPoolExecutor TimeUnit RejectedExecutionHandler]
            (java.util.concurrent.locks StampedLock)
            (xtdb.api ICursor)))
 
@@ -262,6 +262,16 @@
         (doto (Thread. r)
           (.setName (str name-prefix "-" (swap! idx inc)))
           (.setUncaughtExceptionHandler uncaught-exception-handler))))))
+
+(defn bounded-thread-pool ^ExecutorService [^long pool-size, ^long queue-size thread-factory]
+  (let [queue (LinkedBlockingQueue. queue-size)]
+    (ThreadPoolExecutor. pool-size 1
+                         0 TimeUnit/MILLISECONDS
+                         queue
+                         thread-factory
+                         (reify RejectedExecutionHandler
+                           (rejectedExecution [_ runnable executor]
+                             (.put queue runnable))))))
 
 (defrecord Cursor [close-fn ^Iterator lazy-seq-iterator]
   ICursor
