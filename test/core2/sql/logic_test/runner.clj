@@ -332,13 +332,15 @@
             (with-jdbc db f)))))))
 (comment
 
-(sort-by val @error-counts-by-message)
-(sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
+  (sort-by val @error-counts-by-message)
+  (sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
 
 
-(time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/expr/slt_good_0.test"))
+  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/expr/slt_good_0.test"))
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
+
+  (time (-main "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/select1.test"))
 
   (= (time
       (with-out-str
