@@ -1,4 +1,5 @@
-(ns core2.expression-test
+(ns ^{:clojure.tools.namespace.repl/load false}
+    core2.expression-test
   (:require [clojure.test :as t]
             [core2.expression :as expr]
             [core2.expression.temporal :as expr.temp]

@@ -1,4 +1,5 @@
-(ns core2.edn
+(ns ^{:clojure.tools.namespace.repl/load false}
+  core2.edn
   (:require [time-literals.read-write :as time-literals]
             [clojure.string :as str])
   (:import java.io.Writer
