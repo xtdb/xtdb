@@ -144,6 +144,14 @@ CREATE UNIQUE INDEX t1i0 ON t1(
 
 (comment
 
+  (time
+   (let [tables {"t1" ["a" "b" "c" "d" "e"]}
+         query "SELECT a+b*2+c*3+d*4+e*5, (a+b+c+d+e)/5 FROM t1 ORDER BY 1,2"
+         tree (p/parse query :query_expression)
+         tree (xtdb-engine/normalize-query tables tree)]
+     (dotimes [_ 1000]
+       (core2.sql.plan/plan-query tree))))
+
   (doseq [f (->> (file-seq (io/file (io/resource "core2/sql/logic_test/sqlite_test/")))
                  (filter #(clojure.string/ends-with? % ".test"))
                  (sort))]
