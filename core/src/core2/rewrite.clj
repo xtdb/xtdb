@@ -2,7 +2,7 @@
   (:require [clojure.walk :as w]
             [clojure.core.match :as m])
   (:import java.util.regex.Pattern
-           java.util.List
+           [java.util ArrayList List]
            clojure.lang.IPersistentVector))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -111,7 +111,11 @@
 
 (defn zreplace [^Zip z x]
   (when z
-    (assoc z :node x)))
+    (if (identical? (.node z) x)
+      z
+      (with-meta
+        (Zip. x (.idx z) (.parent z))
+        (meta z)))))
 
 ;; Zipper pattern matching
 
@@ -353,35 +357,42 @@
 
 ;; Type Unifying
 
-(defn- monoid [z]
-  (get (meta z) :zip/monoid into))
+(def ^:private ^:dynamic *monoid*
+  (fn
+    ([] (ArrayList.))
+    ([x] (vec x))
+    ([^List x ^List y]
+     (if y
+       (doto x
+         (.addAll y))
+       x))))
 
 ;; TODO: should this short-circuit properly? Ztrategic doesn't seem
 ;; to.
-(defn seq-tu [x y]
+(defn- seq-tu [x y]
   (fn [z]
-    (let [m (monoid z)]
+    (let [m *monoid*]
       (-> (m)
           (m (x z))
-          (m (y z))
-          (m)))))
+          (m (y z))))))
 
 (def choice-tu choice-tp)
 
-(defn all-tu [f]
+(defn- all-tu [f]
   (fn [z]
-    (let [m (monoid z)]
+    (let [m *monoid*
+          acc (m)]
       (if-some [d (zdown z)]
         (loop [z d
-               acc (m)]
+               acc acc]
           (when-some [x (f z)]
             (let [acc (m acc x)]
               (if-some [r (zright z)]
                 (recur r acc)
-                (m acc)))))
-        (m)))))
+                acc))))
+        acc))))
 
-(defn one-tu [f]
+(defn- one-tu [f]
   (fn [z]
     (when-some [d (zdown z)]
       (loop [z d]
@@ -390,35 +401,35 @@
           (when-some [r (zright z)]
             (recur r)))))))
 
-(defn full-td-tu
+(defn- full-td-tu
   ([f]
    (fn self [z]
      ((seq-tu f (all-tu self)) z)))
   ([f z]
    ((full-td-tu f) z)))
 
-(defn full-bu-tu
+(defn- full-bu-tu
   ([f]
    (fn self [z]
      ((seq-tu (all-tu self) f) z)))
   ([f z]
    ((full-bu-tu f) z)))
 
-(defn once-td-tu
+(defn- once-td-tu
   ([f]
    (fn self [z]
      ((choice-tu f (one-tu self)) z)))
   ([f z]
    ((once-td-tu f) z)))
 
-(defn once-bu-tu
+(defn- once-bu-tu
   ([f]
    (fn self [z]
      ((choice-tu (one-tu self) f) z)))
   ([f z]
    ((once-bu-tu f) z)))
 
-(defn stop-td-tu
+(defn- stop-td-tu
   ([f]
    (fn self [z]
      ((choice-tu f (all-tu self)) z)))
@@ -435,23 +446,22 @@
 
 (def mono-tu (partial adhoc-tu fail-tu))
 
-(defn with-tu-monoid [z m]
-  (vary-meta z assoc :zip/monoid m))
-
 (defn collect
   ([f]
-   (full-td-tu f))
+   (*monoid* (full-td-tu f)))
   ([f z]
-   (full-td-tu f z))
+   (*monoid* (full-td-tu f z)))
   ([f m z]
-   (full-td-tu f (with-tu-monoid z m))))
+   (binding [*monoid* m]
+     (m (full-td-tu f z)))))
 
 (defn collect-stop
   ([f]
-   (stop-td-tu f))
+   (*monoid* (stop-td-tu f)))
   ([f z]
-   (stop-td-tu f z))
+   (*monoid* (stop-td-tu f z)))
   ([f m z]
-   (stop-td-tu f (with-tu-monoid z m))))
+   (binding [*monoid* m]
+     (m (stop-td-tu f z)))))
 
 (def select once-td-tu)
