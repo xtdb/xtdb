@@ -1,7 +1,6 @@
 (ns core2.types
   (:require [clojure.string :as str]
-            [core2.util :as util]
-            [core2.types :as types])
+            [core2.util :as util])
   (:import clojure.lang.Keyword
            (core2.types LegType LegType$StructLegType)
            (core2.vector IDenseUnionWriter IVectorWriter)
@@ -511,7 +510,7 @@
 
                                       [(first fields)])))))]
     (case (count new-fields)
-      0 (->field "$data" types/null-type true)
+      0 (->field "$data" null-type true)
       1 (first new-fields)
 
       (apply ->field (.getName ^Field (first fields)) dense-union-type false
