@@ -17,6 +17,7 @@
            [java.util.concurrent CompletableFuture Semaphore]
            xtdb.codec.EntityTx
            java.io.Closeable
+           java.util.function.BiConsumer
            [java.util.concurrent ThreadFactory ExecutorService LinkedBlockingQueue BlockingQueue RejectedExecutionHandler ThreadPoolExecutor TimeUnit]
            [java.util.concurrent Future]))
 
@@ -509,7 +510,7 @@
 
             job (db/subscribe tx-log
                               latest-xtdb-tx-id
-                              (fn [fut txs]
+                              (fn [^CompletableFuture fut txs]
                                 (letfn [(submit-job! [^ExecutorService executor ^Callable f & args]
                                           (.submit executor ^Callable (fn []
                                                                         (try
@@ -592,6 +593,9 @@
                                       (set-ingester-error! t)
                                       (throw t))))))]
 
-        ;; TODO shutdown pools on job completion
+        (.whenComplete job (reify BiConsumer
+                             (accept [_ _v e]
+                               (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor stats-executor]]
+                                 (.shutdown executor)))))
 
         (->TxIngester index-store !error job)))))
