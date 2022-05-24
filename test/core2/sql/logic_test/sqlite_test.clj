@@ -13,7 +13,7 @@
 
 (slt/deftest select4)
 
-(slt/deftest select5)
+#_(slt/deftest select5)
 
 ;; TODO: the entire way we specify and refer to these needs work, but
 ;; this makes these tests possible to run.

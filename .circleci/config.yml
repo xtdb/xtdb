@@ -87,6 +87,16 @@ jobs:
           event: fail
           template: basic_fail_1
 
+  slt-test:
+    executor: clojure
+    resource_class: large
+
+    steps:
+      - attach_workspace:
+          at: ~/
+
+      - run: 'clojure -Srepro -X:slt-test || true'
+
 workflows:
   build:
     jobs:
@@ -98,5 +108,8 @@ workflows:
             - setup
       - integration-test:
           context: slack-bot
+          requires:
+            - setup
+      - slt-test:
           requires:
             - setup

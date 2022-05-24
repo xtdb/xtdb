@@ -297,7 +297,8 @@
         test-path (ns-relative-path *ns* (str (str/replace name "-" "/") ".test"))]
     `(alter-meta!
       (t/deftest ~test-symbol
-        (execute-records *db-engine* (parse-script ~test-path (slurp (io/resource ~test-path)))))
+        (binding [plan/*include-table-column-in-scan?* true]
+          (execute-records *db-engine* (parse-script ~test-path (slurp (io/resource ~test-path))))))
       assoc :file ~test-path)))
 
 (def cli-options
