@@ -127,29 +127,25 @@
           (r/zmatch z
             [:table_primary [:regular_identifier table]]
             ;;=>
-            [[table table]]
+            [table table]
 
             [:table_primary [:regular_identifier table] "AS" [:regular_identifier correlation-name]]
             ;;=>
-            [[table correlation-name]]
+            [table correlation-name]
 
             [:table_primary [:regular_identifier table] [:regular_identifier correlation-name]]
             ;;=>
-            [[table correlation-name]]
+            [table correlation-name]
 
-            [:subquery _]
-            ;;=>
-            []
-
-            [:select_list _]
-            ;;=>
-            []
-
-            [:where_clause _]
-            ;;=>
-            []))
+            (r/zcase z
+              (:select_list
+               :order_by_clause
+               :where_clause
+               :subquery)
+              []
+              nil)))
         (r/vector-zip query))
-       (into {})))
+       (apply hash-map)))
 
 (defn normalize-query [tables query]
   (let [table->correlation-name (top-level-query-table->correlation-name query)
