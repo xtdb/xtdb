@@ -159,7 +159,7 @@
                              [column (get table->correlation-name table)])
                            (into {}))]
     (->> (r/vector-zip query)
-         (r/innermost (r/mono-tp (normalize-rewrite column->table tables)))
+         (r/topdown (r/adhoc-tp r/id-tp (normalize-rewrite column->table tables)))
          (r/node))))
 
 (defn parse-create-table [^String x]
