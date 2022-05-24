@@ -64,7 +64,7 @@
 
 ;; Ids
 
-(defn ^:dynamic prev-subtree-seq [ag]
+(defn- prev-subtree-seq [ag]
   (when ag
     (lazy-seq (cons ag (prev-subtree-seq (r/prev ag))))))
 
@@ -173,7 +173,7 @@
     (r/inherit ag)))
 
 ;; Synthesised
-(defn ^:dynamic cteo [ag]
+(defn- cteo [ag]
   (r/zcase ag
     :query_expression
     (if (r/ctor? :with_clause (r/$ ag 1))
@@ -324,7 +324,7 @@
     (r/inherit ag)))
 
 ;; Synthesised
-(defn ^:dynamic dclo [ag]
+(defn- dclo [ag]
   (r/zcase ag
     :query_specification
     (dclo (r/$ ag -1))
@@ -985,14 +985,11 @@
 (defn analyze-query [query]
   (if (p/failure? query)
     {:errs [(p/failure->str query)]}
-    (r/with-memoized-attributes [prev-subtree-seq
-                                 id
+    (r/with-memoized-attributes [id
                                  dynamic-param-idx
                                  ctei
-                                 cteo
                                  cte-env
                                  dcli
-                                 dclo
                                  env
                                  group-env
                                  order-by-index

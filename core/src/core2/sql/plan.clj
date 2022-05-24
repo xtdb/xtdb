@@ -2363,14 +2363,11 @@
   ([query {:keys [decorrelate?]}]
    (if (p/failure? query)
      {:errs [(p/failure->str query)]}
-     (r/with-memoized-attributes [sem/prev-subtree-seq
-                                  sem/id
+     (r/with-memoized-attributes [sem/id
                                   sem/dynamic-param-idx
                                   sem/ctei
-                                  sem/cteo
                                   sem/cte-env
                                   sem/dcli
-                                  sem/dclo
                                   sem/env
                                   sem/group-env
                                   sem/order-by-index
