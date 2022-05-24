@@ -514,45 +514,48 @@
                                           (db/index-stats index-store docs))
 
                                         (txs-index-fn [txs]
-                                          (doseq [{:keys [tx docs encoded-docs]} txs]
+                                          (let [committed-docs (atom '())]
+                                            (doseq [{:keys [tx docs encoded-docs]} txs]
 
-                                            (let [[{::txe/keys [tx-events] :as tx} committing?]
-                                                  (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
-                                                    (let [tx-log-time (::xt/tx-time tx)
-                                                          {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
-                                                      (cond
-                                                        (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
-                                                        (do
-                                                          (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
-                                                                    (pr-str {:latest-completed-tx lctx
-                                                                             :new-tx (dissoc tx ::txe/tx-events)}))
-                                                          [tx false])
+                                              (let [[{::txe/keys [tx-events] :as tx} committing?]
+                                                    (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
+                                                      (let [tx-log-time (::xt/tx-time tx)
+                                                            {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
+                                                        (cond
+                                                          (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
+                                                          (do
+                                                            (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
+                                                                      (pr-str {:latest-completed-tx lctx
+                                                                               :new-tx (dissoc tx ::txe/tx-events)}))
+                                                            [tx false])
 
-                                                        (neg? (compare tx-log-time tx-time-override))
-                                                        (do
-                                                          (log/warn "overridden tx-time after tx-log clock time, aborting tx"
-                                                                    (pr-str {:tx-log-time tx-log-time
-                                                                             :new-tx (dissoc tx ::txe/tx-events)}))
-                                                          [tx false])
+                                                          (neg? (compare tx-log-time tx-time-override))
+                                                          (do
+                                                            (log/warn "overridden tx-time after tx-log clock time, aborting tx"
+                                                                      (pr-str {:tx-log-time tx-log-time
+                                                                               :new-tx (dissoc tx ::txe/tx-events)}))
+                                                            [tx false])
 
-                                                        :else [(assoc tx ::xt/tx-time tx-time-override) true]))
+                                                          :else [(assoc tx ::xt/tx-time tx-time-override) true]))
 
-                                                    [tx true])
+                                                      [tx true])
 
-                                                  in-flight-tx (db/begin-tx tx-indexer
-                                                                            (select-keys tx [::xt/tx-time ::xt/tx-id])
-                                                                            nil)
+                                                    in-flight-tx (db/begin-tx tx-indexer
+                                                                              (select-keys tx [::xt/tx-time ::xt/tx-id])
+                                                                              nil)
 
-                                                  committing? (and committing?
-                                                                   (db/index-tx-events in-flight-tx tx-events docs encoded-docs))]
+                                                    committing? (and committing?
+                                                                     (db/index-tx-events in-flight-tx tx-events docs encoded-docs))]
 
-                                              (process-tx-f in-flight-tx (assoc tx :committing? committing?))
+                                                (process-tx-f in-flight-tx (assoc tx :committing? committing?))
 
-                                              (if committing?
-                                                (db/commit in-flight-tx)
-                                                (db/abort in-flight-tx))))
+                                                (if committing?
+                                                  (do
+                                                    (db/commit in-flight-tx)
+                                                    (swap! committed-docs concat docs))
+                                                  (db/abort in-flight-tx))))
 
-                                          (submit-job! stats-executor stats-fn (mapcat :docs txs)))
+                                            (submit-job! stats-executor stats-fn @committed-docs)))
 
                                         (txs-doc-encoder-fn [txs]
                                           (let [txs (doall
