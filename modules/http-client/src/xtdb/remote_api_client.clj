@@ -70,23 +70,25 @@
                       (throw error)
                       result))))
               (catch IOException _e))
+            (fn [opts]
+              (http/request opts))
             (fn [_]
               (throw (IllegalStateException. "No supported HTTP client found.")))))))))
 
 (defn- api-request-sync
   ([url {:keys [body http-opts ->jwt-token]}]
    (let [{:keys [body status] :as result}
-         (http/request (merge {:url url
-                               :method :post
-                               :headers (merge (when body
-                                                 {"Content-Type" "application/edn"})
-                                               (when ->jwt-token
-                                                 {"Authorization" (str "Bearer " (->jwt-token))}))
-                               :body (some-> body xio/pr-edn-str)
-                               :accept :edn
-                               :as "UTF-8"
-                               :throw-exceptions false}
-                              (update http-opts :query-params #(into {} (remove (comp nil? val) %)))))]
+         (*internal-http-request-fn* (merge {:url url
+                                             :method :post
+                                             :headers (merge (when body
+                                                               {"Content-Type" "application/edn"})
+                                                             (when ->jwt-token
+                                                               {"Authorization" (str "Bearer " (->jwt-token))}))
+                                             :body (some-> body xio/pr-edn-str)
+                                             :accept :edn
+                                             :as "UTF-8"
+                                             :throw-exceptions false}
+                                            (update http-opts :query-params #(into {} (remove (comp nil? val) %)))))]
      (cond
        (= 404 status)
        nil
