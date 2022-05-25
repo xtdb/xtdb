@@ -54,7 +54,13 @@
                    (tpch/run-tpch node {:scale-factor tpch-scale-factor}))
                  (doto post-to-slack))))
 
-   :tpch-ingest (fn [_nodes {:keys [tpch-scale-factor]}]
+   :tpch-ingest (fn [nodes {:keys [tpch-scale-factor]}]
+                  (bench/with-nodes [node nodes]
+                    (-> (bench/with-comparison-times
+                          (tpch/run-tpch-ingest-only node {:scale-factor tpch-scale-factor}))
+                        (doto post-to-slack))))
+
+   :tpch-ingest-lucene (fn [_nodes {:keys [tpch-scale-factor]}]
                   (bench/with-nodes [node (select-keys bench/nodes ["rocksdb-lucene"])]
                     (-> (bench/with-comparison-times
                           (tpch/run-tpch-ingest-only node {:scale-factor tpch-scale-factor}))

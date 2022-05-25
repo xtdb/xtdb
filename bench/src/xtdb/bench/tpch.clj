@@ -21,6 +21,7 @@
       (bench/run-bench :ingest
                        (bench/with-additional-index-metrics node
                          (tpch/load-docs! node scale-factor)
+                         (bench/compact-node node)
                          {:success true})))))
 
 (defn run-tpch [node {:keys [scale-factor] :as opts}]
@@ -30,6 +31,7 @@
         (bench/run-bench :ingest
           (bench/with-additional-index-metrics node
             (tpch/load-docs! node scale-factor)
+            (bench/compact-node node)
             {:success true}))
 
         ;; TODO we may want to split this up, à la WatDiv, so that we can see if
