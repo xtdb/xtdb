@@ -158,13 +158,13 @@
                                    (.columnIndex "_id"))]
                 (t/is (= "_id" (-> (.getVector metadata-batch "column")
                                    (ty/get-object id-col-idx))))
-                (let [^StructVector varchar-type-vec (-> ^StructVector (.getVector metadata-batch "types")
-                                                         (.getChild "varchar"))]
+                (let [^StructVector utf8-type-vec (-> ^StructVector (.getVector metadata-batch "types")
+                                                      (.getChild "utf8"))]
                   (t/is (= "device-info-demo000000"
-                           (-> (.getChild varchar-type-vec "min")
+                           (-> (.getChild utf8-type-vec "min")
                                (ty/get-object id-col-idx))))
                   (t/is (= "reading-demo000001"
-                           (-> (.getChild varchar-type-vec "max")
+                           (-> (.getChild utf8-type-vec "max")
                                (ty/get-object id-col-idx)))))
 
                 (t/is (= 4 (-> ^BigIntVector (.getVector metadata-batch "count")
@@ -247,30 +247,16 @@
         (tu/check-json (.toPath (io/as-file (io/resource "multi-block-metadata"))) os))
 
       (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
-        (t/is (= (ty/->field "_id" ty/dense-union-type false
-                             (ty/->field "varchar" ty/varchar-type false)
-                             (ty/->field "timestampmicrotz-utc" ty/timestamp-micro-tz-type false)
-                             (ty/->field "float8" ty/float8-type false))
-                 (.columnField mm "_id")))
+        (t/is (= [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64}]
+                 (.columnType mm "_id")))
 
-        (t/is (= (ty/->field "list" ty/list-type false
-                             (ty/->field "$data" ty/dense-union-type false
-                                         (ty/->field "varchar" ty/varchar-type false)
-                                         (ty/->field "timestampmicrotz-utc" ty/timestamp-micro-tz-type false)
-                                         (ty/->field "float8" ty/float8-type false)
-                                         (ty/->field "bit" ty/bool-type false)))
-                 (.columnField mm "list")))
+        (t/is (= [:list [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64 :bool}]]
+                 (.columnType mm "list")))
 
-        (t/is (= (ty/->field "struct" ty/struct-type false
-                             (ty/->field "a" ty/dense-union-type false
-                                         (ty/->field "bit" ty/bool-type false)
-                                         (ty/->field "bigint" ty/bigint-type false))
-                             (ty/->field "b" ty/dense-union-type false
-                                         (ty/->field "varchar" ty/varchar-type false)
-                                         (ty/->field "struct-7" ty/struct-type false
-                                                     (ty/->field "c" ty/varchar-type false)
-                                                     (ty/->field "d" ty/varchar-type false))))
-                 (.columnField mm "struct")))))))
+        (t/is (= [:struct {"a" [:union #{:bool :i64}]
+                           "b" [:union #{:utf8
+                                         [:struct {"c" :utf8, "d" :utf8}]}]}]
+                 (.columnType mm "struct")))))))
 
 (t/deftest round-trips-nils
   (with-open [node (node/start-node {})]
@@ -521,8 +507,7 @@
 
                 (t/is (= 2000 (count (.id->internal-id tm)))))
 
-              (t/is (= (ty/->field "_id" ty/varchar-type false)
-                       (.columnField mm "_id")))
+              (t/is (= :utf8 (.columnType mm "_id")))
 
               (let [^TransactionInstant
                     second-half-tx-key @(reduce
@@ -547,8 +532,7 @@
 
                     (t/is (>= (count (.id->internal-id tm)) 2000))
 
-                    (t/is (= (ty/->field "_id" ty/varchar-type false)
-                             (.columnField mm "_id"))))
+                    (t/is (= :utf8 (.columnType mm "_id"))))
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-key (-> second-half-tx-key
@@ -570,8 +554,7 @@
                       (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))
 
-                    (t/is (= (ty/->field "_id" ty/varchar-type false)
-                             (.columnField mm "_id")))
+                    (t/is (= :utf8 (.columnType mm "_id")))
 
                     (t/is (= 2000 (count (.id->internal-id tm))))))))))))))
 
@@ -588,27 +571,23 @@
 
         (tu/finish-chunk node1)
 
-        (t/is (= (ty/->field "_id" ty/varchar-type false)
-                 (.columnField mm1 "_id")))
+        (t/is (= :utf8 (.columnType mm1 "_id")))
 
-        (let [tx2 (c2/submit-tx node1 [[:put {:_id :bar}]])]
+        (let [tx2 (c2/submit-tx node1 [[:put {:_id :bar}]
+                                       [:put {:_id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]])]
           (tu/then-await-tx tx2 node1 (Duration/ofMillis 200))
 
           (tu/finish-chunk node1)
 
-          (t/is (= (ty/->field "_id" ty/dense-union-type false
-                               (ty/->field "varchar" ty/varchar-type false)
-                               (ty/->field "keyword" ty/keyword-type false))
-                   (.columnField mm1 "_id")))
+          (t/is (= [:union #{:utf8 [:extension-type :keyword :utf8 ""] [:extension-type :uuid :fixed-size-binary ""]}]
+                   (.columnType mm1 "_id")))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 
-              (t/is (= (ty/->field "_id" ty/dense-union-type false
-                                   (ty/->field "varchar" ty/varchar-type false)
-                                   (ty/->field "keyword" ty/keyword-type false))
-                       (.columnField mm2 "_id"))))))))))
+              (t/is (= [:union #{:utf8 [:extension-type :keyword :utf8 ""] [:extension-type :uuid :fixed-size-binary ""]}]
+                       (.columnType mm2 "_id"))))))))))
 
 (t/deftest test-await-fails-fast
   (with-redefs [idx/->live-root (fn [& _args]

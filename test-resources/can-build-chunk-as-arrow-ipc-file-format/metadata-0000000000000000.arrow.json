@@ -57,7 +57,7 @@
         "name" : "struct"
       },
       "children" : [{
-        "name" : "varchar",
+        "name" : "utf8",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -78,11 +78,11 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "VARCHAR",
-          "key" : "minor-type"
+          "value" : "utf8",
+          "key" : "type-head"
         }]
       },{
-        "name" : "float8",
+        "name" : "f64",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -105,11 +105,11 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "FLOAT8",
-          "key" : "minor-type"
+          "value" : "f64",
+          "key" : "type-head"
         }]
       },{
-        "name" : "timestampmicrotz-utc",
+        "name" : "timestamp-tz-micro-utc",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -134,8 +134,11 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "TIMESTAMPMICROTZ",
-          "key" : "minor-type"
+          "value" : "micro",
+          "key" : "time-unit"
+        },{
+          "value" : "timestamp-tz",
+          "key" : "type-head"
         },{
           "value" : "UTC",
           "key" : "tz"
@@ -188,7 +191,7 @@
       "count" : 36,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       "children" : [{
-        "name" : "varchar",
+        "name" : "utf8",
         "count" : 36,
         "VALIDITY" : [1,1,1,1,0,0,1,1,0,0,1,1,0,0,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,0,0,1,1,0,0],
         "children" : [{
@@ -205,7 +208,7 @@
           "DATA" : ["reading-demo000001","reading-demo000001","23","23","","","discharging","discharging","","","A0:B1:C5:D2:E0:F3","A0:B1:C5:D2:E0:F3","","","","","","","device-info-demo000001","device-info-demo000001","iobeam","iobeam","","","","","pinto","pinto","6.0.1","6.0.1","","","stealth-net","stealth-net","",""]
         }]
       },{
-        "name" : "float8",
+        "name" : "f64",
         "count" : 36,
         "VALIDITY" : [0,0,0,0,1,1,0,0,1,1,0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,1,1,0,0,0,0],
         "children" : [{
@@ -220,7 +223,7 @@
           "DATA" : [0.0,0.0,0.0,0.0,86.0,86.0,0.0,0.0,93.7,93.7,0.0,0.0,8.822,8.822,24.81,24.81,10.802,10.802,0.0,0.0,0.0,0.0,7.20742332E8,7.20742332E8,5.89988922E8,5.89988922E8,0.0,0.0,0.0,0.0,-50.0,-50.0,0.0,0.0,0.0,0.0]
         }]
       },{
-        "name" : "timestampmicrotz-utc",
+        "name" : "timestamp-tz-micro-utc",
         "count" : 36,
         "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
         "children" : [{

@@ -1798,20 +1798,15 @@
 (defmethod emit-call-expr :get-field [{[{^Field struct-field :return-field}] :emitted-args
                                        :keys [field]}
                                       col-name]
-  {:return-field (-> (letfn [(get-struct-child [^Field struct-field]
-                               (first
-                                (for [^Field child-field (.getChildren struct-field)
-                                      :when (= (name field) (.getName child-field))]
-                                  child-field)))]
-                       (if (instance? ArrowType$Union (.getType struct-field))
-                         (apply types/merge-fields
-                                (->> (.getChildren struct-field)
-                                     (filter (fn [^Field child-field]
-                                               (= types/struct-type (.getType child-field))))
-                                     (keep get-struct-child)))
-                         (or (get-struct-child struct-field)
-                             (types/->field col-name types/null-type true))))
-                     (types/field-with-name col-name))
+  {:return-field (letfn [(get-struct-child [^Field struct-field]
+                           (first
+                            (for [^Field child-field (.getChildren struct-field)
+                                  :when (= (name field) (.getName child-field))]
+                              child-field)))]
+                   (if (instance? ArrowType$Union (.getType struct-field))
+                     (types/->field col-name types/dense-union-type false)
+                     (or (get-struct-child struct-field)
+                         (types/->field col-name types/null-type true))))
 
    :eval-call-expr (fn [[^ValueVector in-vec] ^ValueVector out-vec _params]
                      (let [out-writer (vw/vec->writer out-vec)]
@@ -1846,8 +1841,7 @@
   (let [el-count (count elements)
         emitted-els (mapv #(emit-expr % "list-el" opts) elements)
         out-field (types/->field col-name (ArrowType$FixedSizeList. el-count) false
-                                 (-> (apply types/merge-fields (map :return-field emitted-els))
-                                     (types/field-with-name "$data")))]
+                                 (types/->field "$data" types/dense-union-type false))]
     {:return-field out-field
      :eval-expr
      (fn [^IIndirectRelation in-rel al params]
@@ -1888,16 +1882,8 @@
            (finally
              (run! util/try-close els)))))}))
 
-(defmethod emit-call-expr :nth-const-n [{[{^Field coll-field :return-field}] :emitted-args
-                                         :keys [^long n]}
-                                        col-name]
-  {:return-field (-> (if (instance? ArrowType$Union (.getType coll-field))
-                       (apply types/merge-fields
-                              (for [^Field child-field (.getChildren coll-field)
-                                    :when (= types/list-type (.getType child-field))]
-                                (first (.getChildren child-field))))
-                       (first (.getChildren coll-field)))
-                     (types/field-with-name col-name))
+(defmethod emit-call-expr :nth-const-n [{:keys [^long n]} col-name]
+  {:return-field (types/->field col-name types/dense-union-type false)
 
    :eval-call-expr
    (fn [[^ValueVector coll-vec] ^ValueVector out-vec _params]
@@ -1922,30 +1908,25 @@
                    (applyAsInt [_ idx]
                      (int (.get ^BigIntVector n-res idx))))))
 
-(defmethod emit-call-expr :nth [{[{coll-field :return-field}
-                                  {n-field :return-field}] :emitted-args}
-                                col-name]
-  (let [out-field (types/->field col-name types/dense-union-type
-                                 (or (.isNullable ^Field coll-field)
-                                     (.isNullable ^Field n-field)))]
+(defmethod emit-call-expr :nth [_ col-name]
+  (let [out-field (types/->field col-name types/dense-union-type false)]
     {:return-field out-field
      :eval-call-expr
      (fn [[^ValueVector coll-res ^ValueVector n-res] ^ValueVector out-vec _params]
        (let [list-rdr (.listReader (iv/->direct-vec coll-res))
              coll-count (.getValueCount coll-res)
-             out-writer (vw/vec->writer out-vec)
+             out-writer (.asDenseUnion (vw/vec->writer out-vec))
              copier (.elementCopier list-rdr out-writer)
              !null-writer (delay
-                            (if (= types/null-type (.getType out-field))
-                              out-writer
-                              (.writerForType (.asDenseUnion out-writer) LegType/NULL)))]
+                            (.writerForType out-writer LegType/NULL))]
 
          (.setValueCount out-vec coll-count)
 
          (let [->n (long-getter n-res)]
            (dotimes [idx coll-count]
              (.startValue out-writer)
-             (if (.isNull n-res idx)
+             (if (or (not (.isPresent list-rdr idx))
+                     (.isNull n-res idx))
                (doto ^IVectorWriter @!null-writer
                  (.startValue)
                  (.endValue))
@@ -1955,15 +1936,10 @@
 (defmethod emit-call-expr :trim-array [{[{^Field array-field :return-field}] :emitted-args}
                                        col-name]
   {:return-field (types/->field col-name types/list-type true
-                                (-> (if (or (instance? ArrowType$List (.getType array-field))
-                                            (instance? ArrowType$FixedSizeList (.getType array-field)))
-                                      (first (.getChildren array-field))
-
-                                      (apply types/merge-fields
-                                             (for [^Field child-field (.getChildren array-field)
-                                                   :when (= types/list-type (.getType child-field))]
-                                               (first (.getChildren child-field)))))
-                                    (types/field-with-name "$data")))
+                                (if (or (instance? ArrowType$List (.getType array-field))
+                                        (instance? ArrowType$FixedSizeList (.getType array-field)))
+                                  (first (.getChildren array-field))
+                                  (types/->field "$data" types/dense-union-type false)))
    :eval-call-expr
    (fn [[^ValueVector array-res ^ValueVector n-res], ^ListVector out-vec, _params]
      (let [list-rdr (.listReader (iv/->direct-vec array-res))

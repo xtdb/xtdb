@@ -12,7 +12,6 @@
   (:import core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
            core2.tx.Watermark
-           (core2.types LegType LegType$StructLegType)
            core2.ICursor
            java.io.Closeable
            (java.util HashMap List SortedSet)
@@ -21,10 +20,7 @@
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector IntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$ExtensionType ArrowType$FloatingPoint
-                                               ArrowType$Int ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Timestamp ArrowType$Utf8
-                                               ExtensionTypeRegistry Field FieldType Schema)
-           (org.apache.arrow.vector.types TimeUnit Types Types$MinorType)
+           (org.apache.arrow.vector.types.pojo Field FieldType Schema)
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
@@ -35,7 +31,7 @@
   (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx, ^long max-rows-per-block])
   (^java.util.SortedSet knownChunks [])
   (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^java.util.function.BiFunction f])
-  (^org.apache.arrow.vector.types.pojo.Field columnField [^String colName]))
+  (columnType [^String colName]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IMetadataIndices
@@ -79,30 +75,33 @@
   (appendNestedMetadata ^core2.metadata.ContentMetadataWriter [^org.apache.arrow.vector.ValueVector contentVector]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
-(defmulti type->metadata-writer (fn [write-col-meta! types-vec ^LegType leg-type] (class (.arrowType leg-type))))
+(defmulti type->metadata-writer
+  (fn [write-col-meta! types-vec col-type] (t/col-type-head col-type))
+  :hierarchy #'t/col-type-hierarchy)
 
-(defmulti type->type-metadata (fn [^LegType leg-type] (class (.arrowType leg-type))))
+(defmulti col-type->type-metadata t/col-type-head, :hierarchy #'t/col-type-hierarchy)
 
-(defmethod type->type-metadata :default [^LegType leg-type]
-  {"minor-type" (str (Types/getMinorTypeForArrowType (.arrowType leg-type)))})
+(defmethod col-type->type-metadata :default [col-type]
+  {"type-head" (name (t/col-type-head col-type))})
 
-(defmulti type-metadata->arrow-type
+#_{:clj-kondo/ignore [:unused-binding]}
+(defmulti type-metadata->col-type
   (fn [type-metadata]
-    (Types$MinorType/valueOf (get type-metadata "minor-type"))))
+    (get type-metadata "type-head"))
+  :hierarchy #'t/col-type-hierarchy)
 
-(defmethod type-metadata->arrow-type :default [type-metadata]
-  (.getType (Types$MinorType/valueOf (get type-metadata "minor-type"))))
+(defmethod type-metadata->col-type :default [type-metadata] (get type-metadata "type-head"))
 
 (defn- add-struct-child ^org.apache.arrow.vector.ValueVector [^StructVector parent, ^Field field]
   (doto (.addOrGet parent (.getName field) (.getFieldType field) ValueVector)
     (.initializeChildrenFromFields (.getChildren field))
     (.setValueCount (.getValueCount parent))))
 
-(defn- ->bool-type-handler [^VectorSchemaRoot metadata-root, ^LegType leg-type]
+(defn- ->bool-type-handler [^VectorSchemaRoot metadata-root, col-type]
   (let [^StructVector types-vec (.getVector metadata-root "types")
         ^BitVector bit-vec (add-struct-child types-vec
-                                             (Field. (t/type->field-name (.arrowType leg-type))
-                                                     (FieldType. true t/bool-type nil (type->type-metadata leg-type))
+                                             (Field. (t/col-type->field-name col-type)
+                                                     (FieldType. true t/bool-type nil (col-type->type-metadata col-type))
                                                      []))]
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ _content-vec]
@@ -110,33 +109,33 @@
           (writeContentMetadata [_ types-vec-idx]
             (.setSafeToOne bit-vec types-vec-idx)))))))
 
-(defmethod type->metadata-writer ArrowType$Null [_write-col-meta! metadata-root leg-type] (->bool-type-handler metadata-root leg-type))
-(defmethod type->metadata-writer ArrowType$Bool [_write-col-meta! metadata-root leg-type] (->bool-type-handler metadata-root leg-type))
+(defmethod type->metadata-writer :null [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type))
+(defmethod type->metadata-writer :bool [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type))
 
 ;; TODO anything we can do for extension types? I suppose we should probably special case our own...
 ;; they'll get included in the bloom filter, which is sufficient for UUIDs/keywords/etc.
-(defmethod type->metadata-writer ArrowType$ExtensionType [_write-col-meta! metadata-root leg-type] (->bool-type-handler metadata-root leg-type))
+(defmethod type->metadata-writer :extension-type [_write-col-meta! metadata-root col-type] (->bool-type-handler metadata-root col-type))
 
-(defmethod type->type-metadata ArrowType$ExtensionType [^LegType leg-type]
-  (let [^ArrowType$ExtensionType arrow-type (.arrowType leg-type)]
-    {"minor-type" (str (Types/getMinorTypeForArrowType arrow-type))
-     "extension-name" (.extensionName arrow-type)
-     "extension-metadata" (.serialize arrow-type)}))
+(defmethod col-type->type-metadata :extension-type [[type-head xname storage-type xdata]]
+  {"type-head" (name type-head)
+   "xname" (name xname)
+   "xstorage-type" (pr-str (col-type->type-metadata storage-type))
+   "xdata" xdata})
 
-(defmethod type-metadata->arrow-type Types$MinorType/EXTENSIONTYPE [tm]
-  (let [^ArrowType$ExtensionType arrow-type (ExtensionTypeRegistry/lookup (get tm "extension-name"))]
-    (.deserialize arrow-type
-                  (.storageType arrow-type)
-                  (get tm "extension-metadata"))))
+(defmethod type-metadata->col-type :extension-type [type-metadata]
+  [:extension-type
+   (keyword (get type-metadata "xname"))
+   (type-metadata->col-type (-> (read-string (get type-metadata "xstorage-type"))
+                                (update "type-head" keyword)))
+   (get type-metadata "xdata")])
 
-(defn- ->min-max-type-handler [^VectorSchemaRoot metadata-root, ^LegType leg-type]
-  (let [arrow-type (.arrowType leg-type)
-        ^StructVector types-vec (.getVector metadata-root "types")
+(defn- ->min-max-type-handler [^VectorSchemaRoot metadata-root, col-type]
+  (let [^StructVector types-vec (.getVector metadata-root "types")
         ^StructVector struct-vec (add-struct-child types-vec
-                                                   (Field. (t/type->field-name arrow-type)
-                                                           (FieldType. true t/struct-type nil (type->type-metadata leg-type))
-                                                           [(t/->field "min" arrow-type true)
-                                                            (t/->field "max" arrow-type true)]))
+                                                   (Field. (t/col-type->field-name col-type)
+                                                           (FieldType. true t/struct-type nil (col-type->type-metadata col-type))
+                                                           [(t/col-type->field "min" [:union #{:null col-type}])
+                                                            (t/col-type->field "max" [:union #{:null col-type}])]))
         min-vec (.getChild struct-vec "min")
         max-vec (.getChild struct-vec "max")]
     (reify NestedMetadataWriter
@@ -159,26 +158,44 @@
                                (pos? (.applyAsInt max-comparator values-idx types-vec-idx))))
                   (.copyFromSafe max-vec values-idx types-vec-idx content-vec))))))))))
 
-(defmethod type->metadata-writer ArrowType$Int [_write-col-meta! metadata-root leg-type] (->min-max-type-handler metadata-root leg-type))
-(defmethod type->metadata-writer ArrowType$FloatingPoint [_write-col-meta! metadata-root leg-type] (->min-max-type-handler metadata-root leg-type))
-(defmethod type->metadata-writer ArrowType$Utf8 [_write-col-meta! metadata-root leg-type] (->min-max-type-handler metadata-root leg-type))
-(defmethod type->metadata-writer ArrowType$Binary [_write-col-meta! metadata-root leg-type] (->min-max-type-handler metadata-root leg-type))
-(defmethod type->metadata-writer ArrowType$Timestamp [_write-col-meta! metadata-root leg-type] (->min-max-type-handler metadata-root leg-type))
-(defmethod type->metadata-writer ArrowType$Date [_write-col-meta! metadata-root leg-type] (->min-max-type-handler metadata-root leg-type))
+(doseq [type-head #{:int :float :utf8 :varbinary :timestamp-tz :timestamp-local :date :interval :time}]
+  (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type)))
 
-(defmethod type->type-metadata ArrowType$Timestamp [^LegType leg-type]
-  (let [^ArrowType$Timestamp arrow-type (.arrowType leg-type)]
-    {"minor-type" (str (Types/getMinorTypeForArrowType arrow-type))
-     "tz" (.getTimezone arrow-type)}))
+(defmethod col-type->type-metadata :timestamp-tz [[type-head time-unit tz]]
+  {"type-head" (name type-head), "time-unit" (name time-unit), "tz" tz})
 
-(defmethod type-metadata->arrow-type Types$MinorType/TIMESTAMPMICROTZ [tm]
-  (ArrowType$Timestamp. TimeUnit/MICROSECOND (get tm "tz")))
+(defmethod type-metadata->col-type :timestamp-tz [type-metadata]
+  [(get type-metadata "type-head"), (keyword (get type-metadata "time-unit")), (get type-metadata "tz")])
 
-(defmethod type->metadata-writer ArrowType$List [write-col-meta! ^VectorSchemaRoot metadata-root ^LegType leg-type]
+(defmethod col-type->type-metadata :timestamp-local [[type-head time-unit]]
+  {"type-head" (name type-head), "time-unit" (name time-unit)})
+
+(defmethod type-metadata->col-type :timestamp-local [type-metadata]
+  [(get type-metadata "type-head"), (keyword (get type-metadata "time-unit"))])
+
+(defmethod col-type->type-metadata :date [[type-head date-unit]]
+  {"type-head" (name type-head), "date-unit" (name date-unit)})
+
+(defmethod type-metadata->col-type :date [type-metadata]
+  [(get type-metadata "type-head"), (keyword (get type-metadata "date-unit"))])
+
+(defmethod col-type->type-metadata :time [[type-head time-unit]]
+  {"type-head" (name type-head), "time-unit" (name time-unit)})
+
+(defmethod type-metadata->col-type :time [type-metadata]
+  [(get type-metadata "type-head"), (keyword (get type-metadata "time-unit"))])
+
+(defmethod col-type->type-metadata :interval [[type-head interval-unit]]
+  {"type-head" (name type-head), "interval-unit" (name interval-unit)})
+
+(defmethod type-metadata->col-type :interval [type-metadata]
+  [(get type-metadata "type-head"), (keyword (get type-metadata "interval-unit"))])
+
+(defmethod type->metadata-writer :list [write-col-meta! ^VectorSchemaRoot metadata-root col-type]
   (let [^StructVector types-vec (.getVector metadata-root "types")
         ^IntVector list-meta-vec (add-struct-child types-vec
-                                                   (Field. (t/type->field-name (.arrowType leg-type))
-                                                           (FieldType. true t/int-type nil (type->type-metadata leg-type))
+                                                   (Field. (t/col-type->field-name col-type)
+                                                           (FieldType. true t/int-type nil (col-type->type-metadata col-type))
                                                            []))]
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ content-vec]
@@ -189,15 +206,15 @@
               (writeContentMetadata [_ types-vec-idx]
                 (.setSafe list-meta-vec types-vec-idx data-meta-idx)))))))))
 
-(defmethod type->type-metadata ArrowType$Struct [^LegType$StructLegType leg-type]
-  {"minor-type" (str (Types/getMinorTypeForArrowType (.arrowType leg-type)))
-   "key-set" (pr-str (into (sorted-set) (.keys leg-type)))})
+(defmethod col-type->type-metadata :struct [[type-head children]]
+  {"type-head" (name type-head)
+   "key-set" (pr-str (into (sorted-set) (keys children)))})
 
-(defmethod type->metadata-writer ArrowType$Struct [write-col-meta! ^VectorSchemaRoot metadata-root ^LegType leg-type]
+(defmethod type->metadata-writer :struct [write-col-meta! ^VectorSchemaRoot metadata-root, col-type]
   (let [^StructVector types-vec (.getVector metadata-root "types")
         ^ListVector struct-meta-vec (add-struct-child types-vec
-                                                      (Field. (str (t/type->field-name (.arrowType leg-type)) "-" (count (seq types-vec)))
-                                                              (FieldType. true t/list-type nil (type->type-metadata leg-type))
+                                                      (Field. (str (t/col-type->field-name col-type) "-" (count (seq types-vec)))
+                                                              (FieldType. true t/list-type nil (col-type->type-metadata col-type))
                                                               [(t/->field "$data" t/int-type true)]))
         ^IntVector nested-col-idxs-vec (.getDataVector struct-meta-vec)]
     (reify NestedMetadataWriter
@@ -248,10 +265,10 @@
                                          (into [] (keep (fn [^ValueVector values-vec]
                                                           (when-not (zero? (.getValueCount values-vec))
                                                             (let [^NestedMetadataWriter nested-meta-writer
-                                                                  (.computeIfAbsent type-metadata-writers (t/field->leg-type (.getField values-vec))
+                                                                  (.computeIfAbsent type-metadata-writers (t/field->col-type (.getField values-vec))
                                                                                     (reify Function
-                                                                                      (apply [_ leg-type]
-                                                                                        (type->metadata-writer write-col-meta! metadata-root leg-type))))]
+                                                                                      (apply [_ col-type]
+                                                                                        (type->metadata-writer write-col-meta! metadata-root col-type))))]
 
                                                               (.appendNestedMetadata nested-meta-writer values-vec)))))))
 
@@ -330,74 +347,70 @@
                 (finally
                   (.close metadata-buffer)))))))))
 
-(defn- ->column-fields [^VectorSchemaRoot metadata-root]
+(defn- ->column-types [^VectorSchemaRoot metadata-root]
   (let [^VarCharVector col-name-vec (.getVector metadata-root "column")
         ^StructVector types-vec (.getVector metadata-root "types")
-        meta-idxs (->metadata-idxs metadata-root)
-        type-vecs (vec
-                   (for [^ValueVector type-vec (seq types-vec)]
-                     {:type-vec type-vec
-                      :arrow-type (type-metadata->arrow-type (.getMetadata (.getField type-vec)))}))]
-    (letfn [(->field [col-name ^long col-idx]
-              (let [type-vecs (->> type-vecs
-                                   (remove (fn [{:keys [^ValueVector type-vec]}]
+        meta-idxs (->metadata-idxs metadata-root)]
+    (letfn [(->col-type [^long col-idx]
+              (let [type-vecs (->> (seq types-vec)
+                                   (remove (fn [^ValueVector type-vec]
                                              (.isNull type-vec col-idx))))]
-                (letfn [(->field* [col-name arrow-type type-vec]
-                          (cond
-                            (instance? ArrowType$List arrow-type)
-                            (t/->field col-name arrow-type false
-                                       (->field "$data" (.get ^IntVector type-vec col-idx)))
+                (letfn [(->col-type* [^ValueVector type-vec]
+                          (let [type-metadata (-> (into {} (.getMetadata (.getField type-vec)))
+                                                  (update "type-head" keyword))
+                                type-head (get type-metadata "type-head")]
 
-                            (instance? ArrowType$Struct arrow-type)
-                            (apply t/->field col-name arrow-type false
-                                   (let [^ListVector type-vec type-vec
-                                         ^IntVector type-vec-data (.getDataVector type-vec)]
-                                     (for [type-vec-data-idx (range (.getElementStartIndex type-vec col-idx)
-                                                                    (.getElementEndIndex type-vec col-idx))
-                                           :let [col-idx (.get type-vec-data type-vec-data-idx)]]
-                                       (->field (str (.getObject col-name-vec col-idx)) col-idx))))
+                            (case type-head
+                              :list
+                              [:list (->col-type (.get ^IntVector type-vec col-idx))]
 
-                            :else
-                            (t/->field col-name arrow-type (= arrow-type t/null-type))))]
+                              :struct
+                              [:struct (let [^ListVector type-vec type-vec
+                                             ^IntVector type-vec-data (.getDataVector type-vec)]
+                                         (->> (for [type-vec-data-idx (range (.getElementStartIndex type-vec col-idx)
+                                                                             (.getElementEndIndex type-vec col-idx))
+                                                    :let [col-idx (.get type-vec-data type-vec-data-idx)
+                                                          col-name (str (.getObject col-name-vec col-idx))]]
+                                                [col-name (->col-type col-idx)])
+                                              (into {})))]
+
+                              (type-metadata->col-type type-metadata))))]
 
                   (if (= 1 (count type-vecs))
-                    (let [{:keys [arrow-type type-vec]} (first type-vecs)]
-                      (->field* col-name arrow-type type-vec))
+                    (->col-type* (first type-vecs))
 
-                    (apply t/->field col-name t/dense-union-type false
-                           (for [{:keys [^ValueVector type-vec arrow-type]} type-vecs]
-                             (->field* (.getName type-vec) arrow-type type-vec)))))))]
+                    [:union (->> type-vecs (into #{} (map ->col-type*)))]))))]
 
       (->> (for [col-name (.columnNames meta-idxs)]
-             [col-name (->field col-name (.columnIndex meta-idxs col-name))])
+             [col-name (->col-type (.columnIndex meta-idxs col-name))])
            (into {})))))
 
-(defn- merge-column-fields [column-fields new-column-fields]
-  (merge-with t/merge-fields column-fields new-column-fields))
+(defn- merge-column-types [column-types new-column-types]
+  (merge-with t/merge-col-types column-types new-column-types))
 
-(defn- load-column-fields [^IBufferPool buffer-pool, known-chunks]
+(defn- load-column-types [^IBufferPool buffer-pool, known-chunks]
   (let [cf-futs (doall (for [chunk-idx known-chunks]
                          (with-metadata* buffer-pool chunk-idx
                            (reify BiFunction
                              (apply [_ _chunk-idx metadata-root]
-                               (->column-fields metadata-root))))))]
+                               (->column-types metadata-root))))))]
     (->> cf-futs
          (transduce (map deref)
                     (completing
                      (fn
                        ([] {})
-                       ([cfs new-cfs] (merge-column-fields cfs new-cfs))))))))
+                       ([cfs new-cfs] (merge-column-types cfs new-cfs))))))))
 
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
                           ^SortedSet known-chunks
-                          ^:unsynchronized-mutable column-fields]
+                          ^:unsynchronized-mutable column-types]
   IMetadataManager
   (registerNewChunk [this live-roots chunk-idx max-rows-per-block]
     (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create metadata-schema allocator)]
                          (write-meta metadata-root live-roots chunk-idx max-rows-per-block)
-                         (set! (.column-fields this) (merge-column-fields column-fields (->column-fields metadata-root)))
+                         (set! (.column-types this) (merge-column-types column-types (->column-types metadata-root)))
                          (util/root->arrow-ipc-byte-buffer metadata-root :file))]
 
       @(.putObject object-store (->metadata-obj-key chunk-idx) metadata-buf)
@@ -408,7 +421,7 @@
 
   (knownChunks [_] known-chunks)
 
-  (columnField [_ col-name] (get column-fields col-name))
+  (columnType [_ col-name] (get column-types col-name))
 
   Closeable
   (close [_]
@@ -432,8 +445,8 @@
 
 (defmethod ig/init-key ::metadata-manager [_ {:keys [allocator ^ObjectStore object-store buffer-pool]}]
   (let [known-chunks (ConcurrentSkipListSet. ^List (keep obj-key->chunk-idx (.listObjects object-store "metadata-")))
-        column-fields (load-column-fields buffer-pool known-chunks)]
-    (MetadataManager. allocator object-store buffer-pool known-chunks column-fields)))
+        column-types (load-column-types buffer-pool known-chunks)]
+    (MetadataManager. allocator object-store buffer-pool known-chunks column-types)))
 
 (defmethod ig/halt-key! ::metadata-manager [_ ^MetadataManager mgr]
   (.close mgr))

@@ -159,71 +159,38 @@
                                                      (.setSafe ^IntervalDayVector (.getVector w) (.getPosition w) (.getDays (.getPeriod v)) (.toMillis (.getDuration v))))
                                                    [period-day-ms])))))))
 
-(t/deftest test-merge-fields
-  (let [varchar-field (types/->field "foo" types/varchar-type false)
-        bigint-field (types/->field "foo" types/bigint-type false)
-        float8-field (types/->field "float8" types/float8-type false)]
-    (t/is (= varchar-field
-             (types/merge-fields varchar-field varchar-field)))
+(t/deftest test-merge-col-types
+  (t/is (= :utf8 (types/merge-col-types :utf8 :utf8)))
 
-    (t/is (= (types/->field "foo" types/dense-union-type false
-                            (types/field-with-name varchar-field "varchar")
-                            (types/field-with-name bigint-field "bigint"))
-             (types/merge-fields varchar-field bigint-field)))
+  (t/is (= [:union #{:utf8 :i64}]
+           (types/merge-col-types :utf8 :i64)))
 
-    (t/is (= (types/->field "foo" types/dense-union-type false
-                            (types/field-with-name varchar-field "varchar")
-                            (types/field-with-name bigint-field "bigint")
-                            (types/field-with-name float8-field "float8"))
-             (types/merge-fields (types/->field "foo" types/dense-union-type false
-                                                (types/field-with-name varchar-field "varchar")
-                                                (types/field-with-name bigint-field "bigint"))
-                                 float8-field))))
+  (t/is (= [:union #{:utf8 :i64 :f64}]
+           (types/merge-col-types [:union #{:utf8 :i64}] :f64)))
 
   (t/testing "merges list types"
-    (t/is (= (types/->field "foo" types/list-type false
-                            (types/->field "$data" types/varchar-type false))
-             (types/merge-fields (types/->field "foo" types/list-type false
-                                                (types/->field "$data" types/varchar-type false))
-                                 (types/->field "foo" types/list-type false
-                                                (types/->field "$data" types/varchar-type false)))))
+    (t/is (= [:list :utf8]
+             (types/merge-col-types [:list :utf8] [:list :utf8])))
 
-    (t/is (= (types/->field "foo" types/list-type false
-                            (types/->field "$data" types/dense-union-type false
-                                           (types/->field "varchar" types/varchar-type false)
-                                           (types/->field "bigint" types/bigint-type false)))
-             (types/merge-fields (types/->field "foo" types/list-type false
-                                                (types/->field "$data" types/varchar-type false))
-                                 (types/->field "foo" types/list-type false
-                                                (types/->field "$data" types/bigint-type false))))))
+    (t/is (= [:list [:union #{:utf8 :i64}]]
+             (types/merge-col-types [:list :utf8] [:list :i64]))))
 
   (t/testing "merges struct types"
-    (let [struct-field (types/->field "foo" types/struct-type false
-                                      (types/->field "a" types/varchar-type false)
-                                      (types/->field "b" types/varchar-type false))]
-      (t/is (= struct-field
-               (types/merge-fields struct-field struct-field))))
+    (t/is (= [:struct {"a" :utf8, "b" :utf8}]
+             (types/merge-col-types [:struct {"a" :utf8, "b" :utf8}]
+                                    [:struct {"a" :utf8, "b" :utf8}])))
 
-    (t/is (= (types/->field "foo" types/struct-type false
-                            (types/->field "a" types/varchar-type false)
-                            (types/->field "b" types/dense-union-type false
-                                           (types/->field "varchar" types/varchar-type false)
-                                           (types/->field "bigint" types/bigint-type false)))
+    (t/is (= [:struct {"a" :utf8
+                       "b" [:union #{:utf8 :i64}]}]
 
-             (types/merge-fields (types/->field "foo" types/struct-type false
-                                                (types/->field "a" types/varchar-type false)
-                                                (types/->field "b" types/varchar-type false))
-                                 (types/->field "foo" types/struct-type false
-                                                (types/->field "a" types/varchar-type false)
-                                                (types/->field "b" types/bigint-type false)))))
+             (types/merge-col-types [:struct {"a" :utf8, "b" :utf8}]
+                                    [:struct {"a" :utf8, "b" :i64}])))
 
-    (let [struct0 (types/->field "foo" types/struct-type false
-                                 (types/->field "a" types/varchar-type false)
-                                 (types/->field "b" types/varchar-type false))
-          struct1 (types/->field "foo" types/struct-type false
-                                 (types/->field "b" types/varchar-type false)
-                                 (types/->field "c" types/bigint-type false))]
-      (t/is (= (types/->field "foo" types/dense-union-type false
-                              (types/field-with-name struct0 "struct0")
-                              (types/field-with-name struct1 "struct1"))
-               (types/merge-fields struct0 struct1))))))
+    (let [struct0 [:struct {"a" :utf8, "b" :utf8}]
+          struct1 [:struct {"b" :utf8, "c" :i64}]]
+      (t/is (= [:union #{struct0 struct1}]
+               (types/merge-col-types struct0 struct1))))
+
+    (t/is (= [:union #{:f64 [:struct {"a" [:union #{:i64 :utf8}]}]}]
+             (types/merge-col-types [:union #{:f64, [:struct {"a" :i64}]}]
+                                    [:struct {"a" :utf8}])))))

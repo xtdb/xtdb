@@ -57,7 +57,7 @@
         "name" : "struct"
       },
       "children" : [{
-        "name" : "varchar",
+        "name" : "utf8",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -78,11 +78,11 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "VARCHAR",
-          "key" : "minor-type"
+          "value" : "utf8",
+          "key" : "type-head"
         }]
       },{
-        "name" : "float8",
+        "name" : "f64",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -105,11 +105,11 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "FLOAT8",
-          "key" : "minor-type"
+          "value" : "f64",
+          "key" : "type-head"
         }]
       },{
-        "name" : "dateday",
+        "name" : "date-day",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -132,11 +132,14 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "DATEDAY",
-          "key" : "minor-type"
+          "value" : "day",
+          "key" : "date-unit"
+        },{
+          "value" : "date",
+          "key" : "type-head"
         }]
       },{
-        "name" : "bigint",
+        "name" : "i64",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -161,8 +164,8 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "BIGINT",
-          "key" : "minor-type"
+          "value" : "i64",
+          "key" : "type-head"
         }]
       }]
     },{
@@ -212,7 +215,7 @@
       "count" : 252,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       "children" : [{
-        "name" : "varchar",
+        "name" : "utf8",
         "count" : 252,
         "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,1,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1],
         "children" : [{
@@ -229,7 +232,7 @@
           "DATA" : ["suppkey_9","orderkey_999","orderkey_99___4","orderkey_999___6","orderkey_2342___3","orderkey_3329___2","orderkey_4295___3","orderkey_5319___1","partkey_9___suppkey_6","suppkey_9","supplier","orders","orders","lineitem","lineitem","lineitem","lineitem","lineitem","partsupp","supplier","","","ziSrvyyBke","ziSrvyyBke","yly fluffy foxes boost final ideas. b","yly fluffy foxes boost final ideas. b","custkey_99","custkey_99","MACHINERY","MACHINERY","Customer#000000150","Customer#000000150","nationkey_9","nationkey_9","34-403-631-3505","34-403-631-3505","zle carefully sauternes. quickly","yly regular i","yly ironic ","ymptotes could u","ymptotes nag furiously slyly even inst","ymptotes haggle across the ca","zle carefully sauternes. quickly","yly. express ideas agai","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","O","O","O","O","O","O","O","O","orderkey_999","orderkey_99","orderkey_999","orderkey_2342","orderkey_3329","orderkey_4295","orderkey_5319","orderkey_5988","partkey_99","partkey_99","partkey_99","partkey_99","partkey_99","partkey_99","partkey_99","partkey_99","","","","","","","","","","","","","","","","","R","R","R","R","R","R","R","R","","","","","","","","","TAKE BACK RETURN","TAKE BACK RETURN","TAKE BACK RETURN","TAKE BACK RETURN","TAKE BACK RETURN","TAKE BACK RETURN","TAKE BACK RETURN","TAKE BACK RETURN","TRUCK","TRUCK","TRUCK","TRUCK","TRUCK","TRUCK","TRUCK","TRUCK","suppkey_9","suppkey_9","suppkey_9","suppkey_9","suppkey_9","suppkey_9","suppkey_9","suppkey_9","","","","","","","","","y final packages. slow foxes cajole quickly. quickly silent platelets breach ironic accounts. unusual pinto be","y final packages. slow foxes cajole quickly. quickly silent platelets breach ironic accounts. unusual pinto be","VIETNAM","VIETNAM","nationkey_9","nationkey_9","regionkey_4","regionkey_4","Clerk#000001000","Clerk#000001000","Clerk#000000998","zzle. carefully enticing deposits nag furio","zzle. carefully enticing deposits nag furio","ze across the express foxes. carefully special acco","custkey_98","custkey_98","custkey_98","","","","orderkey_999","orderkey_999","orderkey_5988","5-LOW","5-LOW","5-LOW","P","P","P","","","","","","","Brand#55","Brand#55","yly s","yly s","WRAP PKG","WRAP PKG","Manufacturer#5","Manufacturer#5","yellow white ghost lavender salmon","yellow white ghost lavender salmon","partkey_99","partkey_99","","","","","STANDARD POLISHED TIN","STANDARD POLISHED TIN","","","","yly regular requests cajole carefully. carefully fina","y stealthy deposits. furiously final pinto beans wake furiou","yly regular requests cajole carefully. carefully fina","partkey_99","partkey_9","partkey_99","suppkey_9","suppkey_9","suppkey_9","","","","uickly special accounts cajole carefully blithely close requests. carefully final asymptotes haggle furiousl","uickly special accounts cajole carefully blithely close requests. carefully final asymptotes haggle furiousl","MIDDLE EAST","MIDDLE EAST","regionkey_4","regionkey_4","","","tQxuVm7s7CnK","tQxuVm7s7CnK","s. unusual, even requests along the furiously regular pac","s. unusual, even requests along the furiously regular pac","Supplier#000000010","Supplier#000000010","nationkey_5","nationkey_5","34-852-489-8585","34-852-489-8585","suppkey_9","suppkey_9"]
         }]
       },{
-        "name" : "float8",
+        "name" : "f64",
         "count" : 252,
         "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
         "children" : [{
@@ -244,7 +247,7 @@
           "DATA" : [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,9983.38,9983.38,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,55010.0,54959.5,55010.0,54809.5,53664.31,54209.0,55010.0,54759.5,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,50.0,50.0,50.0,50.0,50.0,50.0,50.0,50.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.08,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,263411.29,263411.29,258779.02,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1100.2,1100.2,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,999.93,996.12,999.93,0.0,0.0,0.0,0.0,0.0,0.0,7627.85,7627.85,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
         }]
       },{
-        "name" : "dateday",
+        "name" : "date-day",
         "count" : 252,
         "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         "children" : [{
@@ -259,7 +262,7 @@
           "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,10527,10515,10527,10521,10503,10514,10526,10521,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,10585,10536,10585,10532,10533,10560,10577,10567,0,0,0,0,0,0,0,0,10557,10529,10555,10525,10516,10530,10557,10547,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,10440,10437,10440,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
         }]
       },{
-        "name" : "bigint",
+        "name" : "i64",
         "count" : 252,
         "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         "children" : [{

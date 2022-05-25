@@ -57,7 +57,7 @@
         "name" : "struct"
       },
       "children" : [{
-        "name" : "varchar",
+        "name" : "utf8",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -78,11 +78,11 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "VARCHAR",
-          "key" : "minor-type"
+          "value" : "utf8",
+          "key" : "type-head"
         }]
       },{
-        "name" : "float8",
+        "name" : "f64",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -105,11 +105,11 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "FLOAT8",
-          "key" : "minor-type"
+          "value" : "f64",
+          "key" : "type-head"
         }]
       },{
-        "name" : "timestampmicrotz-utc",
+        "name" : "timestamp-tz-micro-utc",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -134,8 +134,11 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "TIMESTAMPMICROTZ",
-          "key" : "minor-type"
+          "value" : "micro",
+          "key" : "time-unit"
+        },{
+          "value" : "timestamp-tz",
+          "key" : "type-head"
         },{
           "value" : "UTC",
           "key" : "tz"
@@ -150,19 +153,19 @@
         },
         "children" : [ ],
         "metadata" : [{
-          "value" : "LIST",
-          "key" : "minor-type"
+          "value" : "list",
+          "key" : "type-head"
         }]
       },{
-        "name" : "bit",
+        "name" : "bool",
         "nullable" : true,
         "type" : {
           "name" : "bool"
         },
         "children" : [ ],
         "metadata" : [{
-          "value" : "BIT",
-          "key" : "minor-type"
+          "value" : "bool",
+          "key" : "type-head"
         }]
       },{
         "name" : "struct-5",
@@ -181,14 +184,14 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "STRUCT",
-          "key" : "minor-type"
+          "value" : "struct",
+          "key" : "type-head"
         },{
           "value" : "#{\"a\" \"b\"}",
           "key" : "key-set"
         }]
       },{
-        "name" : "bigint",
+        "name" : "i64",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -213,8 +216,8 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "BIGINT",
-          "key" : "minor-type"
+          "value" : "i64",
+          "key" : "type-head"
         }]
       },{
         "name" : "struct-7",
@@ -233,8 +236,8 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "STRUCT",
-          "key" : "minor-type"
+          "value" : "struct",
+          "key" : "type-head"
         },{
           "value" : "#{\"a\" \"c\"}",
           "key" : "key-set"
@@ -287,7 +290,7 @@
       "count" : 16,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       "children" : [{
-        "name" : "varchar",
+        "name" : "utf8",
         "count" : 16,
         "VALIDITY" : [1,1,1,0,1,0,0,1,0,1,0,0,1,0,1,0],
         "children" : [{
@@ -304,7 +307,7 @@
           "DATA" : ["foo","foo","foo","","foo","","","b","","c","","","b","","c",""]
         }]
       },{
-        "name" : "float8",
+        "name" : "f64",
         "count" : 16,
         "VALIDITY" : [1,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0],
         "children" : [{
@@ -319,7 +322,7 @@
           "DATA" : [52.0,52.0,12.0,0.0,12.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
         }]
       },{
-        "name" : "timestampmicrotz-utc",
+        "name" : "timestamp-tz-micro-utc",
         "count" : 16,
         "VALIDITY" : [1,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0],
         "children" : [{
@@ -339,7 +342,7 @@
         "VALIDITY" : [0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0],
         "DATA" : [0,0,0,2,0,4,0,0,0,0,0,0,0,0,0,0]
       },{
-        "name" : "bit",
+        "name" : "bool",
         "count" : 16,
         "VALIDITY" : [0,0,1,0,1,0,0,0,1,0,0,0,0,1,0,0],
         "DATA" : [0,0,1,0,1,0,0,0,1,0,0,0,0,1,0,0]
@@ -355,7 +358,7 @@
           "DATA" : [6,7,0,0]
         }]
       },{
-        "name" : "bigint",
+        "name" : "i64",
         "count" : 16,
         "VALIDITY" : [0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0],
         "children" : [{

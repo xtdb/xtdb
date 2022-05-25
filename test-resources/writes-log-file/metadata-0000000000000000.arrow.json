@@ -57,7 +57,7 @@
         "name" : "struct"
       },
       "children" : [{
-        "name" : "varchar",
+        "name" : "utf8",
         "nullable" : true,
         "type" : {
           "name" : "struct"
@@ -78,8 +78,8 @@
           "children" : [ ]
         }],
         "metadata" : [{
-          "value" : "VARCHAR",
-          "key" : "minor-type"
+          "value" : "utf8",
+          "key" : "type-head"
         }]
       }]
     },{
@@ -129,7 +129,7 @@
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "children" : [{
-        "name" : "varchar",
+        "name" : "utf8",
         "count" : 4,
         "VALIDITY" : [1,1,1,1],
         "children" : [{

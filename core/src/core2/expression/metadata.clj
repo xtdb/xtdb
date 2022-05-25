@@ -138,7 +138,9 @@
      :return-types #{types/bool-type}}))
 
 (defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param-expr arrow-type bloom-hash-sym]} opts]
-  (let [field-name (str field)]
+  (let [field-name (str field)
+        ;; HACK
+        col-type (types/field->col-type (types/->field "HACK" arrow-type false))]
     {:return-types #{types/bool-type}
      :continue
      (fn [cont]
@@ -153,7 +155,7 @@
                     (let [vec-sym (get metadata-vec-syms meta-value)
                           col-sym (gensym 'meta-col)]
                       `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
-                                  (some-> ^StructVector (.getChild ~types-vec-sym ~(types/type->field-name arrow-type))
+                                  (some-> ^StructVector (.getChild ~types-vec-sym ~(types/col-type->field-name col-type))
                                           (.getChild ~(name meta-value)))]
                          (when-not (.isNull ~vec-sym ~expr/idx-sym)
                            (let [~(-> col-sym (expr/with-tag IIndirectVector)) (iv/->direct-vec ~vec-sym)]
