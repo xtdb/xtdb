@@ -36,9 +36,7 @@
       (let [idx (dec (.idx z))]
         (when-not (neg? idx)
           (let [^List level (.node parent)]
-            (with-meta
-              (Zip. (.get level idx) idx parent)
-              (meta z))))))))
+            (Zip. (.get level idx) idx parent)))))))
 
 (defn zright [^Zip z]
   (when z
@@ -46,9 +44,7 @@
       (let [idx (inc (.idx z))
             ^List level (.node parent)]
         (when (< idx (.size level))
-          (with-meta
-            (Zip. (.get level idx) idx parent)
-            (meta z)))))))
+          (Zip. (.get level idx) idx parent))))))
 
 (defn znth [^Zip z ^long idx]
   (when z
@@ -59,26 +55,20 @@
                   idx)]
         (when (and (< idx (.size node))
                    (not (neg? idx)))
-          (with-meta
-            (Zip. (.get node idx) idx z)
-            (meta z)))))))
+          (Zip. (.get node idx) idx z))))))
 
 (defn zdown [^Zip z]
   (when z
     (let [node (.node z)]
       (when (and (zbranch? z)
                  (not (.isEmpty ^List node)))
-        (with-meta
-          (Zip. (.get ^List node 0) 0 z)
-          (meta z))))))
+        (Zip. (.get ^List node 0) 0 z)))))
 
 (defn zup [^Zip z]
   (when z
     (let [idx (.idx z)]
       (when-not (neg? idx)
-        (with-meta
-          (zupdate-parent z)
-          (meta z))))))
+        (zupdate-parent z)))))
 
 (defn zroot [^Zip z]
   (if-let [z (zup z)]
@@ -113,9 +103,7 @@
   (when z
     (if (identical? (.node z) x)
       z
-      (with-meta
-        (Zip. x (.idx z) (.parent z))
-        (meta z)))))
+      (Zip. x (.idx z) (.parent z)))))
 
 ;; Zipper pattern matching
 
@@ -124,9 +112,7 @@
 (defmethod m/nth-inline ::m/zip
   [t ocr i]
   `(let [^Zip z# ~ocr]
-     (with-meta
-       (Zip. (.get ^List (.node z#) ~i) ~i z#)
-       (meta z#))))
+     (Zip. (.get ^List (.node z#) ~i) ~i z#)))
 
 (defmethod m/count-inline ::m/zip
   [t ocr]
