@@ -110,7 +110,7 @@
                                      (emit-step var-type acc-sym group-idx-sym val-code))))))))))
       (memoize)))
 
-(defn- monomorphic-agg-factory {:style/indent 2} [^String from-name, ^String to-name, ->out-vec, emit-init-group, emit-step]
+(defn- monomorphic-agg-factory {:style/indent 2} [^String from-name, ^String to-name, ->out-vec, emit-init-group, emit-step & {:keys [set-default-fn]}]
   (let [from-var (symbol from-name)]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
@@ -126,7 +126,17 @@
                     f (emit-agg from-var from-val-types emit-init-group emit-step)]
                 (f out-vec in-vec group-mapping)))
 
-            (finish [_] (iv/->direct-vec out-vec))
+            (finish [_]
+              (cond
+                (pos? (.getValueCount out-vec)) (iv/->direct-vec out-vec)
+
+                set-default-fn
+                (do
+                  (.setValueCount ^ValueVector out-vec 1)
+                  (set-default-fn out-vec)
+                  (iv/->direct-vec out-vec))
+
+                :else (iv/->direct-vec out-vec)))
 
             Closeable
             (close [_] (.close out-vec))))))))
@@ -142,7 +152,9 @@
       `(let [~(-> acc-sym (expr/with-tag BigIntVector)) ~acc-sym]
          (when-not ~(= var-type types/null-type)
            (.set ~acc-sym ~group-idx-sym
-                 (inc (.get ~acc-sym ~group-idx-sym))))))))
+                 (inc (.get ~acc-sym ~group-idx-sym))))))
+
+    :set-default-fn (fn [^BigIntVector v] (.set v 0 0))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IPromotableVector

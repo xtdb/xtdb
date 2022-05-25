@@ -460,3 +460,6 @@
 
 (t/deftest test-min-of-empty-rel-returns-nil
   (t/is (= [{:a nil}] (op/query-ra '[:group-by [{a (min b)}] [:select false [:table [{:b 0}]]]] {}))))
+
+(t/deftest test-count-of-empty-rel-returns-zero
+  (t/is (= [{:a 0}] (op/query-ra '[:group-by [{a (count b)}] [:select false [:table [{:b 0}]]]] {}))))
