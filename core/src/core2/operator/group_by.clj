@@ -225,7 +225,12 @@
                                   (emit-step acc-type))]
                   (f out-vec in-vec group-mapping))))
 
-            (finish [_] (iv/->direct-vec (.getVector out-pvec)))
+            (finish [_]
+              (let [v (.getVector out-pvec)]
+                (if (pos? (.getValueCount v))
+                  (iv/->direct-vec v)
+                  (do (.close out-pvec)
+                      (iv/->direct-vec (doto (NullVector. (.getName v)) (.setValueCount 1)))))))
 
             Closeable
             (close [_] (util/try-close out-pvec))))))))
@@ -368,9 +373,7 @@
 
   ;; TODO: this still only works for fixed-width values, but it's reasonable to want (e.g.) `(min <string-col>)`
   (promotable-agg-factory from-name to-name
-    (fn emit-min-max-init [_acc-type _acc-sym _group-idx-sym]
-      ;; no init here
-      )
+    (fn emit-min-max-init [_acc-type _acc-sym _group-idx-sym] nil)
 
     (fn emit-min-max-step [acc-type var-type acc-sym group-idx-sym val-code]
       (let [{:keys [continue-call]} (expr/codegen-mono-call {:op :call, :f update-if-f-kw,

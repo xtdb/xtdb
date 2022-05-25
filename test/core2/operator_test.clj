@@ -457,3 +457,6 @@
             [:table [{:a nil, :b 1, :c 42}
                      {:a nil, :b 1, :c 43}]]]
           (op/query-ra {})))))
+
+(t/deftest test-min-of-empty-rel-returns-nil
+  (t/is (= [{:a nil}] (op/query-ra '[:group-by [{a (min b)}] [:select false [:table [{:b 0}]]]] {}))))

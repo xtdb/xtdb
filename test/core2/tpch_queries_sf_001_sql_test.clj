@@ -1249,7 +1249,7 @@
   (t/is (= q16-result (q (tpch-test/slurp-query 16)))))
 
 (t/deftest ^:integration test-q17-small-quantity-order-revenue
-  (t/is (= []
+  (t/is (= [{:avg_yearly nil}]
            (q (tpch-test/slurp-query 17)))))
 
 (t/deftest ^:integration test-q18-large-volume-customer

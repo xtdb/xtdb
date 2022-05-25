@@ -437,7 +437,7 @@
            (tpch-test/run-query tpch/tpch-q16-part-supplier-relationship))))
 
 (t/deftest test-q17-small-quantity-order-revenue
-  (t/is (= []
+  (t/is (= [{:avg_yearly nil}]
            (tpch-test/run-query tpch/tpch-q17-small-quantity-order-revenue))))
 
 (t/deftest test-q18-large-volume-customer
@@ -445,7 +445,7 @@
            (tpch-test/run-query tpch/tpch-q18-large-volume-customer))))
 
 (t/deftest test-q19-discounted-revenue
-  (t/is (= []
+  (t/is (= [{:revenue nil}]
            (tpch-test/run-query tpch/tpch-q19-discounted-revenue))))
 
 (t/deftest test-q20-potential-part-promotion

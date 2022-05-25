@@ -1239,7 +1239,7 @@
   (t/is (= q16-result (tpch-test/run-query tpch/tpch-q16-part-supplier-relationship))))
 
 (t/deftest ^:integration test-q17-small-quantity-order-revenue
-  (t/is (= []
+  (t/is (= [{:avg_yearly nil}]
            (tpch-test/run-query tpch/tpch-q17-small-quantity-order-revenue))))
 
 (t/deftest ^:integration test-q18-large-volume-customer

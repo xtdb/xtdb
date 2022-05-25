@@ -542,11 +542,11 @@
            (q (tpch-test/slurp-query 16) {:decorrelate? false}))))
 
 (deftest test-q17-small-quantity-order-revenue
-  (t/is (= []
+  (t/is (= [{:avg_yearly nil}]
            (q (tpch-test/slurp-query 17)))))
 
 (deftest ^:integration test-q17-small-quantity-order-revenue-no-decorrelation
-  (t/is (= []
+  (t/is (= [{:avg_yearly nil}]
            (q (tpch-test/slurp-query 17) {:decorrelate? false}))))
 
 (deftest test-q18-large-volume-customer
@@ -558,11 +558,11 @@
            (q (tpch-test/slurp-query 18) {:decorrelate? false}))))
 
 (deftest test-q19-discounted-revenue
-  (t/is (= []
+  (t/is (= [{:revenue nil}]
            (q (tpch-test/slurp-query 19)))))
 
 (deftest ^:integration test-q19-discounted-revenue-no-decorrelation
-  (t/is (= []
+  (t/is (= [{:revenue nil}]
            (q (tpch-test/slurp-query 19) {:decorrelate? false}))))
 
 (deftest test-q20-potential-part-promotion
