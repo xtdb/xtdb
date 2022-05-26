@@ -21,7 +21,7 @@
            [xtdb.codec EntityTx Id]
            java.io.Closeable
            java.nio.ByteOrder
-           [java.util ArrayList Date HashMap List Map NavigableSet TreeSet]
+           [java.util ArrayList Date HashMap List Map NavigableSet TreeSet TreeMap]
            [java.util.concurrent Semaphore TimeUnit]
            java.util.concurrent.atomic.AtomicBoolean
            [java.util.function BiFunction Supplier]
@@ -975,42 +975,13 @@
       buf)
     mem/empty-buffer))
 
-(defn- ->content-idx-kvs [docs]
-  (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
-                       (into {} (map (juxt identity c/->id-buffer))))]
-    (into (vec (for [[a a-buf] attr-bufs]
-                 (MapEntry/create (encode-hash-cache-key-to nil a-buf) (mem/->nippy-buffer a))))
-
-          cat
-
-          (for [[content-hash doc] docs
-                :let [id (:crux.db/id doc)
-                      eid-value-buffer (c/->value-buffer id)
-                      content-hash (c/->id-buffer content-hash)]]
-            (into [(MapEntry/create (encode-hash-cache-key-to nil (c/->id-buffer id) eid-value-buffer)
-                                    (mem/->nippy-buffer id))]
-                  cat
-                  (for [[a v] doc
-                        :let [a (get attr-bufs a)]
-                        [v idxs] (val-idxs v)
-                        :let [value-buffer (c/->value-buffer v)]
-                        :when (pos? (.capacity value-buffer))]
-                    (cond-> [(MapEntry/create (encode-av-key-to nil a value-buffer) mem/empty-buffer)
-                             (MapEntry/create (encode-ave-key-to nil a value-buffer eid-value-buffer) mem/empty-buffer)
-                             (MapEntry/create (encode-ae-key-to nil a eid-value-buffer) mem/empty-buffer)
-                             (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer)
-                                              (encode-ecav-value idxs))]
-                      (not (c/can-decode-value-buffer? value-buffer))
-                      (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer)
-                                             (mem/->nippy-buffer v))))))))))
-
 (defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStoreTx
-  (index-docs [_ content-idx-kvs]
+  (index-docs [_ {:keys [kvs] :as m}]
     (with-open [transient-kv-snapshot (kv/new-snapshot transient-kv-store)]
       ;; we can write to the transient-kv-store here within an open read snapshot
       ;; on the assumption that the transient-kv-store is always in-memory
-      (some->> (seq content-idx-kvs) (kv/store transient-kv-store))))
+      (some->> (seq kvs) (kv/store transient-kv-store))))
 
   (unindex-eids [_ eids]
     (when (seq eids)
@@ -1103,13 +1074,47 @@
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStore
   (encode-docs [_ docs]
-    (let [kvs (->content-idx-kvs docs)
-          bytes-indexed (->> kvs (transduce (comp cat (map mem/capacity)) +))]
-      (with-meta kvs {:bytes-indexed bytes-indexed})))
+    (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
+                         (into {} (map (juxt identity c/->id-buffer))))
+          t (TreeMap. mem/buffer-comparator)
+          bytes-indexed (volatile! 0)
+          store (fn [k v]
+                  (vreset! bytes-indexed (+ ^long @bytes-indexed (mem/capacity k) (mem/capacity v)))
+                  (.put t k v))]
 
-  (begin-index-tx [_ tx fork-at]
+      (doseq [[a a-buf] attr-bufs]
+        (store (encode-hash-cache-key-to nil a-buf) (mem/->nippy-buffer a)))
+
+      (doseq [[content-hash doc] docs
+              :let [id (:crux.db/id doc)
+                    eid-value-buffer (c/->value-buffer id)
+                    content-hash (c/->id-buffer content-hash)]]
+
+        (store (encode-hash-cache-key-to nil (c/->id-buffer id) eid-value-buffer)
+               (mem/->nippy-buffer id))
+
+        (doseq [[a v] doc
+                :let [a (get attr-bufs a)]
+                [v idxs] (val-idxs v)
+                :let [value-buffer (c/->value-buffer v)]
+                :when (pos? (.capacity value-buffer))]
+
+          (store (encode-av-key-to nil a value-buffer) mem/empty-buffer)
+          (store (encode-ave-key-to nil a value-buffer eid-value-buffer) mem/empty-buffer)
+          (store (encode-ae-key-to nil a eid-value-buffer) mem/empty-buffer)
+          (store (encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer) (encode-ecav-value idxs))
+
+          (when (not (c/can-decode-value-buffer? value-buffer))
+            (store (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
+
+      {:kvs t
+       :bytes-indexed @bytes-indexed
+       :doc-ids (into #{} (map c/new-id (keys docs)))
+       :av-count (->> (vals docs) (apply concat) (count))}))
+
+  (begin-index-tx [_ tx encoded-docs fork-at]
     (let [{::xt/keys [tx-id tx-time]} tx
-          transient-kv-store (mut-kv/->mutable-kv-store)]
+          transient-kv-store (mut-kv/->mutable-kv-store (:kvs encoded-docs))]
       (kv/store transient-kv-store
                 [(MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)])
       (->KvIndexStoreTx kv-store transient-kv-store tx fork-at

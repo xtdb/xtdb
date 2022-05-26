@@ -70,19 +70,11 @@
                                      {:crux.db/id (:crux.db/id arg-doc)
                                       :crux.db.fn/failed? true}))))))
 
-(defn- index-docs [{:keys [index-store-tx !tx]} docs encoded-docs]
-  (when (seq docs)
-    (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
-      (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
-                                            :docs missing-ids})))
-    (db/index-docs index-store-tx encoded-docs)
-    (let [av-count (->> (vals docs) (apply concat) (count))]
-      (swap! !tx
-             (fn [tx]
-               (-> tx
-                   (update :av-count + av-count)
-                   (update :bytes-indexed + (:bytes-indexed (meta encoded-docs)))
-                   (update :doc-ids into (map c/new-id) (keys docs))))))))
+(defn- update-tx-stats [tx {:keys [bytes-indexed doc-ids av-count] :as encoded-docs}]
+  (-> tx
+      (update :av-count + av-count)
+      (update :bytes-indexed + bytes-indexed)
+      (update :doc-ids into doc-ids)))
 
 (defn- etx->vt [^EntityTx etx]
   (.vt etx))
@@ -297,15 +289,13 @@
   (open-db [_ valid-time tx-time] (xt/open-db db-provider valid-time tx-time))
 
   db/InFlightTx
-  (index-tx-events [this tx-events prefetched-docs encoded-docs]
+  (index-tx-events [this tx-events]
     (try
       (let [tx-state @!tx-state]
         (when (not= tx-state :open)
           (throw (IllegalStateException. (format "Transaction marked as '%s'" (name tx-state))))))
 
       (swap! !tx update :tx-events into tx-events)
-
-      (index-docs this prefetched-docs encoded-docs)
 
       (with-open [index-snapshot (db/open-index-snapshot index-store-tx)]
         (let [deps (assoc this :index-snapshot index-snapshot)
@@ -321,8 +311,16 @@
                                true)
 
                              (do
-                               (let [docs (-> docs without-tx-fn-docs)]
-                                 (index-docs this docs (db/encode-docs index-store docs)))
+                               (let [docs (-> docs without-tx-fn-docs)
+                                     encoded-docs (db/encode-docs index-store docs)]
+
+                                 (when (seq docs)
+                                   (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
+                                     (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
+                                                                           :docs missing-ids}))))
+
+                                 (db/index-docs index-store-tx encoded-docs)
+                                 (swap! !tx update-tx-stats encoded-docs))
 
                                (db/index-entity-txs index-store-tx etxs)
                                (let [{:keys [tombstones]} (when (seq evict-eids)
@@ -356,9 +354,9 @@
 
     (let [{:keys [tx-events]} @!tx]
       (bus/send bus (merge {::xt/event-type ::indexed-tx,
-                           :submitted-tx tx,
-                           :committed? true
-                           ::txe/tx-events tx-events}
+                            :submitted-tx tx,
+                            :committed? true
+                            ::txe/tx-events tx-events}
                            (select-keys @!tx [:doc-ids :av-count :bytes-indexed])))))
 
   (abort [_]
@@ -382,19 +380,17 @@
 
 (defrecord TxIndexer [index-store document-store bus query-engine]
   db/TxIndexer
-  (begin-tx [_ tx fork-at]
+  (begin-tx [_ tx encoded-docs fork-at]
     (when-not fork-at
       (log/debug "Indexing tx-id:" (::xt/tx-id tx))
       (bus/send bus {::xt/event-type ::indexing-tx, :submitted-tx tx}))
 
-    (let [index-store-tx (db/begin-index-tx index-store tx fork-at)
+    (let [index-store-tx (db/begin-index-tx index-store tx encoded-docs fork-at)
           document-store-tx (fork/begin-document-store-tx document-store)]
       (->InFlightTx index-store tx fork-at
                     (atom :open)
-                    (atom {:doc-ids #{}
-                           :av-count 0
-                           :bytes-indexed 0
-                           :tx-events []})
+                    (atom (merge {:tx-events []}
+                                 (select-keys encoded-docs [:av-count :bytes-indexed :doc-ids])))
                     index-store-tx
                     document-store-tx
                     (assoc query-engine
@@ -542,10 +538,11 @@
 
                                                     in-flight-tx (db/begin-tx tx-indexer
                                                                               (select-keys tx [::xt/tx-time ::xt/tx-id])
+                                                                              encoded-docs
                                                                               nil)
 
                                                     committing? (and committing?
-                                                                     (db/index-tx-events in-flight-tx tx-events docs encoded-docs))]
+                                                                     (db/index-tx-events in-flight-tx tx-events))]
 
                                                 (process-tx-f in-flight-tx (assoc tx :committing? committing?))
 
