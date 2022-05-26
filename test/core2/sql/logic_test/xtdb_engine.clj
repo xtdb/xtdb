@@ -204,9 +204,11 @@
       (when (p/failure? tree)
         (throw (IllegalArgumentException. (p/failure->str tree))))
       (let [tree (normalize-query (:tables this) tree)
-            projection (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
-                            (first)
-                            (mapv (comp keyword name plan/unqualified-projection-symbol)))
+            projection   (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
+                              (first)
+                              (mapv plan/unqualified-projection-symbol)
+                              (plan/generate-unique-column-names)
+                              (mapv (comp keyword name)))
             {:keys [errs plan]} (plan/plan-query tree)]
         (if-let [err (first errs)]
           (throw (IllegalArgumentException. ^String err))

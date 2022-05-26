@@ -977,13 +977,25 @@
       [:project base-projection order-by]
       order-by)))
 
+(defn generate-unique-column-names [col-names]
+  (->> col-names
+       (reduce
+         (fn try-use-unique-col-name [{:keys [acc ret]} col-name]
+           (if-let [col-name-count (get acc col-name)]
+             {:acc (assoc acc col-name (inc col-name-count))
+              :ret (conj ret (symbol (str (name col-name) "_" (inc col-name-count))))}
+             {:acc (assoc acc col-name 0)
+              :ret (conj ret col-name)}))
+         {:acc {}
+          :ret []})
+         (:ret)))
+
 (defn- build-query-specification [sl te]
   (let [projection (first (sem/projected-columns sl))
-        unqualified-rename-map (->> (for [{:keys [qualified-column] :as projection} projection
-                                          :when qualified-column
-                                          :let [column (qualified-projection-symbol projection)]]
-                                      [column (unqualified-projection-symbol projection)])
-                                    (into {}))
+        unqualified-rename-entries (for [{:keys [qualified-column] :as projection} projection
+                                         :when qualified-column
+                                         :let [column (qualified-projection-symbol projection)]]
+                                     [column (unqualified-projection-symbol projection)])
         qualified-projection (vec (for [{:keys [qualified-column] :as projection} projection
                                         :let [derived-column (:ref (meta projection))]]
                                     (if qualified-column
@@ -992,8 +1004,13 @@
                                        (expr (r/$ derived-column 1))})))
         relation (wrap-with-apply sl (plan te))
         qualified-project [:project qualified-projection relation]]
-    (if (not-empty unqualified-rename-map)
-      [:rename unqualified-rename-map qualified-project]
+    (if (not-empty unqualified-rename-entries)
+      [:rename
+       (zipmap
+         (map first unqualified-rename-entries)
+         (generate-unique-column-names
+           (map second unqualified-rename-entries)))
+       qualified-project]
       qualified-project)))
 
 (defn- build-set-op [set-op lhs rhs]
