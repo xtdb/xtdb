@@ -10,10 +10,10 @@
         org.clojure/tools.cli {:mvn/version "1.0.206"}
         org.clojure/core.match {:mvn/version "1.0.0"}
 
-        org.apache.arrow/arrow-algorithm {:mvn/version "7.0.0"}
-        org.apache.arrow/arrow-compression {:mvn/version "7.0.0"}
-        org.apache.arrow/arrow-vector {:mvn/version "7.0.0"}
-        org.apache.arrow/arrow-memory-netty {:mvn/version "7.0.0"}
+        org.apache.arrow/arrow-algorithm {:mvn/version "8.0.0"}
+        org.apache.arrow/arrow-compression {:mvn/version "8.0.0"}
+        org.apache.arrow/arrow-vector {:mvn/version "8.0.0"}
+        org.apache.arrow/arrow-memory-netty {:mvn/version "8.0.0"}
 
         org.roaringbitmap/RoaringBitmap {:mvn/version "0.9.26"}
 
