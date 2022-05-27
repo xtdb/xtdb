@@ -257,10 +257,14 @@
                          :expected record :actual t})
                       #_(swap!
                           error-counts-by-message
-                          #(update
-                             %
-                             (ex-message t)
-                             (fnil inc 0)))
+                          (fn [acc]
+                            (-> acc
+                                (update-in
+                                  [(ex-message t) :count]
+                                  (fnil inc 0))
+                                (update-in
+                                  [(ex-message t) :lines]
+                                  #(conj % (:line record))))))
                       (update ctx :queries-run + (if (= :query (:type record))
                                                    1
                                                    0))
@@ -333,11 +337,13 @@
             (with-jdbc db f)))))))
 (comment
 
-  (sort-by val @error-counts-by-message)
+  (->> (sort-by (comp :count val) @error-counts-by-message)
+       (map #(vector (first %) ((comp (partial take 5) reverse :lines second) %) (:count (second %)))))
+
   (sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
 
 
-  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/expr/slt_good_0.test"))
+  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/aggregates/slt_good_0.test"))
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
