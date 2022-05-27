@@ -54,10 +54,11 @@
                    (tpch/run-tpch node {:scale-factor tpch-scale-factor}))
                  (doto post-to-slack))))
 
-   :tpch-ingest (fn [nodes {:keys [tpch-scale-factor]}]
+   :tpch-ingest (fn [nodes {:keys [tpch-scale-factor batch-size]}]
                   (bench/with-nodes [node nodes]
                     (-> (bench/with-comparison-times
-                          (tpch/run-tpch-ingest-only node {:scale-factor tpch-scale-factor}))
+                          (tpch/run-tpch-ingest-only node {:scale-factor tpch-scale-factor
+                                                           :batch-size batch-size}))
                         (doto post-to-slack))))
 
    :tpch-ingest-lucene (fn [_nodes {:keys [tpch-scale-factor]}]
@@ -100,6 +101,16 @@
                           :default 0.01
                           :parse-fn #(Double/parseDouble %)]
 
+                         [nil "--batch-size 1000" "Batch size for ingestion (currently only used in TPCH)"
+                          :id :batch-size
+                          :default 1000
+                          :parse-fn #(Double/parseDouble %)]
+
+                         [nil "--description foo" "Descriptive label as an aide-mémoire"
+                          :id :description
+                          :default ""
+                          :parse-fn #(str %)]
+
                          [nil "--repeat 10" "Number of times to repeat the current bench run"
                           :id :repetitions
                           :default 1
@@ -120,7 +131,8 @@
            (into [] (mapcat identity))))))
 
 (defn -main [& args]
-  (bench/post-to-slack (format "*Starting Benchmark*, Commit Hash: %s\n" bench/commit-hash))
+  (bench/post-to-slack (str (format "*Starting Benchmark*, Commit Hash: %s\n" bench/commit-hash)
+                            (format "Bench args: %s\n" (pr-str args))))
 
   (let [bench-results (run-benches (-> (or (parse-args args)
                                            (System/exit 1))

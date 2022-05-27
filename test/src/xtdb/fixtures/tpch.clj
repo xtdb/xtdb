@@ -61,6 +61,7 @@
     (assoc doc :xt/id (str/join "___" pkey))))
 
 (def default-scale-factor 0.05)
+(def default-batch-size 1000)
 
 ;; 0.05 = 7500 customers, 75000 orders, 299814 lineitems, 10000 part, 40000 partsupp, 500 supplier, 25 nation, 5 region
 (defn tpch-table->docs
@@ -77,12 +78,12 @@
 
 (defn submit-docs!
   ([node]
-   (submit-docs! node default-scale-factor))
-  ([node sf]
+   (submit-docs! node default-scale-factor default-batch-size))
+  ([node sf batch-size]
    (println "Transacting TPC-H tables...")
    (->> (for [^TpchTable t (TpchTable/getTables)]
           (let [[last-tx doc-count] (->> (tpch-table->docs t sf)
-                                         (partition-all 1000)
+                                         (partition-all batch-size)
                                          (reduce (fn [[_last-tx last-doc-count] chunk]
                                                    [(xt/submit-tx node (vec (for [doc chunk]
                                                                               [::xt/put doc])))

@@ -15,12 +15,12 @@
                       (tpch/validate-tpch-query actual (tpch/parse-tpch-result n))
                       (boolean actual))))))
 
-(defn run-tpch-ingest-only [node {:keys [scale-factor], :or {scale-factor 0.01}}]
+(defn run-tpch-ingest-only [node {:keys [scale-factor batch-size], :or {scale-factor 0.01 batch-size 1000}}]
   (bench/with-bench-ns :tpch-ingest-only
     (bench/with-xtdb-dimensions
       (bench/run-bench :ingest
                        (bench/with-additional-index-metrics node
-                         (tpch/load-docs! node scale-factor)
+                         (tpch/load-docs! node scale-factor batch-size)
                          (bench/compact-node node)
                          {:success true})))))
 
