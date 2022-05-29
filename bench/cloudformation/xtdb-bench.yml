@@ -165,8 +165,8 @@ Resources:
       - ECRRepository
       - LogGroup
     Properties:
-      Cpu: '4 vCPU'
-      Memory: '12GB'
+      Cpu: '8 vCPU'
+      Memory: '32GB'
       Family: 'xtdb-bench'
       ExecutionRoleArn: !GetAtt ["ECSTaskExecutionRole", "Arn"]
       TaskRoleArn: !GetAtt ["ECSTaskRole", "Arn"]
@@ -210,7 +210,7 @@ Resources:
           PortMappings:
             - ContainerPort: 9092
         - Name: 'bench-container'
-          Cpu: 2048
+          Cpu: 4096
           Memory: 8192
           Image: !Join [':', [ !GetAtt [ 'ECRRepository', 'RepositoryUri' ], 'master' ] ]
           Essential: true
@@ -256,8 +256,8 @@ Resources:
   ECSInstance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: 'ami-0489c3efb4fe85f5d' # amzn2-ami-ecs-hvm-2.0.20200928-x86_64-ebs
-      InstanceType: 'm5.xlarge'
+      ImageId: 'ami-07a1802c113adc855' # TODO not sure what the new value for this is: amzn2-ami-ecs-hvm-2.0.20200928-x86_64-ebs
+      InstanceType: 'm5.2xlarge'
       SubnetId: !ImportValue 'xtdb-vpc:PublicSubnetOne'
       # SecurityGroupIds:
       #   - 'sg-0255e869'
