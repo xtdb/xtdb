@@ -467,13 +467,15 @@
                                  (reset! persistent-kv-snapshot (kv/new-snapshot persistent-kv-store)))
                                (kv/get-value @persistent-kv-snapshot k-buf))]
     (try
-      (let [attr-key-bufs (->> docs
-                               (mapcat keys)
-                               (reduce (fn [acc k]
-                                         (if (get acc k)
-                                           acc
-                                           (assoc acc k (encode-stats-key-to nil (c/->value-buffer k)))))
-                                       {}))]
+      (let [attr-key-bufs (reduce (fn [acc doc]
+                                    (reduce (keys doc)
+                                            (fn [acc k]
+                                              (if (get acc k)
+                                                acc
+                                                (assoc acc k (encode-stats-key-to nil (c/->value-buffer k)))))
+                                            acc))
+                                  {}
+                                  docs)]
         (->> docs
              (reduce (fn [acc doc]
                        (let [e (:crux.db/id doc)]
