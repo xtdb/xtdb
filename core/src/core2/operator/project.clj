@@ -1,12 +1,14 @@
 (ns core2.operator.project
-  (:require [core2.util :as util]
+  (:require [core2.expression :as expr]
+            [core2.logical-plan :as lp]
+            [core2.util :as util]
             [core2.vector.indirect :as iv])
-  (:import java.util.List
-           java.util.function.Consumer
-           org.apache.arrow.memory.BufferAllocator
-           core2.ICursor
+  (:import core2.ICursor
            core2.operator.IProjectionSpec
+           java.util.function.Consumer
            java.util.LinkedList
+           java.util.List
+           org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.BigIntVector))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -60,5 +62,25 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defn ->project-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List #_<IProjectionSpec> projection-specs]
+(defn ->project-cursor ^core2.ICursor [projection-specs {:keys [allocator]} in-cursor]
   (ProjectCursor. allocator in-cursor projection-specs))
+
+(defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [params] :as args}]
+  (lp/unary-expr relation args
+    (fn [inner-col-names]
+      (let [projection-specs (concat (when append-columns?
+                                       (for [col-name inner-col-names]
+                                         (->identity-projection-spec (name col-name))))
+                                     (for [[p-type arg] projections]
+                                       (case p-type
+                                         :column (->identity-projection-spec (name arg))
+                                         :row-number-column (let [[col-name _form] (first arg)]
+                                                              (->row-number-projection-spec (name col-name)))
+                                         :extend (let [[col-name form] (first arg)]
+                                                   (expr/->expression-projection-spec (name col-name) form (into #{} (map symbol) inner-col-names) params)))))]
+        {:col-names (->> projection-specs
+                         (into #{} (map #(.getColumnName ^IProjectionSpec %))))
+         :->cursor (partial ->project-cursor projection-specs)}))))
+
+(defmethod lp/emit-expr :map [op args]
+  (lp/emit-expr (assoc op :op :project :opts {:append-columns? true}) args))

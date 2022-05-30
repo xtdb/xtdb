@@ -1,6 +1,9 @@
 (ns core2.operator.join
-  (:require [core2.bloom :as bloom]
+  (:require [clojure.set :as set]
+            [core2.bloom :as bloom]
+            [core2.expression :as expr]
             [core2.expression.map :as emap]
+            [core2.logical-plan :as lp]
             [core2.operator.scan :as scan]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
@@ -74,8 +77,12 @@
     (util/try-close right-rel)
     (util/try-close right-cursor)))
 
-(defn ->cross-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))
+(defmethod lp/emit-expr :cross-join [{:keys [left right]} args]
+  (lp/binary-expr left right args
+    (fn [left-col-names right-col-names]
+      {:col-names (set/union left-col-names right-col-names)
+       :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
+                   (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))})))
 
 (defn- build-phase [^IIndirectRelation build-rel
                     build-column-names
@@ -376,3 +383,34 @@
                (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
                ::anti-semi-join
                theta-selector))
+
+(doseq [[join-op-k ->join-cursor ->col-names]
+        [[:join #'->equi-join-cursor set/union]
+         [:left-outer-join #'->left-outer-equi-join-cursor set/union]
+         [:full-outer-join #'->full-outer-equi-join-cursor set/union]
+         [:semi-join #'->left-semi-equi-join-cursor (fn [l _r] l)]
+         [:anti-join #'->left-anti-semi-equi-join-cursor (fn [l _r] l)]]]
+
+  (defmethod lp/emit-expr join-op-k [{:keys [condition left right]} args]
+    (let [equi-pairs (keep (fn [[tag val]]
+                             (when (= :equi-condition tag)
+                               (first val)))
+                           condition)
+          left-key-cols (map (comp name first) equi-pairs)
+          right-key-cols (map (comp name second) equi-pairs)
+          predicates (keep (fn [[tag val]]
+                             (when (= :pred-expr tag)
+                               val))
+                           condition)]
+      (lp/binary-expr left right args
+        (fn [left-col-names right-col-names]
+          (let [theta-selector (when (seq predicates)
+                                 (expr/->expression-relation-selector (list* 'and predicates)
+                                                                      (into #{} (map symbol) (concat left-col-names right-col-names))
+                                                                      {}))]
+            {:col-names (->col-names left-col-names right-col-names)
+             :->cursor (fn [{:keys [allocator]} left right]
+                         (->join-cursor allocator
+                                        left left-key-cols left-col-names
+                                        right right-key-cols right-col-names
+                                        theta-selector))}))))))

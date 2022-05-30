@@ -1,5 +1,6 @@
 (ns core2.operator.max-1-row
-  (:require [core2.vector.indirect :as iv])
+  (:require [core2.vector.indirect :as iv]
+            [core2.logical-plan :as lp])
   (:import (core2 ICursor)
            (core2.vector IIndirectRelation)
            (java.util Set)
@@ -37,5 +38,9 @@
   (close [_]
     (.close in-cursor)))
 
-(defn ->max-1-row-cursor [^BufferAllocator allocator, col-names, ^ICursor in-cursor]
-  (Max1RowCursor. allocator col-names in-cursor 0 false))
+(defmethod lp/emit-expr :max-1-row [{:keys [relation]} args]
+  (lp/unary-expr relation args
+    (fn [col-names]
+      {:col-names col-names
+       :->cursor (fn [{:keys [allocator]} in-cursor]
+                   (Max1RowCursor. allocator col-names in-cursor 0 false))})))

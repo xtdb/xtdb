@@ -1,5 +1,6 @@
 (ns core2.operator.set
   (:require [core2.expression.map :as emap]
+            [core2.logical-plan :as lp]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import core2.expression.map.IRelationMap
@@ -12,6 +13,11 @@
            org.apache.arrow.memory.util.ArrowBufPointer))
 
 (set! *unchecked-math* :warn-on-boxed)
+
+(defn- ensuring-same-col-names [left-col-names right-col-names]
+  (when-not (= left-col-names right-col-names)
+    (throw (IllegalArgumentException. (format "union incompatible cols: %s vs %s" (pr-str left-col-names) (pr-str right-col-names)))))
+  left-col-names)
 
 (deftype UnionAllCursor [^ICursor left-cursor
                          ^ICursor right-cursor]
@@ -36,8 +42,12 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
-(defn ->union-all-cursor ^core2.ICursor [^ICursor left-cursor, ^ICursor right-cursor]
-  (UnionAllCursor. left-cursor right-cursor))
+(defmethod lp/emit-expr :union-all [{:keys [left right]} args]
+  (lp/binary-expr left right args
+    (fn [left-col-names right-col-names]
+      {:col-names (ensuring-same-col-names left-col-names right-col-names)
+       :->cursor (fn [_opts left-cursor right-cursor]
+                   (UnionAllCursor. left-cursor right-cursor))})))
 
 (deftype IntersectionCursor [^ICursor left-cursor
                              ^ICursor right-cursor
@@ -81,15 +91,25 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
-(defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^Set col-names, ^ICursor left-cursor, ^ICursor right-cursor]
-  (IntersectionCursor. left-cursor right-cursor
-                       (emap/->relation-map allocator {:key-col-names (map name col-names)})
-                       true))
+(defmethod lp/emit-expr :intersect [{:keys [left right]} args]
+  (lp/binary-expr left right args
+    (fn [left-col-names right-col-names]
+      (let [col-names (ensuring-same-col-names left-col-names right-col-names)]
+        {:col-names col-names
+         :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
+                     (IntersectionCursor. left-cursor right-cursor
+                                          (emap/->relation-map allocator {:key-col-names (map name col-names)})
+                                          false))}))))
 
-(defn ->intersection-cursor ^core2.ICursor [^BufferAllocator allocator, ^Set col-names, ^ICursor left-cursor, ^ICursor right-cursor]
-  (IntersectionCursor. left-cursor right-cursor
-                       (emap/->relation-map allocator {:key-col-names (map name col-names)})
-                       false))
+(defmethod lp/emit-expr :difference [{:keys [left right]} args]
+  (lp/binary-expr left right args
+    (fn [left-col-names right-col-names]
+      (let [col-names (ensuring-same-col-names left-col-names right-col-names)]
+        {:col-names col-names
+         :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
+                     (IntersectionCursor. left-cursor right-cursor
+                                          (emap/->relation-map allocator {:key-col-names (map name col-names)})
+                                          true))}))))
 
 (deftype DistinctCursor [^ICursor in-cursor
                          ^IRelationMap rel-map]
@@ -119,8 +139,12 @@
     (util/try-close rel-map)
     (util/try-close in-cursor)))
 
-(defn ->distinct-cursor ^core2.ICursor [^BufferAllocator allocator, ^Set col-names, ^ICursor in-cursor]
-  (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (map name col-names)})))
+(defmethod lp/emit-expr :distinct [{:keys [relation]} args]
+  (lp/unary-expr relation args
+    (fn [inner-col-names]
+      {:col-names inner-col-names
+       :->cursor (fn [{:keys [allocator]} in-cursor]
+                   (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (map name inner-col-names)})))})))
 
 (defn- ->set-key [^List cols ^long idx]
   (let [set-key (ArrayList. (count cols))]
@@ -231,9 +255,59 @@
     (.clear fixpoint-set)
     (util/try-close base-cursor)))
 
-(defn ->fixpoint-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                        ^ICursor base-cursor
-                                        ^IFixpointCursorFactory recursive-cursor-factory
-                                        incremental?]
-  (FixpointCursor. allocator base-cursor recursive-cursor-factory
-                   (HashSet.) (LinkedList.) incremental? nil true))
+(def ^:dynamic ^:private *relation-variable->col-names* {})
+(def ^:dynamic ^:private *relation-variable->cursor-factory* {})
+
+(defmethod lp/emit-expr :relation [{:keys [relation]} _opts]
+  (let [col-names (*relation-variable->col-names* relation)]
+    {:col-names col-names
+     :->cursor (fn [_opts]
+                 (let [^ICursorFactory cursor-factory (get *relation-variable->cursor-factory* relation)]
+                   (assert cursor-factory (str "can't find " relation, (pr-str *relation-variable->cursor-factory*)))
+                   (.createCursor cursor-factory)))}))
+
+(defmethod lp/emit-expr :fixpoint [{:keys [mu-variable base recursive], {:keys [incremental?]} :opts} args]
+  (let [{base-col-names :col-names, ->base-cursor :->cursor} (lp/emit-expr base args)
+        {recursive-col-names :col-names, ->recursive-cursor :->cursor} (binding [*relation-variable->col-names* (-> *relation-variable->col-names*
+                                                                                                                    (assoc mu-variable base-col-names))]
+                                                                         (lp/emit-expr recursive args))]
+    {:col-names (ensuring-same-col-names base-col-names recursive-col-names)
+     :->cursor
+     (fn [{:keys [allocator] :as opts}]
+       (FixpointCursor. allocator
+                        (->base-cursor opts)
+                        (reify IFixpointCursorFactory
+                          (createCursor [_ cursor-factory]
+                            (binding [*relation-variable->cursor-factory* (-> *relation-variable->cursor-factory*
+                                                                              (assoc mu-variable cursor-factory))]
+                              (->recursive-cursor opts))))
+                        (HashSet.) (LinkedList.)
+                        (boolean incremental?)
+                        #_recursive-cursor nil
+                        #_continue? true))}))
+
+(defmethod lp/emit-expr :assign [{:keys [bindings relation]} args]
+  (let [{:keys [rel-var->col-names relations]} (->> bindings
+                                                     (reduce (fn [{:keys [rel-var->col-names relations]} {:keys [variable value]}]
+                                                               (binding [*relation-variable->col-names* rel-var->col-names]
+                                                                 (let [{:keys [col-names ->cursor]} (lp/emit-expr value args)]
+                                                                   {:rel-var->col-names (-> rel-var->col-names
+                                                                                            (assoc variable col-names))
+
+                                                                    :relations (conj relations {:variable variable, :->cursor ->cursor})})))
+                                                             {:rel-var->col-names *relation-variable->col-names*
+                                                              :relations []}))
+        {:keys [col-names ->cursor]} (binding [*relation-variable->col-names* rel-var->col-names]
+                                       (lp/emit-expr relation args))]
+    {:col-names col-names
+     :->cursor (fn [opts]
+                 (let [rel-var->cursor-factory (->> relations
+                                                    (reduce (fn [acc {:keys [variable ->cursor]}]
+                                                              (-> acc
+                                                                  (assoc variable (reify ICursorFactory
+                                                                                    (createCursor [_]
+                                                                                      (binding [*relation-variable->cursor-factory* acc]
+                                                                                        (->cursor opts)))))))
+                                                            *relation-variable->cursor-factory*))]
+                   (binding [*relation-variable->cursor-factory* rel-var->cursor-factory]
+                     (->cursor opts))))}))

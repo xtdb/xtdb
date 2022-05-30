@@ -1,9 +1,11 @@
 (ns core2.operator.table
-  (:require [core2.expression :as expr]
+  (:require [core2.error :as err]
+            [core2.expression :as expr]
             [core2.types :as ty]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.logical-plan :as lp])
   (:import (core2 ICursor)
            (core2.vector IIndirectRelation)
            (java.util LinkedList List)
@@ -52,15 +54,40 @@
 
   (close [_]))
 
-(defn ->table-cursor ^core2.ICursor [^BufferAllocator allocator, col-names, ^List rows, params]
-  (TableCursor. allocator
-                (count rows)
-                (when (seq rows)
-                  (->> (for [col-name col-names
-                             :let [col-k (keyword col-name)
-                                   col-s (symbol col-name)]]
-                         [col-name (vec (for [row rows
-                                              :let [v (get row col-k (get row col-s))]]
-                                          (expr/eval-scalar-value allocator v #{} params)))])
-                       (into {})))
-                false))
+(defn table->keys [rows]
+  (letfn [(row-keys [row]
+            (into #{} (map name) (keys row)))]
+    (let [col-names (row-keys (first rows))]
+      (when-not (every? #(= col-names (row-keys %)) rows)
+        (throw (err/illegal-arg :mismatched-keys-in-table
+                                {::err/message "Mismatched keys in table"
+                                 :expected col-names
+                                 :key-sets (into #{} (map row-keys) rows)})))
+      col-names)))
+
+(defmethod lp/emit-expr :table [{[table-type table-arg] :table, :keys [explicit-col-names]} {:keys [src-keys table-keys params]}]
+  (when (and (= table-type :source) (not (contains? src-keys table-arg)))
+    (throw (err/illegal-arg :unknown-table
+                            {::err/message "Query refers to unknown table"
+                             :table table-arg
+                             :src-keys src-keys})))
+  (let [col-names (or explicit-col-names
+                      (case table-type
+                        :rows (table->keys table-arg)
+                        :source (get table-keys table-arg)))]
+    {:col-names col-names
+     :->cursor (fn [{:keys [allocator srcs]}]
+                 (let [rows (case table-type
+                              :rows table-arg
+                              :source (get srcs table-arg))]
+                   (TableCursor. allocator
+                                 (count rows)
+                                 (when (seq rows)
+                                   (->> (for [col-name col-names
+                                              :let [col-k (keyword col-name)
+                                                    col-s (symbol col-name)]]
+                                          [col-name (vec (for [row rows
+                                                               :let [v (get row col-k (get row col-s))]]
+                                                           (expr/eval-scalar-value allocator v #{} params)))])
+                                        (into {})))
+                                 false)))}))

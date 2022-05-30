@@ -1,6 +1,8 @@
 (ns core2.operator.group-by
-  (:require [core2.expression :as expr]
+  (:require [clojure.set :as set]
+            [core2.expression :as expr]
             [core2.expression.map :as emap]
+            [core2.logical-plan :as lp]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
@@ -9,7 +11,7 @@
            (core2.expression.map IRelationMap IRelationMapBuilder)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (java.io Closeable)
-           (java.util ArrayList LinkedList List HashMap Spliterator)
+           (java.util ArrayList HashMap LinkedList List Spliterator)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
@@ -71,6 +73,7 @@
                     gm-vec)
       (NullGroupMapper. gm-vec))))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IAggregateSpec
   (^String getFromColumnName [])
   (^void aggregate [^core2.vector.IIndirectVector inVector,
@@ -86,6 +89,8 @@
 (defmulti ^core2.operator.group_by.IAggregateSpecFactory ->aggregate-factory
   (fn [f from-name to-name]
     (keyword (name f))))
+
+(def memo-agg-factory (memoize ->aggregate-factory))
 
 (def emit-agg
   (-> (fn [from-var from-val-types, emit-init-group, emit-step]
@@ -595,19 +600,30 @@
     (util/try-close in-cursor)
     (util/try-close group-mapper)))
 
-(defn ->group-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor,
-                                        ^List #_<String> group-col-names
-                                        ^List #_<IAggregateSpecFactory> agg-factories]
-  (let [agg-specs (LinkedList.)]
-    (try
-      (doseq [^IAggregateSpecFactory factory agg-factories]
-        (.add agg-specs (.build factory allocator)))
+(defmethod lp/emit-expr :group-by [{:keys [columns relation]} args]
+  (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
+        group-cols (mapv (comp name second) group-cols)
+        agg-factories (for [[_ agg] aggs]
+                        (let [[to-column {:keys [aggregate-fn from-column]}] (first agg)]
+                          (memo-agg-factory aggregate-fn
+                                            (name from-column)
+                                            (name to-column))))]
+    (lp/unary-expr relation args
+      (fn [_inner-col-names]
+        {:col-names (set/union (set group-cols)
+                               (->> agg-factories
+                                    (into #{} (map #(.getToColumnName ^IAggregateSpecFactory %)))))
+         :->cursor (fn [{:keys [allocator]} in-cursor]
+                     (let [agg-specs (LinkedList.)]
+                       (try
+                         (doseq [^IAggregateSpecFactory factory agg-factories]
+                           (.add agg-specs (.build factory allocator)))
 
-      (GroupByCursor. allocator in-cursor
-                      (->group-mapper allocator group-col-names)
-                      (vec agg-specs)
-                      false)
+                         (GroupByCursor. allocator in-cursor
+                                         (->group-mapper allocator group-cols)
+                                         (vec agg-specs)
+                                         false)
 
-      (catch Exception e
-        (run! util/try-close agg-specs)
-        (throw e)))))
+                         (catch Exception e
+                           (run! util/try-close agg-specs)
+                           (throw e)))))}))))

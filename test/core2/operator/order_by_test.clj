@@ -11,19 +11,17 @@
 (t/deftest test-order-by
   (let [a-field (ty/->field "a" ty/bigint-type false)
         b-field (ty/->field "b" ty/bigint-type false)]
-    (with-open [cursor (tu/->cursor (Schema. [a-field b-field])
-                                    [[{:a 12, :b 10}
-                                      {:a 0, :b 15}]
-                                     [{:a 100, :b 83}]
-                                     [{:a 83, :b 100}]])
-                order-by-cursor (order-by/->order-by-cursor tu/*allocator*
-                                                            cursor
-                                                            [{:col-name "a", :direction :asc, :null-ordering :nulls-last}])]
+    (with-open [res (op/open-ra [:order-by [['a :asc :nulls-last]]
+                                 [::tu/blocks (Schema. [a-field b-field])
+                                  [[{:a 12, :b 10}
+                                    {:a 0, :b 15}]
+                                   [{:a 100, :b 83}]
+                                   [{:a 83, :b 100}]]]])]
       (t/is (= [[{:a 0, :b 15}
                  {:a 12, :b 10}
                  {:a 83, :b 100}
                  {:a 100, :b 83}]]
-               (tu/<-cursor order-by-cursor)))))
+               (tu/<-cursor res)))))
 
   (t/is (= [{:a 0, :b 15}
             {:a 12.4, :b 10}

@@ -1,7 +1,7 @@
 (ns core2.operator.csv
   (:require [clojure.data.csv :as csv]
             [clojure.instant :as inst]
-            [core2.edn :as edn]
+            [core2.logical-plan :as lp]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
@@ -14,7 +14,7 @@
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.types.Types$MinorType
-           org.apache.arrow.vector.VectorSchemaRoot))
+           [org.apache.arrow.vector ValueVector VectorSchemaRoot]))
 
 (deftype CSVCursor [^BufferAllocator allocator
                     ^AutoCloseable rdr
@@ -29,16 +29,16 @@
         (.clear root)
 
         (dorun
-         (map-indexed (fn [col-idx fv]
-                        (let [parse-value (nth col-parsers col-idx)
-                              writer (vw/vec->writer fv)]
-                          (dotimes [row-idx row-count]
-                            (doto writer
-                              (.startValue)
-                              (->> (types/write-value! (-> (nth row-batch row-idx)
-                                                           (nth col-idx)
-                                                           parse-value)))
-                              (.endValue)))))
+         (map-indexed (fn [col-idx ^ValueVector fv]
+                        (when-let [parse-value (get col-parsers (.getName fv))]
+                          (let [writer (vw/vec->writer fv)]
+                            (dotimes [row-idx row-count]
+                              (doto writer
+                                (.startValue)
+                                (->> (types/write-value! (-> (nth row-batch row-idx)
+                                                             (nth col-idx)
+                                                             parse-value)))
+                                (.endValue))))))
                       (.getFieldVectors root)))
 
         (util/set-vector-schema-root-row-count root row-count)
@@ -65,28 +65,30 @@
    :duration time-literals.dr/duration})
 
 (def ->arrow-type
-  {:bigint (.getType Types$MinorType/BIGINT)
-   :float8 (.getType Types$MinorType/FLOAT8)
-   :varbinary (.getType Types$MinorType/VARBINARY)
-   :varchar (.getType Types$MinorType/VARCHAR)
-   :bit (.getType Types$MinorType/BIT)
+  {:null types/null-type
+   :bigint types/bigint-type
+   :float8 types/float8-type
+   :varbinary types/varbinary-type
+   :varchar types/varchar-type
+   :bit types/bool-type
    :timestamp types/timestamp-micro-tz-type
    :duration types/duration-micro-type})
 
-(defn ^core2.ICursor ->csv-cursor
-  ([^BufferAllocator allocator, ^Path path, col-types]
-   (->csv-cursor allocator path col-types {}))
-
-  ([^BufferAllocator allocator, ^Path path, col-types {:keys [batch-size], :or {batch-size 1000}}]
-   (let [rdr (Files/newBufferedReader path)
-         [col-names & rows] (csv/read-csv rdr)
-         col-types (map #(get col-types % :varchar) col-names)
-         schema (Schema. (map (fn [col-name col-type]
-                                (types/->field col-name
-                                               (->arrow-type col-type)
-                                               false))
-                              col-names col-types))]
-     (CSVCursor. allocator rdr
-                 (VectorSchemaRoot/create schema allocator)
-                 (mapv col-parsers col-types)
-                 (.iterator ^Iterable (partition-all batch-size rows))))))
+(defmethod lp/emit-expr :csv [{:keys [path col-types],
+                               {:keys [batch-size], :or {batch-size 1000}} :opts}
+                              _args]
+  (let [col-names (into #{} (map name) (keys col-types))]
+    {:col-names col-names
+     :->cursor (fn [{:keys [allocator]}]
+                 (let [rdr (Files/newBufferedReader path)
+                       [file-col-names & rows] (csv/read-csv rdr)
+                       schema (Schema. (map (fn [[col-name col-type]]
+                                              (types/->field (name col-name)
+                                                             (->arrow-type col-type)
+                                                             false))
+                                            col-types))]
+                   (CSVCursor. allocator rdr
+                               (VectorSchemaRoot/create schema allocator)
+                               (->> col-types (into {} (map (juxt (comp name key)
+                                                                  (comp col-parsers val)))))
+                               (.iterator ^Iterable (partition-all batch-size rows)))))}))

@@ -9,7 +9,9 @@
             [core2.types :as ty]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.logical-plan :as lp]
+            [clojure.spec.alpha :as s])
   (:import core2.ICursor
            core2.local_node.Node
            core2.object_store.FileSystemObjectStore
@@ -21,7 +23,7 @@
            [java.util ArrayList LinkedList]
            java.util.concurrent.TimeUnit
            java.util.function.Consumer
-           org.apache.arrow.memory.RootAllocator
+           (org.apache.arrow.memory BufferAllocator RootAllocator)
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types.pojo ArrowType Field FieldType Schema]))
@@ -156,20 +158,34 @@
 
     root))
 
-(defn ->cursor ^core2.ICursor [^Schema schema, blocks]
-  (let [blocks (LinkedList. blocks)
-        root (VectorSchemaRoot/create schema *allocator*)]
-    (reify ICursor
-      (tryAdvance [_ c]
-        (if-let [block (some-> (.poll blocks) vec)]
-          (do
-            (populate-root root block)
-            (.accept c (iv/<-root root))
-            true)
-          false))
+(defn ->cursor
+  (^core2.ICursor [^Schema schema, blocks] (->cursor *allocator* schema blocks))
 
-      (close [_]
-        (.close root)))))
+  (^core2.ICursor [^BufferAllocator allocator ^Schema schema, blocks]
+   (let [blocks (LinkedList. blocks)
+         root (VectorSchemaRoot/create schema allocator)]
+     (reify ICursor
+       (tryAdvance [_ c]
+         (if-let [block (some-> (.poll blocks) vec)]
+           (do
+             (populate-root root block)
+             (.accept c (iv/<-root root))
+             true)
+           false))
+
+       (close [_]
+         (.close root))))))
+
+(defmethod lp/ra-expr ::blocks [_]
+  (s/cat :op #{::blocks}
+         :schema #(instance? Schema %)
+         :blocks vector?))
+
+(defmethod lp/emit-expr ::blocks [{:keys [^Schema schema blocks]} _args]
+  {:col-names (->> (.getFields schema)
+                   (into #{} (map #(.getName ^Field %))))
+   :->cursor (fn [{:keys [allocator]}]
+               (->cursor allocator schema blocks))})
 
 (defn <-column [^IIndirectVector col]
   (mapv (fn [idx]

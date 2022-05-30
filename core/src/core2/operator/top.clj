@@ -3,7 +3,8 @@
            core2.vector.IIndirectRelation
            java.util.function.Consumer
            java.util.stream.IntStream)
-  (:require [core2.vector.indirect :as iv]))
+  (:require [core2.vector.indirect :as iv]
+            [core2.logical-plan :as lp]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -42,5 +43,9 @@
   (close [_]
     (.close in-cursor)))
 
-(defn ->top-cursor ^core2.ICursor [^ICursor in-cursor skip limit]
-  (TopCursor. in-cursor (or skip 0) (or limit Long/MAX_VALUE) 0))
+(defmethod lp/emit-expr :top [{:keys [relation], {:keys [skip limit]} :top} args]
+  (lp/unary-expr relation args
+    (fn [col-names]
+      {:col-names col-names
+       :->cursor (fn [_opts in-cursor]
+                   (TopCursor. in-cursor (or skip 0) (or limit Long/MAX_VALUE) 0))})))

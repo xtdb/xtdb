@@ -2,7 +2,8 @@
   (:require [core2.expression.comparator :as expr.comp]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.logical-plan :as lp])
   (:import core2.ICursor
            core2.vector.IIndirectRelation
            [java.util Comparator]
@@ -61,5 +62,11 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defn ->order-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, order-specs]
-  (OrderByCursor. allocator in-cursor order-specs))
+(defmethod lp/emit-expr :order-by [{:keys [order relation]} args]
+  (let [order-specs (for [{:keys [column direction null-ordering], :or {direction :asc, null-ordering :nulls-last}} order]
+                      {:col-name (name column), :direction direction, :null-ordering null-ordering})]
+    (lp/unary-expr relation args
+      (fn [col-names]
+        {:col-names col-names
+         :->cursor (fn [{:keys [allocator]} in-cursor]
+                     (OrderByCursor. allocator in-cursor order-specs))}))))

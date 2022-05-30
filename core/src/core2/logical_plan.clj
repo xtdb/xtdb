@@ -47,12 +47,15 @@
          :table (s/or :rows (s/coll-of (s/map-of simple-ident? any?))
                       :source ::source)))
 
-(s/def ::csv-col-type #{:bit :bigint :float8 :varchar :varbinary :timestamp-milli :duration-milli})
+(s/def ::csv-col-type #{:bit :bigint :float8 :varchar :varbinary :timestamp :duration-milli})
+
+(s/def ::batch-size pos-int?)
 
 (defmethod ra-expr :csv [_]
   (s/cat :op #{:csv}
          :path ::util/path
-         :col-types (s/? (s/map-of ::column ::csv-col-type))))
+         :col-types (s/? (s/map-of ::column ::csv-col-type))
+         :opts (s/? (s/keys :opt-un [::batch-size]))))
 
 (defmethod ra-expr :arrow [_]
   (s/cat :op #{:arrow}
@@ -186,9 +189,12 @@
          :left ::ra-expression
          :right ::ra-expression))
 
+(s/def ::incremental? boolean?)
+
 (defmethod ra-expr :fixpoint [_]
   (s/cat :op #{:μ :mu :fixpoint}
          :mu-variable ::relation
+         :opts (s/? (s/keys :opt-un [::incremental?]))
          :base ::ra-expression
          :recursive ::ra-expression))
 
@@ -216,7 +222,7 @@
 (defmethod ra-expr :relation [_]
   (s/and ::relation
          (s/conformer (fn [rel]
-                        {:op :relation :relation rel})
+                        {:op :relation, :relation rel})
                       :relation)))
 
 (defmethod ra-expr :max-1-row [_]
@@ -226,3 +232,39 @@
 (s/def ::ra-expression (s/multi-spec ra-expr :op))
 
 (s/def ::logical-plan ::ra-expression)
+
+#_{:clj-kondo/ignore #{:unused-binding}}
+(defmulti emit-expr
+  (fn [ra-expr srcs]
+    (:op ra-expr)))
+
+(defn unary-expr {:style/indent 2} [relation args f]
+  (let [{->inner-cursor :->cursor, inner-col-names :col-names} (emit-expr relation args)
+        {:keys [col-names ->cursor]} (f inner-col-names)]
+    {:col-names col-names
+     :->cursor (fn [opts]
+                 (let [inner (->inner-cursor opts)]
+                   (try
+                     (->cursor opts inner)
+                     (catch Throwable e
+                       (util/try-close inner)
+                       (throw e)))))}))
+
+(defn binary-expr {:style/indent 3} [left right args f]
+  (let [{left-col-names :col-names, ->left-cursor :->cursor} (emit-expr left args)
+        {right-col-names :col-names, ->right-cursor :->cursor} (emit-expr right args)
+        {:keys [col-names ->cursor]} (f left-col-names right-col-names)]
+
+    {:col-names col-names
+     :->cursor (fn [opts]
+                 (let [left (->left-cursor opts)]
+                   (try
+                     (let [right (->right-cursor opts)]
+                       (try
+                         (->cursor opts left right)
+                         (catch Throwable e
+                           (util/try-close right)
+                           (throw e))))
+                     (catch Throwable e
+                       (util/try-close left)
+                       (throw e)))))}))

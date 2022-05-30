@@ -1,5 +1,6 @@
 (ns core2.operator.group-by-test
   (:require [clojure.test :as t]
+            [core2.operator :as op]
             [core2.operator.group-by :as group-by]
             [core2.test-util :as tu]
             [core2.types :as types]
@@ -12,18 +13,19 @@
 (t/deftest test-group-by
   (let [a-field (types/->field "a" types/bigint-type false)
         b-field (types/->field "b" types/bigint-type false)]
-    (letfn [(run-test [group-cols agg-specs blocks]
-              (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field]) blocks)
-                          group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor group-cols agg-specs)]
-                (set (first (tu/<-cursor group-by-cursor)))))]
+    (letfn [(run-test [group-by-spec blocks]
+              (with-open [res (op/open-ra [:group-by group-by-spec
+                                           [::tu/blocks (Schema. [a-field b-field])
+                                            blocks]])]
+                (into #{} cat (tu/<-cursor res))))]
 
-      (let [agg-specs [(group-by/->aggregate-factory :sum "b" "sum")
-                       (group-by/->aggregate-factory :avg "b" "avg")
-                       (group-by/->aggregate-factory :count "b" "cnt")
-                       (group-by/->aggregate-factory :min "b" "min")
-                       (group-by/->aggregate-factory :max "b" "max")
-                       (group-by/->aggregate-factory :variance "b" "variance")
-                       (group-by/->aggregate-factory :std-dev "b" "std-dev")]]
+      (let [agg-specs '[{sum (sum b)}
+                        {avg (avg b)}
+                        {cnt (count b)}
+                        {min (min b)}
+                        {max (max b)}
+                        {variance (variance b)}
+                        {std-dev (std-dev b)}]]
 
         (t/is (= #{{:a 1, :sum 140, :avg 35.0, :cnt 4 :min 10 :max 60,
                     :variance 425.0, :std-dev 20.615528128088304}
@@ -31,7 +33,7 @@
                     :variance 288.88888888888914, :std-dev 16.996731711975958}
                    {:a 3, :sum 170, :avg 85.0, :cnt 2 :min 80 :max 90,
                     :variance 25.0, :std-dev 5.0}}
-                 (run-test ["a"] agg-specs
+                 (run-test (cons 'a agg-specs)
                            [[{:a 1 :b 20}
                              {:a 1 :b 10}
                              {:a 2 :b 30}
@@ -42,11 +44,11 @@
                              {:a 3 :b 80}
                              {:a 3 :b 90}]])))
 
-        (t/is (empty? (run-test ["a"] agg-specs []))
+        (t/is (empty? (run-test (cons 'a agg-specs) []))
               "empty input"))
 
       (t/is (= #{{:a 1} {:a 2} {:a 3}}
-               (run-test ["a"] []
+               (run-test '[a]
                          [[{:a 1 :b 10}
                            {:a 1 :b 20}
                            {:a 2 :b 10}
@@ -64,7 +66,7 @@
                  {:a 2, :b 20, :cnt 1}
                  {:a 3, :b 10, :cnt 1}
                  {:a 3, :b 20, :cnt 1}}
-               (run-test ["a" "b"] [(group-by/->aggregate-factory :count "b" "cnt")]
+               (run-test '[a b {cnt (count b)}]
                          [[{:a 1 :b 10}
                            {:a 1 :b 20}
                            {:a 2 :b 10}
@@ -77,7 +79,7 @@
             "multiple group columns (distinct)")
 
       (t/is (= #{{:cnt 9}}
-               (run-test [] [(group-by/->aggregate-factory :count "b" "cnt")]
+               (run-test '[{cnt (count b)}]
                          [[{:a 1 :b 10}
                            {:a 1 :b 20}
                            {:a 2 :b 10}
@@ -118,18 +120,15 @@
           (util/try-close agg-spec))))))
 
 (t/deftest test-bool-aggs
-  (with-open [in-cursor (tu/->cursor (Schema. [(types/->field "k" types/varchar-type false)
-                                               (types/->field "v" types/bool-type true)])
-                                     [[{:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
-                                       {:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
-                                       {:k "tn", :v true} {:k "tn", :v nil} {:k "tn", :v true}
-                                       {:k "fn", :v false} {:k "fn", :v nil} {:k "fn", :v false}
-                                       {:k "tf", :v true} {:k "tf", :v false} {:k "tf", :v true}
-                                       {:k "tfn", :v true} {:k "tfn", :v false} {:k "tfn", :v nil}]])
-              group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor
-                                                          ["k"]
-                                                          [(group-by/->aggregate-factory :all "v" "all-vs")
-                                                           (group-by/->aggregate-factory :any "v" "any-vs")])]
+  (with-open [res (op/open-ra [:group-by '[k {all-vs (all v)} {any-vs (any v)}]
+                               [::tu/blocks (Schema. [(types/->field "k" types/varchar-type false)
+                                                      (types/->field "v" types/bool-type true)])
+                                [[{:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
+                                  {:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
+                                  {:k "tn", :v true} {:k "tn", :v nil} {:k "tn", :v true}
+                                  {:k "fn", :v false} {:k "fn", :v nil} {:k "fn", :v false}
+                                  {:k "tf", :v true} {:k "tf", :v false} {:k "tf", :v true}
+                                  {:k "tfn", :v true} {:k "tfn", :v false} {:k "tfn", :v nil}]]]])]
     (t/is (= #{{:k "t", :all-vs true, :any-vs true}
                {:k "f", :all-vs false, :any-vs false}
                {:k "n", :all-vs nil, :any-vs nil}
@@ -137,28 +136,27 @@
                {:k "tn", :all-vs nil, :any-vs true}
                {:k "tf", :all-vs false, :any-vs true}
                {:k "tfn", :all-vs false, :any-vs true}}
-             (set (first (tu/<-cursor group-by-cursor)))))))
+             (set (first (tu/<-cursor res)))))))
 
 (t/deftest test-distinct
-  (with-open [in-cursor (tu/->cursor (Schema. [(types/->field "k" types/keyword-type false)
-                                               (types/->field "v" types/bigint-type true)])
-                                     [[{:k :a, :v 10}
-                                       {:k :b, :v 12}
-                                       {:k :b, :v 15}
-                                       {:k :b, :v 15}
-                                       {:k :b, :v 10}]
-                                      [{:k :a, :v 12}
-                                       {:k :a, :v 10}]])
-              group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor
-                                                          ["k"]
-                                                          [(group-by/->aggregate-factory :count "v" "cnt")
-                                                           (group-by/->aggregate-factory :count-distinct "v" "cnt-distinct")
-                                                           (group-by/->aggregate-factory :sum "v" "sum")
-                                                           (group-by/->aggregate-factory :sum-distinct "v" "sum-distinct")
-                                                           (group-by/->aggregate-factory :avg "v" "avg")
-                                                           (group-by/->aggregate-factory :avg-distinct "v" "avg-distinct")
-                                                           (group-by/->aggregate-factory :array-agg "v" "array-agg")
-                                                           (group-by/->aggregate-factory :array-agg-distinct "v" "array-agg-distinct")])]
+  (with-open [res (op/open-ra [:group-by '[k
+                                           {cnt (count v)}
+                                           {cnt-distinct (count-distinct v)}
+                                           {sum (sum v)}
+                                           {sum-distinct (sum-distinct v)}
+                                           {avg (avg v)}
+                                           {avg-distinct (avg-distinct v)}
+                                           {array-agg (array-agg v)}
+                                           {array-agg-distinct (array-agg-distinct v)}]
+                               [::tu/blocks (Schema. [(types/->field "k" types/keyword-type false)
+                                                      (types/->field "v" types/bigint-type true)])
+                                [[{:k :a, :v 10}
+                                  {:k :b, :v 12}
+                                  {:k :b, :v 15}
+                                  {:k :b, :v 15}
+                                  {:k :b, :v 10}]
+                                 [{:k :a, :v 12}
+                                  {:k :a, :v 10}]]]])]
     (t/is (= #{{:k :a,
                 :cnt 3, :cnt-distinct 2,
                 :sum 32, :sum-distinct 22,
@@ -169,4 +167,4 @@
                 :sum 52, :sum-distinct 37,
                 :avg 13.0, :avg-distinct 12.333333333333334
                 :array-agg [12 15 15 10], :array-agg-distinct [12 15 10]}}
-             (set (first (tu/<-cursor group-by-cursor)))))))
+             (set (first (tu/<-cursor res)))))))

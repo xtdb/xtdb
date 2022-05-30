@@ -5,7 +5,8 @@
             [core2.operator.csv :as csv]
             [core2.test-util :as tu]
             [core2.types :as types]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.operator :as op])
   (:import org.apache.arrow.memory.RootAllocator
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot))
@@ -20,15 +21,15 @@
     {:id "foo5", :a-long 53, :a-double 10.0, :an-inst (util/->zdt #inst "2022")}]])
 
 (t/deftest test-csv-cursor
-  (with-open [cursor (csv/->csv-cursor tu/*allocator*
-                                       (-> (io/resource "core2/operator/csv-cursor-test.csv")
-                                           .toURI
-                                           util/->path)
-                                       {"a-long" :bigint
-                                        "a-double" :float8
-                                        "an-inst" :timestamp}
-                                       {:batch-size 3})]
-    (t/is (= example-data (into [] (tu/<-cursor cursor))))))
+  (with-open [res (op/open-ra [:csv (-> (io/resource "core2/operator/csv-cursor-test.csv")
+                                        .toURI
+                                        util/->path)
+                               '{id :varchar
+                                 a-long :bigint
+                                 a-double :float8
+                                 an-inst :timestamp}
+                               {:batch-size 3}])]
+    (t/is (= example-data (into [] (tu/<-cursor res))))))
 
 (def ^:private arrow-path
   (-> (io/resource "core2/operator/arrow-cursor-test.arrow")
@@ -36,8 +37,8 @@
       util/->path))
 
 (t/deftest test-arrow-cursor
-  (with-open [cursor (arrow/->arrow-cursor tu/*allocator* arrow-path)]
-    (t/is (= example-data (into [] (tu/<-cursor cursor))))))
+  (with-open [res (op/open-ra [:arrow arrow-path])]
+    (t/is (= example-data (tu/<-cursor res)))))
 
 (comment
   (with-open [al (RootAllocator.)

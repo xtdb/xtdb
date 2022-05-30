@@ -1,7 +1,8 @@
 (ns core2.operator.unwind
   (:require [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.logical-plan :as lp])
   (:import (core2 ICursor)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (java.util LinkedList)
@@ -103,5 +104,12 @@
   (close [_]
     (.close in-cursor)))
 
-(defn ->unwind-cursor ^core2.ICursor [allocator ^ICursor in-cursor from-column-name to-column-name {:keys [ordinality-column]}]
-  (UnwindCursor. allocator in-cursor from-column-name to-column-name ordinality-column))
+(defmethod lp/emit-expr :unwind [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
+  (let [[to-col from-col] (first columns)]
+    (lp/unary-expr relation op-args
+      (fn [col-names]
+        {:col-names (conj col-names (name to-col))
+         :->cursor (fn [{:keys [allocator]} in-cursor]
+                     (UnwindCursor. allocator in-cursor
+                                    (name from-col) (name to-col)
+                                    (some-> ordinality-column name)))}))))

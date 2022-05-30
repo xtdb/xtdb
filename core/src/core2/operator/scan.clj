@@ -2,24 +2,32 @@
   (:require [core2.align :as align]
             [core2.bloom :as bloom]
             [core2.coalesce :as coalesce]
+            [core2.error :as err]
+            [core2.expression :as expr]
+            [core2.expression.metadata :as expr.meta]
+            [core2.expression.temporal :as expr.temp]
             [core2.indexer :as idx]
+            [core2.logical-plan :as lp]
             [core2.metadata :as meta]
+            core2.snapshot
             [core2.temporal :as temporal]
             [core2.types :as t]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import clojure.lang.MapEntry
+           core2.api.TransactionInstant
            core2.buffer_pool.IBufferPool
            core2.ICursor
+           core2.indexer.IChunkManager
            core2.metadata.IMetadataManager
            core2.operator.IRelationSelector
+           core2.snapshot.Snapshot
            [core2.temporal ITemporalManager TemporalRoots]
            core2.tx.Watermark
            [java.util HashMap LinkedList List Map Queue]
            [java.util.function BiFunction Consumer]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
-           [org.apache.arrow.vector.complex ListVector StructVector]
            [org.roaringbitmap IntConsumer RoaringBitmap]
            org.roaringbitmap.buffer.MutableRoaringBitmap
            org.roaringbitmap.longlong.Roaring64Bitmap))
@@ -224,17 +232,79 @@
       (util/try-close chunk))))
 
 (defn ->scan-cursor ^core2.operator.scan.ScanCursor [^BufferAllocator allocator
-                                                     ^IMetadataManager metadata-manager
-                                                     ^ITemporalManager temporal-manager
-                                                     ^IBufferPool buffer-pool
-                                                     ^Watermark watermark
+                                                     ^Snapshot snapshot
                                                      ^List col-names
                                                      metadata-pred ;; TODO derive this from col-preds
                                                      ^Map col-preds
-                                                     ^longs temporal-min-range, ^longs temporal-max-range]
-  (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))]
-    (-> (ScanCursor. allocator buffer-pool temporal-manager metadata-manager watermark
-                     matching-chunks col-names col-preds
-                     temporal-min-range temporal-max-range
-                     #_chunks nil #_live-chunk-done? false)
-        (coalesce/->coalescing-cursor allocator))))
+                                                     [^longs temporal-min-range, ^longs temporal-max-range]]
+  (let [^IChunkManager indexer (.indexer snapshot)
+        metadata-mgr (.metadata-mgr snapshot)
+        buffer-pool (.buffer-pool snapshot)
+        temporal-mgr (.temporal-mgr snapshot)
+        watermark (.getWatermark indexer)]
+    (try
+      (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr watermark metadata-pred) []))]
+        (-> (ScanCursor. allocator buffer-pool temporal-mgr metadata-mgr watermark
+                         matching-chunks col-names col-preds
+                         temporal-min-range temporal-max-range
+                         #_chunks nil #_live-chunk-done? false)
+            (coalesce/->coalescing-cursor allocator)
+            (util/and-also-close watermark)))
+      (catch Throwable t
+        (util/try-close watermark)
+        (throw t)))))
+
+(defn- apply-default-valid-time! [[^longs temporal-min-range, ^longs temporal-max-range] default-valid-time col-preds]
+  (when-not (or (contains? col-preds "_valid-time-start")
+                (contains? col-preds "_valid-time-end"))
+    (expr.temp/apply-constraint temporal-min-range temporal-max-range
+                                '<= "_valid-time-start" default-valid-time)
+    (expr.temp/apply-constraint temporal-min-range temporal-max-range
+                                '> "_valid-time-end" default-valid-time)))
+
+(defn- apply-snapshot-tx! [[^longs temporal-min-range, ^longs temporal-max-range], ^Snapshot snapshot, col-preds]
+  (when-let [tx-time (.tx-time ^TransactionInstant (.tx snapshot))]
+    (expr.temp/apply-constraint temporal-min-range temporal-max-range
+                                '<= "_tx-time-start" tx-time)
+
+    (when-not (or (contains? col-preds "_tx-time-start")
+                  (contains? col-preds "_tx-time-end"))
+      (expr.temp/apply-constraint temporal-min-range temporal-max-range
+                                  '> "_tx-time-end" tx-time))))
+
+(defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [src-keys params]}]
+  (let [ordered-col-names (->> columns
+                               (map (fn [[col-type arg]]
+                                      (str (case col-type
+                                             :column arg
+                                             :select (key (first arg))))))
+                               (distinct))
+        selects (->> (for [[col-type arg] columns
+                           :when (= col-type :select)]
+                       (first arg))
+                     (into {}))
+        col-preds (->> (for [[col-name select-form] selects]
+                         (MapEntry/create (name col-name)
+                                          (expr/->expression-relation-selector select-form #{col-name} params)))
+                       (into {}))
+        metadata-args (vec (concat (for [col-name ordered-col-names
+                                         :when (not (contains? col-preds col-name))]
+                                     (symbol col-name))
+                                   (vals selects)))
+        metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (into #{} (map symbol) ordered-col-names) params)
+
+        src-key (or source '$)]
+
+    (when-not (contains? src-keys src-key)
+      (throw (err/illegal-arg :unknown-src
+                              {::err/message "Query refers to unknown source"
+                               :db source
+                               :src-keys src-keys})))
+    {:col-names (set ordered-col-names)
+     :->cursor (fn [{:keys [allocator srcs params default-valid-time]}]
+                 (let [snapshot (get srcs src-key)]
+                   (->scan-cursor allocator snapshot ordered-col-names
+                                  metadata-pred col-preds
+                                  (doto (expr.temp/->temporal-min-max-range selects params)
+                                    (apply-default-valid-time! default-valid-time col-preds)
+                                    (apply-snapshot-tx! snapshot col-preds)))))}))
