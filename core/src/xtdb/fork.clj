@@ -95,7 +95,7 @@
   java.io.Closeable
   (close [_] (xio/try-close index-snapshot)))
 
-(defrecord MergedIndexSnapshot [persistent-index-snapshot -index-snapshot evicted-eids]
+(defrecord MergedIndexSnapshot [persistent-index-snapshot transient-index-snapshot evicted-eids]
   db/IndexSnapshot
   (av [_ a min-v]
     (merge-seqs (db/av persistent-index-snapshot a min-v)

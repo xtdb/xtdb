@@ -975,7 +975,7 @@
       buf)
     mem/empty-buffer))
 
-(defrecord KvIndexStoreTx [kv-tx tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
+(defrecord KvIndexStoreTx [kv-store kv-tx tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStoreTx
   (index-docs [_ docs]
     (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
@@ -1095,7 +1095,7 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (new-kv-index-snapshot (kv/new-snapshot kv-tx) true thread-mgr
+    (new-kv-index-snapshot (kv/new-snapshot kv-store) true thread-mgr
                            cav-cache canonical-buffer-cache)
     #_(fork/->MergedIndexSnapshot (-> (new-kv-index-snapshot (kv/new-snapshot persistent-kv-store) true thread-mgr
                                                              cav-cache canonical-buffer-cache)
@@ -1113,7 +1113,7 @@
 ;; TODO          transient-kv-store (mut-kv/->mutable-kv-store (:kvs encoded-docs))
           ]
       (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)
-      (->KvIndexStoreTx kv-store tx fork-at
+      (->KvIndexStoreTx kv-store kv-tx tx fork-at
                         (atom #{}) thread-mgr
                         (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache)))
 

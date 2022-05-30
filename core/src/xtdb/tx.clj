@@ -289,7 +289,7 @@
   (open-db [_ valid-time tx-time] (xt/open-db db-provider valid-time tx-time))
 
   db/InFlightTx
-  (index-docs [_ docs]
+  (index-tx-docs [_ docs]
     (let [stats (db/index-docs index-store-tx docs)]
       (swap! !tx update-tx-stats stats)))
 
@@ -321,7 +321,7 @@
                                      (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
                                                                            :docs missing-ids}))))
 
-                                 (db/index-docs this docs))
+                                 (db/index-tx-docs this docs))
 
                                (db/index-entity-txs index-store-tx etxs)
                                (let [{:keys [tombstones]} (when (seq evict-eids)
@@ -552,8 +552,7 @@
                                           (let [txs (doall
                                                      (for [{:keys [docs tx] :as m} txs]
                                                        (let [in-flight-tx (db/begin-tx tx-indexer (select-keys tx [::xt/tx-time ::xt/tx-id]) nil)]
-                                                         (let [stats (db/index-docs (:index-store-tx in-flight-tx) docs)]
-                                                           (swap! (:!tx in-flight-tx) update-tx-stats stats))
+                                                         (db/index-tx-docs in-flight-tx docs)
                                                          (assoc m :in-flight-tx in-flight-tx))))]
                                             (submit-job! txs-index-executor txs-index-fn txs)))
 
