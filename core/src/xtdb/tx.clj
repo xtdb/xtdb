@@ -319,9 +319,9 @@
                                  (when (seq docs)
                                    (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
                                      (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
-                                                                           :docs missing-ids}))))
+                                                                           :docs missing-ids})))
 
-                                 (db/index-tx-docs this docs))
+                                   (db/index-tx-docs this docs)))
 
                                (db/index-entity-txs index-store-tx etxs)
                                (let [{:keys [tombstones]} (when (seq evict-eids)
