@@ -70,7 +70,7 @@
                                      {:crux.db/id (:crux.db/id arg-doc)
                                       :crux.db.fn/failed? true}))))))
 
-(defn- update-tx-stats [tx {:keys [bytes-indexed doc-ids av-count] :as encoded-docs}]
+(defn- update-tx-stats [tx {:keys [bytes-indexed doc-ids av-count]}]
   (-> tx
       (update :av-count + av-count)
       (update :bytes-indexed + bytes-indexed)
@@ -289,6 +289,10 @@
   (open-db [_ valid-time tx-time] (xt/open-db db-provider valid-time tx-time))
 
   db/InFlightTx
+  (index-docs [_ docs]
+    (let [stats (db/index-docs index-store-tx docs)]
+      (swap! !tx update-tx-stats stats)))
+
   (index-tx-events [this tx-events]
     (try
       (let [tx-state @!tx-state]
@@ -311,16 +315,13 @@
                                true)
 
                              (do
-                               (let [docs (-> docs without-tx-fn-docs)
-                                     encoded-docs (db/encode-docs index-store docs)]
-
+                               (let [docs (-> docs without-tx-fn-docs)]
                                  (when (seq docs)
                                    (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
                                      (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
                                                                            :docs missing-ids}))))
 
-                                 (db/index-docs index-store-tx encoded-docs)
-                                 (swap! !tx update-tx-stats encoded-docs))
+                                 (db/index-docs this docs))
 
                                (db/index-entity-txs index-store-tx etxs)
                                (let [{:keys [tombstones]} (when (seq evict-eids)
@@ -380,17 +381,16 @@
 
 (defrecord TxIndexer [index-store document-store bus query-engine]
   db/TxIndexer
-  (begin-tx [_ tx encoded-docs fork-at]
+  (begin-tx [_ tx fork-at]
     (when-not fork-at
       (log/debug "Indexing tx-id:" (::xt/tx-id tx))
       (bus/send bus {::xt/event-type ::indexing-tx, :submitted-tx tx}))
 
-    (let [index-store-tx (db/begin-index-tx index-store tx encoded-docs fork-at)
+    (let [index-store-tx (db/begin-index-tx index-store tx fork-at)
           document-store-tx (fork/begin-document-store-tx document-store)]
       (->InFlightTx index-store tx fork-at
                     (atom :open)
-                    (atom (merge {:tx-events []}
-                                 (select-keys encoded-docs [:av-count :bytes-indexed :doc-ids])))
+                    (atom {:tx-events [] :av-count 0 :bytes-indexed 0 :doc-ids #{}})
                     index-store-tx
                     document-store-tx
                     (assoc query-engine
@@ -511,8 +511,7 @@
 
                                         (txs-index-fn [txs]
                                           (let [committed-docs (atom '())]
-                                            (doseq [{:keys [tx docs encoded-docs]} txs]
-
+                                            (doseq [{:keys [tx docs in-flight-tx]} txs]
                                               (let [[{::txe/keys [tx-events] :as tx} committing?]
                                                     (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
                                                       (let [tx-log-time (::xt/tx-time tx)
@@ -536,11 +535,6 @@
 
                                                       [tx true])
 
-                                                    in-flight-tx (db/begin-tx tx-indexer
-                                                                              (select-keys tx [::xt/tx-time ::xt/tx-id])
-                                                                              encoded-docs
-                                                                              nil)
-
                                                     committing? (and committing?
                                                                      (db/index-tx-events in-flight-tx tx-events))]
 
@@ -556,8 +550,11 @@
 
                                         (txs-doc-encoder-fn [txs]
                                           (let [txs (doall
-                                                     (for [{:keys [docs] :as m} txs]
-                                                       (assoc m :encoded-docs (db/encode-docs index-store docs))))]
+                                                     (for [{:keys [docs tx] :as m} txs]
+                                                       (let [in-flight-tx (db/begin-tx tx-indexer (select-keys tx [::xt/tx-time ::xt/tx-id]) nil)]
+                                                         (let [stats (db/index-docs (:index-store-tx in-flight-tx) docs)]
+                                                           (swap! (:!tx in-flight-tx) update-tx-stats stats))
+                                                         (assoc m :in-flight-tx in-flight-tx))))]
                                             (submit-job! txs-index-executor txs-index-fn txs)))
 
                                         (txs-doc-fetch-fn [txs]

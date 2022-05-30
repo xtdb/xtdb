@@ -57,8 +57,20 @@
     (.close read-options)
     (.releaseSnapshot db snapshot)))
 
+(defrecord RocksKvTx [^RocksDB db, ^WriteOptions write-options, ^WriteBatch wb]
+  kv/KvStoreTx
+  (put-kv [_ k v]
+    (if v
+      (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
+      (.remove wb (mem/direct-byte-buffer k))))
+
+  (commit-kv-tx [_]
+    (.write db write-options wb)))
+
 (defrecord RocksKv [^RocksDB db, ^WriteOptions write-options, ^Options options, ^Closeable metrics, ^Closeable cp-job, db-dir]
   kv/KvStore
+
+  ;; TODO, expect to move this
   (new-snapshot [_]
     (let [snapshot (.getSnapshot db)]
       (->RocksKvSnapshot db
@@ -66,6 +78,10 @@
                            (.setSnapshot snapshot))
                          snapshot)))
 
+  (begin-kv-tx [_]
+    (->RocksKvTx db write-options (WriteBatch.)))
+
+  ;; todo, remove in favour of kv-tx put
   (store [_ kvs]
     (with-open [wb (WriteBatch.)]
       (doseq [[k v] kvs]

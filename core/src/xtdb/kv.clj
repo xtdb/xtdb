@@ -15,6 +15,12 @@
   (new-iterator ^java.io.Closeable [this])
   (get-value [this k]))
 
+(defprotocol KvStoreTx
+  (new-snapshot ^java.io.Closeable [this])
+  (abort-kv-tx [this])
+  (commit-kv-tx [this])
+  (put-kv [this k v]))
+
 ;; tag::KvStore[]
 (defprotocol KvStore
   (new-snapshot ^java.io.Closeable [this])
@@ -23,7 +29,8 @@
   (compact [this])
   (count-keys [this])
   (db-dir [this])
-  (kv-name [this]))
+  (kv-name [this])
+  (begin-kv-tx [this]))
 ;; end::KvStore[]
 
 (def args
