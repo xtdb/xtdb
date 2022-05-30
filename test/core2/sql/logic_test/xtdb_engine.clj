@@ -207,10 +207,11 @@
             projection   (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
                               (first)
                               (mapv plan/unqualified-projection-symbol)
-                              (plan/generate-unique-column-names)
-                              (mapv (comp keyword name)))
-            {:keys [errs plan]} (plan/plan-query tree)]
+                              (plan/generate-unique-column-names))
+            {:keys [errs plan]} (plan/plan-query tree {:decorrelate? true
+                                                       :project-anonymous-columns? true})
+            column->anonymous-col (:column->name (meta plan))]
         (if-let [err (first errs)]
           (throw (IllegalArgumentException. ^String err))
           (vec (for [row (op/query-ra plan {'$ db})]
-                 (mapv row projection))))))))
+                 (mapv #(-> (get column->anonymous-col %) name keyword row) projection))))))))

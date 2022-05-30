@@ -992,24 +992,27 @@
 
 (defn- build-query-specification [sl te]
   (let [projection (first (sem/projected-columns sl))
-        unqualified-rename-entries (for [{:keys [qualified-column] :as projection} projection
-                                         :when qualified-column
-                                         :let [column (qualified-projection-symbol projection)]]
-                                     [column (unqualified-projection-symbol projection)])
-        qualified-projection (vec (for [{:keys [qualified-column] :as projection} projection
+        projection (map
+                     (fn [projection-col unique-unqualified-column-name]
+                       (assoc projection-col :unique-unqualified-column-name unique-unqualified-column-name))
+                     projection
+                     (generate-unique-column-names (map #(unqualified-projection-symbol %) projection)))
+        qualified->unqualified-rename (->> (for [{:keys [qualified-column unique-unqualified-column-name] :as projection} projection
+                                            :when qualified-column
+                                            :let [column (qualified-projection-symbol projection)]]
+                                        [column unique-unqualified-column-name])
+                                           (into {}))
+        qualified-projection (vec (for [{:keys [qualified-column unique-unqualified-column-name] :as projection} projection
                                         :let [derived-column (:ref (meta projection))]]
                                     (if qualified-column
                                       (qualified-projection-symbol projection)
-                                      {(unqualified-projection-symbol projection)
+                                      {unique-unqualified-column-name
                                        (expr (r/$ derived-column 1))})))
         relation (wrap-with-apply sl (plan te))
         qualified-project [:project qualified-projection relation]]
-    (if (not-empty unqualified-rename-entries)
+    (if (not-empty qualified->unqualified-rename)
       [:rename
-       (zipmap
-         (map first unqualified-rename-entries)
-         (generate-unique-column-names
-           (map second unqualified-rename-entries)))
+       qualified->unqualified-rename
        qualified-project]
       qualified-project)))
 
@@ -1605,7 +1608,7 @@
                  (keyword? (r/ctor relation-in)))
         (throw (IllegalArgumentException. (str "cannot remove names for: " (pr-str (r/node relation-in)))))))))
 
-(defn- remove-names [relation]
+(defn- remove-names [relation {:keys [project-anonymous-columns?]}]
   (let [projection (relation-columns relation)
         relation (binding [*name-counter* (atom 0)]
                    (r/node (r/bottomup (r/adhoc-tp r/id-tp remove-names-step) (r/vector-zip relation))))
@@ -1618,12 +1621,15 @@
                                              [:project projection
                                               relation])
                                   smap-inv (set/map-invert rename-map)
-                                  relation (or (r/zmatch relation
-                                                 [:rename rename-map-2 relation-2]
-                                                 ;;=>
-                                                 (when (= smap-inv (set/map-invert rename-map-2))
-                                                   relation-2))
-                                               [:rename smap-inv relation])]
+                                  relation (if project-anonymous-columns?
+                                             relation
+                                             (or (r/zmatch
+                                                   relation
+                                                   [:rename rename-map-2 relation-2]
+                                                   ;;=>
+                                                   (when (= smap-inv (set/map-invert rename-map-2))
+                                                     relation-2))
+                                                 [:rename smap-inv relation]))]
                               (with-meta relation {:column->name smap})))]
     (with-meta relation {:column->name smap
                          :add-projection-fn add-projection-fn})))
@@ -2377,7 +2383,7 @@
 
 (defn plan-query
   ([query] (plan-query query {:decorrelate? true}))
-  ([query {:keys [decorrelate?]}]
+  ([query {:keys [decorrelate?] :as opts}]
    (if (p/failure? query)
      {:errs [(p/failure->str query)]}
      (r/with-memoized-attributes [sem/id
@@ -2436,7 +2442,7 @@
                                    #'decorrelate-apply-rule-4
                                    #'decorrelate-apply-rule-8
                                    #'decorrelate-apply-rule-9]
-                 plan (remove-names (plan ag))
+                 plan (remove-names (plan ag) opts)
                  add-projection-fn (:add-projection-fn (meta plan))
                  plan (->> plan
                            (r/vector-zip)
