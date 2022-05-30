@@ -29,12 +29,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- buffer-tl ^ThreadLocal []
-  (ThreadLocal/withInitial
-   (reify Supplier
-     (get [_]
-       (ExpandableDirectByteBuffer. 32)))))
-
 (def ^:private ^ThreadLocal seek-buffer-tl
   (ThreadLocal/withInitial
    (reify Supplier
@@ -466,9 +460,6 @@
   (let [^long hll-size (/ (- (.capacity b) Long/BYTES Long/BYTES) 2)]
     (mem/slice-buffer b (+ Long/BYTES Long/BYTES hll-size) hll-size)))
 
-(def ^:private ^ThreadLocal stats-key-buffer-tl (buffer-tl))
-(def ^:private ^ThreadLocal attr-buffer-tl (buffer-tl))
-
 (defn- stats-kvs [stats-kvs-cache persistent-kv-store docs]
   (let [persistent-kv-snapshot (atom nil)
         get-persistent-value (fn [k-buf]
@@ -480,7 +471,7 @@
       (let [attr-key-bufs (->> docs
                                (into {} (comp (mapcat keys)
                                               (distinct)
-                                              (map (juxt identity #(encode-stats-key-to (.get stats-key-buffer-tl) (c/value->buffer % (.get attr-buffer-tl))))))))]
+                                              (map (juxt identity #(encode-stats-key-to nil (c/->value-buffer %)))))))]
         (->> docs
              (reduce (fn [acc doc]
                        (let [e (:crux.db/id doc)]
@@ -983,6 +974,12 @@
         (.putInt buf (* Integer/BYTES idx) (nth idxs idx)))
       buf)
     mem/empty-buffer))
+
+(defn- buffer-tl ^ThreadLocal []
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (ExpandableDirectByteBuffer. 32)))))
 
 (def ^:private ^ThreadLocal content-hash-buffer-tl (buffer-tl))
 (def ^:private ^ThreadLocal content-buffer-tl (buffer-tl))
