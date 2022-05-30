@@ -196,155 +196,169 @@
                             {:c 11, :d 42}]]]])
                 (mapv frequencies)))))
 
-#_
 (t/deftest test-left-equi-join
   (t/is (= [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0, :b nil, :c nil} 1}
             {{:a 12, :b 12, :c 2} 1, {:a 100, :b 100, :c 3} 1, {:a 12, :b 12, :c 0} 1}]
-           (->> (run-join-test join/->left-outer-equi-join-cursor
-                               [[{:a 12}, {:a 0}]
-                                [{:a 12}, {:a 100}]]
-                               [[{:b 12, :c 0}, {:b 2, :c 1}]
-                                [{:b 12, :c 2}, {:b 100, :c 3}]]
-                               {:right-fields [b-field c-field]})
+           (->> (run-ra [:left-outer-join '[{a b}]
+                         [::tu/blocks (Schema. [a-field])
+                          [[{:a 12}, {:a 0}]
+                           [{:a 12}, {:a 100}]]]
+                         [::tu/blocks (Schema. [b-field c-field])
+                          [[{:b 12, :c 0}, {:b 2, :c 1}]
+                           [{:b 12, :c 2}, {:b 100, :c 3}]]]])
                 (mapv frequencies))))
 
   (t/testing "empty input"
     (t/is (= [#{{:a 12, :b nil}, {:a 0, :b nil}}
               #{{:a 100, :b nil}}]
-             (->> (run-join-test join/->left-outer-equi-join-cursor
-                                 [[{:a 12}, {:a 0}]
-                                  [{:a 100}]]
-                                 [])
+             (->> (run-ra [:left-outer-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field])
+                            [[{:a 12}, {:a 0}]
+                             [{:a 100}]]]
+                           [::tu/blocks (Schema. [b-field])
+                            []]])
                   (mapv set))))
 
-    (t/is (empty? (run-join-test join/->left-outer-equi-join-cursor
-                                 []
-                                 [[{:b 12}, {:b 2}]
-                                  [{:b 100} {:b 0}]])))
+    (t/is (empty? (run-ra [:left-outer-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field])
+                            []]
+                           [::tu/blocks (Schema. [b-field])
+                            [[{:b 12}, {:b 2}]
+                             [{:b 100} {:b 0}]]]])))
 
     (t/is (= [#{{:a 12, :b nil}, {:a 0, :b nil}}
               #{{:a 100, :b nil}}]
-             (->> (run-join-test join/->left-outer-equi-join-cursor
-                                 [[{:a 12}, {:a 0}]
-                                  [{:a 100}]]
-                                 [[]])
+             (->> (run-ra [:left-outer-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field])
+                            [[{:a 12}, {:a 0}]
+                             [{:a 100}]]]
+                           [::tu/blocks (Schema. [b-field])
+                            [[]]]])
                   (mapv set))))))
 
-#_
 (t/deftest test-left-equi-join-multi-col
   (->> "multi column left"
        (t/is (= [{{:a 11, :b 44, :c nil, :d nil, :e nil} 1
                   {:a 10, :b 42, :c nil, :d nil, :e nil} 1
                   {:a 12, :b 42, :c 12, :d 42, :e 0} 6
                   {:a 12, :b 42, :c 12, :d 42, :e 1} 2}]
-                (->> (run-join-test join/->left-outer-equi-join-cursor
-                                    [[{:a 12, :b 42}
-                                      {:a 12, :b 42}
-                                      {:a 11, :b 44}
-                                      {:a 10, :b 42}]]
-                                    [[{:c 12, :d 42, :e 0}
-                                      {:c 12, :d 43, :e 0}
-                                      {:c 11, :d 42, :e 0}]
-                                     [{:c 12, :d 42, :e 0}
-                                      {:c 12, :d 42, :e 0}
-                                      {:c 12, :d 42, :e 1}]]
-                                    {:left-fields [a-field b-field], :right-fields [c-field d-field e-field]
-                                     :left-join-cols ["a" "b"], :right-join-cols ["c" "d"]})
+                (->> (run-ra [:left-outer-join '[{a c} {b d}]
+                              [::tu/blocks (Schema. [a-field b-field])
+                               [[{:a 12, :b 42}
+                                 {:a 12, :b 42}
+                                 {:a 11, :b 44}
+                                 {:a 10, :b 42}]]]
+                              [::tu/blocks (Schema. [c-field d-field e-field])
+                               [[{:c 12, :d 42, :e 0}
+                                 {:c 12, :d 43, :e 0}
+                                 {:c 11, :d 42, :e 0}]
+                                [{:c 12, :d 42, :e 0}
+                                 {:c 12, :d 42, :e 0}
+                                 {:c 12, :d 42, :e 1}]]]])
                      (mapv frequencies))))))
 
-#_
 (t/deftest test-left-theta-join
-  (let [left [{:a 12, :b 42}
-              {:a 12, :b 44}
-              {:a 10, :b 42}
-              {:a 10, :b 42}]
-        right [{:c 12, :d 43}
-               {:c 11, :d 42}]
-        j (fn j [& conditions] (quick-join join/->left-outer-equi-join-cursor left right conditions))]
+  (let [left [::tu/blocks (Schema. [a-field b-field])
+              [[{:a 12, :b 42}
+                {:a 12, :b 44}
+                {:a 10, :b 42}
+                {:a 10, :b 42}]]]
+        right [::tu/blocks (Schema. [c-field d-field])
+               [[{:c 12, :d 43}
+                 {:c 11, :d 42}]]]]
 
-    (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
-              {:a 12, :b 44, :c 12, :d 43} 1
-              {:a 10, :b 42, :c nil, :d nil} 2}
-             (j {:a :c} '(> b d))))
+    (t/is (= [{{:a 12, :b 42, :c nil, :d nil} 1
+               {:a 12, :b 44, :c 12, :d 43} 1
+               {:a 10, :b 42, :c nil, :d nil} 2}]
+             (->> (run-ra [:left-outer-join '[{a c} (> b d)] left right])
+                  (mapv frequencies))))
 
-    (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
-              {:a 12, :b 44, :c nil, :d nil} 1
-              {:a 10, :b 42, :c nil, :d nil} 2}
-             (j {:a :c} '(> b d) '(= c -1))))
+    (t/is (= [{{:a 12, :b 42, :c nil, :d nil} 1
+               {:a 12, :b 44, :c nil, :d nil} 1
+               {:a 10, :b 42, :c nil, :d nil} 2}]
+             (->> (run-ra [:left-outer-join '[{a c} (> b d) (= c -1)] left right])
+                  (mapv frequencies))))
 
-    (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
-              {:a 12, :b 44, :c nil, :d nil} 1
-              {:a 10, :b 42, :c nil, :d nil} 2}
-             (j {:a :c} '(and (= c -1) (> b d)))))
+    (t/is (= [{{:a 12, :b 42, :c nil, :d nil} 1
+               {:a 12, :b 44, :c nil, :d nil} 1
+               {:a 10, :b 42, :c nil, :d nil} 2}]
+             (->> (run-ra [:left-outer-join '[{a c} (and (= c -1) (> b d))] left right])
+                  (mapv frequencies))))
 
-    (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
-              {:a 12, :b 44, :c nil, :d nil} 1
-              {:a 10, :b 42, :c nil, :d nil} 2}
-             (j {:a :c} {:b :d} '(= c -1))))))
+    (t/is (= [{{:a 12, :b 42, :c nil, :d nil} 1
+               {:a 12, :b 44, :c nil, :d nil} 1
+               {:a 10, :b 42, :c nil, :d nil} 2}]
+             (->> (run-ra [:left-outer-join '[{a c} {b d} (= c -1)] left right])
+                  (mapv frequencies))))))
 
-#_
 (t/deftest test-full-outer-join
   (t/testing "missing on both sides"
     (t/is (= [{{:a 12, :b 12, :c 0} 2, {:a nil, :b 2, :c 1} 1}
               {{:a 12, :b 12, :c 2} 2, {:a 100, :b 100, :c 3} 1}
               {{:a 0, :b nil, :c nil} 1}]
-             (->> (run-join-test join/->full-outer-equi-join-cursor
-                                 [[{:a 12}, {:a 0}]
-                                  [{:a 12}, {:a 100}]]
-                                 [[{:b 12, :c 0}, {:b 2, :c 1}]
-                                  [{:b 12, :c 2}, {:b 100, :c 3}]]
-                                 {:right-fields [b-field c-field]})
+             (->> (run-ra [:full-outer-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field])
+                            [[{:a 12}, {:a 0}]
+                             [{:a 12}, {:a 100}]]]
+                           [::tu/blocks (Schema. [b-field c-field])
+                            [[{:b 12, :c 0}, {:b 2, :c 1}]
+                             [{:b 12, :c 2}, {:b 100, :c 3}]]]])
                   (mapv frequencies))))
 
     (t/is (= [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2, {:a nil, :b 2, :c 1} 1}
               {{:a 100, :b 100, :c 3} 1}
               {{:a 0, :b nil, :c nil} 1}]
-             (->> (run-join-test join/->full-outer-equi-join-cursor
-                                 [[{:a 12}, {:a 0}]
-                                  [{:a 12}, {:a 100}]]
-                                 [[{:b 12, :c 0}, {:b 12, :c 2}, {:b 2, :c 1}]
-                                  [{:b 100, :c 3}]]
-                                 {:right-fields [b-field c-field]})
+             (->> (run-ra [:full-outer-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field])
+                            [[{:a 12}, {:a 0}]
+                             [{:a 12}, {:a 100}]]]
+                           [::tu/blocks (Schema. [b-field c-field])
+                            [[{:b 12, :c 0}, {:b 12, :c 2}, {:b 2, :c 1}]
+                             [{:b 100, :c 3}]]]])
                   (mapv frequencies)))))
 
   (t/testing "all matched"
     (t/is (= [{{:a 12, :b 12, :c 0} 2, {:a 100, :b 100, :c 3} 1}
               {{:a 12, :b 12, :c 2} 2}]
-             (->> (run-join-test join/->full-outer-equi-join-cursor
-                                 [[{:a 12}]
-                                  [{:a 12}, {:a 100}]]
-                                 [[{:b 12, :c 0}, {:b 100, :c 3}]
-                                  [{:b 12, :c 2}]]
-                                 {:right-fields [b-field c-field]})
+             (->> (run-ra [:full-outer-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field])
+                            [[{:a 12}]
+                             [{:a 12}, {:a 100}]]]
+                           [::tu/blocks (Schema. [b-field c-field])
+                            [[{:b 12, :c 0}, {:b 100, :c 3}]
+                             [{:b 12, :c 2}]]]])
                   (mapv frequencies))))
 
     (t/is (= [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2}
               {{:a 100, :b 100, :c 3} 1}]
-             (->> (run-join-test join/->full-outer-equi-join-cursor
-                                 [[{:a 12}]
-                                  [{:a 12}, {:a 100}]]
-                                 [[{:b 12, :c 0}, {:b 12, :c 2}]
-                                  [{:b 100, :c 3}]]
-                                 {:right-fields [b-field c-field]})
+             (->> (run-ra [:full-outer-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field])
+                            [[{:a 12}]
+                             [{:a 12}, {:a 100}]]]
+                           [::tu/blocks (Schema. [b-field c-field])
+                            [[{:b 12, :c 0}, {:b 12, :c 2}]
+                             [{:b 100, :c 3}]]]])
                   (mapv frequencies)))))
 
   (t/testing "empty input"
     (t/is (= [{{:a 0, :b nil} 1, {:a 100, :b nil} 1, {:a 12, :b nil} 1}]
-             (->> (run-join-test join/->full-outer-equi-join-cursor
-                                 [[{:a 12}, {:a 0}]
-                                  [{:a 100}]]
-                                 [])
+             (->> (run-ra [:full-outer-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field])
+                            [[{:a 12}, {:a 0}]
+                             [{:a 100}]]]
+                           [::tu/blocks (Schema. [b-field])
+                            []]])
                   (mapv frequencies))))
 
     (t/is (= [{{:a nil, :b 12} 1, {:a nil, :b 2} 1}
               {{:a nil, :b 100} 1, {:a nil, :b 0} 1}]
-             (->> (run-join-test join/->full-outer-equi-join-cursor
-                                 []
-                                 [[{:b 12}, {:b 2}]
-                                  [{:b 100} {:b 0}]])
+             (->> (run-ra [:full-outer-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field]) []]
+                           [::tu/blocks (Schema. [b-field])
+                            [[{:b 12}, {:b 2}]
+                             [{:b 100} {:b 0}]]]])
                   (mapv frequencies))))))
 
-#_
 (t/deftest test-full-outer-equi-join-multi-col
   (->> "multi column full outer"
        (t/is (= [{{:a 12 :b 42 :c 12 :d 42 :e 0} 2
@@ -354,124 +368,137 @@
                   {:a 12 :b 42 :c 12 :d 42 :e 1} 2}
                  {{:a 10 :b 42 :c nil :d nil :e nil} 1
                   {:a 11 :b 44 :c nil :d nil :e nil} 1}]
-                (->> (run-join-test join/->full-outer-equi-join-cursor
-                                    [[{:a 12, :b 42}
-                                      {:a 12, :b 42}
-                                      {:a 11, :b 44}
-                                      {:a 10, :b 42}]]
-                                    [[{:c 12, :d 42, :e 0}
-                                      {:c 12, :d 43, :e 0}
-                                      {:c 11, :d 42, :e 0}]
-                                     [{:c 12, :d 42, :e 0}
-                                      {:c 12, :d 42, :e 0}
-                                      {:c 12, :d 42, :e 1}]]
-                                    {:left-fields [a-field b-field], :right-fields [c-field d-field e-field]
-                                     :left-join-cols ["a" "b"], :right-join-cols ["c" "d"]})
+                (->> (run-ra [:full-outer-join '[{a c} {b d}]
+                              [::tu/blocks (Schema. [a-field b-field])
+                               [[{:a 12, :b 42}
+                                 {:a 12, :b 42}
+                                 {:a 11, :b 44}
+                                 {:a 10, :b 42}]]]
+                              [::tu/blocks (Schema. [c-field d-field e-field])
+                               [[{:c 12, :d 42, :e 0}
+                                 {:c 12, :d 43, :e 0}
+                                 {:c 11, :d 42, :e 0}]
+                                [{:c 12, :d 42, :e 0}
+                                 {:c 12, :d 42, :e 0}
+                                 {:c 12, :d 42, :e 1}]]]])
                      (mapv frequencies))))))
 
-#_
 (t/deftest test-full-outer-join-theta
-  (let [left [{:a 12, :b 42}
-              {:a 12, :b 44}
-              {:a 10, :b 42}
-              {:a 10, :b 42}]
-        right [{:c 12, :d 43}
-               {:c 11, :d 42}]
-        j (fn j [& conditions] (quick-join join/->full-outer-equi-join-cursor left right conditions))]
+  (let [left [::tu/blocks (Schema. [a-field b-field])
+              [[{:a 12, :b 42}
+                {:a 12, :b 44}
+                {:a 10, :b 42}
+                {:a 10, :b 42}]]]
+        right [::tu/blocks (Schema. [c-field d-field])
+               [[{:c 12, :d 43}
+                 {:c 11, :d 42}]]]]
 
     (t/is (= {{:a 12, :b 42, :c 12, :d 43} 1
               {:a 12, :b 44, :c nil, :d nil} 1
               {:a 10, :b 42, :c nil, :d nil} 2
               {:a nil, :b nil, :c 11, :d 42} 1}
 
-             (j {:a :c} '(not (= b 44)))))
+             (->> (run-ra [:full-outer-join '[{a c} (not (= b 44))] left right])
+                  (sequence cat)
+                  (frequencies))))
 
     (t/is (= {{:a 12, :b 42, :c nil, :d nil} 1
               {:a 12, :b 44, :c nil, :d nil} 1
               {:a 10, :b 42, :c nil :d nil} 2
               {:a nil, :b nil, :c 12, :d 43} 1
               {:a nil, :b nil, :c 11, :d 42} 1}
-             (j {:a :c} false)))))
+             (->> (run-ra [:full-outer-join '[{a c} false] left right])
+                  (sequence cat)
+                  (frequencies))))))
 
-#_
 (t/deftest test-anti-equi-join
   (t/is (= [{{:a 0} 2}]
-           (->> (run-join-test join/->left-anti-semi-equi-join-cursor
-                               [[{:a 12}, {:a 0}, {:a 0}]
-                                [{:a 100}]]
-                               [[{:b 12}, {:b 2}]
-                                [{:b 100}]])
+           (->> (run-ra [:anti-join '[{a b}]
+                         [::tu/blocks (Schema. [a-field])
+                          [[{:a 12}, {:a 0}, {:a 0}]
+                           [{:a 100}]]]
+                         [::tu/blocks (Schema. [b-field])
+                          [[{:b 12}, {:b 2}]
+                           [{:b 100}]]]])
                 (mapv frequencies))))
 
   (t/testing "empty input"
-    (t/is (empty? (run-join-test join/->left-anti-semi-equi-join-cursor
-                                 []
-                                 [[{:b 12}, {:b 2}]
-                                  [{:b 100}]])))
+    (t/is (empty? (run-ra [:anti-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field])
+                            []]
+                           [::tu/blocks (Schema. [b-field])
+                            [[{:b 12}, {:b 2}]
+                             [{:b 100}]]]])))
 
     (t/is (= [#{{:a 12}, {:a 0}}
               #{{:a 100}}]
-             (->> (run-join-test join/->left-anti-semi-equi-join-cursor
-                                 [[{:a 12}, {:a 0}]
-                                  [{:a 100}]]
-                                 [])
+             (->> (run-ra [:anti-join '[{a b}]
+                           [::tu/blocks (Schema. [a-field])
+                            [[{:a 12}, {:a 0}]
+                             [{:a 100}]]]
+                           [::tu/blocks (Schema. [b-field])
+                            []]])
                   (mapv set)))))
 
-  (t/is (empty? (run-join-test join/->left-anti-semi-equi-join-cursor
-                               [[{:a 12}, {:a 2}]
-                                [{:a 100}]]
-                               [[{:b 12}, {:b 2}]
-                                [{:b 100}]]))
+  (t/is (empty? (run-ra [:anti-join '[{a b}]
+                         [::tu/blocks (Schema. [a-field])
+                          [[{:a 12}, {:a 2}]
+                           [{:a 100}]]]
+                         [::tu/blocks (Schema. [b-field])
+                          [[{:b 12}, {:b 2}]
+                           [{:b 100}]]]]))
         "empty output"))
 
-#_
 (t/deftest test-anti-equi-join-multi-col
   (->> "multi column anti"
        (t/is (= [{{:a 10 :b 42} 1
                   {:a 11 :b 44} 1}]
-                (->> (run-join-test join/->left-anti-semi-equi-join-cursor
-                                    [[{:a 12, :b 42}
-                                      {:a 12, :b 42}
-                                      {:a 11, :b 44}
-                                      {:a 10, :b 42}]]
-                                    [[{:c 12, :d 42, :e 0}
-                                      {:c 12, :d 43, :e 0}
-                                      {:c 11, :d 42, :e 0}]
-                                     [{:c 12, :d 42, :e 0}
-                                      {:c 12, :d 42, :e 0}
-                                      {:c 12, :d 42, :e 1}]]
-                                    {:left-fields [a-field b-field], :right-fields [c-field d-field e-field]
-                                     :left-join-cols ["a" "b"], :right-join-cols ["c" "d"]})
+                (->> (run-ra [:anti-join '[{a c} {b d}]
+                              [::tu/blocks (Schema. [a-field b-field])
+                               [[{:a 12, :b 42}
+                                 {:a 12, :b 42}
+                                 {:a 11, :b 44}
+                                 {:a 10, :b 42}]]]
+                              [::tu/blocks (Schema. [c-field d-field])
+                               [[{:c 12, :d 42, :e 0}
+                                 {:c 12, :d 43, :e 0}
+                                 {:c 11, :d 42, :e 0}]
+                                [{:c 12, :d 42, :e 0}
+                                 {:c 12, :d 42, :e 0}
+                                 {:c 12, :d 42, :e 1}]]]])
                      (mapv frequencies))))))
 
-#_
 (t/deftest test-anti-join-theta
-  (let [left [{:a 12, :b 42}
-              {:a 12, :b 44}
-              {:a 10, :b 42}
-              {:a 10, :b 42}]
-        right [{:c 12, :d 43}
-               {:c 11, :d 42}]
-        j (fn j [& conditions] (quick-join join/->left-anti-semi-equi-join-cursor left right conditions))]
+  (let [left [::tu/blocks (Schema. [a-field b-field])
+              [[{:a 12, :b 42}
+                {:a 12, :b 44}
+                {:a 10, :b 42}
+                {:a 10, :b 42}]]]
+        right [::tu/blocks (Schema. [c-field d-field])
+               [[{:c 12, :d 43}
+                 {:c 11, :d 42}]]]]
 
     (t/is (= {{:a 12, :b 44} 1
               {:a 10, :b 42} 2}
 
-             (j {:a :c} '(not (= b 44)))))
+             (->> (run-ra [:anti-join '[{a c} (not (= b 44))] left right])
+                  (sequence cat)
+                  (frequencies))))
 
     (t/is (= {{:a 12, :b 42} 1
               {:a 12, :b 44} 1
               {:a 10, :b 42} 2}
-             (j {:a :c} false)))))
+             (->> (run-ra [:anti-join '[{a c} false] left right])
+                  (sequence cat)
+                  (frequencies))))))
 
-#_
 (t/deftest test-join-on-true
   (letfn [(run-join [left? right? theta-expr]
-            (->> (run-join-test join/->equi-join-cursor
-                                (if left? [[{:a 12}, {:a 0}]] [])
-                                (if right? [[{:b 12}, {:b 2}]] [])
-                                {:left-join-cols [], :right-join-cols []
-                                 :theta-expr theta-expr})
+            (->> (run-ra [:join [theta-expr]
+                          [::tu/blocks (Schema. [a-field])
+                           (if left? [[{:a 12}, {:a 0}]] [])]
+                          [::tu/blocks (Schema. [b-field])
+                           (if right? [[{:b 12}, {:b 2}]] [])]])
                  (mapv frequencies)))]
     (t/is (= []
              (run-join true false nil)))
@@ -494,14 +521,13 @@
                {:a 0, :b 2} 1}]
              (run-join true true true)))))
 
-#_
 (t/deftest test-loj-on-true
   (letfn [(run-loj [left? right? theta-expr]
-            (->> (run-join-test join/->left-outer-equi-join-cursor
-                                (if left? [[{:a 12}, {:a 0}]] [])
-                                (if right? [[{:b 12}, {:b 2}]] [])
-                                {:left-join-cols [], :right-join-cols []
-                                 :theta-expr theta-expr})
+            (->> (run-ra [:left-outer-join [theta-expr]
+                          [::tu/blocks (Schema. [a-field])
+                           (if left? [[{:a 12}, {:a 0}]] [])]
+                          [::tu/blocks (Schema. [b-field])
+                           (if right? [[{:b 12}, {:b 2}]] [])]])
                  (mapv frequencies)))]
     (t/is (= [{{:a 12, :b nil} 1,
                {:a 0, :b nil} 1}]
@@ -533,14 +559,13 @@
                {:a 0, :b 2} 1}]
              (run-loj true true true)))))
 
-#_
 (t/deftest test-foj-on-true
   (letfn [(run-foj [left? right? theta-expr]
-            (->> (run-join-test join/->full-outer-equi-join-cursor
-                                (if left? [[{:a 12}, {:a 0}]] [])
-                                (if right? [[{:b 12}, {:b 2}]] [])
-                                {:left-join-cols [], :right-join-cols []
-                                 :theta-expr theta-expr})
+            (->> (run-ra [:full-outer-join [theta-expr]
+                          [::tu/blocks (Schema. [a-field])
+                           (if left? [[{:a 12}, {:a 0}]] [])]
+                          [::tu/blocks (Schema. [b-field])
+                           (if right? [[{:b 12}, {:b 2}]] [])]])
                  (mapv frequencies)))]
     (t/is (= [{{:a 12, :b nil} 1,
                {:a 0, :b nil} 1}]
@@ -576,14 +601,14 @@
                {:a 0, :b 2} 1}]
              (run-foj true true true)))))
 
-#_
 (t/deftest test-semi-join-on-true
   (letfn [(run-semi [left? right? theta-expr]
-            (->> (run-join-test join/->left-semi-equi-join-cursor
-                                (if left? [[{:a 12}, {:a 0}]] [])
-                                (if right? [[{:b 12}, {:b 2}]] [])
-                                {:left-join-cols [], :right-join-cols []
-                                 :theta-expr theta-expr})
+            (->> (run-ra [:semi-join [theta-expr]
+                          [::tu/blocks (Schema. [a-field])
+                           (if left? [[{:a 12}, {:a 0}]] [])]
+
+                          [::tu/blocks (Schema. [b-field])
+                           (if right? [[{:b 12}, {:b 2}]] [])]])
                  (mapv frequencies)))]
     (t/is (= [] (run-semi true false nil)))
     (t/is (= [] (run-semi true false true)))
@@ -594,14 +619,13 @@
     (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-semi true true nil)))
     (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-semi true true true)))))
 
-#_
 (t/deftest test-anti-join-on-true
   (letfn [(run-anti [left? right? theta-expr]
-            (->> (run-join-test join/->left-anti-semi-equi-join-cursor
-                                (if left? [[{:a 12}, {:a 0}]] [])
-                                (if right? [[{:b 12}, {:b 2}]] [])
-                                {:left-join-cols [], :right-join-cols []
-                                 :theta-expr theta-expr})
+            (->> (run-ra [:anti-join [theta-expr]
+                          [::tu/blocks (Schema. [a-field])
+                           (if left? [[{:a 12}, {:a 0}]] [])]
+                          [::tu/blocks (Schema. [b-field])
+                           (if right? [[{:b 12}, {:b 2}]] [])]])
                  (mapv frequencies)))]
     (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true false nil)))
     (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true false true)))
