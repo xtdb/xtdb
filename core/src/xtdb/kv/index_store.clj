@@ -467,7 +467,7 @@
     (mem/slice-buffer b (+ Long/BYTES Long/BYTES hll-size) hll-size)))
 
 (def ^:private ^ThreadLocal stats-key-buffer-tl (buffer-tl))
-(def ^:private ^ThreadLocal doc-value-buffer-tl (buffer-tl))
+(def ^:private ^ThreadLocal attr-buffer-tl (buffer-tl))
 
 (defn- stats-kvs [stats-kvs-cache persistent-kv-store docs]
   (let [persistent-kv-snapshot (atom nil)
@@ -480,7 +480,7 @@
       (let [attr-key-bufs (->> docs
                                (into {} (comp (mapcat keys)
                                               (distinct)
-                                              (map (juxt identity #(encode-stats-key-to (.get stats-key-buffer-tl) (c/value->buffer % (.get doc-value-buffer-tl))))))))]
+                                              (map (juxt identity #(encode-stats-key-to (.get stats-key-buffer-tl) (c/value->buffer % (.get attr-buffer-tl))))))))]
         (->> docs
              (reduce (fn [acc doc]
                        (let [e (:crux.db/id doc)]
