@@ -245,10 +245,12 @@
   (nippy/thaw-from-in! (-> (DirectBufferInputStream. buf)
                            (DataInputStream.))))
 
-(defn ->nippy-buffer [v]
-  (let [to (ExpandableDirectByteBuffer. 64)
-        dos (-> (ExpandableDirectBufferOutputStream. to)
+(defn nippy->buffer [v to]
+  (let [dos (-> (ExpandableDirectBufferOutputStream. to)
                 (DataOutputStream.))]
     (nippy/-freeze-without-meta! v dos)
     (-> to
         (limit-buffer (.size dos)))))
+
+(defn ->nippy-buffer [v]
+  (nippy->buffer v (ExpandableDirectByteBuffer. 64)))

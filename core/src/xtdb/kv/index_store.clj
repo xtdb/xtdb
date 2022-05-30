@@ -975,6 +975,19 @@
       buf)
     mem/empty-buffer))
 
+(defn- buffer-tl ^ThreadLocal []
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (ExpandableDirectByteBuffer. 32)))))
+
+(def ^:private ^ThreadLocal content-hash-buffer-tl (buffer-tl))
+(def ^:private ^ThreadLocal content-buffer-tl (buffer-tl))
+(def ^:private ^ThreadLocal eid-buffer-tl (buffer-tl))
+(def ^:private ^ThreadLocal value-buffer-tl (buffer-tl))
+(def ^:private ^ThreadLocal nippy-buffer-tl (buffer-tl))
+(def ^:private ^ThreadLocal hash-key-buffer-tl (buffer-tl))
+
 (defrecord KvIndexStoreTx [kv-store kv-tx tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStoreTx
   (index-docs [_ docs]
@@ -986,29 +999,29 @@
                   (kv/put-kv kv-tx k v))]
 
       (doseq [[a a-buf] attr-bufs]
-        (store (encode-hash-cache-key-to nil a-buf) (mem/->nippy-buffer a)))
+        (store (encode-hash-cache-key-to (.get content-buffer-tl) a-buf) (mem/nippy->buffer a (.get nippy-buffer-tl))))
 
       (doseq [[content-hash doc] docs
               :let [id (:crux.db/id doc)
-                    eid-value-buffer (c/->value-buffer id)
-                    content-hash (c/->id-buffer content-hash)]]
+                    eid-value-buffer (c/value->buffer id (.get eid-buffer-tl))
+                    content-hash (c/id->buffer content-hash (.get content-hash-buffer-tl))]]
 
-        (store (encode-hash-cache-key-to nil (c/->id-buffer id) eid-value-buffer)
-               (mem/->nippy-buffer id))
+        (store (encode-hash-cache-key-to (.get hash-key-buffer-tl) (c/id->buffer id (.get content-buffer-tl)) eid-value-buffer)
+               (mem/nippy->buffer id (.get nippy-buffer-tl)))
 
         (doseq [[a v] doc
                 :let [a (get attr-bufs a)]
                 [v idxs] (val-idxs v)
-                :let [value-buffer (c/->value-buffer v)]
+                :let [value-buffer (c/value->buffer v (.get value-buffer-tl))]
                 :when (pos? (.capacity value-buffer))]
 
-          (store (encode-av-key-to nil a value-buffer) mem/empty-buffer)
-          (store (encode-ave-key-to nil a value-buffer eid-value-buffer) mem/empty-buffer)
-          (store (encode-ae-key-to nil a eid-value-buffer) mem/empty-buffer)
-          (store (encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer) (encode-ecav-value idxs))
+          (store (encode-av-key-to (.get content-buffer-tl) a value-buffer) mem/empty-buffer)
+          (store (encode-ave-key-to (.get content-buffer-tl) a value-buffer eid-value-buffer) mem/empty-buffer)
+          (store (encode-ae-key-to (.get content-buffer-tl) a eid-value-buffer) mem/empty-buffer)
+          (store (encode-ecav-key-to (.get content-buffer-tl) eid-value-buffer content-hash a value-buffer) (encode-ecav-value idxs))
 
           (when (not (c/can-decode-value-buffer? value-buffer))
-            (store (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
+            (store (encode-hash-cache-key-to (.get content-buffer-tl) value-buffer eid-value-buffer) (mem/nippy->buffer v (.get nippy-buffer-tl))))))
 
       {:bytes-indexed @bytes-indexed
        :doc-ids (into #{} (map c/new-id (keys docs)))
