@@ -180,10 +180,9 @@
 ;; https://github.com/christoff-buerger/racr
 
 (defn ctor [ag]
-  (when ag
-    (let [node (znode ag)]
-      (when (vector? node)
-        (.nth ^IPersistentVector node 0 nil)))))
+  (let [node (znode ag)]
+    (when (vector? node)
+      (.nth ^IPersistentVector node 0 nil))))
 
 (defn ctor? [kw ag]
   (= kw (ctor ag)))
