@@ -2,7 +2,7 @@
   (:require [clojure.walk :as w]
             [clojure.core.match :as m])
   (:import java.util.regex.Pattern
-           [java.util ArrayList List]
+           [java.util ArrayList List HashMap]
            clojure.lang.IPersistentVector))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -216,8 +216,17 @@
 (defmacro zcase {:style/indent 1} [ag & body]
   `(case (ctor ~ag) ~@body))
 
+(defn zmemoize [f]
+  (let [memo (HashMap.)]
+    (fn [x]
+      (let [v (.getOrDefault memo x ::not-found)]
+        (if (= v ::not-found)
+          (doto (f x)
+            (->> (.put memo x)))
+          v)))))
+
 (defmacro with-memoized-attributes [attrs & body]
-  `(binding [~@(interleave attrs (map (partial list 'memoize) attrs))]
+  `(binding [~@(interleave attrs (map (partial list `zmemoize) attrs))]
      ~@body))
 
 ;; Strategic Zippers based on Ztrategic
