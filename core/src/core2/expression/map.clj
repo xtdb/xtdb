@@ -1,6 +1,7 @@
 (ns core2.expression.map
   (:require [clojure.set :as set]
             [core2.expression :as expr]
+            [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
@@ -67,7 +68,7 @@
             (.test p2 l r))))))
 
 (def build-comparator
-  (-> (fn [left-val-types right-val-types nil-equal]
+  (-> (fn [left-val-types left-col-type right-val-types right-col-type nil-equal]
         (let [left-vec (gensym 'left-vec)
               left-idx (gensym 'left-idx)
               right-vec (gensym 'right-vec)
@@ -78,12 +79,14 @@
               {continue-left :continue} (-> (expr/form->expr left-vec {:col-names #{left-vec}})
                                             (assoc :idx left-idx)
                                             (expr/codegen-expr {:var->types {left-vec left-val-types}
+                                                                :var->col-type {left-vec left-col-type}
                                                                 :return-boxes left-boxes}))
 
               right-boxes (HashMap.)
               {continue-right :continue} (-> (expr/form->expr right-vec {:col-names #{right-vec}})
                                              (assoc :idx right-idx)
                                              (expr/codegen-expr {:var->types {right-vec right-val-types}
+                                                                 :var->col-type {right-vec right-col-type}
                                                                  :return-boxes right-boxes}))]
           (eval
            `(fn [~(expr/with-tag left-vec IIndirectVector)
@@ -95,22 +98,20 @@
                       (fn [left-type left-code]
                         (continue-right
                          (fn [right-type right-code]
-                           (let [{continue-= :continue-call}
+                           (let [{eq-type :return-type, ->eq-code :->call-code}
                                  (expr/codegen-mono-call {:op :call, :f eq-fn,
-                                                     :arg-types [left-type right-type]})]
-                             (continue-=
-                              (fn [out-type out-code]
-                                (if (instance? ArrowType$Null out-type)
-                                  false
-                                  out-code))
-                              [left-code right-code])))))))))))))
+                                                           :arg-types [left-type right-type]})]
+                             (when-not (= :null eq-type)
+                               (->eq-code [left-code right-code]))))))))))))))
       (memoize)))
 
 (defn- ->comparator ^core2.expression.map.IntIntPredicate [left-cols right-cols nil-equal]
   (->> (map (fn [^IIndirectVector left-col, ^IIndirectVector right-col]
               (let [left-val-types (expr/field->value-types (.getField (.getVector left-col)))
+                    left-col-type (types/field->col-type (.getField (.getVector left-col)))
                     right-val-types (expr/field->value-types (.getField (.getVector right-col)))
-                    f (build-comparator left-val-types right-val-types nil-equal)]
+                    right-col-type (types/field->col-type (.getField (.getVector right-col)))
+                    f (build-comparator left-val-types left-col-type right-val-types right-col-type nil-equal)]
                 (f left-col right-col)))
             left-cols
             right-cols)

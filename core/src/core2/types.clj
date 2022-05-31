@@ -813,3 +813,30 @@
 
 (defmethod arrow-type->col-type ArrowType$ExtensionType [^ArrowType$ExtensionType arrow-type]
   [:extension-type (keyword (.extensionName arrow-type)) (arrow-type->col-type (.storageType arrow-type)) (.serialize arrow-type)])
+
+;;; LUB
+
+(defmulti least-upper-bound2*
+  (fn [x-type y-type] [(col-type-head x-type) (col-type-head y-type)])
+  :hierarchy #'col-type-hierarchy)
+
+(def widening-hierarchy
+  (-> col-type-hierarchy
+      (derive :i8 :i16) (derive :i16 :i32) (derive :i32 :i64)
+      (derive :f32 :f64)
+      (derive :int :f64) (derive :int :f32)))
+
+(defmethod least-upper-bound2* [:num :num] [x-type y-type]
+  (cond
+    (isa? widening-hierarchy x-type y-type) y-type
+    (isa? widening-hierarchy y-type x-type) x-type
+    :else (throw (IllegalArgumentException. (format "can't LUB: %s ⊔ %s" x-type y-type)))))
+
+(defmethod least-upper-bound2* :default [_ _] :any)
+
+(defn least-upper-bound* [col-types]
+  (reduce (fn [lub col-type]
+            (if (= lub col-type)
+              lub
+              (least-upper-bound2* lub col-type)))
+          col-types))

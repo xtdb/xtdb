@@ -41,19 +41,19 @@
 (declare meta-expr)
 
 (defn call-meta-expr [{:keys [f args] :as expr}]
-  (letfn [(var-param-expr [f meta-value field {:keys [^ArrowType param-type] :as param-expr}]
+  (letfn [(var-param-expr [f meta-value field {:keys [param-type] :as param-expr}]
             (simplify-and-or-expr
              {:op :call
               :f 'or
               ;; TODO this seems like it could make better use
               ;; of the polymorphic expr patterns?
-              :args (vec (for [arrow-type (if (isa? types/arrow-type-hierarchy (class param-type) ::types/Number)
-                                            [types/bigint-type types/float8-type]
-                                            [param-type])]
+              :args (vec (for [col-type (if (isa? types/col-type-hierarchy param-type :num)
+                                          [:i64 :f64]
+                                          [param-type])]
                            (into {:op :metadata-vp-call,
                                   :f f
                                   :meta-value meta-value
-                                  :arrow-type arrow-type
+                                  :col-type col-type
                                   :field field,
                                   :param-expr param-expr
                                   :bloom-hash-sym (when (= meta-value :bloom-filter)
@@ -129,22 +129,20 @@
 
 (defmethod expr/codegen-expr :metadata-field-present [{:keys [field]} _]
   (let [field-name (str field)]
-    {:continue (fn [f]
-                 (f types/bool-type
+    {:return-type :bool
+     :continue (fn [f]
+                 (f :bool
                     `(boolean
                       (if ~block-idx-sym
                         (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
-                        (.columnIndex ~metadata-idxs-sym ~field-name)))))
-     :return-types #{types/bool-type}}))
+                        (.columnIndex ~metadata-idxs-sym ~field-name)))))}))
 
-(defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param-expr arrow-type bloom-hash-sym]} opts]
-  (let [field-name (str field)
-        ;; HACK
-        col-type (types/field->col-type (types/->field "HACK" arrow-type false))]
-    {:return-types #{types/bool-type}
+(defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param-expr col-type bloom-hash-sym]} opts]
+  (let [field-name (str field)]
+    {:return-type :bool
      :continue
      (fn [cont]
-       (cont types/bool-type
+       (cont :bool
              `(boolean
                (when-let [~expr/idx-sym (if ~block-idx-sym
                                           (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
@@ -153,9 +151,11 @@
                     `(bloom/bloom-contains? ~bloom-vec-sym ~expr/idx-sym ~bloom-hash-sym)
 
                     (let [vec-sym (get metadata-vec-syms meta-value)
-                          col-sym (gensym 'meta-col)]
+                          col-sym (gensym 'meta-col)
+                          col-field (types/col-type->field col-type)
+                          arrow-type (.getType col-field)]
                       `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
-                                  (some-> ^StructVector (.getChild ~types-vec-sym ~(types/col-type->field-name col-type))
+                                  (some-> ^StructVector (.getChild ~types-vec-sym ~(.getName col-field))
                                           (.getChild ~(name meta-value)))]
                          (when-not (.isNull ~vec-sym ~expr/idx-sym)
                            (let [~(-> col-sym (expr/with-tag IIndirectVector)) (iv/->direct-vec ~vec-sym)]
@@ -165,7 +165,9 @@
                                             :args [{:op :variable, :variable col-sym}
                                                    param-expr]}
                                            (-> opts
-                                               (assoc-in [:var->types col-sym] (FieldType/notNullable arrow-type)))))
+                                               ;; HACK remove :var->types (eventually)
+                                               (assoc-in [:var->types col-sym] (FieldType/notNullable arrow-type))
+                                               (assoc-in [:var->col-type col-sym] col-type))))
                                (fn [_ code] code)))))))))))}))
 
 (defmethod ewalk/walk-expr :metadata-vp-call [inner outer expr]
