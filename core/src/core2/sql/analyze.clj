@@ -170,7 +170,11 @@
           {:keys [query-name] :as cte} (cte ag)]
       (extend-env cte-env query-name cte))
 
-    (r/inherit ag)))
+    (when-let [parent (some-> ag (r/parent))]
+      (r/zcase parent
+        (:query_expression
+         :with_list_element) (ctei parent)
+        (recur parent)))))
 
 ;; Synthesised
 (defn- cteo [ag]
@@ -197,7 +201,11 @@
         (cteo (r/parent ag))
         (ctei (r/left-or-parent ag))))
 
-    (r/inherit ag)))
+    (when-let [parent (some-> ag (r/parent))]
+      (r/zcase parent
+        (:query_expression
+         :with_list_element) (cte-env parent)
+        (recur parent)))))
 
 ;; From
 
@@ -321,7 +329,12 @@
             (dcli (r/left-or-parent ag))
             (local-tables ag))
 
-    (r/inherit ag)))
+    (when-let [parent (some-> ag (r/parent))]
+      (r/zcase parent
+        (:query_specification
+         :table_primary
+         :qualified_join) (dcli parent)
+        (recur parent)))))
 
 ;; Synthesised
 (defn- dclo [ag]
@@ -355,7 +368,15 @@
     (let [query-expression-body (r/left ag)]
       (env query-expression-body))
 
-    (r/inherit ag)))
+    (when-let [parent (some-> ag (r/parent))]
+      (r/zcase parent
+        (:query_specification
+         :from_clause
+         :collection_derived_table
+         :join_condition
+         :lateral_derived_table
+         :order_by_clause) (env parent)
+        (recur parent)))))
 
 ;; Group by
 
@@ -409,7 +430,13 @@
                 (fn [s]
                   (assoc s :column-reference-type :within-group-varying)))
 
-    (r/inherit ag)))
+    (when-let [parent (some-> ag (r/parent))]
+      (r/zcase parent
+        (:query_specification
+         :select_list
+         :having_clause
+         :aggregate_function) (group-env parent)
+        (recur parent)))))
 
 ;; Select
 
@@ -590,7 +617,20 @@
     :subquery
     (projected-columns (r/$ ag 1))
 
-    (r/inherit ag)))
+    (when-let [parent (some-> ag (r/parent))]
+      (r/zcase parent
+        (:table_primary
+         :query_specification
+         :query_expression
+         :collection_derived_table
+         :table_value_constructor
+         :row_value_expression_list
+         :contextually_typed_row_value_expression_list
+         :in_value_list
+         :query_expression_body
+         :query_term
+         :subquery) (projected-columns parent)
+        (recur parent)))))
 
 ;; Order by
 
