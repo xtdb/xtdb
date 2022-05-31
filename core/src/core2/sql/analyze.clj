@@ -1,7 +1,8 @@
 (ns core2.sql.analyze
   (:require [clojure.string :as str]
             [core2.rewrite :as r]
-            [core2.sql.parser :as p]))
+            [core2.sql.parser :as p])
+  (:import java.util.HashMap))
 
 (defn- ->line-info-str [loc]
   (let [{:keys [sql]} (meta (r/root loc))
@@ -68,10 +69,10 @@
   (when ag
     (lazy-seq (cons ag (prev-subtree-seq (r/prev ag))))))
 
-(defn ^:dynamic id [ag]
+(defn id [ag]
   (dec (count (prev-subtree-seq ag))))
 
-(defn ^:dynamic dynamic-param-idx [ag]
+(defn dynamic-param-idx [ag]
   (->> (prev-subtree-seq ag)
        (filter (partial r/ctor? :dynamic_parameter_specification))
        (count)
@@ -160,7 +161,7 @@
         {:ref ag}))))
 
 ;; Inherited
-(defn ^:dynamic ctei [ag]
+(defn ctei [ag]
   (r/zcase ag
     :query_expression
     (enter-env-scope (cte-env (r/parent ag)))
@@ -170,11 +171,7 @@
           {:keys [query-name] :as cte} (cte ag)]
       (extend-env cte-env query-name cte))
 
-    (when-let [parent (some-> ag (r/parent))]
-      (r/zcase parent
-        (:query_expression
-         :with_list_element) (ctei parent)
-        (recur parent)))))
+    ::r/inherit))
 
 ;; Synthesised
 (defn- cteo [ag]
@@ -190,7 +187,7 @@
     :with_list
     (ctei (r/$ ag -1))))
 
-(defn ^:dynamic cte-env [ag]
+(defn cte-env [ag]
   (r/zcase ag
     :query_expression
     (cteo ag)
@@ -201,11 +198,7 @@
         (cteo (r/parent ag))
         (ctei (r/left-or-parent ag))))
 
-    (when-let [parent (some-> ag (r/parent))]
-      (r/zcase parent
-        (:query_expression
-         :with_list_element) (cte-env parent)
-        (recur parent)))))
+    ::r/inherit))
 
 ;; From
 
@@ -314,10 +307,10 @@
        :lhs lhs
        :rhs rhs})
 
-    (r/inherit ag)))
+    ::r/inherit))
 
 ;; Inherited
-(defn ^:dynamic dcli [ag]
+(defn dcli [ag]
   (r/zcase ag
     :query_specification
     (enter-env-scope (env (r/parent ag)))
@@ -329,12 +322,7 @@
             (dcli (r/left-or-parent ag))
             (local-tables ag))
 
-    (when-let [parent (some-> ag (r/parent))]
-      (r/zcase parent
-        (:query_specification
-         :table_primary
-         :qualified_join) (dcli parent)
-        (recur parent)))))
+    ::r/inherit))
 
 ;; Synthesised
 (defn- dclo [ag]
@@ -351,7 +339,7 @@
     :table_reference_list
     (dcli (r/$ ag -1))))
 
-(defn ^:dynamic env [ag]
+(defn env [ag]
   (r/zcase ag
     :query_specification
     (dclo ag)
@@ -368,15 +356,7 @@
     (let [query-expression-body (r/left ag)]
       (env query-expression-body))
 
-    (when-let [parent (some-> ag (r/parent))]
-      (r/zcase parent
-        (:query_specification
-         :from_clause
-         :collection_derived_table
-         :join_condition
-         :lateral_derived_table
-         :order_by_clause) (env parent)
-        (recur parent)))))
+    ::r/inherit))
 
 ;; Group by
 
@@ -408,7 +388,7 @@
        (sort-by count)
        (last)))
 
-(defn ^:dynamic group-env [ag]
+(defn group-env [ag]
   (r/zcase ag
     :query_specification
     (enter-env-scope (group-env (r/parent ag))
@@ -430,13 +410,7 @@
                 (fn [s]
                   (assoc s :column-reference-type :within-group-varying)))
 
-    (when-let [parent (some-> ag (r/parent))]
-      (r/zcase parent
-        (:query_specification
-         :select_list
-         :having_clause
-         :aggregate_function) (group-env parent)
-        (recur parent)))))
+    ::r/inherit))
 
 ;; Select
 
@@ -457,14 +431,14 @@
 
 (declare column-reference)
 
-(defn ^:dynamic all-column-references [ag]
+(defn all-column-references [ag]
   (r/collect
    (fn [ag]
      (when (r/ctor? :column_reference ag)
        [(column-reference ag)]))
    ag))
 
-(defn ^:dynamic projected-columns [ag]
+(defn projected-columns [ag]
   (r/zcase ag
     :table_primary
     (when-not (r/ctor? :qualified_join (r/$ ag 1))
@@ -617,24 +591,11 @@
     :subquery
     (projected-columns (r/$ ag 1))
 
-    (when-let [parent (some-> ag (r/parent))]
-      (r/zcase parent
-        (:table_primary
-         :query_specification
-         :query_expression
-         :collection_derived_table
-         :table_value_constructor
-         :row_value_expression_list
-         :contextually_typed_row_value_expression_list
-         :in_value_list
-         :query_expression_body
-         :query_term
-         :subquery) (projected-columns parent)
-        (recur parent)))))
+    ::r/inherit))
 
 ;; Order by
 
-(defn ^:dynamic order-by-index [ag]
+(defn order-by-index [ag]
   (r/zcase ag
     :query_expression
     nil
@@ -646,9 +607,9 @@
                                 (= identifier (str/join "." (identifiers (r/$ ag 1))))))]
              index))
 
-    (r/inherit ag)))
+    ::r/inherit))
 
-(defn- order-by-indexes [ag]
+(defn order-by-indexes [ag]
   (r/zcase ag
     :query_expression
     (r/collect-stop
@@ -663,11 +624,11 @@
          nil))
      ag)
 
-    (r/inherit ag)))
+    ::r/inherit))
 
 ;; Column references
 
-(defn ^:dynamic column-reference [ag]
+(defn column-reference [ag]
   (r/zcase ag
     :column_reference
     (let [identifiers (identifiers ag)
@@ -858,7 +819,7 @@
      :explicit_row_value_constructor)
     {:type :row_subquery}
 
-    (r/inherit ag)))
+    ::r/inherit))
 
 (defn- check-subquery [ag]
   (let [{:keys [single?]} (subquery-type (r/parent ag))]
@@ -952,15 +913,15 @@
 
 ;; Scopes
 
-(defn ^:dynamic scope-element [ag]
+(defn scope-element [ag]
   (r/zcase ag
     (:query_expression
      :query_specification)
     ag
 
-    (r/inherit ag)))
+    ::r/inherit))
 
-(defn- ^:dynamic scope [ag]
+(defn scope [ag]
   (r/zcase ag
     (:query_expression
      :query_specification)
@@ -1009,7 +970,7 @@
                          :type :query-specification)
             grouping-columns (assoc :grouping-columns grouping-columns)))))
 
-    (r/inherit ag)))
+    ::r/inherit))
 
 (defn- scopes [ag]
   (r/collect
@@ -1024,22 +985,16 @@
 
 ;; Analysis API, might be deprecated.
 
+(doseq [[_ v] (ns-publics *ns*)
+        :let [{:keys [arglists private]} (meta v)]
+        :when (and (= arglists '([ag]))
+                   (not private))]
+  (alter-var-root v r/zmemoize))
+
 (defn analyze-query [query]
   (if (p/failure? query)
     {:errs [(p/failure->str query)]}
-    (r/with-memoized-attributes [id
-                                 dynamic-param-idx
-                                 ctei
-                                 cte-env
-                                 dcli
-                                 env
-                                 group-env
-                                 order-by-index
-                                 all-column-references
-                                 projected-columns
-                                 column-reference
-                                 scope-element
-                                 scope]
+    (binding [r/*memo* (HashMap.)]
       (let [ag (r/vector-zip query)]
         (if-let [errs (not-empty (errs ag))]
           {:errs errs}

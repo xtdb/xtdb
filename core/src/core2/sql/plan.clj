@@ -11,6 +11,7 @@
             [core2.types :as types])
   (:import (clojure.lang IObj Var)
            (java.time LocalDate Period Duration)
+           java.util.HashMap
            (org.apache.arrow.vector PeriodDuration)))
 
 ;; Attribute grammar for transformation into logical plan.
@@ -2388,17 +2389,7 @@
   ([query {:keys [decorrelate? validate-plan? instrument-rules?] :as opts}]
    (if (p/failure? query)
      {:errs [(p/failure->str query)]}
-     (r/with-memoized-attributes [sem/id
-                                  sem/dynamic-param-idx
-                                  sem/ctei
-                                  sem/cte-env
-                                  sem/dcli
-                                  sem/env
-                                  sem/group-env
-                                  sem/order-by-index
-                                  sem/all-column-references
-                                  sem/projected-columns
-                                  sem/column-reference]
+     (binding [r/*memo* (HashMap.)]
        (let [ag (r/vector-zip query)]
          (if-let [errs (not-empty (sem/errs ag))]
            {:errs errs}

@@ -10,7 +10,7 @@
             [core2.sql.logic-test.runner :as slt]
             [core2.operator :as op]
             [core2.test-util :as tu])
-  (:import java.util.UUID
+  (:import [java.util HashMap UUID]
            core2.local_node.Node))
 
 (defn- create-table [node {:keys [table-name columns]}]
@@ -51,8 +51,9 @@
   (boolean (re-find #"(?is)^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(\w+)\s+ON\s+(\w+)\s*\((.+)\)\s*$" x)))
 
 (defn- execute-statement [node direct-sql-data-statement]
-  (case (first direct-sql-data-statement)
-    :insert_statement (insert-statement node direct-sql-data-statement)))
+  (binding [r/*memo* (HashMap.)]
+    (case (first direct-sql-data-statement)
+      :insert_statement (insert-statement node direct-sql-data-statement))))
 
 ;; TODO:
 ;; - needs cleanup.
@@ -203,15 +204,16 @@
           db (snap/snapshot snapshot-factory)]
       (when (p/failure? tree)
         (throw (IllegalArgumentException. (p/failure->str tree))))
-      (let [tree (normalize-query (:tables this) tree)
-            projection   (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
-                              (first)
-                              (mapv plan/unqualified-projection-symbol)
-                              (plan/generate-unique-column-names))
-            {:keys [errs plan]} (plan/plan-query tree {:decorrelate? true
-                                                       :project-anonymous-columns? true})
-            column->anonymous-col (:column->name (meta plan))]
-        (if-let [err (first errs)]
-          (throw (IllegalArgumentException. ^String err))
-          (vec (for [row (op/query-ra plan {'$ db})]
-                 (mapv #(-> (get column->anonymous-col %) name keyword row) projection))))))))
+      (binding [r/*memo* (HashMap.)]
+        (let [tree (normalize-query (:tables this) tree)
+              projection   (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
+                                (first)
+                                (mapv plan/unqualified-projection-symbol)
+                                (plan/generate-unique-column-names))
+              {:keys [errs plan]} (plan/plan-query tree {:decorrelate? true
+                                                         :project-anonymous-columns? true})
+              column->anonymous-col (:column->name (meta plan))]
+          (if-let [err (first errs)]
+            (throw (IllegalArgumentException. ^String err))
+            (vec (for [row (op/query-ra plan {'$ db})]
+                   (mapv #(-> (get column->anonymous-col %) name keyword row) projection)))))))))

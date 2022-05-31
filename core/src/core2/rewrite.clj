@@ -2,8 +2,8 @@
   (:require [clojure.walk :as w]
             [clojure.core.match :as m])
   (:import java.util.regex.Pattern
-           [java.util ArrayList List HashMap]
-           [clojure.lang IPersistentVector ILookup]
+           [java.util ArrayList HashMap List Map]
+           [clojure.lang Box IPersistentVector ILookup MapEntry]
            core2.BitUtil))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -239,24 +239,43 @@
     (parent ag)
     (zleft ag)))
 
-(defmacro inherit [ag]
-  `(some-> ~ag (parent) (recur)))
-
 (defmacro zcase {:style/indent 1} [ag & body]
   `(case (ctor ~ag) ~@body))
 
-(defn zmemoize [f]
-  (let [memo (HashMap.)]
-    (fn [x]
-      (let [v (.getOrDefault memo x ::not-found)]
-        (if (= v ::not-found)
-          (doto (f x)
-            (->> (.put memo x)))
-          v)))))
+(def ^:dynamic *memo*)
 
-(defmacro with-memoized-attributes [attrs & body]
-  `(binding [~@(interleave attrs (map (partial list `zmemoize) attrs))]
-     ~@body))
+(defn zmemoize-with-inherited [f]
+  (fn [x]
+    (let [^Map memo *memo*
+          memo-box (Box. nil)]
+      (loop [x x
+             inherited? false]
+        (let [k (MapEntry/create f x)
+              ^Box stored-memo-box (.getOrDefault memo k memo-box)]
+          (if (identical? memo-box stored-memo-box)
+            (let [v (f x)]
+              (.put memo k memo-box)
+              (if (= ::inherit v)
+                (some-> x (parent) (recur true))
+                (do (set! (.val memo-box) v)
+                    v)))
+            (let [v (.val stored-memo-box)]
+              (when inherited?
+                (set! (.val memo-box) v))
+              v)))))))
+
+(defn zmemoize [f]
+  (fn [x]
+    (let [^Map memo *memo*
+          k (MapEntry/create f x)
+          v (.getOrDefault memo k ::not-found)]
+      (if (= ::not-found v)
+        (let [v (f x)]
+          (if (= ::inherit v)
+            (some-> x (parent) (recur))
+            (doto v
+              (->> (.put memo k)))))
+        v))))
 
 ;; Strategic Zippers based on Ztrategic
 

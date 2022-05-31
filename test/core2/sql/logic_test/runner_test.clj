@@ -1,10 +1,12 @@
 (ns core2.sql.logic-test.runner-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
+            [core2.rewrite :as r]
             [core2.sql.parser :as p]
             [core2.sql.logic-test.runner :as slt]
             [core2.sql.logic-test.xtdb-engine :as xtdb-engine]
-            [core2.test-util :as tu]))
+            [core2.test-util :as tu])
+  (:import java.util.HashMap))
 
 (t/use-fixtures :each tu/with-node)
 
@@ -137,10 +139,11 @@ CREATE UNIQUE INDEX t1i0 ON t1(
 
 (t/deftest test-insert->doc
   (let [tables {"t1" ["a" "b" "c" "d" "e"]}]
-    (t/is (= [{:e 103 :c 102 :b 100 :d 101 :a 104 :_table "t1"}]
-             (xtdb-engine/insert->docs tables (p/parse "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :insert_statement))))
-    (t/is (= [{:a nil :b -102 :c true :d "101" :e 104.5 :_table "t1"}]
-             (xtdb-engine/insert->docs tables (p/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement))))))
+     (binding [r/*memo* (HashMap.)]
+       (t/is (= [{:e 103 :c 102 :b 100 :d 101 :a 104 :_table "t1"}]
+                (xtdb-engine/insert->docs tables (p/parse "INSERT INTO t1(e,c,b,d,a) VALUES(103,102,100,101,104)" :insert_statement))))
+       (t/is (= [{:a nil :b -102 :c true :d "101" :e 104.5 :_table "t1"}]
+                (xtdb-engine/insert->docs tables (p/parse "INSERT INTO t1 VALUES(NULL,-102,TRUE,'101',104.5)" :insert_statement)))))))
 
 (comment
 
@@ -158,8 +161,9 @@ CREATE UNIQUE INDEX t1i0 ON t1(
         tree (p/parse query :query_expression)]
     (time
      (dotimes [_ 1000]
-       (let [tree (xtdb-engine/normalize-query tables tree)]
-         (core2.sql.plan/plan-query tree)))))
+       (binding [r/*memo* (HashMap.)]
+         (let [tree (xtdb-engine/normalize-query tables tree)]
+           (core2.sql.plan/plan-query tree))))))
 
   (doseq [f (->> (file-seq (io/file (io/resource "core2/sql/logic_test/sqlite_test/")))
                  (filter #(clojure.string/ends-with? % ".test"))
