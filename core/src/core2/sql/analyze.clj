@@ -377,7 +377,9 @@
             :group_by_clause
             [(grouping-column-references ag)]
 
-            :subquery
+            (:subquery
+             :from_clause
+             :order_by_clause)
             []
 
             nil))
