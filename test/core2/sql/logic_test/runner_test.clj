@@ -159,7 +159,7 @@ CREATE UNIQUE INDEX t1i0 ON t1(
     (time
      (dotimes [_ 1000]
        (let [tree (xtdb-engine/normalize-query tables tree)]
-         (aset r 0 (core2.sql.plan/plan-query tree))))))
+         (core2.sql.plan/plan-query tree)))))
 
   (doseq [f (->> (file-seq (io/file (io/resource "core2/sql/logic_test/sqlite_test/")))
                  (filter #(clojure.string/ends-with? % ".test"))
