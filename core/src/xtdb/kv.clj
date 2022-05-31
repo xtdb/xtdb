@@ -16,7 +16,7 @@
   (get-value [this k]))
 
 (defprotocol KvStoreTx
-  (new-snapshot ^java.io.Closeable [this])
+  (new-tx-snapshot ^java.io.Closeable [this])
   (abort-kv-tx [this])
   (commit-kv-tx [this])
   (put-kv [this k v]))

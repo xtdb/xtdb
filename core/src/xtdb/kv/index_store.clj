@@ -993,7 +993,7 @@
 (def ^:private ^ThreadLocal nippy-buffer-tl (buffer-tl))
 (def ^:private ^ThreadLocal hash-key-buffer-tl (buffer-tl))
 
-(defrecord KvIndexStoreTx [kv-store kv-tx tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
+(defrecord KvIndexStoreTx [kv-store kv-tx tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache !docs]
   db/IndexStoreTx
   (index-docs [_ docs]
     (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
@@ -1027,6 +1027,8 @@
 
           (when (not (c/can-decode-value-buffer? value-buffer))
             (store (encode-hash-cache-key-to (.get content-buffer-tl) value-buffer eid-value-buffer) (mem/nippy->buffer v (.get nippy-buffer-tl))))))
+
+      (swap! !docs merge docs)
 
       {:bytes-indexed @bytes-indexed
        :doc-ids (into #{} (map c/new-id (keys docs)))
@@ -1099,22 +1101,38 @@
         (kv/store persistent-kv-store (seq snapshot))))
 
   (abort-index-tx [_]
-    #_(with-open [snapshot (kv/new-snapshot transient-kv-store)]
-        (let [{::xt/keys [tx-id tx-time]} tx]
-          ;; we still put the ECAV KVs in so that we can keep track of what we need to evict later
-          ;; the bitemp indices will ensure these are never returned in queries
-          (kv/store persistent-kv-store
-                    (conj (->> (seq snapshot)
-                               (filter (fn [[^DirectBuffer k-buf _v-buf]]
-                                         (= c/ecav-index-id (.getByte k-buf 0)))))
+    (let [{::xt/keys [tx-id tx-time]} tx
+          attr-bufs (->> (into #{} (mapcat keys) (vals @!docs))
+                         (into {} (map (juxt identity c/->id-buffer))))
+          store (fn [k v]
+                  (kv/store kv-store [[k v]]))]
 
-                          (MapEntry/create (encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer)
-                          (MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer))))))
+      (store (encode-failed-tx-id-key-to (.get content-buffer-tl) tx-id) mem/empty-buffer)
+      (store (encode-tx-time-mapping-key-to  (.get content-buffer-tl) tx-time tx-id) mem/empty-buffer)
+
+      ;; we still put the ECAV KVs in so that we can keep track of what we need to evict later
+      ;; the bitemp indices will ensure these are never returned in queries
+
+      (doseq [[content-hash doc] @!docs
+              :let [id (:crux.db/id doc)
+                    eid-value-buffer (c/value->buffer id (.get eid-buffer-tl))
+                    content-hash (c/id->buffer content-hash (.get content-hash-buffer-tl))]]
+
+        (doseq [[a v] doc
+                :let [a (get attr-bufs a)]
+                [v idxs] (val-idxs v)
+                :let [value-buffer (c/value->buffer v (.get value-buffer-tl))]
+                :when (pos? (.capacity value-buffer))]
+
+          (store (encode-ecav-key-to (.get content-buffer-tl) eid-value-buffer content-hash a value-buffer) (encode-ecav-value idxs))))))
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (new-kv-index-snapshot (kv/new-snapshot kv-store) true thread-mgr
-                           cav-cache canonical-buffer-cache)
+    (-> (new-kv-index-snapshot (kv/new-tx-snapshot kv-tx) true thread-mgr
+                               cav-cache canonical-buffer-cache)
+        (fork/->CappedIndexSnapshot (::xt/valid-time fork-at)
+                                    (get fork-at ::xt/tx-id (::xt/tx-id tx))))
+
     #_(fork/->MergedIndexSnapshot (-> (new-kv-index-snapshot (kv/new-snapshot persistent-kv-store) true thread-mgr
                                                              cav-cache canonical-buffer-cache)
                                       (fork/->CappedIndexSnapshot (::xt/valid-time fork-at)
@@ -1133,7 +1151,7 @@
       (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)
       (->KvIndexStoreTx kv-store kv-tx tx fork-at
                         (atom #{}) thread-mgr
-                        (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache)))
+                        (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache (atom {}))))
 
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
