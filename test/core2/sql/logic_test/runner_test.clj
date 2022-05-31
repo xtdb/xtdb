@@ -144,13 +144,22 @@ CREATE UNIQUE INDEX t1i0 ON t1(
 
 (comment
 
-  (time
-   (let [tables {"t1" ["a" "b" "c" "d" "e"]}
-         query "SELECT a+b*2+c*3+d*4+e*5, (a+b+c+d+e)/5 FROM t1 ORDER BY 1,2"
-         tree (p/parse query :query_expression)
-         tree (xtdb-engine/normalize-query tables tree)]
+  (let [tables {"t1" ["a" "b" "c" "d" "e"]}
+        query "SELECT CASE WHEN c>(SELECT avg(c) FROM t1) THEN a*2 ELSE b*10 END,
+       a+b*2+c*3+d*4,
+       abs(b-c),
+       (SELECT count(*) FROM t1 AS x WHERE x.b<t1.b),
+       c-d,
+       a+b*2,
+       CASE WHEN a<b-3 THEN 111 WHEN a<=b THEN 222
+        WHEN a<b+3 THEN 333 ELSE 444 END
+  FROM t1 WHERE e+d BETWEEN a+b-10 AND c+130
+    OR coalesce(a,b,c,d,e)<>0"
+        tree (p/parse query :query_expression)]
+    (time
      (dotimes [_ 1000]
-       (core2.sql.plan/plan-query tree))))
+       (let [tree (xtdb-engine/normalize-query tables tree)]
+         (aset r 0 (core2.sql.plan/plan-query tree))))))
 
   (doseq [f (->> (file-seq (io/file (io/resource "core2/sql/logic_test/sqlite_test/")))
                  (filter #(clojure.string/ends-with? % ".test"))
