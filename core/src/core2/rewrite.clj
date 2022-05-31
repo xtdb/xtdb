@@ -290,16 +290,22 @@
 
 ;; Type Preserving
 
-(defn seq-tp [x y]
-  (fn [z]
-    (when-some [z (x z)]
-      (y z))))
+(defn seq-tp
+  ([x y]
+   (fn [z]
+     (seq-tp x y z)))
+  ([x y z]
+   (when-some [z (x z)]
+     (y z))))
 
-(defn choice-tp [x y]
-  (fn [z]
-    (if-some [z (x z)]
-      z
-      (y z))))
+(defn choice-tp
+  ([x y]
+   (fn [z]
+     (choice-tp x y z)))
+  ([x y z]
+   (if-some [z (x z)]
+     z
+     (y z))))
 
 (defn all-tp [f]
   (fn [z]
@@ -323,35 +329,35 @@
 (defn full-td-tp
   ([f]
    (fn self [z]
-     ((seq-tp f (all-tp self)) z)))
+     (seq-tp f (all-tp self) z)))
   ([f z]
    ((full-td-tp f) z)))
 
 (defn full-bu-tp
   ([f]
    (fn self [z]
-     ((seq-tp (all-tp self) f) z)))
+     (seq-tp (all-tp self) f z)))
   ([f z]
    ((full-bu-tp f) z)))
 
 (defn once-td-tp
   ([f]
    (fn self [z]
-     ((choice-tp f (one-tp self)) z)))
+     (choice-tp f (one-tp self) z)))
   ([f z]
    ((once-td-tp f) z)))
 
 (defn once-bu-tp
   ([f]
    (fn self [z]
-     ((choice-tp (one-tp self) f) z)))
+     (choice-tp (one-tp self) f z)))
   ([f z]
    ((once-bu-tp f) z)))
 
 (defn stop-td-tp
   ([f]
    (fn self [z]
-     ((choice-tp f (all-tp self)) z)))
+     (choice-tp f (all-tp self) z)))
   ([f z]
    ((stop-td-tp f) z)))
 
@@ -384,7 +390,7 @@
 (defn innermost
   ([f]
    (fn self [z]
-     ((seq-tp (all-tp self) (try-tp (seq-tp f self))) z)))
+     (seq-tp (all-tp self) (try-tp (seq-tp f self)) z)))
   ([f z]
    ((innermost f) z)))
 
@@ -412,12 +418,15 @@
 
 ;; TODO: should this short-circuit properly? Ztrategic doesn't seem
 ;; to.
-(defn- seq-tu [x y]
-  (fn [z]
-    (let [m *monoid*]
-      (-> (m)
-          (m (x z))
-          (m (y z))))))
+(defn- seq-tu
+  ([x y]
+   (fn [z]
+     (seq-tu x y z)))
+  ([x y z]
+   (let [m *monoid*]
+     (-> (m)
+         (m (x z))
+         (m (y z))))))
 
 (def choice-tu choice-tp)
 
@@ -447,35 +456,35 @@
 (defn- full-td-tu
   ([f]
    (fn self [z]
-     ((seq-tu f (all-tu self)) z)))
+     (seq-tu f (all-tu self) z)))
   ([f z]
    ((full-td-tu f) z)))
 
 (defn- full-bu-tu
   ([f]
    (fn self [z]
-     ((seq-tu (all-tu self) f) z)))
+     (seq-tu (all-tu self) f z)))
   ([f z]
    ((full-bu-tu f) z)))
 
 (defn- once-td-tu
   ([f]
    (fn self [z]
-     ((choice-tu f (one-tu self)) z)))
+     (choice-tu f (one-tu self) z)))
   ([f z]
    ((once-td-tu f) z)))
 
 (defn- once-bu-tu
   ([f]
    (fn self [z]
-     ((choice-tu (one-tu self) f) z)))
+     (choice-tu (one-tu self) f z)))
   ([f z]
    ((once-bu-tu f) z)))
 
 (defn- stop-td-tu
   ([f]
    (fn self [z]
-     ((choice-tu f (all-tu self)) z)))
+     (choice-tu f (all-tu self) z)))
   ([f z]
    ((stop-td-tu f) z)))
 
