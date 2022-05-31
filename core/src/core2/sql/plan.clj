@@ -2382,8 +2382,10 @@
 ;; Logical plan API
 
 (defn plan-query
-  ([query] (plan-query query {:decorrelate? true}))
-  ([query {:keys [decorrelate?] :as opts}]
+  ([query] (plan-query query {:decorrelate? true
+                              :validate-plan? false
+                              :instrument-rules? false}))
+  ([query {:keys [decorrelate? validate-plan? instrument-rules?] :as opts}]
    (if (p/failure? query)
      {:errs [(p/failure->str query)]}
      (r/with-memoized-attributes [sem/id
@@ -2403,18 +2405,20 @@
            (let [fired-rules (atom [])
                  instrument-rules (fn [rules]
                                     (apply
-                                      some-fn
-                                      (map (fn [f]
-                                             (fn [z]
-                                               (when-let [successful-rewrite (f z)]
-                                                 (swap!
+                                     some-fn
+                                     (if instrument-rules?
+                                       (map (fn [f]
+                                              (fn [z]
+                                                (when-let [successful-rewrite (f z)]
+                                                  (swap!
                                                    fired-rules
                                                    #(conj ;; could also capture z before the rewrite
-                                                          %
-                                                          [(name (.toSymbol ^Var f))
-                                                           successful-rewrite]))
-                                                 successful-rewrite)))
-                                           rules)))
+                                                     %
+                                                     [(name (.toSymbol ^Var f))
+                                                      successful-rewrite]))
+                                                  successful-rewrite)))
+                                            rules)
+                                       (map deref rules))))
                  optimize-plan [#'promote-selection-cross-join-to-join
                                 #'promote-selection-to-join
                                 #'push-selection-down-past-apply
@@ -2453,7 +2457,7 @@
                            (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
                            (r/node)
                            (add-projection-fn))]
-             (if (s/invalid? (s/conform ::lp/logical-plan plan))
+             (if (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
                (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
                {:plan plan
                 :fired-rules @fired-rules}))))))))

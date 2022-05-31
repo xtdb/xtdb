@@ -8,7 +8,7 @@
             [core2.types :as types]))
 
 (defn plan-sql
-  ([sql] (plan-sql sql {:decorrelate? true}))
+  ([sql] (plan-sql sql {:decorrelate? true :validate-plan? true :instrument-rules? true}))
   ([sql opts]
    (let [tree (p/parse sql :directly_executable_statement)
          {errs :errs :as plan} (plan/plan-query tree opts)]
