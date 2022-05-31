@@ -2407,18 +2407,18 @@
                                     (apply
                                      some-fn
                                      (if instrument-rules?
-                                       (map (fn [f]
-                                              (fn [z]
-                                                (when-let [successful-rewrite (f z)]
-                                                  (swap!
-                                                   fired-rules
-                                                   #(conj ;; could also capture z before the rewrite
-                                                     %
-                                                     [(name (.toSymbol ^Var f))
-                                                      successful-rewrite]))
-                                                  successful-rewrite)))
-                                            rules)
-                                       (map deref rules))))
+                                       (mapv (fn [f]
+                                               (fn [z]
+                                                 (when-let [successful-rewrite (f z)]
+                                                   (swap!
+                                                    fired-rules
+                                                    #(conj ;; could also capture z before the rewrite
+                                                      %
+                                                      [(name (.toSymbol ^Var f))
+                                                       successful-rewrite]))
+                                                   successful-rewrite)))
+                                             rules)
+                                       (mapv deref rules))))
                  optimize-plan [#'promote-selection-cross-join-to-join
                                 #'promote-selection-to-join
                                 #'push-selection-down-past-apply
