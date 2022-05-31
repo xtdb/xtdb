@@ -217,16 +217,24 @@
 (defn ctor? [kw ag]
   (= kw (ctor ag)))
 
-(def vector-zip ->zipper)
-(def node znode)
-(def root zroot)
-(def left zleft)
-(def right zright)
-(def prev zprev)
-
-(def parent zup)
-(def $ znth)
-(def child-idx zchild-idx)
+(defmacro vector-zip [x]
+  `(->zipper ~x))
+(defmacro node [x]
+  `(znode ~x))
+(defmacro root [x]
+  `(zroot ~x))
+(defmacro left [x]
+  `(zleft ~x))
+(defmacro right [x]
+  `(zright ~x))
+(defmacro prev [x]
+  `(zprev ~x))
+(defmacro parent [x]
+  `(zup ~x))
+(defmacro $ [x n]
+  `(znth ~x ~n))
+(defmacro child-idx [x]
+  `(zchild-idx ~x))
 
 (defn lexeme [ag ^long n]
   (some-> ($ ag n) (znode)))
