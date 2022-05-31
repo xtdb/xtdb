@@ -318,7 +318,7 @@
    (fn [z]
      (choice-tp x y z)))
   ([x y z]
-   (if-some [z (x z)]
+   (if-let [z (x z)]
      z
      (y z))))
 
@@ -327,10 +327,10 @@
    (fn [z]
      (all-tp f z)))
   ([f z]
-   (if-some [d (zdown z)]
+   (if-let [d (zdown z)]
      (loop [z d]
-       (when-some [z (f z)]
-         (if-some [r (zright z)]
+       (when-let [z (f z)]
+         (if-let [r (zright z)]
            (recur r)
            (zup z))))
      z)))
@@ -340,17 +340,17 @@
    (fn [z]
      (one-tp f z)))
   ([f z]
-   (when-some [d (zdown z)]
+   (when-let [d (zdown z)]
      (loop [z d]
-       (if-some [z (f z)]
+       (if-let [z (f z)]
          (zup z)
-         (when-some [r (zright z)]
+         (when-let [r (zright z)]
            (recur r)))))))
 
 (defn full-td-tp
   ([f]
    (fn self [z]
-     (when-some [z (f z)]
+     (when-let [z (f z)]
        (all-tp self z))))
   ([f z]
    ((full-td-tp f) z)))
@@ -358,7 +358,7 @@
 (defn full-bu-tp
   ([f]
    (fn self [z]
-     (when-some [z (all-tp self z)]
+     (when-let [z (all-tp self z)]
        (f z))))
   ([f z]
    ((full-bu-tp f) z)))
@@ -366,7 +366,7 @@
 (defn once-td-tp
   ([f]
    (fn self [z]
-     (if-some [z (f z)]
+     (if-let [z (f z)]
        z
        (one-tp self z))))
   ([f z]
@@ -375,7 +375,7 @@
 (defn once-bu-tp
   ([f]
    (fn self [z]
-     (if-some [z (one-tp self z)]
+     (if-let [z (one-tp self z)]
        z
        (f z))))
   ([f z]
@@ -384,7 +384,7 @@
 (defn stop-td-tp
   ([f]
    (fn self [z]
-     (if-some [z (f z)]
+     (if-let [z (f z)]
        z
        (all-tp self z))))
   ([f z]
@@ -410,7 +410,7 @@
 (defn repeat-tp
   ([f]
    (fn [z]
-     (if-some [z (f z)]
+     (if-let [z (f z)]
        (recur z)
        z)))
   ([f z]
@@ -419,8 +419,8 @@
 (defn innermost
   ([f]
    (fn self [z]
-     (when-some [z (all-tp self z)]
-       (if-some [z (f z)]
+     (when-let [z (all-tp self z)]
+       (if-let [z (f z)]
          (self z)
          z))))
   ([f z]
