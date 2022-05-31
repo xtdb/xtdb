@@ -468,12 +468,12 @@
                                (kv/get-value @persistent-kv-snapshot k-buf))]
     (try
       (let [attr-key-bufs (reduce (fn [acc doc]
-                                    (reduce (keys doc)
-                                            (fn [acc k]
+                                    (reduce (fn [acc k]
                                               (if (get acc k)
                                                 acc
                                                 (assoc acc k (encode-stats-key-to nil (c/->value-buffer k)))))
-                                            acc))
+                                            acc
+                                            (keys doc)))
                                   {}
                                   docs)]
         (->> docs
@@ -482,7 +482,7 @@
                          (reduce-kv (fn [acc k v]
                                       (let [k-buf (get attr-key-bufs k)
                                             stats-buf (or (get acc k-buf)
-;                                                          (kv/get-value transient-kv-snapshot k-buf)
+                                        ;(kv/get-value transient-kv-snapshot k-buf)
                                                           (cache/compute-if-absent stats-kvs-cache k-buf mem/copy-to-unpooled-buffer
                                                                                    (fn [_k-buf]
                                                                                      (or (some-> (get-persistent-value k-buf) mem/copy-buffer)
