@@ -310,7 +310,7 @@
    (fn [z]
      (seq-tp x y z)))
   ([x y z]
-   (when-some [z (x z)]
+   (when-let [z (x z)]
      (y z))))
 
 (defn choice-tp
