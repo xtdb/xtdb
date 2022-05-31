@@ -24,51 +24,45 @@
         (Zip. (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent))))))
 
 (defn znode [^Zip z]
-  (when z
-    (.node z)))
+  (.node z))
 
 (defn zbranch? [^Zip z]
   (vector? (.node z)))
 
 (defn zleft [^Zip z]
-  (when z
-    (when-let [^Zip parent (zupdate-parent z)]
-      (let [idx (dec (.idx z))]
-        (when-not (neg? idx)
-          (let [^List level (.node parent)]
-            (Zip. (.get level idx) idx parent)))))))
-
-(defn zright [^Zip z]
-  (when z
-    (when-let [^Zip parent (zupdate-parent z)]
-      (let [idx (inc (.idx z))
-            ^List level (.node parent)]
-        (when (< idx (.size level))
+  (when-let [^Zip parent (zupdate-parent z)]
+    (let [idx (dec (.idx z))]
+      (when-not (neg? idx)
+        (let [^List level (.node parent)]
           (Zip. (.get level idx) idx parent))))))
 
+(defn zright [^Zip z]
+  (when-let [^Zip parent (zupdate-parent z)]
+    (let [idx (inc (.idx z))
+          ^List level (.node parent)]
+      (when (< idx (.size level))
+        (Zip. (.get level idx) idx parent)))))
+
 (defn znth [^Zip z ^long idx]
-  (when z
-    (when (zbranch? z)
-      (let [^List node (.node z)
-            idx (if (neg? idx)
-                  (+ (.size node) idx)
-                  idx)]
-        (when (and (< idx (.size node))
-                   (not (neg? idx)))
-          (Zip. (.get node idx) idx z))))))
+  (when (zbranch? z)
+    (let [^List node (.node z)
+          idx (if (neg? idx)
+                (+ (.size node) idx)
+                idx)]
+      (when (and (< idx (.size node))
+                 (not (neg? idx)))
+        (Zip. (.get node idx) idx z)))))
 
 (defn zdown [^Zip z]
-  (when z
-    (let [node (.node z)]
-      (when (and (zbranch? z)
-                 (not (.isEmpty ^List node)))
-        (Zip. (.get ^List node 0) 0 z)))))
+  (let [node (.node z)]
+    (when (and (zbranch? z)
+               (not (.isEmpty ^List node)))
+      (Zip. (.get ^List node 0) 0 z))))
 
 (defn zup [^Zip z]
-  (when z
-    (let [idx (.idx z)]
-      (when-not (neg? idx)
-        (zupdate-parent z)))))
+  (let [idx (.idx z)]
+    (when-not (neg? idx)
+      (zupdate-parent z))))
 
 (defn zroot [^Zip z]
   (if-let [z (zup z)]
@@ -180,9 +174,10 @@
 ;; https://github.com/christoff-buerger/racr
 
 (defn ctor [ag]
-  (let [node (znode ag)]
-    (when (vector? node)
-      (.nth ^IPersistentVector node 0 nil))))
+  (when ag
+    (let [node (znode ag)]
+      (when (vector? node)
+        (.nth ^IPersistentVector node 0 nil)))))
 
 (defn ctor? [kw ag]
   (= kw (ctor ag)))
