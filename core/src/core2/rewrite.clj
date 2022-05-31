@@ -447,8 +447,6 @@
        (.addAll y))
      x)))
 
-(def choice-tu choice-tp)
-
 (defn- all-tu [acc m f z]
   (if-some [d (zdown z)]
     (loop [z d
@@ -494,16 +492,6 @@
        (all-tu (m) m self z))))
   ([f m z]
    ((stop-td-tu f m) z)))
-
-(defn adhoc-tu [f g]
-  (choice-tu g f))
-
-(defn fail-tu [_])
-
-(defn const-tu [x]
-  (constantly x))
-
-(def mono-tu (partial adhoc-tu fail-tu))
 
 (defn collect
   ([f z]
