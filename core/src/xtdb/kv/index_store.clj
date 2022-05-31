@@ -467,6 +467,7 @@
                                  (reset! persistent-kv-snapshot (kv/new-snapshot persistent-kv-store)))
                                (kv/get-value @persistent-kv-snapshot k-buf))]
     (try
+      ;; TODO, put this into a cache
       (let [attr-key-bufs (reduce (fn [acc doc]
                                     (reduce (fn [acc k]
                                               (if (get acc k)
