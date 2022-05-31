@@ -54,37 +54,38 @@
   (^core2.ICursor [query args] (open-ra query args {}))
 
   (^core2.ICursor [query args {:keys [default-valid-time default-tz] :as query-opts}]
-   (when-not (s/valid? ::lp/logical-plan query)
-     (throw (err/illegal-arg :malformed-query
-                             {:plan query
-                              :args args
-                              :explain (s/explain-data ::lp/logical-plan query)})))
+   (let [conformed-query (s/conform ::lp/logical-plan query)]
+     (when (s/invalid? conformed-query)
+       (throw (err/illegal-arg :malformed-query
+                               {:plan query
+                                :args args
+                                :explain (s/explain-data ::lp/logical-plan query)})))
 
-   (let [allocator (RootAllocator.)]
-     (try
-       (let [default-valid-time (or default-valid-time (.instant expr/*clock*))
-             ;; will later be provided as part of the 'SQL session' (see §6.32)
-             default-tz (or default-tz (.getZone expr/*clock*))
-             clock (Clock/fixed default-valid-time default-tz)]
+     (let [allocator (RootAllocator.)]
+       (try
+         (let [default-valid-time (or default-valid-time (.instant expr/*clock*))
+               ;; will later be provided as part of the 'SQL session' (see §6.32)
+               default-tz (or default-tz (.getZone expr/*clock*))
+               clock (Clock/fixed default-valid-time default-tz)]
 
-         (binding [expr/*clock* clock]
-           (let [{:keys [srcs params]} (args->srcs+params args)
-                 {:keys [->cursor]} (lp/emit-expr (s/conform ::lp/logical-plan query)
-                                                  {:src-keys (set (keys srcs)),
-                                                   :table-keys (->> (for [[src-k src-v] srcs
-                                                                          :when (sequential? src-v)]
-                                                                      [src-k (table/table->keys src-v)])
-                                                                    (into {}))
-                                                   :params params})]
-             (-> (->cursor (into query-opts
-                                 {:srcs srcs, :params params
-                                  :default-valid-time default-valid-time
-                                  :allocator allocator}))
-                 (cursor-with-clock clock)
-                 (util/and-also-close allocator)))))
-       (catch Throwable t
-         (util/try-close allocator)
-         (throw t))))))
+           (binding [expr/*clock* clock]
+             (let [{:keys [srcs params]} (args->srcs+params args)
+                   {:keys [->cursor]} (lp/emit-expr conformed-query
+                                                    {:src-keys (set (keys srcs)),
+                                                     :table-keys (->> (for [[src-k src-v] srcs
+                                                                            :when (sequential? src-v)]
+                                                                        [src-k (table/table->keys src-v)])
+                                                                      (into {}))
+                                                     :params params})]
+               (-> (->cursor (into query-opts
+                                   {:srcs srcs, :params params
+                                    :default-valid-time default-valid-time
+                                    :allocator allocator}))
+                   (cursor-with-clock clock)
+                   (util/and-also-close allocator)))))
+         (catch Throwable t
+           (util/try-close allocator)
+           (throw t)))))))
 
 (deftype CursorResultSet [^ICursor cursor
                           ^:unsynchronized-mutable ^Iterator next-values]
