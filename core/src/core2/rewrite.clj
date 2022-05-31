@@ -3,16 +3,51 @@
             [clojure.core.match :as m])
   (:import java.util.regex.Pattern
            [java.util ArrayList List HashMap]
-           clojure.lang.IPersistentVector))
+           [clojure.lang IPersistentVector ILookup]
+           core2.BitUtil))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defrecord Zip [node ^int idx parent])
+(deftype Zip [node ^int idx parent ^:unsynchronized-mutable ^int hash_]
+  ILookup
+  (valAt [_ k]
+    (when (= :node k)
+      node))
+
+  (valAt [_ k not-found]
+    (if (= :node k)
+      node
+      not-found))
+
+  Object
+  (equals [this other]
+    (if (identical? this other)
+      true
+      (let [^Zip other other]
+        (and (instance? Zip other)
+             (= (.node this) (.node other))
+             (= (.idx this) (.idx other))
+             (= (.parent this) (.parent other))))))
+
+  (hashCode [this]
+    (if (zero? hash_)
+      (let [result 1
+            result (+ (* 31 result) (if node
+                                      (long (.hashCode node))
+                                      0))
+            result (+ (* 31 result) (long (Integer/hashCode idx)))
+            result (+ (* 31 result) (if parent
+                                      (long (.hashCode parent))
+                                      0))
+            result (unchecked-int result)]
+        (set! (.hash_ this) result)
+        result)
+      hash_)))
 
 (defn ->zipper [x]
   (if (instance? Zip x)
     x
-    (Zip. x -1 nil)))
+    (Zip. x -1 nil 0)))
 
 (defn- zupdate-parent [^Zip z]
   (when-let [^Zip parent (.parent z)]
@@ -21,7 +56,7 @@
           idx (.idx z)]
       (if (identical? node (.get level idx))
         parent
-        (Zip. (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent))))))
+        (Zip. (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent) 0)))))
 
 (defn znode [^Zip z]
   (.node z))
@@ -32,16 +67,16 @@
 (defn zleft [^Zip z]
   (when-let [^Zip parent (zupdate-parent z)]
     (let [idx (dec (.idx z))]
-      (when-not (neg? idx)
+      (when (BitUtil/bitNot (neg? idx))
         (let [^List level (.node parent)]
-          (Zip. (.get level idx) idx parent))))))
+          (Zip. (.get level idx) idx parent 0))))))
 
 (defn zright [^Zip z]
   (when-let [^Zip parent (zupdate-parent z)]
     (let [idx (inc (.idx z))
           ^List level (.node parent)]
       (when (< idx (.size level))
-        (Zip. (.get level idx) idx parent)))))
+        (Zip. (.get level idx) idx parent 0)))))
 
 (defn znth [^Zip z ^long idx]
   (when (zbranch? z)
@@ -50,18 +85,18 @@
                 (+ (.size node) idx)
                 idx)]
       (when (and (< idx (.size node))
-                 (not (neg? idx)))
-        (Zip. (.get node idx) idx z)))))
+                 (BitUtil/bitNot (neg? idx)))
+        (Zip. (.get node idx) idx z 0)))))
 
 (defn zdown [^Zip z]
   (let [node (.node z)]
     (when (and (zbranch? z)
-               (not (.isEmpty ^List node)))
-      (Zip. (.get ^List node 0) 0 z))))
+               (BitUtil/bitNot (.isEmpty ^List node)))
+      (Zip. (.get ^List node 0) 0 z 0))))
 
 (defn zup [^Zip z]
   (let [idx (.idx z)]
-    (when-not (neg? idx)
+    (when (BitUtil/bitNot (neg? idx))
       (zupdate-parent z))))
 
 (defn zroot [^Zip z]
@@ -97,7 +132,7 @@
   (when z
     (if (identical? (.node z) x)
       z
-      (Zip. x (.idx z) (.parent z)))))
+      (Zip. x (.idx z) (.parent z) 0))))
 
 ;; Zipper pattern matching
 
@@ -106,7 +141,7 @@
 (defmethod m/nth-inline ::m/zip
   [t ocr i]
   `(let [^Zip z# ~ocr]
-     (Zip. (.get ^List (.node z#) ~i) ~i z#)))
+     (Zip. (.get ^List (.node z#) ~i) ~i z# 0)))
 
 (defmethod m/count-inline ::m/zip
   [t ocr]
