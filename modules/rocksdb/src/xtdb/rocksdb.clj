@@ -24,31 +24,31 @@
 
 (defrecord RocksKvIterator [^RocksIterator i]
   kv/KvIterator
-  (seek [this k]
+  (seek [_ k]
     (.seek i (mem/direct-byte-buffer k))
     (iterator->key i))
 
-  (next [this]
+  (next [_]
     (.next i)
     (iterator->key i))
 
-  (prev [this]
+  (prev [_]
     (.prev i)
     (iterator->key i))
 
-  (value [this]
+  (value [_]
     (mem/as-buffer (.value i)))
 
   Closeable
-  (close [this]
+  (close [_]
     (.close i)))
 
 (defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
   kv/KvSnapshot
-  (new-iterator [this]
+  (new-iterator [_]
     (->RocksKvIterator (.newIterator db read-options)))
 
-  (get-value [this k]
+  (get-value [_ k]
     (some-> (.get db read-options (mem/->on-heap k))
             (mem/as-buffer)))
 
