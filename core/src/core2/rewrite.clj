@@ -111,6 +111,14 @@
     (recur z)
     (.node z)))
 
+(defn znext [z]
+  (or (zdown z)
+      (zright z)
+      (loop [z z]
+        (when-let [p (zup z)]
+          (or (zright p)
+              (recur p))))))
+
 (defn zprev [z]
   (if-let [z (zleft z)]
     (loop [z z]
