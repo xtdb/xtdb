@@ -1418,7 +1418,7 @@
                                (tu/->mono-vec "y" (FieldType/nullable types/bigint-type) [0 nil])])]
       (t/is (= {:res [1.2 nil]
                 :leg-type #{LegType/NULL LegType/FLOAT8}
-                :nullable? true}
+                :nullable? false}
                (run-projection rel '(nth [x] y))))))
 
   (t/testing "IOOBE"
