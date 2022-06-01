@@ -11,7 +11,8 @@
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
             [core2.logical-plan :as lp]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [core2.types :as types])
   (:import core2.ICursor
            core2.local_node.Node
            core2.object_store.FileSystemObjectStore
@@ -182,8 +183,8 @@
          :blocks vector?))
 
 (defmethod lp/emit-expr ::blocks [{:keys [^Schema schema blocks]} _args]
-  {:col-names (->> (.getFields schema)
-                   (into #{} (map #(.getName ^Field %))))
+  {:col-types (->> (.getFields schema)
+                   (into {} (map (juxt #(.getName ^Field %) types/field->col-type))))
    :->cursor (fn [{:keys [allocator]}]
                (->cursor allocator schema blocks))})
 

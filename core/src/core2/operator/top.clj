@@ -54,7 +54,7 @@
 
 (defmethod lp/emit-expr :top [{:keys [relation], {:keys [skip limit]} :top} args]
   (lp/unary-expr relation args
-    (fn [col-names]
-      {:col-names col-names
+    (fn [col-types]
+      {:col-types col-types
        :->cursor (fn [_opts in-cursor]
                    (TopCursor. in-cursor (or skip 0) (or limit Long/MAX_VALUE) 0))})))

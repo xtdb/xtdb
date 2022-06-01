@@ -1,7 +1,6 @@
 (ns core2.operator.rename
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
-            [clojure.string :as str]
             [core2.logical-plan :as lp]
             [core2.operator.scan :as scan]
             [core2.util :as util]
@@ -22,17 +21,13 @@
 (def ^:const ^String relation-prefix-delimiter "_")
 
 (deftype RenameCursor [^ICursor in-cursor
-                       ^Map #_#_<String, String> rename-map
-                       ^String prefix]
+                       ^Map #_#_<String, String> col-name-mapping
+                       ^Map #_#_<String, String> col-name-reverse-mapping]
   ICursor
   (tryAdvance [_ c]
-    (binding [scan/*column->pushdown-bloom* (let [prefix-pattern (re-pattern (str "^" prefix relation-prefix-delimiter))
-                                                  invert-rename-map (set/map-invert rename-map)]
-                                              (->> (for [[k v] scan/*column->pushdown-bloom*
-                                                         :let [k (str/replace k prefix-pattern "")
-                                                               new-field-name (get invert-rename-map k k)]]
-                                                     [new-field-name v])
-                                                   (into {})))]
+    (binding [scan/*column->pushdown-bloom* (->> (for [[k v] scan/*column->pushdown-bloom*]
+                                                   [(get col-name-reverse-mapping k) v])
+                                                 (into {}))]
       (.tryAdvance in-cursor
                    (reify Consumer
                      (accept [_ in-rel]
@@ -40,9 +35,7 @@
                              out-cols (LinkedList.)]
 
                          (doseq [^IIndirectVector in-col in-rel
-                                 :let [old-name (.getName in-col)
-                                       col-name (cond->> (get rename-map old-name old-name)
-                                                  prefix (str prefix relation-prefix-delimiter))]]
+                                 :let [col-name (get col-name-mapping (.getName in-col))]]
                            (.add out-cols (.withName in-col col-name)))
 
                          (.accept c (iv/->indirect-rel out-cols))))))))
@@ -55,11 +48,14 @@
                         (into {} (map (juxt (comp name key)
                                             (comp name val)))))]
     (lp/unary-expr relation args
-      (fn [col-names]
-        {:col-names (->> col-names
-                         (into #{}
-                               (map (fn [old-name]
-                                      (cond->> (get rename-map old-name old-name)
-                                        prefix (str prefix relation-prefix-delimiter))))))
-         :->cursor (fn [_opts in-cursor]
-                     (RenameCursor. in-cursor rename-map prefix))}))))
+      (fn [col-types]
+        (let [col-name-mapping (->> (for [old-name (set (keys col-types))]
+                                      [old-name
+                                       (cond->> (get rename-map old-name old-name)
+                                         prefix (str prefix relation-prefix-delimiter))])
+                                    (into {}))]
+          {:col-types (->> col-types
+                           (into {}
+                                 (map (juxt (comp col-name-mapping key) val))))
+           :->cursor (fn [_opts in-cursor]
+                       (RenameCursor. in-cursor col-name-mapping (set/map-invert col-name-mapping)))})))))

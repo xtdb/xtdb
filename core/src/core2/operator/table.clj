@@ -82,7 +82,8 @@
                       (case table-type
                         :rows (table->keys table-arg)
                         :source (get table-keys table-arg)))]
-    {:col-names col-names
+    ;; TODO actually pass col-types through
+    {:col-types (zipmap col-names (repeat :null))
      :->cursor (fn [{:keys [allocator srcs params]}]
                  (let [rows (case table-type
                               :rows table-arg

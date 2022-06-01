@@ -95,11 +95,11 @@
   (with-open [group-mapping (tu/->mono-vec "gm" types/int-type (map int [0 0 0]))
               v0 (tu/->mono-vec "v" types/bigint-type [1 2 3])
               v1 (tu/->duv "v" [1 2.0 3])]
-    (let [sum-spec (-> (group-by/->aggregate-factory :sum "v" "vsum")
+    (let [sum-spec (-> (group-by/->aggregate-factory :sum "v" [:union #{:i64 :f64}] "vsum")
                        (.build tu/*allocator*))]
       (try
-        (.aggregate sum-spec (iv/->direct-vec v0) group-mapping)
-        (.aggregate sum-spec (iv/->direct-vec v1) group-mapping)
+        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v0)]) group-mapping)
+        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v1)]) group-mapping)
         (t/is (= [12.0] (tu/<-column (.finish sum-spec))))
         (finally
           (util/try-close sum-spec))))))
@@ -110,11 +110,11 @@
 
               gm1 (tu/->mono-vec "gm1" types/int-type (map int [1 2 0]))
               k1 (tu/->mono-vec "k" types/bigint-type [4 5 6])]
-    (let [agg-spec (-> (group-by/->aggregate-factory :array-agg "k" "vs")
+    (let [agg-spec (-> (group-by/->aggregate-factory :array-agg "k" :i64 "vs")
                        (.build tu/*allocator*))]
       (try
-        (.aggregate agg-spec (iv/->direct-vec k0) gm0)
-        (.aggregate agg-spec (iv/->direct-vec k1) gm1)
+        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k0)]) gm0)
+        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k1)]) gm1)
         (t/is (= [[1 3 6] [2 4] [5]] (tu/<-column (.finish agg-spec))))
         (finally
           (util/try-close agg-spec))))))

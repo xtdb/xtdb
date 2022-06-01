@@ -1,6 +1,7 @@
 (ns core2.operator.arrow
   (:require [clojure.spec.alpha :as s]
             [core2.logical-plan :as lp]
+            [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import core2.ICursor
@@ -26,10 +27,11 @@
     (util/try-close rdr)))
 
 (defmethod lp/emit-expr :arrow [{:keys [^Path path]} _args]
-  ;; FIXME this didn't ever work from the LP - needs `:col-names`
-  {:col-names (with-open [al (RootAllocator.)
+  ;; HACK: not ideal that we have to open the file in the emitter just to get the col-types?
+  {:col-types (with-open [al (RootAllocator.)
                           rdr (ArrowFileReader. (util/->file-channel path) al)]
                 (->> (.getFields (.getSchema (.getVectorSchemaRoot rdr)))
-                     (into #{} (map #(.getName ^Field %)))))
+                     (into {} (map (juxt #(.getName ^Field %) types/field->col-type)))))
+
    :->cursor (fn [{:keys [^BufferAllocator allocator]}]
                (ArrowCursor. (ArrowFileReader. (util/->file-channel path) allocator)))})

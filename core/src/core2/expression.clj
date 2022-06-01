@@ -1993,6 +1993,9 @@
     (reify IProjectionSpec
       (getColumnName [_] col-name)
 
+      ;; TODO need to pass through an accurate col-type
+      (getColumnType [_] :null)
+
       (project [_ allocator in-rel params]
         (let [var->col-type (->> (seq in-rel)
                                  (into {} (map (fn [^IIndirectVector iv]

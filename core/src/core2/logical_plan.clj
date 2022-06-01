@@ -61,9 +61,9 @@
     (:op ra-expr)))
 
 (defn unary-expr {:style/indent 2} [relation args f]
-  (let [{->inner-cursor :->cursor, inner-col-names :col-names} (emit-expr relation args)
-        {:keys [col-names ->cursor]} (f inner-col-names)]
-    {:col-names col-names
+  (let [{->inner-cursor :->cursor, inner-col-types :col-types} (emit-expr relation args)
+        {:keys [col-types ->cursor]} (f inner-col-types)]
+    {:col-types col-types
      :->cursor (fn [opts]
                  (let [inner (->inner-cursor opts)]
                    (try
@@ -73,11 +73,11 @@
                        (throw e)))))}))
 
 (defn binary-expr {:style/indent 3} [left right args f]
-  (let [{left-col-names :col-names, ->left-cursor :->cursor} (emit-expr left args)
-        {right-col-names :col-names, ->right-cursor :->cursor} (emit-expr right args)
-        {:keys [col-names ->cursor]} (f left-col-names right-col-names)]
+  (let [{left-col-types :col-types, ->left-cursor :->cursor} (emit-expr left args)
+        {right-col-types :col-types, ->right-cursor :->cursor} (emit-expr right args)
+        {:keys [col-types ->cursor]} (f left-col-types right-col-types)]
 
-    {:col-names col-names
+    {:col-types col-types
      :->cursor (fn [opts]
                  (let [left (->left-cursor opts)]
                    (try

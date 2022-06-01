@@ -22,11 +22,13 @@
   (with-open [res (op/open-ra [:csv (-> (io/resource "core2/operator/csv-cursor-test.csv")
                                         .toURI
                                         util/->path)
-                               '{id :varchar
-                                 a-long :bigint
-                                 a-double :float8
+                               '{id :utf8
+                                 a-long :i64
+                                 a-double :f64
                                  an-inst :timestamp}
                                {:batch-size 3}])]
+    (t/is (= {"id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
+             (.columnTypes res)))
     (t/is (= example-data (into [] (tu/<-cursor res))))))
 
 (def ^:private arrow-path
@@ -36,6 +38,8 @@
 
 (t/deftest test-arrow-cursor
   (with-open [res (op/open-ra [:arrow arrow-path])]
+    (t/is (= {"id" :utf8, "a-long" :i64, "a-double" :f64, "an-inst" [:timestamp-tz :micro "UTC"]}
+             (.columnTypes res)))
     (t/is (= example-data (tu/<-cursor res)))))
 
 (comment

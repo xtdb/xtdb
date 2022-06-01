@@ -8,7 +8,8 @@
             [core2.operator.scan :as scan]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.operator.project :as project])
+            [core2.operator.project :as project]
+            [core2.types :as types])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap)
            (core2.operator IRelationSelector)
@@ -132,8 +133,8 @@
 
 (defmethod lp/emit-expr :cross-join [{:keys [left right]} args]
   (lp/binary-expr left right args
-    (fn [left-col-names right-col-names]
-      {:col-names (set/union left-col-names right-col-names)
+    (fn [left-col-types right-col-types]
+      {:col-types (merge left-col-types right-col-types)
        :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                    (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))})))
 
@@ -382,58 +383,63 @@
     {:predicate-type :theta
      :expr val}))
 
-(defn- equi-projection [{:keys [col, expr, project]} col-names param-names]
-  (if project
-    (expr/->expression-projection-spec (name col) expr col-names param-names)
-    (project/->identity-projection-spec (name col))))
+(defn- equi-projection [{:keys [col, expr, project]} col-names col-types param-names]
+  (let [col-name (name col)]
+    (if project
+      (expr/->expression-projection-spec col-name expr col-names param-names)
+      (project/->identity-projection-spec col-name (get col-types col-name)))))
 
 (defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-names] :as args} f]
   (lp/binary-expr left right args
-    (fn [left-col-names right-col-names]
-      (let [{:keys [equi, theta]} (group-by :predicate-type (map-indexed further-destructure-join-pred condition))
+    (fn [left-col-types right-col-types]
+      (let [left-col-names (keys left-col-types)
+            right-col-names (keys right-col-types)
 
-            left-col-syms (set (map symbol left-col-names))
-            right-col-syms (set (map symbol right-col-names))
+            left-col-syms (into #{} (map symbol) left-col-names)
+            right-col-syms (into #{} (map symbol) right-col-names)
+
             col-syms (into left-col-syms right-col-syms)
 
-            theta-selector
-            (when theta
-              (expr/->expression-relation-selector (list* 'and (map :expr theta)) col-syms param-names))
+            {:keys [equi, theta]} (group-by :predicate-type (map-indexed further-destructure-join-pred condition))
 
-            {:keys [col-names ->cursor]} (f left-col-names right-col-names)
+            theta-selector (when theta
+                             (expr/->expression-relation-selector (list* 'and (map :expr theta))
+                                                                  col-syms param-names))
 
-            return-col-names col-names
+            {:keys [col-types ->cursor]} (f left-col-types right-col-types)
+
+            return-col-types col-types
 
             left-key-col-names (mapv (comp name :col :left) equi)
             right-key-col-names (mapv (comp name :col :right) equi)
 
             left-projections
-            (vec (concat (map (comp #(equi-projection % left-col-syms param-names) :left) equi)
-                         (map project/->identity-projection-spec (remove (set left-key-col-names) left-col-names))))
-            right-projections
-            (vec (concat (map (comp #(equi-projection % right-col-syms param-names) :right) equi)
-                         (map project/->identity-projection-spec (remove (set right-key-col-names) right-col-names))))]
+            (vec (concat (map (comp #(equi-projection % left-col-syms left-col-types param-names) :left) equi)
+                         (map #(project/->identity-projection-spec % (get left-col-types %)) (remove (set left-key-col-names) left-col-names))))
 
-        {:col-names return-col-names
+            right-projections
+            (vec (concat (map (comp #(equi-projection % right-col-syms right-col-types param-names) :right) equi)
+                         (map #(project/->identity-projection-spec % (get right-col-types %)) (remove (set right-key-col-names) right-col-names))))]
+
+        {:col-types return-col-types
          :->cursor
          (fn [opts left-cursor right-cursor]
            (let [left-project-cursor (project/->project-cursor opts left-cursor left-projections)
                  right-project-cursor (project/->project-cursor opts right-cursor right-projections)
 
-                 join-cursor (->cursor
-                               opts
-                               left-project-cursor left-key-col-names left-col-names
-                               right-project-cursor right-key-col-names right-col-names
-                               theta-selector)
+                 join-cursor (->cursor opts
+                                       left-project-cursor left-key-col-names left-col-names
+                                       right-project-cursor right-key-col-names right-col-names
+                                       theta-selector)
 
-                 project-away-cursor (project/->project-cursor opts join-cursor (mapv project/->identity-projection-spec return-col-names))]
+                 project-away-cursor (project/->project-cursor opts join-cursor (mapv #(project/->identity-projection-spec % (get return-col-types %)) (keys return-col-types)))]
 
              project-away-cursor))}))))
 
 (defmethod lp/emit-expr :join [join-expr args]
   (emit-join-expr join-expr args
-    (fn [left-col-names right-col-names]
-      {:col-names (set/union left-col-names right-col-names)
+    (fn [left-col-types right-col-types]
+      {:col-types (merge-with types/merge-col-types left-col-types right-col-types)
        :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
                    (JoinCursor. allocator
                                 left-cursor left-key-cols left-cols
@@ -447,10 +453,14 @@
                                 theta-selector
                                 params))})))
 
+(defn- with-nullable-cols [col-types]
+  (->> col-types
+       (into {} (map (juxt key (comp #(types/merge-col-types % :null) val))))))
+
 (defmethod lp/emit-expr :left-outer-join [join-expr args]
   (emit-join-expr join-expr args
-    (fn [left-col-names right-col-names]
-      {:col-names (set/union left-col-names right-col-names)
+    (fn [left-col-types right-col-types]
+      {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
                    (JoinCursor. allocator
                                 right-cursor right-key-cols right-cols
@@ -467,8 +477,8 @@
 
 (defmethod lp/emit-expr :full-outer-join [join-expr args]
   (emit-join-expr join-expr args
-    (fn [left-col-names right-col-names]
-      {:col-names (set/union left-col-names right-col-names)
+    (fn [left-col-types right-col-types]
+      {:col-types (merge-with types/merge-col-types (-> left-col-types with-nullable-cols) (-> right-col-types with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
                    (JoinCursor. allocator
                                 left-cursor left-key-cols left-cols
@@ -485,8 +495,8 @@
 
 (defmethod lp/emit-expr :semi-join [join-expr args]
   (emit-join-expr join-expr args
-    (fn [left-col-names _right-col-names]
-      {:col-names left-col-names
+    (fn [left-col-types _right-col-types]
+      {:col-types left-col-types
        :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
                    (JoinCursor. allocator
                                 right-cursor right-key-cols right-cols
@@ -502,8 +512,8 @@
 
 (defmethod lp/emit-expr :anti-join [join-expr args]
   (emit-join-expr join-expr args
-    (fn [left-col-names _right-col-names]
-      {:col-names left-col-names
+    (fn [left-col-types _right-col-types]
+      {:col-types left-col-types
        :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
                    (JoinCursor. allocator
                                 right-cursor right-key-cols right-cols
