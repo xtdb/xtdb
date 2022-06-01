@@ -123,29 +123,37 @@
     (recur z)
     (.node z)))
 
-(defn- zright-or-up [^Zip z ^long depth out-fn]
-  (when z
-    (if (pos? depth)
-      (when-let [z (out-fn z)]
-        (if (reduced? z)
-          @z
-          (or (zright z)
-              (recur (zup z) (dec depth) out-fn))))
-      (reduced z))))
+(defn- zright-or-up [^Zip z ^long depth]
+  (if (pos? depth)
+    (or (zright z)
+        (recur (zup z) (dec depth)))
+    (reduced z)))
 
 (defn znext
+  ([z]
+   (znext z (zdepth z)))
   ([z ^long depth]
-   (znext z depth identity))
-  ([z ^long depth out-fn]
    (or (zdown z)
-       (zright-or-up z depth out-fn))))
+       (zright-or-up z depth))))
+
+(defn- zright-or-up-bu [^Zip z ^long depth out-fn]
+  (if (pos? depth)
+    (when-let [z (out-fn z)]
+      (if (reduced? z)
+        @z
+        (or (zright z)
+            (recur (zup z) (dec depth) out-fn))))
+    (reduced z)))
+
+(defn- znext-bu [z ^long depth out-fn]
+  (or (zdown z)
+      (zright-or-up-bu z depth out-fn)))
 
 (defn- zright-or-up-no-edit [^Zip z top]
   (loop [z z]
-    (when z
-      (when-not (identical? z top)
-        (or (zright-no-edit z)
-            (recur (.parent z)))))))
+    (when-not (identical? z top)
+      (or (zright-no-edit z)
+          (recur (.parent z))))))
 
 (defn- znext-no-edit [z top]
   (or (zdown z)
@@ -345,14 +353,6 @@
 
 ;; Type Preserving
 
-(defn seq-tp
-  ([x y]
-   (fn [z]
-     (seq-tp x y z)))
-  ([x y z]
-   (when-let [z (x z)]
-     (y z))))
-
 (defn choice-tp
   ([x y]
    (fn [z]
@@ -361,76 +361,6 @@
    (if-let [z (x z)]
      z
      (y z))))
-
-;; (defn ->cont-fn [f]
-;;   (fn [x k]
-;;     (fn []
-;;       (k (f x)))))
-
-;; (defn ->cont-seq-tp [a b]
-;;   (fn [x k]
-;;     (fn []
-;;       (a x (fn [x]
-;;              (when x
-;;                (fn []
-;;                  (b x k))))))))
-
-;; (defn ->cont-choice-tp [a b]
-;;   (fn [x k]
-;;     (fn []
-;;       (a x (fn [x2]
-;;              (if x2
-;;                (fn []
-;;                  (k x2))
-;;                (fn []
-;;                  (b x k))))))))
-
-;; (trampoline (->cont-choice-tp
-;;              (->cont-fn inc)
-;;              (->cont-fn /))
-;;             2
-;;             identity)
-
-;; (defn ->cont-all-tp [f]
-;;   (->cont-choice-tp
-;;    (->cont-seq-tp
-;;     (->cont-fn zdown)
-;;     (->cont-choice-tp
-;;      (letfn [(lp [x k]
-;;                ((->cont-seq-tp f
-;;                                (->cont-choice-tp
-;;                                 (->cont-seq-tp (->cont-fn zright) lp)
-;;                                 (->cont-fn zup)))
-;;                 x
-;;                 k))]
-;;        lp)
-;;      (fn [x k])))
-;;    (fn [x k]
-;;      x)))
-
-;; (defn ->cont-full-tp-td [f]
-;;   (letfn [(self [x k]
-;;             ((->cont-seq-tp f (->cont-all-tp self)) x k))]
-;;     self))
-
-;; (trampoline (->cont-full-tp-td (->cont-fn (fn [x]
-;;                                             (prn x)
-;;                                             x)))
-;;             (vector-zip [[1 :+ 2] :* [3 :- 4]])
-;;             identity)
-
-(defn all-tp
-  ([f]
-   (fn [z]
-     (all-tp f z)))
-  ([f z]
-   (if-let [d (zdown z)]
-     (loop [z d]
-       (when-let [z (f z)]
-         (if-let [r (zright z)]
-           (recur r)
-           (zup z))))
-     z)))
 
 (defn full-td-tp
   ([f]
@@ -452,7 +382,7 @@
      (let [depth (zdepth z)]
        (loop [z z
               n 0]
-         (when-let [z (znext z n f)]
+         (when-let [z (znext-bu z n f)]
            (if (reduced? z)
              (f @z)
              (recur z (- (zdepth z) depth))))))))
@@ -487,18 +417,6 @@
 
 (def mono-tp (partial adhoc-tp fail-tp))
 
-(defn try-tp [f]
-  (choice-tp f id-tp))
-
-(defn repeat-tp
-  ([f]
-   (fn [z]
-     (if-let [z (f z)]
-       (recur z)
-       z)))
-  ([f z]
-   ((repeat-tp f) z)))
-
 (defn innermost
   ([f]
    (fn self [z]
@@ -510,7 +428,7 @@
                     z))]
          (loop [z z
                 n 0]
-           (if-let [z (znext z n f2)]
+           (if-let [z (znext-bu z n f2)]
              (if (reduced? z)
                (if-let [z (f @z)]
                  (recur z n)
@@ -518,12 +436,6 @@
                (recur z (- (zdepth z) depth)))))))))
   ([f z]
    ((innermost f) z)))
-
-(defn outermost
-  ([f]
-   (repeat-tp (once-td-tp f)))
-  ([f z]
-   ((outermost f) z)))
 
 (def topdown full-td-tp)
 
