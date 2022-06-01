@@ -347,9 +347,9 @@
 
         (do
           (with-open [kv-tx (kv/begin-kv-tx kv-store)]
-            (doseq [[k v] [(encode-index-version-key-to nil)
-                           (encode-index-version-value-to nil c/index-version)]]
-              (kv/put-kv kv-tx k v))
+            (kv/put-kv kv-tx
+                       (encode-index-version-key-to nil)
+                       (encode-index-version-value-to nil c/index-version))
             (kv/commit-kv-tx kv-tx))
           (kv/fsync kv-store)))))
 
