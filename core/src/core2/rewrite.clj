@@ -73,6 +73,13 @@
       (when-let [child-node (.nth level idx nil)]
         (Zip. child-node idx parent 0 (.depth z))))))
 
+(defn- zleft-no-edit [^Zip z]
+  (when-let [^Zip parent (.parent z)]
+    (let [idx (dec (.idx z))
+          ^IPersistentVector level (.node parent)]
+      (when-let [child-node (.nth level idx nil)]
+        (Zip. child-node idx parent 0 (.depth z))))))
+
 (defn zright [^Zip z]
   (when-let [^Zip parent (zupdate-parent z)]
     (let [idx (inc (.idx z))
@@ -163,6 +170,14 @@
         (recur z)
         z))
     (zup z)))
+
+(defn zprev-no-edit [^Zip z]
+  (if-let [z (zleft-no-edit z)]
+    (loop [z z]
+      (if-let [z (znth z -1)]
+        (recur z)
+        z))
+    (.parent z)))
 
 (defn zchild-idx ^long [^Zip z]
   (when z
