@@ -67,7 +67,7 @@
 
 (defn- prev-subtree-seq [ag]
   (when ag
-    (lazy-seq (cons ag (prev-subtree-seq (r/prev ag))))))
+    (lazy-seq (cons ag (prev-subtree-seq (r/zprev-no-edit ag))))))
 
 (defn id [ag]
   (dec (count (prev-subtree-seq ag))))
