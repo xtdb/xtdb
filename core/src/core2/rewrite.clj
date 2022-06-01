@@ -8,7 +8,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype Zip [node ^int idx parent ^:unsynchronized-mutable ^int hash_]
+(deftype Zip [node ^int idx parent ^:unsynchronized-mutable ^int hash_ ^int depth]
   ILookup
   (valAt [_ k]
     (when (= :node k)
@@ -25,8 +25,9 @@
       true
       (let [^Zip other other]
         (and (instance? Zip other)
-             (= (.node this) (.node other))
              (= (.idx this) (.idx other))
+             (= (.depth this) (.depth other))
+             (= (.node this) (.node other))
              (= (.parent this) (.parent other))))))
 
   (hashCode [this]
@@ -39,6 +40,7 @@
             result (+ (* 31 result) (if parent
                                       (long (.hashCode parent))
                                       0))
+            result (+ (* 31 result) (long (Integer/hashCode depth)))
             result (unchecked-int result)]
         (set! (.hash_ this) result)
         result)
@@ -47,7 +49,7 @@
 (defn ->zipper [x]
   (if (instance? Zip x)
     x
-    (Zip. x -1 nil 0)))
+    (Zip. x -1 nil 0 0)))
 
 (defn- zupdate-parent [^Zip z]
   (when-let [^Zip parent (.parent z)]
@@ -56,7 +58,7 @@
           idx (.idx z)]
       (if (identical? node (.get level idx))
         parent
-        (Zip. (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent) 0)))))
+        (Zip. (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent) 0 (.depth parent))))))
 
 (defn znode [^Zip z]
   (.node z))
@@ -69,21 +71,21 @@
     (let [idx (dec (.idx z))]
       (when (BitUtil/bitNot (neg? idx))
         (let [^List level (.node parent)]
-          (Zip. (.get level idx) idx parent 0))))))
+          (Zip. (.get level idx) idx parent 0 (.depth z)))))))
 
 (defn zright [^Zip z]
   (when-let [^Zip parent (zupdate-parent z)]
     (let [idx (inc (.idx z))
           ^List level (.node parent)]
       (when (< idx (.size level))
-        (Zip. (.get level idx) idx parent 0)))))
+        (Zip. (.get level idx) idx parent 0 (.depth z))))))
 
 (defn- zright-no-edit [^Zip z]
   (when-let [^Zip parent (.parent z)]
     (let [idx (inc (.idx z))
           ^List level (.node parent)]
       (when (< idx (.size level))
-        (Zip. (.get level idx) idx parent 0)))))
+        (Zip. (.get level idx) idx parent 0 (.depth z))))))
 
 (defn znth [^Zip z ^long idx]
   (when (zbranch? z)
@@ -93,13 +95,13 @@
                 idx)]
       (when (and (< idx (.size node))
                  (BitUtil/bitNot (neg? idx)))
-        (Zip. (.get node idx) idx z 0)))))
+        (Zip. (.get node idx) idx z 0 (inc (.depth z)))))))
 
 (defn zdown [^Zip z]
   (let [node (.node z)]
     (when (and (zbranch? z)
                (BitUtil/bitNot (.isEmpty ^List node)))
-      (Zip. (.get ^List node 0) 0 z 0))))
+      (Zip. (.get ^List node 0) 0 z 0 (inc (.depth z))))))
 
 (defn zup [^Zip z]
   (let [idx (.idx z)]
@@ -107,11 +109,7 @@
       (zupdate-parent z))))
 
 (defn- zdepth ^long [^Zip z]
-  (loop [z z
-         n 0]
-    (if-let [p (.parent z)]
-      (recur p (inc n))
-      n)))
+  (.depth z))
 
 (defn- zups [^Zip z ^long n]
   (if (zero? n)
@@ -187,7 +185,7 @@
   (when z
     (if (identical? (.node z) x)
       z
-      (Zip. x (.idx z) (.parent z) 0))))
+      (Zip. x (.idx z) (.parent z) 0 (.depth z)))))
 
 ;; Zipper pattern matching
 
@@ -196,7 +194,7 @@
 (defmethod m/nth-inline ::m/zip
   [t ocr i]
   `(let [^Zip z# ~ocr]
-     (Zip. (.get ^List (.node z#) ~i) ~i z# 0)))
+     (Zip. (.get ^List (.node z#) ~i) ~i z# 0 (inc (.depth z#)))))
 
 (defmethod m/count-inline ::m/zip
   [t ocr]
@@ -420,20 +418,19 @@
 (defn innermost
   ([f]
    (fn self [z]
-     (when z
-       (let [depth (zdepth z)
-             f2 (fn [z]
-                  (if-let [z (f z)]
-                    (reduced z)
-                    z))]
-         (loop [z z
-                n 0]
-           (if-let [z (znext-bu z n f2)]
-             (if (reduced? z)
-               (if-let [z (f @z)]
-                 (recur z n)
-                 @z)
-               (recur z (- (zdepth z) depth)))))))))
+     (let [depth (zdepth z)
+           inner-f (fn [z]
+                     (if-let [z (f z)]
+                       (reduced z)
+                       z))]
+       (loop [z z
+              n 0]
+         (if-let [z (znext-bu z n inner-f)]
+           (if (reduced? z)
+             (if-let [z (f @z)]
+               (recur z n)
+               @z)
+             (recur z (- (zdepth z) depth))))))))
   ([f z]
    ((innermost f) z)))
 
@@ -444,7 +441,7 @@
 ;; Type Unifying
 
 (defn- into-array-list
-  ([] (ArrayList.))
+  ([] (ArrayList. 0))
   ([x] (vec x))
   ([^List x ^List y]
    (if y
