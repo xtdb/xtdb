@@ -50,9 +50,10 @@
           (transient {}) ids)))))
 
   (submit-docs [_ id-and-docs]
-    (kv/store kv-store (for [[id doc] id-and-docs]
-                         (MapEntry/create (encode-doc-key-to nil (c/->id-buffer id))
-                                          (mem/->nippy-buffer doc))))
+    (with-open [kv-tx (kv/begin-kv-tx kv-store)]
+      (doseq [[id doc] id-and-docs]
+        (kv/put-kv kv-tx (encode-doc-key-to nil (c/->id-buffer id)) (mem/->nippy-buffer doc)))
+      (kv/commit-kv-tx kv-tx))
     (when fsync?
       (kv/fsync kv-store)))
 

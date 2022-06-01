@@ -87,7 +87,11 @@
       (.remove wb (mem/direct-byte-buffer k))))
 
   (commit-kv-tx [_]
-    (.write db write-options wb)))
+    (.write db write-options wb))
+
+  Closeable
+  (close [_]
+    (.close wb)))
 
 (defrecord RocksKv [^RocksDB db, ^WriteOptions write-options, ^Options options, ^Closeable metrics, ^Closeable cp-job, db-dir]
   kv/KvStore

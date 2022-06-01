@@ -24,13 +24,12 @@
 ;; tag::KvStore[]
 (defprotocol KvStore
   (new-snapshot ^java.io.Closeable [this])
-  (store [this kvs])
   (fsync [this])
   (compact [this])
   (count-keys [this])
   (db-dir [this])
   (kv-name [this])
-  (begin-kv-tx [this]))
+  (begin-kv-tx ^java.io.Closeable [this]))
 ;; end::KvStore[]
 
 (def args
