@@ -176,7 +176,22 @@
         (kv/put-kv tx2 (long->bytes 1) (.getBytes "XTDB"))
         (kv/put-kv tx1 (long->bytes 1) nil)
         (t/is (nil? (value-tx tx1 (long->bytes 1))))
-        (t/is (value-tx tx2 (long->bytes 1)))))))
+        (t/is (value-tx tx2 (long->bytes 1))))
+
+      (t/testing "update"
+        (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB2"))
+        (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB3"))
+        (t/is (= "XTDB3" (String. ^bytes (value-tx tx1 (long->bytes 1)))))
+        (t/is (= "XTDB" (String. ^bytes (value-tx tx2 (long->bytes 1))))))
+
+      (t/testing "seek"
+        (with-open [snapshot (kv/new-tx-snapshot tx1)
+                    i (kv/new-iterator snapshot)]
+          (t/is (kv/seek i (long->bytes 0)))
+          (t/is (kv/seek i (long->bytes 1)))
+          (t/is (nil? (kv/seek i (long->bytes 2))))
+          (kv/put-kv tx1 (long->bytes 1) nil)
+          (t/is (nil? (kv/seek i (long->bytes 0)))))))))
 
 (t/deftest test-checkpoint-and-restore-db
   (fkv/with-kv-store [kv-store]
