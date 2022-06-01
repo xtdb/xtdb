@@ -7,25 +7,23 @@
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.error :as err]
-            [xtdb.fork :as fork]
             [xtdb.hyper-log-log :as hll]
             [xtdb.io :as xio]
             [xtdb.kv :as kv]
-            [xtdb.kv.mutable-kv :as mut-kv]
             [xtdb.memory :as mem]
             [xtdb.morton :as morton]
             [xtdb.status :as status]
             [xtdb.system :as sys])
   (:import clojure.lang.MapEntry
-           xtdb.api.IndexVersionOutOfSyncException
-           [xtdb.codec EntityTx Id]
            java.io.Closeable
            java.nio.ByteOrder
-           [java.util ArrayList Date HashMap List Map NavigableSet TreeSet TreeMap]
+           [java.util ArrayList Date HashMap List Map NavigableSet TreeSet]
            [java.util.concurrent Semaphore TimeUnit]
            java.util.concurrent.atomic.AtomicBoolean
            [java.util.function BiFunction Supplier]
-           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]))
+           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
+           xtdb.api.IndexVersionOutOfSyncException
+           [xtdb.codec EntityTx Id]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -1133,9 +1131,7 @@
   db/IndexStore
   (begin-index-tx [_ tx fork-at]
     (let [{::xt/keys [tx-id tx-time]} tx
-          kv-tx (kv/begin-kv-tx kv-store)
-;; TODO          transient-kv-store (mut-kv/->mutable-kv-store (:kvs encoded-docs))
-          ]
+          kv-tx (kv/begin-kv-tx kv-store)]
       (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)
       (->KvIndexStoreTx kv-store kv-tx tx fork-at
                         (atom #{}) thread-mgr
