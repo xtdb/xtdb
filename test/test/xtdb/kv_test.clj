@@ -164,13 +164,25 @@
 
 (t/deftest test-can-read-writes-in-tx
   (fkv/with-kv-store [kv-store]
+    (let [tx1 (kv/begin-kv-tx kv-store)]
+
+      (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB"))
+      (t/is (= "XTDB" (String. ^bytes (value-tx tx1 (long->bytes 1)))))
+
+      (kv/store kv-store [[(long->bytes 2) (.getBytes "XTDB2")]])
+      (t/is (String. ^bytes (value kv-store (long->bytes 2))))
+      (t/is (nil? (String. ^bytes (value-tx tx1 (long->bytes 2))))))))
+
+(t/deftest test-can-read-writes-in-tx
+  (fkv/with-kv-store [kv-store]
     (let [tx1 (kv/begin-kv-tx kv-store)
           tx2 (kv/begin-kv-tx kv-store)]
 
       (t/testing "read a put"
         (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB"))
         (t/is (= "XTDB" (String. ^bytes (value-tx tx1 (long->bytes 1)))))
-        (t/is (nil? (value-tx tx2 (long->bytes 1)))))
+        (t/is (nil? (value-tx tx2 (long->bytes 1))))
+        (t/is (nil? (value kv-store (long->bytes 1)))))
 
       (t/testing "delete"
         (kv/put-kv tx2 (long->bytes 1) (.getBytes "XTDB"))
@@ -192,6 +204,17 @@
           (t/is (nil? (kv/seek i (long->bytes 2))))
           (kv/put-kv tx1 (long->bytes 1) nil)
           (t/is (nil? (kv/seek i (long->bytes 0)))))))))
+
+(t/deftest test-can-commit-txs
+  (fkv/with-kv-store [kv-store]
+    (let [^java.io.Closeable tx1 (kv/begin-kv-tx kv-store)]
+      (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB"))
+      (t/is (value-tx tx1 (long->bytes 1)))
+      (t/is (nil? (value kv-store (long->bytes 1))))
+
+      (kv/commit-kv-tx tx1)
+
+      (t/is (value kv-store (long->bytes 1))))))
 
 (t/deftest test-checkpoint-and-restore-db
   (fkv/with-kv-store [kv-store]
