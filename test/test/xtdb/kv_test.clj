@@ -240,7 +240,7 @@
 
             (t/testing "backup and original are different"
               (store kv-store [[(long->bytes 1) (.getBytes "Original")]])
-              (kv/store restored-kv [[(long->bytes 1) (.getBytes "Backup")]])
+              (store restored-kv [[(long->bytes 1) (.getBytes "Backup")]])
               (t/is (= "Original" (String. ^bytes (value kv-store (long->bytes 1)))))
               (t/is (= "Backup" (String. ^bytes (value restored-kv (long->bytes 1))))))))))))
 

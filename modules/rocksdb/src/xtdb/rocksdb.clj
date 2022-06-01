@@ -107,15 +107,6 @@
   (begin-kv-tx [_]
     (->RocksKvTx db write-options (WriteBatchWithIndex.)))
 
-  ;; todo, remove in favour of kv-tx put
-  (store [_ kvs]
-    (with-open [wb (WriteBatch.)]
-      (doseq [[k v] kvs]
-        (if v
-          (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
-          (.delete wb (mem/direct-byte-buffer k))))
-      (.write db write-options wb)))
-
   (compact [_]
     (.compactRange db))
 
