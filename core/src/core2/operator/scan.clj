@@ -1,5 +1,6 @@
 (ns core2.operator.scan
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.core.match :refer [match]]
+            [clojure.spec.alpha :as s]
             [core2.align :as align]
             [core2.bloom :as bloom]
             [core2.coalesce :as coalesce]
@@ -26,7 +27,7 @@
            [core2.temporal ITemporalManager TemporalRoots]
            core2.tx.Watermark
            [java.util HashMap LinkedList List Map Queue]
-           [java.util.function BiFunction Consumer]
+           [java.util.function BiFunction Consumer Function]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
            [org.roaringbitmap IntConsumer RoaringBitmap]
@@ -45,6 +46,42 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:dynamic *column->pushdown-bloom* {})
+
+(defn ->scan-col-types [scan-exprs srcs]
+  (let [mm+wms (HashMap.)]
+    (try
+      (letfn [(->mm+wm [src-key]
+                (.computeIfAbsent mm+wms src-key
+                                  (reify Function
+                                    (apply [_ _src-key]
+                                      (let [^Snapshot src (or (get srcs src-key)
+                                                              (throw (err/illegal-arg :unknown-src
+                                                                                      {::err/message "Query refers to unknown source"
+                                                                                       :db src-key
+                                                                                       :src-keys (keys srcs)})))]
+
+                                        {:mm (.metadata-mgr src)
+                                         :wm (.getWatermark ^IChunkManager (.indexer src))})))))
+
+              (->col-type [[src-key col-name]]
+                (let [{:keys [^IMetadataManager mm, ^Watermark wm]} (->mm+wm src-key)]
+                  (if (temporal/temporal-column? col-name)
+                    [:timestamp-tz :micro "UTC"]
+                    (t/merge-col-types (.columnType mm col-name)
+                                       (.columnType wm col-name)))))]
+
+        (->> scan-exprs
+             (into {} (comp (mapcat (fn ->scan-col-keys [{:keys [source columns]}]
+                                      (let [src-key (or source '$)]
+                                        (for [column columns]
+                                          [src-key (name (match column
+                                                           [:column col] col
+                                                           [:select col-map] (key (first col-map))))]))))
+                            (distinct)
+                            (map (juxt identity ->col-type))))))
+
+      (finally
+        (run! util/try-close (map :wm (vals mm+wms)))))))
 
 (defn- next-roots [col-names chunks]
   (when (= (count col-names) (count chunks))
@@ -268,8 +305,10 @@
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                   '> "_tx-time-end" tx-time))))
 
-(defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [src-keys param-names]}]
-  (let [ordered-col-names (->> columns
+(defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [scan-col-types param-names]}]
+  (let [src-key (or source '$)
+
+        ordered-col-names (->> columns
                                (map (fn [[col-type arg]]
                                       (str (case col-type
                                              :column arg
@@ -286,15 +325,11 @@
         metadata-args (vec (concat (for [col-name ordered-col-names
                                          :when (not (contains? col-preds col-name))]
                                      (symbol col-name))
-                                   (vals selects)))
-        src-key (or source '$)]
-
-    (when-not (contains? src-keys src-key)
-      (throw (err/illegal-arg :unknown-src
-                              {::err/message "Query refers to unknown source"
-                               :db source
-                               :src-keys src-keys})))
-    {:col-names (set ordered-col-names)
+                                   (vals selects)))]
+    {:col-types (->> ordered-col-names
+                     (into {} (map (juxt identity
+                                         (fn [col-name]
+                                           (get scan-col-types [src-key col-name]))))))
      :->cursor (fn [{:keys [allocator srcs params default-valid-time]}]
                  (let [^Snapshot snapshot (get srcs src-key)
                        ^IChunkManager indexer (.indexer snapshot)

@@ -5,7 +5,8 @@
             [core2.operator :as op]
             [core2.snapshot :as snap]
             [core2.test-util :as tu]
-            [core2.util :as util]))
+            [core2.util :as util])
+  (:import (core2 IResultCursor)))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -74,3 +75,24 @@
       (t/is (op/query-ra '[:scan [_valid-time-start _valid-time-end
                                   _tx-time-start _tx-time-end]]
                          (snap/snapshot snapshot-factory tx))))))
+
+(t/deftest test-scan-col-types
+  (with-open [node (node/start-node {})]
+    (let [snapshot-factory (tu/component node ::snap/snapshot-factory)]
+      (letfn [(->col-types [tx]
+                (let [snap (snap/snapshot snapshot-factory tx)]
+                  (with-open [^IResultCursor rs (op/open-ra '[:scan [_id]] snap {})]
+                    (.columnTypes rs))))]
+
+        (let [tx (-> (c2/submit-tx node [[:put {:_id :doc}]])
+                     (tu/then-await-tx node))]
+         (tu/finish-chunk node)
+
+         (t/is (= {"_id" [:extension-type :keyword :utf8 ""]}
+                  (->col-types tx))))
+
+        (let [tx (-> (c2/submit-tx node [[:put {:_id "foo"}]])
+                     (tu/then-await-tx node))]
+
+          (t/is (= {"_id" [:union #{[:extension-type :keyword :utf8 ""] :utf8}]}
+                   (->col-types tx))))))))

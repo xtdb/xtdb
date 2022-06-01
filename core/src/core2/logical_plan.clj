@@ -36,6 +36,25 @@
 
 (s/def ::logical-plan ::ra-expression)
 
+(defn- direct-child-exprs [{:keys [op] :as expr}]
+  (case op
+    :relation #{}
+
+    :assign (let [{:keys [bindings relation]} expr]
+              (into #{relation} (map :value) bindings))
+
+    (let [spec (s/describe (ra-expr [op]))]
+      (case (first spec)
+        cat (->> (rest spec)
+                 (partition 2)
+                 (keep (fn [[k form]]
+                         (when (= form ::ra-expression)
+                           k)))
+                 (mapv expr))))))
+
+(defn child-exprs [ra]
+  (into #{ra} (mapcat child-exprs) (direct-child-exprs ra)))
+
 #_{:clj-kondo/ignore #{:unused-binding}}
 (defmulti emit-expr
   (fn [ra-expr srcs]

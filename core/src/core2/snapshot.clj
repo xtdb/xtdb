@@ -1,6 +1,5 @@
 (ns core2.snapshot
   (:require core2.api
-            [core2.expression.temporal :as expr.temp]
             [core2.indexer :as idx]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
