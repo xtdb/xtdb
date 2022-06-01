@@ -2120,11 +2120,15 @@
                         smap
                         post-group-by-projection))]))))
 
-(defn parameters-in-e-resolved-from-r? [apply-columns]
-  (boolean
-    (some
-      #(= "x" (subs (str (key %)) 0 1))
-      apply-columns)))
+(defn parameters-in-e-resolved-from-r? [dependent-relation apply-columns]
+  (let [apply-symbols (set (vals apply-columns))
+        found? (atom false)]
+    (w/prewalk
+      #(if (contains? apply-symbols %)
+         (reset! found? true)
+         %)
+      dependent-relation)
+    @found?))
 
 (defn- decorrelate-apply-rule-1
   "R A⊗ E = R ⊗true E
@@ -2134,18 +2138,13 @@
     z
     [:apply :cross-join columns _ independent-relation dependent-relation]
     ;;=>
-    (when-not (parameters-in-e-resolved-from-r? columns)
+    (when-not (parameters-in-e-resolved-from-r? dependent-relation columns)
       [:cross-join independent-relation dependent-relation])
 
     [:apply mode columns _ independent-relation dependent-relation]
     ;;=>
-    (when-not (parameters-in-e-resolved-from-r? columns)
+    (when-not (parameters-in-e-resolved-from-r? dependent-relation columns)
       [mode [] independent-relation dependent-relation])))
-
-(defn- remove-parameters-in-predicate-from-apply-columns [columns predicate]
-  (->> columns
-       (remove (comp (expr-correlated-symbols predicate) val))
-       (into {})))
 
 (defn- decorrelate-apply-rule-2
   "R A⊗(σp E) = R ⊗p E
@@ -2158,7 +2157,8 @@
     ;;=>
     (when (seq (expr-correlated-symbols predicate))
       (when-not (parameters-in-e-resolved-from-r?
-                  (remove-parameters-in-predicate-from-apply-columns columns predicate))
+                  dependent-relation
+                  columns)
         [(if (= :cross-join mode)
            :join
            mode)

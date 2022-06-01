@@ -337,13 +337,10 @@
                     (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)")))))))
 
 (t/deftest parameters-in-e-resolved-from-r-test
-  (t/are [expected apply-columns]
-         (= expected (plan/parameters-in-e-resolved-from-r? apply-columns))
-         false {}
-         true {'x1 '?x2}
-         false {'?x3 '?x4}
-         true {'?x3 '?x3
-                'x4 '?x5}))
+  (t/are [expected plan apply-columns]
+         (= expected (plan/parameters-in-e-resolved-from-r? plan apply-columns))
+         true '[:table [{x6 ?x8}]] '{x2 ?x8}
+         false '[:table [{x6 ?x4}]] '{x2 ?x8}))
 
 
 (deftest non-semi-join-subquery-optimizations-test
