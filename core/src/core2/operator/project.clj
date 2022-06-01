@@ -1,5 +1,6 @@
 (ns core2.operator.project
-  (:require [core2.expression :as expr]
+  (:require [clojure.spec.alpha :as s]
+            [core2.expression :as expr]
             [core2.logical-plan :as lp]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
@@ -11,10 +12,25 @@
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.BigIntVector))
 
-(set! *unchecked-math* :warn-on-boxed)
+(s/def ::append-columns? boolean?)
 
-(deftype IdentityProjectionSpec [^String col-name]
-  )
+(defmethod lp/ra-expr :project [_]
+  (s/cat :op #{:π :pi :project}
+         :opts (s/? (s/keys :req-un [::append-columns?]))
+         :projections (s/coll-of (s/or :column ::lp/column
+                                       :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
+                                       :extend ::lp/column-expression)
+                                 :min-count 1)
+         :relation ::lp/ra-expression))
+
+(defmethod lp/ra-expr :map [_]
+  (s/cat :op #{:ⲭ :chi :map}
+         :projections (s/coll-of (s/or :row-number-column (s/map-of ::lp/column #{'(row-number)}, :conform-keys true, :count 1)
+                                       :extend ::lp/column-expression)
+                                 :min-count 1)
+         :relation ::lp/ra-expression))
+
+(set! *unchecked-math* :warn-on-boxed)
 
 (defn ->identity-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
   (reify IProjectionSpec

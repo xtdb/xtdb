@@ -1,15 +1,25 @@
 (ns core2.operator.order-by
-  (:require [core2.expression.comparator :as expr.comp]
+  (:require [clojure.spec.alpha :as s]
+            [core2.expression.comparator :as expr.comp]
+            [core2.logical-plan :as lp]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw]
-            [core2.logical-plan :as lp])
+            [core2.vector.writer :as vw])
   (:import core2.ICursor
            core2.vector.IIndirectRelation
            [java.util Comparator]
            [java.util.function Consumer ToIntFunction]
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator))
+
+(s/def ::order-direction #{:asc :desc})
+
+(defmethod lp/ra-expr :order-by [_]
+  (s/cat :op '#{:τ :tau :order-by order-by}
+         :order (s/coll-of (s/cat :column ::lp/column
+                                  :direction (s/? ::order-direction)
+                                  :null-ordering (s/? #{:nulls-first :nulls-last})))
+         :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
 

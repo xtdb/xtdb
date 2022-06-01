@@ -1,5 +1,6 @@
 (ns core2.operator.select
-  (:require [core2.coalesce :as coalesce]
+  (:require [clojure.spec.alpha :as s]
+            [core2.coalesce :as coalesce]
             [core2.expression :as expr]
             [core2.logical-plan :as lp]
             [core2.util :as util]
@@ -9,6 +10,11 @@
            core2.vector.IIndirectRelation
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator))
+
+(defmethod lp/ra-expr :select [_]
+  (s/cat :op #{:σ :sigma :select}
+         :predicate ::lp/expression
+         :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
 

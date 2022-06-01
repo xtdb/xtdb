@@ -1,12 +1,17 @@
 (ns core2.operator.max-1-row
-  (:require [core2.vector.indirect :as iv]
-            [core2.logical-plan :as lp])
+  (:require [clojure.spec.alpha :as s]
+            [core2.logical-plan :as lp]
+            [core2.vector.indirect :as iv])
   (:import (core2 ICursor)
            (core2.vector IIndirectRelation)
            (java.util Set)
            (java.util.function Consumer)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector NullVector)))
+
+(defmethod lp/ra-expr :max-1-row [_]
+  (s/cat :op #{:max-1-row}
+         :relation ::lp/ra-expression))
 
 (deftype Max1RowCursor [^BufferAllocator allocator
                         ^Set col-names

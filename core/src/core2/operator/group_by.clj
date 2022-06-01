@@ -1,5 +1,6 @@
 (ns core2.operator.group-by
   (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [core2.expression :as expr]
             [core2.expression.map :as emap]
             [core2.logical-plan :as lp]
@@ -18,6 +19,18 @@
            (org.apache.arrow.vector BigIntVector BitVector Float8Vector IntVector NullVector ValueVector)
            (org.apache.arrow.vector.complex ListVector)
            (org.apache.arrow.vector.types.pojo ArrowType$FloatingPoint ArrowType$Int FieldType)))
+
+(s/def ::aggregate-expr
+  (s/cat :aggregate-fn simple-symbol?
+         :from-column ::lp/column))
+
+(s/def ::aggregate
+  (s/map-of ::lp/column ::aggregate-expr :conform-keys true :count 1))
+
+(defmethod lp/ra-expr :group-by [_]
+  (s/cat :op #{:γ :gamma :group-by}
+         :columns (s/coll-of (s/or :group-by ::lp/column :aggregate ::aggregate), :min-count 1)
+         :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
 

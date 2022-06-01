@@ -1,5 +1,6 @@
 (ns core2.operator.rename
   (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [core2.logical-plan :as lp]
             [core2.operator.scan :as scan]
@@ -9,6 +10,12 @@
            [core2.vector IIndirectRelation IIndirectVector]
            [java.util LinkedList Map]
            java.util.function.Consumer))
+
+(defmethod lp/ra-expr :rename [_]
+  (s/cat :op #{:ρ :rho :rename}
+         :prefix (s/? ::lp/relation)
+         :columns (s/? (s/map-of ::lp/column ::lp/column :conform-keys true))
+         :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
 

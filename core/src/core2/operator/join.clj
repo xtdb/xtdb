@@ -1,5 +1,6 @@
 (ns core2.operator.join
   (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [core2.bloom :as bloom]
             [core2.expression :as expr]
             [core2.expression.map :as emap]
@@ -17,6 +18,57 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.roaringbitmap IntConsumer RoaringBitmap)
            (org.roaringbitmap.buffer MutableRoaringBitmap)))
+
+(defmethod lp/ra-expr :cross-join [_]
+  (s/cat :op #{:⨯ :cross-join}
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
+
+(s/def ::join-equi-clause (s/map-of ::lp/column ::lp/column :conform-keys true :count 1))
+
+(s/def ::join-condition-clause
+  (s/or :equi-condition ::join-equi-clause
+        :pred-expr ::lp/expression))
+
+(s/def ::join-condition
+  (s/and
+    (s/or :vec-form (s/coll-of ::join-condition-clause :kind vector?)
+          :legacy-single-map-form (s/map-of ::lp/column ::lp/column :conform-keys true :count 1))
+    (s/conformer
+     (fn [[tag val]]
+       (case tag
+         :vec-form val
+         :legacy-single-map-form [[:equi-condition val]])))))
+
+(defmethod lp/ra-expr :join [_]
+  (s/cat :op #{:⋈ :join}
+         :condition ::join-condition
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
+
+(defmethod lp/ra-expr :left-outer-join [_]
+  (s/cat :op #{:⟕ :left-outer-join}
+         :condition ::join-condition
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
+
+(defmethod lp/ra-expr :full-outer-join [_]
+  (s/cat :op #{:⟗ :full-outer-join}
+         :condition ::join-condition
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
+
+(defmethod lp/ra-expr :semi-join [_]
+  (s/cat :op #{:⋉ :semi-join}
+         :condition ::join-condition
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
+
+(defmethod lp/ra-expr :anti-join [_]
+  (s/cat :op #{:▷ :anti-join}
+         :condition ::join-condition
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
 

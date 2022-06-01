@@ -1,5 +1,6 @@
 (ns core2.operator.set
-  (:require [core2.expression.map :as emap]
+  (:require [clojure.spec.alpha :as s]
+            [core2.expression.map :as emap]
             [core2.logical-plan :as lp]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
@@ -11,6 +12,47 @@
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ArrowBufPointer))
+
+(defmethod lp/ra-expr :distinct [_]
+  (s/cat :op #{:δ :distinct}
+         :relation ::lp/ra-expression))
+
+(defmethod lp/ra-expr :intersect [_]
+  (s/cat :op #{:∩ :intersect}
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
+
+(defmethod lp/ra-expr :union-all [_]
+  (s/cat :op #{:∪ :union-all}
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
+
+(defmethod lp/ra-expr :difference [_]
+  (s/cat :op #{:− :except :difference}
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
+
+(s/def ::incremental? boolean?)
+
+(defmethod lp/ra-expr :fixpoint [_]
+  (s/cat :op #{:μ :mu :fixpoint}
+         :mu-variable ::lp/relation
+         :opts (s/? (s/keys :opt-un [::incremental?]))
+         :base ::lp/ra-expression
+         :recursive ::lp/ra-expression))
+
+(defmethod lp/ra-expr :relation [_]
+  (s/and ::lp/relation
+         (s/conformer (fn [rel]
+                        {:op :relation, :relation rel})
+                      :relation)))
+
+(defmethod lp/ra-expr :assign [_]
+  (s/cat :op #{:← :assign}
+         :bindings (s/and vector?
+                          (s/* (s/cat :variable ::lp/relation,
+                                      :value ::lp/ra-expression)))
+         :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
 

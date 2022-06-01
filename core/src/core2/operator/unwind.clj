@@ -1,8 +1,9 @@
 (ns core2.operator.unwind
-  (:require [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw]
+  (:require [clojure.spec.alpha :as s]
+            [core2.logical-plan :as lp]
             [core2.util :as util]
-            [core2.logical-plan :as lp])
+            [core2.vector.indirect :as iv]
+            [core2.vector.writer :as vw])
   (:import (core2 ICursor)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (java.util LinkedList)
@@ -10,7 +11,19 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector IntVector)
-           (org.apache.arrow.vector.complex BaseListVector DenseUnionVector FixedSizeListVector ListVector)))
+           (org.apache.arrow.vector.complex
+             BaseListVector
+             DenseUnionVector
+             FixedSizeListVector
+             ListVector)))
+
+(s/def ::ordinality-column ::lp/column)
+
+(defmethod lp/ra-expr :unwind [_]
+  (s/cat :op #{:ω :unwind}
+         :columns (s/map-of ::lp/column ::lp/column, :conform-keys true, :count 1)
+         :opts (s/? (s/keys :opt-un [::ordinality-column]))
+         :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
 

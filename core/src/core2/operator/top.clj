@@ -1,10 +1,19 @@
 (ns core2.operator.top
+  (:require [clojure.spec.alpha :as s]
+            [core2.logical-plan :as lp]
+            [core2.vector.indirect :as iv])
   (:import core2.ICursor
            core2.vector.IIndirectRelation
            java.util.function.Consumer
-           java.util.stream.IntStream)
-  (:require [core2.vector.indirect :as iv]
-            [core2.logical-plan :as lp]))
+           java.util.stream.IntStream))
+
+(s/def ::skip nat-int?)
+(s/def ::limit nat-int?)
+
+(defmethod lp/ra-expr :top [_]
+  (s/cat :op #{:λ :top}
+         :top (s/keys :opt-un [::skip ::limit])
+         :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
 

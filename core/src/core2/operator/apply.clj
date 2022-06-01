@@ -1,5 +1,6 @@
 (ns core2.operator.apply
   (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [core2.logical-plan :as lp]
             [core2.types :as types]
             [core2.util :as util]
@@ -12,6 +13,14 @@
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector NullVector)))
+
+(defmethod lp/ra-expr :apply [_]
+  (s/cat :op #{:apply}
+         :mode #{:cross-join, :left-outer-join, :semi-join, :anti-join}
+         :columns (s/map-of ::lp/column ::lp/column, :conform-keys true)
+         :dependent-column-names (s/coll-of ::lp/column, :kind set?)
+         :independent-relation ::lp/ra-expression
+         :dependent-relation ::lp/ra-expression))
 
 (definterface IDependentCursorFactory
   (^core2.ICursor openDependentCursor [^core2.vector.IIndirectRelation inRelation, ^int idx]))

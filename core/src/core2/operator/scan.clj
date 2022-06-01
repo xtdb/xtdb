@@ -1,5 +1,6 @@
 (ns core2.operator.scan
-  (:require [core2.align :as align]
+  (:require [clojure.spec.alpha :as s]
+            [core2.align :as align]
             [core2.bloom :as bloom]
             [core2.coalesce :as coalesce]
             [core2.error :as err]
@@ -31,6 +32,15 @@
            [org.roaringbitmap IntConsumer RoaringBitmap]
            org.roaringbitmap.buffer.MutableRoaringBitmap
            org.roaringbitmap.longlong.Roaring64Bitmap))
+
+;; TODO be good to just specify a single expression here and have the interpreter split it
+;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
+(defmethod lp/ra-expr :scan [_]
+  (s/cat :op #{:scan}
+         :source (s/? ::lp/source)
+         :columns (s/coll-of (s/or :column ::lp/column
+                                   :select ::lp/column-expression)
+                             :min-count 1)))
 
 (set! *unchecked-math* :warn-on-boxed)
 

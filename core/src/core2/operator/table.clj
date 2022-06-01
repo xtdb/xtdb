@@ -1,16 +1,23 @@
 (ns core2.operator.table
-  (:require [core2.error :as err]
+  (:require [clojure.spec.alpha :as s]
+            [core2.error :as err]
             [core2.expression :as expr]
+            [core2.logical-plan :as lp]
             [core2.types :as ty]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw]
-            [core2.logical-plan :as lp])
+            [core2.vector.writer :as vw])
   (:import (core2 ICursor)
            (core2.vector IIndirectRelation)
-           (java.util LinkedList List)
+           (java.util LinkedList)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector.complex DenseUnionVector)))
+
+(defmethod lp/ra-expr :table [_]
+  (s/cat :op #{:table}
+         :explicit-col-names (s/? (s/coll-of ::lp/column :kind set?))
+         :table (s/or :rows (s/coll-of (s/map-of simple-ident? any?))
+                      :source ::lp/source)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
