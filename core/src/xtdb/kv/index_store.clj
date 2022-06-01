@@ -1122,10 +1122,8 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (-> (new-kv-index-snapshot (kv/new-tx-snapshot kv-tx) true thread-mgr
-                               cav-cache canonical-buffer-cache)
-        (fork/->CappedIndexSnapshot (::xt/valid-time fork-at)
-                                    (get fork-at ::xt/tx-id (::xt/tx-id tx))))
+    (new-kv-index-snapshot (kv/new-tx-snapshot kv-tx) true thread-mgr
+                           cav-cache canonical-buffer-cache)
 
     #_(fork/->MergedIndexSnapshot (-> (new-kv-index-snapshot (kv/new-snapshot persistent-kv-store) true thread-mgr
                                                              cav-cache canonical-buffer-cache)

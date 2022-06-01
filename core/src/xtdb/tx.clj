@@ -270,7 +270,7 @@
 (defmethod index-tx-event :default [[op & _] _tx _in-flight-tx]
   (throw (err/illegal-arg :unknown-tx-op {:op op})))
 
-(defrecord InFlightTx [index-store tx fork-at !tx-state !tx
+(defrecord InFlightTx [tx fork-at !tx-state !tx
                        index-store-tx document-store-tx
                        db-provider bus]
   db/DocumentStore
@@ -388,7 +388,7 @@
 
     (let [index-store-tx (db/begin-index-tx index-store tx fork-at)
           document-store-tx (fork/begin-document-store-tx document-store)]
-      (->InFlightTx index-store tx fork-at
+      (->InFlightTx tx fork-at
                     (atom :open)
                     (atom {:tx-events [] :av-count 0 :bytes-indexed 0 :doc-ids #{}})
                     index-store-tx

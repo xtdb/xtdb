@@ -2122,7 +2122,7 @@
       (db/submit-docs in-flight-tx docs)
 
       (let [tx-events (map txc/->tx-event conformed-tx-ops)]
-        (db/index-docs in-flight-tx docs)
+        (db/index-tx-docs in-flight-tx docs)
         (when (db/index-tx-events in-flight-tx tx-events)
           (xt/db in-flight-tx valid-time))))))
 
