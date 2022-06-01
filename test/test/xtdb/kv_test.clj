@@ -31,6 +31,11 @@
     (some-> (kv/get-value snapshot seek-k)
             (mem/->on-heap))))
 
+(defn- value-tx [kv-tx seek-k]
+  (with-open [snapshot (kv/new-tx-snapshot kv-tx)]
+    (some-> (kv/get-value snapshot seek-k)
+            (mem/->on-heap))))
+
 (defn seek-and-iterate [kvs key-pred seek-k]
   (with-open [snapshot (kv/new-snapshot kvs)
               i (kv/new-iterator snapshot)]
@@ -156,6 +161,22 @@
 
       (t/is (= "XTDB" (String. ^bytes (value kv-store (long->bytes 1)))))
       (t/is (nil? (value kv-store (long->bytes 2)))))))
+
+(t/deftest test-can-read-writes-in-tx
+  (fkv/with-kv-store [kv-store]
+    (let [tx1 (kv/begin-kv-tx kv-store)
+          tx2 (kv/begin-kv-tx kv-store)]
+
+      (t/testing "read a put"
+        (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB"))
+        (t/is (= "XTDB" (String. ^bytes (value-tx tx1 (long->bytes 1)))))
+        (t/is (nil? (value-tx tx2 (long->bytes 1)))))
+
+      (t/testing "delete"
+        (kv/put-kv tx2 (long->bytes 1) (.getBytes "XTDB"))
+        (kv/put-kv tx1 (long->bytes 1) nil)
+        (t/is (nil? (value-tx tx1 (long->bytes 1))))
+        (t/is (value-tx tx2 (long->bytes 1)))))))
 
 (t/deftest test-checkpoint-and-restore-db
   (fkv/with-kv-store [kv-store]
