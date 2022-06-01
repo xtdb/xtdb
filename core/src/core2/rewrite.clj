@@ -117,10 +117,11 @@
 (defn- zdepth ^long [^Zip z]
   (.depth z))
 
-(defn- zups [^Zip z ^long n]
-  (if (zero? n)
-    z
-    (recur (zup z) (dec n))))
+(defn- zups [^Zip z ^long depth]
+  (loop [z z]
+    (if (= depth (.depth z))
+      z
+      (recur (zup z)))))
 
 (defn zroot [^Zip z]
   (if-let [z (zup z)]
@@ -128,10 +129,11 @@
     (.node z)))
 
 (defn- zright-or-up [^Zip z ^long depth]
-  (if (pos? depth)
-    (or (zright z)
-        (recur (zup z) (dec depth)))
-    (reduced z)))
+  (loop [z z]
+    (if (= depth (.depth z))
+      (reduced z)
+      (or (zright z)
+          (recur (zup z))))))
 
 (defn znext
   ([z]
@@ -141,13 +143,14 @@
        (zright-or-up z depth))))
 
 (defn- zright-or-up-bu [^Zip z ^long depth out-fn]
-  (if (pos? depth)
-    (when-let [z (out-fn z)]
-      (if (reduced? z)
-        @z
-        (or (zright z)
-            (recur (zup z) (dec depth) out-fn))))
-    (reduced z)))
+  (loop [z z]
+    (if (= depth (.depth z))
+      (reduced z)
+      (when-let [z (out-fn z)]
+        (if (reduced? z)
+          @z
+          (or (zright z)
+              (recur (zup z))))))))
 
 (defn- znext-bu [z ^long depth out-fn]
   (or (zdown z)
@@ -376,13 +379,12 @@
   ([f]
    (fn self [z]
      (let [depth (zdepth z)]
-       (loop [z z
-              n 0]
+       (loop [z z]
          (when-let [z (f z)]
-           (let [z (znext z n)]
+           (let [z (znext z depth)]
              (if (reduced? z)
                @z
-               (recur z (- (zdepth z) depth)))))))))
+               (recur z))))))))
   ([f z]
    ((full-td-tp f) z)))
 
@@ -390,12 +392,11 @@
   ([f]
    (fn self [z]
      (let [depth (zdepth z)]
-       (loop [z z
-              n 0]
-         (when-let [z (znext-bu z n f)]
+       (loop [z z]
+         (when-let [z (znext-bu z depth f)]
            (if (reduced? z)
              (f @z)
-             (recur z (- (zdepth z) depth))))))))
+             (recur z)))))))
   ([f z]
    ((full-bu-tp f) z)))
 
@@ -403,13 +404,12 @@
   ([f]
    (fn self [z]
      (let [depth (zdepth z)]
-       (loop [z z
-              n 0]
+       (loop [z z]
          (if-let [z (f z)]
-           (zups z n)
-           (when-let [z (znext z n)]
+           (zups z depth)
+           (when-let [z (znext z depth)]
              (when-not (reduced? z)
-               (recur z (- (zdepth z) depth)))))))))
+               (recur z))))))))
   ([f z]
    ((once-td-tp f) z)))
 
@@ -435,14 +435,13 @@
                      (if-let [z (f z)]
                        (reduced z)
                        z))]
-       (loop [z z
-              n 0]
-         (if-let [z (znext-bu z n inner-f)]
+       (loop [z z]
+         (if-let [z (znext-bu z depth inner-f)]
            (if (reduced? z)
              (if-let [z (f @z)]
-               (recur z n)
+               (recur z)
                @z)
-             (recur z (- (zdepth z) depth))))))))
+             (recur z)))))))
   ([f z]
    ((innermost f) z)))
 
