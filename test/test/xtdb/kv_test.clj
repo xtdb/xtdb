@@ -219,7 +219,7 @@
           (t/is (kv/seek i (long->bytes 1)))
           (t/is (nil? (kv/seek i (long->bytes 2))))
           (kv/put-kv tx1 (long->bytes 1) nil)
-          (t/is (nil? (kv/seek i (long->bytes 0)))))))))
+          (t/is (some? (kv/seek i (long->bytes 0)))))))))
 
 (t/deftest test-can-commit-txs
   (fkv/with-kv-store [kv-store]
