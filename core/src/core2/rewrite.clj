@@ -98,10 +98,10 @@
         (Zip. (.get node idx) idx z 0 (inc (.depth z)))))))
 
 (defn zdown [^Zip z]
-  (let [node (.node z)]
-    (when (and (zbranch? z)
-               (BitUtil/bitNot (.isEmpty ^List node)))
-      (Zip. (.get ^List node 0) 0 z 0 (inc (.depth z))))))
+  (when (zbranch? z)
+    (let [^List node (.node z)]
+      (when (BitUtil/bitNot (.isEmpty node))
+        (Zip. (.get node 0) 0 z 0 (inc (.depth z)))))))
 
 (defn zup [^Zip z]
   (let [idx (.idx z)]
