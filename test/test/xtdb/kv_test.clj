@@ -11,7 +11,8 @@
             [xtdb.kv :as kv]
             [xtdb.memory :as mem])
   (:import java.nio.ByteOrder
-           org.agrona.concurrent.UnsafeBuffer))
+           org.agrona.concurrent.UnsafeBuffer
+           java.lang.IllegalStateException))
 
 (t/use-fixtures :once fix/with-silent-test-check)
 (t/use-fixtures :each fkv/with-each-kv-store*)
@@ -218,8 +219,10 @@
           (t/is (kv/seek i (long->bytes 0)))
           (t/is (kv/seek i (long->bytes 1)))
           (t/is (nil? (kv/seek i (long->bytes 2))))
-          (kv/put-kv tx1 (long->bytes 1) nil)
-          (t/is (some? (kv/seek i (long->bytes 0)))))))))
+          (t/is (some? (kv/seek i (long->bytes 0))))
+          (when-not (instance? xtdb.mem_kv.MemKv kv-store)
+            (t/is (thrown-with-msg? IllegalStateException #"Snapshot open will be affected by put"
+                                    (kv/put-kv tx1 (long->bytes 1) nil)))))))))
 
 (t/deftest test-can-commit-txs
   (fkv/with-kv-store [kv-store]
