@@ -54,11 +54,11 @@
 (defn- zupdate-parent [^Zip z]
   (when-let [^Zip parent (.parent z)]
     (let [node (.node z)
-          ^List level (.node parent)
+          ^IPersistentVector level (.node parent)
           idx (.idx z)]
-      (if (identical? node (.get level idx))
+      (if (identical? node (.nth level idx))
         parent
-        (Zip. (.assocN ^IPersistentVector level idx node) (.idx parent) (.parent parent) 0 (.depth parent))))))
+        (Zip. (.assocN level idx node) (.idx parent) (.parent parent) 0 (.depth parent))))))
 
 (defn znode [^Zip z]
   (.node z))
@@ -68,40 +68,39 @@
 
 (defn zleft [^Zip z]
   (when-let [^Zip parent (zupdate-parent z)]
-    (let [idx (dec (.idx z))]
-      (when (BitUtil/bitNot (neg? idx))
-        (let [^List level (.node parent)]
-          (Zip. (.get level idx) idx parent 0 (.depth z)))))))
+    (let [idx (dec (.idx z))
+          ^IPersistentVector level (.node parent)]
+      (when-let [child-node (.nth level idx nil)]
+        (Zip. child-node idx parent 0 (.depth z))))))
 
 (defn zright [^Zip z]
   (when-let [^Zip parent (zupdate-parent z)]
     (let [idx (inc (.idx z))
-          ^List level (.node parent)]
-      (when (< idx (.size level))
-        (Zip. (.get level idx) idx parent 0 (.depth z))))))
+          ^IPersistentVector level (.node parent)]
+      (when-let [child-node (.nth level idx nil)]
+        (Zip. child-node idx parent 0 (.depth z))))))
 
 (defn- zright-no-edit [^Zip z]
   (when-let [^Zip parent (.parent z)]
     (let [idx (inc (.idx z))
-          ^List level (.node parent)]
-      (when (< idx (.size level))
-        (Zip. (.get level idx) idx parent 0 (.depth z))))))
+          ^IPersistentVector level (.node parent)]
+      (when-let [child-node (.nth level idx nil)]
+        (Zip. child-node idx parent 0 (.depth z))))))
 
 (defn znth [^Zip z ^long idx]
-  (when (instance? IPersistentVector (.node z))
-    (let [^List node (.node z)
-          idx (if (neg? idx)
-                (+ (.size node) idx)
-                idx)]
-      (when (and (< idx (.size node))
-                 (BitUtil/bitNot (neg? idx)))
-        (Zip. (.get node idx) idx z 0 (inc (.depth z)))))))
+  (let [^IPersistentVector node (.node z)]
+    (when (instance? IPersistentVector node)
+      (let [idx (if (neg? idx)
+                  (+ (.count node) idx)
+                  idx)]
+        (when-let [child-node (.nth node idx nil)]
+          (Zip. child-node idx z 0 (inc (.depth z))))))))
 
 (defn zdown [^Zip z]
-  (when (instance? IPersistentVector (.node z))
-    (let [^List node (.node z)]
-      (when (BitUtil/bitNot (.isEmpty node))
-        (Zip. (.get node 0) 0 z 0 (inc (.depth z)))))))
+  (let [^IPersistentVector node (.node z)]
+    (when (instance? IPersistentVector node)
+      (when-let [child-node (.nth node 0 nil)]
+        (Zip. child-node 0 z 0 (inc (.depth z)))))))
 
 (defn zup [^Zip z]
   (let [idx (.idx z)]
@@ -173,10 +172,7 @@
   (vec (.node ^Zip (.parent z))))
 
 (defn zrights [^Zip z]
-  (let [idx (inc (.idx z))
-        ^List children (zchildren z)]
-    (when (< idx (.size children))
-      (seq (subvec children idx)))))
+  (seq (subvec (zchildren z) (inc (.idx z)))))
 
 (defn zlefts [^Zip z]
   (seq (subvec (zchildren z) 0 (.idx z))))
@@ -194,13 +190,14 @@
 (defmethod m/nth-inline ::m/zip
   [t ocr i]
   `(let [^Zip z# ~ocr]
-     (Zip. (.get ^List (.node z#) ~i) ~i z# 0 (inc (.depth z#)))))
+     (Zip. (.nth ^IPersistentVector (.node z#) ~i) ~i z# 0 (inc (.depth z#)))))
 
 (defmethod m/count-inline ::m/zip
   [t ocr]
-  `(let [^Zip z# ~ocr]
-     (if (instance? IPersistentVector (.node z#))
-       (.size ^List (znode z#))
+  `(let [^Zip z# ~ocr
+         n# (.node z#)]
+     (if (instance? IPersistentVector n#)
+       (.count ^IPersistentVector n#)
        0)))
 
 (defmethod m/subvec-inline ::m/zip
