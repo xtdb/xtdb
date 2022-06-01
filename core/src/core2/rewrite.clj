@@ -64,7 +64,7 @@
   (.node z))
 
 (defn zbranch? [^Zip z]
-  (vector? (.node z)))
+  (instance? IPersistentVector (.node z)))
 
 (defn zleft [^Zip z]
   (when-let [^Zip parent (zupdate-parent z)]
@@ -88,7 +88,7 @@
         (Zip. (.get level idx) idx parent 0 (.depth z))))))
 
 (defn znth [^Zip z ^long idx]
-  (when (zbranch? z)
+  (when (instance? IPersistentVector (.node z))
     (let [^List node (.node z)
           idx (if (neg? idx)
                 (+ (.size node) idx)
@@ -98,7 +98,7 @@
         (Zip. (.get node idx) idx z 0 (inc (.depth z)))))))
 
 (defn zdown [^Zip z]
-  (when (zbranch? z)
+  (when (instance? IPersistentVector (.node z))
     (let [^List node (.node z)]
       (when (BitUtil/bitNot (.isEmpty node))
         (Zip. (.get node 0) 0 z 0 (inc (.depth z)))))))
@@ -199,7 +199,7 @@
 (defmethod m/count-inline ::m/zip
   [t ocr]
   `(let [^Zip z# ~ocr]
-     (if (zbranch? z#)
+     (if (instance? IPersistentVector (.node z#))
        (.size ^List (znode z#))
        0)))
 
