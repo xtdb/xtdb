@@ -3,11 +3,10 @@
             [clojure.core.match :as m])
   (:import java.util.regex.Pattern
            [java.util ArrayList HashMap List Map]
-           [clojure.lang Box IPersistentVector ILookup MapEntry]
+           [clojure.lang Box IPersistentVector ILookup MapEntry Reduced]
            core2.BitUtil))
 
 ;; TODO:
-;; - try inline/macros of common ops.
 ;; - try go via IZip.
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -55,145 +54,168 @@
     x
     (Zip. x -1 nil 0 0)))
 
-(defn zup [^Zip z]
-  (when-let [^Zip parent (.parent z)]
-    (let [node (.node z)
-          ^IPersistentVector level (.node parent)
-          idx (.idx z)]
-      (if (identical? node (.nth level idx))
-        parent
-        (Zip. (.assocN level idx node) (.idx parent) (.parent parent) 0 (.depth parent))))))
+(defmacro zreduced? [r]
+  `(let [^Object r# ~r]
+     (identical? Reduced (.getClass r#))))
 
-(defn znode [^Zip z]
-  (.node z))
+(defmacro zup [z]
+  `(let [^Zip z# ~z]
+     (when-let [^Zip parent# (.parent z#)]
+       (let [node# (.node z#)
+             ^IPersistentVector level# (.node parent#)
+             idx# (.idx z#)]
+         (if (identical? node# (.nth level# idx#))
+           parent#
+           (Zip. (.assocN level# idx# node#) (.idx parent#) (.parent parent#) 0 (.depth parent#)))))))
 
-(defn zbranch? [^Zip z]
-  (instance? IPersistentVector (.node z)))
+(defmacro znode [z]
+  `(let [^Zip z# ~z]
+     (.node z#)))
 
-(defn zleft [^Zip z]
-  (when-let [^Zip parent (zup z)]
-    (let [idx (dec (.idx z))
-          ^IPersistentVector level (.node parent)]
-      (when-let [child-node (.nth level idx nil)]
-        (Zip. child-node idx parent 0 (.depth z))))))
+(defmacro zbranch? [z]
+  `(instance? IPersistentVector (znode ~z)))
 
-(defn- zleft-no-edit [^Zip z]
-  (when-let [^Zip parent (.parent z)]
-    (let [idx (dec (.idx z))
-          ^IPersistentVector level (.node parent)]
-      (when-let [child-node (.nth level idx nil)]
-        (Zip. child-node idx parent 0 (.depth z))))))
+(defmacro zleft [z]
+  `(let [^Zip z# ~z]
+     (when-let [^Zip parent# (zup z#)]
+       (let [idx# (dec (.idx z#))
+             ^IPersistentVector level# (.node parent#)]
+         (when-let [child-node# (.nth level# idx# nil)]
+           (Zip. child-node# idx# parent# 0 (.depth z#)))))))
 
-(defn zright [^Zip z]
-  (when-let [^Zip parent (zup z)]
-    (let [idx (inc (.idx z))
-          ^IPersistentVector level (.node parent)]
-      (when-let [child-node (.nth level idx nil)]
-        (Zip. child-node idx parent 0 (.depth z))))))
+(defmacro zleft-no-edit [z]
+  `(let [^Zip z# ~z]
+     (when-let [^Zip parent# (.parent z#)]
+       (let [idx# (dec (.idx z#))
+             ^IPersistentVector level# (.node parent#)]
+         (when-let [child-node# (.nth level# idx# nil)]
+           (Zip. child-node# idx# parent# 0 (.depth z#)))))))
 
-(defn- zright-no-edit [^Zip z]
-  (when-let [^Zip parent (.parent z)]
-    (let [idx (inc (.idx z))
-          ^IPersistentVector level (.node parent)]
-      (when-let [child-node (.nth level idx nil)]
-        (Zip. child-node idx parent 0 (.depth z))))))
+(defmacro zright [z]
+  `(let [^Zip z# ~z]
+     (when-let [^Zip parent# (zup z#)]
+       (let [idx# (inc (.idx z#))
+             ^IPersistentVector level# (.node parent#)]
+         (when-let [child-node# (.nth level# idx# nil)]
+           (Zip. child-node# idx# parent# 0 (.depth z#)))))))
 
-(defn znth [^Zip z ^long idx]
-  (let [^IPersistentVector node (.node z)]
-    (when (instance? IPersistentVector node)
-      (let [idx (if (neg? idx)
-                  (+ (.count node) idx)
-                  idx)]
-        (when-let [child-node (.nth node idx nil)]
-          (Zip. child-node idx z 0 (inc (.depth z))))))))
+(defmacro zright-no-edit [z]
+  `(let [^Zip z# ~z]
+     (when-let [^Zip parent# (.parent z#)]
+       (let [idx# (inc (.idx z#))
+             ^IPersistentVector level# (.node parent#)]
+         (when-let [child-node# (.nth level# idx# nil)]
+           (Zip. child-node# idx# parent# 0 (.depth z#)))))))
 
-(defn zdown [^Zip z]
-  (let [^IPersistentVector node (.node z)]
-    (when (instance? IPersistentVector node)
-      (when-let [child-node (.nth node 0 nil)]
-        (Zip. child-node 0 z 0 (inc (.depth z)))))))
+(defmacro znth [z idx]
+  `(let [^Zip z# ~z
+         ^IPersistentVector node# (.node z#)]
+     (when (instance? IPersistentVector node#)
+       (let [idx# (if (neg? ~idx)
+                    (+ (.count node#) ~idx)
+                    ~idx)]
+         (when-let [child-node# (.nth node# idx# nil)]
+           (Zip. child-node# idx# z# 0 (inc (.depth z#))))))))
 
-(defn- zups [^Zip z ^long depth]
-  (loop [z z]
-    (if (= depth (.depth z))
-      z
-      (recur (zup z)))))
+(defmacro zdown [z]
+  `(let [^Zip z# ~z
+         ^IPersistentVector node# (.node z#)]
+     (when (instance? IPersistentVector node#)
+       (when-let [child-node# (.nth node# 0 nil)]
+         (Zip. child-node# 0 z# 0 (inc (.depth z#)))))))
 
-(defn zroot [^Zip z]
-  (if-let [z (zup z)]
-    (recur z)
-    (.node z)))
+(defmacro zups [z depth]
+  `(loop [^Zip z# ~z]
+     (if (= ~depth (.depth z#))
+       z#
+       (recur (zup z#)))))
 
-(defn- zright-or-up [^Zip z ^long depth]
-  (loop [z z]
-    (if (= depth (.depth z))
-      (reduced z)
-      (or (zright z)
-          (recur (zup z))))))
+(defmacro zroot [z]
+  `(loop [^Zip z# ~z]
+     (if-let [z# (zup z#)]
+       (recur z#)
+       (.node z#))))
 
-(defn znext
-  ([^Zip z]
-   (znext z (.depth z)))
-  ([z ^long depth]
-   (or (zdown z)
-       (zright-or-up z depth))))
+(defmacro zright-or-up [z depth]
+  `(loop [^Zip z# ~z]
+     (if (= ~depth (.depth z#))
+       (reduced z#)
+       (or (zright z#)
+           (recur (zup z#))))))
 
-(defn- zright-or-up-bu [^Zip z ^long depth out-fn]
-  (loop [z z]
-    (if (= depth (.depth z))
-      (reduced z)
-      (when-let [z (out-fn z)]
-        (if (reduced? z)
-          @z
-          (or (zright z)
-              (recur (zup z))))))))
+(defmacro znext
+  ([z]
+   `(znext ~z (.depth ~z)))
+  ([z depth]
+   `(let [^Zip z# ~z]
+      (or (zdown z#)
+          (zright-or-up z# ~depth)))))
 
-(defn- znext-bu [z ^long depth out-fn]
-  (or (zdown z)
-      (zright-or-up-bu z depth out-fn)))
+(defmacro zright-or-up-bu [z depth out-fn]
+  `(loop [^Zip z# ~z]
+     (if (= ~depth (.depth z#))
+       (reduced z#)
+       (when-let [^Zip z# (~out-fn z#)]
+         (if (zreduced? z#)
+           (.deref ^Reduced z#)
+           (or (zright z#)
+               (recur (zup z#))))))))
 
-(defn- zright-or-up-no-edit [^Zip z depth]
-  (loop [z z]
-    (when-not (= depth (.depth z))
-      (or (zright-no-edit z)
-          (recur (.parent z))))))
+(defmacro znext-bu [z depth out-fn]
+  `(let [^Zip z# ~z]
+     (or (zdown z#)
+         (zright-or-up-bu z# ~depth ~out-fn))))
 
-(defn- znext-no-edit [z depth]
-  (or (zdown z)
-      (zright-or-up-no-edit z depth)))
+(defmacro zright-or-up-no-edit [z depth]
+  `(loop [z# ~z]
+     (when-not (= ~depth (.depth z#))
+       (or (zright-no-edit z#)
+           (recur (.parent z#))))))
 
-(defn zprev [z]
-  (if-let [z (zleft z)]
-    (loop [z z]
-      (if-let [z (znth z -1)]
-        (recur z)
-        z))
-    (zup z)))
+(defmacro znext-no-edit [z depth]
+  `(let [^Zip z# ~z]
+     (or (zdown z#)
+         (zright-or-up-no-edit z# ~depth))))
 
-(defn zprev-no-edit [^Zip z]
-  (if-let [z (zleft-no-edit z)]
-    (loop [z z]
-      (if-let [z (znth z -1)]
-        (recur z)
-        z))
-    (.parent z)))
+(defmacro zprev [z]
+  `(let [^Zip z# ~z]
+     (if-let [z# (zleft z#)]
+       (loop [z# z#]
+         (if-let [z# (znth z# -1)]
+           (recur z#)
+           z#))
+       (zup z#))))
 
-(defn zchild-idx ^long [^Zip z]
-  (.idx z))
+(defmacro zprev-no-edit [z]
+  `(let [^Zip z# ~z]
+     (if-let [^Zip z# (zleft-no-edit z#)]
+       (loop [z# z#]
+         (if-let [z# (znth z# -1)]
+           (recur z#)
+           z#))
+       (.parent z#))))
 
-(defn zchildren [^Zip z]
-  (vec (.node ^Zip (.parent z))))
+(defmacro zchild-idx [z]
+  `(let [^Zip z# ~z]
+     (.idx z#)))
 
-(defn zrights [^Zip z]
-  (seq (subvec (zchildren z) (inc (.idx z)))))
+(defmacro zchildren [z]
+  `(vec (.node ^Zip (.parent ~z))))
 
-(defn zlefts [^Zip z]
-  (seq (subvec (zchildren z) 0 (.idx z))))
+(defmacro zrights [z]
+  `(let [^Zip z# ~z]
+     (seq (subvec (zchildren z#) (inc (.idx z#))))))
 
-(defn zreplace [^Zip z x]
-  (if (identical? (.node z) x)
-    z
-    (Zip. x (.idx z) (.parent z) 0 (.depth z))))
+(defmacro zlefts [z]
+  `(let [^Zip z# ~z]
+     (seq (subvec (zchildren z#) 0 (.idx z#)))))
+
+(defmacro zreplace [z x]
+  `(let [^Zip z# ~z
+         x# ~x]
+     (if (identical? (.node z#) x#)
+       z#
+       (Zip. x# (.idx z#) (.parent z#) 0 (.depth z#)))))
 
 ;; Zipper pattern matching
 
@@ -270,7 +292,7 @@
 ;; https://haslab.uminho.pt/prmartins/files/phd.pdf
 ;; https://github.com/christoff-buerger/racr
 
-(defn ctor [ag]
+(defn ctor [^Zip ag]
   (when ag
     (let [node (znode ag)]
       (when (vector? node)
@@ -298,13 +320,13 @@
 (defmacro child-idx [x]
   `(zchild-idx ~x))
 
-(defn lexeme [ag ^long n]
+(defn lexeme [^Zip ag ^long n]
   (some-> ($ ag n) (znode)))
 
-(defn first-child? [ag]
+(defn first-child? [^Zip ag]
   (= 1 (count (zlefts ag))))
 
-(defn left-or-parent [ag]
+(defn left-or-parent [^Zip ag]
   (if (first-child? ag)
     (parent ag)
     (zleft ag)))
@@ -318,7 +340,7 @@
   (fn [x]
     (let [^Map memo *memo*
           memo-box (Box. nil)]
-      (loop [x x
+      (loop [^Zip x x
              inherited? false]
         (let [k (MapEntry/create f x)
               ^Box stored-memo-box (.getOrDefault memo k memo-box)]
@@ -335,7 +357,7 @@
               v)))))))
 
 (defn zmemoize [f]
-  (fn [x]
+  (fn [^Zip x]
     (let [^Map memo *memo*
           k (MapEntry/create f x)
           v (.getOrDefault memo k ::not-found)]
@@ -372,31 +394,31 @@
 (defn full-td-tp [f ^Zip z]
   (let [depth (.depth z)]
     (loop [z z]
-      (when-let [z (f z)]
+      (when-let [^Zip z (f z)]
         (let [z (znext z depth)]
-          (if (reduced? z)
-            @z
+          (if (zreduced? z)
+            (.deref ^Reduced z)
             (recur z)))))))
 
 (defn full-bu-tp [f ^Zip z]
   (let [depth (.depth z)]
-    (loop [z z]
+    (loop [^Zip z z]
       (when-let [z (znext-bu z depth f)]
-        (if (reduced? z)
-          (f @z)
+        (if (zreduced? z)
+          (f (.deref ^Reduced z))
           (recur z))))))
 
 (defn once-td-tp [f ^Zip z]
   (let [depth (.depth z)]
     (loop [z z]
-      (if-let [z (f z)]
+      (if-let [^Zip z (f z)]
         (zups z depth)
         (when-let [z (znext z depth)]
-          (when-not (reduced? z)
+          (when-not (zreduced? z)
             (recur z)))))))
 
 (defn z-try-apply-m [f]
-  (fn [z]
+  (fn [^Zip z]
     (some->> (f z)
              (zreplace z))))
 
@@ -417,12 +439,12 @@
                      (if-let [z (f z)]
                        (reduced z)
                        z))]
-       (loop [z z]
+       (loop [^Zip z z]
          (if-let [z (znext-bu z depth inner-f)]
-           (if (reduced? z)
-             (if-let [z (f @z)]
+           (if (zreduced? z)
+             (if-let [z (f (.deref ^Reduced z))]
                (recur z)
-               @z)
+               (.deref ^Reduced z))
              (recur z)))))))
   ([f z]
    ((innermost f) z)))
