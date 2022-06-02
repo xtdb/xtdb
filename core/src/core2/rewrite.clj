@@ -51,7 +51,7 @@
     x
     (Zip. x -1 nil 0 0)))
 
-(defn- zupdate-parent [^Zip z]
+(defn zup [^Zip z]
   (when-let [^Zip parent (.parent z)]
     (let [node (.node z)
           ^IPersistentVector level (.node parent)
@@ -67,7 +67,7 @@
   (instance? IPersistentVector (.node z)))
 
 (defn zleft [^Zip z]
-  (when-let [^Zip parent (zupdate-parent z)]
+  (when-let [^Zip parent (zup z)]
     (let [idx (dec (.idx z))
           ^IPersistentVector level (.node parent)]
       (when-let [child-node (.nth level idx nil)]
@@ -81,7 +81,7 @@
         (Zip. child-node idx parent 0 (.depth z))))))
 
 (defn zright [^Zip z]
-  (when-let [^Zip parent (zupdate-parent z)]
+  (when-let [^Zip parent (zup z)]
     (let [idx (inc (.idx z))
           ^IPersistentVector level (.node parent)]
       (when-let [child-node (.nth level idx nil)]
@@ -108,11 +108,6 @@
     (when (instance? IPersistentVector node)
       (when-let [child-node (.nth node 0 nil)]
         (Zip. child-node 0 z 0 (inc (.depth z)))))))
-
-(defn zup [^Zip z]
-  (let [idx (.idx z)]
-    (when (BitUtil/bitNot (neg? idx))
-      (zupdate-parent z))))
 
 (defn- zdepth ^long [^Zip z]
   (.depth z))
