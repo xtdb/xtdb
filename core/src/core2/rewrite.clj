@@ -145,7 +145,8 @@
 
 (defmacro znext
   ([z]
-   `(znext ~z (.depth ~z)))
+   `(let [^Zip z# ~z]
+      (znext z# (.depth z#))))
   ([z depth]
    `(let [^Zip z# ~z]
       (or (zdown z#)
@@ -320,16 +321,17 @@
 (defmacro child-idx [x]
   `(zchild-idx ~x))
 
-(defn lexeme [^Zip ag ^long n]
-  (some-> ($ ag n) (znode)))
+(defmacro lexeme [ag n]
+  `(some-> ($ ~ag ~n) (znode)))
 
-(defn first-child? [^Zip ag]
-  (= 1 (count (zlefts ag))))
+(defmacro first-child? [ag]
+  `(= 1 (count (zlefts ~ag))))
 
-(defn left-or-parent [^Zip ag]
-  (if (first-child? ag)
-    (parent ag)
-    (zleft ag)))
+(defmacro left-or-parent [ag]
+  `(let [^Zip ag# ~ag]
+     (if (first-child? ag#)
+       (parent ag#)
+       (zleft ag#))))
 
 (defmacro zcase {:style/indent 1} [ag & body]
   `(case (ctor ~ag) ~@body))
