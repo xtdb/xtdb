@@ -2,7 +2,7 @@
   (:require [clojure.walk :as w]
             [clojure.core.match :as m])
   (:import java.util.regex.Pattern
-           [java.util ArrayList HashMap List Map]
+           [java.util ArrayList HashMap List Map Objects]
            [clojure.lang Box IPersistentVector ILookup MapEntry]))
 
 ;; TODO:
@@ -34,16 +34,16 @@
 
   (hashCode [this]
     (if (zero? hash_)
-      (let [result 1
-            result (+ (* 31 result) (if node
-                                      (long (.hashCode node))
-                                      0))
-            result (+ (* 31 result) (long (Integer/hashCode idx)))
-            result (+ (* 31 result) (if parent
-                                      (long (.hashCode parent))
-                                      0))
-            result (+ (* 31 result) (long (Integer/hashCode depth)))
-            result (unchecked-int result)]
+      (let [result (unchecked-int 1)
+            prime (unchecked-int 31)
+            result (unchecked-add-int (unchecked-multiply-int prime result)
+                                      (Objects/hashCode node))
+            result (unchecked-add-int (unchecked-multiply-int prime result)
+                                      (Integer/hashCode idx))
+            result (unchecked-add-int (unchecked-multiply-int prime result)
+                                      (Objects/hashCode node))
+            result (unchecked-add-int (unchecked-multiply-int prime result)
+                                      (Integer/hashCode depth))]
         (set! (.hash_ this) result)
         result)
       hash_)))
@@ -88,7 +88,7 @@
 (defmacro zleft [z]
   `(let [^Zip z# ~z]
      (when-let [^Zip parent# (zup z#)]
-       (let [idx# (dec (.idx z#))
+       (let [idx# (unchecked-dec-int (.idx z#))
              ^IPersistentVector level# (.node parent#)]
          (when-let [child-node# (.nth level# idx# nil)]
            (Zip. child-node# idx# parent# 0 (.depth z#)))))))
@@ -96,7 +96,7 @@
 (defmacro zleft-no-edit [z]
   `(let [^Zip z# ~z]
      (when-let [^Zip parent# (.parent z#)]
-       (let [idx# (dec (.idx z#))
+       (let [idx# (unchecked-dec-int (.idx z#))
              ^IPersistentVector level# (.node parent#)]
          (when-let [child-node# (.nth level# idx# nil)]
            (Zip. child-node# idx# parent# 0 (.depth z#)))))))
@@ -104,7 +104,7 @@
 (defmacro zright [z]
   `(let [^Zip z# ~z]
      (when-let [^Zip parent# (zup z#)]
-       (let [idx# (inc (.idx z#))
+       (let [idx# (unchecked-inc-int (.idx z#))
              ^IPersistentVector level# (.node parent#)]
          (when-let [child-node# (.nth level# idx# nil)]
            (Zip. child-node# idx# parent# 0 (.depth z#)))))))
@@ -112,7 +112,7 @@
 (defmacro zright-no-edit [z]
   `(let [^Zip z# ~z]
      (when-let [^Zip parent# (.parent z#)]
-       (let [idx# (inc (.idx z#))
+       (let [idx# (unchecked-inc-int (.idx z#))
              ^IPersistentVector level# (.node parent#)]
          (when-let [child-node# (.nth level# idx# nil)]
            (Zip. child-node# idx# parent# 0 (.depth z#)))))))
@@ -122,17 +122,17 @@
          ^IPersistentVector node# (.node z#)]
      (when (instance? IPersistentVector node#)
        (let [idx# (if (neg? ~idx)
-                    (+ (.count node#) ~idx)
+                    (unchecked-add-int (.count node#) ~idx)
                     ~idx)]
          (when-let [child-node# (.nth node# idx# nil)]
-           (Zip. child-node# idx# z# 0 (inc (.depth z#))))))))
+           (Zip. child-node# idx# z# 0 (unchecked-inc-int (.depth z#))))))))
 
 (defmacro zdown [z]
   `(let [^Zip z# ~z
          ^IPersistentVector node# (.node z#)]
      (when (instance? IPersistentVector node#)
        (when-let [child-node# (.nth node# 0 nil)]
-         (Zip. child-node# 0 z# 0 (inc (.depth z#)))))))
+         (Zip. child-node# 0 z# 0 (unchecked-inc-int (.depth z#)))))))
 
 (defmacro zups [z depth]
   `(loop [^Zip z# ~z]
@@ -215,7 +215,7 @@
 
 (defmacro zrights [z]
   `(let [^Zip z# ~z]
-     (seq (subvec (zchildren z#) (inc (.idx z#))))))
+     (seq (subvec (zchildren z#) (unchecked-inc-int (.idx z#))))))
 
 (defmacro zlefts [z]
   `(let [^Zip z# ~z]
@@ -235,7 +235,7 @@
 (defmethod m/nth-inline ::m/zip
   [t ocr i]
   `(let [^Zip z# ~ocr]
-     (Zip. (.nth ^IPersistentVector (.node z#) ~i) ~i z# 0 (inc (.depth z#)))))
+     (Zip. (.nth ^IPersistentVector (.node z#) ~i) ~i z# 0 (unchecked-inc-int (.depth z#)))))
 
 (defmethod m/count-inline ::m/zip
   [t ocr]
