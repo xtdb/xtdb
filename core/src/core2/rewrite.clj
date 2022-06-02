@@ -433,23 +433,19 @@
 
 (def mono-tp (partial adhoc-tp fail-tp))
 
-(defn innermost
-  ([f]
-   (fn self [^Zip z]
-     (let [depth (.depth z)
-           inner-f (fn [z]
-                     (if-let [z (f z)]
-                       (reduced z)
-                       z))]
-       (loop [^Zip z z]
-         (if-let [z (znext-bu z depth inner-f)]
-           (if (zreduced? z)
-             (if-let [z (f (.deref ^Reduced z))]
-               (recur z)
-               (.deref ^Reduced z))
-             (recur z)))))))
-  ([f z]
-   ((innermost f) z)))
+(defn innermost [f ^Zip z]
+  (let [depth (.depth z)
+        inner-f (fn [z]
+                  (if-let [z (f z)]
+                    (reduced z)
+                    z))]
+    (loop [^Zip z z]
+      (if-let [z (znext-bu z depth inner-f)]
+        (if (zreduced? z)
+          (if-let [z (f (.deref ^Reduced z))]
+            (recur z)
+            (.deref ^Reduced z))
+          (recur z))))))
 
 (def topdown full-td-tp)
 
