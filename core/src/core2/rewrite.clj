@@ -26,7 +26,7 @@
     (if (identical? this other)
       true
       (let [^Zip other other]
-        (and (instance? Zip other)
+        (and (identical? Zip (.getClass other))
              (= (.idx this) (.idx other))
              (= (.depth this) (.depth other))
              (= (.node this) (.node other))
@@ -59,8 +59,12 @@
   `(let [^Object r# ~r]
      (identical? StrategyRepeat (.getClass r#))))
 
+(defmacro zip? [z]
+  `(let [^Object z# ~z]
+     (identical? Zip (.getClass z#))))
+
 (defn ->zipper [x]
-  (if (instance? Zip x)
+  (if (zip? x)
     x
     (Zip. x -1 nil 0 0)))
 
@@ -262,7 +266,7 @@
       (throw (IllegalArgumentException. (str "Match variables shadow locals: " (set shadowed-locals)))))
     (if-not zip-matches?
       `(let [z# ~z
-             node# (if (instance? Zip z#)
+             node# (if (zip? z#)
                      (znode z#)
                      z#)]
          (m/match node#
