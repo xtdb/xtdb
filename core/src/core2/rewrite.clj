@@ -472,40 +472,34 @@
        (.addAll y))
      x)))
 
-(defn- full-td-tu [f m ^Zip z]
-  (let [depth (.depth z)]
-    (loop [z z
-           acc (m)]
-      (let [acc (if-some [x (f z)]
-                  (m acc x)
-                  acc)]
-        (if-let [z (znext-no-edit z depth)]
-          (recur z acc)
-          acc)))))
-
-(defn- stop-td-tu [f m ^Zip z]
-  (let [depth (.depth z)]
-    (loop [z z
-           acc (m)]
-      (let [x (f z)
-            stop? (some? x)
-            acc (if stop?
-                  (m acc x)
-                  acc)]
-        (if-let [z (if stop?
-                     (zright-or-up-no-edit z depth)
-                     (znext-no-edit z depth))]
-          (recur z acc)
-          acc)))))
-
 (defn collect
   ([f z]
    (collect f into-array-list z))
-  ([f m z]
-   (m (full-td-tu f m z))))
+  ([f m ^Zip z]
+   (let [depth (.depth z)]
+     (loop [z z
+            acc (m)]
+       (let [acc (if-some [x (f z)]
+                   (m acc x)
+                   acc)]
+         (if-let [z (znext-no-edit z depth)]
+           (recur z acc)
+           (m acc)))))))
 
 (defn collect-stop
   ([f z]
    (collect-stop f into-array-list z))
-  ([f m z]
-   (m (stop-td-tu f m z))))
+  ([f m ^Zip z]
+   (let [depth (.depth z)]
+     (loop [z z
+            acc (m)]
+       (let [x (f z)
+             stop? (some? x)
+             acc (if stop?
+                   (m acc x)
+                   acc)]
+         (if-let [z (if stop?
+                      (zright-or-up-no-edit z depth)
+                      (znext-no-edit z depth))]
+           (recur z acc)
+           (m acc)))))))
