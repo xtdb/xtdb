@@ -6,6 +6,11 @@
            [clojure.lang Box IPersistentVector ILookup MapEntry]
            core2.BitUtil))
 
+;; TODO:
+;; - remove initial fn indirection in some strategies.
+;; - try inline/macros of common ops.
+;; - try go via IZip.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype Zip [node ^int idx parent ^:unsynchronized-mutable ^int hash_ ^int depth]
@@ -128,7 +133,7 @@
           (recur (zup z))))))
 
 (defn znext
-  ([z]
+  ([^Zip z]
    (znext z (.depth z)))
   ([z ^long depth]
    (or (zdown z)
@@ -148,15 +153,15 @@
   (or (zdown z)
       (zright-or-up-bu z depth out-fn)))
 
-(defn- zright-or-up-no-edit [^Zip z top]
+(defn- zright-or-up-no-edit [^Zip z depth]
   (loop [z z]
-    (when-not (identical? z top)
+    (when-not (= depth (.depth z))
       (or (zright-no-edit z)
           (recur (.parent z))))))
 
-(defn- znext-no-edit [z top]
+(defn- znext-no-edit [z depth]
   (or (zdown z)
-      (zright-or-up-no-edit z top)))
+      (zright-or-up-no-edit z depth)))
 
 (defn zprev [z]
   (if-let [z (zleft z)]
@@ -175,8 +180,7 @@
     (.parent z)))
 
 (defn zchild-idx ^long [^Zip z]
-  (when z
-    (.idx z)))
+  (.idx z))
 
 (defn zchildren [^Zip z]
   (vec (.node ^Zip (.parent z))))
@@ -188,10 +192,9 @@
   (seq (subvec (zchildren z) 0 (.idx z))))
 
 (defn zreplace [^Zip z x]
-  (when z
-    (if (identical? (.node z) x)
-      z
-      (Zip. x (.idx z) (.parent z) 0 (.depth z)))))
+  (if (identical? (.node z) x)
+    z
+    (Zip. x (.idx z) (.parent z) 0 (.depth z))))
 
 ;; Zipper pattern matching
 
@@ -369,7 +372,7 @@
 
 (defn full-td-tp
   ([f]
-   (fn self [z]
+   (fn self [^Zip z]
      (let [depth (.depth z)]
        (loop [z z]
          (when-let [z (f z)]
@@ -382,7 +385,7 @@
 
 (defn full-bu-tp
   ([f]
-   (fn self [z]
+   (fn self [^Zip z]
      (let [depth (.depth z)]
        (loop [z z]
          (when-let [z (znext-bu z depth f)]
@@ -394,8 +397,8 @@
 
 (defn once-td-tp
   ([f]
-   (fn self [z]
-     (let [depth (.depth) z]
+   (fn self [^Zip z]
+     (let [depth (.depth z)]
        (loop [z z]
          (if-let [z (f z)]
            (zups z depth)
@@ -421,7 +424,7 @@
 
 (defn innermost
   ([f]
-   (fn self [z]
+   (fn self [^Zip z]
      (let [depth (.depth z)
            inner-f (fn [z]
                      (if-let [z (f z)]
@@ -454,14 +457,14 @@
 
 (defn- full-td-tu
   ([f m]
-   (fn self [z]
-     (let [top z]
+   (fn self [^Zip z]
+     (let [depth (.depth z)]
        (loop [z z
               acc (m)]
          (let [acc (if-some [x (f z)]
                      (m acc x)
                      acc)]
-           (if-let [z (znext-no-edit z top)]
+           (if-let [z (znext-no-edit z depth)]
              (recur z acc)
              acc))))))
   ([f m z]
@@ -469,8 +472,8 @@
 
 (defn- stop-td-tu
   ([f m]
-   (fn self [z]
-     (let [top z]
+   (fn self [^Zip z]
+     (let [depth (.depth z)]
        (loop [z z
               acc (m)]
          (let [x (f z)
@@ -479,8 +482,8 @@
                      (m acc x)
                      acc)]
            (if-let [z (if stop?
-                        (zright-or-up-no-edit z top)
-                        (znext-no-edit z top))]
+                        (zright-or-up-no-edit z depth)
+                        (znext-no-edit z depth))]
              (recur z acc)
              acc))))))
   ([f m z]
