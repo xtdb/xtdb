@@ -3,8 +3,7 @@
             [clojure.core.match :as m])
   (:import java.util.regex.Pattern
            [java.util ArrayList HashMap List Map]
-           [clojure.lang Box IPersistentVector ILookup MapEntry Reduced]
-           core2.BitUtil))
+           [clojure.lang Box IPersistentVector ILookup MapEntry]))
 
 ;; TODO:
 ;; - try go via IZip.
@@ -49,14 +48,21 @@
         result)
       hash_)))
 
+(deftype StrategyDone [^Zip z])
+(deftype StrategyRepeat [^Zip z])
+
+(defmacro zstate-done? [r]
+  `(let [^Object r# ~r]
+     (identical? StrategyDone (.getClass r#))))
+
+(defmacro zstate-repeat? [r]
+  `(let [^Object r# ~r]
+     (identical? StrategyRepeat (.getClass r#))))
+
 (defn ->zipper [x]
   (if (instance? Zip x)
     x
     (Zip. x -1 nil 0 0)))
-
-(defmacro zreduced? [r]
-  `(let [^Object r# ~r]
-     (identical? Reduced (.getClass r#))))
 
 (defmacro zup [z]
   `(let [^Zip z# ~z]
@@ -139,7 +145,7 @@
 (defmacro zright-or-up [z depth]
   `(loop [^Zip z# ~z]
      (if (= ~depth (.depth z#))
-       (reduced z#)
+       (StrategyDone. z#)
        (or (zright z#)
            (recur (zup z#))))))
 
@@ -155,10 +161,10 @@
 (defmacro zright-or-up-bu [z depth out-fn]
   `(loop [^Zip z# ~z]
      (if (= ~depth (.depth z#))
-       (reduced z#)
+       (StrategyDone. z#)
        (when-let [^Zip z# (~out-fn z#)]
-         (if (zreduced? z#)
-           (.deref ^Reduced z#)
+         (if (zstate-repeat? z#)
+           (.z ^StrategyRepeat z#)
            (or (zright z#)
                (recur (zup z#))))))))
 
@@ -398,16 +404,16 @@
     (loop [z z]
       (when-let [^Zip z (f z)]
         (let [z (znext z depth)]
-          (if (zreduced? z)
-            (.deref ^Reduced z)
+          (if (zstate-done? z)
+            (.z ^StrategyDone z)
             (recur z)))))))
 
 (defn full-bu-tp [f ^Zip z]
   (let [depth (.depth z)]
     (loop [^Zip z z]
       (when-let [z (znext-bu z depth f)]
-        (if (zreduced? z)
-          (f (.deref ^Reduced z))
+        (if (zstate-done? z)
+          (f (.z ^StrategyDone z))
           (recur z))))))
 
 (defn once-td-tp [f ^Zip z]
@@ -416,7 +422,7 @@
       (if-let [^Zip z (f z)]
         (zups z depth)
         (when-let [z (znext z depth)]
-          (when-not (zreduced? z)
+          (when-not (zstate-done? z)
             (recur z)))))))
 
 (defn z-try-apply-m [f]
@@ -437,14 +443,14 @@
   (let [depth (.depth z)
         inner-f (fn [z]
                   (if-let [z (f z)]
-                    (reduced z)
+                    (StrategyRepeat. z)
                     z))]
     (loop [^Zip z z]
       (if-let [z (znext-bu z depth inner-f)]
-        (if (zreduced? z)
-          (if-let [z (f (.deref ^Reduced z))]
+        (if (zstate-done? z)
+          (if-let [z (f (.z ^StrategyDone z))]
             (recur z)
-            (.deref ^Reduced z))
+            (.z ^StrategyDone z))
           (recur z))))))
 
 (def topdown full-td-tp)
