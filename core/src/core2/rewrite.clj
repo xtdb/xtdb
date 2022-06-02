@@ -109,9 +109,6 @@
       (when-let [child-node (.nth node 0 nil)]
         (Zip. child-node 0 z 0 (inc (.depth z)))))))
 
-(defn- zdepth ^long [^Zip z]
-  (.depth z))
-
 (defn- zups [^Zip z ^long depth]
   (loop [z z]
     (if (= depth (.depth z))
@@ -132,7 +129,7 @@
 
 (defn znext
   ([z]
-   (znext z (zdepth z)))
+   (znext z (.depth z)))
   ([z ^long depth]
    (or (zdown z)
        (zright-or-up z depth))))
@@ -373,7 +370,7 @@
 (defn full-td-tp
   ([f]
    (fn self [z]
-     (let [depth (zdepth z)]
+     (let [depth (.depth z)]
        (loop [z z]
          (when-let [z (f z)]
            (let [z (znext z depth)]
@@ -386,7 +383,7 @@
 (defn full-bu-tp
   ([f]
    (fn self [z]
-     (let [depth (zdepth z)]
+     (let [depth (.depth z)]
        (loop [z z]
          (when-let [z (znext-bu z depth f)]
            (if (reduced? z)
@@ -398,7 +395,7 @@
 (defn once-td-tp
   ([f]
    (fn self [z]
-     (let [depth (zdepth z)]
+     (let [depth (.depth) z]
        (loop [z z]
          (if-let [z (f z)]
            (zups z depth)
@@ -425,7 +422,7 @@
 (defn innermost
   ([f]
    (fn self [z]
-     (let [depth (zdepth z)
+     (let [depth (.depth z)
            inner-f (fn [z]
                      (if-let [z (f z)]
                        (reduced z)
