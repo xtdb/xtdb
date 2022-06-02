@@ -394,14 +394,11 @@
 
 ;; Type Preserving
 
-(defn choice-tp
-  ([x y]
-   (fn [z]
-     (choice-tp x y z)))
-  ([x y z]
-   (if-let [z (x z)]
-     z
-     (y z))))
+(defn choice-tp [x y]
+  (fn [z]
+    (if-let [z (x z)]
+      z
+      (y z))))
 
 (defn full-td-tp [f ^Zip z]
   (let [depth (.depth z)]
