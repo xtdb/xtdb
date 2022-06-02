@@ -7,7 +7,6 @@
            core2.BitUtil))
 
 ;; TODO:
-;; - remove initial fn indirection in some strategies.
 ;; - try inline/macros of common ops.
 ;; - try go via IZip.
 
@@ -370,43 +369,31 @@
      z
      (y z))))
 
-(defn full-td-tp
-  ([f]
-   (fn self [^Zip z]
-     (let [depth (.depth z)]
-       (loop [z z]
-         (when-let [z (f z)]
-           (let [z (znext z depth)]
-             (if (reduced? z)
-               @z
-               (recur z))))))))
-  ([f z]
-   ((full-td-tp f) z)))
+(defn full-td-tp [f ^Zip z]
+  (let [depth (.depth z)]
+    (loop [z z]
+      (when-let [z (f z)]
+        (let [z (znext z depth)]
+          (if (reduced? z)
+            @z
+            (recur z)))))))
 
-(defn full-bu-tp
-  ([f]
-   (fn self [^Zip z]
-     (let [depth (.depth z)]
-       (loop [z z]
-         (when-let [z (znext-bu z depth f)]
-           (if (reduced? z)
-             (f @z)
-             (recur z)))))))
-  ([f z]
-   ((full-bu-tp f) z)))
+(defn full-bu-tp [f ^Zip z]
+  (let [depth (.depth z)]
+    (loop [z z]
+      (when-let [z (znext-bu z depth f)]
+        (if (reduced? z)
+          (f @z)
+          (recur z))))))
 
-(defn once-td-tp
-  ([f]
-   (fn self [^Zip z]
-     (let [depth (.depth z)]
-       (loop [z z]
-         (if-let [z (f z)]
-           (zups z depth)
-           (when-let [z (znext z depth)]
-             (when-not (reduced? z)
-               (recur z))))))))
-  ([f z]
-   ((once-td-tp f) z)))
+(defn once-td-tp [f ^Zip z]
+  (let [depth (.depth z)]
+    (loop [z z]
+      (if-let [z (f z)]
+        (zups z depth)
+        (when-let [z (znext z depth)]
+          (when-not (reduced? z)
+            (recur z)))))))
 
 (defn z-try-apply-m [f]
   (fn [z]
@@ -455,39 +442,31 @@
        (.addAll y))
      x)))
 
-(defn- full-td-tu
-  ([f m]
-   (fn self [^Zip z]
-     (let [depth (.depth z)]
-       (loop [z z
-              acc (m)]
-         (let [acc (if-some [x (f z)]
-                     (m acc x)
-                     acc)]
-           (if-let [z (znext-no-edit z depth)]
-             (recur z acc)
-             acc))))))
-  ([f m z]
-   ((full-td-tu f m) z)))
+(defn- full-td-tu [f m ^Zip z]
+  (let [depth (.depth z)]
+    (loop [z z
+           acc (m)]
+      (let [acc (if-some [x (f z)]
+                  (m acc x)
+                  acc)]
+        (if-let [z (znext-no-edit z depth)]
+          (recur z acc)
+          acc)))))
 
-(defn- stop-td-tu
-  ([f m]
-   (fn self [^Zip z]
-     (let [depth (.depth z)]
-       (loop [z z
-              acc (m)]
-         (let [x (f z)
-               stop? (some? x)
-               acc (if stop?
-                     (m acc x)
-                     acc)]
-           (if-let [z (if stop?
-                        (zright-or-up-no-edit z depth)
-                        (znext-no-edit z depth))]
-             (recur z acc)
-             acc))))))
-  ([f m z]
-   ((stop-td-tu f m) z)))
+(defn- stop-td-tu [f m ^Zip z]
+  (let [depth (.depth z)]
+    (loop [z z
+           acc (m)]
+      (let [x (f z)
+            stop? (some? x)
+            acc (if stop?
+                  (m acc x)
+                  acc)]
+        (if-let [z (if stop?
+                     (zright-or-up-no-edit z depth)
+                     (znext-no-edit z depth))]
+          (recur z acc)
+          acc)))))
 
 (defn collect
   ([f z]
