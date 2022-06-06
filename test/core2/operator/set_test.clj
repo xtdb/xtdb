@@ -1,9 +1,5 @@
 (ns core2.operator.set-test
   (:require [clojure.test :as t]
-            [core2.expression :as expr]
-            [core2.operator.project :as project]
-            [core2.operator.select :as select]
-            [core2.operator.set :as set-op]
             [core2.operator :as op]
             [core2.test-util :as tu]
             [core2.types :as ty])

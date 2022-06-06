@@ -1,7 +1,5 @@
 (ns core2.operator.select-test
   (:require [clojure.test :as t]
-            [core2.expression :as expr]
-            [core2.operator.select :as select]
             [core2.test-util :as tu]
             [core2.types :as ty]
             [core2.operator :as op])

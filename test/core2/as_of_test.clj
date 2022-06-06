@@ -5,10 +5,7 @@
             [core2.snapshot :as snap]
             [core2.temporal :as temporal]
             [core2.test-util :as tu]
-            [core2.util :as util])
-  (:import core2.api.TransactionInstant
-           java.time.Instant
-           java.util.Date))
+            [core2.util :as util]))
 
 (t/use-fixtures :each tu/with-node)
 

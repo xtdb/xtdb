@@ -3,10 +3,8 @@
             [core2.types :as types]
             [core2.util :as util])
   (:import (core2.vector IIndirectVector)
-           (core2.vector.extensions KeywordType UuidType)
            java.util.HashMap
-           java.util.function.IntBinaryOperator
-           (org.apache.arrow.vector.types.pojo ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Int ArrowType$Null ArrowType$Timestamp ArrowType$Utf8)))
+           java.util.function.IntBinaryOperator))
 
 (set! *unchecked-math* :warn-on-boxed)
 

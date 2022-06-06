@@ -1,7 +1,6 @@
 (ns core2.operator.unwind-test
   (:require [clojure.test :as t]
             [core2.operator :as op]
-            [core2.operator.unwind :as unwind]
             [core2.test-util :as tu]
             [core2.types :as ty])
   (:import org.apache.arrow.vector.types.pojo.Schema))

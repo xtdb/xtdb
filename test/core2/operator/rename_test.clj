@@ -1,6 +1,5 @@
 (ns core2.operator.rename-test
   (:require [clojure.test :as t]
-            [core2.operator.rename :as rename]
             [core2.test-util :as tu]
             [core2.types :as ty]
             [core2.operator :as op])

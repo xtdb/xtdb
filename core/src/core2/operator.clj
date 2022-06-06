@@ -1,6 +1,5 @@
 (ns core2.operator
-  (:require [clojure.set :as set]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [core2.error :as err]
             [core2.expression :as expr]
             [core2.logical-plan :as lp]
@@ -24,7 +23,7 @@
            java.time.Clock
            (java.util Iterator)
            (java.util.function Consumer)
-           (org.apache.arrow.memory BufferAllocator RootAllocator)))
+           (org.apache.arrow.memory RootAllocator)))
 
 (defn- args->srcs+params [args]
   (if-not (map? args)

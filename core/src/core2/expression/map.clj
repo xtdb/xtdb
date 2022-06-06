@@ -12,8 +12,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher)
            org.apache.arrow.vector.NullVector
-           (org.roaringbitmap IntConsumer RoaringBitmap)
-           (org.apache.arrow.vector.types.pojo ArrowType$Null)))
+           (org.roaringbitmap IntConsumer RoaringBitmap)))
 
 (def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
   (MurmurHasher.))
@@ -39,14 +38,17 @@
               (recur (inc n) (MurmurHasher/combineHashCode hash-code (.hashCode v (.getIndex col idx) hasher))))
             hash-code))))))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IRelationMapBuilder
   (^void add [^int inIdx])
   (^int addIfNotPresent [^int inIdx]))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IRelationMapProber
   (^int indexOf [^int inIdx])
   (^org.roaringbitmap.RoaringBitmap getAll [^int inIdx]))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IRelationMap
   (^core2.expression.map.IRelationMapBuilder buildFromRelation [^core2.vector.IIndirectRelation inRelation])
   (^core2.expression.map.IRelationMapProber probeFromRelation [^core2.vector.IIndirectRelation inRelation])

@@ -70,12 +70,12 @@
 (defn latest-completed-tx ^core2.api.TransactionInstant [node]
   (:latest-completed-tx (c2/status node)))
 
-(defn ^java.time.Clock ->mock-clock
-  ([]
+(defn ->mock-clock
+  (^java.time.Clock []
    (->mock-clock (iterate #(.plus ^Instant % (Period/ofDays 1))
                           (.toInstant #inst "2020-01-01"))))
 
-  ([^Iterable insts]
+  (^java.time.Clock [^Iterable insts]
    (let [times-iterator (.iterator insts)]
      (proxy [Clock] []
        (getZone []

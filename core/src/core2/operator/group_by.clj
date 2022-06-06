@@ -18,7 +18,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector Float8Vector IntVector NullVector ValueVector)
            (org.apache.arrow.vector.complex ListVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$FloatingPoint ArrowType$Int FieldType)))
+           (org.apache.arrow.vector.types.pojo FieldType)))
 
 (s/def ::aggregate-expr
   (s/cat :aggregate-fn simple-symbol?

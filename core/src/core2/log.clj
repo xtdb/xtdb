@@ -12,10 +12,12 @@
 
 (defrecord LogRecord [^TransactionInstant tx ^ByteBuffer record])
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface LogSubscriber
   (onSubscribe [^java.lang.AutoCloseable cancelHook])
   (acceptRecord [^core2.log.LogRecord record]))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface Log
   (^java.util.concurrent.CompletableFuture #_<LogRecord> appendRecord [^java.nio.ByteBuffer record])
   (^java.util.List #_<LogRecord> readRecords [^Long afterOffset ^int limit])

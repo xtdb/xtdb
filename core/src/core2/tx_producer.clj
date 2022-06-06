@@ -13,6 +13,7 @@
            [org.apache.arrow.vector.types.pojo ArrowType$Union Schema]
            org.apache.arrow.vector.types.UnionMode))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface ITxProducer
   (submitTx
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps])

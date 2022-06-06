@@ -2,7 +2,6 @@
   (:require [cognitect.transit :as transit]
             [time-literals.read-write :as time-literals.rw]
             [core2.api :as c2]
-            [core2.edn :as edn]
             [core2.error :as err])
   (:import core2.api.TransactionInstant
            [java.time Period

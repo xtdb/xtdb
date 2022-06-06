@@ -10,8 +10,8 @@
            core2.vector.IIndirectVector
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
-           [org.apache.arrow.vector.complex ListVector StructVector]
-           [org.apache.arrow.vector.types.pojo ArrowType FieldType]
+           [org.apache.arrow.vector.complex StructVector]
+           [org.apache.arrow.vector.types.pojo FieldType]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)

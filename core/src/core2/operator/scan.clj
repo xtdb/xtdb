@@ -102,7 +102,7 @@
           (let [row-id (.get row-id-vec idx)]
             (when (.contains row-id-bitmap row-id)
               (.compute res row-id (reify BiFunction
-                                     (apply [_ k v]
+                                     (apply [_ _k v]
                                        (if v
                                          (inc (long v))
                                          1)))))))

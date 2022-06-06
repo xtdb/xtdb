@@ -1,8 +1,6 @@
 (ns core2.operator.external-data-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [core2.operator.arrow :as arrow]
-            [core2.operator.csv :as csv]
             [core2.test-util :as tu]
             [core2.types :as types]
             [core2.util :as util]

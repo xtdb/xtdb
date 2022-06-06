@@ -28,7 +28,7 @@
            java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.complex ListVector StructVector]))
+           [org.apache.arrow.vector.complex StructVector]))
 
 (def txs
   [[[:put {:_id "device-info-demo000000",

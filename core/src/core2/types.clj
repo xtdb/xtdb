@@ -756,7 +756,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti extension-type->field-name (fn [[type-head xname xdata]] xname), :default ::default)
-(defmethod extension-type->field-name ::default [[type-head xname xdata]] (name xname))
+(defmethod extension-type->field-name ::default [[_type-head xname _xdata]] (name xname))
 
 (defmethod col-type->field-name :extension-type [col-type] (extension-type->field-name col-type))
 

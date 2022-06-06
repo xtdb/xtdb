@@ -31,7 +31,7 @@
            java.util.concurrent.locks.StampedLock
            [java.util.function Consumer Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector TimeStampMicroTZVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BigIntVector TimeStampMicroTZVector TimeStampVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema]
@@ -43,11 +43,13 @@
   (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName])
   (^core2.tx.Watermark getWatermark []))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface TransactionIndexer
   (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx ^java.nio.ByteBuffer txBytes])
   (^core2.api.TransactionInstant latestCompletedTx [])
   (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^core2.api.TransactionInstant tx]))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IndexerPrivate
   (^void indexTx [^core2.api.TransactionInstant tx-key, ^org.apache.arrow.vector.VectorSchemaRoot txRoot, ^long nextRowId])
   (^java.nio.ByteBuffer writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root])
@@ -105,6 +107,7 @@
                                                         (t/->field "_valid-time-end" t/timestamp-micro-tz-type true))
                                              (t/->field "evict" t/struct-type false))))]))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface ILogOpIndexer
   (^void logPut [^long rowId, ^long txOpIdx])
   (^void logDelete [^long rowId, ^long txOpIdx])
@@ -190,7 +193,7 @@
 
                 (.endValue ops-data-writer))
 
-              (logEvict [_ row-id tx-op-idx]
+              (logEvict [_ row-id _tx-op-idx]
                 (let [op-idx (.startValue ops-data-writer)]
                   (.setSafe row-id-vec op-idx row-id))
 
@@ -321,7 +324,7 @@
                       ^AtomicInteger thread-ref-count (.computeIfAbsent thread->count
                                                                         (Thread/currentThread)
                                                                         (reify Function
-                                                                          (apply [_ k]
+                                                                          (apply [_ _k]
                                                                             (AtomicInteger. 0))))]
                   (.incrementAndGet thread-ref-count)
                   (.add open-watermarks current-watermark)
@@ -434,6 +437,7 @@
 
       (.endTx log-op-idxer)
       (let [evicted-row-ids (.endTx temporal-idxer)]
+        #_{:clj-kondo/ignore [:missing-body-in-when]}
         (when-not (.isEmpty evicted-row-ids)
           ;; TODO create work item
           ))))

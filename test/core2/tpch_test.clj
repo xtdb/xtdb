@@ -7,7 +7,7 @@
             [core2.util :as util]
             [core2.operator :as op]
             [core2.snapshot :as snap])
-  (:import [java.nio.file Files LinkOption Path CopyOption]
+  (:import [java.nio.file Files LinkOption Path]
            [java.time Clock Duration ZoneId]))
 
 (def ^:dynamic *node* nil)
