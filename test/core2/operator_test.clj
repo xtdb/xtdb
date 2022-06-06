@@ -441,25 +441,3 @@
                           (op/query-ra '[:select (= ?x13 x4)
                                          [:table []]]
                                        {}))))
-
-(t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
-  (t/is
-    (-> '[:group-by [a]
-          [:table [{:a 42, :b 42} {:a nil, :b 42} {:a nil, :b 42}]]]
-        (op/query-ra {})
-        any?)))
-
-(t/deftest test-group-by-groups-nils
-  (t/is
-    (=
-      [{:a nil, :b 1, :n 85}]
-      (-> '[:group-by [a b {n (sum c)}]
-            [:table [{:a nil, :b 1, :c 42}
-                     {:a nil, :b 1, :c 43}]]]
-          (op/query-ra {})))))
-
-(t/deftest test-min-of-empty-rel-returns-nil
-  (t/is (= [{:a nil}] (op/query-ra '[:group-by [{a (min b)}] [:select false [:table [{:b 0}]]]] {}))))
-
-(t/deftest test-count-of-empty-rel-returns-zero
-  (t/is (= [{:a 0}] (op/query-ra '[:group-by [{a (count b)}] [:select false [:table [{:b 0}]]]] {}))))

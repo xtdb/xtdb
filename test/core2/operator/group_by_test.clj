@@ -168,3 +168,40 @@
                 :avg 13.0, :avg-distinct 12.333333333333334
                 :array-agg [12 15 15 10], :array-agg-distinct [12 15 10]}}
              (set (first (tu/<-cursor res)))))))
+
+(t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
+  (t/is
+    (-> '[:group-by [a]
+          [:table [{:a 42, :b 42} {:a nil, :b 42} {:a nil, :b 42}]]]
+        (op/query-ra {})
+        any?)))
+
+(t/deftest test-group-by-groups-nils
+  (t/is
+    (=
+      [{:a nil, :b 1, :n 85}]
+      (-> '[:group-by [a b {n (sum c)}]
+            [:table [{:a nil, :b 1, :c 42}
+                     {:a nil, :b 1, :c 43}]]]
+          (op/query-ra {})))))
+
+(t/deftest test-min-of-empty-rel-returns-nil
+  (t/is (= [{:a nil}] (op/query-ra '[:group-by [{a (min b)}] [:select false [:table [{:b 0}]]]] {}))))
+
+(t/deftest test-count-of-empty-rel-returns-zero
+  (t/is (= [{:a 0}] (op/query-ra '[:group-by [{a (count b)}] [:select false [:table [{:b 0}]]]] {}))))
+
+(t/deftest test-sum-empty-returns-null
+  (t/is (= [{:n nil}]  (op/query-ra '[:group-by [{n (sum a)}] [:table []]] {}))))
+
+(t/deftest test-no-groups-sum-empty-returns-empty
+  (t/is (= [] (op/query-ra '[:group-by [b {n (sum a)}] [:table []]] {}))))
+
+;; FIXME least-upper-bound https://github.com/xtdb/core2/issues/192
+#_#_
+(t/deftest test-sum-all-nulls-returns-null
+  (t/is (= [{:n nil}]  (op/query-ra '[:group-by [{n (sum a)}] [:table [{:a nil}]]] {}))))
+
+(t/deftest test-summed-group-all-null
+  (t/is (= [{:a 42, :n nil}] (op/query-ra '[:group-by [a {n (sum b)}] [:table [{:a 42, :b nil}]]] {})))
+  (t/is (= [{:a 42, :n nil} {:a 45, :b 1}] (op/query-ra '[:group-by [a {n (sum b)}] [:table [{:a 42, :b nil} {:a 45, :b 1}]]] {}))))
