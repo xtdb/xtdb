@@ -13,8 +13,7 @@
             [clojure.test.check.generators :as tcg]
             [clojure.string :as str]
             [core2.edn :as edn])
-  (:import core2.types.LegType
-           core2.vector.IIndirectVector
+  (:import core2.vector.IIndirectVector
            (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId Period)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector PeriodDuration)
@@ -248,12 +247,7 @@
                                    tu/*allocator*
                                    rel)]
       {:res (tu/<-column out-ivec)
-       :leg-type (let [out-field (.getField (.getVector out-ivec))]
-                   (if (instance? ArrowType$Union (.getType out-field))
-                     (->> (.getChildren out-field)
-                          (into #{} (map types/field->leg-type)))
-                     (types/field->leg-type out-field)))
-       :nullable? (.isNullable (.getField (.getVector out-ivec)))})))
+       :res-type (types/field->col-type (.getField (.getVector out-ivec)))})))
 
 (t/deftest test-nils
   (letfn [(run-test [f xs ys]
@@ -1074,8 +1068,7 @@
 (t/deftest can-return-string-multiple-times
   (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bigint-type) [1 2 3])])]
     (t/is (= {:res ["foo" "foo" "foo"]
-              :leg-type LegType/UTF8
-              :nullable? false}
+              :res-type :utf8}
              (run-projection rel "foo")))))
 
 (t/deftest test-cond
@@ -1084,22 +1077,19 @@
               (run-projection rel expr)))]
 
     (t/is (= {:res ["big" "small" "tiny" "tiny"]
-              :leg-type LegType/UTF8
-              :nullable? false}
+              :res-type :utf8}
              (run-test '(cond (> x 100) "big", (> x 10) "small", "tiny")
                        [500 50 5 nil])))
 
     (t/is (= {:res ["big" "small" nil nil]
-              :leg-type LegType/UTF8
-              :nullable? true}
+              :res-type [:union #{:null :utf8}]}
              (run-test '(cond (> x 100) "big", (> x 10) "small")
                        [500 50 5 nil])))))
 
 (t/deftest test-let
   (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bigint-type) [1 2 3 nil])])]
     (t/is (= {:res [6 9 12 nil]
-              :leg-type LegType/BIGINT
-              :nullable? true}
+              :res-type [:union #{:null :i64}]}
              (run-projection rel '(let [y (* x 2)
                                         y (+ y 3)]
                                     (+ x y)))))))
@@ -1107,8 +1097,7 @@
 (t/deftest test-case
   (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bigint-type) [1 2 3 nil])])]
     (t/is (= {:res ["x=1" "x=2" "none of the above" "none of the above"]
-              :leg-type LegType/UTF8
-              :nullable? false}
+              :res-type :utf8}
              (run-projection rel '(case (* x 2)
                                     2 "x=1"
                                     (+ x 2) "x=2"
@@ -1121,18 +1110,15 @@
               (run-projection rel expr)))]
 
     (t/is (= {:res ["x" "y" nil]
-              :leg-type LegType/UTF8
-              :nullable? true}
+              :res-type [:union #{:null :utf8}]}
              (run-test '(coalesce x y))))
 
     (t/is (= {:res ["x" "lit" "lit"]
-              :leg-type LegType/UTF8
-              :nullable? false}
+              :res-type :utf8}
              (run-test '(coalesce x "lit" y))))
 
     (t/is (= {:res ["x" "y" "default"]
-              :leg-type LegType/UTF8
-              :nullable? false}
+              :res-type :utf8}
              (run-test '(coalesce x y "default"))))))
 
 (t/deftest test-nullif
@@ -1142,8 +1128,7 @@
               (run-projection rel expr)))]
 
     (t/is (= {:res ["x" nil nil "x"]
-              :leg-type LegType/UTF8
-              :nullable? true}
+              :res-type [:union #{:utf8 :null}]}
              (run-test '(nullif x y))))))
 
 (t/deftest test-mixing-numeric-types
@@ -1151,40 +1136,39 @@
             (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (types/value->leg-type x)) [x])
                                        (tu/->mono-vec "y" (.arrowType (types/value->leg-type y)) [y])])]
               (-> (run-projection rel (list f 'x 'y))
-                  (update :res first)
-                  (dissoc :nullable?))))]
+                  (update :res first))))]
 
-    (t/is (= {:res 6, :leg-type LegType/INT}
+    (t/is (= {:res 6, :res-type :i32}
              (run-test '+ (int 4) (int 2))))
 
-    (t/is (= {:res 6, :leg-type LegType/BIGINT}
+    (t/is (= {:res 6, :res-type :i64}
              (run-test '+ (int 2) (long 4))))
 
-    (t/is (= {:res 6, :leg-type LegType/SMALLINT}
+    (t/is (= {:res 6, :res-type :i16}
              (run-test '+ (short 2) (short 4))))
 
-    (t/is (= {:res 6.5, :leg-type LegType/FLOAT4}
+    (t/is (= {:res 6.5, :res-type :f32}
              (run-test '+ (byte 2) (float 4.5))))
 
-    (t/is (= {:res 6.5, :leg-type LegType/FLOAT4}
+    (t/is (= {:res 6.5, :res-type :f32}
              (run-test '+ (float 2) (float 4.5))))
 
-    (t/is (= {:res 6.5, :leg-type LegType/FLOAT8}
+    (t/is (= {:res 6.5, :res-type :f64}
              (run-test '+ (float 2) (double 4.5))))
 
-    (t/is (= {:res 6.5, :leg-type LegType/FLOAT8}
+    (t/is (= {:res 6.5, :res-type :f64}
              (run-test '+ (int 2) (double 4.5))))
 
-    (t/is (= {:res -2, :leg-type LegType/INT}
+    (t/is (= {:res -2, :res-type :i32}
              (run-test '- (short 2) (int 4))))
 
-    (t/is (= {:res 8, :leg-type LegType/SMALLINT}
+    (t/is (= {:res 8, :res-type :i16}
              (run-test '* (byte 2) (short 4))))
 
-    (t/is (= {:res 2, :leg-type LegType/SMALLINT}
+    (t/is (= {:res 2, :res-type :i16}
              (run-test '/ (short 4) (byte 2))))
 
-    (t/is (= {:res 2.0, :leg-type LegType/FLOAT4}
+    (t/is (= {:res 2.0, :res-type :f32}
              (run-test '/ (float 4) (int 2))))))
 
 (t/deftest test-throws-on-overflow
@@ -1218,37 +1202,46 @@
 
 (t/deftest test-polymorphic-columns
   (t/is (= {:res [1.2 1 3.4]
-            :leg-type #{LegType/FLOAT8 LegType/BIGINT}
-            :nullable? false}
+            :res-type [:union #{:i64 :f64}]}
            (with-open [rel (open-rel [(tu/->duv "x" [1.2 1 3.4])])]
              (run-projection rel 'x))))
 
   (t/is (= {:res [4.4 9.75]
-            :leg-type #{LegType/FLOAT4 LegType/FLOAT8}
-            :nullable? false}
+            :res-type [:union #{:f32 :f64}]}
            (with-open [rel (open-rel [(tu/->duv "x" [1 1.5])
                                       (tu/->duv "y" [3.4 (float 8.25)])])]
              (run-projection rel '(+ x y)))))
 
   (t/is (= {:res [(float 4.4) nil nil nil]
-            :leg-type #{LegType/NULL LegType/FLOAT4 LegType/FLOAT8}
-            :nullable? false}
+            :res-type [:union #{:null :f32 :f64}]}
            (with-open [rel (open-rel [(tu/->duv "x" [1 12 nil nil])
                                       (tu/->duv "y" [(float 3.4) nil 4.8 nil])])]
              (run-projection rel '(+ x y))))))
 
 (t/deftest test-ternary-booleans
   (t/is (= [{:res [true false nil false false false nil false nil]
-             :leg-type LegType/BOOL, :nullable? true}
+             :res-type [:union #{:null :bool}]}
             {:res [true true true true false nil true nil nil]
-             :leg-type LegType/BOOL, :nullable? true}]
+             :res-type [:union #{:null :bool}]}]
            (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bool-type)
                                                      [true true true false false false nil nil nil])
                                       (tu/->duv "y" [true false nil true false nil true false nil])])]
              [(run-projection rel '(and x y))
               (run-projection rel '(or x y))])))
 
-  )
+  (t/is (= [{:res [false true nil]
+             :res-type [:union #{:null :bool}]}
+            {:res [true false false]
+             :res-type :bool}
+            {:res [false true false]
+             :res-type :bool}
+            {:res [false false true]
+             :res-type :bool}]
+           (with-open [rel (open-rel [(tu/->mono-vec "x" (FieldType/nullable types/bool-type) [true false nil])])]
+             [(run-projection rel '(not x))
+              (run-projection rel '(true? x))
+              (run-projection rel '(false? x))
+              (run-projection rel '(nil? x))]))))
 
 (t/deftest test-mixing-timestamp-types
   (letfn [(->ts-vec [col-name time-unit, ^long value]
@@ -1264,26 +1257,25 @@
           (test-projection [f-sym ->x-vec ->y-vec]
             (with-open [^ValueVector x-vec (->x-vec)
                         ^ValueVector y-vec (->y-vec)]
-              (-> (run-projection (iv/->indirect-rel [(iv/->direct-vec x-vec)
-                                                      (iv/->direct-vec y-vec)])
-                                  (list f-sym 'x 'y))
-                  (dissoc :nullable?))))]
+              (run-projection (iv/->indirect-rel [(iv/->direct-vec x-vec)
+                                                  (iv/->direct-vec y-vec)])
+                              (list f-sym 'x 'y))))]
 
     (t/testing "ts/dur"
       (t/is (= {:res [(util/->zdt #inst "2021-01-01T00:02:03Z")]
-                :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/SECOND "UTC"))}
+                :res-type [:timestamp-tz :second "UTC"]}
                (test-projection '+
                                 #(->ts-vec "x" TimeUnit/SECOND (.getEpochSecond (util/->instant #inst "2021")))
                                 #(->dur-vec "y" TimeUnit/SECOND 123))))
 
       (t/is (= {:res [(util/->zdt #inst "2021-01-01T00:00:00.123Z")]
-                :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/MILLISECOND "UTC"))}
+                :res-type [:timestamp-tz :milli "UTC"]}
                (test-projection '+
                                 #(->ts-vec "x" TimeUnit/SECOND (.getEpochSecond (util/->instant #inst "2021")))
                                 #(->dur-vec "y" TimeUnit/MILLISECOND 123))))
 
       (t/is (= {:res [(ZonedDateTime/parse "1970-01-01T00:02:34.000001234Z[UTC]")]
-                :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/NANOSECOND "UTC"))}
+                :res-type [:timestamp-tz :nano "UTC"]}
                (test-projection '+
                                 #(->dur-vec "x" TimeUnit/SECOND 154)
                                 #(->ts-vec "y" TimeUnit/NANOSECOND 1234))))
@@ -1294,13 +1286,13 @@
                                       #(->dur-vec "y" TimeUnit/SECOND 1))))
 
       (t/is (= {:res [(util/->zdt #inst "2020-12-31T23:59:59.998Z")]
-                :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))}
+                :res-type [:timestamp-tz :micro "UTC"]}
                (test-projection '-
                                 #(->ts-vec "x" TimeUnit/MICROSECOND (util/instant->micros (util/->instant #inst "2021")))
                                 #(->dur-vec "y" TimeUnit/MILLISECOND 2)))))
 
     (t/is (t/is (= {:res [(Duration/parse "PT23H59M59.999S")]
-                    :leg-type (LegType. (ArrowType$Duration. TimeUnit/MILLISECOND))}
+                    :res-type [:duration :milli]}
                    (test-projection '-
                                     #(->ts-vec "x" TimeUnit/MILLISECOND (.toEpochMilli (util/->instant #inst "2021-01-02")))
                                     #(->ts-vec "y" TimeUnit/MILLISECOND (.toEpochMilli (util/->instant #inst "2021-01-01T00:00:00.001Z")))))))
@@ -1313,37 +1305,37 @@
                 (tu/->mono-vec col-name types/float8-type [value]))]
 
         (t/is (= {:res [(Duration/parse "PT0.002001S")]
-                  :leg-type LegType/DURATIONMICRO}
+                  :res-type [:duration :micro]}
                  (test-projection '+
                                   #(->dur-vec "x" TimeUnit/MICROSECOND 1)
                                   #(->dur-vec "y" TimeUnit/MILLISECOND 2))))
 
         (t/is (= {:res [(Duration/parse "PT-1.999S")]
-                  :leg-type (LegType. (ArrowType$Duration. TimeUnit/MILLISECOND))}
+                  :res-type [:duration :milli]}
                  (test-projection '-
                                   #(->dur-vec "x" TimeUnit/MILLISECOND 1)
                                   #(->dur-vec "y" TimeUnit/SECOND 2))))
 
         (t/is (= {:res [(Duration/parse "PT0.002S")]
-                  :leg-type (LegType. (ArrowType$Duration. TimeUnit/MILLISECOND))}
+                  :res-type [:duration :milli]}
                  (test-projection '*
                                   #(->dur-vec "x" TimeUnit/MILLISECOND 1)
                                   #(->bigint-vec "y" 2))))
 
         (t/is (= {:res [(Duration/parse "PT10S")]
-                  :leg-type (LegType. (ArrowType$Duration. TimeUnit/SECOND))}
+                  :res-type [:duration :second]}
                  (test-projection '*
                                   #(->bigint-vec "x" 2)
                                   #(->dur-vec "y" TimeUnit/SECOND 5))))
 
         (t/is (= {:res [(Duration/parse "PT0.000012S")]
-                  :leg-type LegType/DURATIONMICRO}
+                  :res-type [:duration :micro]}
                  (test-projection '*
                                   #(->float8-vec "x" 2.4)
                                   #(->dur-vec "y" TimeUnit/MICROSECOND 5))))
 
         (t/is (= {:res [(Duration/parse "PT3S")]
-                  :leg-type (LegType. (ArrowType$Duration. TimeUnit/SECOND))}
+                  :res-type [:duration :second]}
                  (test-projection '/
                                   #(->dur-vec "x" TimeUnit/SECOND 10)
                                   #(->bigint-vec "y" 3))))))))
@@ -1353,36 +1345,28 @@
                              (tu/->mono-vec "y" types/float8-type [3.4 8.25])])]
     (t/is (= {:res [{:x 1.2, :y 3.4}
                     {:x 3.4, :y 8.25}]
-              :leg-type (LegType/structOfKeys #{"x" "y"})
-              :nullable? false}
+              :res-type [:struct {"x" :f64, "y" :f64}]}
              (run-projection rel '{:x x, :y y})))
 
-    (t/is (= {:res [3.4 8.25]
-              :leg-type LegType/FLOAT8
-              :nullable? false}
+    (t/is (= {:res [3.4 8.25], :res-type :f64}
              (run-projection rel '(. {:x x, :y y} y))))
 
-    (t/is (= {:res [nil nil]
-              :leg-type LegType/NULL
-              :nullable? true}
+    (t/is (= {:res [nil nil], :res-type :null}
              (run-projection rel '(. {:x x, :y y} z))))))
 
 (t/deftest test-nested-structs
   (with-open [rel (open-rel [(tu/->mono-vec "y" types/float8-type [1.2 3.4])])]
     (t/is (= {:res [{:x {:y 1.2}}
                     {:x {:y 3.4}}]
-              :leg-type (LegType/structOfKeys #{"x"})
-              :nullable? false}
+              :res-type [:struct {"x" [:struct {"y" :f64}]}]}
              (run-projection rel '{:x {:y y}})))
 
     (t/is (= {:res [{:y 1.2} {:y 3.4}]
-              :leg-type (LegType/structOfKeys #{"y"})
-              :nullable? false}
+              :res-type [:struct {"y" :f64}]}
              (run-projection rel '(. {:x {:y y}} x))))
 
     (t/is (= {:res [1.2 3.4]
-              :leg-type LegType/FLOAT8
-              :nullable? false}
+              :res-type :f64}
              (run-projection rel '(.. {:x {:y y}} x y))))))
 
 (t/deftest test-lists
@@ -1391,13 +1375,11 @@
                                (tu/->mono-vec "y" types/float8-type [3.4 8.25])])]
       (t/is (= {:res [[1.2 3.4 10.0]
                       [3.4 8.25 10.0]]
-                :leg-type (LegType. (ArrowType$FixedSizeList. 3))
-                :nullable? false}
+                :res-type [:fixed-size-list 3 :f64]}
                (run-projection rel '[x y 10.0])))
 
       (t/is (= {:res [[1.2 3.4] [3.4 8.25]]
-                :leg-type (LegType. (ArrowType$FixedSizeList. 2))
-                :nullable? false}
+                :res-type [:fixed-size-list 2 :f64]}
                (run-projection rel '[(nth [x y] 0)
                                      (nth [x y] 1)])))))
 
@@ -1405,8 +1387,7 @@
     (with-open [rel (open-rel [(tu/->mono-vec "x" types/float8-type [1.2 3.4])
                                (tu/->mono-vec "y" (FieldType/nullable types/bigint-type) [0 nil])])]
       (t/is (= {:res [1.2 nil]
-                :leg-type #{LegType/NULL LegType/FLOAT8}
-                :nullable? false}
+                :res-type [:union #{:f64 :null}]}
                (run-projection rel '(nth [x] y))))))
 
   (t/testing "IOOBE"
@@ -1425,8 +1406,7 @@
                                           [4 5]
                                           "foo"])])]
       (t/is (= {:res [nil 2 5 nil]
-                :leg-type #{LegType/BIGINT LegType/NULL}
-                :nullable? false}
+                :res-type [:union #{:i64 :null}]}
                (run-projection rel '(nth x 1))))))
 
   (t/testing "Nested expr"
@@ -1438,8 +1418,7 @@
                                              {:a 12, :b 5}])])]
     (t/is (= {:res [{:a 42, :b 8, :sum 50}
                     {:a 12, :b 5, :sum 17}]
-              :leg-type (LegType/structOfKeys #{"a", "b", "sum"})
-              :nullable? false}
+              :res-type [:struct {"a" :i64, "b" :i64, "sum" :i64}]}
              (run-projection rel '{:a (. x a)
                                    :b (. x b)
                                    :sum (+ (. x a) (. x b))})))))
@@ -1456,17 +1435,14 @@
                     {:b 10}
                     {:a 15, :b 25}
                     10.0]
-              :leg-type #{(LegType/structOfKeys #{"a"})
-                          (LegType/structOfKeys #{"a" "b"})
-                          (LegType/structOfKeys #{"b"})
-                          LegType/FLOAT8}
-              :nullable? false}
+              :res-type [:union #{[:struct {"a" :i64}]
+                                  [:struct {"a" :i64, "b" :i64}]
+                                  [:struct {"b" :i64}]
+                                  :f64}]}
              (run-projection rel 'x)))
 
     (t/is (= {:res [42 12 nil 15 nil]
-              ;; TODO: this could be a nullable BigIntVector, rather than a DUV
-              :leg-type #{LegType/BIGINT LegType/NULL}
-              :nullable? false}
+              :res-type [:union #{:i64 :null}]}
              (run-projection rel '(. x a))))))
 
 (t/deftest test-current-times-111
@@ -1482,93 +1458,79 @@
       (binding [expr/*clock* (Clock/fixed inst utc-tz)]
         (t/testing "UTC"
           (t/is (= {:res [utc-zdt-micros]
-                    :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
-                    :nullable? false}
+                    :res-type [:timestamp-tz :micro "UTC"]}
                    (project-fn '(current-timestamp)))
                 "current-timestamp")
 
           (t/is (= {:res [(.toLocalDate utc-zdt-micros)]
-                    :leg-type (LegType. types/date-day-type)
-                    :nullable? false}
+                    :res-type [:date :day]}
                    (project-fn '(current-date)))
                 "current-date")
 
           (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :leg-type (LegType. types/time-micros-type)
-                    :nullable? false}
+                    :res-type [:time :micro]}
                    (project-fn '(current-time)))
                 "current-time")
 
           (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :leg-type (LegType. types/time-micros-type)
-                    :nullable? false}
+                    :res-type [:time :micro]}
                    (project-fn '(local-time)))
                 "local-time")
 
           (t/is (= {:res [(.toLocalDateTime utc-zdt-micros)]
-                    :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/MICROSECOND nil))
-                    :nullable? false}
+                    :res-type [:timestamp-local :micro]}
                    (project-fn '(local-timestamp)))
                 "local-timestamp")))
 
       (binding [expr/*clock* (Clock/fixed inst la-tz)]
         (t/testing "LA"
           (t/is (= {:res [la-zdt-micros]
-                    :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/MICROSECOND "America/Los_Angeles"))
-                    :nullable? false}
+                    :res-type [:timestamp-tz :micro "America/Los_Angeles"]}
                    (run-projection (iv/->indirect-rel [] 1) '(current-timestamp)))
                 "current-timestamp")
 
           ;; these two are where we may differ from the spec, due to Arrow's Date and Time types not supporting a TZ.
           ;; I've opted to return these as UTC to differentiate them from `local-time` and `local-timestamp` below.
           (t/is (= {:res [(.toLocalDate utc-zdt-micros)]
-                    :leg-type (LegType. types/date-day-type)
-                    :nullable? false}
+                    :res-type [:date :day]}
                    (project-fn '(current-date)))
                 "current-date")
 
           (t/is (= {:res [(.toLocalTime utc-zdt-micros)]
-                    :leg-type (LegType. types/time-micros-type)
-                    :nullable? false}
+                    :res-type [:time :micro]}
                    (project-fn '(current-time)))
                 "current-time")
 
           (t/is (= {:res [(.toLocalTime la-zdt-micros)]
-                    :leg-type (LegType. types/time-micros-type)
-                    :nullable? false}
+                    :res-type [:time :micro]}
                    (project-fn '(local-time)))
                 "local-time")
 
           (t/is (= {:res [(.toLocalDateTime la-zdt-micros)]
-                    :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/MICROSECOND nil))
-                    :nullable? false}
+                    :res-type [:timestamp-local :micro]}
                    (project-fn '(local-timestamp)))
                 "local-timestamp")))
 
       (binding [expr/*clock* (Clock/fixed inst, (ZoneId/of "America/Los_Angeles"))]
         (t/testing "timestamp precision"
           (t/is (= {:res [(-> la-zdt (.minusNanos 45))]
-                    :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/NANOSECOND "America/Los_Angeles"))
-                    :nullable? false}
+                    :res-type [:timestamp-tz :nano "America/Los_Angeles"]}
                    (run-projection (iv/->indirect-rel [] 1) '(current-timestamp 7)))
                 "current-timestamp")
 
           (t/is (= {:res [(-> la-zdt-micros (.truncatedTo ChronoUnit/SECONDS) (.toLocalDateTime))]
-                    :leg-type (LegType. (ArrowType$Timestamp. TimeUnit/SECOND nil))
-                    :nullable? false}
+                    :res-type [:timestamp-local :second]}
                    (project-fn '(local-timestamp 0)))
                 "local-timestamp"))
 
         (t/testing "time precision"
           (t/is (= {:res [(-> utc-zdt (.truncatedTo ChronoUnit/MILLIS) (.toLocalTime))]
-                    :leg-type (LegType. (ArrowType$Time. TimeUnit/MILLISECOND 32))
-                    :nullable? false}
+                    :res-type [:time :milli]}
                    (project-fn '(current-time 3)))
                 "current-time")
 
           (t/is (= {:res [(-> la-zdt (.truncatedTo ChronoUnit/MILLIS) (.minusNanos 8e6) (.toLocalTime))]
-                    :leg-type (LegType. (ArrowType$Time. TimeUnit/MILLISECOND 32))
-                    :nullable? false}
+                    :res-type [:time :milli]}
                    (project-fn '(local-time 2)))
                 "local-time"))))))
 
