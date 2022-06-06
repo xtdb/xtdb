@@ -12,7 +12,6 @@
            (core2 StringUtil)
            (core2.expression.boxes BoolBox DoubleBox LongBox ObjectBox)
            (core2.operator IProjectionSpec IRelationSelector)
-           (core2.types LegType)
            (core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter)
            (core2.vector.extensions KeywordType UuidType)
            (java.nio ByteBuffer)
@@ -25,10 +24,8 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector BigIntVector BitVector DurationVector IntVector IntervalDayVector IntervalYearVector NullVector PeriodDuration ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
-           (org.apache.arrow.vector.types DateUnit FloatingPointPrecision IntervalUnit TimeUnit Types)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Date ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary
-                                               ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$Interval ArrowType$List ArrowType$Null ArrowType$Time
-                                               ArrowType$Timestamp ArrowType$Union ArrowType$Utf8 Field FieldType)
+           (org.apache.arrow.vector.types FloatingPointPrecision Types)
+           (org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$List ArrowType$Union Field FieldType)
            (org.apache.commons.codec.binary Hex)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -1561,35 +1558,6 @@
 (defmethod extension-type-literal-form KeywordType [_] `KeywordType/INSTANCE)
 (defmethod extension-type-literal-form UuidType [_] `UuidType/INSTANCE)
 
-(defn- arrow-type-literal-form [^ArrowType arrow-type]
-  (letfn [(timestamp-type-literal [time-unit-literal]
-            `(ArrowType$Timestamp. ~time-unit-literal ~(.getTimezone ^ArrowType$Timestamp arrow-type)))]
-    (let [minor-type-name (.name (Types/getMinorTypeForArrowType arrow-type))]
-      (case minor-type-name
-        "DURATION" `(ArrowType$Duration. ~(symbol (name `TimeUnit) (.name (.getUnit ^ArrowType$Duration arrow-type))))
-
-        "TIMESTAMPSECTZ" (timestamp-type-literal `TimeUnit/SECOND)
-        "TIMESTAMPMILLITZ" (timestamp-type-literal `TimeUnit/MILLISECOND)
-        "TIMESTAMPMICROTZ" (timestamp-type-literal `TimeUnit/MICROSECOND)
-        "TIMESTAMPNANOTZ" (timestamp-type-literal `TimeUnit/NANOSECOND)
-
-        "EXTENSIONTYPE" `~(extension-type-literal-form arrow-type)
-
-        "DATEDAY" `(ArrowType$Date. DateUnit/DAY)
-        "DATEMILLI" `(ArrowType$Date. DateUnit/MILLISECOND)
-
-        "TIMENANO" `(ArrowType$Time. TimeUnit/NANOSECOND 64)
-        "TIMEMICRO" `(ArrowType$Time. TimeUnit/MICROSECOND 64)
-        "TIMEMILLI" `(ArrowType$Time. TimeUnit/MILLISECOND 32)
-        "TIMESEC" `(ArrowType$Time. TimeUnit/SECOND 32)
-
-        "INTERVALMONTHDAYNANO" `(ArrowType$Interval. IntervalUnit/MONTH_DAY_NANO)
-        "INTERVALYEAR" `(ArrowType$Interval. IntervalUnit/YEAR_MONTH)
-        "INTERVALDAY" `(ArrowType$Interval. IntervalUnit/DAY_TIME)
-
-        ;; TODO there are other minor types that don't have a single corresponding ArrowType
-        `(.getType ~(symbol (name 'org.apache.arrow.vector.types.Types$MinorType) minor-type-name))))))
-
 (defn- write-value-out-code [return-type]
   (let [out-field (types/col-type->field return-type)]
     (if (instance? ArrowType$Union (.getType out-field))
@@ -1598,10 +1566,8 @@
                               (into {} (map (juxt identity (fn [_] (gensym 'writer))))))]
         {:writer-bindings
          (->> (cons [out-writer-sym `(.asDenseUnion ~out-writer-sym)]
-                    (for [[inner-type writer-sym] ->writer-sym
-                          :let [arrow-type (.getType (types/col-type->field inner-type))]]
-                      [writer-sym `(.writerForType ~out-writer-sym
-                                                   (LegType. ~(arrow-type-literal-form arrow-type)))]))
+                    (for [[inner-type writer-sym] ->writer-sym]
+                      [writer-sym `(.writerForType ~out-writer-sym ~inner-type)]))
               (apply concat))
 
          :write-value-out!
@@ -1685,8 +1651,8 @@
       wrap-zone-id-cache-buster))
 
 (defn field->value-types [^Field field]
-  ;; potential duplication with LegType
   ;; probably doesn't work with structs, not convinced about lists either.
+  ;; can hopefully replace this with col-types
   (case (.name (Types/getMinorTypeForArrowType (.getType field)))
     "DENSEUNION"
     (mapv #(.getFieldType ^Field %) (.getChildren field))
@@ -1883,8 +1849,7 @@
              coll-count (.getValueCount coll-res)
              out-writer (.asDenseUnion (vw/vec->writer out-vec))
              copier (.elementCopier list-rdr out-writer)
-             !null-writer (delay
-                           (.writerForType out-writer LegType/NULL))]
+             !null-writer (delay (.writerForType out-writer :null))]
 
          (.setValueCount out-vec coll-count)
 

@@ -17,7 +17,7 @@
            (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId Period)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector PeriodDuration)
-           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$FixedSizeList ArrowType$Time ArrowType$Timestamp ArrowType$Union FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp FieldType)
            org.apache.arrow.vector.types.TimeUnit
            (core2 StringUtil)
            (java.nio ByteBuffer)))
@@ -1131,10 +1131,15 @@
               :res-type [:union #{:utf8 :null}]}
              (run-test '(nullif x y))))))
 
+(defn- value->arrow-type [v]
+  (-> (types/value->col-type v)
+      (types/col-type->field)
+      (.getType)))
+
 (t/deftest test-mixing-numeric-types
   (letfn [(run-test [f x y]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (types/value->leg-type x)) [x])
-                                       (tu/->mono-vec "y" (.arrowType (types/value->leg-type y)) [y])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (value->arrow-type x) [x])
+                                       (tu/->mono-vec "y" (value->arrow-type y) [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 
@@ -1173,13 +1178,13 @@
 
 (t/deftest test-throws-on-overflow
   (letfn [(run-unary-test [f x]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (types/value->leg-type x)) [x])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (value->arrow-type x) [x])])]
               (-> (run-projection rel (list f 'x))
                   (update :res first))))
 
           (run-binary-test [f x y]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (.arrowType (types/value->leg-type x)) [x])
-                                       (tu/->mono-vec "y" (.arrowType (types/value->leg-type y)) [y])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" (value->arrow-type x) [x])
+                                       (tu/->mono-vec "y" (value->arrow-type y) [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 

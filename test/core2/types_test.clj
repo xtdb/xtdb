@@ -10,19 +10,16 @@
            [java.time Instant OffsetDateTime ZonedDateTime ZoneId ZoneOffset LocalDate LocalTime Period Duration]
            [org.apache.arrow.vector BigIntVector BitVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TinyIntVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeSecVector TimeMilliVector TimeMicroVector PeriodDuration IntervalMonthDayNanoVector IntervalYearVector IntervalDayVector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [core2.types LegType]
-           [org.apache.arrow.vector.types.pojo ArrowType$Date ArrowType$Time ArrowType$Interval]
-           [org.apache.arrow.vector.types DateUnit TimeUnit IntervalUnit]
            [core2.vector IVectorWriter]))
 
 (t/use-fixtures :each tu/with-allocator)
 
-(defn- test-read [leg-type-fn write-fn vs]
+(defn- test-read [col-type-fn write-fn vs]
   (with-open [duv (DenseUnionVector/empty "" tu/*allocator*)]
     (let [duv-writer (.asDenseUnion (vw/vec->writer duv))]
       (doseq [v vs]
         (.startValue duv-writer)
-        (doto (.writerForType duv-writer (leg-type-fn v))
+        (doto (.writerForType duv-writer (col-type-fn v))
           (.startValue)
           (write-fn v)
           (.endValue))
@@ -33,10 +30,9 @@
                        (class (.getVectorByType duv (.getTypeId duv idx)))))}))
 
 (defn- test-round-trip [vs]
-  (test-read types/value->leg-type #(types/write-value! %2 %1) vs))
+  (test-read types/value->col-type #(types/write-value! %2 %1) vs))
 
 (t/deftest round-trips-values
-
   (t/is (= {:vs [false nil 2 1 6 4 3.14 2.0]
             :vec-types [BitVector NullVector BigIntVector TinyIntVector SmallIntVector IntVector Float8Vector Float4Vector]}
            (test-round-trip [false nil (long 2) (byte 1) (short 6) (int 4) (double 3.14) (float 2)]))
@@ -91,7 +87,7 @@
                   (test-round-trip vs))))
 
     (->> "LocalDate can be read from MILLISECOND date vectors"
-         (t/is (= vs (:vs (test-read (constantly (LegType. (ArrowType$Date. DateUnit/MILLISECOND)))
+         (t/is (= vs (:vs (test-read (constantly [:date :milli])
                                      (fn [^IVectorWriter w ^LocalDate v]
                                        (.setSafe ^DateMilliVector (.getVector w) (.getPosition w) (long (* 86400000 (.toEpochDay v)))))
                                      vs)))))))
@@ -108,21 +104,21 @@
                   (test-round-trip all))))
 
     (->> "LocalTime can be read from SECOND time vectors"
-         (t/is (= secs (:vs (test-read (constantly (LegType. (ArrowType$Time. TimeUnit/SECOND 32)))
+         (t/is (= secs (:vs (test-read (constantly [:time :second])
                                        (fn [^IVectorWriter w, ^LocalTime v]
                                          (.setSafe ^TimeSecVector (.getVector w) (.getPosition w) (.toSecondOfDay v)))
                                        secs)))))
 
     (let [millis+ (concat millis secs)]
       (->> "LocalTime can be read from MILLI time vectors"
-           (t/is (= millis+ (:vs (test-read (constantly (LegType. (ArrowType$Time. TimeUnit/MILLISECOND 32)))
+           (t/is (= millis+ (:vs (test-read (constantly [:time :milli])
                                             (fn [^IVectorWriter w, ^LocalTime v]
                                               (.setSafe ^TimeMilliVector (.getVector w) (.getPosition w) (int (quot (.toNanoOfDay v) 1e6))))
                                             millis+))))))
 
     (let [micros+ (concat micros millis secs)]
       (->> "LocalTime can be read from MICRO time vectors"
-           (t/is (= micros+ (:vs (test-read (constantly (LegType. (ArrowType$Time. TimeUnit/MICROSECOND 64)))
+           (t/is (= micros+ (:vs (test-read (constantly [:time :micro])
                                             (fn [^IVectorWriter w, ^LocalTime v]
                                               (.setSafe ^TimeMicroVector (.getVector w) (.getPosition w) (long (quot (.toNanoOfDay v) 1e3))))
                                             micros+))))))))
@@ -148,16 +144,18 @@
                   (test-round-trip [full-period]))))
 
     (->> "PeriodDuration can be read from YEAR vectors"
-         (t/is (= [period-year-month] (:vs (test-read (constantly (LegType. (ArrowType$Interval. IntervalUnit/YEAR_MONTH)))
-                                                   (fn [^IVectorWriter w, ^PeriodDuration v]
-                                                     (.setSafe ^IntervalYearVector (.getVector w) (.getPosition w) (.toTotalMonths (.getPeriod v))))
-                                                   [period-year-month])))))
+         (t/is (= [period-year-month]
+                  (:vs (test-read (constantly [:interval :year-month])
+                                  (fn [^IVectorWriter w, ^PeriodDuration v]
+                                    (.setSafe ^IntervalYearVector (.getVector w) (.getPosition w) (.toTotalMonths (.getPeriod v))))
+                                  [period-year-month])))))
 
     (->> "PeriodDuration can be read from DAY vectors"
-         (t/is (= [period-day-ms] (:vs (test-read (constantly (LegType. (ArrowType$Interval. IntervalUnit/DAY_TIME)))
-                                                   (fn [^IVectorWriter w, ^PeriodDuration v]
-                                                     (.setSafe ^IntervalDayVector (.getVector w) (.getPosition w) (.getDays (.getPeriod v)) (.toMillis (.getDuration v))))
-                                                   [period-day-ms])))))))
+         (t/is (= [period-day-ms]
+                  (:vs (test-read (constantly [:interval :day-time])
+                                  (fn [^IVectorWriter w, ^PeriodDuration v]
+                                    (.setSafe ^IntervalDayVector (.getVector w) (.getPosition w) (.getDays (.getPeriod v)) (.toMillis (.getDuration v))))
+                                  [period-day-ms])))))))
 
 (t/deftest test-merge-col-types
   (t/is (= :utf8 (types/merge-col-types :utf8 :utf8)))

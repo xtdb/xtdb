@@ -7,7 +7,6 @@
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import [core2.log Log LogRecord]
-           [core2.types LegType$StructLegType]
            java.time.Instant
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot]
@@ -110,7 +109,7 @@
             (case op
               :put (let [put-idx (.startValue put-writer)]
                      (let [{:keys [doc]} tx-op]
-                       (doto (.writerForType put-doc-writer (types/value->leg-type doc))
+                       (doto (.writerForType put-doc-writer (types/value->col-type doc))
                          (.startValue)
                          (->> (types/write-value! doc))
                          (.endValue)))
@@ -128,7 +127,7 @@
               :delete (let [delete-idx (.startValue delete-writer)]
                         (let [id (:_id tx-op)]
                           (doto (-> delete-id-writer
-                                    (.writerForType (types/value->leg-type id)))
+                                    (.writerForType (types/value->col-type id)))
                             (.startValue)
                             (->> (types/write-value! id))
                             (.endValue)))
@@ -145,7 +144,7 @@
                        (.startValue evict-writer)
                        (let [id (:_id tx-op)]
                          (doto (-> evict-id-writer
-                                   (.writerForType (types/value->leg-type id)))
+                                   (.writerForType (types/value->col-type id)))
                            (.startValue)
                            (->> (types/write-value! id))
                            (.endValue)))

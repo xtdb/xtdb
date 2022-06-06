@@ -18,7 +18,7 @@
         "typeIds" : [0]
       },
       "children" : [{
-        "name" : "float8",
+        "name" : "f64",
         "nullable" : false,
         "type" : {
           "name" : "floatingpoint",
@@ -41,7 +41,7 @@
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
       "children" : [{
-        "name" : "float8",
+        "name" : "f64",
         "count" : 2,
         "VALIDITY" : [1,1],
         "DATA" : [24.81,4.93]

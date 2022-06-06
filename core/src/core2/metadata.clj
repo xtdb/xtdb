@@ -161,6 +161,12 @@
 (doseq [type-head #{:int :float :utf8 :varbinary :timestamp-tz :timestamp-local :date :interval :time}]
   (defmethod type->metadata-writer type-head [_write-col-meta! metadata-root col-type] (->min-max-type-handler metadata-root col-type)))
 
+(defmethod col-type->type-metadata :fixed-size-binary [[type-head byte-width]]
+  {"type-head" (name type-head), "byte-width" (str byte-width)})
+
+(defmethod type-metadata->col-type :fixed-size-binary [type-metadata]
+  [(get type-metadata "type-head"), (Long/parseLong (get type-metadata "byte-width"))])
+
 (defmethod col-type->type-metadata :timestamp-tz [[type-head time-unit tz]]
   {"type-head" (name type-head), "time-unit" (name time-unit), "tz" tz})
 

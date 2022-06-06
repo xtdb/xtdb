@@ -43,7 +43,7 @@
                                 (util/set-value-count out-vec idx)
 
                                 (.startValue out-writer)
-                                (doto (.writerForType out-writer (ty/value->leg-type v))
+                                (doto (.writerForType out-writer (ty/value->col-type v))
                                   (.startValue)
                                   (->> (ty/write-value! v))
                                   (.endValue))

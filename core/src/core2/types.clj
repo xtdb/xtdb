@@ -3,10 +3,8 @@
             [clojure.string :as str]
             [core2.util :as util])
   (:import clojure.lang.Keyword
-           (core2.types LegType LegType$StructLegType)
            (core2.vector IDenseUnionWriter IVectorWriter)
-           (core2.vector.extensions KeywordType KeywordVector UuidType UuidVector UriType)
-           java.io.Writer
+           (core2.vector.extensions KeywordType KeywordVector UriType UriVector UuidType UuidVector)
            java.net.URI
            (java.nio ByteBuffer CharBuffer)
            java.nio.charset.StandardCharsets
@@ -17,7 +15,7 @@
            (org.apache.arrow.vector BigIntVector BitVector DurationVector FixedSizeBinaryVector Float4Vector Float8Vector IntVector NullVector SmallIntVector TimeStampMicroTZVector TimeStampMilliTZVector TimeStampNanoTZVector TimeStampSecTZVector TinyIntVector ValueVector VarBinaryVector VarCharVector DateDayVector DateMilliVector TimeNanoVector TimeMilliVector TimeMicroVector TimeSecVector TimeStampSecVector TimeStampMilliVector TimeStampMicroVector TimeStampNanoVector IntervalMonthDayNanoVector IntervalDayVector IntervalYearVector PeriodDuration)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.holders NullableIntervalDayHolder)
-           (org.apache.arrow.vector.types FloatingPointPrecision TimeUnit Types Types$MinorType UnionMode DateUnit IntervalUnit)
+           (org.apache.arrow.vector.types FloatingPointPrecision TimeUnit Types$MinorType UnionMode DateUnit IntervalUnit)
            (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int
                                                ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8
                                                ExtensionTypeRegistry Field FieldType ArrowType$Date ArrowType$Time ArrowType$Interval)
@@ -40,115 +38,93 @@
 (def dense-union-type (ArrowType$Union. UnionMode/Dense (int-array 0)))
 (def list-type (.getType Types$MinorType/LIST))
 (def keyword-type KeywordType/INSTANCE)
-(def date-day-type (ArrowType$Date. DateUnit/DAY))
-(def time-micros-type (ArrowType$Time. TimeUnit/MICROSECOND 64))
-(def interval-day-time-type (ArrowType$Interval. IntervalUnit/DAY_TIME))
-(def interval-year-month-type (ArrowType$Interval. IntervalUnit/YEAR_MONTH))
-(def interval-month-day-nano-type (ArrowType$Interval. IntervalUnit/MONTH_DAY_NANO))
 
 (defprotocol ArrowWriteable
   (value->col-type [v])
-  (^core2.types.LegType value->leg-type [v])
   (write-value! [v ^core2.vector.IVectorWriter writer]))
 
 (extend-protocol ArrowWriteable
   nil
   (value->col-type [_] :null)
-  (value->leg-type [_] LegType/NULL)
   (write-value! [_v ^IVectorWriter _writer])
 
   Boolean
   (value->col-type [_] :bool)
-  (value->leg-type [_] LegType/BOOL)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^BitVector (.getVector writer) (.getPosition writer) (if v 1 0)))
 
   Byte
   (value->col-type [_] :i8)
-  (value->leg-type [_] LegType/TINYINT)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TinyIntVector (.getVector writer) (.getPosition writer) v))
 
   Short
   (value->col-type [_] :i16)
-  (value->leg-type [_] LegType/SMALLINT)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^SmallIntVector (.getVector writer) (.getPosition writer) v))
 
   Integer
   (value->col-type [_] :i32)
-  (value->leg-type [_] LegType/INT)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^IntVector (.getVector writer) (.getPosition writer) v))
 
   Long
   (value->col-type [_] :i64)
-  (value->leg-type [_] LegType/BIGINT)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^BigIntVector (.getVector writer) (.getPosition writer) v))
 
   Float
   (value->col-type [_] :f32)
-  (value->leg-type [_] LegType/FLOAT4)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^Float4Vector (.getVector writer) (.getPosition writer) v))
 
   Double
   (value->col-type [_] :f64)
-  (value->leg-type [_] LegType/FLOAT8)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^Float8Vector (.getVector writer) (.getPosition writer) v)))
 
 (extend-protocol ArrowWriteable
   Date
   (value->col-type [_] [:timestamp-tz :micro "UTC"])
-  (value->leg-type [_] LegType/TIMESTAMPMICROTZ)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TimeStampMicroTZVector (.getVector writer) (.getPosition writer)
               (Math/multiplyExact (.getTime v) 1000)))
 
   Instant
   (value->col-type [_] [:timestamp-tz :micro "UTC"])
-  (value->leg-type [_] LegType/TIMESTAMPMICROTZ)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TimeStampMicroTZVector (.getVector writer) (.getPosition writer)
               (util/instant->micros v)))
 
   ZonedDateTime
   (value->col-type [v] [:timestamp-tz :micro (.getId (.getZone v))])
-  (value->leg-type [v] (LegType. (ArrowType$Timestamp. TimeUnit/MICROSECOND (.getId (.getZone v)))))
   (write-value! [v ^IVectorWriter writer]
     (write-value! (.toInstant v) writer))
 
   OffsetDateTime
   (value->col-type [v] [:timestamp-tz :micro (.getId (.getOffset v))])
-  (value->leg-type [v] (LegType. (ArrowType$Timestamp. TimeUnit/MICROSECOND (.getId (.getOffset v)))))
   (write-value! [v ^IVectorWriter writer]
     (write-value! (.toInstant v) writer))
 
   Duration
   (value->col-type [_] [:duration :micro])
-  (value->leg-type [_] LegType/DURATIONMICRO)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^DurationVector (.getVector writer) (.getPosition writer)
               (quot (.toNanos v) 1000)))
 
   LocalDate
   (value->col-type [_] [:date :day])
-  (value->leg-type [_] LegType/DATEDAY)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^DateDayVector (.getVector writer) (.getPosition writer) (.toEpochDay v)))
 
   LocalTime
   (value->col-type [_] [:time :nano])
-  (value->leg-type [_] LegType/TIMENANO)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^TimeNanoVector (.getVector writer) (.getPosition writer) (.toNanoOfDay v)))
 
   ;; allow the use of PeriodDuration for more precision
   PeriodDuration
   (value->col-type [_] [:interval :month-day-nano])
-  (value->leg-type [_] LegType/INTERVALMONTHDAYNANO)
   (write-value! [v ^IVectorWriter writer]
     (let [period (.getPeriod v)
           duration (.getDuration v)]
@@ -157,20 +133,17 @@
 (extend-protocol ArrowWriteable
   (Class/forName "[B")
   (value->col-type [_] :varbinary)
-  (value->leg-type [_] LegType/BINARY)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^VarBinaryVector (.getVector writer) (.getPosition writer) ^bytes v))
 
   ByteBuffer
   (value->col-type [_] :varbinary)
-  (value->leg-type [_] LegType/BINARY)
   (write-value! [buf ^IVectorWriter writer]
     (.setSafe ^VarBinaryVector (.getVector writer) (.getPosition writer)
               buf (.position buf) (.remaining buf)))
 
   CharSequence
   (value->col-type [_] :utf8)
-  (value->leg-type [_] LegType/UTF8)
   (write-value! [v ^IVectorWriter writer]
     (let [buf (.encode (.newEncoder StandardCharsets/UTF_8) (CharBuffer/wrap v))]
       (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer)
@@ -178,7 +151,6 @@
 
   Text
   (value->col-type [_] :utf8)
-  (value->leg-type [_] LegType/UTF8)
   (write-value! [v ^IVectorWriter writer]
     (.setSafe ^VarCharVector (.getVector writer) (.getPosition writer) v)))
 
@@ -188,14 +160,13 @@
 (extend-protocol ArrowWriteable
   List
   (value->col-type [v] [:list (apply merge-col-types (into #{} (map value->col-type) v))])
-  (value->leg-type [_] LegType/LIST)
   (write-value! [v ^IVectorWriter writer]
     (let [writer (.asList writer)
           data-writer (.getDataWriter writer)
           data-duv-writer (.asDenseUnion data-writer)]
       (doseq [el v]
         (.startValue data-writer)
-        (doto (.writerForType data-duv-writer (value->leg-type el))
+        (doto (.writerForType data-duv-writer (value->col-type el))
           (.startValue)
           (->> (write-value! el))
           (.endValue))
@@ -203,15 +174,13 @@
 
   Map
   (value->col-type [v]
-    [:map
-     (apply merge-col-types (into #{} (map (comp value->col-type key)) v))
-     (apply merge-col-types (into #{} (map (comp value->col-type val)) v))])
-
-  (value->leg-type [v]
-    (let [ks (keys v)]
-      (if (every? keyword? ks)
-        (LegType$StructLegType. (into #{} (map name) (keys v)))
-        LegType/MAP)))
+    (if (every? keyword? (keys v))
+      [:struct (->> v
+                    (into {} (map (juxt (comp name key)
+                                        (comp value->col-type val)))))]
+      [:map
+       (apply merge-col-types (into #{} (map (comp value->col-type key)) v))
+       (apply merge-col-types (into #{} (map (comp value->col-type val)) v))]))
 
   (write-value! [m ^IVectorWriter writer]
     (let [dest-vec (.getVector writer)]
@@ -223,7 +192,7 @@
             (if (instance? IDenseUnionWriter v-writer)
               (doto (-> v-writer
                         (.asDenseUnion)
-                        (.writerForType (value->leg-type v)))
+                        (.writerForType (value->col-type v)))
                 (.startValue)
                 (->> (write-value! v))
                 (.endValue))
@@ -233,20 +202,14 @@
         ;; TODO
         :else (throw (UnsupportedOperationException.))))))
 
-(def ^:private ^core2.types.LegType keyword-leg-type (LegType. KeywordType/INSTANCE))
-(def ^:private ^core2.types.LegType uuid-leg-type (LegType. UuidType/INSTANCE))
-(def ^:private ^core2.types.LegType uri-leg-type (LegType. UriType/INSTANCE))
-
 (extend-protocol ArrowWriteable
   Keyword
   (value->col-type [_] [:extension-type :keyword :utf8 ""])
-  (value->leg-type [_] keyword-leg-type)
   (write-value! [kw ^IVectorWriter writer]
     (write-value! (str (symbol kw)) (.getUnderlyingWriter (.asExtension writer))))
 
   UUID
-  (value->col-type [_] [:extension-type :uuid :fixed-size-binary ""])
-  (value->leg-type [_] uuid-leg-type)
+  (value->col-type [_] [:extension-type :uuid [:fixed-size-binary 16] ""])
   (write-value! [^UUID uuid ^IVectorWriter writer]
     (let [underlying-writer (.getUnderlyingWriter (.asExtension writer))
           bb (doto (ByteBuffer/allocate 16)
@@ -258,7 +221,6 @@
 
   URI
   (value->col-type [_] [:extension-type :uri :utf8 ""])
-  (value->leg-type [_] uri-leg-type)
   (write-value! [^URI uri ^IVectorWriter writer]
     (write-value! (str uri) (.getUnderlyingWriter (.asExtension writer)))))
 
@@ -333,7 +295,8 @@
 
 (extend-protocol VectorType
   KeywordType (arrow-type->vector-type [_] KeywordVector)
-  UuidType (arrow-type->vector-type [_] UuidVector))
+  UuidType (arrow-type->vector-type [_] UuidVector)
+  UriType (arrow-type->vector-type [_] UriVector))
 
 (defprotocol ArrowReadable
   (get-object [value-vector idx]))
@@ -500,33 +463,8 @@
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
   (->field "_row-id" bigint-type false))
 
-(defn type->field-name ^String [^ArrowType arrow-type]
-  (let [minor-type-name (.toLowerCase (.name (Types/getMinorTypeForArrowType arrow-type)))]
-    (case minor-type-name
-      "duration" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Duration arrow-type))))
-      "timestampmicrotz" (format "%s-%s" minor-type-name
-                                 (-> (.toLowerCase (.getTimezone ^ArrowType$Timestamp arrow-type))
-                                     (str/replace #"[/:]" "_")))
-      "extensiontype" (.extensionName ^ArrowType$ExtensionType arrow-type)
-      "date" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Date arrow-type))))
-      "time" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Time arrow-type))))
-      "interval" (format "%s-%s" minor-type-name (.toLowerCase (.name (.getUnit ^ArrowType$Interval arrow-type))))
-      minor-type-name)))
-
 (defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, ^String col-name]
   (Field. col-name (.getFieldType field) (.getChildren field)))
-
-(defn field->leg-type ^core2.types.LegType [^Field field]
-  (let [arrow-type (.getType field)]
-    (if (instance? ArrowType$Struct arrow-type)
-      (LegType$StructLegType. (->> (.getChildren field) (into #{} (map #(.getName ^Field %)))))
-      (LegType. arrow-type))))
-
-(defmethod print-method LegType [^LegType leg-type, ^Writer w]
-  (.write w (format "(LegType %s)" (.arrowType leg-type))))
-
-(defmethod print-method LegType$StructLegType [^LegType$StructLegType leg-type, ^Writer w]
-  (.write w (format "(StructLegType %s)" (pr-str (.keys leg-type)))))
 
 ;;;; col-types
 
@@ -617,6 +555,12 @@
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
   (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* col-name false col-type)))
 
+(defn col-type->duv-leg-key [col-type]
+  (match col-type
+    [:struct inner-types] [:struct-keys (set (keys inner-types))]
+    [:list _inner-types] :list
+    :else col-type))
+
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti arrow-type->col-type
   (fn [arrow-type & child-fields]
@@ -626,13 +570,20 @@
 (defmethod arrow-type->col-type ArrowType$Bool [_] :bool)
 (defmethod arrow-type->col-type ArrowType$Utf8 [_] :utf8)
 (defmethod arrow-type->col-type ArrowType$Binary [_] :varbinary)
-(defmethod arrow-type->col-type ArrowType$FixedSizeBinary [_] :fixed-size-binary)
 
 (defn field->col-type [^Field field]
   (let [inner-type (apply arrow-type->col-type (.getType field) (.getChildren field))]
     (if (.isNullable field)
       (apply merge-col-types :null (flatten-union-types inner-type))
       inner-type)))
+
+;;; fixed size binary
+
+(defmethod arrow-type->col-type ArrowType$FixedSizeBinary [^ArrowType$FixedSizeBinary fsb-type]
+  [:fixed-size-binary (.getByteWidth fsb-type)])
+
+(defmethod col-type->field* :fixed-size-binary [col-name nullable? [_ byte-width]]
+  (->field col-name (ArrowType$FixedSizeBinary. byte-width) nullable?))
 
 ;;; list
 

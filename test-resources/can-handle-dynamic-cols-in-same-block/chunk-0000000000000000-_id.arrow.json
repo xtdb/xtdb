@@ -18,14 +18,14 @@
         "typeIds" : [0,1,2]
       },
       "children" : [{
-        "name" : "varchar",
+        "name" : "utf8",
         "nullable" : false,
         "type" : {
           "name" : "utf8"
         },
         "children" : [ ]
       },{
-        "name" : "float8",
+        "name" : "f64",
         "nullable" : false,
         "type" : {
           "name" : "floatingpoint",
@@ -33,7 +33,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "timestampmicrotz-utc",
+        "name" : "timestamp-tz-micro-utc",
         "nullable" : false,
         "type" : {
           "name" : "timestamp",
@@ -57,18 +57,18 @@
       "TYPE_ID" : [0,1,0,2,1,2],
       "OFFSET" : [0,0,1,0,1,1],
       "children" : [{
-        "name" : "varchar",
+        "name" : "utf8",
         "count" : 2,
         "VALIDITY" : [1,1],
         "OFFSET" : [0,3,6],
         "DATA" : ["foo","bar"]
       },{
-        "name" : "float8",
+        "name" : "f64",
         "count" : 2,
         "VALIDITY" : [1,1],
         "DATA" : [24.0,52.0]
       },{
-        "name" : "timestampmicrotz-utc",
+        "name" : "timestamp-tz-micro-utc",
         "count" : 2,
         "VALIDITY" : [1,1],
         "DATA" : [1609459200000000,1577836800000000]

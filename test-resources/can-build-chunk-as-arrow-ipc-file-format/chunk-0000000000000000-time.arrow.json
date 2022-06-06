@@ -18,7 +18,7 @@
         "typeIds" : [0]
       },
       "children" : [{
-        "name" : "timestampmicrotz-utc",
+        "name" : "timestamp-tz-micro-utc",
         "nullable" : false,
         "type" : {
           "name" : "timestamp",
@@ -42,7 +42,7 @@
       "TYPE_ID" : [0,0],
       "OFFSET" : [0,1],
       "children" : [{
-        "name" : "timestampmicrotz-utc",
+        "name" : "timestamp-tz-micro-utc",
         "count" : 2,
         "VALIDITY" : [1,1],
         "DATA" : [1479211200000000,1479211200000000]

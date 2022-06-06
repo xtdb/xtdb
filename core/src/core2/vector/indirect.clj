@@ -2,7 +2,6 @@
   (:require [core2.types :as ty]
             [core2.util :as util])
   (:import core2.DenseUnionUtil
-           core2.types.LegType
            [core2.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader IVectorWriter]
            [java.util LinkedHashMap Map]
            org.apache.arrow.memory.BufferAllocator
@@ -16,7 +15,7 @@
 (defrecord NullIndirectVector []
   IIndirectVector
   (isPresent [_ _] false)
-  (rowCopier [_ w]
+  (rowCopier [_ _w]
     (reify IRowCopier
       (copyRow [_ _]))))
 
@@ -63,6 +62,7 @@
 
       (reader-for-key v col-name))))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IAbstractListVector
   (^int getElementStartIndex [^int idx])
   (^int getElementEndIndex [^int idx])
@@ -117,7 +117,7 @@
               (.getElementEndIndex rdr idx)))
           (elementCopier [this w]
             (let [copiers (mapv #(some-> ^IListReader % (.elementCopier w)) rdrs)
-                  !null-writer (delay (.writerForType (.asDenseUnion w) LegType/NULL))]
+                  !null-writer (delay (.writerForType (.asDenseUnion w) :null))]
               (reify IListElementCopier
                 (copyElement [_ idx n]
                   (let [^IListElementCopier copier (nth copiers (.getTypeId v idx))]
@@ -281,33 +281,13 @@
   (getName [_] (.getName parent-col))
   (withName [_ name] (DuvChildReader. (.withName parent-col name) parent-duv type-id type-vec)))
 
-(defn duv-type-id ^java.lang.Byte [^DenseUnionVector duv, ^LegType leg-type]
+(defn duv-type-id ^java.lang.Byte [^DenseUnionVector duv, col-type]
   (let [field (.getField duv)
-        type-ids (.getTypeIds ^ArrowType$Union (.getType field))]
+        type-ids (.getTypeIds ^ArrowType$Union (.getType field))
+        duv-leg-key (ty/col-type->duv-leg-key col-type)]
     (-> (keep-indexed (fn [idx ^Field sub-field]
-                        (when (= leg-type (ty/field->leg-type sub-field))
+                        (when (= duv-leg-key (-> (ty/field->col-type sub-field)
+                                                 (ty/col-type->duv-leg-key)))
                           (aget type-ids idx)))
                       (.getChildren field))
         (first))))
-
-(defn reader-for-type ^core2.vector.IIndirectVector [^IIndirectVector col, ^LegType leg-type]
-  (let [v (.getVector col)
-        field (.getField v)
-        v-type (ty/field->leg-type field)]
-    (cond
-      (= leg-type v-type) col
-
-      (instance? DenseUnionVector v)
-      (let [type-id (or (duv-type-id v leg-type)
-                        (throw (IllegalArgumentException.)))
-            type-vec (.getVectorByType ^DenseUnionVector v type-id)]
-        (DuvChildReader. col v type-id type-vec)))))
-
-(defn col->leg-types [^IIndirectVector col]
-  (let [col-vec (.getVector col)
-        field (.getField col-vec)]
-    (if (instance? DenseUnionVector col-vec)
-      (into #{} (for [^ValueVector vv (.getChildrenFromFields ^DenseUnionVector col-vec)
-                      :when (pos? (.getValueCount vv))]
-                  (ty/field->leg-type (.getField vv))))
-      #{(ty/field->leg-type field)})))

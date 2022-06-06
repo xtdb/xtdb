@@ -65,8 +65,8 @@
      acc)))
 
 (defn literal-hashes ^ints [^BufferAllocator allocator literal]
-  (let [arrow-type (.arrowType (types/value->leg-type literal))]
-    (with-open [^ValueVector vec (.createVector (types/->field "_" arrow-type false) allocator)]
+  (let [col-type (types/value->col-type literal)]
+    (with-open [^ValueVector vec (.createVector (types/col-type->field "_" col-type) allocator)]
       (let [writer (vw/vec->writer vec)]
         (.startValue writer)
         (types/write-value! literal writer)

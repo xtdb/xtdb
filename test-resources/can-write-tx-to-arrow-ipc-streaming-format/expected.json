@@ -43,7 +43,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -59,7 +59,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -75,7 +75,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -91,7 +91,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -107,7 +107,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -130,7 +130,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -146,7 +146,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "nullable" : false,
                   "type" : {
                     "name" : "floatingpoint",
@@ -163,7 +163,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "nullable" : false,
                   "type" : {
                     "name" : "floatingpoint",
@@ -180,7 +180,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "nullable" : false,
                   "type" : {
                     "name" : "floatingpoint",
@@ -197,7 +197,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -213,7 +213,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -229,7 +229,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "timestampmicrotz-utc",
+                  "name" : "timestamp-tz-micro-utc",
                   "nullable" : false,
                   "type" : {
                     "name" : "timestamp",
@@ -247,7 +247,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "nullable" : false,
                   "type" : {
                     "name" : "floatingpoint",
@@ -264,7 +264,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "nullable" : false,
                   "type" : {
                     "name" : "utf8"
@@ -280,7 +280,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "nullable" : false,
                   "type" : {
                     "name" : "floatingpoint",
@@ -297,7 +297,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "nullable" : false,
                   "type" : {
                     "name" : "floatingpoint",
@@ -314,7 +314,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "nullable" : false,
                   "type" : {
                     "name" : "floatingpoint",
@@ -331,7 +331,7 @@
                   "typeIds" : [0]
                 },
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "nullable" : false,
                   "type" : {
                     "name" : "floatingpoint",
@@ -454,7 +454,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "OFFSET" : [0,22],
@@ -466,7 +466,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "OFFSET" : [0,2],
@@ -478,7 +478,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "OFFSET" : [0,6],
@@ -490,7 +490,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "OFFSET" : [0,5],
@@ -502,7 +502,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "OFFSET" : [0,5],
@@ -519,7 +519,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "OFFSET" : [0,18],
@@ -531,7 +531,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : [8.654]
@@ -542,7 +542,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : [-50.0]
@@ -553,7 +553,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : [10.802]
@@ -564,7 +564,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "OFFSET" : [0,11],
@@ -576,7 +576,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "OFFSET" : [0,8],
@@ -588,7 +588,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "timestampmicrotz-utc",
+                  "name" : "timestamp-tz-micro-utc",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : [1479211200000000]
@@ -599,7 +599,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : [59.0]
@@ -610,7 +610,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "varchar",
+                  "name" : "utf8",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "OFFSET" : [0,17],
@@ -622,7 +622,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : [89.5]
@@ -633,7 +633,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : [24.81]
@@ -644,7 +644,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : [4.10011078E8]
@@ -655,7 +655,7 @@
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
                 "children" : [{
-                  "name" : "float8",
+                  "name" : "f64",
                   "count" : 1,
                   "VALIDITY" : [1],
                   "DATA" : [5.89988922E8]

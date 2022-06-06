@@ -1,9 +1,9 @@
 (ns core2.vector.writer
-  (:require [core2.types :as types]
+  (:require [clojure.core.match :refer [match]]
+            [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
-  (:import (core2.types LegType)
-           (core2.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter)
+  (:import (core2.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter)
            (java.lang AutoCloseable)
            (java.util HashMap LinkedHashMap Map)
            (java.util.function Function)
@@ -11,7 +11,7 @@
            (org.apache.arrow.util AutoCloseables)
            (org.apache.arrow.vector ExtensionTypeVector NullVector ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union Field FieldType)))
+           (org.apache.arrow.vector.types.pojo ArrowType$List ArrowType$Struct ArrowType$Union Field FieldType)))
 
 (deftype DuvChildWriter [^IDenseUnionWriter parent-writer,
                          ^byte type-id
@@ -84,8 +84,8 @@
 
     (dotimes [n (alength type-ids)]
       (let [src-type-id (aget type-ids n)
-            leg-type (types/field->leg-type (.get (.getChildren src-field) n))]
-        (aset copier-mapping src-type-id (.rowCopier (.writerForType dest-col leg-type)
+            col-type (types/field->col-type (.get (.getChildren src-field) n))]
+        (aset copier-mapping src-type-id (.rowCopier (.writerForType dest-col col-type)
                                                      (.getVectorByType src-vec src-type-id)))))
 
     (reify IRowCopier
@@ -97,20 +97,24 @@
 
 (defn- vec->duv-copier ^core2.vector.IRowCopier [^ValueVector src-vec, ^IDenseUnionWriter dest-col]
   (let [field (.getField src-vec)
-        leg-type (types/field->leg-type field)]
-    (if (and (.isNullable field)
-             (not (= types/null-type (.getType field))))
-      (let [non-null-copier (-> (.writerForType dest-col leg-type)
-                                (.rowCopier src-vec))
-            null-copier (-> (.writerForType dest-col LegType/NULL)
-                            (.rowCopier src-vec))]
-        (reify IRowCopier
-          (copyRow [_ src-idx]
-            (if (.isNull src-vec src-idx)
-              (.copyRow null-copier src-idx)
-              (.copyRow non-null-copier src-idx)))))
+        col-type (types/field->col-type field)]
+    (match col-type
+      [:union inner-types]
+      (let [without-null (disj inner-types :null)]
+        (assert (= 1 (count without-null)))
+        (let [nn-col-type (first without-null)
+              non-null-copier (-> (.writerForType dest-col nn-col-type)
+                                  (.rowCopier src-vec))
+              null-copier (-> (.writerForType dest-col :null)
+                              (.rowCopier src-vec))]
+          (reify IRowCopier
+            (copyRow [_ src-idx]
+              (if (.isNull src-vec src-idx)
+                (.copyRow null-copier src-idx)
+                (.copyRow non-null-copier src-idx))))))
 
-      (-> (.writerForType dest-col leg-type)
+      :else
+      (-> (.writerForType dest-col col-type)
           (.rowCopier src-vec)))))
 
 (declare ^core2.vector.IVectorWriter vec->writer)
@@ -131,7 +135,7 @@
 
   (endValue [this]
     (when (neg? (.getTypeId dest-duv pos))
-      (doto (.writerForType this LegType/NULL)
+      (doto (.writerForType this :null)
         (.startValue)
         (.endValue)))
 
@@ -161,23 +165,25 @@
           (aset writers-by-type-id type-id writer)
           writer)))
 
-  (writerForType [this leg-type]
-    (.computeIfAbsent writers-by-type leg-type
+  (writerForType [this col-type]
+    (.computeIfAbsent writers-by-type (match col-type
+                                        [:struct inner-types] [:struct (set (keys inner-types))]
+                                        [:list _inner-type] :list
+                                        :else col-type)
                       (reify Function
                         (apply [_ _]
-                          (let [arrow-type (.arrowType leg-type)
-                                field-name (types/type->field-name arrow-type)
+                          (let [field-name (types/col-type->field-name col-type)
 
-                                ^Field field (condp = arrow-type
-                                               types/list-type
-                                               (types/->field field-name arrow-type false (types/->field "$data$" types/dense-union-type false))
+                                ^Field field (case (types/col-type-head col-type)
+                                               :list
+                                               (types/->field field-name ArrowType$List/INSTANCE false (types/->field "$data$" types/dense-union-type false))
 
-                                               types/struct-type
-                                               (types/->field (str field-name (count writers-by-type)) arrow-type false)
+                                               :struct
+                                               (types/->field (str field-name (count writers-by-type)) ArrowType$Struct/INSTANCE false)
 
-                                               (types/->field field-name arrow-type false))
+                                               (types/col-type->field field-name col-type))
 
-                                type-id (or (iv/duv-type-id dest-duv leg-type)
+                                type-id (or (iv/duv-type-id dest-duv col-type)
                                             (.registerNewTypeId dest-duv field))]
 
                             (when-not (.getVectorByType dest-duv type-id)
@@ -349,8 +355,10 @@
                               pos)]
        (dotimes [writer-idx (count (seq dest-vec))]
          (let [inner-writer (.writerForTypeId writer writer-idx)
-               inner-vec (.getVector inner-writer)]
-           (.put writers-by-type (types/field->leg-type (.getField inner-vec)) inner-writer)))
+               inner-vec (.getVector inner-writer)
+               duv-leg-key (-> (types/field->col-type (.getField inner-vec))
+                               types/col-type->duv-leg-key)]
+           (.put writers-by-type duv-leg-key inner-writer)))
 
        writer)
 

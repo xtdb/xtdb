@@ -32,7 +32,7 @@
             "typeIds" : [0]
           },
           "children" : [{
-            "name" : "bigint",
+            "name" : "i64",
             "nullable" : false,
             "type" : {
               "name" : "int",
@@ -50,7 +50,7 @@
             "typeIds" : [0]
           },
           "children" : [{
-            "name" : "varchar",
+            "name" : "utf8",
             "nullable" : false,
             "type" : {
               "name" : "utf8"
@@ -73,7 +73,7 @@
             "typeIds" : [0]
           },
           "children" : [{
-            "name" : "bit",
+            "name" : "bool",
             "nullable" : false,
             "type" : {
               "name" : "bool"
@@ -89,7 +89,7 @@
             "typeIds" : [0]
           },
           "children" : [{
-            "name" : "varchar",
+            "name" : "utf8",
             "nullable" : false,
             "type" : {
               "name" : "utf8"
@@ -122,7 +122,7 @@
           "TYPE_ID" : [0],
           "OFFSET" : [0],
           "children" : [{
-            "name" : "bigint",
+            "name" : "i64",
             "count" : 1,
             "VALIDITY" : [1],
             "DATA" : ["1"]
@@ -133,7 +133,7 @@
           "TYPE_ID" : [0],
           "OFFSET" : [0],
           "children" : [{
-            "name" : "varchar",
+            "name" : "utf8",
             "count" : 1,
             "VALIDITY" : [1],
             "OFFSET" : [0,1],
@@ -150,7 +150,7 @@
           "TYPE_ID" : [0],
           "OFFSET" : [0],
           "children" : [{
-            "name" : "bit",
+            "name" : "bool",
             "count" : 1,
             "VALIDITY" : [1],
             "DATA" : [1]
@@ -161,7 +161,7 @@
           "TYPE_ID" : [0],
           "OFFSET" : [0],
           "children" : [{
-            "name" : "varchar",
+            "name" : "utf8",
             "count" : 1,
             "VALIDITY" : [1],
             "OFFSET" : [0,1],

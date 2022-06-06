@@ -72,7 +72,7 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (c2/map->TransactionInstant {:tx-id 7149, :tx-time (util/->instant #inst "2020-01-02")})
+        last-tx-key (c2/map->TransactionInstant {:tx-id 7117, :tx-time (util/->instant #inst "2020-01-02")})
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -317,7 +317,7 @@
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
         mock-clock (tu/->mock-clock)
-        last-tx-key (c2/map->TransactionInstant {:tx-id 7149, :tx-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (c2/map->TransactionInstant {:tx-id 7117, :tx-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
@@ -579,14 +579,17 @@
 
           (tu/finish-chunk node1)
 
-          (t/is (= [:union #{:utf8 [:extension-type :keyword :utf8 ""] [:extension-type :uuid :fixed-size-binary ""]}]
+          (t/is (= [:union #{:utf8
+                             [:extension-type :keyword :utf8 ""]
+                             [:extension-type :uuid [:fixed-size-binary 16] ""]}]
                    (.columnType mm1 "_id")))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
               (tu/then-await-tx tx2 node2 (Duration/ofMillis 200))
 
-              (t/is (= [:union #{:utf8 [:extension-type :keyword :utf8 ""] [:extension-type :uuid :fixed-size-binary ""]}]
+              (t/is (= [:union #{:utf8 [:extension-type :keyword :utf8 ""]
+                                 [:extension-type :uuid [:fixed-size-binary 16] ""]}]
                        (.columnType mm2 "_id"))))))))))
 
 (t/deftest test-await-fails-fast

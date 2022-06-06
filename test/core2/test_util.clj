@@ -98,7 +98,7 @@
   (let [writer (-> (vw/vec->writer duv) .asDenseUnion)]
     (doseq [v vs]
       (.startValue writer)
-      (doto (.writerForType writer (ty/value->leg-type v))
+      (doto (.writerForType writer (ty/value->col-type v))
         (.startValue)
         (->> (ty/write-value! v))
         (.endValue))
