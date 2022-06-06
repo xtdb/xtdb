@@ -18,7 +18,7 @@
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
            (org.apache.arrow.vector.holders NullableIntervalDayHolder)
            (org.apache.arrow.vector.types FloatingPointPrecision TimeUnit Types Types$MinorType UnionMode DateUnit IntervalUnit)
-           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FloatingPoint ArrowType$Int
+           (org.apache.arrow.vector.types.pojo ArrowType ArrowType$Binary ArrowType$Bool ArrowType$Duration ArrowType$ExtensionType ArrowType$FixedSizeBinary ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int
                                                ArrowType$List ArrowType$Null ArrowType$Struct ArrowType$Time ArrowType$Timestamp ArrowType$Union ArrowType$Utf8
                                                ExtensionTypeRegistry Field FieldType ArrowType$Date ArrowType$Time ArrowType$Interval)
            org.apache.arrow.vector.util.Text))
@@ -642,6 +642,13 @@
 
 (defmethod arrow-type->col-type ArrowType$List [_ data-field]
   [:list (field->col-type data-field)])
+
+(defmethod col-type->field* :fixed-size-list [col-name nullable? [_ list-size inner-col-type]]
+  (->field col-name (ArrowType$FixedSizeList. list-size) nullable?
+           (col-type->field "$data" inner-col-type)))
+
+(defmethod arrow-type->col-type ArrowType$FixedSizeList [^ArrowType$FixedSizeList list-type, data-field]
+  [:fixed-size-list (.getListSize list-type) (field->col-type data-field)])
 
 ;;; struct
 
