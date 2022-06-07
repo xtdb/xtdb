@@ -1042,7 +1042,8 @@
     (when (seq eids)
       (swap! !evicted-eids into eids)
 
-      (with-open [pi (kv/new-iterator kv-tx)]
+      (with-open [p-snapshot (kv/new-tx-snapshot kv-tx)
+                  pi (kv/new-iterator p-snapshot)]
         (let [bitemp-ks (->> (for [eid eids
                                    :let [eid-buf (c/->id-buffer eid)]
                                    k (concat (all-keys-in-prefix pi (encode-bitemp-key-to nil eid-buf))
@@ -1123,8 +1124,8 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    ;; TODO this will open 5 iterators... need to review when/where that happens.. not needed in the case of ingest?
-    (new-kv-index-snapshot kv-tx true thread-mgr cav-cache canonical-buffer-cache)))
+    (new-kv-index-snapshot (kv/new-tx-snapshot kv-tx) true thread-mgr
+                           cav-cache canonical-buffer-cache)))
 
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStore
