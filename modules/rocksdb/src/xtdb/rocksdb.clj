@@ -43,7 +43,7 @@
   (close [_]
     (.close i)))
 
-(defrecord RocksKvTxSnapshot [^RocksDB db ^ReadOptions read-options, snapshot, ^WriteBatchWithIndex wb, close-fn]
+(defrecord RocksKvTxSnapshot [^RocksDB db ^ReadOptions read-options, snapshot, ^WriteBatchWithIndex wb]
   kv/KvSnapshot
   (new-iterator [_]
     (->RocksKvIterator (.newIteratorWithBase wb (.newIterator db read-options) read-options)))
@@ -54,11 +54,10 @@
   Closeable
   (close [_]
     (.close read-options)
-    (.releaseSnapshot db snapshot)
-    (close-fn)))
+    (.releaseSnapshot db snapshot)))
 
 ;; TODO should die:
-(defrecord RocksKvSnapshot [^RocksDB db, ^ReadOptions read-options, snapshot]
+(defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
   kv/KvSnapshot
   (new-iterator [_]
     (->RocksKvIterator (.newIterator db read-options)))
@@ -72,22 +71,17 @@
     (.close read-options)
     (.releaseSnapshot db snapshot)))
 
-(defrecord RocksKvTx [^RocksDB db, ^WriteOptions write-options, ^WriteBatchWithIndex wb, snapshots-open]
+(defrecord RocksKvTx [^RocksDB db, ^WriteOptions write-options, ^WriteBatchWithIndex wb]
   kv/KvStoreTx
   (new-tx-snapshot [_]
     (let [snapshot (.getSnapshot db)]
-      (swap! snapshots-open inc)
       (->RocksKvTxSnapshot db
                            (doto (ReadOptions.)
                              (.setSnapshot snapshot))
                            snapshot
-                           wb
-                           (fn []
-                             (swap! snapshots-open dec)))))
+                           wb)))
 
   (put-kv [_ k v]
-    (when (pos? ^int  @snapshots-open)
-      (throw (IllegalStateException. "Snapshot open will be affected by put")))
     (if v
       (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
       (.remove wb (mem/direct-byte-buffer k))))
@@ -111,7 +105,7 @@
                          snapshot)))
 
   (begin-kv-tx [_]
-    (->RocksKvTx db write-options (WriteBatchWithIndex.) (atom 0)))
+    (->RocksKvTx db write-options (WriteBatchWithIndex.)))
 
   (compact [_]
     (.compactRange db))
