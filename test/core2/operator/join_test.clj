@@ -636,3 +636,7 @@
 
     (t/is (= [] (run-anti true true nil)))
     (t/is (= [] (run-anti true true true)))))
+
+(t/deftest test-equi-join-expr
+  (t/is (= [{:a 42, :b 42}] (op/query-ra '[:join [{(+ a 1) (+ b 1)}] [:table [{:a 42}]] [:table [{:b 42} {:b 43}]]] {})))
+  (t/is (= [] (op/query-ra '[:join [{(+ a 1) (+ b 1)}] [:table [{:a 42}]] [:table [{:b 43} {:b 44}]]] {}))))

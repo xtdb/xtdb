@@ -7,7 +7,8 @@
             [core2.logical-plan :as lp]
             [core2.operator.scan :as scan]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            [core2.operator.project :as project])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap)
            (core2.operator IRelationSelector)
@@ -24,7 +25,7 @@
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
-(s/def ::join-equi-clause (s/map-of ::lp/column ::lp/column :conform-keys true :count 1))
+(s/def ::join-equi-clause (s/map-of ::lp/expression ::lp/expression :conform-keys true :count 1))
 
 (s/def ::join-condition-clause
   (s/or :equi-condition ::join-equi-clause
@@ -365,31 +366,72 @@
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
+(defn- further-destructure-join-pred
+  [pred-index [tag val]]
+  (case tag
+    :equi-condition
+    (let [[left-expr right-expr] (first val)]
+      {:predicate-type :equi
+       :left {:expr left-expr
+              :col (if (symbol? left-expr) left-expr (symbol (str "?l-equi-expr-" pred-index)))
+              :project (not (symbol? left-expr))}
+       :right {:expr right-expr
+               :col (if (symbol? right-expr) right-expr (symbol (str "?r-equi-expr-" pred-index)))
+               :project (not (symbol? right-expr))}})
+    :pred-expr
+    {:predicate-type :theta
+     :expr val}))
+
+(defn- equi-projection [{:keys [col, expr, project]} col-names params]
+  (if project
+    (expr/->expression-projection-spec (name col) expr col-names params)
+    (project/->identity-projection-spec (name col))))
+
 (defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} args f]
   (lp/binary-expr left right args
     (fn [left-col-names right-col-names]
-      (let [equi-pairs (keep (fn [[tag val]]
-                               (when (= :equi-condition tag)
-                                 (first val)))
-                             condition)
-            left-key-col-names (map (comp name first) equi-pairs)
-            right-key-col-names (map (comp name second) equi-pairs)
-            predicates (keep (fn [[tag val]]
-                               (when (= :pred-expr tag)
-                                 val))
-                             condition)
-            theta-selector (when (seq predicates)
-                             (expr/->expression-relation-selector (list* 'and predicates)
-                                                                  (into #{} (map symbol) (concat left-col-names right-col-names))
-                                                                  #{}))
-            {:keys [col-names ->cursor]} (f left-col-names right-col-names)]
+      (let [{:keys [equi, theta]} (group-by :predicate-type (map-indexed further-destructure-join-pred condition))
 
-        {:col-names col-names
-         :->cursor (fn [opts left-cursor right-cursor]
-                     (->cursor opts
-                               left-cursor left-key-col-names left-col-names
-                               right-cursor right-key-col-names right-col-names
-                               theta-selector))}))))
+            left-col-syms (set (map symbol left-col-names))
+            right-col-syms (set (map symbol right-col-names))
+            col-syms (into left-col-syms right-col-syms)
+
+            ;; FIXME this shouldn't be 'keep', though tests fail if nil expr are allowed to flow
+            theta-expr (keep :expr theta)
+            params->theta-selector
+            (if (seq theta-expr)
+              #(expr/->expression-relation-selector (list* 'and theta-expr) col-syms %)
+              (constantly nil))
+
+            {:keys [col-names ->cursor]} (f left-col-names right-col-names)
+
+            return-col-names col-names
+
+            left-key-col-names (mapv (comp name :col :left) equi)
+            right-key-col-names (mapv (comp name :col :right) equi)]
+
+        {:col-names return-col-names
+         :->cursor
+         (fn [{:keys [allocator, params] :as opts} left-cursor right-cursor]
+           (let [left-projections
+                 (concat (map (comp #(equi-projection % left-col-syms params) :left) equi)
+                         (map project/->identity-projection-spec (remove (set left-key-col-names) left-col-names)))
+                 left-project-cursor (project/->ProjectCursor allocator left-cursor left-projections params)
+
+                 right-projections
+                 (concat (map (comp #(equi-projection % right-col-syms params) :right) equi)
+                         (map project/->identity-projection-spec (remove (set right-key-col-names) right-col-names)))
+                 right-project-cursor (project/->ProjectCursor allocator right-cursor right-projections params)
+
+                 join-cursor (->cursor
+                               opts
+                               left-project-cursor left-key-col-names left-col-names
+                               right-project-cursor right-key-col-names right-col-names
+                               (params->theta-selector params))
+
+                 project-away-cursor (project/->ProjectCursor allocator join-cursor (mapv project/->identity-projection-spec return-col-names) params)]
+
+             project-away-cursor))}))))
 
 (defmethod lp/emit-expr :join [join-expr args]
   (emit-join-expr join-expr args
