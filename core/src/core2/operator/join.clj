@@ -382,12 +382,12 @@
     {:predicate-type :theta
      :expr val}))
 
-(defn- equi-projection [{:keys [col, expr, project]} col-names params]
+(defn- equi-projection [{:keys [col, expr, project]} col-names param-names]
   (if project
-    (expr/->expression-projection-spec (name col) expr col-names params)
+    (expr/->expression-projection-spec (name col) expr col-names param-names)
     (project/->identity-projection-spec (name col))))
 
-(defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} args f]
+(defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-names] :as args} f]
   (lp/binary-expr left right args
     (fn [left-col-names right-col-names]
       (let [{:keys [equi, theta]} (group-by :predicate-type (map-indexed further-destructure-join-pred condition))
@@ -396,36 +396,35 @@
             right-col-syms (set (map symbol right-col-names))
             col-syms (into left-col-syms right-col-syms)
 
-            params->theta-selector
-            (if theta
-              #(expr/->expression-relation-selector (list* 'and (map :expr theta)) col-syms %)
-              (constantly nil))
+            theta-selector
+            (when theta
+              (expr/->expression-relation-selector (list* 'and (map :expr theta)) col-syms param-names))
 
             {:keys [col-names ->cursor]} (f left-col-names right-col-names)
 
             return-col-names col-names
 
             left-key-col-names (mapv (comp name :col :left) equi)
-            right-key-col-names (mapv (comp name :col :right) equi)]
+            right-key-col-names (mapv (comp name :col :right) equi)
+
+            left-projections
+            (vec (concat (map (comp #(equi-projection % left-col-syms param-names) :left) equi)
+                         (map project/->identity-projection-spec (remove (set left-key-col-names) left-col-names))))
+            right-projections
+            (vec (concat (map (comp #(equi-projection % right-col-syms param-names) :right) equi)
+                         (map project/->identity-projection-spec (remove (set right-key-col-names) right-col-names))))]
 
         {:col-names return-col-names
          :->cursor
-         (fn [{:keys [params] :as opts} left-cursor right-cursor]
-           (let [left-projections
-                 (concat (map (comp #(equi-projection % left-col-syms params) :left) equi)
-                         (map project/->identity-projection-spec (remove (set left-key-col-names) left-col-names)))
-                 left-project-cursor (project/->project-cursor opts left-cursor left-projections)
-
-                 right-projections
-                 (concat (map (comp #(equi-projection % right-col-syms params) :right) equi)
-                         (map project/->identity-projection-spec (remove (set right-key-col-names) right-col-names)))
+         (fn [opts left-cursor right-cursor]
+           (let [left-project-cursor (project/->project-cursor opts left-cursor left-projections)
                  right-project-cursor (project/->project-cursor opts right-cursor right-projections)
 
                  join-cursor (->cursor
                                opts
                                left-project-cursor left-key-col-names left-col-names
                                right-project-cursor right-key-col-names right-col-names
-                               (params->theta-selector params))
+                               theta-selector)
 
                  project-away-cursor (project/->project-cursor opts join-cursor (mapv project/->identity-projection-spec return-col-names))]
 
