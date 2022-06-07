@@ -18,7 +18,8 @@
   (s/cat :op #{:apply}
          :mode #{:cross-join, :left-outer-join, :semi-join, :anti-join}
          :columns (s/map-of ::lp/column ::lp/column, :conform-keys true)
-         :dependent-column-names (s/coll-of ::lp/column, :kind set?)
+         ;; TODO no longer required - see #136/#201
+         :dependent-column-names (s/? (s/coll-of ::lp/column, :kind set?))
          :independent-relation ::lp/ra-expression
          :dependent-relation ::lp/ra-expression))
 
@@ -119,28 +120,30 @@
   (close [_]
     (util/try-close independent-cursor)))
 
-(defmethod lp/emit-expr :apply [{:keys [mode columns dependent-column-names
-                                        independent-relation dependent-relation]}
-                                args]
+(defmethod lp/emit-expr :apply [{:keys [mode columns independent-relation dependent-relation]} args]
   ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
-  ;; TODO: shouldn't re-emit the op each time - required though because emit-op still takes params,
-  ;;       and not just the keys to those params
 
   (lp/unary-expr independent-relation args
                  (fn [independent-col-names]
-                   {:col-names (case mode
-                                 (:cross-join :left-outer-join) (set/union independent-col-names (set (map name dependent-column-names)))
-                                 (:semi-join :anti-join) independent-col-names)
-                    :->cursor (fn [{:keys [allocator] :as query-opts} independent-cursor]
-                                (let [dependent-cursor-factory
-                                      (reify IDependentCursorFactory
-                                        (openDependentCursor [_ in-rel idx]
-                                          (let [args (update args :params
-                                                             (fnil into {})
-                                                             (for [[ik dk] columns]
-                                                               (let [iv (.vectorForName in-rel (name ik))]
-                                                                 (MapEntry/create dk (types/get-object (.getVector iv) (.getIndex iv idx))))))
-                                                {:keys [->cursor]} (lp/emit-expr dependent-relation args)]
-                                            (->cursor query-opts))))]
+                   (let [dependent-args (-> args
+                                            (update :param-names
+                                                    (fnil into #{})
+                                                    (map second)
+                                                    columns))
+                         {dependent-col-names :col-names, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)]
+                     {:col-names (case mode
+                                   (:cross-join :left-outer-join) (set/union independent-col-names dependent-col-names)
+                                   (:semi-join :anti-join) independent-col-names)
+                      :->cursor (fn [{:keys [allocator] :as query-opts} independent-cursor]
+                                  (let [dependent-cursor-factory
+                                        (reify IDependentCursorFactory
+                                          (openDependentCursor [_ in-rel idx]
+                                            (let [query-opts (-> query-opts
+                                                                 (update :params
+                                                                         (fnil into {})
+                                                                         (for [[ik dk] columns]
+                                                                           (let [iv (.vectorForName in-rel (name ik))]
+                                                                             (MapEntry/create dk (types/get-object (.getVector iv) (.getIndex iv idx)))))))]
+                                              (->dependent-cursor query-opts))))]
 
-                                  (ApplyCursor. allocator (->mode-strategy mode dependent-column-names) independent-cursor dependent-cursor-factory)))})))
+                                    (ApplyCursor. allocator (->mode-strategy mode dependent-col-names) independent-cursor dependent-cursor-factory)))}))))

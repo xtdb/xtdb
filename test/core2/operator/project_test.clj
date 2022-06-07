@@ -16,7 +16,19 @@
                                             [{:a 100, :b 83}]]]])]
     (t/is (= [[{:a 12, :c 22}, {:a 0, :c 15}]
               [{:a 100, :c 183}]]
-             (tu/<-cursor project-cursor)))))
+             (tu/<-cursor project-cursor))))
+
+  (t/testing "param"
+    (with-open [project-cursor (op/open-ra [:project '[a {b (+ b ?p)}]
+                                            [::tu/blocks (Schema. [(ty/->field "a" ty/bigint-type false)
+                                                                   (ty/->field "b" ty/bigint-type false)])
+                                             [[{:a 12, :b 10}
+                                               {:a 0, :b 15}]
+                                              [{:a 100, :b 83}]]]]
+                                           '{?p 42})]
+      (t/is (= [[{:a 12, :b 52}, {:a 0, :b 57}]
+                [{:a 100, :b 125}]]
+               (tu/<-cursor project-cursor))))))
 
 (t/deftest test-project-row-number
   (with-open [project-cursor (op/open-ra [:project '[a {$row-num (row-number)}]

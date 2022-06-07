@@ -324,7 +324,7 @@
             (finish [_]
               (let [sum-ivec (.finish sum-agg)
                     count-ivec (.finish count-agg)
-                    out-vec (.project projecter al (iv/->indirect-rel [sum-ivec count-ivec]))]
+                    out-vec (.project projecter al (iv/->indirect-rel [sum-ivec count-ivec]) {})]
                 (if (instance? NullVector (.getVector out-vec))
                   out-vec
                   (do
@@ -342,8 +342,8 @@
   (let [avgx-agg (->aggregate-factory :avg from-name "avgx")
         avgx2-agg (->aggregate-factory :avg "x2" "avgx2")
         from-var (symbol from-name)
-        x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var) #{from-var} {})
-        finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx)) '#{avgx2 avgx} {})]
+        x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var) #{from-var} #{})
+        finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx)) '#{avgx2 avgx} #{})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
 
@@ -356,14 +356,14 @@
             (getFromColumnName [_] from-name)
 
             (aggregate [_ in-vec group-mapping]
-              (with-open [x2 (.project x2-projecter al (iv/->indirect-rel [in-vec]))]
+              (with-open [x2 (.project x2-projecter al (iv/->indirect-rel [in-vec]) {})]
                 (.aggregate avgx-agg in-vec group-mapping)
                 (.aggregate avgx2-agg x2 group-mapping)))
 
             (finish [_]
               (let [avgx-ivec (.finish avgx-agg)
                     avgx2-ivec (.finish avgx2-agg)
-                    out-ivec (.project finish-projecter al (iv/->indirect-rel [avgx-ivec avgx2-ivec]))]
+                    out-ivec (.project finish-projecter al (iv/->indirect-rel [avgx-ivec avgx2-ivec]) {})]
                 (if (instance? NullVector (.getVector out-ivec))
                   out-ivec
                   (do
@@ -395,7 +395,7 @@
 
             (finish [_]
               (let [variance-ivec (.finish variance-agg)
-                    out-ivec (.project finish-projecter al (iv/->indirect-rel [variance-ivec]))]
+                    out-ivec (.project finish-projecter al (iv/->indirect-rel [variance-ivec]) {})]
                 (if (instance? NullVector (.getVector out-ivec))
                   out-ivec
                   (do

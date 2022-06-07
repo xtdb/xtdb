@@ -25,11 +25,13 @@
 
     (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-relation-selector '(<= age 30) '#{age} {})
                                                         tu/*allocator*
-                                                        (iv/->indirect-rel [(iv/->direct-vec age-vec)]))
+                                                        (iv/->indirect-rel [(iv/->direct-vec age-vec)])
+                                                        {})
                                                age-row-id-vec)
                     (.and (align/->row-id-bitmap (.select (expr/->expression-relation-selector '(<= name "Frank") '#{name} {})
                                                           tu/*allocator*
-                                                          (iv/->indirect-rel [(iv/->direct-vec name-vec)]))
+                                                          (iv/->indirect-rel [(iv/->direct-vec name-vec)])
+                                                          {})
                                                  name-row-id-vec)))
           roots [name-root age-root]]
       (t/is (= [{:name "Dave", :age 12}

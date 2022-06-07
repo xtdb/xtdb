@@ -65,13 +65,13 @@
    (doto x
      (.and y))))
 
-(defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^List col-names, ^Map col-preds, ^Map in-roots]
+(defn- ->atemporal-row-id-bitmap [^BufferAllocator allocator, ^List col-names, ^Map col-preds, ^Map in-roots, params]
   (->> (for [^String col-name col-names
              :when (not (temporal/temporal-column? col-name))
              :let [^IRelationSelector col-pred (.get col-preds col-name)
                    ^VectorSchemaRoot in-root (.get in-roots col-name)]]
          (align/->row-id-bitmap (when col-pred
-                                  (.select col-pred allocator (iv/<-root in-root)))
+                                  (.select col-pred allocator (iv/<-root in-root) params))
                                 (.getVector in-root t/row-id-field)))
        (reduce roaring64-and)))
 
@@ -116,7 +116,7 @@
                           temporal-max-range
                           atemporal-row-id-bitmap)))
 
-(defn- ->temporal-row-id-bitmap [^BufferAllocator allocator, col-names, ^Map col-preds, ^TemporalRoots temporal-roots, atemporal-row-id-bitmap]
+(defn- ->temporal-row-id-bitmap [^BufferAllocator allocator, col-names, ^Map col-preds, ^TemporalRoots temporal-roots, atemporal-row-id-bitmap, params]
   (reduce roaring64-and
           (if temporal-roots
             (.row-id-bitmap temporal-roots)
@@ -126,7 +126,7 @@
                 :let [^IRelationSelector col-pred (.get col-preds col-name)
                       ^VectorSchemaRoot in-root (.get ^Map (.roots temporal-roots) col-name)]]
             (align/->row-id-bitmap (when col-pred
-                                     (.select col-pred allocator (iv/<-root in-root)))
+                                     (.select col-pred allocator (iv/<-root in-root) params))
                                    (.getVector in-root t/row-id-field)))))
 
 (defn- align-roots ^core2.vector.IIndirectRelation [^List col-names ^Map in-roots ^TemporalRoots temporal-roots row-id-bitmap]
@@ -169,6 +169,7 @@
                      ^Map col-preds
                      ^longs temporal-min-range
                      ^longs temporal-max-range
+                     params
                      ^:unsynchronized-mutable ^Map #_#_<String, ICursor> chunks
                      ^:unsynchronized-mutable ^boolean live-chunk-done?]
   ICursor
@@ -177,10 +178,10 @@
       (letfn [(next-block [chunks]
                 (loop []
                   (if-let [in-roots (next-roots real-col-names chunks)]
-                    (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-names col-preds in-roots)
+                    (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-names col-preds in-roots params)
                           temporal-roots (->temporal-roots temporal-manager watermark col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
                       (or (try
-                            (let [row-id-bitmap (->temporal-row-id-bitmap allocator col-names col-preds temporal-roots atemporal-row-id-bitmap)
+                            (let [row-id-bitmap (->temporal-row-id-bitmap allocator col-names col-preds temporal-roots atemporal-row-id-bitmap params)
                                   read-rel (align-roots col-names in-roots temporal-roots row-id-bitmap)]
                               (if (and read-rel (pos? (.rowCount read-rel)))
                                 (do
@@ -247,22 +248,7 @@
                                                      metadata-pred ;; TODO derive this from col-preds
                                                      ^Map col-preds
                                                      [^longs temporal-min-range, ^longs temporal-max-range]]
-  (let [^IChunkManager indexer (.indexer snapshot)
-        metadata-mgr (.metadata-mgr snapshot)
-        buffer-pool (.buffer-pool snapshot)
-        temporal-mgr (.temporal-mgr snapshot)
-        watermark (.getWatermark indexer)]
-    (try
-      (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr watermark metadata-pred) []))]
-        (-> (ScanCursor. allocator buffer-pool temporal-mgr metadata-mgr watermark
-                         matching-chunks col-names col-preds
-                         temporal-min-range temporal-max-range
-                         #_chunks nil #_live-chunk-done? false)
-            (coalesce/->coalescing-cursor allocator)
-            (util/and-also-close watermark)))
-      (catch Throwable t
-        (util/try-close watermark)
-        (throw t)))))
+  )
 
 (defn- apply-default-valid-time! [[^longs temporal-min-range, ^longs temporal-max-range] default-valid-time col-preds]
   (when-not (or (contains? col-preds "_valid-time-start")
@@ -282,7 +268,7 @@
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                   '> "_tx-time-end" tx-time))))
 
-(defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [src-keys params]}]
+(defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [src-keys param-names]}]
   (let [ordered-col-names (->> columns
                                (map (fn [[col-type arg]]
                                       (str (case col-type
@@ -295,14 +281,12 @@
                      (into {}))
         col-preds (->> (for [[col-name select-form] selects]
                          (MapEntry/create (name col-name)
-                                          (expr/->expression-relation-selector select-form #{col-name} params)))
+                                          (expr/->expression-relation-selector select-form #{col-name} param-names)))
                        (into {}))
         metadata-args (vec (concat (for [col-name ordered-col-names
                                          :when (not (contains? col-preds col-name))]
                                      (symbol col-name))
                                    (vals selects)))
-        metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (into #{} (map symbol) ordered-col-names) params)
-
         src-key (or source '$)]
 
     (when-not (contains? src-keys src-key)
@@ -312,9 +296,24 @@
                                :src-keys src-keys})))
     {:col-names (set ordered-col-names)
      :->cursor (fn [{:keys [allocator srcs params default-valid-time]}]
-                 (let [snapshot (get srcs src-key)]
-                   (->scan-cursor allocator snapshot ordered-col-names
-                                  metadata-pred col-preds
-                                  (doto (expr.temp/->temporal-min-max-range selects params)
-                                    (apply-default-valid-time! default-valid-time col-preds)
-                                    (apply-snapshot-tx! snapshot col-preds)))))}))
+                 (let [^Snapshot snapshot (get srcs src-key)
+                       ^IChunkManager indexer (.indexer snapshot)
+                       metadata-mgr (.metadata-mgr snapshot)
+                       buffer-pool (.buffer-pool snapshot)
+                       temporal-mgr (.temporal-mgr snapshot)
+                       watermark (.getWatermark indexer)
+                       metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (into #{} (map symbol) ordered-col-names) params)
+                       [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
+                                                                 (apply-default-valid-time! default-valid-time col-preds)
+                                                                 (apply-snapshot-tx! snapshot col-preds))]
+                   (try
+                     (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr watermark metadata-pred) []))]
+                       (-> (ScanCursor. allocator buffer-pool temporal-mgr metadata-mgr watermark
+                                        matching-chunks ordered-col-names col-preds
+                                        temporal-min-range temporal-max-range params
+                                        #_chunks nil #_live-chunk-done? false)
+                           (coalesce/->coalescing-cursor allocator)
+                           (util/and-also-close watermark)))
+                     (catch Throwable t
+                       (util/try-close watermark)
+                       (throw t)))))}))

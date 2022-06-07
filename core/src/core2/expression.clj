@@ -36,14 +36,11 @@
     f)
   :default ::default)
 
-(defn form->expr [form {:keys [col-names params locals] :as env}]
+(defn form->expr [form {:keys [col-names param-names locals] :as env}]
   (cond
     (symbol? form) (cond
                      (contains? locals form) {:op :local, :local form}
-                     (contains? params form) (let [param-v (get params form)]
-                                               {:op :param, :param form,
-                                                :param-type (types/value->col-type param-v)
-                                                :param-class (class param-v)})
+                     (contains? param-names form) {:op :param, :param form}
                      (contains? col-names form) {:op :variable, :variable form}
                      :else (throw (err/illegal-arg :unknown-symbol
                                                    {::err/message (format "Unknown symbol: '%s'" form)
@@ -175,8 +172,13 @@
 (def rel-sym (gensym 'rel))
 (def params-sym (gensym 'params))
 
-(defmulti with-batch-bindings :op, :default ::default)
-(defmethod with-batch-bindings ::default [expr] expr)
+#_{:clj-kondo/ignore [:unused-binding]}
+(defmulti with-batch-bindings
+  (fn [expr opts]
+    (:op expr))
+  :default ::default)
+
+(defmethod with-batch-bindings ::default [expr _] expr)
 
 (defmulti ->box-class types/col-type-head, :hierarchy #'types/col-type-hierarchy)
 
@@ -259,25 +261,29 @@
   (if (= op :literal)
     (let [{:keys [literal]} expr]
       {:op :param, :param (gensym 'lit),
-       :literal literal
-       :param-class (class literal)
-       :param-type (types/value->col-type literal)})
+       :literal literal})
     expr))
 
-(defmethod with-batch-bindings :param [{:keys [param param-class] :as expr}]
-  (-> expr
-      (assoc :batch-bindings
-             [[param
-               (emit-value param-class
-                           (:literal expr
-                                     (cond-> `(get ~params-sym '~param)
-                                       param-class (with-tag param-class))))]])))
+(defmethod with-batch-bindings :param [{:keys [param] :as expr} {:keys [param-classes]}]
+  (let [param-class (if (contains? expr :literal)
+                      (class (:literal expr))
+                      (get param-classes param))]
+    (-> expr
+        (assoc :batch-bindings
+               [[param
+                 (emit-value param-class
+                             (get expr :literal
+                                  (cond-> `(get ~params-sym '~param)
+                                    param-class (with-tag param-class))))]]))))
 
-(defmethod codegen-expr :param [{:keys [param param-type] :as expr} _]
-  (into {:return-type param-type
-         :continue (fn [f]
-                     (f param-type param))}
-        (select-keys expr #{:literal})))
+(defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param-types]}]
+  (let [param-type (if (contains? expr :literal)
+                     (types/value->col-type (:literal expr))
+                     (get param-types param))]
+    (into {:return-type param-type
+           :continue (fn [f]
+                       (f param-type param))}
+          (select-keys expr #{:literal}))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti get-value-form
@@ -320,7 +326,7 @@
   ;; a reasonable default, but implement it for more specific types if this doesn't work
   (get-value-form underlying-type `(.getUnderlyingVector ~vec-sym) idx-sym))
 
-(defmethod with-batch-bindings :variable [{:keys [variable] :as expr}]
+(defmethod with-batch-bindings :variable [{:keys [variable] :as expr} _]
   (-> expr
       (assoc :batch-bindings
              [[(-> variable (with-tag IIndirectVector))
@@ -1618,7 +1624,7 @@
   (-> (fn [expr opts]
         (let [expr (->> expr
                         (macro/macroexpand-all)
-                        (walk/postwalk-expr (comp with-batch-bindings lit->param)))
+                        (walk/postwalk-expr (comp #(with-batch-bindings % opts) lit->param)))
 
               return-boxes (HashMap.)
               {:keys [return-type continue boxes]} (codegen-expr expr (-> opts (assoc :return-boxes return-boxes)))
@@ -1904,7 +1910,7 @@
     :if :if-some
     :metadata-field-present :metadata-vp-call})
 
-(defn- emit-prim-expr [prim-expr ^String col-name {:keys [var-fields var->col-type] :as opts}]
+(defn- emit-prim-expr [prim-expr ^String col-name {:keys [var-fields var->col-type param-classes param-types] :as opts}]
   (let [prim-expr (->> prim-expr
                        (walk/prewalk-expr (fn [{:keys [op] :as expr}]
                                             (if (contains? primitive-ops op)
@@ -1932,7 +1938,9 @@
 
         {:keys [expr-fn return-type]} (memo-generate-projection prim-expr
                                                                 {:var->types var->types
-                                                                 :var->col-type var->col-type})
+                                                                 :var->col-type var->col-type
+                                                                 :param-classes param-classes
+                                                                 :param-types param-types})
 
         out-field (types/col-type->field col-name return-type)]
 
@@ -1976,26 +1984,31 @@
            (MapEntry/create var-sym (-> ivec (.getVector) (.getField)))))
        (into {})))
 
-(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [^String col-name form col-names params]
-  (let [expr (form->expr form {:col-names col-names, :params params})]
+(defn param-opts [params]
+  {:param-types (->> params (into {} (map (juxt key (comp types/value->col-type val)))))
+   :param-classes (->> params (into {} (map (juxt key (comp class val)))))})
+
+(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [^String col-name form col-names param-names]
+  (let [expr (form->expr form {:col-names col-names, :param-names param-names})]
     (reify IProjectionSpec
       (getColumnName [_] col-name)
 
-      (project [_ allocator in-rel]
+      (project [_ allocator in-rel params]
         (let [var->col-type (->> (seq in-rel)
                                  (into {} (map (fn [^IIndirectVector iv]
                                                  [(symbol (.getName iv))
                                                   (types/field->col-type (.getField (.getVector iv)))]))))
 
-              {:keys [eval-expr]} (emit-expr expr col-name {:var-fields (->var-fields in-rel expr)
-                                                            :var->col-type var->col-type})]
+              {:keys [eval-expr]} (emit-expr expr col-name (into (param-opts params)
+                                                                 {:var-fields (->var-fields in-rel expr)
+                                                                  :var->col-type var->col-type}))]
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))
 
-(defn ->expression-relation-selector ^core2.operator.IRelationSelector [form col-names params]
-  (let [projector (->expression-projection-spec "select" (list 'boolean form) col-names params)]
+(defn ->expression-relation-selector ^core2.operator.IRelationSelector [form col-names param-names]
+  (let [projector (->expression-projection-spec "select" (list 'boolean form) col-names param-names)]
     (reify IRelationSelector
-      (select [_ al in-rel]
-        (with-open [selection (.project projector al in-rel)]
+      (select [_ al in-rel params]
+        (with-open [selection (.project projector al in-rel params)]
           (let [^BitVector sel-vec (.getVector selection)
                 res (IntStream/builder)]
             (dotimes [idx (.getValueCount selection)]
@@ -2004,12 +2017,12 @@
             (.toArray (.build res))))))))
 
 (defn eval-scalar-value [al form col-names params]
-  (let [expr (form->expr form {:params params})]
+  (let [expr (form->expr form {:param-names (set (keys params))})]
     (case (:op expr)
       :literal form
       :param (get params (:param expr))
 
       ;; this is probably quite heavyweight to calculate a single value...
       (let [projection-spec (->expression-projection-spec "_scalar" form col-names params)]
-        (with-open [out-vec (.project projection-spec al (iv/->indirect-rel [] 1))]
+        (with-open [out-vec (.project projection-spec al (iv/->indirect-rel [] 1) params)]
           (types/get-object (.getVector out-vec) (.getIndex out-vec 0)))))))

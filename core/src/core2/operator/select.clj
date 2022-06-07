@@ -18,7 +18,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype SelectCursor [^BufferAllocator allocator, ^ICursor in-cursor, ^IRelationSelector selector]
+(deftype SelectCursor [^BufferAllocator allocator, ^ICursor in-cursor, ^IRelationSelector selector, params]
   ICursor
   (tryAdvance [_ c]
     (let [advanced? (boolean-array 1)]
@@ -26,7 +26,7 @@
                                (reify Consumer
                                  (accept [_ in-rel]
                                    (let [^IIndirectRelation in-rel in-rel]
-                                     (when-let [idxs (.select selector allocator in-rel)]
+                                     (when-let [idxs (.select selector allocator in-rel params)]
                                        (when-not (zero? (alength idxs))
                                          (.accept c (iv/select in-rel idxs))
                                          (aset advanced? 0 true)))))))
@@ -36,11 +36,11 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [params] :as args}]
+(defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [param-names] :as args}]
   (lp/unary-expr relation args
     (fn [inner-col-names]
-      (let [selector (expr/->expression-relation-selector predicate (into #{} (map symbol) inner-col-names) params)]
+      (let [selector (expr/->expression-relation-selector predicate (into #{} (map symbol) inner-col-names) param-names)]
         {:col-names inner-col-names
-         :->cursor (fn [{:keys [allocator]} in-cursor]
-                     (-> (SelectCursor. allocator in-cursor selector)
+         :->cursor (fn [{:keys [allocator params]} in-cursor]
+                     (-> (SelectCursor. allocator in-cursor selector params)
                          (coalesce/->coalescing-cursor allocator)))}))))

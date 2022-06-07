@@ -72,7 +72,7 @@
                                  :key-sets (into #{} (map row-keys) rows)})))
       col-names)))
 
-(defmethod lp/emit-expr :table [{[table-type table-arg] :table, :keys [explicit-col-names]} {:keys [src-keys table-keys params]}]
+(defmethod lp/emit-expr :table [{[table-type table-arg] :table, :keys [explicit-col-names]} {:keys [src-keys table-keys]}]
   (when (and (= table-type :source) (not (contains? src-keys table-arg)))
     (throw (err/illegal-arg :unknown-table
                             {::err/message "Query refers to unknown table"
@@ -83,7 +83,7 @@
                         :rows (table->keys table-arg)
                         :source (get table-keys table-arg)))]
     {:col-names col-names
-     :->cursor (fn [{:keys [allocator srcs]}]
+     :->cursor (fn [{:keys [allocator srcs params]}]
                  (let [rows (case table-type
                               :rows table-arg
                               :source (get srcs table-arg))]

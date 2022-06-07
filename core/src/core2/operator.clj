@@ -75,7 +75,7 @@
                                                                             :when (sequential? src-v)]
                                                                         [src-k (table/table->keys src-v)])
                                                                       (into {}))
-                                                     :params params})]
+                                                     :param-names (set (keys params))})]
                (-> (->cursor (into query-opts
                                    {:srcs srcs, :params params
                                     :default-valid-time default-valid-time

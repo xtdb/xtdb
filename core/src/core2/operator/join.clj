@@ -154,7 +154,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^core2.vector.IIndirectRelation probe-phase
-  (fn [join-type allocator probe-rel rel-map probe-column-names matched-build-idxs theta-selector]
+  (fn [join-type allocator probe-rel rel-map probe-column-names matched-build-idxs theta-selector params]
     join-type))
 
 (defn- probe-inner-join-select
@@ -195,7 +195,8 @@
   ^ints [^IIndirectRelation probe-rel
          ^IRelationMap rel-map
          ^BufferAllocator allocator
-         ^IRelationSelector theta-selector]
+         ^IRelationSelector theta-selector
+         params]
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
         probe-semi-sel (let [matching-probe-idxs (IntStream/builder)]
                          (dotimes [probe-idx (.rowCount probe-rel)]
@@ -209,7 +210,7 @@
             [probe-join-sel _build-join-sel :as sel-pair] (probe-inner-join-select probe-filtered-rel rel-map)
 
             theta-base-rel (join-rels probe-filtered-rel rel-map sel-pair)
-            theta-sel (.select theta-selector allocator theta-base-rel)]
+            theta-sel (.select theta-selector allocator theta-base-rel params)]
         (-> (reduce iv/compose-selection [probe-semi-sel probe-join-sel theta-sel])
             (distinct-selection))))))
 
@@ -220,9 +221,10 @@
    ^IRelationMap rel-map
    _probe-column-names
    _matched-build-idxs
-   ^IRelationSelector theta-selector]
+   ^IRelationSelector theta-selector
+   params]
   (let [joined-rel (join-rels probe-rel rel-map (probe-inner-join-select probe-rel rel-map))
-        theta-sel (when theta-selector (.select theta-selector allocator joined-rel))]
+        theta-sel (when theta-selector (.select theta-selector allocator joined-rel params))]
     (cond-> joined-rel theta-sel (iv/select theta-sel))))
 
 (defmethod probe-phase ::semi-join
@@ -232,8 +234,9 @@
    ^IRelationMap rel-map
    _probe-column-names
    _matched-build-idxs
-   ^IRelationSelector theta-selector]
-  (iv/select probe-rel (probe-semi-join-select probe-rel rel-map allocator theta-selector)))
+   ^IRelationSelector theta-selector
+   params]
+  (iv/select probe-rel (probe-semi-join-select probe-rel rel-map allocator theta-selector params)))
 
 (defmethod probe-phase ::anti-semi-join
   [_join-type
@@ -242,10 +245,10 @@
    ^IRelationMap rel-map
    _probe-column-names
    _matched-build-idxs
-   ^IRelationSelector theta-selector]
-
+   ^IRelationSelector theta-selector
+   params]
   (let [anti-stream (IntStream/builder)
-        semi-bitmap (doto (MutableRoaringBitmap.) (.add (probe-semi-join-select probe-rel rel-map allocator theta-selector)))
+        semi-bitmap (doto (MutableRoaringBitmap.) (.add (probe-semi-join-select probe-rel rel-map allocator theta-selector params)))
         anti-sel (do (dotimes [idx (.rowCount ^IIndirectRelation probe-rel)]
                        (when-not (.contains semi-bitmap idx)
                          (.add anti-stream idx)))
@@ -262,11 +265,12 @@
 (defn- probe-outer-join-select [^IIndirectRelation probe-rel, rel-map
                                 ^BufferAllocator allocator
                                 ^RoaringBitmap matched-build-idxs
-                                ^IRelationSelector theta-selector]
+                                ^IRelationSelector theta-selector
+                                params]
   (let [[probe-sel build-sel :as selection-pair] (probe-inner-join-select probe-rel rel-map)
         inner-join-rel (join-rels probe-rel rel-map selection-pair)
 
-        theta-sel (when theta-selector (.select theta-selector allocator inner-join-rel))
+        theta-sel (when theta-selector (.select theta-selector allocator inner-join-rel params))
         ^ints theta-probe-sel (cond-> probe-sel theta-sel (iv/compose-selection theta-sel))
         ^ints theta-build-sel (cond-> build-sel theta-sel (iv/compose-selection theta-sel))
 
@@ -299,8 +303,9 @@
    ^IRelationMap rel-map
    _probe-column-names
    ^RoaringBitmap matched-build-idxs
-   ^IRelationSelector theta-selector]
-  (->> (probe-outer-join-select probe-rel rel-map allocator matched-build-idxs theta-selector)
+   ^IRelationSelector theta-selector
+   params]
+  (->> (probe-outer-join-select probe-rel rel-map allocator matched-build-idxs theta-selector params)
        (join-rels probe-rel rel-map)))
 
 (deftype JoinCursor [^BufferAllocator allocator
@@ -310,7 +315,8 @@
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
                      join-type
-                     ^IRelationSelector theta-selector]
+                     ^IRelationSelector theta-selector
+                     params]
   ICursor
   (tryAdvance [_ c]
     (.forEachRemaining build-cursor
@@ -330,7 +336,7 @@
                                          (reify Consumer
                                            (accept [_ probe-rel]
                                              (when (pos? (.rowCount ^IIndirectRelation probe-rel))
-                                               (with-open [out-rel (-> (probe-phase join-type allocator probe-rel rel-map probe-column-names matched-build-idxs theta-selector)
+                                               (with-open [out-rel (-> (probe-phase join-type allocator probe-rel rel-map probe-column-names matched-build-idxs theta-selector params)
                                                                        (iv/copy allocator))]
                                                  (when (pos? (.rowCount out-rel))
                                                    (aset advanced? 0 true)
@@ -379,8 +385,8 @@
             {:keys [col-names ->cursor]} (f left-col-names right-col-names)]
 
         {:col-names col-names
-         :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
-                     (->cursor allocator
+         :->cursor (fn [opts left-cursor right-cursor]
+                     (->cursor opts
                                left-cursor left-key-col-names left-col-names
                                right-cursor right-key-col-names right-col-names
                                theta-selector))}))))
@@ -389,7 +395,7 @@
   (emit-join-expr join-expr args
     (fn [left-col-names right-col-names]
       {:col-names (set/union left-col-names right-col-names)
-       :->cursor (fn [allocator, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
+       :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
                    (JoinCursor. allocator
                                 left-cursor left-key-cols left-cols
                                 right-cursor right-key-cols right-cols
@@ -399,13 +405,14 @@
                                 nil
                                 (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
                                 ::inner-join
-                                theta-selector))})))
+                                theta-selector
+                                params))})))
 
 (defmethod lp/emit-expr :left-outer-join [join-expr args]
   (emit-join-expr join-expr args
     (fn [left-col-names right-col-names]
       {:col-names (set/union left-col-names right-col-names)
-       :->cursor (fn [allocator, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
+       :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
                    (JoinCursor. allocator
                                 right-cursor right-key-cols right-cols
                                 left-cursor left-key-cols left-cols
@@ -416,13 +423,14 @@
                                 nil
                                 (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
                                 ::left-outer-join
-                                theta-selector))})))
+                                theta-selector
+                                params))})))
 
 (defmethod lp/emit-expr :full-outer-join [join-expr args]
   (emit-join-expr join-expr args
     (fn [left-col-names right-col-names]
       {:col-names (set/union left-col-names right-col-names)
-       :->cursor (fn [allocator, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
+       :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
                    (JoinCursor. allocator
                                 left-cursor left-key-cols left-cols
                                 right-cursor right-key-cols right-cols
@@ -433,13 +441,14 @@
                                 (RoaringBitmap.)
                                 (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
                                 ::full-outer-join
-                                theta-selector))})))
+                                theta-selector
+                                params))})))
 
 (defmethod lp/emit-expr :semi-join [join-expr args]
   (emit-join-expr join-expr args
     (fn [left-col-names _right-col-names]
       {:col-names left-col-names
-       :->cursor (fn [allocator, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
+       :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
                    (JoinCursor. allocator
                                 right-cursor right-key-cols right-cols
                                 left-cursor left-key-cols left-cols
@@ -449,13 +458,14 @@
                                 nil
                                 (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
                                 ::semi-join
-                                theta-selector))})))
+                                theta-selector
+                                params))})))
 
 (defmethod lp/emit-expr :anti-join [join-expr args]
   (emit-join-expr join-expr args
     (fn [left-col-names _right-col-names]
       {:col-names left-col-names
-       :->cursor (fn [allocator, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
+       :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
                    (JoinCursor. allocator
                                 right-cursor right-key-cols right-cols
                                 left-cursor left-key-cols left-cols
@@ -465,4 +475,5 @@
                                 nil
                                 (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
                                 ::anti-semi-join
-                                theta-selector))})))
+                                theta-selector
+                                params))})))

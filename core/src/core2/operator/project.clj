@@ -35,14 +35,14 @@
 (defn ->identity-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
   (reify IProjectionSpec
     (getColumnName [_] col-name)
-    (project [_ _allocator in-rel]
+    (project [_ _allocator in-rel _params]
       (.vectorForName in-rel col-name))))
 
 (defn ->row-number-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
   (let [row-num (long-array [1])]
     (reify IProjectionSpec
       (getColumnName [_] col-name)
-      (project [_ allocator in-rel]
+      (project [_ allocator in-rel _params]
         (let [out-vec (BigIntVector. col-name allocator)
               start-row-num (aget row-num 0)
               row-count (.rowCount in-rel)]
@@ -58,7 +58,8 @@
 
 (deftype ProjectCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
-                        ^List #_<IProjectionSpec> projection-specs]
+                        ^List #_<IProjectionSpec> projection-specs
+                        params]
   ICursor
   (tryAdvance [_ c]
     (.tryAdvance in-cursor
@@ -67,7 +68,7 @@
                      (let [out-cols (LinkedList.)]
                        (try
                          (doseq [^IProjectionSpec projection-spec projection-specs]
-                           (let [out-col (.project projection-spec allocator read-rel)]
+                           (let [out-col (.project projection-spec allocator read-rel params)]
                              (.add out-cols out-col)))
 
                          (.accept c (iv/->indirect-rel out-cols))
@@ -78,7 +79,7 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [params] :as args}]
+(defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-names] :as args}]
   (lp/unary-expr relation args
     (fn [inner-col-names]
       (let [projection-specs (concat (when append-columns?
@@ -90,11 +91,11 @@
                                          :row-number-column (let [[col-name _form] (first arg)]
                                                               (->row-number-projection-spec (name col-name)))
                                          :extend (let [[col-name form] (first arg)]
-                                                   (expr/->expression-projection-spec (name col-name) form (into #{} (map symbol) inner-col-names) params)))))]
+                                                   (expr/->expression-projection-spec (name col-name) form (into #{} (map symbol) inner-col-names) param-names)))))]
         {:col-names (->> projection-specs
                          (into #{} (map #(.getColumnName ^IProjectionSpec %))))
-         :->cursor (fn [{:keys [allocator]} in-cursor]
-                     (ProjectCursor. allocator in-cursor projection-specs))}))))
+         :->cursor (fn [{:keys [allocator params]} in-cursor]
+                     (ProjectCursor. allocator in-cursor projection-specs params))}))))
 
 (defmethod lp/emit-expr :map [op args]
   (lp/emit-expr (assoc op :op :project :opts {:append-columns? true}) args))

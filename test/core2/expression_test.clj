@@ -36,8 +36,8 @@
 (t/deftest test-simple-projection
   (with-open [in-rel (open-rel (->data-vecs))]
     (letfn [(project [form]
-              (with-open [project-col (.project (expr/->expression-projection-spec "c" form '#{a b d} {})
-                                                tu/*allocator* in-rel)]
+              (with-open [project-col (.project (expr/->expression-projection-spec "c" form '#{a b d} #{})
+                                                tu/*allocator* in-rel {})]
                 (tu/<-column project-col)))]
 
       (t/is (= (mapv (comp double +) (range 1000) (range 1000))
@@ -72,9 +72,8 @@
 (t/deftest can-compile-simple-expression
   (with-open [in-rel (open-rel (->data-vecs))]
     (letfn [(select-relation [form col-names params]
-              (alength (.select (expr/->expression-relation-selector form col-names params)
-                                tu/*allocator*
-                                in-rel)))]
+              (alength (.select (expr/->expression-relation-selector form col-names (set (keys params)))
+                                tu/*allocator* in-rel params)))]
 
       (t/testing "selector"
         (t/is (= 500 (select-relation '(>= a 500) '#{a} {})))
@@ -86,9 +85,8 @@
 
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
-           (-> (.select (expr/->expression-relation-selector '(and true nil) #{} {})
-                        tu/*allocator*
-                        (iv/->indirect-rel [] 1))
+           (-> (.select (expr/->expression-relation-selector '(and true nil) #{} #{})
+                        tu/*allocator* (iv/->indirect-rel [] 1) {})
                (alength)))))
 
 (t/deftest can-extract-min-max-range-from-expression
@@ -243,9 +241,8 @@
 
 (defn- run-projection [rel form]
   (let [col-names (into #{} (map #(symbol (.getName ^IIndirectVector %))) rel)]
-    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form col-names {})
-                                   tu/*allocator*
-                                   rel)]
+    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form col-names #{})
+                                   tu/*allocator* rel {})]
       {:res (tu/<-column out-ivec)
        :res-type (types/field->col-type (.getField (.getVector out-ivec)))})))
 
