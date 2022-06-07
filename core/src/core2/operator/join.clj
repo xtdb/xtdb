@@ -381,7 +381,7 @@
             theta-selector (when (seq predicates)
                              (expr/->expression-relation-selector (list* 'and predicates)
                                                                   (into #{} (map symbol) (concat left-col-names right-col-names))
-                                                                  {}))
+                                                                  #{}))
             {:keys [col-names ->cursor]} (f left-col-names right-col-names)]
 
         {:col-names col-names

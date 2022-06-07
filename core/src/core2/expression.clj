@@ -2017,12 +2017,13 @@
             (.toArray (.build res))))))))
 
 (defn eval-scalar-value [al form col-names params]
-  (let [expr (form->expr form {:param-names (set (keys params))})]
+  (let [param-names (set (keys params))
+        expr (form->expr form {:param-names param-names})]
     (case (:op expr)
       :literal form
       :param (get params (:param expr))
 
       ;; this is probably quite heavyweight to calculate a single value...
-      (let [projection-spec (->expression-projection-spec "_scalar" form col-names params)]
+      (let [projection-spec (->expression-projection-spec "_scalar" form col-names param-names)]
         (with-open [out-vec (.project projection-spec al (iv/->indirect-rel [] 1) params)]
           (types/get-object (.getVector out-vec) (.getIndex out-vec 0)))))))

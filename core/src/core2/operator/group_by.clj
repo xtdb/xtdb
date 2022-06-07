@@ -305,7 +305,7 @@
 (defmethod ->aggregate-factory :avg [_ ^String from-name, ^String to-name]
   (let [sum-agg (->aggregate-factory :sum from-name "sum")
         count-agg (->aggregate-factory :count from-name "cnt")
-        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt) '#{sum cnt} {})]
+        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt) '#{sum cnt} #{})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
 
@@ -379,7 +379,7 @@
 
 (defmethod ->aggregate-factory :std-dev [_ ^String from-name, ^String to-name]
   (let [variance-agg (->aggregate-factory :variance from-name "variance")
-        finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance) '#{variance} {})]
+        finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance) '#{variance} #{})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
 
