@@ -85,6 +85,9 @@
   (close [_]
     (util/try-close in-cursor)))
 
+(defn ->project-cursor [{:keys [allocator, params] :as _opts} in-cursor projection-specs]
+  (->ProjectCursor allocator in-cursor projection-specs params))
+
 (defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-names] :as args}]
   (lp/unary-expr relation args
     (fn [inner-col-names]
@@ -100,8 +103,7 @@
                                                    (expr/->expression-projection-spec (name col-name) form (into #{} (map symbol) inner-col-names) param-names)))))]
         {:col-names (->> projection-specs
                          (into #{} (map #(.getColumnName ^IProjectionSpec %))))
-         :->cursor (fn [{:keys [allocator params]} in-cursor]
-                     (ProjectCursor. allocator in-cursor projection-specs params))}))))
+         :->cursor (fn [opts in-cursor] (->project-cursor opts in-cursor projection-specs))}))))
 
 (defmethod lp/emit-expr :map [op args]
   (lp/emit-expr (assoc op :op :project :opts {:append-columns? true}) args))

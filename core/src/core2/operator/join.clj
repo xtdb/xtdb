@@ -410,16 +410,16 @@
 
         {:col-names return-col-names
          :->cursor
-         (fn [{:keys [allocator, params] :as opts} left-cursor right-cursor]
+         (fn [{:keys [params] :as opts} left-cursor right-cursor]
            (let [left-projections
                  (concat (map (comp #(equi-projection % left-col-syms params) :left) equi)
                          (map project/->identity-projection-spec (remove (set left-key-col-names) left-col-names)))
-                 left-project-cursor (project/->ProjectCursor allocator left-cursor left-projections params)
+                 left-project-cursor (project/->project-cursor opts left-cursor left-projections)
 
                  right-projections
                  (concat (map (comp #(equi-projection % right-col-syms params) :right) equi)
                          (map project/->identity-projection-spec (remove (set right-key-col-names) right-col-names)))
-                 right-project-cursor (project/->ProjectCursor allocator right-cursor right-projections params)
+                 right-project-cursor (project/->project-cursor opts right-cursor right-projections)
 
                  join-cursor (->cursor
                                opts
@@ -427,7 +427,7 @@
                                right-project-cursor right-key-col-names right-col-names
                                (params->theta-selector params))
 
-                 project-away-cursor (project/->ProjectCursor allocator join-cursor (mapv project/->identity-projection-spec return-col-names) params)]
+                 project-away-cursor (project/->project-cursor opts join-cursor (mapv project/->identity-projection-spec return-col-names))]
 
              project-away-cursor))}))))
 
