@@ -15,8 +15,9 @@
   (new-iterator ^java.io.Closeable [this])
   (get-value [this k]))
 
+;; TODO can we drop use of the word Store as it's overloaded (i.e. go to Kv only)?
+
 (defprotocol KvStoreTx
-  (new-tx-snapshot ^java.io.Closeable [this])
   (abort-kv-tx [this])
   (commit-kv-tx [this])
   (put-kv [this k v]))

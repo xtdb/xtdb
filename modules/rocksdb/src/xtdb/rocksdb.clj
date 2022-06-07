@@ -43,20 +43,6 @@
   (close [_]
     (.close i)))
 
-(defrecord RocksKvTxSnapshot [^RocksDB db ^ReadOptions read-options, snapshot, ^WriteBatchWithIndex wb]
-  kv/KvSnapshot
-  (new-iterator [_]
-    (->RocksKvIterator (.newIteratorWithBase wb (.newIterator db read-options) read-options)))
-
-  (get-value [_ k]
-    (some-> (.getFromBatchAndDB wb db read-options (mem/->on-heap k)) (mem/as-buffer)))
-
-  Closeable
-  (close [_]
-    (.close read-options)
-    (.releaseSnapshot db snapshot)))
-
-;; TODO should die:
 (defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
   kv/KvSnapshot
   (new-iterator [_]
@@ -71,16 +57,15 @@
     (.close read-options)
     (.releaseSnapshot db snapshot)))
 
-(defrecord RocksKvTx [^RocksDB db, ^WriteOptions write-options, ^WriteBatchWithIndex wb]
-  kv/KvStoreTx
-  (new-tx-snapshot [_]
-    (let [snapshot (.getSnapshot db)]
-      (->RocksKvTxSnapshot db
-                           (doto (ReadOptions.)
-                             (.setSnapshot snapshot))
-                           snapshot
-                           wb)))
+(defrecord RocksKvTx [^RocksDB db, ^ReadOptions read-options, ^WriteOptions write-options, ^RocksKvSnapshot snapshot, ^WriteBatchWithIndex wb]
+  kv/KvSnapshot
+  (new-iterator [_]
+    (->RocksKvIterator (.newIteratorWithBase wb (.newIterator db read-options) read-options)))
 
+  (get-value [_ k]
+    (some-> (.getFromBatchAndDB wb db read-options (mem/->on-heap k)) (mem/as-buffer)))
+
+  kv/KvStoreTx
   (put-kv [_ k v]
     (if v
       (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
@@ -91,12 +76,12 @@
 
   Closeable
   (close [_]
+    (.close read-options)
+    (.releaseSnapshot db snapshot)
     (.close wb)))
 
 (defrecord RocksKv [^RocksDB db, ^WriteOptions write-options, ^Options options, ^Closeable metrics, ^Closeable cp-job, db-dir]
   kv/KvStore
-
-  ;; TODO, expect to move this
   (new-snapshot [_]
     (let [snapshot (.getSnapshot db)]
       (->RocksKvSnapshot db
@@ -105,7 +90,10 @@
                          snapshot)))
 
   (begin-kv-tx [_]
-    (->RocksKvTx db write-options (WriteBatchWithIndex.)))
+    (let [snapshot (.getSnapshot db)
+          read-options (doto (ReadOptions.)
+                         (.setSnapshot snapshot))]
+      (->RocksKvTx db read-options write-options snapshot (WriteBatchWithIndex.))))
 
   (compact [_]
     (.compactRange db))
