@@ -100,32 +100,32 @@
     (or (coerce-eid id)
         (UUID/randomUUID))))
 
-(defn- value->tx-op [edn-record-value props ^SinkRecord record]
+(defn- value->tx-ops [edn-record-value props ^SinkRecord record]
   (cond
     (map? edn-record-value)
     (let [id (find-eid props record edn-record-value)]
-      [::xt/put (assoc edn-record-value :xt/id id)])
+      [[::xt/put (assoc edn-record-value :xt/id id)]])
 
-    (vector? edn-record-value)
-    (first edn-record-value)
+    (vector? edn-record-value) edn-record-value 
 
     :else (throw (err/illegal-arg :unknown-message-type
                                   {::err/message (str "Unknown edn-record-value: " edn-record-value)}))))
 
 (defn transform-sink-record [props ^SinkRecord record]
   (log/info "sink record:" record)
-  (let [tx-op (if (and (nil? (.value record))
+  (let [tx-ops (if (and (nil? (.value record))
                        (.key record))
                 [::xt/delete (coerce-eid (.key record))]
                 (let [edn-record-value (record->edn record)]
-                  (value->tx-op edn-record-value props record)))]
-    (log/info "tx op:" tx-op)
-    tx-op))
+                  (value->tx-ops edn-record-value props record)))]
+    (log/info "tx ops:" tx-ops)
+    tx-ops))
 
 (defn submit-sink-records [api props records]
   (when (seq records)
-    (xt/submit-tx api (vec (for [record records]
-                              (transform-sink-record props record))))))
+    (doseq [record records]
+      (let [tx-ops (transform-sink-record props record)]
+        (xt/submit-tx api tx-ops)))))
 
 (defn- write-transit [x]
   (with-open [out (ByteArrayOutputStream.)]
