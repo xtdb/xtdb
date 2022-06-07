@@ -359,110 +359,110 @@
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
-(defn ->equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                         ^ICursor left-cursor, left-key-column-names, left-column-names
-                                         ^ICursor right-cursor, right-key-column-names, right-column-names
-                                         theta-selector]
-  (JoinCursor. allocator
-               left-cursor left-key-column-names left-column-names
-               right-cursor right-key-column-names right-column-names
-               (emap/->relation-map allocator {:build-key-col-names left-key-column-names
-                                               :probe-key-col-names right-key-column-names
-                                               :store-col-names left-column-names})
-               nil
-               (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
-               ::inner-join
-               theta-selector))
+(defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} args f]
+  (lp/binary-expr left right args
+    (fn [left-col-names right-col-names]
+      (let [equi-pairs (keep (fn [[tag val]]
+                               (when (= :equi-condition tag)
+                                 (first val)))
+                             condition)
+            left-key-col-names (map (comp name first) equi-pairs)
+            right-key-col-names (map (comp name second) equi-pairs)
+            predicates (keep (fn [[tag val]]
+                               (when (= :pred-expr tag)
+                                 val))
+                             condition)
+            theta-selector (when (seq predicates)
+                             (expr/->expression-relation-selector (list* 'and predicates)
+                                                                  (into #{} (map symbol) (concat left-col-names right-col-names))
+                                                                  {}))
+            {:keys [col-names ->cursor]} (f left-col-names right-col-names)]
 
-(defn ->left-semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                                   ^ICursor left-cursor, left-key-column-names, left-column-names
-                                                   ^ICursor right-cursor, right-key-column-names, right-column-names
-                                                   theta-selector]
-  (JoinCursor. allocator
-               right-cursor right-key-column-names right-column-names
-               left-cursor left-key-column-names left-column-names
-               (emap/->relation-map allocator {:build-key-col-names right-key-column-names
-                                               :probe-key-col-names left-key-column-names
-                                               :store-col-names right-column-names})
-               nil
-               (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
-               ::semi-join
-               theta-selector))
+        {:col-names col-names
+         :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
+                     (->cursor allocator
+                               left-cursor left-key-col-names left-col-names
+                               right-cursor right-key-col-names right-col-names
+                               theta-selector))}))))
 
-(defn ->left-outer-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                                    ^ICursor left-cursor, left-key-column-names, left-column-names
-                                                    ^ICursor right-cursor, right-key-column-names, right-column-names
-                                                    theta-selector]
-  (JoinCursor. allocator
-               right-cursor right-key-column-names right-column-names
-               left-cursor left-key-column-names left-column-names
-               (emap/->relation-map allocator {:build-key-col-names right-key-column-names
-                                               :probe-key-col-names left-key-column-names
-                                               :store-col-names right-column-names
-                                               :with-nil-row? true})
-               nil
-               (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
-               ::left-outer-join
-               theta-selector))
+(defmethod lp/emit-expr :join [join-expr args]
+  (emit-join-expr join-expr args
+    (fn [left-col-names right-col-names]
+      {:col-names (set/union left-col-names right-col-names)
+       :->cursor (fn [allocator, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
+                   (JoinCursor. allocator
+                                left-cursor left-key-cols left-cols
+                                right-cursor right-key-cols right-cols
+                                (emap/->relation-map allocator {:build-key-col-names left-key-cols
+                                                                :probe-key-col-names right-key-cols
+                                                                :store-col-names left-cols})
+                                nil
+                                (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
+                                ::inner-join
+                                theta-selector))})))
 
-(defn ->full-outer-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                                    ^ICursor left-cursor, left-key-column-names, left-column-names
-                                                    ^ICursor right-cursor, right-key-column-names, right-column-names
-                                                    theta-selector]
-  (JoinCursor. allocator
-               left-cursor left-key-column-names left-column-names
-               right-cursor right-key-column-names right-column-names
-               (emap/->relation-map allocator {:build-key-col-names left-key-column-names
-                                               :probe-key-col-names right-key-column-names
-                                               :store-col-names left-column-names
-                                               :with-nil-row? true})
-               (RoaringBitmap.)
-               (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
-               ::full-outer-join
-               theta-selector))
+(defmethod lp/emit-expr :left-outer-join [join-expr args]
+  (emit-join-expr join-expr args
+    (fn [left-col-names right-col-names]
+      {:col-names (set/union left-col-names right-col-names)
+       :->cursor (fn [allocator, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
+                   (JoinCursor. allocator
+                                right-cursor right-key-cols right-cols
+                                left-cursor left-key-cols left-cols
+                                (emap/->relation-map allocator {:build-key-col-names right-key-cols
+                                                                :probe-key-col-names left-key-cols
+                                                                :store-col-names right-cols
+                                                                :with-nil-row? true})
+                                nil
+                                (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
+                                ::left-outer-join
+                                theta-selector))})))
 
-(defn ->left-anti-semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                                        ^ICursor left-cursor, left-key-column-names, left-column-names
-                                                        ^ICursor right-cursor, right-key-column-names, right-column-names
-                                                        theta-selector]
-  (JoinCursor. allocator
-               right-cursor right-key-column-names right-column-names
-               left-cursor left-key-column-names left-column-names
-               (emap/->relation-map allocator {:build-key-col-names right-key-column-names
-                                               :probe-key-col-names left-key-column-names
-                                               :store-col-names right-column-names})
-               nil
-               (vec (repeatedly (count right-key-column-names) #(MutableRoaringBitmap.)))
-               ::anti-semi-join
-               theta-selector))
+(defmethod lp/emit-expr :full-outer-join [join-expr args]
+  (emit-join-expr join-expr args
+    (fn [left-col-names right-col-names]
+      {:col-names (set/union left-col-names right-col-names)
+       :->cursor (fn [allocator, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
+                   (JoinCursor. allocator
+                                left-cursor left-key-cols left-cols
+                                right-cursor right-key-cols right-cols
+                                (emap/->relation-map allocator {:build-key-col-names left-key-cols
+                                                                :probe-key-col-names right-key-cols
+                                                                :store-col-names left-cols
+                                                                :with-nil-row? true})
+                                (RoaringBitmap.)
+                                (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
+                                ::full-outer-join
+                                theta-selector))})))
 
-(doseq [[join-op-k ->join-cursor ->col-names]
-        [[:join #'->equi-join-cursor set/union]
-         [:left-outer-join #'->left-outer-equi-join-cursor set/union]
-         [:full-outer-join #'->full-outer-equi-join-cursor set/union]
-         [:semi-join #'->left-semi-equi-join-cursor (fn [l _r] l)]
-         [:anti-join #'->left-anti-semi-equi-join-cursor (fn [l _r] l)]]]
+(defmethod lp/emit-expr :semi-join [join-expr args]
+  (emit-join-expr join-expr args
+    (fn [left-col-names _right-col-names]
+      {:col-names left-col-names
+       :->cursor (fn [allocator, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
+                   (JoinCursor. allocator
+                                right-cursor right-key-cols right-cols
+                                left-cursor left-key-cols left-cols
+                                (emap/->relation-map allocator {:build-key-col-names right-key-cols
+                                                                :probe-key-col-names left-key-cols
+                                                                :store-col-names right-cols})
+                                nil
+                                (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
+                                ::semi-join
+                                theta-selector))})))
 
-  (defmethod lp/emit-expr join-op-k [{:keys [condition left right]} args]
-    (let [equi-pairs (keep (fn [[tag val]]
-                             (when (= :equi-condition tag)
-                               (first val)))
-                           condition)
-          left-key-cols (map (comp name first) equi-pairs)
-          right-key-cols (map (comp name second) equi-pairs)
-          predicates (keep (fn [[tag val]]
-                             (when (= :pred-expr tag)
-                               val))
-                           condition)]
-      (lp/binary-expr left right args
-        (fn [left-col-names right-col-names]
-          (let [theta-selector (when (seq predicates)
-                                 (expr/->expression-relation-selector (list* 'and predicates)
-                                                                      (into #{} (map symbol) (concat left-col-names right-col-names))
-                                                                      {}))]
-            {:col-names (->col-names left-col-names right-col-names)
-             :->cursor (fn [{:keys [allocator]} left right]
-                         (->join-cursor allocator
-                                        left left-key-cols left-col-names
-                                        right right-key-cols right-col-names
-                                        theta-selector))}))))))
+(defmethod lp/emit-expr :anti-join [join-expr args]
+  (emit-join-expr join-expr args
+    (fn [left-col-names _right-col-names]
+      {:col-names left-col-names
+       :->cursor (fn [allocator, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
+                   (JoinCursor. allocator
+                                right-cursor right-key-cols right-cols
+                                left-cursor left-key-cols left-cols
+                                (emap/->relation-map allocator {:build-key-col-names right-key-cols
+                                                                :probe-key-col-names left-key-cols
+                                                                :store-col-names right-cols})
+                                nil
+                                (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
+                                ::anti-semi-join
+                                theta-selector))})))
