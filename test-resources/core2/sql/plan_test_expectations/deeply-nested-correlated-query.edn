@@ -10,6 +10,6 @@
     [:rename {A x1, B x2} [:scan [A B]]]
     [:rename {C x4} [:scan [C]]]]
    [:semi-join
-    [(= x10 ?x13) {x7 x9}]
+    [{?x13 x10} {x7 x9}]
     [:rename {A x6, B x7} [:scan [{A (= A ?x14)} B]]]
     [:rename {A x9, B x10} [:scan [A B]]]]]]]

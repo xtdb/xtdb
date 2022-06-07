@@ -708,3 +708,27 @@
 
     "CAST(foo.a AS INT)" (list 'cast 'x1 types/int-type)
     "CAST(42.0 AS INT)" (list 'cast 42.0 types/int-type)))
+
+(t/deftest test-expr-in-equi-join
+  (t/are [sql expected]
+    (= expected (plan-sql sql))
+
+    "SELECT a.a FROM a JOIN bar b ON a.a+1 = b.b+1"
+    '[:rename
+      {x1 a}
+      [:project
+       [x1]
+       [:join
+        [{(+ x1 1) (+ x3 1)}]
+        [:rename {a x1} [:scan [a]]]
+        [:rename {b x3} [:scan [b]]]]]]
+    
+    "SELECT a.a FROM a JOIN bar b ON a.a = b.b+1"
+    '[:rename
+      {x1 a}
+      [:project
+       [x1]
+       [:join
+        [{x1 (+ x3 1)}]
+        [:rename {a x1} [:scan [a]]]
+        [:rename {b x3} [:scan [b]]]]]]))

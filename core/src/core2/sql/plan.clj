@@ -1717,6 +1717,13 @@
       (when (and lhs-v rhs-v)
         {lhs-v rhs-v}))))
 
+(defn all-columns-in-relation?
+  "Returns true if all columns referenced by the expression are present in the given relation.
+
+  Useful for figuring out whether an expr can be applied as an equi-condition in join."
+  [expr relation]
+  (every? (set (relation-columns relation)) (expr-symbols expr)))
+
 (defn- columns-in-both-relations? [predicate lhs rhs]
   (let [predicate-columns (expr-symbols predicate)]
     (and
@@ -2232,20 +2239,27 @@
     (decorrelate-group-by-apply nil group-by-columns
                                 :left-outer-join columns independent-relation dependent-relation)))
 
+(defn- as-equi-condition [expr lhs rhs]
+  (when (equals-predicate? expr)
+    (let [[_ expr1 expr2] expr
+          expr-side
+          #(cond (all-columns-in-relation? % lhs) :lhs
+                 (all-columns-in-relation? % rhs) :rhs)
+          expr1-side (expr-side expr1)
+          expr2-side (expr-side expr2)]
+      (when (and expr1-side
+                 expr2-side
+                 (not= expr1-side expr2-side))
+        (case expr1-side
+          :lhs {expr1 expr2}
+          :rhs {expr2 expr1})))))
+
 (defn- optimize-join-expression [join-expressions lhs rhs]
   (if (some map? join-expressions)
     join-expressions
     (->> join-expressions
          (mapcat #(flatten-expr and-predicate? %))
-         (mapv (fn [join-clause]
-                 (if (and (equals-predicate? join-clause)
-                          (every? symbol? (rest join-clause)) ;; only contains columns
-                          (columns-in-both-relations? join-clause lhs rhs))
-                   (let [[_ x y] join-clause]
-                     (if (contains? (set (relation-columns lhs)) x)
-                       {x y}
-                       {y x}))
-                   join-clause))))))
+         (mapv (fn [join-clause] (or (as-equi-condition join-clause lhs rhs) join-clause))))))
 
 (defn- rewrite-equals-predicates-in-join-as-equi-join-map [z]
   (r/zmatch z

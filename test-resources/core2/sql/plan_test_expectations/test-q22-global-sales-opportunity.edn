@@ -13,7 +13,7 @@
       [:anti-join
        [{x3 x16}]
        [:semi-join
-        [(= (substring x1 1 2 true) x5)]
+        [{(substring x1 1 2 true) x5}]
         [:rename
          {c_phone x1, c_acctbal x2, c_custkey x3}
          [:scan [c_phone c_acctbal c_custkey]]]
@@ -30,7 +30,7 @@
        [:group-by
         [{x14 (avg x8)}]
         [:semi-join
-         [(= (substring x9 1 2 true) x11)]
+         [{(substring x9 1 2 true) x11}]
          [:rename
           {c_acctbal x8, c_phone x9}
           [:scan [{c_acctbal (> c_acctbal 0.0)} c_phone]]]
