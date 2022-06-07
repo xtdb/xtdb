@@ -508,10 +508,7 @@
     (t/is (= []
              (run-join true true false)))
 
-    (t/is (= [{{:a 12, :b 12} 1,
-               {:a 12, :b 2} 1,
-               {:a 0, :b 12} 1,
-               {:a 0, :b 2} 1}]
+    (t/is (= []
              (run-join true true nil)))
 
     (t/is (= [{{:a 12, :b 12} 1,
@@ -546,10 +543,8 @@
                {:a 0, :b nil} 1}]
              (run-loj true true false)))
 
-    (t/is (= [{{:a 12, :b 12} 1,
-               {:a 12, :b 2} 1,
-               {:a 0, :b 12} 1,
-               {:a 0, :b 2} 1}]
+    (t/is (= [{{:a 12, :b nil} 1,
+               {:a 0, :b nil} 1}]
              (run-loj true true nil)))
 
     (t/is (= [{{:a 12, :b 12} 1,
@@ -588,10 +583,10 @@
                {:a 0, :b nil} 1}]
              (run-foj true true false)))
 
-    (t/is (= [{{:a 12, :b 12} 1,
-               {:a 12, :b 2} 1,
-               {:a 0, :b 12} 1,
-               {:a 0, :b 2} 1}]
+    (t/is (= [{{:a nil, :b 12} 1,
+               {:a nil, :b 2} 1}
+              {{:a 12, :b nil} 1,
+               {:a 0, :b nil} 1}]
              (run-foj true true nil)))
 
     (t/is (= [{{:a 12, :b 12} 1,
@@ -615,7 +610,7 @@
     (t/is (= [] (run-semi false true true)))
     (t/is (= [] (run-semi true true false)))
 
-    (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-semi true true nil)))
+    (t/is (= [] (run-semi true true nil)))
     (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-semi true true true)))))
 
 (t/deftest test-anti-join-on-true
@@ -633,8 +628,8 @@
     (t/is (= [] (run-anti false true true)))
 
     (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true true false)))
+    (t/is (= [{{:a 12} 1, {:a 0} 1}] (run-anti true true nil)))
 
-    (t/is (= [] (run-anti true true nil)))
     (t/is (= [] (run-anti true true true)))))
 
 (t/deftest test-equi-join-expr

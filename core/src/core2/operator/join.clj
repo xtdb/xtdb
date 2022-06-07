@@ -396,11 +396,9 @@
             right-col-syms (set (map symbol right-col-names))
             col-syms (into left-col-syms right-col-syms)
 
-            ;; FIXME this shouldn't be 'keep', though tests fail if nil expr are allowed to flow
-            theta-expr (keep :expr theta)
             params->theta-selector
-            (if (seq theta-expr)
-              #(expr/->expression-relation-selector (list* 'and theta-expr) col-syms %)
+            (if theta
+              #(expr/->expression-relation-selector (list* 'and (map :expr theta)) col-syms %)
               (constantly nil))
 
             {:keys [col-names ->cursor]} (f left-col-names right-col-names)
