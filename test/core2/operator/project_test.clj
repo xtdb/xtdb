@@ -2,7 +2,8 @@
   (:require [clojure.test :as t]
             [core2.operator :as op]
             [core2.test-util :as tu]
-            [core2.types :as ty])
+            [core2.types :as ty]
+            [core2.operator :as op])
   (:import org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -39,3 +40,12 @@
     (t/is (= [[{:a 12, :$row-num 1}, {:a 0, :$row-num 2}]
               [{:a 100, :$row-num 3}]]
              (tu/<-cursor project-cursor)))))
+
+(t/deftest test-identity-projection-not-closed
+  (t/is (= [{:a nil, :b 12} {:a nil, :b 2} {:a 12, :b nil} {:a 0, :b nil}]
+           (op/query-ra
+             '[:project [a b]
+               [:full-outer-join [false]
+                [:table [{:a 12}, {:a 0}]]
+                [:table [{:b 12}, {:b 2}]]]]
+             {}))))

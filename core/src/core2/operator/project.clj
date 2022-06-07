@@ -7,7 +7,7 @@
   (:import core2.ICursor
            core2.operator.IProjectionSpec
            java.util.function.Consumer
-           java.util.LinkedList
+           java.util.ArrayList
            java.util.List
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.BigIntVector))
@@ -32,11 +32,14 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defrecord IdentityProjectionSpec [col-name]
+  IProjectionSpec
+  (getColumnName [_] col-name)
+  (project [_ _allocator in-rel _params]
+    (.vectorForName in-rel col-name)))
+
 (defn ->identity-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
-  (reify IProjectionSpec
-    (getColumnName [_] col-name)
-    (project [_ _allocator in-rel _params]
-      (.vectorForName in-rel col-name))))
+  (->IdentityProjectionSpec col-name))
 
 (defn ->row-number-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
   (let [row-num (long-array [1])]
@@ -65,16 +68,19 @@
     (.tryAdvance in-cursor
                  (reify Consumer
                    (accept [_ read-rel]
-                     (let [out-cols (LinkedList.)]
+                     (let [close-cols (ArrayList.)
+                           out-cols (ArrayList.)]
                        (try
                          (doseq [^IProjectionSpec projection-spec projection-specs]
                            (let [out-col (.project projection-spec allocator read-rel params)]
+                             (when-not (instance? IdentityProjectionSpec projection-spec)
+                               (.add close-cols out-col))
                              (.add out-cols out-col)))
 
                          (.accept c (iv/->indirect-rel out-cols))
 
                          (finally
-                           (run! util/try-close out-cols))))))))
+                           (run! util/try-close close-cols))))))))
 
   (close [_]
     (util/try-close in-cursor)))
