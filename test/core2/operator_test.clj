@@ -7,12 +7,14 @@
             [core2.metadata :as meta]
             [core2.operator :as op]
             [core2.snapshot :as snap]
-            [core2.test-util :as tu])
+            [core2.test-util :as tu]
+            [core2.types :as types])
   (:import (core2.indexer IChunkManager)
            (core2.metadata IMetadataManager)
            (core2.snapshot ISnapshotFactory)
            (java.time LocalTime)
-           (org.roaringbitmap RoaringBitmap)))
+           (org.roaringbitmap RoaringBitmap)
+           org.apache.arrow.vector.types.pojo.Schema))
 
 (t/deftest test-find-gt-ivan
   (with-open [node (node/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
@@ -313,17 +315,19 @@
 (t/deftest test-apply-operator
   (letfn [(q [mode]
             (op/query-ra [:apply mode '{c-id ?c-id}
-                          '[:table $customers]
-                          '[:select (= o-customer-id ?c-id)
-                            [:table $orders]]]
-
-                         {'$customers [{:c-id "c1", :c-name "Alan"}
-                                       {:c-id "c2", :c-name "Bob"}
-                                       {:c-id "c3", :c-name "Charlie"}]
-                          '$orders [{:o-customer-id "c1", :o-value 12.34}
-                                    {:o-customer-id "c1", :o-value 14.80}
-                                    {:o-customer-id "c2", :o-value 91.46}
-                                    {:o-customer-id "c4", :o-value 55.32}]}))]
+                          [::tu/blocks (Schema. [(types/->field "c-id" types/varchar-type false)
+                                                 (types/->field "c-name" types/varchar-type false)])
+                           [[{:c-id "c1", :c-name "Alan"}
+                             {:c-id "c2", :c-name "Bob"}
+                             {:c-id "c3", :c-name "Charlie"}]]]
+                          [:select '(= o-customer-id ?c-id)
+                           [::tu/blocks (Schema. [(types/->field "o-customer-id" types/varchar-type false)
+                                                  (types/->field "o-value" types/float8-type false)])
+                            [[{:o-customer-id "c1", :o-value 12.34}
+                              {:o-customer-id "c1", :o-value 14.80}
+                              {:o-customer-id "c2", :o-value 91.46}
+                              {:o-customer-id "c4", :o-value 55.32}]]]]]
+                         {}))]
 
     (t/is (= [{:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 12.34}
               {:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 14.80}

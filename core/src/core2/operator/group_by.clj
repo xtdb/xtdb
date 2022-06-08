@@ -308,7 +308,7 @@
 (defmethod ->aggregate-factory :avg [_ ^String from-name, from-type, ^String to-name]
   (let [sum-agg (->aggregate-factory :sum from-name from-type "sum")
         count-agg (->aggregate-factory :count from-name from-type "cnt")
-        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt) '#{sum cnt} #{})]
+        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt) {:col-names '#{sum cnt}})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
       (getToColumnType [_] (.getColumnType projecter))
@@ -343,10 +343,12 @@
 (defmethod ->aggregate-factory :variance [_ ^String from-name, from-type, ^String to-name]
   (let [from-var (symbol from-name)
         avgx-agg (->aggregate-factory :avg from-name from-type "avgx")
-        x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var) #{from-var} #{})
+        x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var)
+                                                        {:col-names #{from-var}})
 
         avgx2-agg (->aggregate-factory :avg "x2" (.getColumnType x2-projecter) "avgx2")
-        finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx)) '#{avgx2 avgx} #{})]
+        finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx))
+                                                            {:col-names '#{avgx2 avgx}})]
 
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
@@ -383,7 +385,8 @@
 
 (defmethod ->aggregate-factory :std-dev [_ ^String from-name, from-type, ^String to-name]
   (let [variance-agg (->aggregate-factory :variance from-name from-type "variance")
-        finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance) '#{variance} #{})]
+        finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance)
+                                                            {:col-names '#{variance}})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
       (getToColumnType [_] (.getColumnType finish-projecter))

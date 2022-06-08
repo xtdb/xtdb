@@ -124,9 +124,10 @@
   (lp/unary-expr independent-relation args
     (fn [independent-col-types]
       (let [dependent-args (-> args
-                               (update :param-names
-                                       (fnil into #{})
-                                       (map second)
+                               (update :param-types
+                                       (fnil into {})
+                                       (map (fn [[ik dk]]
+                                              [dk (get independent-col-types (name ik))]))
                                        columns))
             {dependent-col-types :col-types, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)]
 

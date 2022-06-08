@@ -90,7 +90,7 @@
 (defn ->project-cursor [{:keys [allocator, params] :as _opts} in-cursor projection-specs]
   (->ProjectCursor allocator in-cursor projection-specs params))
 
-(defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-names] :as args}]
+(defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-types] :as args}]
   (lp/unary-expr relation args
     (fn [inner-col-types]
       (let [projection-specs (concat (when append-columns?
@@ -102,7 +102,9 @@
                                          :row-number-column (let [[col-name _form] (first arg)]
                                                               (->row-number-projection-spec (name col-name)))
                                          :extend (let [[col-name form] (first arg)]
-                                                   (expr/->expression-projection-spec (name col-name) form (into #{} (map symbol) (keys inner-col-types)) param-names)))))]
+                                                   (expr/->expression-projection-spec (name col-name) form
+                                                                                      {:col-names (into #{} (map symbol) (keys inner-col-types))
+                                                                                       :param-types param-types})))))]
         {:col-types (->> projection-specs
                          (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
                                              #(.getColumnType ^IProjectionSpec %)))))

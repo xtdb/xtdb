@@ -277,23 +277,23 @@
         col-names (into #{} (map symbol) (keys temporal/temporal-fields))]
     (doseq [[col-name select-form] selects
             :when (temporal/temporal-column? col-name)]
-      (-> (expr/form->expr select-form {:param-names (set (keys params)) :col-names col-names})
-          (emacro/macroexpand-all)
-          (->> (ewalk/postwalk-expr expr/lit->param))
-          (expr.meta/meta-expr (expr/param-opts params))
-          (->> (ewalk/prewalk-expr
-                (fn [{:keys [op] :as expr}]
-                  (case op
-                    :call (when (not= 'or (:f expr))
-                            expr)
+      (->> (expr/form->expr select-form {:param-types (expr/->param-types params) :col-names col-names})
+           (emacro/macroexpand-all)
+           (ewalk/postwalk-expr expr/lit->param)
+           (expr.meta/meta-expr)
+           (ewalk/prewalk-expr
+            (fn [{:keys [op] :as expr}]
+              (case op
+                :call (when (not= 'or (:f expr))
+                        expr)
 
-                    :metadata-vp-call
-                    (let [{:keys [f param-expr]} expr]
-                      (apply-constraint min-range max-range
-                                        f col-name
-                                        (util/->instant (some-> (or (find param-expr :literal)
-                                                                    (find params (get param-expr :param)))
-                                                                val))))
+                :metadata-vp-call
+                (let [{:keys [f param-expr]} expr]
+                  (apply-constraint min-range max-range
+                                    f col-name
+                                    (util/->instant (some-> (or (find param-expr :literal)
+                                                                (find params (get param-expr :param)))
+                                                            val))))
 
-                    expr))))))
+                expr)))))
     [min-range max-range]))

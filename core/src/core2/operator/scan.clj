@@ -305,7 +305,7 @@
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                   '> "_tx-time-end" tx-time))))
 
-(defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [scan-col-types param-names]}]
+(defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [scan-col-types param-types]}]
   (let [src-key (or source '$)
 
         ordered-col-names (->> columns
@@ -320,7 +320,7 @@
                      (into {}))
         col-preds (->> (for [[col-name select-form] selects]
                          (MapEntry/create (name col-name)
-                                          (expr/->expression-relation-selector select-form #{col-name} param-names)))
+                                          (expr/->expression-relation-selector select-form {:col-names #{col-name}, :param-types param-types})))
                        (into {}))
         metadata-args (vec (concat (for [col-name ordered-col-names
                                          :when (not (contains? col-preds col-name))]

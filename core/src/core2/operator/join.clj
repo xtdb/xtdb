@@ -383,13 +383,13 @@
     {:predicate-type :theta
      :expr val}))
 
-(defn- equi-projection [{:keys [col, expr, project]} col-names col-types param-names]
+(defn- equi-projection [{:keys [col, expr, project]} col-types param-types]
   (let [col-name (name col)]
     (if project
-      (expr/->expression-projection-spec col-name expr col-names param-names)
+      (expr/->expression-projection-spec col-name expr {:col-names (into #{} (map symbol) (keys col-types)), :param-types param-types})
       (project/->identity-projection-spec col-name (get col-types col-name)))))
 
-(defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-names] :as args} f]
+(defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-types] :as args} f]
   (lp/binary-expr left right args
     (fn [left-col-types right-col-types]
       (let [left-col-names (keys left-col-types)
@@ -404,7 +404,7 @@
 
             theta-selector (when theta
                              (expr/->expression-relation-selector (list* 'and (map :expr theta))
-                                                                  col-syms param-names))
+                                                                  {:col-names col-syms, :param-types param-types}))
 
             {:keys [col-types ->cursor]} (f left-col-types right-col-types)
 
@@ -414,11 +414,11 @@
             right-key-col-names (mapv (comp name :col :right) equi)
 
             left-projections
-            (vec (concat (map (comp #(equi-projection % left-col-syms left-col-types param-names) :left) equi)
+            (vec (concat (map (comp #(equi-projection % left-col-types param-types) :left) equi)
                          (map #(project/->identity-projection-spec % (get left-col-types %)) (remove (set left-key-col-names) left-col-names))))
 
             right-projections
-            (vec (concat (map (comp #(equi-projection % right-col-syms right-col-types param-names) :right) equi)
+            (vec (concat (map (comp #(equi-projection % right-col-types param-types) :right) equi)
                          (map #(project/->identity-projection-spec % (get right-col-types %)) (remove (set right-key-col-names) right-col-names))))]
 
         {:col-types return-col-types

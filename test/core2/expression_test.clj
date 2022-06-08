@@ -36,7 +36,7 @@
 (t/deftest test-simple-projection
   (with-open [in-rel (open-rel (->data-vecs))]
     (letfn [(project [form]
-              (with-open [project-col (.project (expr/->expression-projection-spec "c" form '#{a b d} #{})
+              (with-open [project-col (.project (expr/->expression-projection-spec "c" form {:col-names '#{a b d}, :param-types {}})
                                                 tu/*allocator* in-rel {})]
                 (tu/<-column project-col)))]
 
@@ -72,7 +72,8 @@
 (t/deftest can-compile-simple-expression
   (with-open [in-rel (open-rel (->data-vecs))]
     (letfn [(select-relation [form col-names params]
-              (alength (.select (expr/->expression-relation-selector form col-names (set (keys params)))
+              (alength (.select (expr/->expression-relation-selector form {:col-names col-names,
+                                                                           :param-types (expr/->param-types params)})
                                 tu/*allocator* in-rel params)))]
 
       (t/testing "selector"
@@ -85,7 +86,7 @@
 
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
-           (-> (.select (expr/->expression-relation-selector '(and true nil) #{} #{})
+           (-> (.select (expr/->expression-relation-selector '(and true nil) {:col-names #{}, :param-types {}})
                         tu/*allocator* (iv/->indirect-rel [] 1) {})
                (alength)))))
 
@@ -241,7 +242,7 @@
 
 (defn- run-projection [rel form]
   (let [col-names (into #{} (map #(symbol (.getName ^IIndirectVector %))) rel)]
-    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form col-names #{})
+    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {:col-names col-names, :param-types {}})
                                    tu/*allocator* rel {})]
       {:res (tu/<-column out-ivec)
        :res-type (types/field->col-type (.getField (.getVector out-ivec)))})))

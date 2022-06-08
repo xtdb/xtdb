@@ -87,7 +87,7 @@
                                                                                   [src-k (table/table->keys src-v)])
                                                                                 (into {}))
                                                                :scan-col-types scan-col-types
-                                                               :param-names (set (keys params))})
+                                                               :param-types (expr/->param-types params)})
                    cursor (->cursor (into query-opts
                                           {:srcs srcs, :params params
                                            :default-valid-time default-valid-time
