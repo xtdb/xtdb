@@ -5,9 +5,6 @@
            [java.util ArrayList HashMap List Map Objects]
            [clojure.lang Box IPersistentVector ILookup MapEntry]))
 
-;; TODO:
-;; - try go via IZip.
-
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype Zip [node ^int idx parent ^:unsynchronized-mutable ^int hash_ ^int depth]
