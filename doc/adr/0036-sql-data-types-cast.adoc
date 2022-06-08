@@ -1,4 +1,4 @@
-= 35. SQL Data Types & CAST
+= 36. SQL Data Types & CAST
 
 Date: 2022-06-08
 
