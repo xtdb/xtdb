@@ -227,6 +227,12 @@
 
 ;; Zipper pattern matching
 
+(defmethod m/count-inline ::m/vector
+  [_ ocr] `(.count ~(vary-meta ocr assoc :tag 'clojure.lang.IPersistentVector)))
+
+(defmethod m/nth-inline ::m/vector
+  [_ ocr i] `(.nth ~(vary-meta ocr assoc :tag 'clojure.lang.IPersistentVector) ~i))
+
 (derive ::m/zip ::m/vector)
 
 (defmethod m/nth-inline ::m/zip
