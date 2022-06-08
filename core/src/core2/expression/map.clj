@@ -78,14 +78,14 @@
               eq-fn (if nil-equal :null-eq :=)
 
               left-boxes (HashMap.)
-              {continue-left :continue} (-> (expr/form->expr left-vec {:col-names #{left-vec}})
+              {continue-left :continue} (-> (expr/form->expr left-vec {:col-types {left-vec left-col-type}})
                                             (assoc :idx left-idx)
                                             (expr/codegen-expr {:var->types {left-vec left-val-types}
                                                                 :var->col-type {left-vec left-col-type}
                                                                 :return-boxes left-boxes}))
 
               right-boxes (HashMap.)
-              {continue-right :continue} (-> (expr/form->expr right-vec {:col-names #{right-vec}})
+              {continue-right :continue} (-> (expr/form->expr right-vec {:col-types {right-vec right-col-type}})
                                              (assoc :idx right-idx)
                                              (expr/codegen-expr {:var->types {right-vec right-val-types}
                                                                  :var->col-type {right-vec right-col-type}

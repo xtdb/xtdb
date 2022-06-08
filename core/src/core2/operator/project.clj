@@ -103,7 +103,7 @@
                                                               (->row-number-projection-spec col-name))
                                          :extend (let [[col-name form] (first arg)]
                                                    (expr/->expression-projection-spec col-name form
-                                                                                      {:col-names (set (keys inner-col-types))
+                                                                                      {:col-types inner-col-types
                                                                                        :param-types param-types})))))]
         {:col-types (->> projection-specs
                          (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)

@@ -111,7 +111,7 @@
               group-mapping-sym (gensym 'group-mapping)
               group-idx-sym (gensym 'group-idx)
               boxes (HashMap.)
-              {continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {:col-names #{from-var}})
+              {continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {:col-types {from-var from-col-type}})
                                                           {:var->types {from-var from-val-types}
                                                            :var->col-type {from-var from-col-type}
                                                            :return-boxes boxes})]
@@ -308,7 +308,9 @@
 (defmethod ->aggregate-factory :avg [_ ^String from-name, from-type, ^String to-name]
   (let [sum-agg (->aggregate-factory :sum from-name from-type "sum")
         count-agg (->aggregate-factory :count from-name from-type "cnt")
-        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt) {:col-names '#{sum cnt}})]
+        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt)
+                                                     {:col-types {'sum (.getToColumnType sum-agg)
+                                                                  'cnt (.getToColumnType count-agg)}})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
       (getToColumnType [_] (.getColumnType projecter))
@@ -344,11 +346,12 @@
   (let [from-var (symbol from-name)
         avgx-agg (->aggregate-factory :avg from-name from-type "avgx")
         x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var)
-                                                        {:col-names #{from-var}})
+                                                        {:col-types {from-var from-type}})
 
         avgx2-agg (->aggregate-factory :avg "x2" (.getColumnType x2-projecter) "avgx2")
         finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx))
-                                                            {:col-names '#{avgx2 avgx}})]
+                                                            {:col-types {'avgx (.getToColumnType avgx-agg)
+                                                                         'avgx2 (.getToColumnType avgx2-agg)}})]
 
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
@@ -386,7 +389,7 @@
 (defmethod ->aggregate-factory :std-dev [_ ^String from-name, from-type, ^String to-name]
   (let [variance-agg (->aggregate-factory :variance from-name from-type "variance")
         finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance)
-                                                            {:col-names '#{variance}})]
+                                                            {:col-types {'variance (.getToColumnType variance-agg)}})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
       (getToColumnType [_] (.getColumnType finish-projecter))

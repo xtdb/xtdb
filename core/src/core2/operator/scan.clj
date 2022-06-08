@@ -319,7 +319,7 @@
 
         col-preds (->> (for [[col-name select-form] selects]
                          (MapEntry/create (name col-name)
-                                          (expr/->expression-relation-selector select-form {:col-names #{col-name}, :param-types param-types})))
+                                          (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
                        (into {}))
 
         metadata-args (vec (concat (for [col-name col-names

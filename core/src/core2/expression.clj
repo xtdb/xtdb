@@ -36,12 +36,12 @@
     f)
   :default ::default)
 
-(defn form->expr [form {:keys [col-names param-types locals] :as env}]
+(defn form->expr [form {:keys [col-types param-types locals] :as env}]
   (cond
     (symbol? form) (cond
                      (contains? locals form) {:op :local, :local form}
                      (contains? param-types form) {:op :param, :param form, :param-type (get param-types form)}
-                     (contains? col-names form) {:op :variable, :variable form}
+                     (contains? col-types form) {:op :variable, :variable form, :var-type (get col-types form)}
                      :else (throw (err/illegal-arg :unknown-symbol
                                                    {::err/message (format "Unknown symbol: '%s'" form)
                                                     :symbol form})))
@@ -352,6 +352,7 @@
                            (f return-type (continue (fn [_ code] code))))))))
 
 (defmethod codegen-expr :variable [{:keys [variable idx], :or {idx idx-sym}} {:keys [var->types var->col-type]}]
+  ;; NOTE we now get the widest var-type in the expr itself, but don't use it here (yet? at all?)
   (let [col-type (or (get var->col-type variable)
                      (throw (AssertionError. (str "unknown variable: " variable))))
         field-types (or (get var->types variable)
@@ -2019,9 +2020,8 @@
                 (.add res idx)))
             (.toArray (.build res))))))))
 
-(defn eval-scalar-value [al form col-names params]
-  (let [input-types {:col-names col-names,
-                     :param-types (->param-types params)}
+(defn eval-scalar-value [al form params]
+  (let [input-types {:param-types (->param-types params)}
         expr (form->expr form input-types)]
     (case (:op expr)
       :literal form

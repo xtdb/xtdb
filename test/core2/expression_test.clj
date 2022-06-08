@@ -36,7 +36,7 @@
 (t/deftest test-simple-projection
   (with-open [in-rel (open-rel (->data-vecs))]
     (letfn [(project [form]
-              (with-open [project-col (.project (expr/->expression-projection-spec "c" form {:col-names '#{a b d}, :param-types {}})
+              (with-open [project-col (.project (expr/->expression-projection-spec "c" form {:col-types {'a :f64, 'b :f64, 'd :i64}, :param-types {}})
                                                 tu/*allocator* in-rel {})]
                 (tu/<-column project-col)))]
 
@@ -71,22 +71,22 @@
 
 (t/deftest can-compile-simple-expression
   (with-open [in-rel (open-rel (->data-vecs))]
-    (letfn [(select-relation [form col-names params]
-              (alength (.select (expr/->expression-relation-selector form {:col-names col-names,
+    (letfn [(select-relation [form col-types params]
+              (alength (.select (expr/->expression-relation-selector form {:col-types col-types,
                                                                            :param-types (expr/->param-types params)})
                                 tu/*allocator* in-rel params)))]
 
       (t/testing "selector"
-        (t/is (= 500 (select-relation '(>= a 500) '#{a} {})))
-        (t/is (= 500 (select-relation '(>= e "0500") '#{e} {}))))
+        (t/is (= 500 (select-relation '(>= a 500) {'a :f64} {})))
+        (t/is (= 500 (select-relation '(>= e "0500") {'e :utf8} {}))))
 
       (t/testing "parameter"
-        (t/is (= 500 (select-relation '(>= a ?a) '#{a} {'?a 500})))
-        (t/is (= 500 (select-relation '(>= e ?e) '#{e} {'?e "0500"})))))))
+        (t/is (= 500 (select-relation '(>= a ?a) {'a :f64} {'?a 500})))
+        (t/is (= 500 (select-relation '(>= e ?e) {'e :utf8} {'?e "0500"})))))))
 
 (t/deftest nil-selection-doesnt-yield-the-row
   (t/is (= 0
-           (-> (.select (expr/->expression-relation-selector '(and true nil) {:col-names #{}, :param-types {}})
+           (-> (.select (expr/->expression-relation-selector '(and true nil) {})
                         tu/*allocator* (iv/->indirect-rel [] 1) {})
                (alength)))))
 
@@ -241,8 +241,10 @@
         (t/is (= [2022 2021 2020] (extract-all "YEAR" dates)))))))
 
 (defn- run-projection [rel form]
-  (let [col-names (into #{} (map #(symbol (.getName ^IIndirectVector %))) rel)]
-    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {:col-names col-names, :param-types {}})
+  (let [col-types (->> rel
+                       (into {} (map (juxt #(symbol (.getName ^IIndirectVector %))
+                                           #(types/field->col-type (.getField (.getVector ^IIndirectVector %)))))))]
+    (with-open [out-ivec (.project (expr/->expression-projection-spec "out" form {:col-types col-types, :param-types {}})
                                    tu/*allocator* rel {})]
       {:res (tu/<-column out-ivec)
        :res-type (types/field->col-type (.getField (.getVector out-ivec)))})))

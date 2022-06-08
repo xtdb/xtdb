@@ -385,7 +385,7 @@
 (defn- equi-projection [{:keys [col, expr, project]} col-types param-types]
   (let [col-name (name col)]
     (if project
-      (expr/->expression-projection-spec col-name expr {:col-names (into #{} (map symbol) (keys col-types)), :param-types param-types})
+      (expr/->expression-projection-spec col-name expr {:col-types col-types, :param-types param-types})
       (project/->identity-projection-spec col-name (get col-types col-name)))))
 
 (defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-types] :as args} f]
@@ -394,13 +394,13 @@
       (let [left-col-names (set (keys left-col-types))
             right-col-names (set (keys right-col-types))
 
-            col-names (into left-col-names right-col-names)
-
             {:keys [equi, theta]} (group-by :predicate-type (map-indexed further-destructure-join-pred condition))
+
+            col-types (merge-with types/merge-col-types left-col-types right-col-types)
 
             theta-selector (when theta
                              (expr/->expression-relation-selector (list* 'and (map :expr theta))
-                                                                  {:col-names col-names, :param-types param-types}))
+                                                                  {:col-types col-types, :param-types param-types}))
 
             {:keys [col-types ->cursor]} (f left-col-types right-col-types)
 

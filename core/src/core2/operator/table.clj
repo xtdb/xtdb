@@ -96,6 +96,6 @@
                                                     col-s (symbol col-name)]]
                                           [col-name (vec (for [row rows
                                                                :let [v (get row col-k (get row col-s))]]
-                                                           (expr/eval-scalar-value allocator v #{} params)))])
+                                                           (expr/eval-scalar-value allocator v params)))])
                                         (into {})))
                                  false)))}))
