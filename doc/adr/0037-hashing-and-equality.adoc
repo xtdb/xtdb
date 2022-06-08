@@ -1,0 +1,55 @@
+= 37. Hashing and equality
+
+Date: 2022-06-08
+
+== Status
+
+Proposed
+
+== Context
+
+XTDB uses hash tables in joins and group by, we currently leverage the `.hashCode` functionality provided by arrow, using its `MurmurHasher` as the hash function.
+
+Arrow hashes the byte contents of vectors, it is overloaded for different vector types, lists for example will hash their elements and combine them.
+
+This will work for many types but might fall apart at the edges, and cause the hash code to be inconsistent with value equality, and the property that equal objects should share the same hash code.
+
+For example, we would expect 42 to be equal to 42 regardless of the integer representation we use, the hash code should follow.
+
+=== Numbers
+
+Exact numbers should compare equal and hash equal if their values are the same. (Not true in clojure, 42N != 42M,  42 != 42M).
+
+Approximate numbers having the same value likewise.
+
+=== Structs
+
+(This is just a note, struct equality has yet to be defined anyway)
+
+Structs in arrow hash the same only if their fields are specified in the same order, even if they are same fields.
+
+This is consistent with SQL equality rules for `ROW` types, but they are quite strict and more like traditional static structs rather than clojure maps.
+
+This will cause problems if we use structs as our representation of clojure maps.
+
+=== General
+
+Intervals are inconsistent with equality due to differing binary representations if using the arrow hasher.
+
+Durations, dates and such will have the same problem.
+
+There is an open question for 'large' binary and string vectors, but they are not supported yet - and if you are hashing (or comparing) these, well you've probably lost!)
+
+== Option A: `(hash)` as an expression.
+
+Rather than using the hasher provided by arrow. Use the expression engine to compute the hash. Using the polymorphic dispatch tools on arrow type, we can ensure differing representations of the same value result in the hash.
+
+For `ARRAY` and `STRUCT` we may need the pointer types described in ADR-35.
+
+== Option B: Align equality with arrows hasher
+
+Instead of changing how we hash, we _could_ change equality to be consistent with arrows hashing semantics. Not sure if we should event entertain this.
+
+== Decision
+
+== Consequences
