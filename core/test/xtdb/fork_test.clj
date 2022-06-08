@@ -65,10 +65,33 @@
              (->> history
                   (mapv #(select-keys % [::xt/tx-id ::xt/doc])))))))
 
+(t/deftest test-speculative-from-point-in-past-cut-down
+  (let [ivan1 {:xt/id :ivan, :name "Ivan1"}
+        ivan2 {:xt/id :ivan, :name "Ivan2"}
+
+        tt0 (::xt/tx-time (fix/submit+await-tx [[::xt/put ivan1]]))
+        _ (Thread/sleep 100)
+        tt1 (::xt/tx-time (fix/submit+await-tx [[::xt/put ivan2]]))
+        _ (Thread/sleep 100)]
+
+    (t/is (= [{::xt/tx-id 0, ::xt/doc {:name "Ivan1", :xt/id :ivan}}]
+             (->> (xt/entity-history (xt/db *api* tt1 tt0)
+                                     :ivan
+                                     :asc
+                                     {:with-docs? true})
+                  (mapv #(select-keys % [::xt/tx-id ::xt/doc])))))
+
+    (t/is (= [{::xt/tx-id 0, ::xt/doc {:name "Ivan1", :xt/id :ivan}}]
+             (->> (xt/entity-history (xt/with-tx (xt/db *api* tt1 tt0) [])
+                                     :ivan
+                                     :asc
+                                     {:with-docs? true})
+                  (mapv #(select-keys % [::xt/tx-id ::xt/doc])))))))
+
 (t/deftest test-speculative-from-point-in-past
   (let [ivan0 {:xt/id :ivan, :name "Ivan0"}
         tt0 (::xt/tx-time (fix/submit+await-tx [[::xt/put ivan0]]))
-        _ (Thread/sleep 10)      ; to ensure these two txs are at a different ms
+        _ (Thread/sleep 10) ; to ensure these two txs are at a different ms
         tt1 (::xt/tx-time (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :name "Ivan1"}]]))
 
         db0 (xt/db *api* tt0 tt0)]
