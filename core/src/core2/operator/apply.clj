@@ -127,7 +127,7 @@
                                (update :param-types
                                        (fnil into {})
                                        (map (fn [[ik dk]]
-                                              [dk (get independent-col-types (name ik))]))
+                                              [dk (get independent-col-types ik)]))
                                        columns))
             {dependent-col-types :col-types, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)]
 

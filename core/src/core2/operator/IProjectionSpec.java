@@ -9,7 +9,7 @@ import java.nio.Buffer;
 import java.util.Map;
 
 public interface IProjectionSpec {
-    String getColumnName();
+    Symbol getColumnName();
     Object getColumnType();
 
     IIndirectVector<?> project(BufferAllocator allocator, IIndirectRelation readRelation, Map<Symbol, Object> params);

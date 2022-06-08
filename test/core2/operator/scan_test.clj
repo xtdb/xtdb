@@ -88,11 +88,11 @@
                      (tu/then-await-tx node))]
          (tu/finish-chunk node)
 
-         (t/is (= {"_id" [:extension-type :keyword :utf8 ""]}
+         (t/is (= '{_id [:extension-type :keyword :utf8 ""]}
                   (->col-types tx))))
 
         (let [tx (-> (c2/submit-tx node [[:put {:_id "foo"}]])
                      (tu/then-await-tx node))]
 
-          (t/is (= {"_id" [:union #{[:extension-type :keyword :utf8 ""] :utf8}]}
+          (t/is (= '{_id [:union #{[:extension-type :keyword :utf8 ""] :utf8}]}
                    (->col-types tx))))))))

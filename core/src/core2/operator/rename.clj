@@ -21,8 +21,8 @@
 (def ^:const ^String relation-prefix-delimiter "_")
 
 (deftype RenameCursor [^ICursor in-cursor
-                       ^Map #_#_<String, String> col-name-mapping
-                       ^Map #_#_<String, String> col-name-reverse-mapping]
+                       ^Map #_#_<Symbol, Symbol> col-name-mapping
+                       ^Map #_#_<Symbol, Symbol> col-name-reverse-mapping]
   ICursor
   (tryAdvance [_ c]
     (binding [scan/*column->pushdown-bloom* (->> (for [[k v] scan/*column->pushdown-bloom*]
@@ -35,7 +35,7 @@
                              out-cols (LinkedList.)]
 
                          (doseq [^IIndirectVector in-col in-rel
-                                 :let [col-name (get col-name-mapping (.getName in-col))]]
+                                 :let [col-name (name (get col-name-mapping (symbol (.getName in-col))))]]
                            (.add out-cols (.withName in-col col-name)))
 
                          (.accept c (iv/->indirect-rel out-cols))))))))
@@ -44,18 +44,15 @@
     (util/try-close in-cursor)))
 
 (defmethod lp/emit-expr :rename [{:keys [columns relation prefix]} args]
-  (let [rename-map (->> columns
-                        (into {} (map (juxt (comp name key)
-                                            (comp name val)))))]
-    (lp/unary-expr relation args
-      (fn [col-types]
-        (let [col-name-mapping (->> (for [old-name (set (keys col-types))]
-                                      [old-name
-                                       (cond->> (get rename-map old-name old-name)
-                                         prefix (str prefix relation-prefix-delimiter))])
-                                    (into {}))]
-          {:col-types (->> col-types
-                           (into {}
-                                 (map (juxt (comp col-name-mapping key) val))))
-           :->cursor (fn [_opts in-cursor]
-                       (RenameCursor. in-cursor col-name-mapping (set/map-invert col-name-mapping)))})))))
+  (lp/unary-expr relation args
+    (fn [col-types]
+      (let [col-name-mapping (->> (for [old-name (set (keys col-types))]
+                                    [old-name
+                                     (cond-> (get columns old-name old-name)
+                                       prefix (->> name (str prefix relation-prefix-delimiter) symbol))])
+                                  (into {}))]
+        {:col-types (->> col-types
+                         (into {}
+                               (map (juxt (comp col-name-mapping key) val))))
+         :->cursor (fn [_opts in-cursor]
+                     (RenameCursor. in-cursor col-name-mapping (set/map-invert col-name-mapping)))}))))

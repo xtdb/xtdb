@@ -2,15 +2,14 @@
   (:require [clojure.test :as t]
             [core2.operator :as op]
             [core2.test-util :as tu]
-            [core2.types :as ty]
             [core2.types :as types])
   (:import (org.apache.arrow.vector.types.pojo Schema)))
 
-(def ^:private a-field (ty/->field "a" ty/bigint-type false))
-(def ^:private b-field (ty/->field "b" ty/bigint-type false))
-(def ^:private c-field (ty/->field "c" ty/bigint-type false))
-(def ^:private d-field (ty/->field "d" ty/bigint-type false))
-(def ^:private e-field (ty/->field "e" ty/bigint-type false))
+(def ^:private a-field (types/->field "a" types/bigint-type false))
+(def ^:private b-field (types/->field "b" types/bigint-type false))
+(def ^:private c-field (types/->field "c" types/bigint-type false))
+(def ^:private d-field (types/->field "d" types/bigint-type false))
+(def ^:private e-field (types/->field "e" types/bigint-type false))
 
 (defn- run-ra [ra-expr]
   (with-open [res (op/open-ra ra-expr)]
@@ -25,7 +24,7 @@
                   {{:a 100, :b 10, :c 1} 1, {:a 100, :b 15, :c 2} 1}
                   {{:a 12, :b 83, :c 3} 2, {:a 0, :b 83, :c 3} 1}
                   {{:a 100, :b 83, :c 3} 1}]
-            :col-types {"a" :i64, "b" :i64, "c" :i64}}
+            :col-types '{a :i64, b :i64, c :i64}}
            (-> (run-ra [:cross-join
                         [::tu/blocks (Schema. [a-field])
                          [[{:a 12}, {:a 12}, {:a 0}]
@@ -36,7 +35,7 @@
                (update :res #(mapv frequencies %)))))
 
   (t/is (= {:res []
-            :col-types {"a" :i64, "b" :i64}}
+            :col-types '{a :i64, b :i64}}
            (run-ra [:cross-join
                          [::tu/blocks (Schema. [a-field])
                           [[{:a 12}, {:a 0}]
@@ -58,7 +57,7 @@
   (t/is (= {:res [#{{:a 12, :b 12}}
                   #{{:a 100, :b 100}
                     {:a 0, :b 0}}]
-            :col-types {"a" :i64, "b" :i64}}
+            :col-types '{a :i64, b :i64}}
            (-> (run-ra [:join '[{a b}]
                         [::tu/blocks (Schema. [a-field])
                          [[{:a 12}, {:a 0}]
@@ -70,7 +69,7 @@
 
   (t/is (= {:res [{{:a 12} 2}
                   {{:a 100} 1, {:a 0} 1}]
-            :col-types {"a" :i64}}
+            :col-types '{a :i64}}
            (-> (run-ra [:join '[{a a}]
                         [::tu/blocks (Schema. [a-field])
                          [[{:a 12}, {:a 0}]
@@ -82,7 +81,7 @@
         "same column name")
 
   (t/is (= {:res []
-            :col-types {"a" :i64, "b" :i64}}
+            :col-types '{a :i64, b :i64}}
            (run-ra [:join '[{a b}]
                     [::tu/blocks (Schema. [a-field])
                      [[{:a 12}, {:a 0}]
@@ -92,7 +91,7 @@
         "empty input")
 
   (t/is (= {:res []
-            :col-types {"a" :i64, "b" :i64, "c" :i64}}
+            :col-types '{a :i64, b :i64, c :i64}}
            (run-ra [:join '[{a b}]
                     [::tu/blocks (Schema. [a-field])
                      [[{:a 12}, {:a 0}]
@@ -215,7 +214,7 @@
 (t/deftest test-left-equi-join
   (t/is (= {:res [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0, :b nil, :c nil} 1}
                   {{:a 12, :b 12, :c 2} 1, {:a 100, :b 100, :c 3} 1, {:a 12, :b 12, :c 0} 1}]
-            :col-types {"a" :i64, "b" [:union #{:null :i64}], "c" [:union #{:null :i64}]}}
+            :col-types '{a :i64, b [:union #{:null :i64}], c [:union #{:null :i64}]}}
            (-> (run-ra [:left-outer-join '[{a b}]
                          [::tu/blocks (Schema. [a-field])
                           [[{:a 12}, {:a 0}]
@@ -228,7 +227,7 @@
   (t/testing "empty input"
     (t/is (= {:res [#{{:a 12, :b nil}, {:a 0, :b nil}}
                     #{{:a 100, :b nil}}]
-              :col-types {"a" :i64, "b" [:union #{:null :i64}]}}
+              :col-types '{a :i64, b [:union #{:null :i64}]}}
              (-> (run-ra [:left-outer-join '[{a b}]
                           [::tu/blocks (Schema. [a-field])
                            [[{:a 12}, {:a 0}]
@@ -238,7 +237,7 @@
                  (update :res (partial mapv set)))))
 
     (t/is (= {:res []
-              :col-types {"a" :i64, "b" [:union #{:null :i64}]}}
+              :col-types '{a :i64, b [:union #{:null :i64}]}}
              (run-ra [:left-outer-join '[{a b}]
                       [::tu/blocks (Schema. [a-field])
                        []]
@@ -248,7 +247,7 @@
 
     (t/is (= {:res [#{{:a 12, :b nil}, {:a 0, :b nil}}
                     #{{:a 100, :b nil}}]
-              :col-types {"a" :i64, "b" [:union #{:null :i64}]}}
+              :col-types '{a :i64, b [:union #{:null :i64}]}}
              (-> (run-ra [:left-outer-join '[{a b}]
                            [::tu/blocks (Schema. [a-field])
                             [[{:a 12}, {:a 0}]
@@ -322,7 +321,7 @@
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a nil, :b 2, :c 1} 1}
                     {{:a 12, :b 12, :c 2} 2, {:a 100, :b 100, :c 3} 1}
                     {{:a 0, :b nil, :c nil} 1}]
-              :col-types {"a" [:union #{:null :i64}], "b" [:union #{:null :i64}], "c" [:union #{:null :i64}]}}
+              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
                           [::tu/blocks (Schema. [a-field])
                            [[{:a 12}, {:a 0}]
@@ -335,7 +334,7 @@
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2, {:a nil, :b 2, :c 1} 1}
                     {{:a 100, :b 100, :c 3} 1}
                     {{:a 0, :b nil, :c nil} 1}]
-              :col-types {"a" [:union #{:null :i64}], "b" [:union #{:null :i64}], "c" [:union #{:null :i64}]}}
+              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
                           [::tu/blocks (Schema. [a-field])
                            [[{:a 12}, {:a 0}]
@@ -348,7 +347,7 @@
   (t/testing "all matched"
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 100, :b 100, :c 3} 1}
                     {{:a 12, :b 12, :c 2} 2}]
-              :col-types {"a" [:union #{:null :i64}], "b" [:union #{:null :i64}], "c" [:union #{:null :i64}]}}
+              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
                           [::tu/blocks (Schema. [a-field])
                            [[{:a 12}]
@@ -360,7 +359,7 @@
 
     (t/is (= {:res [{{:a 12, :b 12, :c 0} 2, {:a 12, :b 12, :c 2} 2}
                     {{:a 100, :b 100, :c 3} 1}]
-              :col-types {"a" [:union #{:null :i64}], "b" [:union #{:null :i64}], "c" [:union #{:null :i64}]}}
+              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
                           [::tu/blocks (Schema. [a-field])
                            [[{:a 12}]
@@ -372,7 +371,7 @@
 
   (t/testing "empty input"
     (t/is (= {:res [{{:a 0, :b nil} 1, {:a 100, :b nil} 1, {:a 12, :b nil} 1}]
-              :col-types {"a" [:union #{:null :i64}], "b" [:union #{:null :i64}]}}
+              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
                           [::tu/blocks (Schema. [a-field])
                            [[{:a 12}, {:a 0}]
@@ -383,7 +382,7 @@
 
     (t/is (= {:res [{{:a nil, :b 12} 1, {:a nil, :b 2} 1}
                     {{:a nil, :b 100} 1, {:a nil, :b 0} 1}]
-              :col-types {"a" [:union #{:null :i64}], "b" [:union #{:null :i64}]}}
+              :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
                           [::tu/blocks (Schema. [a-field]) []]
                           [::tu/blocks (Schema. [b-field])
@@ -448,7 +447,7 @@
 
 (t/deftest test-anti-equi-join
   (t/is (= {:res [{{:a 0} 2}]
-            :col-types {"a" :i64}}
+            :col-types '{a :i64}}
            (-> (run-ra [:anti-join '[{a b}]
                         [::tu/blocks (Schema. [a-field])
                          [[{:a 12}, {:a 0}, {:a 0}]

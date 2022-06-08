@@ -274,7 +274,7 @@
             Closeable
             (close [_] (util/try-close out-pvec))))))))
 
-(defmethod ->aggregate-factory :sum [_ ^String from-name, from-type, ^String to-name]
+(defmethod ->aggregate-factory :sum [_ ^String from-name, _from-type, ^String to-name]
   (let [to-type :f64] ; HACK!
     (promotable-agg-factory from-name to-name to-type
       (fn emit-sum-init [acc-type acc-sym group-idx-sym]
@@ -627,19 +627,19 @@
 
 (defmethod lp/emit-expr :group-by [{:keys [columns relation]} args]
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
-        group-cols (mapv (comp name second) group-cols)]
+        group-cols (mapv second group-cols)]
     (lp/unary-expr relation args
       (fn [inner-col-types]
         (let [agg-factories (for [[_ agg] aggs]
                               (let [[to-column {:keys [aggregate-fn from-column]}] (first agg)]
                                 (memo-agg-factory aggregate-fn
                                                   (name from-column)
-                                                  (get inner-col-types (name from-column))
+                                                  (get inner-col-types from-column)
                                                   (name to-column))))]
           {:col-types (-> (into (->> group-cols
                                      (into {} (map (juxt identity inner-col-types))))
                                 (->> agg-factories
-                                     (into {} (map (juxt #(.getToColumnName ^IAggregateSpecFactory %)
+                                     (into {} (map (juxt #(symbol (.getToColumnName ^IAggregateSpecFactory %))
                                                          #(.getToColumnType ^IAggregateSpecFactory %)))))))
 
            :->cursor (fn [{:keys [allocator]} in-cursor]
@@ -649,7 +649,7 @@
                              (.add agg-specs (.build factory allocator)))
 
                            (GroupByCursor. allocator in-cursor
-                                           (->group-mapper allocator group-cols)
+                                           (->group-mapper allocator (mapv name group-cols))
                                            (vec agg-specs)
                                            false)
 

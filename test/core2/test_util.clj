@@ -184,7 +184,7 @@
 
 (defmethod lp/emit-expr ::blocks [{:keys [^Schema schema blocks]} _args]
   {:col-types (->> (.getFields schema)
-                   (into {} (map (juxt #(.getName ^Field %) types/field->col-type))))
+                   (into {} (map (juxt #(symbol (.getName ^Field %)) types/field->col-type))))
    :->cursor (fn [{:keys [allocator]}]
                (->cursor allocator schema blocks))})
 

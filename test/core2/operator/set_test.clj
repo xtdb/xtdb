@@ -16,7 +16,7 @@
                                   [[{:a 10 :b 1}, {:a 15 :b 2}]
                                    [{:a 83 :b 3}]]]])]
 
-      (t/is (= {"a" :i64, "b" :i64} (.columnTypes res)))
+      (t/is (= '{a :i64, b :i64} (.columnTypes res)))
 
       (t/is (= [#{{:a 0, :b 15}
                   {:a 12, :b 10}}
@@ -44,7 +44,7 @@
                                   [[{:a 10 :b 1}, {:a 15 :b 2}]
                                    [{:a 0 :b 15}]]]])]
 
-      (t/is (= {"a" :i64, "b" :i64} (.columnTypes res)))
+      (t/is (= '{a :i64, b :i64} (.columnTypes res)))
 
       (t/is (= [#{{:a 0, :b 15}}]
                (mapv set (tu/<-cursor res)))))
@@ -88,7 +88,7 @@
                                  [::tu/blocks (Schema. [a-field b-field])
                                   [[{:a 10 :b 1}, {:a 15 :b 2}]
                                    [{:a 0 :b 15}]]]])]
-      (t/is (= {"a" :i64, "b" :i64} (.columnTypes res)))
+      (t/is (= '{a :i64, b :i64} (.columnTypes res)))
 
       (t/is (= [#{{:a 12, :b 10}}
                 #{{:a 100 :b 15}}]

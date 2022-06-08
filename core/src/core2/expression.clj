@@ -1671,7 +1671,7 @@
 (defmethod emit-expr :struct [{:keys [entries]} col-name opts]
   (let [entries (vec (for [[k v] entries]
                        (emit-expr v (name k) opts)))
-        ^Field return-field (apply types/->field col-name types/struct-type false
+        ^Field return-field (apply types/->field (name col-name) types/struct-type false
                                    (map :return-field entries))]
 
     {:return-field return-field
@@ -1708,7 +1708,7 @@
   (fn [{:keys [f] :as expr} out-vec]
     (keyword f)))
 
-(defmethod emit-expr :vectorised-call [{:keys [args] :as expr} ^String col-name opts]
+(defmethod emit-expr :vectorised-call [{:keys [args] :as expr} col-name opts]
   (let [emitted-args (mapv #(emit-expr % "arg" opts) args)
         {:keys [^Field return-field eval-call-expr]} (emit-call-expr (assoc expr :emitted-args emitted-args) col-name)]
     {:return-field return-field
@@ -1739,9 +1739,9 @@
                                   :when (= (name field) (.getName child-field))]
                               child-field)))]
                    (if (instance? ArrowType$Union (.getType struct-field))
-                     (types/->field col-name types/dense-union-type false)
+                     (types/->field (name col-name) types/dense-union-type false)
                      (or (get-struct-child struct-field)
-                         (types/->field col-name types/null-type true))))
+                         (types/->field (name col-name) types/null-type true))))
 
    :eval-call-expr (fn [[^ValueVector in-vec] ^ValueVector out-vec _params]
                      (let [out-writer (vw/vec->writer out-vec)]
@@ -1759,7 +1759,7 @@
 (defmethod emit-expr :variable [{:keys [variable]} col-name {:keys [var-fields]}]
   (let [^Field out-field (-> (or (get var-fields variable)
                                  (throw (IllegalArgumentException. (str "missing variable: " variable ", available " (pr-str (set (keys var-fields)))))))
-                             (types/field-with-name col-name))]
+                             (types/field-with-name (name col-name)))]
     {:return-field out-field
      :eval-expr
      (fn [^IIndirectRelation in-rel al _params]
@@ -1772,10 +1772,10 @@
              (.close out-vec)
              (throw e)))))}))
 
-(defmethod emit-expr :list [{:keys [elements]} ^String col-name opts]
+(defmethod emit-expr :list [{:keys [elements]} col-name opts]
   (let [el-count (count elements)
         emitted-els (mapv #(emit-expr % "list-el" opts) elements)
-        out-field (types/->field col-name (ArrowType$FixedSizeList. el-count) false
+        out-field (types/->field (name col-name) (ArrowType$FixedSizeList. el-count) false
                                  (types/->field "$data" types/dense-union-type false))]
     {:return-field out-field
      :eval-expr
@@ -1869,7 +1869,7 @@
 
 (defmethod emit-call-expr :trim-array [{[{^Field array-field :return-field}] :emitted-args}
                                        col-name]
-  {:return-field (types/->field col-name types/list-type true
+  {:return-field (types/->field (name col-name) types/list-type true
                                 (if (or (instance? ArrowType$List (.getType array-field))
                                         (instance? ArrowType$FixedSizeList (.getType array-field)))
                                   (first (.getChildren array-field))
@@ -1907,7 +1907,7 @@
     :if :if-some
     :metadata-field-present :metadata-vp-call})
 
-(defn- emit-prim-expr [prim-expr ^String col-name {:keys [var-fields var->col-type param-classes param-types] :as opts}]
+(defn- emit-prim-expr [prim-expr col-name {:keys [var-fields var->col-type param-classes param-types] :as opts}]
   (let [prim-expr (->> prim-expr
                        (walk/prewalk-expr (fn [{:keys [op] :as expr}]
                                             (if (contains? primitive-ops op)
@@ -1988,7 +1988,7 @@
 (defn param-opts [params]
   {:param-classes (->> params (into {} (map (juxt key (comp class val)))))})
 
-(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [^String col-name form input-types]
+(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [col-name form input-types]
   (let [expr (form->expr form input-types)]
     (reify IProjectionSpec
       (getColumnName [_] col-name)

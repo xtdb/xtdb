@@ -157,7 +157,7 @@
   (let [hash->bitmap (HashMap.)
         out-rel (vw/->rel-writer allocator)]
     (doseq [col-name (set/union (set build-key-col-names) (set store-col-names))]
-      (.writerForName out-rel col-name))
+      (.writerForName out-rel (name col-name)))
 
     (when with-nil-row?
       (assert store-col-names "supply `:store-col-names` with `:with-nil-row? true`")
@@ -174,14 +174,14 @@
         (buildFromRelation [_ in-rel]
           (let [in-rel (if store-col-names
                          (->> (set/union (set build-key-col-names) (set store-col-names))
-                              (mapv #(.vectorForName in-rel %))
+                              (mapv #(.vectorForName in-rel (name %)))
                               iv/->indirect-rel)
                          in-rel)
-                in-key-cols (mapv #(.vectorForName in-rel %) build-key-col-names)
+                in-key-cols (mapv #(.vectorForName in-rel (name %)) build-key-col-names)
                 out-writers (->> (mapv #(.writerForName out-rel (.getName ^IIndirectVector %)) in-rel))
                 out-copiers (mapv vw/->row-copier out-writers in-rel)
                 build-rel (vw/rel-writer->reader out-rel)
-                comparator (->comparator in-key-cols (mapv #(.vectorForName build-rel %) build-key-col-names) nil-keys-equal?)
+                comparator (->comparator in-key-cols (mapv #(.vectorForName build-rel (name %)) build-key-col-names) nil-keys-equal?)
                 hasher (->hasher in-key-cols)]
 
             (letfn [(add ^long [^RoaringBitmap hash-bitmap, ^long idx]
@@ -205,9 +205,9 @@
                       (add hash-bitmap idx))))))))
 
         (probeFromRelation [_ probe-rel]
-          (let [in-key-cols (mapv #(.vectorForName probe-rel %) probe-key-col-names)
+          (let [in-key-cols (mapv #(.vectorForName probe-rel (name %)) probe-key-col-names)
                 build-rel (vw/rel-writer->reader out-rel)
-                comparator (->comparator in-key-cols (mapv #(.vectorForName build-rel %) build-key-col-names) nil-keys-equal?)
+                comparator (->comparator in-key-cols (mapv #(.vectorForName build-rel (name %)) build-key-col-names) nil-keys-equal?)
                 hasher (->hasher in-key-cols)]
 
             (reify IRelationMapProber

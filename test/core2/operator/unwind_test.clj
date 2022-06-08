@@ -20,7 +20,7 @@
 
     (with-open [res (op/open-ra [:unwind '{b* b}
                                  [::tu/blocks (Schema. [a-field b-field]) in-vals]])]
-      (t/is (= {"a" :i64, "b" [:list :i64], "b*" :i64}
+      (t/is (= '{a :i64, b [:list :i64], b* :i64}
                (.columnTypes res)))
 
       (t/is (= [[{:a 1, :b [1 2], :b* 1}
@@ -35,7 +35,7 @@
 
     (with-open [res (op/open-ra [:unwind '{b* b} '{:ordinality-column $ordinal}
                                  [::tu/blocks (Schema. [a-field b-field]) in-vals]])]
-      (t/is (= {"a" :i64, "b" [:list :i64], "b*" :i64, "$ordinal" :i32}
+      (t/is (= '{a :i64, b [:list :i64], b* :i64, $ordinal :i32}
                (.columnTypes res)))
 
       (t/is (= [[{:a 1, :b [1 2], :b* 1, :$ordinal 1}

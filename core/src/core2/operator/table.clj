@@ -63,7 +63,7 @@
 
 (defn table->keys [rows]
   (letfn [(row-keys [row]
-            (into #{} (map name) (keys row)))]
+            (into #{} (map symbol) (keys row)))]
     (let [col-names (row-keys (first rows))]
       (when-not (every? #(= col-names (row-keys %)) rows)
         (throw (err/illegal-arg :mismatched-keys-in-table

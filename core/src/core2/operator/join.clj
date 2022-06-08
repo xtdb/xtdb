@@ -1,6 +1,5 @@
 (ns core2.operator.join
-  (:require [clojure.set :as set]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [core2.bloom :as bloom]
             [core2.expression :as expr]
             [core2.expression.map :as emap]
@@ -392,19 +391,16 @@
 (defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-types] :as args} f]
   (lp/binary-expr left right args
     (fn [left-col-types right-col-types]
-      (let [left-col-names (keys left-col-types)
-            right-col-names (keys right-col-types)
+      (let [left-col-names (set (keys left-col-types))
+            right-col-names (set (keys right-col-types))
 
-            left-col-syms (into #{} (map symbol) left-col-names)
-            right-col-syms (into #{} (map symbol) right-col-names)
-
-            col-syms (into left-col-syms right-col-syms)
+            col-names (into left-col-names right-col-names)
 
             {:keys [equi, theta]} (group-by :predicate-type (map-indexed further-destructure-join-pred condition))
 
             theta-selector (when theta
                              (expr/->expression-relation-selector (list* 'and (map :expr theta))
-                                                                  {:col-names col-syms, :param-types param-types}))
+                                                                  {:col-names col-names, :param-types param-types}))
 
             {:keys [col-types ->cursor]} (f left-col-types right-col-types)
 

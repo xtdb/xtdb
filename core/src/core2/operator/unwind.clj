@@ -123,7 +123,7 @@
   (let [[to-col from-col] (first columns)]
     (lp/unary-expr relation op-args
       (fn [col-types]
-        (let [unwind-col-type (->> (get col-types (name from-col))
+        (let [unwind-col-type (->> (get col-types from-col)
                                    types/flatten-union-types
                                    (keep (fn [col-type]
                                            (match col-type
@@ -132,8 +132,8 @@
                                              :else nil)))
                                    (apply types/merge-col-types))]
           {:col-types (-> col-types
-                          (assoc (name to-col) unwind-col-type)
-                          (cond-> ordinality-column (assoc (name ordinality-column) :i32)))
+                          (assoc to-col unwind-col-type)
+                          (cond-> ordinality-column (assoc ordinality-column :i32)))
            :->cursor (fn [{:keys [allocator]} in-cursor]
                        (UnwindCursor. allocator in-cursor
                                       (name from-col) (name to-col)

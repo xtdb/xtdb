@@ -37,18 +37,18 @@
   (getColumnName [_] col-name)
   (getColumnType [_] col-type)
   (project [_ _allocator in-rel _params]
-    (.vectorForName in-rel col-name)))
+    (.vectorForName in-rel (name col-name))))
 
 (defn ->identity-projection-spec ^core2.operator.IProjectionSpec [col-name col-type]
   (->IdentityProjectionSpec col-name col-type))
 
-(defn ->row-number-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
+(defn ->row-number-projection-spec ^core2.operator.IProjectionSpec [col-name]
   (let [row-num (long-array [1])]
     (reify IProjectionSpec
       (getColumnName [_] col-name)
       (getColumnType [_] :i64)
       (project [_ allocator in-rel _params]
-        (let [out-vec (BigIntVector. col-name allocator)
+        (let [out-vec (BigIntVector. (name col-name) allocator)
               start-row-num (aget row-num 0)
               row-count (.rowCount in-rel)]
           (try
@@ -95,15 +95,15 @@
     (fn [inner-col-types]
       (let [projection-specs (concat (when append-columns?
                                        (for [[col-name col-type] inner-col-types]
-                                         (->identity-projection-spec (name col-name) col-type)))
+                                         (->identity-projection-spec col-name col-type)))
                                      (for [[p-type arg] projections]
                                        (case p-type
-                                         :column (->identity-projection-spec (name arg) (get inner-col-types (name arg)))
+                                         :column (->identity-projection-spec arg (get inner-col-types arg))
                                          :row-number-column (let [[col-name _form] (first arg)]
-                                                              (->row-number-projection-spec (name col-name)))
+                                                              (->row-number-projection-spec col-name))
                                          :extend (let [[col-name form] (first arg)]
-                                                   (expr/->expression-projection-spec (name col-name) form
-                                                                                      {:col-names (into #{} (map symbol) (keys inner-col-types))
+                                                   (expr/->expression-projection-spec col-name form
+                                                                                      {:col-names (set (keys inner-col-types))
                                                                                        :param-types param-types})))))]
         {:col-types (->> projection-specs
                          (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)

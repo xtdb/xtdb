@@ -40,7 +40,7 @@
                                            [[{:a 12, :b 10}
                                              {:a 0, :b 15}]
                                             [{:a 100, :b 83}]]]])]
-    (t/is (= {"a" :i64, "$row-num" :i64} (.columnTypes project-cursor)))
+    (t/is (= '{a :i64, $row-num :i64} (.columnTypes project-cursor)))
     (t/is (= [[{:a 12, :$row-num 1}, {:a 0, :$row-num 2}]
               [{:a 100, :$row-num 3}]]
              (tu/<-cursor project-cursor)))))
