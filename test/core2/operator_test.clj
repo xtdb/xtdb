@@ -312,7 +312,7 @@
 
 (t/deftest test-apply-operator
   (letfn [(q [mode]
-            (op/query-ra [:apply mode '{c-id ?c-id} '#{o-customer-id o-value}
+            (op/query-ra [:apply mode '{c-id ?c-id}
                           '[:table $customers]
                           '[:select (= o-customer-id ?c-id)
                             [:table $orders]]]

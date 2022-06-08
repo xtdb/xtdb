@@ -7,7 +7,6 @@
    [:apply
     :cross-join
     {x4 ?x9}
-    #{x6}
     [:join
      []
      [:rename {a x1} [:scan [a]]]

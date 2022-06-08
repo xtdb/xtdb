@@ -7,7 +7,6 @@
    [:apply
     :cross-join
     {x1 ?x9}
-    #{x6}
     [:rename {a x1, b x2} [:scan [a b]]]
     [:top
      {:limit 1}

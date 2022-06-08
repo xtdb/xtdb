@@ -5,7 +5,6 @@
   [:apply
    :semi-join
    {x2 ?x14, x4 ?x13}
-   #{}
    [:cross-join
     [:rename {A x1, B x2} [:scan [A B]]]
     [:rename {C x4} [:scan [C]]]]

@@ -30,27 +30,21 @@
     [:apply
      :cross-join
      {x5 ?x24}
-     #{x45}
      [:apply
       :cross-join
       {x10 ?x18}
-      #{x39}
       [:apply
        :cross-join
        {x5 ?x24}
-       #{x33}
        [:apply
         :cross-join
         {x10 ?x18}
-        #{x27}
         [:apply
          :cross-join
          {x5 ?x24}
-         #{x21}
          [:apply
           :cross-join
           {x10 ?x18}
-          #{x15}
           [:join
            [{x3 x8}]
            [:rename

@@ -18,8 +18,6 @@
   (s/cat :op #{:apply}
          :mode #{:cross-join, :left-outer-join, :semi-join, :anti-join}
          :columns (s/map-of ::lp/column ::lp/column, :conform-keys true)
-         ;; TODO no longer required - see #136/#201
-         :dependent-column-names (s/? (s/coll-of ::lp/column, :kind set?))
          :independent-relation ::lp/ra-expression
          :dependent-relation ::lp/ra-expression))
 

@@ -5,7 +5,6 @@
   [:apply
    :cross-join
    {x1 ?x9}
-   #{x6}
    [:rename {y x1, z x2} [:scan [y {z (= z 10)}]]]
    [:top
     {:limit 1}

@@ -612,11 +612,10 @@
           param-symbol])
        (into {})))
 
-(defn- build-apply [apply-mode column->param projected-dependent-columns independent-relation dependent-relation]
+(defn- build-apply [apply-mode column->param independent-relation dependent-relation]
   [:apply
    apply-mode
    column->param
-   projected-dependent-columns
    independent-relation
    (w/postwalk-replace column->param dependent-relation)])
 
@@ -683,7 +682,6 @@
                  (:scalar_subquery
                    :row_subquery) [:max-1-row subquery-plan]
                  subquery-plan)
-         :projected-columns projected-columns
          :column->param column->param})
 
       [:exists_predicate _
@@ -694,7 +692,6 @@
             projected-columns #{exists-symbol}]
         {:type :exists
          :plan subquery-plan
-         :projected-columns projected-columns
          :column->param column->param
          :sym exists-symbol})
 
@@ -723,7 +720,6 @@
          :quantifier (if (= co '=) :some :all)
          :plan subquery-plan
          :predicate predicate
-         :projected-columns projected-columns
          :column->param column->param
          :sym exists-symbol})
 
@@ -733,13 +729,11 @@
             predicate (list (symbol co) (expr rvp) projection-symbol)
             subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
             column->param (merge (correlated-column->param qe scope-id)
-                                 (correlated-column->param rvp scope-id))
-            projected-columns #{exists-symbol}]
+                                 (correlated-column->param rvp scope-id))]
         {:type :quantified-comparison
          :quantifier quantifier
          :plan subquery-plan
          :predicate predicate
-         :projected-columns projected-columns
          :column->param column->param
          :sym exists-symbol})
 
@@ -750,7 +744,6 @@
         (when-not (= 1 (count projected-columns)) (throw (IllegalArgumentException. "ARRAY subquery must return exactly 1 column/")))
         {:type :array
          :plan [:group-by [{(subquery-array-symbol qe) (list 'array-agg (first projected-columns))}] subquery-plan]
-         :projected-columns projected-columns
          :column->param column->param})
 
       (throw (IllegalArgumentException. "unknown subquery type")))))
@@ -763,11 +756,11 @@
 
    See (interpret-subquery) for 'subquery info'."
   [relation subquery-info]
-  (let [{:keys [type plan projected-columns column->param sym predicate]} subquery-info]
+  (let [{:keys [type plan column->param sym predicate]} subquery-info]
     (case type
-      :quantified-comparison (build-apply :cross-join column->param projected-columns relation (wrap-with-exists sym [:select predicate plan]))
-      :exists (build-apply :cross-join column->param projected-columns relation (wrap-with-exists sym plan))
-      (build-apply :cross-join column->param projected-columns relation plan))))
+      :quantified-comparison (build-apply :cross-join column->param relation (wrap-with-exists sym [:select predicate plan]))
+      :exists (build-apply :cross-join column->param relation (wrap-with-exists sym plan))
+      (build-apply :cross-join column->param relation plan))))
 
 (defn- apply-predicative-subquery
   "In certain situations, we are able to optimise subqueries into semi or anti joins, and simplify the resulting plan.
@@ -796,7 +789,7 @@
                        :predicate predicate}
                 :exists {:negated? false}
                 :cannot-be-exists)))]
-    (let [{:keys [type plan column->param sym quantifier]} subquery-info
+    (let [{:keys [type plan column->param sym]} subquery-info
           {:keys [negated? predicate]} (all-some->exists subquery-info)
           [_ x y] predicate]
     (cond
@@ -808,7 +801,6 @@
            :anti-join
            :semi-join)
          column->param
-         #{}
          relation
          (if predicate
            [:select
@@ -829,7 +821,6 @@
            :semi-join
            :anti-join)
          column->param
-         #{}
          relation
          (if predicate
            [:select
@@ -1058,11 +1049,10 @@
 (defn- build-lateral-derived-table [tp qe]
   (let [scope-id (sem/id (sem/scope-element tp))
         column->param (correlated-column->param qe scope-id)
-        projected-columns (set (map qualified-projection-symbol (first (sem/projected-columns tp))))
         relation (build-table-primary tp)]
     (if (every? true? (map = (keys column->param) (vals column->param)))
       relation
-      (build-apply :cross-join column->param projected-columns nil relation))))
+      (build-apply :cross-join column->param nil relation))))
 
 ;; TODO: both UNNEST and LATERAL are only dealt with on top-level in
 ;; FROM. UNNEST also needs to take potential subqueries in cve into
@@ -1075,9 +1065,9 @@
        ;;=>
        [:unwind cve unwind-opts [:map projection acc]]
 
-       [:apply :cross-join columns dependent-column-names nil dependent-relation]
+       [:apply :cross-join columns nil dependent-relation]
        ;;=>
-       [:apply :cross-join columns dependent-column-names acc dependent-relation]
+       [:apply :cross-join columns acc dependent-relation]
 
        [:cross-join acc table]))
    (r/collect-stop
@@ -1384,10 +1374,10 @@
     [:assign _ relation]
     (relation-columns relation)
 
-    [:apply mode _ dependent-column-names independent-relation _]
+    [:apply mode _ independent-relation dependent-relation]
     (-> (relation-columns independent-relation)
         (concat (case mode
-                  (:cross-join :left-outer-join) dependent-column-names
+                  (:cross-join :left-outer-join) (relation-columns dependent-relation)
                   []))
         (vec))
 
@@ -1567,7 +1557,7 @@
                                               rhs)]
         (->smap lhs))
 
-      [:apply mode columns dependent-column-names independent-relation dependent-relation]
+      [:apply mode columns independent-relation dependent-relation]
       (let [smap (merge (->smap independent-relation) (->smap dependent-relation))
             params (->> columns
                         (vals)
@@ -1583,7 +1573,6 @@
             new-smap (merge smap params)]
         (with-smap [:apply mode
                     (w/postwalk-replace new-smap columns)
-                    (w/postwalk-replace new-smap dependent-column-names)
                     independent-relation
                     (rename-walk new-smap dependent-relation)]
           (case mode
@@ -1791,16 +1780,14 @@
 (defn- push-selection-down-past-apply [z]
   (r/zmatch z
     [:select predicate
-     [:apply mode columns dependent-column-names independent-relation dependent-relation]]
+     [:apply mode columns independent-relation dependent-relation]]
     ;;=>
-    (when (and (no-correlated-columns? predicate)
-               (empty? (set/intersection (expr-symbols predicate) dependent-column-names)))
+    (when (no-correlated-columns? predicate)
       (cond
         (columns-in-predicate-present-in-relation? independent-relation predicate)
         [:apply
          mode
          columns
-         dependent-column-names
          [:select predicate independent-relation]
          dependent-relation]
 
@@ -1808,7 +1795,6 @@
         [:apply
          mode
          columns
-         dependent-column-names
          independent-relation
          [:select predicate dependent-relation]]))))
 
@@ -2118,7 +2104,7 @@
     (cond->> [:group-by (vec (concat independent-projection
                                      [row-number-sym]
                                      (w/postwalk-replace smap group-by-columns)))
-              [:apply apply-mode columns (set (relation-columns dependent-relation))
+              [:apply apply-mode columns
                [:map [{row-number-sym '(row-number)}]
                 independent-relation]
                dependent-relation]]
@@ -2143,12 +2129,12 @@
   [z]
   (r/zmatch
     z
-    [:apply :cross-join columns _ independent-relation dependent-relation]
+    [:apply :cross-join columns independent-relation dependent-relation]
     ;;=>
     (when-not (parameters-in-e-resolved-from-r? dependent-relation columns)
       [:cross-join independent-relation dependent-relation])
 
-    [:apply mode columns _ independent-relation dependent-relation]
+    [:apply mode columns independent-relation dependent-relation]
     ;;=>
     (when-not (parameters-in-e-resolved-from-r? dependent-relation columns)
       [mode [] independent-relation dependent-relation])))
@@ -2159,7 +2145,7 @@
   [z]
   (r/zmatch
     z
-    [:apply mode columns _dependent-column-names independent-relation
+    [:apply mode columns independent-relation
      [:select predicate dependent-relation]]
     ;;=>
     (when (seq (expr-correlated-symbols predicate))
@@ -2179,31 +2165,31 @@
   "R A× (σp E) = σp (R A× E)"
   [z]
   (r/zmatch z
-    [:apply :cross-join columns dependent-column-names independent-relation [:select predicate dependent-relation]]
+    [:apply :cross-join columns independent-relation [:select predicate dependent-relation]]
     ;;=>
     (when (seq (expr-correlated-symbols predicate)) ;; select predicate is correlated
       [:select (w/postwalk-replace (set/map-invert columns) (if (or (all-predicate? predicate) (some-predicate? predicate))
                                                               (second predicate)
                                                               predicate))
        (let [columns (remove-unused-correlated-columns columns dependent-relation)]
-         [:apply :cross-join columns dependent-column-names independent-relation dependent-relation])])))
+         [:apply :cross-join columns independent-relation dependent-relation])])))
 
 (defn- decorrelate-apply-rule-4
   "R A× (πv E) = πv ∪ columns(R) (R A× E)"
   [z]
   (r/zmatch z
-    [:apply :cross-join columns dependent-column-names independent-relation [:project projection dependent-relation]]
+    [:apply :cross-join columns independent-relation [:project projection dependent-relation]]
     ;;=>
     [:project (vec (concat (relation-columns independent-relation)
                            (w/postwalk-replace (set/map-invert columns) projection)))
      (let [columns (remove-unused-correlated-columns columns dependent-relation)]
-       [:apply :cross-join columns dependent-column-names independent-relation dependent-relation])]))
+       [:apply :cross-join columns independent-relation dependent-relation])]))
 
 (defn- decorrelate-apply-rule-8
   "R A× (G A,F E) = G A ∪ columns(R),F (R A× E)"
   [z]
   (r/zmatch z
-    [:apply :cross-join columns _ independent-relation
+    [:apply :cross-join columns independent-relation
      [:project post-group-by-projection
       [:group-by group-by-columns
        dependent-relation]]]
@@ -2211,7 +2197,7 @@
     (decorrelate-group-by-apply post-group-by-projection group-by-columns
                                 :cross-join columns independent-relation dependent-relation)
 
-    [:apply :cross-join columns _ independent-relation
+    [:apply :cross-join columns independent-relation
      [:group-by group-by-columns
       dependent-relation]]
     ;;=>
@@ -2222,7 +2208,7 @@
   "R A× (G F1 E) = G columns(R),F' (R A⟕ E)"
   [z]
   (r/zmatch z
-    [:apply :cross-join columns _ independent-relation
+    [:apply :cross-join columns independent-relation
      [:max-1-row
       [:project post-group-by-projection
        [:group-by group-by-columns
@@ -2231,7 +2217,7 @@
     (decorrelate-group-by-apply post-group-by-projection group-by-columns
                                 :left-outer-join columns independent-relation dependent-relation)
 
-    [:apply :cross-join columns _ independent-relation
+    [:apply :cross-join columns independent-relation
      [:max-1-row
       [:group-by group-by-columns
        dependent-relation]]]
@@ -2292,17 +2278,17 @@
 (defn remove-redundant-projects [z]
   ;; assumes you wont ever have a project like [] whos job is to return an empty rel
   (r/zmatch z
-    [:apply :semi-join c p i
+    [:apply :semi-join c i
      [:project projection dependent-relation]]
     ;;=>
     (when (every? symbol? projection)
-      [:apply :semi-join c p i dependent-relation])
+      [:apply :semi-join c i dependent-relation])
 
-    [:apply :anti-join c p i
+    [:apply :anti-join c i
      [:project projection dependent-relation]]
     ;;=>
     (when (every? symbol? projection)
-      [:apply :anti-join c p i dependent-relation])
+      [:apply :anti-join c i dependent-relation])
 
     [:semi-join jc i
      [:project projection dependent-relation]]

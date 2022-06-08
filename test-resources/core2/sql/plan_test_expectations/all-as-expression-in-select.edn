@@ -5,7 +5,6 @@
   [:apply
    :cross-join
    {x1 ?x8}
-   #{x5}
    [:rename {z x1} [:scan [z]]]
    [:top
     {:limit 1}
