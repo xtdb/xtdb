@@ -1,0 +1,70 @@
+= 35. SQL Data Types & CAST
+
+Date: 2022-06-08
+
+== Status
+
+Proposed
+
+== Context
+
+Thinking about the `CAST` function brings up some differences between the arrow type model and the SQL data type language used in `CAST`.
+
+In the SQL standard various data types are described, such as `VARCHAR(255)` and `DECIMAL(10)`. Much as data types normally do, these data types specify semantics for interpretation, representation of values, and constraints on top of the representational constraints (e.g max length).
+
+=== Interpretation
+
+A typical SQL database would know the SQL type of each column or expression in a query, and the correct behaviour can be known statically.
+
+In XTDB we currently infer behaviour as part of EE dispatch on arrow type instances.
+
+It is a goal of XTDB that the behaviour of the system closely follows the SQL spec where possible, therefore we seek congruence between arrow types and sql data types to derive type specialised behaviour for a given function.
+
+=== Representation
+
+XTDB's internal (and external) data format is apache arrow, and so all SQL values must be representable in an arrow vector. As arrow vectors
+include dynamic width binary vectors, in principle all required representations can be accommodated either by a 'native' vector, or an extension type.
+
+It should be noted that one goal of XTDB is to leverage native arrow vectors (e.g IntVector) where possible, so that they can be read by external software that understands native arrow vector types.
+
+=== Constraints
+
+SQL data types often include constraints that are not natural limits of the representation, such as the maximum length of a `VARCHAR` string, or the precision of a `DECIMAL`.
+
+In a static database these constraints would often be used as part of column definitions to ensure invariants are maintained on write. XTDB will likely not use data type constraints in this way - though they are still a part of the grammar for operations such as `CAST`, and literal qualifiers (e.g intervals).
+
+Unless they happen to collide with arrow's representational constraints, these constraints have nowhere to go in native arrows vector and would not be recoverable at runtime. e.g I cannot tell that my `DECIMAL(9)` number has precision `9`, though I may be able to tell it is a `DECIMAL`.
+
+In postgres this is similar to `pg_typeof`, which does not include precision information e.g `numeric`, so it is lossy in this way - these kinds of constraint are only used on write (known statically), or when casting. i.e you will get a runtime error when casting `42` to a `NUMERIC(1)`.
+
+=== Type Parameters
+
+A reminder that types can be parameterized by other types in SQL, row types, and arrays have this property. The parameters therefore include things like precision constraints that require `CAST` behaviour.
+
+== Option A: Spec compliant full `CAST`
+
+One option that has been considered multiple cast functions such as `(cast-varchar s len)` to include parameters beyond the desired arrow type. The problem with this is with `ARRAY` and `ROW` types, these require the `CAST` operator to cast elements / fields recursively. If we allow ourselves to break spec - we can still do this, see Option C.
+
+The idea is to fully support non-arrow parameters, and allow for nesting for `ROW` and `ARRAY` type literals.
+
+The type language we use for `CAST` must allow for non-representational parameters, e.g `VARCHAR(255)`, which apply at runtime during the cast. This means users can get the SQL behaviour described in the spec.
+
+Would likely involve inventing a (data dsl) notation to make `CAST` dispatch on SQL type possible, and it cannot be simply the arrow type notation. This dispatch would be used to implement `CAST` on parameterized types via recursion.
+
+Such a notation may be useful for to consolidate other functions that dispatch on type, such as interval literal construction.
+
+Inventing another type notation alongside arrow type may confuse things in the code base, though its use would be minimal, perhaps just for `CAST`.
+
+== Option B: Simplified `CAST`
+
+Rather than casting to SQL types, one could cast to a seperate type notation, that more closely maps directly to arrow vectors without ambiguity. So instead of `VARCHAR(255)` you would use `VARCHAR`, all decimals would cast `DECIMAL` rather than `DECIMAL(20)` and so on. This would not be spec compliant and would involve changing the SQL grammar. Under the hood our `CAST` operator could take a type argument whose form is the arrow type notation we already use.
+
+One cost of this is that we may not be able to specialise the arrow type based on precision constraint, for example - small decimals may have a different representation to arbitrarily large ones. We would have to use the largest possible representation or somehow inspect values dynamically to determine whether a more constrained representation is possible.
+
+== Option C: Partially compliant `CAST`
+
+We could avoid the need for a recursive type notation if the types themselves could not nest. So if `CAST` only supported scalars, then we can use different cast functions that are parameterized to keep compatibility with the spec - e.g `(cast-varchar s len)`.
+
+== Decision
+
+== Consequences
