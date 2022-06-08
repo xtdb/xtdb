@@ -74,12 +74,22 @@
         tt1 (::xt/tx-time (fix/submit+await-tx [[::xt/put ivan2]]))
         _ (Thread/sleep 100)]
 
+    (t/is (= #{["Ivan1"]}
+             (->> (xt/q (xt/db *api* tt1 tt0)
+                        '{:find [?name]
+                          :where [[e :name ?name]]}))))
+
     (t/is (= [{::xt/tx-id 0, ::xt/doc {:name "Ivan1", :xt/id :ivan}}]
              (->> (xt/entity-history (xt/db *api* tt1 tt0)
                                      :ivan
                                      :asc
                                      {:with-docs? true})
                   (mapv #(select-keys % [::xt/tx-id ::xt/doc])))))
+
+    (t/is (= #{["Ivan1"]}
+             (->> (xt/q (xt/with-tx (xt/db *api* tt1 tt0) [])
+                        '{:find [?name]
+                          :where [[e :name ?name]]}))))
 
     (t/is (= [{::xt/tx-id 0, ::xt/doc {:name "Ivan1", :xt/id :ivan}}]
              (->> (xt/entity-history (xt/with-tx (xt/db *api* tt1 tt0) [])
