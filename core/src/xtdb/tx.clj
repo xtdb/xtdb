@@ -446,6 +446,27 @@
 (def ^ThreadFactory stats-processor-thread-factory
   (xio/thread-factory "xtdb-stats-processor"))
 
+(defn- validate-tx-time-override! [latest-tx tx tx-time-override]
+  (let [tx-log-time (::xt/tx-time tx)
+        {latest-tx-time ::xt/tx-time, :as lctx} latest-tx]
+    (cond
+      (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
+      (do
+        (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
+                  (pr-str {:latest-completed-tx lctx
+                           :new-tx (dissoc tx ::txe/tx-events)}))
+        false)
+
+      (neg? (compare tx-log-time tx-time-override))
+      (do
+        (log/warn "overridden tx-time after tx-log clock time, aborting tx"
+                  (pr-str {:tx-log-time tx-log-time
+                           :new-tx (dissoc tx ::txe/tx-events)}))
+        false)
+
+      :else
+      true)))
+
 (defn ->tx-ingester {::sys/deps {:tx-indexer :xtdb/tx-indexer
                                  :index-store :xtdb/index-store
                                  :document-store :xtdb/document-store
@@ -488,7 +509,8 @@
               (set-ingester-error! t)
               (throw t)))))
 
-      (let [txs-docs-fetch-executor (xio/bounded-thread-pool 1 1 docs-fetcher-thread-factory)
+      (let [latest-tx! (atom (db/latest-completed-tx index-store))
+            txs-docs-fetch-executor (xio/bounded-thread-pool 1 1 docs-fetcher-thread-factory)
             txs-docs-encode-executor (xio/bounded-thread-pool 1 1 docs-encoder-thread-factory)
             txs-index-executor (xio/bounded-thread-pool 1 1 txs-processor-thread-factory)
             stats-executor (xio/bounded-thread-pool 1 1 stats-processor-thread-factory)
@@ -511,32 +533,9 @@
 
                                         (txs-index-fn [txs]
                                           (let [committed-docs (atom '())]
-                                            (doseq [{:keys [tx docs in-flight-tx]} txs]
-                                              (let [[{::txe/keys [tx-events] :as tx} committing?]
-                                                    (if-let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])]
-                                                      (let [tx-log-time (::xt/tx-time tx)
-                                                            {latest-tx-time ::xt/tx-time, :as lctx} (db/latest-completed-tx index-store)]
-                                                        (cond
-                                                          (and latest-tx-time (pos? (compare latest-tx-time tx-time-override)))
-                                                          (do
-                                                            (log/warn "overridden tx-time before latest completed tx-time, aborting tx"
-                                                                      (pr-str {:latest-completed-tx lctx
-                                                                               :new-tx (dissoc tx ::txe/tx-events)}))
-                                                            [tx false])
-
-                                                          (neg? (compare tx-log-time tx-time-override))
-                                                          (do
-                                                            (log/warn "overridden tx-time after tx-log clock time, aborting tx"
-                                                                      (pr-str {:tx-log-time tx-log-time
-                                                                               :new-tx (dissoc tx ::txe/tx-events)}))
-                                                            [tx false])
-
-                                                          :else [(assoc tx ::xt/tx-time tx-time-override) true]))
-
-                                                      [tx true])
-
-                                                    committing? (and committing?
-                                                                     (db/index-tx-events in-flight-tx tx-events))]
+                                            (doseq [{:keys [tx docs in-flight-tx]} txs
+                                                    :let [{::txe/keys [tx-events] :keys [abort?]} tx]]
+                                              (let [committing? (and (not abort?) (db/index-tx-events in-flight-tx tx-events))]
 
                                                 (process-tx-f in-flight-tx (assoc tx :committing? committing?))
 
@@ -551,9 +550,16 @@
                                         (txs-doc-encoder-fn [txs]
                                           (let [txs (doall
                                                      (for [{:keys [docs tx] :as m} txs]
-                                                       (let [in-flight-tx (db/begin-tx tx-indexer (select-keys tx [::xt/tx-time ::xt/tx-id]) nil)]
-                                                         (db/index-tx-docs in-flight-tx docs)
-                                                         (assoc m :in-flight-tx in-flight-tx))))]
+                                                       (let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])
+                                                             tx (if tx-time-override
+                                                                  (if (validate-tx-time-override! @latest-tx! tx tx-time-override)
+                                                                    (assoc tx ::xt/tx-time tx-time-override)
+                                                                    (assoc tx :abort? true))
+                                                                  tx)]
+                                                         (reset! latest-tx! tx)
+                                                         (let [in-flight-tx (db/begin-tx tx-indexer (select-keys tx [::xt/tx-time ::xt/tx-id]) nil)]
+                                                           (db/index-tx-docs in-flight-tx docs)
+                                                           (assoc m :tx tx :in-flight-tx in-flight-tx)))))]
                                             (submit-job! txs-index-executor txs-index-fn txs)))
 
                                         (txs-doc-fetch-fn [txs]
