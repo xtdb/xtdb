@@ -14,9 +14,9 @@
            java.nio.ByteBuffer
            java.time.Instant
            [java.util Arrays Collections Comparator HashMap Map TreeMap]
-           [java.util.concurrent CompletableFuture ConcurrentHashMap Executors ExecutorService]
+           [java.util.concurrent CompletableFuture ConcurrentHashMap ExecutorService Executors]
            java.util.concurrent.atomic.AtomicLong
-           [java.util.function Consumer Function LongConsumer LongFunction LongPredicate Predicate ToLongFunction]
+           [java.util.function Consumer Function LongConsumer LongFunction Predicate ToLongFunction]
            java.util.stream.LongStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMicroTZVector TimeStampVector VectorSchemaRoot]
@@ -103,6 +103,7 @@
     (doseq [root (vals roots)]
       (util/try-close root))))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface ITemporalTxIndexer
   (^void indexPut [^Object eid, ^long row-id
                    ^org.apache.arrow.vector.TimeStampVector vt-start-vec
@@ -115,6 +116,7 @@
   (^void indexEvict [^Object eid, ^long row-id])
   (^org.roaringbitmap.longlong.Roaring64Bitmap endTx []))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface ITemporalManager
   (^Object getTemporalWatermark [])
   (^void registerNewChunk [^long chunk-idx])
@@ -125,10 +127,12 @@
                                                       ^longs temporal-max-range
                                                       ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IInternalIdManager
   (^long getOrCreateInternalId [^Object id ^long row-id])
   (^boolean isKnownId [^Object id]))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface TemporalManagerPrivate
   (^void populateKnownChunks [])
   (^Long latestTemporalSnapshotIndex [^int chunk-idx])
@@ -270,60 +274,6 @@
 (defn- ->big-endian-internal-id ^long [^long row-id]
   (Long/reverseBytes row-id))
 
-(defn- wrap-with-current-entity-cache [kd-tree ^Map current-entities-cache]
-  (reify
-    kd/KdTree
-    (kd-tree-insert [_ allocator point]
-      (throw (UnsupportedOperationException.)))
-    (kd-tree-delete [_ allocator point]
-      (throw (UnsupportedOperationException.)))
-    (kd-tree-range-search [_ min-range max-range]
-      (let [min-range (kd/->longs min-range)
-            max-range (kd/->longs max-range)]
-        (if (and (= (aget min-range tx-time-end-idx)
-                    (aget max-range tx-time-end-idx)
-                    end-of-time-μs)
-                 (= (aget min-range id-idx)
-                    (aget max-range id-idx)))
-          (let [id (aget min-range id-idx)
-                new-min-range (doto (->min-range)
-                                (aset id-idx id)
-                                (aset tx-time-end-idx ^long end-of-time-μs))
-                new-max-range (doto (->max-range)
-                                (aset id-idx id)
-                                (aset tx-time-end-idx ^long end-of-time-μs))
-                ^IKdTreePointAccess access (kd/kd-tree-point-access kd-tree)
-                axis-mask (-> (kd/range-bitmask min-range max-range)
-                              (bit-and-not (bit-or (bit-shift-left 1 id-idx)
-                                                   (bit-shift-left 1 tx-time-end-idx))))]
-            (-> (LongStream/of ^longs (.computeIfAbsent current-entities-cache
-                                                        id
-                                                        (reify Function
-                                                          (apply [_ _]
-                                                            (.toArray ^LongStream (kd/kd-tree-range-search kd-tree new-min-range new-max-range))))))
-                (.filter (reify LongPredicate
-                           (test [_ x]
-                             (.isInRange access x min-range max-range axis-mask))))))
-          (kd/kd-tree-range-search kd-tree min-range max-range))))
-    (kd-tree-points [_ deletes?]
-      (kd/kd-tree-points kd-tree deletes?))
-    (kd-tree-height [_]
-      (kd/kd-tree-height kd-tree))
-    (kd-tree-retain [_ allocator]
-      (wrap-with-current-entity-cache (kd/kd-tree-retain kd-tree allocator) current-entities-cache))
-    (kd-tree-point-access [_]
-      (kd/kd-tree-point-access kd-tree))
-    (kd-tree-size [_]
-      (kd/kd-tree-size kd-tree))
-    (kd-tree-value-count [_]
-      (kd/kd-tree-value-count kd-tree))
-    (kd-tree-dimensions [_]
-      (kd/kd-tree-dimensions kd-tree))
-
-    Closeable
-    (close [_]
-      (util/try-close kd-tree))))
-
 (deftype TemporalManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
@@ -336,13 +286,13 @@
                           ^:volatile-mutable kd-tree
                           ^boolean async-snapshot?]
   TemporalManagerPrivate
-  (latestTemporalSnapshotIndex [this chunk-idx]
+  (latestTemporalSnapshotIndex [_ chunk-idx]
     (->> (.listObjects object-store "temporal-snapshot-")
          (map temporal-snapshot-obj-key->chunk-idx)
          (filter #(<= ^long % chunk-idx))
          (last)))
 
-  (buildStaticTree [this base-kd-tree chunk-idx snapshot-idx]
+  (buildStaticTree [_ base-kd-tree chunk-idx snapshot-idx]
     (let [kd-tree (atom base-kd-tree)]
       (try
         (let [snapshot-idx (long (or snapshot-idx -1))

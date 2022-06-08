@@ -4,14 +4,11 @@
             [core2.expression.metadata :as expr.meta]
             [core2.expression.walk :as ewalk]
             [core2.temporal :as temporal]
-            [core2.types :as types]
             [core2.util :as util])
   (:import java.time.Instant
-           [org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Int ArrowType$Interval ArrowType$Date ArrowType$Timestamp]
-           org.apache.arrow.vector.types.TimeUnit
+           [org.apache.arrow.vector.types.pojo  ArrowType$Interval ArrowType$Date]
            [java.time LocalDate Period Duration]
-           [org.apache.arrow.vector PeriodDuration]
-           [org.apache.arrow.vector.types IntervalUnit]))
+           [org.apache.arrow.vector PeriodDuration]))
 
 (set! *unchecked-math* :warn-on-boxed)
 

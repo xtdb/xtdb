@@ -2,8 +2,7 @@
   (:require [clojure.test :as t]
             [core2.operator :as op]
             [core2.test-util :as tu]
-            [core2.types :as ty]
-            [core2.operator :as op])
+            [core2.types :as ty])
   (:import org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
