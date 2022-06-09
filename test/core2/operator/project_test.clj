@@ -14,8 +14,7 @@
                                            [[{:a 12, :b 10}
                                              {:a 0, :b 15}]
                                             [{:a 100, :b 83}]]]])]
-    #_ ; FIXME
-    (t/is (= {"a" :i64, "c" :i64} (.columnTypes project-cursor)))
+    (t/is (= '{a :i64, c :i64} (.columnTypes project-cursor)))
 
     (t/is (= [[{:a 12, :c 22}, {:a 0, :c 15}]
               [{:a 100, :c 183}]]

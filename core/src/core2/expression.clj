@@ -1986,16 +1986,28 @@
   (->> params
        (into {} (map (juxt key (comp types/value->col-type val))))))
 
-(defn param-opts [params]
-  {:param-classes (->> params (into {} (map (juxt key (comp class val)))))})
+(defn param-classes [params]
+  (->> params (into {} (map (juxt key (comp class val))))))
 
-(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [col-name form input-types]
-  (let [expr (form->expr form input-types)]
+(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [col-name form {:keys [col-types] :as input-types}]
+  (let [expr (form->expr form input-types)
+
+        ;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
+        ;; we assume that we don't need `:param-classes` nor accurate `var-fields`
+        ;; (i.e. we lose the exact DUV type-id mapping by converting to col-types)
+        ;; ideally we'd lose var-fields altogether.
+        widest-out-type (-> (emit-expr expr col-name
+                                       {:var->col-type col-types
+                                        :var-fields (->> col-types
+                                                         (into {} (map (juxt key
+                                                                             (fn [[col-name col-type]]
+                                                                               (types/col-type->field col-name col-type))))))})
+                            :return-field
+                            (types/field->col-type))]
     (reify IProjectionSpec
       (getColumnName [_] col-name)
 
-      ;; TODO need to pass through an accurate col-type
-      (getColumnType [_] :null)
+      (getColumnType [_] widest-out-type)
 
       (project [_ allocator in-rel params]
         (let [var->col-type (->> (seq in-rel)
@@ -2003,9 +2015,9 @@
                                                  [(symbol (.getName iv))
                                                   (types/field->col-type (.getField (.getVector iv)))]))))
 
-              {:keys [eval-expr]} (emit-expr expr col-name (into (param-opts params)
-                                                                 {:var-fields (->var-fields in-rel expr)
-                                                                  :var->col-type var->col-type}))]
+              {:keys [eval-expr]} (emit-expr expr col-name {:param-classes (param-classes params)
+                                                            :var-fields (->var-fields in-rel expr)
+                                                            :var->col-type var->col-type})]
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))
 
 (defn ->expression-relation-selector ^core2.operator.IRelationSelector [form input-types]

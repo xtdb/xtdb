@@ -215,6 +215,6 @@
 
 (defn ->metadata-selector [form col-types params]
   (let [{:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types (expr/->param-types params), :col-types col-types})
-                                            (expr/param-opts params))]
+                                            {:param-classes (expr/param-classes params)})]
     (fn [chunk-idx metadata-root]
       (f chunk-idx metadata-root params (->bloom-hashes expr params)))))

@@ -33,7 +33,6 @@
 (def varchar-type (.getType Types$MinorType/VARCHAR))
 (def varbinary-type (.getType Types$MinorType/VARBINARY))
 (def timestamp-micro-tz-type (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
-(def duration-micro-type (ArrowType$Duration. TimeUnit/MICROSECOND))
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (ArrowType$Union. UnionMode/Dense (int-array 0)))
 (def list-type (.getType Types$MinorType/LIST))
