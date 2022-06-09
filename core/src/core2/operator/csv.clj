@@ -16,7 +16,7 @@
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.types.pojo.Schema))
 
-(s/def ::csv-col-type #{:bit :bigint :float8 :varchar :varbinary :timestamp :duration-milli})
+(s/def ::csv-col-type #{:bool :i64 :f64 :utf8 :varbinary :timestamp :duration})
 
 (s/def ::batch-size pos-int?)
 
@@ -65,37 +65,32 @@
   (Base64/getDecoder))
 
 (def ^:private col-parsers
-  {:null (constantly nil)
-   :bigint #(Long/parseLong %)
-   :float8 #(Double/parseDouble %)
-   :varbinary #(.decode b64-decoder ^String %)
-   :varchar identity
-   :bit #(or (= "1" %) (= "true" %))
-   :timestamp inst/read-instant-date
-   :duration time-literals.dr/duration})
+  (comp {:null (constantly nil)
+         :i64 #(Long/parseLong %)
+         :f64 #(Double/parseDouble %)
+         :varbinary #(.decode b64-decoder ^String %)
+         :utf8 identity
+         :bool #(or (= "1" %) (= "true" %))
+         :timestamp-tz inst/read-instant-date
+         :duration time-literals.dr/duration}
+        types/col-type-head))
 
-(def ->arrow-type
-  {:null types/null-type
-   :bigint types/bigint-type
-   :float8 types/float8-type
-   :varbinary types/varbinary-type
-   :varchar types/varchar-type
-   :bit types/bool-type
-   :timestamp types/timestamp-micro-tz-type
-   :duration types/duration-micro-type})
+(def ^:private csv-col-type-overrides
+  {:timestamp [:timestamp-tz :micro "UTC"]
+   :duration [:duration :micro]})
 
 (defmethod lp/emit-expr :csv [{:keys [path col-types],
                                {:keys [batch-size], :or {batch-size 1000}} :opts}
                               _args]
-  (let [col-names (into #{} (map name) (keys col-types))]
-    {:col-names col-names
+  (let [col-types (->> col-types
+                       (into {} (map (juxt (comp name key)
+                                           (comp #(get csv-col-type-overrides % %) val)))))]
+    {:col-types col-types
      :->cursor (fn [{:keys [allocator]}]
                  (let [rdr (Files/newBufferedReader path)
                        rows (rest (csv/read-csv rdr))
                        schema (Schema. (map (fn [[col-name col-type]]
-                                              (types/->field (name col-name)
-                                                             (->arrow-type col-type)
-                                                             false))
+                                              (types/col-type->field (name col-name) col-type))
                                             col-types))]
                    (CSVCursor. allocator rdr
                                (VectorSchemaRoot/create schema allocator)

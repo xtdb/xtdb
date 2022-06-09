@@ -21,6 +21,9 @@
 (s/def ::source
   (s/and simple-symbol? source-sym?))
 
+(s/def ::param
+  (s/and simple-symbol? #(str/starts-with? (name %) "?")))
+
 (s/def ::expression any?)
 
 (s/def ::column-expression (s/map-of ::column ::expression :conform-keys true :count 1))
@@ -36,15 +39,34 @@
 
 (s/def ::logical-plan ::ra-expression)
 
+(defn- direct-child-exprs [{:keys [op] :as expr}]
+  (case op
+    :relation #{}
+
+    :assign (let [{:keys [bindings relation]} expr]
+              (into #{relation} (map :value) bindings))
+
+    (let [spec (s/describe (ra-expr [op]))]
+      (case (first spec)
+        cat (->> (rest spec)
+                 (partition 2)
+                 (keep (fn [[k form]]
+                         (when (= form ::ra-expression)
+                           k)))
+                 (mapv expr))))))
+
+(defn child-exprs [ra]
+  (into #{ra} (mapcat child-exprs) (direct-child-exprs ra)))
+
 #_{:clj-kondo/ignore #{:unused-binding}}
 (defmulti emit-expr
   (fn [ra-expr srcs]
     (:op ra-expr)))
 
 (defn unary-expr {:style/indent 2} [relation args f]
-  (let [{->inner-cursor :->cursor, inner-col-names :col-names} (emit-expr relation args)
-        {:keys [col-names ->cursor]} (f inner-col-names)]
-    {:col-names col-names
+  (let [{->inner-cursor :->cursor, inner-col-types :col-types} (emit-expr relation args)
+        {:keys [col-types ->cursor]} (f inner-col-types)]
+    {:col-types col-types
      :->cursor (fn [opts]
                  (let [inner (->inner-cursor opts)]
                    (try
@@ -54,11 +76,11 @@
                        (throw e)))))}))
 
 (defn binary-expr {:style/indent 3} [left right args f]
-  (let [{left-col-names :col-names, ->left-cursor :->cursor} (emit-expr left args)
-        {right-col-names :col-names, ->right-cursor :->cursor} (emit-expr right args)
-        {:keys [col-names ->cursor]} (f left-col-names right-col-names)]
+  (let [{left-col-types :col-types, ->left-cursor :->cursor} (emit-expr left args)
+        {right-col-types :col-types, ->right-cursor :->cursor} (emit-expr right args)
+        {:keys [col-types ->cursor]} (f left-col-types right-col-types)]
 
-    {:col-names col-names
+    {:col-types col-types
      :->cursor (fn [opts]
                  (let [left (->left-cursor opts)]
                    (try

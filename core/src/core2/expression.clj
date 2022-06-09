@@ -36,12 +36,12 @@
     f)
   :default ::default)
 
-(defn form->expr [form {:keys [col-names param-names locals] :as env}]
+(defn form->expr [form {:keys [col-types param-types locals] :as env}]
   (cond
     (symbol? form) (cond
                      (contains? locals form) {:op :local, :local form}
-                     (contains? param-names form) {:op :param, :param form}
-                     (contains? col-names form) {:op :variable, :variable form}
+                     (contains? param-types form) {:op :param, :param form, :param-type (get param-types form)}
+                     (contains? col-types form) {:op :variable, :variable form, :var-type (get col-types form)}
                      :else (throw (err/illegal-arg :unknown-symbol
                                                    {::err/message (format "Unknown symbol: '%s'" form)
                                                     :symbol form})))
@@ -261,13 +261,13 @@
   (if (= op :literal)
     (let [{:keys [literal]} expr]
       {:op :param, :param (gensym 'lit),
+       :param-type (types/value->col-type literal)
+       :param-class (class literal)
        :literal literal})
     expr))
 
 (defmethod with-batch-bindings :param [{:keys [param] :as expr} {:keys [param-classes]}]
-  (let [param-class (if (contains? expr :literal)
-                      (class (:literal expr))
-                      (get param-classes param))]
+  (let [param-class (get expr :param-class (get param-classes param))]
     (-> expr
         (assoc :batch-bindings
                [[param
@@ -276,14 +276,11 @@
                                   (cond-> `(get ~params-sym '~param)
                                     param-class (with-tag param-class))))]]))))
 
-(defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param-types]}]
-  (let [param-type (if (contains? expr :literal)
-                     (types/value->col-type (:literal expr))
-                     (get param-types param))]
-    (into {:return-type param-type
-           :continue (fn [f]
-                       (f param-type param))}
-          (select-keys expr #{:literal}))))
+(defmethod codegen-expr :param [{:keys [param param-type] :as expr} _]
+  (into {:return-type param-type
+         :continue (fn [f]
+                     (f param-type param))}
+        (select-keys expr #{:literal})))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti get-value-form
@@ -355,6 +352,7 @@
                            (f return-type (continue (fn [_ code] code))))))))
 
 (defmethod codegen-expr :variable [{:keys [variable idx], :or {idx idx-sym}} {:keys [var->types var->col-type]}]
+  ;; NOTE we now get the widest var-type in the expr itself, but don't use it here (yet? at all?)
   (let [col-type (or (get var->col-type variable)
                      (throw (AssertionError. (str "unknown variable: " variable))))
         field-types (or (get var->types variable)
@@ -1674,7 +1672,7 @@
 (defmethod emit-expr :struct [{:keys [entries]} col-name opts]
   (let [entries (vec (for [[k v] entries]
                        (emit-expr v (name k) opts)))
-        ^Field return-field (apply types/->field col-name types/struct-type false
+        ^Field return-field (apply types/->field (name col-name) types/struct-type false
                                    (map :return-field entries))]
 
     {:return-field return-field
@@ -1711,7 +1709,7 @@
   (fn [{:keys [f] :as expr} out-vec]
     (keyword f)))
 
-(defmethod emit-expr :vectorised-call [{:keys [args] :as expr} ^String col-name opts]
+(defmethod emit-expr :vectorised-call [{:keys [args] :as expr} col-name opts]
   (let [emitted-args (mapv #(emit-expr % "arg" opts) args)
         {:keys [^Field return-field eval-call-expr]} (emit-call-expr (assoc expr :emitted-args emitted-args) col-name)]
     {:return-field return-field
@@ -1742,9 +1740,9 @@
                                   :when (= (name field) (.getName child-field))]
                               child-field)))]
                    (if (instance? ArrowType$Union (.getType struct-field))
-                     (types/->field col-name types/dense-union-type false)
+                     (types/->field (name col-name) types/dense-union-type false)
                      (or (get-struct-child struct-field)
-                         (types/->field col-name types/null-type true))))
+                         (types/->field (name col-name) types/null-type true))))
 
    :eval-call-expr (fn [[^ValueVector in-vec] ^ValueVector out-vec _params]
                      (let [out-writer (vw/vec->writer out-vec)]
@@ -1762,7 +1760,7 @@
 (defmethod emit-expr :variable [{:keys [variable]} col-name {:keys [var-fields]}]
   (let [^Field out-field (-> (or (get var-fields variable)
                                  (throw (IllegalArgumentException. (str "missing variable: " variable ", available " (pr-str (set (keys var-fields)))))))
-                             (types/field-with-name col-name))]
+                             (types/field-with-name (name col-name)))]
     {:return-field out-field
      :eval-expr
      (fn [^IIndirectRelation in-rel al _params]
@@ -1775,10 +1773,10 @@
              (.close out-vec)
              (throw e)))))}))
 
-(defmethod emit-expr :list [{:keys [elements]} ^String col-name opts]
+(defmethod emit-expr :list [{:keys [elements]} col-name opts]
   (let [el-count (count elements)
         emitted-els (mapv #(emit-expr % "list-el" opts) elements)
-        out-field (types/->field col-name (ArrowType$FixedSizeList. el-count) false
+        out-field (types/->field (name col-name) (ArrowType$FixedSizeList. el-count) false
                                  (types/->field "$data" types/dense-union-type false))]
     {:return-field out-field
      :eval-expr
@@ -1872,7 +1870,7 @@
 
 (defmethod emit-call-expr :trim-array [{[{^Field array-field :return-field}] :emitted-args}
                                        col-name]
-  {:return-field (types/->field col-name types/list-type true
+  {:return-field (types/->field (name col-name) types/list-type true
                                 (if (or (instance? ArrowType$List (.getType array-field))
                                         (instance? ArrowType$FixedSizeList (.getType array-field)))
                                   (first (.getChildren array-field))
@@ -1910,7 +1908,7 @@
     :if :if-some
     :metadata-field-present :metadata-vp-call})
 
-(defn- emit-prim-expr [prim-expr ^String col-name {:keys [var-fields var->col-type param-classes param-types] :as opts}]
+(defn- emit-prim-expr [prim-expr col-name {:keys [var-fields var->col-type param-classes param-types] :as opts}]
   (let [prim-expr (->> prim-expr
                        (walk/prewalk-expr (fn [{:keys [op] :as expr}]
                                             (if (contains? primitive-ops op)
@@ -1984,14 +1982,32 @@
            (MapEntry/create var-sym (-> ivec (.getVector) (.getField)))))
        (into {})))
 
-(defn param-opts [params]
-  {:param-types (->> params (into {} (map (juxt key (comp types/value->col-type val)))))
-   :param-classes (->> params (into {} (map (juxt key (comp class val)))))})
+(defn ->param-types [params]
+  (->> params
+       (into {} (map (juxt key (comp types/value->col-type val))))))
 
-(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [^String col-name form col-names param-names]
-  (let [expr (form->expr form {:col-names col-names, :param-names param-names})]
+(defn param-classes [params]
+  (->> params (into {} (map (juxt key (comp class val))))))
+
+(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [col-name form {:keys [col-types] :as input-types}]
+  (let [expr (form->expr form input-types)
+
+        ;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
+        ;; we assume that we don't need `:param-classes` nor accurate `var-fields`
+        ;; (i.e. we lose the exact DUV type-id mapping by converting to col-types)
+        ;; ideally we'd lose var-fields altogether.
+        widest-out-type (-> (emit-expr expr col-name
+                                       {:var->col-type col-types
+                                        :var-fields (->> col-types
+                                                         (into {} (map (juxt key
+                                                                             (fn [[col-name col-type]]
+                                                                               (types/col-type->field col-name col-type))))))})
+                            :return-field
+                            (types/field->col-type))]
     (reify IProjectionSpec
       (getColumnName [_] col-name)
+
+      (getColumnType [_] widest-out-type)
 
       (project [_ allocator in-rel params]
         (let [var->col-type (->> (seq in-rel)
@@ -1999,13 +2015,13 @@
                                                  [(symbol (.getName iv))
                                                   (types/field->col-type (.getField (.getVector iv)))]))))
 
-              {:keys [eval-expr]} (emit-expr expr col-name (into (param-opts params)
-                                                                 {:var-fields (->var-fields in-rel expr)
-                                                                  :var->col-type var->col-type}))]
+              {:keys [eval-expr]} (emit-expr expr col-name {:param-classes (param-classes params)
+                                                            :var-fields (->var-fields in-rel expr)
+                                                            :var->col-type var->col-type})]
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))
 
-(defn ->expression-relation-selector ^core2.operator.IRelationSelector [form col-names param-names]
-  (let [projector (->expression-projection-spec "select" (list 'boolean form) col-names param-names)]
+(defn ->expression-relation-selector ^core2.operator.IRelationSelector [form input-types]
+  (let [projector (->expression-projection-spec "select" (list 'boolean form) input-types)]
     (reify IRelationSelector
       (select [_ al in-rel params]
         (with-open [selection (.project projector al in-rel params)]
@@ -2015,15 +2031,3 @@
               (when (= 1 (.get sel-vec (.getIndex selection idx)))
                 (.add res idx)))
             (.toArray (.build res))))))))
-
-(defn eval-scalar-value [al form col-names params]
-  (let [param-names (set (keys params))
-        expr (form->expr form {:param-names param-names})]
-    (case (:op expr)
-      :literal form
-      :param (get params (:param expr))
-
-      ;; this is probably quite heavyweight to calculate a single value...
-      (let [projection-spec (->expression-projection-spec "_scalar" form col-names param-names)]
-        (with-open [out-vec (.project projection-spec al (iv/->indirect-rel [] 1) params)]
-          (types/get-object (.getVector out-vec) (.getIndex out-vec 0)))))))

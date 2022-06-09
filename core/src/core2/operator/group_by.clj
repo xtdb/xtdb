@@ -1,6 +1,5 @@
 (ns core2.operator.group-by
-  (:require [clojure.set :as set]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [core2.expression :as expr]
             [core2.expression.map :as emap]
             [core2.logical-plan :as lp]
@@ -10,7 +9,7 @@
             [core2.vector.writer :as vw])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap IRelationMapBuilder)
-           (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
+           (core2.vector IIndirectVector IVectorWriter)
            (java.io Closeable)
            (java.util ArrayList HashMap LinkedList List Spliterator)
            (java.util.function Consumer IntConsumer)
@@ -88,19 +87,19 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IAggregateSpec
-  (^String getFromColumnName [])
-  (^void aggregate [^core2.vector.IIndirectVector inVector,
+  (^void aggregate [^core2.vector.IIndirectRelation inRelation,
                     ^org.apache.arrow.vector.IntVector groupMapping])
   (^core2.vector.IIndirectVector finish []))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IAggregateSpecFactory
   (^String getToColumnName [])
+  (getToColumnType [])
   (^core2.operator.group_by.IAggregateSpec build [^org.apache.arrow.memory.BufferAllocator allocator]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^core2.operator.group_by.IAggregateSpecFactory ->aggregate-factory
-  (fn [f from-name to-name]
+  (fn [f from-name from-type to-name]
     (keyword (name f))))
 
 (def memo-agg-factory (memoize ->aggregate-factory))
@@ -111,7 +110,7 @@
               group-mapping-sym (gensym 'group-mapping)
               group-idx-sym (gensym 'group-idx)
               boxes (HashMap.)
-              {continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {:col-names #{from-var}})
+              {continue-var :continue} (expr/codegen-expr (expr/form->expr from-var {:col-types {from-var from-col-type}})
                                                           {:var->types {from-var from-val-types}
                                                            :var->col-type {from-var from-col-type}
                                                            :return-boxes boxes})]
@@ -130,19 +129,20 @@
               eval)))
       (memoize)))
 
-(defn- monomorphic-agg-factory {:style/indent 2} [^String from-name, ^String to-name, ->out-vec, emit-init-group, emit-step & {:keys [set-default-fn]}]
-  (let [from-var (symbol from-name)]
+(defn- monomorphic-agg-factory {:style/indent 3} [^String from-name, ^String to-name, to-type, emit-init-group, emit-step & [{:keys [set-default-fn]}]]
+  (let [from-var (symbol from-name)
+        to-field (types/col-type->field to-name to-type)]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
+      (getToColumnType [_] to-type)
 
       (build [_ al]
-        (let [^ValueVector out-vec (->out-vec al)]
+        (let [^ValueVector out-vec (.createVector to-field al)]
           (reify
             IAggregateSpec
-            (getFromColumnName [_] from-name)
-
-            (aggregate [_ in-vec group-mapping]
-              (let [from-field (.getField (.getVector in-vec))
+            (aggregate [_ in-rel group-mapping]
+              (let [in-vec (.vectorForName in-rel from-name)
+                    from-field (.getField (.getVector in-vec))
                     from-val-types (expr/field->value-types from-field)
                     from-col-type (types/field->col-type from-field)
                     f (emit-agg from-var from-val-types from-col-type emit-init-group emit-step)]
@@ -163,8 +163,8 @@
             Closeable
             (close [_] (.close out-vec))))))))
 
-(defmethod ->aggregate-factory :count [_ ^String from-name, ^String to-name]
-  (monomorphic-agg-factory from-name to-name #(BigIntVector. to-name ^BufferAllocator %)
+(defmethod ->aggregate-factory :count [_ ^String from-name, _from-type, ^String to-name]
+  (monomorphic-agg-factory from-name to-name :i64
     (fn emit-init-count-group [acc-sym group-idx-sym]
       `(let [~(-> acc-sym (expr/with-tag BigIntVector)) ~acc-sym]
          (.setIndexDefined ~acc-sym ~group-idx-sym)
@@ -176,7 +176,7 @@
             `(.set ~acc-sym ~group-idx-sym
                    (inc (.get ~acc-sym ~group-idx-sym))))))
 
-    :set-default-fn (fn [^BigIntVector v] (.set v 0 0))))
+    {:set-default-fn (fn [^BigIntVector v] (.set v 0 0))}))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IPromotableVector
@@ -238,29 +238,30 @@
 
       new-vec)))
 
-(defn- promotable-agg-factory {:style/indent 2} [^String from-name, ^String to-name, emit-init-group, emit-step]
+;; TODO this should go away once we know the full types of the inputs
+(defn- promotable-agg-factory {:style/indent 3} [^String from-name, ^String to-name, to-type, emit-init-group, emit-step]
   (let [from-var (symbol from-name)
         emit-init-group (memoize (fn [acc-type] (partial emit-init-group acc-type)))
         emit-step (memoize (fn [acc-type] (partial emit-step acc-type)))]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
+      (getToColumnType [_] to-type)
 
       (build [_ al]
         (let [out-pvec (PromotableVector. al (NullVector. to-name))]
           (reify
             IAggregateSpec
-            (getFromColumnName [_] from-name)
-
-            (aggregate [_ in-vec group-mapping]
-              (when (pos? (.getValueCount in-vec))
-                (let [from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
-                      from-col-type (types/field->col-type (.getField (.getVector in-vec)))
-                      out-vec (.maybePromote out-pvec from-val-types)
-                      acc-type (types/field->col-type (.getField out-vec))
-                      f (emit-agg from-var from-val-types from-col-type
-                                  (emit-init-group acc-type)
-                                  (emit-step acc-type))]
-                  (f out-vec in-vec group-mapping))))
+            (aggregate [_ in-rel group-mapping]
+              (let [in-vec (.vectorForName in-rel from-name)]
+                (when (pos? (.getValueCount in-vec))
+                  (let [from-val-types (expr/field->value-types (.getField (.getVector in-vec)))
+                        from-col-type (types/field->col-type (.getField (.getVector in-vec)))
+                        out-vec (.maybePromote out-pvec from-val-types)
+                        acc-type (types/field->col-type (.getField out-vec))
+                        f (emit-agg from-var from-val-types from-col-type
+                                    (emit-init-group acc-type)
+                                    (emit-step acc-type))]
+                    (f out-vec in-vec group-mapping)))))
 
             (finish [_]
               (let [v (.getVector out-pvec)]
@@ -272,42 +273,49 @@
             Closeable
             (close [_] (util/try-close out-pvec))))))))
 
-(defmethod ->aggregate-factory :sum [_ ^String from-name, ^String to-name]
-  (promotable-agg-factory from-name to-name
-    (fn emit-sum-init [acc-type acc-sym group-idx-sym]
-      (let [vec-type (-> (.getType (types/col-type->field acc-type))
-                         (types/arrow-type->vector-type))]
-        `(let [~(-> acc-sym (expr/with-tag vec-type)) ~acc-sym]
-           (.setIndexDefined ~acc-sym ~group-idx-sym)
-           (.set ~acc-sym ~group-idx-sym
-                 ~(cond
-                    (isa? types/col-type-hierarchy acc-type :int) 0
-                    (isa? types/col-type-hierarchy acc-type :float) 0.0)))))
+(defmethod ->aggregate-factory :sum [_ ^String from-name, from-type, ^String to-name]
+  (let [to-type (->> (types/flatten-union-types from-type)
+                     (filter #(isa? types/col-type-hierarchy % :num))
+                     (types/least-upper-bound*)
+                     (types/merge-col-types :null))]
+    (promotable-agg-factory from-name to-name to-type
+      (fn emit-sum-init [acc-type acc-sym group-idx-sym]
+        (let [vec-type (-> (.getType (types/col-type->field acc-type))
+                           (types/arrow-type->vector-type))]
+          `(let [~(-> acc-sym (expr/with-tag vec-type)) ~acc-sym]
+             (.setIndexDefined ~acc-sym ~group-idx-sym)
+             (.set ~acc-sym ~group-idx-sym
+                   ~(cond
+                      (isa? types/col-type-hierarchy acc-type :int) 0
+                      (isa? types/col-type-hierarchy acc-type :float) 0.0)))))
 
-    (fn emit-sum-step [acc-type var-type acc-sym group-idx-sym val-code]
-      ;; TODO `DoubleSummaryStatistics` uses 'Kahan's summation algorithm'
-      ;; to compensate for rounding errors - should we?
-      (let [{:keys [continue]} (expr/codegen-call
-                                {:op :call, :f :+,
-                                 :emitted-args [{:return-type acc-type
-                                                 :continue (fn [f]
-                                                             (f acc-type (expr/get-value-form var-type acc-sym group-idx-sym)))}
-                                                {:return-type var-type
-                                                 :continue (fn [f]
-                                                             (f var-type val-code))}]})]
-        `(let [~(-> acc-sym (expr/with-tag (-> (.getType (types/col-type->field acc-type))
-                                               (types/arrow-type->vector-type))))
-               ~acc-sym]
+      (fn emit-sum-step [acc-type var-type acc-sym group-idx-sym val-code]
+        ;; TODO `DoubleSummaryStatistics` uses 'Kahan's summation algorithm'
+        ;; to compensate for rounding errors - should we?
+        (let [{:keys [continue]} (expr/codegen-call
+                                  {:op :call, :f :+,
+                                   :emitted-args [{:return-type acc-type
+                                                   :continue (fn [f]
+                                                               (f acc-type (expr/get-value-form var-type acc-sym group-idx-sym)))}
+                                                  {:return-type var-type
+                                                   :continue (fn [f]
+                                                               (f var-type val-code))}]})]
+          `(let [~(-> acc-sym (expr/with-tag (-> (.getType (types/col-type->field acc-type))
+                                                 (types/arrow-type->vector-type))))
+                 ~acc-sym]
 
-           ~(continue (fn [arrow-type res-code]
-                        (expr/set-value-form arrow-type acc-sym group-idx-sym res-code))))))))
+             ~(continue (fn [arrow-type res-code]
+                          (expr/set-value-form arrow-type acc-sym group-idx-sym res-code)))))))))
 
-(defmethod ->aggregate-factory :avg [_ ^String from-name, ^String to-name]
-  (let [sum-agg (->aggregate-factory :sum from-name "sum")
-        count-agg (->aggregate-factory :count from-name "cnt")
-        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt) '#{sum cnt} #{})]
+(defmethod ->aggregate-factory :avg [_ ^String from-name, from-type, ^String to-name]
+  (let [sum-agg (->aggregate-factory :sum from-name from-type "sum")
+        count-agg (->aggregate-factory :count from-name from-type "cnt")
+        projecter (expr/->expression-projection-spec to-name '(/ (double sum) cnt)
+                                                     {:col-types {'sum (.getToColumnType sum-agg)
+                                                                  'cnt (.getToColumnType count-agg)}})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
+      (getToColumnType [_] (.getColumnType projecter))
 
       (build [_ al]
         (let [sum-agg (.build sum-agg al)
@@ -315,11 +323,9 @@
               res-vec (Float8Vector. to-name al)]
           (reify
             IAggregateSpec
-            (getFromColumnName [_] from-name)
-
-            (aggregate [_ in-vec group-mapping]
-              (.aggregate sum-agg in-vec group-mapping)
-              (.aggregate count-agg in-vec group-mapping))
+            (aggregate [_ in-rel group-mapping]
+              (.aggregate sum-agg in-rel group-mapping)
+              (.aggregate count-agg in-rel group-mapping))
 
             (finish [_]
               (let [sum-ivec (.finish sum-agg)
@@ -338,14 +344,20 @@
               (util/try-close sum-agg)
               (util/try-close count-agg))))))))
 
-(defmethod ->aggregate-factory :variance [_ ^String from-name, ^String to-name]
-  (let [avgx-agg (->aggregate-factory :avg from-name "avgx")
-        avgx2-agg (->aggregate-factory :avg "x2" "avgx2")
-        from-var (symbol from-name)
-        x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var) #{from-var} #{})
-        finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx)) '#{avgx2 avgx} #{})]
+(defmethod ->aggregate-factory :variance [_ ^String from-name, from-type, ^String to-name]
+  (let [from-var (symbol from-name)
+        avgx-agg (->aggregate-factory :avg from-name from-type "avgx")
+        x2-projecter (expr/->expression-projection-spec "x2" (list '* from-var from-var)
+                                                        {:col-types {from-var from-type}})
+
+        avgx2-agg (->aggregate-factory :avg "x2" (.getColumnType x2-projecter) "avgx2")
+        finish-projecter (expr/->expression-projection-spec to-name '(- avgx2 (* avgx avgx))
+                                                            {:col-types {'avgx (.getToColumnType avgx-agg)
+                                                                         'avgx2 (.getToColumnType avgx2-agg)}})]
+
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
+      (getToColumnType [_] (.getColumnType finish-projecter))
 
       (build [_ al]
         (let [avgx-agg (.build avgx-agg al)
@@ -353,12 +365,11 @@
               res-vec (Float8Vector. to-name al)]
           (reify
             IAggregateSpec
-            (getFromColumnName [_] from-name)
-
-            (aggregate [_ in-vec group-mapping]
-              (with-open [x2 (.project x2-projecter al (iv/->indirect-rel [in-vec]) {})]
-                (.aggregate avgx-agg in-vec group-mapping)
-                (.aggregate avgx2-agg x2 group-mapping)))
+            (aggregate [_ in-rel group-mapping]
+              (let [in-vec (.vectorForName in-rel from-name)]
+                (with-open [x2 (.project x2-projecter al (iv/->indirect-rel [in-vec]) {})]
+                  (.aggregate avgx-agg in-rel group-mapping)
+                  (.aggregate avgx2-agg (iv/->indirect-rel [x2]) group-mapping))))
 
             (finish [_]
               (let [avgx-ivec (.finish avgx-agg)
@@ -377,21 +388,21 @@
               (util/try-close avgx-agg)
               (util/try-close avgx2-agg))))))))
 
-(defmethod ->aggregate-factory :std-dev [_ ^String from-name, ^String to-name]
-  (let [variance-agg (->aggregate-factory :variance from-name "variance")
-        finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance) '#{variance} #{})]
+(defmethod ->aggregate-factory :std-dev [_ ^String from-name, from-type, ^String to-name]
+  (let [variance-agg (->aggregate-factory :variance from-name from-type "variance")
+        finish-projecter (expr/->expression-projection-spec to-name '(sqrt variance)
+                                                            {:col-types {'variance (.getToColumnType variance-agg)}})]
     (reify IAggregateSpecFactory
       (getToColumnName [_] to-name)
+      (getToColumnType [_] (.getColumnType finish-projecter))
 
       (build [_ al]
         (let [variance-agg (.build variance-agg al)
               res-vec (Float8Vector. to-name al)]
           (reify
             IAggregateSpec
-            (getFromColumnName [_] from-name)
-
-            (aggregate [_ in-vec group-mapping]
-              (.aggregate variance-agg in-vec group-mapping))
+            (aggregate [_ in-rel group-mapping]
+              (.aggregate variance-agg in-rel group-mapping))
 
             (finish [_]
               (let [variance-ivec (.finish variance-agg)
@@ -410,10 +421,10 @@
 
 (defn- min-max-factory
   "update-if-f-kw: update the accumulated value if `(f el acc)`"
-  [from-name to-name update-if-f-kw]
+  [from-name from-type to-name update-if-f-kw]
 
   ;; TODO: this still only works for fixed-width values, but it's reasonable to want (e.g.) `(min <string-col>)`
-  (promotable-agg-factory from-name to-name
+  (promotable-agg-factory from-name to-name (types/merge-col-types from-type :null)
     (fn emit-min-max-init [_acc-type _acc-sym _group-idx-sym] nil)
 
     (fn emit-min-max-step [acc-type var-type acc-sym group-idx-sym val-code]
@@ -429,23 +440,22 @@
              (when ~(->call-code [val-sym (expr/get-value-form var-type acc-sym group-idx-sym)])
                ~(expr/set-value-form acc-type acc-sym group-idx-sym val-sym))))))))
 
-(defmethod ->aggregate-factory :min [_ from-name to-name] (min-max-factory from-name to-name :<))
-(defmethod ->aggregate-factory :max [_ from-name to-name] (min-max-factory from-name to-name :>))
+(defmethod ->aggregate-factory :min [_ from-name from-type to-name] (min-max-factory from-name from-type to-name :<))
+(defmethod ->aggregate-factory :max [_ from-name from-type to-name] (min-max-factory from-name from-type to-name :>))
 
-(defn- wrap-distinct [^IAggregateSpecFactory agg-factory]
+(defn- wrap-distinct [^IAggregateSpecFactory agg-factory, ^String from-name]
   (reify IAggregateSpecFactory
     (getToColumnName [_] (.getToColumnName agg-factory))
+    (getToColumnType [_] (.getToColumnType agg-factory))
 
     (build [_ al]
       (let [agg-spec (.build agg-factory al)
-            rel-maps (ArrayList.)
-            from-name (.getFromColumnName agg-spec)]
+            rel-maps (ArrayList.)]
         (reify
           IAggregateSpec
-          (getFromColumnName [_] from-name)
-
-          (aggregate [_ in-vec group-mapping]
-            (let [builders (ArrayList. (.size rel-maps))
+          (aggregate [_ in-rel group-mapping]
+            (let [in-vec (.vectorForName in-rel from-name)
+                  builders (ArrayList. (.size rel-maps))
                   distinct-idxs (IntStream/builder)]
               (dotimes [idx (.getValueCount in-vec)]
                 (let [group-idx (.get group-mapping idx)]
@@ -467,7 +477,7 @@
                                             (.select distinct-idxs)
                                             (.copy al))]
                   (.aggregate agg-spec
-                              (.select in-vec distinct-idxs)
+                              (iv/->indirect-rel [(.select in-vec distinct-idxs)])
                               (.getVector distinct-gm))))))
 
           (finish [_] (.finish agg-spec))
@@ -477,17 +487,17 @@
             (util/try-close agg-spec)
             (run! util/try-close rel-maps)))))))
 
-(defmethod ->aggregate-factory :count-distinct [_ from-name to-name]
-  (-> (->aggregate-factory :count from-name to-name)
-      (wrap-distinct)))
+(defmethod ->aggregate-factory :count-distinct [_ from-name from-type to-name]
+  (-> (->aggregate-factory :count from-name from-type to-name)
+      (wrap-distinct from-name)))
 
-(defmethod ->aggregate-factory :sum-distinct [_ from-name to-name]
-  (-> (->aggregate-factory :sum from-name to-name)
-      (wrap-distinct)))
+(defmethod ->aggregate-factory :sum-distinct [_ from-name from-type to-name]
+  (-> (->aggregate-factory :sum from-name from-type to-name)
+      (wrap-distinct from-name)))
 
-(defmethod ->aggregate-factory :avg-distinct [_ from-name to-name]
-  (-> (->aggregate-factory :avg from-name to-name)
-      (wrap-distinct)))
+(defmethod ->aggregate-factory :avg-distinct [_ from-name from-type to-name]
+  (-> (->aggregate-factory :avg from-name from-type to-name)
+      (wrap-distinct from-name)))
 
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
                                 ^String from-name, ^String to-name
@@ -496,10 +506,9 @@
                                 ^:unsynchronized-mutable ^long base-idx
                                 ^List group-idxmaps]
   IAggregateSpec
-  (getFromColumnName [_] from-name)
-
-  (aggregate [this in-vec group-mapping]
-    (let [row-count (.getValueCount in-vec)]
+  (aggregate [this in-rel group-mapping]
+    (let [in-vec (.vectorForName in-rel from-name)
+          row-count (.getValueCount in-vec)]
       (vw/append-vec acc-col in-vec)
 
       (dotimes [idx row-count]
@@ -537,37 +546,38 @@
     (util/try-close acc-col)
     (util/try-close out-vec)))
 
-(defmethod ->aggregate-factory :array-agg [_ ^String from-name, ^String to-name]
+(defmethod ->aggregate-factory :array-agg [_ ^String from-name, to-type, ^String to-name]
   (reify IAggregateSpecFactory
     (getToColumnName [_] to-name)
+    (getToColumnType [_] to-type)
 
     (build [_ al]
       (ArrayAggAggregateSpec. al from-name to-name
                               (vw/->vec-writer al to-name)
                               nil 0 (ArrayList.)))))
 
-(defmethod ->aggregate-factory :array-agg-distinct [_ from-name to-name]
-  (-> (->aggregate-factory :array-agg from-name to-name)
-      (wrap-distinct)))
+(defmethod ->aggregate-factory :array-agg-distinct [_ from-name from-type to-name]
+  (-> (->aggregate-factory :array-agg from-name [:list from-type] to-name)
+      (wrap-distinct from-name)))
 
 (defn- bool-agg-factory [^String from-name, ^String to-name, zero-value step-f-kw]
-  ;; TODO this could be a nullable input?
-  (monomorphic-agg-factory from-name to-name #(BitVector. to-name ^BufferAllocator %)
+  (monomorphic-agg-factory from-name to-name [:union #{:null :bool}]
     (fn emit-bool-agg-init [acc-sym group-idx-sym]
       `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym]
          (.setIndexDefined ~acc-sym ~group-idx-sym)
          ~(expr/set-value-form :bool acc-sym group-idx-sym zero-value)))
 
     (fn emit-bool-agg-step [var-type acc-sym group-idx-sym val-code]
-      (let [{:keys [continue]} (expr/codegen-call {:op :call, :f step-f-kw
-                                                    :emitted-args [{:return-type [:union #{:bool :null}]
-                                                                    :continue (fn [f]
-                                                                                `(if (.isNull ~acc-sym ~group-idx-sym)
-                                                                                   ~(f :null nil)
-                                                                                   ~(f :bool (expr/get-value-form :bool acc-sym group-idx-sym))))}
-                                                                   {:return-type var-type
-                                                                    :continue (fn [f]
-                                                                                (f var-type val-code))}]})]
+      (let [{:keys [continue]} (expr/codegen-call
+                                {:op :call, :f step-f-kw
+                                 :emitted-args [{:return-type [:union #{:bool :null}]
+                                                 :continue (fn [f]
+                                                             `(if (.isNull ~acc-sym ~group-idx-sym)
+                                                                ~(f :null nil)
+                                                                ~(f :bool (expr/get-value-form :bool acc-sym group-idx-sym))))}
+                                                {:return-type var-type
+                                                 :continue (fn [f]
+                                                             (f var-type val-code))}]})]
 
         `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym]
            ~(continue (fn [value-type res-code]
@@ -577,10 +587,10 @@
                              (.setIndexDefined ~acc-sym ~group-idx-sym)
                              ~(expr/set-value-form value-type acc-sym group-idx-sym res-code))))))))))
 
-(defmethod ->aggregate-factory :all [_ ^String from-name, ^String to-name] (bool-agg-factory from-name to-name true :and))
-(defmethod ->aggregate-factory :every [_ ^String from-name, ^String to-name] (->aggregate-factory :all from-name to-name))
-(defmethod ->aggregate-factory :any [_ ^String from-name, ^String to-name] (bool-agg-factory from-name to-name false :or))
-(defmethod ->aggregate-factory :some [_ ^String from-name, ^String to-name] (->aggregate-factory :any from-name to-name))
+(defmethod ->aggregate-factory :all [_ ^String from-name, _from-type, ^String to-name] (bool-agg-factory from-name to-name true :and))
+(defmethod ->aggregate-factory :every [_ ^String from-name, from-type, ^String to-name] (->aggregate-factory :all from-name from-type to-name))
+(defmethod ->aggregate-factory :any [_ ^String from-name, _from-type, ^String to-name] (bool-agg-factory from-name to-name false :or))
+(defmethod ->aggregate-factory :some [_ ^String from-name, from-type, ^String to-name] (->aggregate-factory :any from-name from-type to-name))
 
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
@@ -597,11 +607,9 @@
          (.forEachRemaining in-cursor
                             (reify Consumer
                               (accept [_ in-rel]
-                                (let [^IIndirectRelation in-rel in-rel]
-                                  (with-open [group-mapping (.groupMapping group-mapper in-rel)]
-                                    (doseq [^IAggregateSpec agg-spec aggregate-specs
-                                            :let [in-vec (.vectorForName in-rel (.getFromColumnName agg-spec))]]
-                                      (.aggregate agg-spec in-vec group-mapping)))))))
+                                (with-open [group-mapping (.groupMapping group-mapper in-rel)]
+                                  (doseq [^IAggregateSpec agg-spec aggregate-specs]
+                                    (.aggregate agg-spec in-rel group-mapping))))))
 
          (let [out-rel (iv/->indirect-rel (concat (.finish group-mapper)
                                                   (map #(.finish ^IAggregateSpec %) aggregate-specs)))]
@@ -624,28 +632,32 @@
 
 (defmethod lp/emit-expr :group-by [{:keys [columns relation]} args]
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
-        group-cols (mapv (comp name second) group-cols)
-        agg-factories (for [[_ agg] aggs]
-                        (let [[to-column {:keys [aggregate-fn from-column]}] (first agg)]
-                          (memo-agg-factory aggregate-fn
-                                            (name from-column)
-                                            (name to-column))))]
+        group-cols (mapv second group-cols)]
     (lp/unary-expr relation args
-      (fn [_inner-col-names]
-        {:col-names (set/union (set group-cols)
-                               (->> agg-factories
-                                    (into #{} (map #(.getToColumnName ^IAggregateSpecFactory %)))))
-         :->cursor (fn [{:keys [allocator]} in-cursor]
-                     (let [agg-specs (LinkedList.)]
-                       (try
-                         (doseq [^IAggregateSpecFactory factory agg-factories]
-                           (.add agg-specs (.build factory allocator)))
+      (fn [inner-col-types]
+        (let [agg-factories (for [[_ agg] aggs]
+                              (let [[to-column {:keys [aggregate-fn from-column]}] (first agg)]
+                                (memo-agg-factory aggregate-fn
+                                                  (name from-column)
+                                                  (get inner-col-types from-column)
+                                                  (name to-column))))]
+          {:col-types (-> (into (->> group-cols
+                                     (into {} (map (juxt identity inner-col-types))))
+                                (->> agg-factories
+                                     (into {} (map (juxt #(symbol (.getToColumnName ^IAggregateSpecFactory %))
+                                                         #(.getToColumnType ^IAggregateSpecFactory %)))))))
 
-                         (GroupByCursor. allocator in-cursor
-                                         (->group-mapper allocator group-cols)
-                                         (vec agg-specs)
-                                         false)
+           :->cursor (fn [{:keys [allocator]} in-cursor]
+                       (let [agg-specs (LinkedList.)]
+                         (try
+                           (doseq [^IAggregateSpecFactory factory agg-factories]
+                             (.add agg-specs (.build factory allocator)))
 
-                         (catch Exception e
-                           (run! util/try-close agg-specs)
-                           (throw e)))))}))))
+                           (GroupByCursor. allocator in-cursor
+                                           (->group-mapper allocator (mapv name group-cols))
+                                           (vec agg-specs)
+                                           false)
+
+                           (catch Exception e
+                             (run! util/try-close agg-specs)
+                             (throw e)))))})))))

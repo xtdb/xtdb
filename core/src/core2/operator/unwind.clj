@@ -1,9 +1,11 @@
 (ns core2.operator.unwind
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.core.match :refer [match]]
+            [clojure.spec.alpha :as s]
             [core2.logical-plan :as lp]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.writer :as vw])
+            [core2.vector.writer :as vw]
+            [core2.types :as types])
   (:import (core2 ICursor)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (java.util LinkedList)
@@ -120,9 +122,19 @@
 (defmethod lp/emit-expr :unwind [{:keys [columns relation], {:keys [ordinality-column]} :opts}, op-args]
   (let [[to-col from-col] (first columns)]
     (lp/unary-expr relation op-args
-      (fn [col-names]
-        {:col-names (conj col-names (name to-col))
-         :->cursor (fn [{:keys [allocator]} in-cursor]
-                     (UnwindCursor. allocator in-cursor
-                                    (name from-col) (name to-col)
-                                    (some-> ordinality-column name)))}))))
+      (fn [col-types]
+        (let [unwind-col-type (->> (get col-types from-col)
+                                   types/flatten-union-types
+                                   (keep (fn [col-type]
+                                           (match col-type
+                                             [:list inner-type] inner-type
+                                             [:fixed-size-list _list-size inner-type] inner-type
+                                             :else nil)))
+                                   (apply types/merge-col-types))]
+          {:col-types (-> col-types
+                          (assoc to-col unwind-col-type)
+                          (cond-> ordinality-column (assoc ordinality-column :i32)))
+           :->cursor (fn [{:keys [allocator]} in-cursor]
+                       (UnwindCursor. allocator in-cursor
+                                      (name from-col) (name to-col)
+                                      (some-> ordinality-column name)))})))))

@@ -1,6 +1,7 @@
 (ns core2.operator.max-1-row
   (:require [clojure.spec.alpha :as s]
             [core2.logical-plan :as lp]
+            [core2.types :as types]
             [core2.vector.indirect :as iv])
   (:import (core2 ICursor)
            (core2.vector IIndirectRelation)
@@ -45,7 +46,7 @@
 
 (defmethod lp/emit-expr :max-1-row [{:keys [relation]} args]
   (lp/unary-expr relation args
-    (fn [col-names]
-      {:col-names col-names
+    (fn [col-types]
+      {:col-types (->> col-types (into {} (map (juxt key (comp #(types/merge-col-types % :null) val)))))
        :->cursor (fn [{:keys [allocator]} in-cursor]
-                   (Max1RowCursor. allocator col-names in-cursor 0 false))})))
+                   (Max1RowCursor. allocator (set (keys col-types)) in-cursor 0 false))})))

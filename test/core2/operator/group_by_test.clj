@@ -10,14 +10,18 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
+(defn- query-group-by [q]
+  (with-open [res (op/open-ra q)]
+    {:res (into #{} cat (tu/<-cursor res))
+     :col-types (.columnTypes res)}))
+
 (t/deftest test-group-by
-  (let [a-field (types/->field "a" types/bigint-type false)
-        b-field (types/->field "b" types/bigint-type false)]
+  (let [schema (Schema. [(types/->field "a" types/bigint-type false)
+                         (types/->field "b" types/bigint-type false)])]
     (letfn [(run-test [group-by-spec blocks]
-              (with-open [res (op/open-ra [:group-by group-by-spec
-                                           [::tu/blocks (Schema. [a-field b-field])
-                                            blocks]])]
-                (into #{} cat (tu/<-cursor res))))]
+              (query-group-by [:group-by group-by-spec
+                               [::tu/blocks schema
+                                blocks]]))]
 
       (let [agg-specs '[{sum (sum b)}
                         {avg (avg b)}
@@ -25,14 +29,20 @@
                         {min (min b)}
                         {max (max b)}
                         {variance (variance b)}
-                        {std-dev (std-dev b)}]]
+                        {std-dev (std-dev b)}]
+            expected-col-types '{a :i64, cnt :i64
+                                 sum [:union #{:null :i64}], avg [:union #{:null :f64}]
+                                 min [:union #{:null :i64}], max [:union #{:null :i64}]
+                                 variance [:union #{:null :f64}], std-dev [:union #{:null :f64}]}]
 
-        (t/is (= #{{:a 1, :sum 140, :avg 35.0, :cnt 4 :min 10 :max 60,
-                    :variance 425.0, :std-dev 20.615528128088304}
-                   {:a 2, :sum 140, :avg 46.666666666666664, :cnt 3 :min 30 :max 70
-                    :variance 288.88888888888914, :std-dev 16.996731711975958}
-                   {:a 3, :sum 170, :avg 85.0, :cnt 2 :min 80 :max 90,
-                    :variance 25.0, :std-dev 5.0}}
+        (t/is (= {:res #{{:a 1, :sum 140, :avg 35.0, :cnt 4 :min 10 :max 60,
+                          :variance 425.0, :std-dev 20.615528128088304}
+                         {:a 2, :sum 140, :avg 46.666666666666664, :cnt 3 :min 30 :max 70
+                          :variance 288.88888888888914, :std-dev 16.996731711975958}
+                         {:a 3, :sum 170, :avg 85.0, :cnt 2 :min 80 :max 90,
+                          :variance 25.0, :std-dev 5.0}}
+                  :col-types expected-col-types}
+
                  (run-test (cons 'a agg-specs)
                            [[{:a 1 :b 20}
                              {:a 1 :b 10}
@@ -44,10 +54,12 @@
                              {:a 3 :b 80}
                              {:a 3 :b 90}]])))
 
-        (t/is (empty? (run-test (cons 'a agg-specs) []))
+        (t/is {:res (run-test (cons 'a agg-specs) [])
+               :col-types expected-col-types}
               "empty input"))
 
-      (t/is (= #{{:a 1} {:a 2} {:a 3}}
+      (t/is (= {:res #{{:a 1} {:a 2} {:a 3}}
+                :col-types '{a :i64}}
                (run-test '[a]
                          [[{:a 1 :b 10}
                            {:a 1 :b 20}
@@ -60,12 +72,13 @@
                            {:a 3 :b 10}]]))
             "group without aggregate")
 
-      (t/is (= #{{:a 1, :b 10, :cnt 2}
-                 {:a 1, :b 20, :cnt 2}
-                 {:a 2, :b 10, :cnt 2}
-                 {:a 2, :b 20, :cnt 1}
-                 {:a 3, :b 10, :cnt 1}
-                 {:a 3, :b 20, :cnt 1}}
+      (t/is (= {:res #{{:a 1, :b 10, :cnt 2}
+                       {:a 1, :b 20, :cnt 2}
+                       {:a 2, :b 10, :cnt 2}
+                       {:a 2, :b 20, :cnt 1}
+                       {:a 3, :b 10, :cnt 1}
+                       {:a 3, :b 20, :cnt 1}}
+                :col-types '{a :i64, b :i64, cnt :i64}}
                (run-test '[a b {cnt (count b)}]
                          [[{:a 1 :b 10}
                            {:a 1 :b 20}
@@ -78,7 +91,7 @@
                            {:a 3 :b 10}]]))
             "multiple group columns (distinct)")
 
-      (t/is (= #{{:cnt 9}}
+      (t/is (= {:res #{{:cnt 9}}, :col-types '{cnt :i64}}
                (run-test '[{cnt (count b)}]
                          [[{:a 1 :b 10}
                            {:a 1 :b 20}
@@ -95,11 +108,13 @@
   (with-open [group-mapping (tu/->mono-vec "gm" types/int-type (map int [0 0 0]))
               v0 (tu/->mono-vec "v" types/bigint-type [1 2 3])
               v1 (tu/->duv "v" [1 2.0 3])]
-    (let [sum-spec (-> (group-by/->aggregate-factory :sum "v" "vsum")
-                       (.build tu/*allocator*))]
+    (let [sum-factory (group-by/->aggregate-factory :sum "v" [:union #{:i64 :f64}] "vsum")
+          sum-spec (.build sum-factory tu/*allocator*)]
       (try
-        (.aggregate sum-spec (iv/->direct-vec v0) group-mapping)
-        (.aggregate sum-spec (iv/->direct-vec v1) group-mapping)
+        (t/is (= [:union #{:null :f64}] (.getToColumnType sum-factory)))
+
+        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v0)]) group-mapping)
+        (.aggregate sum-spec (iv/->indirect-rel [(iv/->direct-vec v1)]) group-mapping)
         (t/is (= [12.0] (tu/<-column (.finish sum-spec))))
         (finally
           (util/try-close sum-spec))))))
@@ -110,11 +125,13 @@
 
               gm1 (tu/->mono-vec "gm1" types/int-type (map int [1 2 0]))
               k1 (tu/->mono-vec "k" types/bigint-type [4 5 6])]
-    (let [agg-spec (-> (group-by/->aggregate-factory :array-agg "k" "vs")
-                       (.build tu/*allocator*))]
+    (let [agg-factory (group-by/->aggregate-factory :array-agg "k" :i64 "vs")
+          agg-spec (.build agg-factory tu/*allocator*)]
       (try
-        (.aggregate agg-spec (iv/->direct-vec k0) gm0)
-        (.aggregate agg-spec (iv/->direct-vec k1) gm1)
+        (t/is (= :i64 (.getToColumnType agg-factory)))
+
+        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k0)]) gm0)
+        (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k1)]) gm1)
         (t/is (= [[1 3 6] [2 4] [5]] (tu/<-column (.finish agg-spec))))
         (finally
           (util/try-close agg-spec))))))
@@ -129,6 +146,8 @@
                                   {:k "fn", :v false} {:k "fn", :v nil} {:k "fn", :v false}
                                   {:k "tf", :v true} {:k "tf", :v false} {:k "tf", :v true}
                                   {:k "tfn", :v true} {:k "tfn", :v false} {:k "tfn", :v nil}]]]])]
+    (t/is (= '{k :utf8, all-vs [:union #{:null :bool}], any-vs [:union #{:null :bool}]}
+             (.columnTypes res)))
     (t/is (= #{{:k "t", :all-vs true, :any-vs true}
                {:k "f", :all-vs false, :any-vs false}
                {:k "n", :all-vs nil, :any-vs nil}
@@ -157,6 +176,14 @@
                                   {:k :b, :v 10}]
                                  [{:k :a, :v 12}
                                   {:k :a, :v 10}]]]])]
+    (t/is (= '{k [:extension-type :keyword :utf8 ""],
+               cnt :i64, cnt-distinct :i64,
+               sum [:union #{:null :i64}], sum-distinct [:union #{:null :i64}],
+               avg [:union #{:null :f64}], avg-distinct [:union #{:null :f64}],
+               array-agg [:union #{:null :i64}],
+               array-agg-distinct [:list [:union #{:null :i64}]]}
+             (.columnTypes res)))
+
     (t/is (= #{{:k :a,
                 :cnt 3, :cnt-distinct 2,
                 :sum 32, :sum-distinct 22,
@@ -170,20 +197,17 @@
              (set (first (tu/<-cursor res)))))))
 
 (t/deftest test-group-by-with-nils-coerce-to-boolean-npe-regress
-  (t/is
-    (-> '[:group-by [a]
-          [:table [{:a 42, :b 42} {:a nil, :b 42} {:a nil, :b 42}]]]
-        (op/query-ra {})
-        any?)))
+  (t/is (= {:res #{{:a 42} {:a nil}}
+            :col-types '{a [:union #{:i64 :null}]}}
+           (query-group-by '[:group-by [a]
+                             [:table [{:a 42, :b 42}, {:a nil, :b 42}, {:a nil, :b 42}]]]))))
 
 (t/deftest test-group-by-groups-nils
-  (t/is
-    (=
-      [{:a nil, :b 1, :n 85}]
-      (-> '[:group-by [a b {n (sum c)}]
-            [:table [{:a nil, :b 1, :c 42}
-                     {:a nil, :b 1, :c 43}]]]
-          (op/query-ra {})))))
+  (t/is (= {:res #{{:a nil, :b 1, :n 85}}
+            :col-types '{a :null, b :i64, n [:union #{:null :i64}]}}
+           (query-group-by '[:group-by [a b {n (sum c)}]
+                             [:table [{:a nil, :b 1, :c 42}
+                                      {:a nil, :b 1, :c 43}]]]))))
 
 (t/deftest test-min-of-empty-rel-returns-nil
   (t/is (= [{:a nil}] (op/query-ra '[:group-by [{a (min b)}] [:select false [:table [{:b 0}]]]] {}))))

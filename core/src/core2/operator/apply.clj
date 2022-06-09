@@ -122,26 +122,28 @@
   ;; TODO: decodes/re-encodes row values - can we pass these directly to the sub-query?
 
   (lp/unary-expr independent-relation args
-                 (fn [independent-col-names]
-                   (let [dependent-args (-> args
-                                            (update :param-names
-                                                    (fnil into #{})
-                                                    (map second)
-                                                    columns))
-                         {dependent-col-names :col-names, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)]
-                     {:col-names (case mode
-                                   (:cross-join :left-outer-join) (set/union independent-col-names dependent-col-names)
-                                   (:semi-join :anti-join) independent-col-names)
-                      :->cursor (fn [{:keys [allocator] :as query-opts} independent-cursor]
-                                  (let [dependent-cursor-factory
-                                        (reify IDependentCursorFactory
-                                          (openDependentCursor [_ in-rel idx]
-                                            (let [query-opts (-> query-opts
-                                                                 (update :params
-                                                                         (fnil into {})
-                                                                         (for [[ik dk] columns]
-                                                                           (let [iv (.vectorForName in-rel (name ik))]
-                                                                             (MapEntry/create dk (types/get-object (.getVector iv) (.getIndex iv idx)))))))]
-                                              (->dependent-cursor query-opts))))]
+    (fn [independent-col-types]
+      (let [dependent-args (-> args
+                               (update :param-types
+                                       (fnil into {})
+                                       (map (fn [[ik dk]]
+                                              [dk (get independent-col-types ik)]))
+                                       columns))
+            {dependent-col-types :col-types, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)]
 
-                                    (ApplyCursor. allocator (->mode-strategy mode dependent-col-names) independent-cursor dependent-cursor-factory)))}))))
+        {:col-types (case mode
+                      (:cross-join :left-outer-join) (merge-with types/merge-col-types independent-col-types dependent-col-types)
+                      (:semi-join :anti-join) independent-col-types)
+         :->cursor (fn [{:keys [allocator] :as query-opts} independent-cursor]
+                     (let [dependent-cursor-factory
+                           (reify IDependentCursorFactory
+                             (openDependentCursor [_ in-rel idx]
+                               (let [query-opts (-> query-opts
+                                                    (update :params
+                                                            (fnil into {})
+                                                            (for [[ik dk] columns]
+                                                              (let [iv (.vectorForName in-rel (name ik))]
+                                                                (MapEntry/create dk (types/get-object (.getVector iv) (.getIndex iv idx)))))))]
+                                 (->dependent-cursor query-opts))))]
+
+                       (ApplyCursor. allocator (->mode-strategy mode (set (keys dependent-col-types))) independent-cursor dependent-cursor-factory)))}))))

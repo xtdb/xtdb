@@ -1,5 +1,6 @@
 (ns core2.operator.scan
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.core.match :refer [match]]
+            [clojure.spec.alpha :as s]
             [core2.align :as align]
             [core2.bloom :as bloom]
             [core2.coalesce :as coalesce]
@@ -26,7 +27,7 @@
            [core2.temporal ITemporalManager TemporalRoots]
            core2.tx.Watermark
            [java.util HashMap LinkedList List Map Queue]
-           [java.util.function BiFunction Consumer]
+           [java.util.function BiFunction Consumer Function]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
            [org.roaringbitmap IntConsumer RoaringBitmap]
@@ -45,6 +46,42 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:dynamic *column->pushdown-bloom* {})
+
+(defn ->scan-col-types [scan-exprs srcs]
+  (let [mm+wms (HashMap.)]
+    (try
+      (letfn [(->mm+wm [src-key]
+                (.computeIfAbsent mm+wms src-key
+                                  (reify Function
+                                    (apply [_ _src-key]
+                                      (let [^Snapshot src (or (get srcs src-key)
+                                                              (throw (err/illegal-arg :unknown-src
+                                                                                      {::err/message "Query refers to unknown source"
+                                                                                       :db src-key
+                                                                                       :src-keys (keys srcs)})))]
+
+                                        {:mm (.metadata-mgr src)
+                                         :wm (.getWatermark ^IChunkManager (.indexer src))})))))
+
+              (->col-type [[src-key col-name]]
+                (let [{:keys [^IMetadataManager mm, ^Watermark wm]} (->mm+wm src-key)]
+                  (if (temporal/temporal-column? col-name)
+                    [:timestamp-tz :micro "UTC"]
+                    (t/merge-col-types (.columnType mm (name col-name))
+                                       (.columnType wm (name col-name))))))]
+
+        (->> scan-exprs
+             (into {} (comp (mapcat (fn ->scan-col-keys [{:keys [source columns]}]
+                                      (let [src-key (or source '$)]
+                                        (for [column columns]
+                                          [src-key (match column
+                                                     [:column col] col
+                                                     [:select col-map] (key (first col-map)))]))))
+                            (distinct)
+                            (map (juxt identity ->col-type))))))
+
+      (finally
+        (run! util/try-close (map :wm (vals mm+wms)))))))
 
 (defn- next-roots [col-names chunks]
   (when (= (count col-names) (count chunks))
@@ -69,7 +106,7 @@
   (->> (for [^String col-name col-names
              :when (not (temporal/temporal-column? col-name))
              :let [^IRelationSelector col-pred (.get col-preds col-name)
-                   ^VectorSchemaRoot in-root (.get in-roots col-name)]]
+                   ^VectorSchemaRoot in-root (.get in-roots (name col-name))]]
          (align/->row-id-bitmap (when col-pred
                                   (.select col-pred allocator (iv/<-root in-root) params))
                                 (.getVector in-root t/row-id-field)))
@@ -138,7 +175,7 @@
     (align/align-vectors roots row-id-bitmap row-id->repeat-count)))
 
 (defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager ^long chunk-idx ^String col-name ^RoaringBitmap block-idxs]
-  (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* col-name)]
+  (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* (symbol col-name))]
     @(meta/with-metadata metadata-manager chunk-idx
        (fn [_chunk-idx ^VectorSchemaRoot metadata-root]
          (let [metadata-idxs (meta/->metadata-idxs metadata-root)
@@ -242,14 +279,6 @@
     (doseq [^ICursor chunk (vals chunks)]
       (util/try-close chunk))))
 
-(defn ->scan-cursor ^core2.operator.scan.ScanCursor [^BufferAllocator allocator
-                                                     ^Snapshot snapshot
-                                                     ^List col-names
-                                                     metadata-pred ;; TODO derive this from col-preds
-                                                     ^Map col-preds
-                                                     [^longs temporal-min-range, ^longs temporal-max-range]]
-  )
-
 (defn- apply-default-valid-time! [[^longs temporal-min-range, ^longs temporal-max-range] default-valid-time col-preds]
   (when-not (or (contains? col-preds "_valid-time-start")
                 (contains? col-preds "_valid-time-end"))
@@ -268,33 +297,37 @@
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                   '> "_tx-time-end" tx-time))))
 
-(defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [src-keys param-names]}]
-  (let [ordered-col-names (->> columns
-                               (map (fn [[col-type arg]]
-                                      (str (case col-type
-                                             :column arg
-                                             :select (key (first arg))))))
-                               (distinct))
+(defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [scan-col-types param-types]}]
+  (let [src-key (or source '$)
+
+        col-names (->> columns
+                       (into [] (comp (map (fn [[col-type arg]]
+                                             (case col-type
+                                               :column arg
+                                               :select (key (first arg)))))
+                                      (distinct))))
+
+        col-types (->> col-names
+                       (into {} (map (juxt identity
+                                           (fn [col-name]
+                                             (get scan-col-types [src-key col-name]))))))
+
         selects (->> (for [[col-type arg] columns
                            :when (= col-type :select)]
                        (first arg))
                      (into {}))
+
         col-preds (->> (for [[col-name select-form] selects]
                          (MapEntry/create (name col-name)
-                                          (expr/->expression-relation-selector select-form #{col-name} param-names)))
+                                          (expr/->expression-relation-selector select-form {:col-types col-types, :param-types param-types})))
                        (into {}))
-        metadata-args (vec (concat (for [col-name ordered-col-names
-                                         :when (not (contains? col-preds col-name))]
-                                     (symbol col-name))
-                                   (vals selects)))
-        src-key (or source '$)]
 
-    (when-not (contains? src-keys src-key)
-      (throw (err/illegal-arg :unknown-src
-                              {::err/message "Query refers to unknown source"
-                               :db source
-                               :src-keys src-keys})))
-    {:col-names (set ordered-col-names)
+        metadata-args (vec (concat (for [col-name col-names
+                                         :when (not (contains? col-preds (name col-name)))]
+                                     col-name)
+                                   (vals selects)))]
+
+    {:col-types col-types
      :->cursor (fn [{:keys [allocator srcs params default-valid-time]}]
                  (let [^Snapshot snapshot (get srcs src-key)
                        ^IChunkManager indexer (.indexer snapshot)
@@ -302,14 +335,14 @@
                        buffer-pool (.buffer-pool snapshot)
                        temporal-mgr (.temporal-mgr snapshot)
                        watermark (.getWatermark indexer)
-                       metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (into #{} (map symbol) ordered-col-names) params)
+                       metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                        [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
                                                                  (apply-default-valid-time! default-valid-time col-preds)
                                                                  (apply-snapshot-tx! snapshot col-preds))]
                    (try
                      (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr watermark metadata-pred) []))]
                        (-> (ScanCursor. allocator buffer-pool temporal-mgr metadata-mgr watermark
-                                        matching-chunks ordered-col-names col-preds
+                                        matching-chunks (mapv name col-names) col-preds
                                         temporal-min-range temporal-max-range params
                                         #_chunks nil #_live-chunk-done? false)
                            (coalesce/->coalescing-cursor allocator)

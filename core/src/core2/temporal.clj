@@ -154,6 +154,8 @@
 (defn temporal-column? [col-name]
   (contains? temporal-fields (name col-name)))
 
+(def temporal-col-type [:timestamp-tz :micro "UTC"])
+
 (defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]
   (Schema. [t/row-id-field (get temporal-fields (name col-name))]))
 

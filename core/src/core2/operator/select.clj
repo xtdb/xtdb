@@ -36,11 +36,11 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [param-names] :as args}]
+(defmethod lp/emit-expr :select [{:keys [predicate relation]} {:keys [param-types] :as args}]
   (lp/unary-expr relation args
-    (fn [inner-col-names]
-      (let [selector (expr/->expression-relation-selector predicate (into #{} (map symbol) inner-col-names) param-names)]
-        {:col-names inner-col-names
+    (fn [inner-col-types]
+      (let [selector (expr/->expression-relation-selector predicate {:col-types inner-col-types, :param-types param-types})]
+        {:col-types inner-col-types
          :->cursor (fn [{:keys [allocator params]} in-cursor]
                      (-> (SelectCursor. allocator in-cursor selector params)
                          (coalesce/->coalescing-cursor allocator)))}))))

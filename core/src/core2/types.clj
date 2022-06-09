@@ -33,7 +33,6 @@
 (def varchar-type (.getType Types$MinorType/VARCHAR))
 (def varbinary-type (.getType Types$MinorType/VARBINARY))
 (def timestamp-micro-tz-type (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
-(def duration-micro-type (ArrowType$Duration. TimeUnit/MICROSECOND))
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (ArrowType$Union. UnionMode/Dense (int-array 0)))
 (def list-type (.getType Types$MinorType/LIST))
@@ -553,7 +552,7 @@
 
 (defn col-type->field
   (^org.apache.arrow.vector.types.pojo.Field [col-type] (col-type->field (col-type->field-name col-type) col-type))
-  (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* col-name false col-type)))
+  (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (name col-name) false col-type)))
 
 (defn col-type->duv-leg-key [col-type]
   (match col-type
@@ -793,8 +792,10 @@
 (defmethod least-upper-bound2* :default [_ _] :any)
 
 (defn least-upper-bound* [col-types]
-  (reduce (fn [lub col-type]
-            (if (= lub col-type)
-              lub
-              (least-upper-bound2* lub col-type)))
+  (reduce (fn
+            ([] :null)
+            ([lub col-type]
+             (if (= lub col-type)
+               lub
+               (least-upper-bound2* lub col-type))))
           col-types))

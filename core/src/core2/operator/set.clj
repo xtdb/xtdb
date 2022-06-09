@@ -1,7 +1,9 @@
 (ns core2.operator.set
   (:require [clojure.spec.alpha :as s]
+            [core2.error :as err]
             [core2.expression.map :as emap]
             [core2.logical-plan :as lp]
+            [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
   (:import core2.expression.map.IRelationMap
@@ -56,10 +58,16 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- ensuring-same-col-names [left-col-names right-col-names]
-  (when-not (= left-col-names right-col-names)
-    (throw (IllegalArgumentException. (format "union incompatible cols: %s vs %s" (pr-str left-col-names) (pr-str right-col-names)))))
-  left-col-names)
+(defn- union-col-types [left-col-types right-col-types]
+  (when-not (= (set (keys left-col-types)) (set (keys right-col-types)))
+    (throw (err/illegal-arg :union-incompatible-cols
+                            {::err/message "union incompatible cols"
+                             :left-col-names (set (keys left-col-types))
+                             :right-col-names (set (keys right-col-types))})))
+
+  ;; NOTE: this overestimates types for intersection - if one side's string and the other int,
+  ;; they statically can't intersect - but maybe that's one step too far for now.
+  (merge-with types/merge-col-types left-col-types right-col-types))
 
 (deftype UnionAllCursor [^ICursor left-cursor
                          ^ICursor right-cursor]
@@ -86,8 +94,8 @@
 
 (defmethod lp/emit-expr :union-all [{:keys [left right]} args]
   (lp/binary-expr left right args
-    (fn [left-col-names right-col-names]
-      {:col-names (ensuring-same-col-names left-col-names right-col-names)
+    (fn [left-col-types right-col-types]
+      {:col-types (union-col-types left-col-types right-col-types)
        :->cursor (fn [_opts left-cursor right-cursor]
                    (UnionAllCursor. left-cursor right-cursor))})))
 
@@ -135,22 +143,22 @@
 
 (defmethod lp/emit-expr :intersect [{:keys [left right]} args]
   (lp/binary-expr left right args
-    (fn [left-col-names right-col-names]
-      (let [col-names (ensuring-same-col-names left-col-names right-col-names)]
-        {:col-names col-names
+    (fn [left-col-types right-col-types]
+      (let [col-types (union-col-types left-col-types right-col-types)]
+        {:col-types col-types
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (IntersectionCursor. left-cursor right-cursor
-                                          (emap/->relation-map allocator {:key-col-names (map name col-names)})
+                                          (emap/->relation-map allocator {:key-col-names (set (keys col-types))})
                                           false))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
   (lp/binary-expr left right args
-    (fn [left-col-names right-col-names]
-      (let [col-names (ensuring-same-col-names left-col-names right-col-names)]
-        {:col-names col-names
+    (fn [left-col-types right-col-types]
+      (let [col-types (union-col-types left-col-types right-col-types)]
+        {:col-types col-types
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (IntersectionCursor. left-cursor right-cursor
-                                          (emap/->relation-map allocator {:key-col-names (map name col-names)})
+                                          (emap/->relation-map allocator {:key-col-names (set (keys col-types))})
                                           true))}))))
 
 (deftype DistinctCursor [^ICursor in-cursor
@@ -183,10 +191,10 @@
 
 (defmethod lp/emit-expr :distinct [{:keys [relation]} args]
   (lp/unary-expr relation args
-    (fn [inner-col-names]
-      {:col-names inner-col-names
+    (fn [inner-col-types]
+      {:col-types inner-col-types
        :->cursor (fn [{:keys [allocator]} in-cursor]
-                   (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (map name inner-col-names)})))})))
+                   (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (set (keys inner-col-types))})))})))
 
 (defn- ->set-key [^List cols ^long idx]
   (let [set-key (ArrayList. (count cols))]
@@ -297,23 +305,24 @@
     (.clear fixpoint-set)
     (util/try-close base-cursor)))
 
-(def ^:dynamic ^:private *relation-variable->col-names* {})
+(def ^:dynamic ^:private *relation-variable->col-types* {})
 (def ^:dynamic ^:private *relation-variable->cursor-factory* {})
 
 (defmethod lp/emit-expr :relation [{:keys [relation]} _opts]
-  (let [col-names (*relation-variable->col-names* relation)]
-    {:col-names col-names
+  (let [col-types (*relation-variable->col-types* relation)]
+    {:col-types col-types
      :->cursor (fn [_opts]
                  (let [^ICursorFactory cursor-factory (get *relation-variable->cursor-factory* relation)]
                    (assert cursor-factory (str "can't find " relation, (pr-str *relation-variable->cursor-factory*)))
                    (.createCursor cursor-factory)))}))
 
 (defmethod lp/emit-expr :fixpoint [{:keys [mu-variable base recursive], {:keys [incremental?]} :opts} args]
-  (let [{base-col-names :col-names, ->base-cursor :->cursor} (lp/emit-expr base args)
-        {recursive-col-names :col-names, ->recursive-cursor :->cursor} (binding [*relation-variable->col-names* (-> *relation-variable->col-names*
-                                                                                                                    (assoc mu-variable base-col-names))]
+  (let [{base-col-types :col-types, ->base-cursor :->cursor} (lp/emit-expr base args)
+        {recursive-col-types :col-types, ->recursive-cursor :->cursor} (binding [*relation-variable->col-types* (-> *relation-variable->col-types*
+                                                                                                                    (assoc mu-variable base-col-types))]
                                                                          (lp/emit-expr recursive args))]
-    {:col-names (ensuring-same-col-names base-col-names recursive-col-names)
+    ;; HACK I think `:col-types` needs to be a fixpoint as well?
+    {:col-types (union-col-types base-col-types recursive-col-types)
      :->cursor
      (fn [{:keys [allocator] :as opts}]
        (FixpointCursor. allocator
@@ -329,19 +338,19 @@
                         #_continue? true))}))
 
 (defmethod lp/emit-expr :assign [{:keys [bindings relation]} args]
-  (let [{:keys [rel-var->col-names relations]} (->> bindings
-                                                     (reduce (fn [{:keys [rel-var->col-names relations]} {:keys [variable value]}]
-                                                               (binding [*relation-variable->col-names* rel-var->col-names]
-                                                                 (let [{:keys [col-names ->cursor]} (lp/emit-expr value args)]
-                                                                   {:rel-var->col-names (-> rel-var->col-names
-                                                                                            (assoc variable col-names))
+  (let [{:keys [rel-var->col-types relations]} (->> bindings
+                                                     (reduce (fn [{:keys [rel-var->col-types relations]} {:keys [variable value]}]
+                                                               (binding [*relation-variable->col-types* rel-var->col-types]
+                                                                 (let [{:keys [col-types ->cursor]} (lp/emit-expr value args)]
+                                                                   {:rel-var->col-types (-> rel-var->col-types
+                                                                                            (assoc variable col-types))
 
                                                                     :relations (conj relations {:variable variable, :->cursor ->cursor})})))
-                                                             {:rel-var->col-names *relation-variable->col-names*
+                                                             {:rel-var->col-types *relation-variable->col-types*
                                                               :relations []}))
-        {:keys [col-names ->cursor]} (binding [*relation-variable->col-names* rel-var->col-names]
+        {:keys [col-types ->cursor]} (binding [*relation-variable->col-types* rel-var->col-types]
                                        (lp/emit-expr relation args))]
-    {:col-names col-names
+    {:col-types col-types
      :->cursor (fn [opts]
                  (let [rel-var->cursor-factory (->> relations
                                                     (reduce (fn [acc {:keys [variable ->cursor]}]

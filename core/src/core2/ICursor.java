@@ -1,8 +1,6 @@
 package core2;
 
-import java.util.Set;
 import java.util.Spliterator;
-import java.util.function.Consumer;
 
 public interface ICursor<E> extends Spliterator<E>, AutoCloseable {
     @Override

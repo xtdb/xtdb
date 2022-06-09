@@ -14,6 +14,8 @@
                                            [[{:a 12, :b 10}
                                              {:a 0, :b 15}]
                                             [{:a 100, :b 83}]]]])]
+    (t/is (= '{a :i64, c :i64} (.columnTypes project-cursor)))
+
     (t/is (= [[{:a 12, :c 22}, {:a 0, :c 15}]
               [{:a 100, :c 183}]]
              (tu/<-cursor project-cursor))))
@@ -31,11 +33,13 @@
                (tu/<-cursor project-cursor))))))
 
 (t/deftest test-project-row-number
-  (with-open [project-cursor (op/open-ra [:project '[a {$row-num (row-number)}]
+  (with-open [project-cursor (op/open-ra [:project '[a, {$row-num (row-number)}]
                                           [::tu/blocks (Schema. [(ty/->field "a" ty/bigint-type false)
                                                                  (ty/->field "b" ty/bigint-type false)])
-                                           [[{:a 12, :b 10} {:a 0, :b 15}]
+                                           [[{:a 12, :b 10}
+                                             {:a 0, :b 15}]
                                             [{:a 100, :b 83}]]]])]
+    (t/is (= '{a :i64, $row-num :i64} (.columnTypes project-cursor)))
     (t/is (= [[{:a 12, :$row-num 1}, {:a 0, :$row-num 2}]
               [{:a 100, :$row-num 3}]]
              (tu/<-cursor project-cursor)))))

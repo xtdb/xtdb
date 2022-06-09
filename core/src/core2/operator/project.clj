@@ -32,21 +32,23 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defrecord IdentityProjectionSpec [col-name]
+(defrecord IdentityProjectionSpec [col-name col-type]
   IProjectionSpec
   (getColumnName [_] col-name)
+  (getColumnType [_] col-type)
   (project [_ _allocator in-rel _params]
-    (.vectorForName in-rel col-name)))
+    (.vectorForName in-rel (name col-name))))
 
-(defn ->identity-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
-  (->IdentityProjectionSpec col-name))
+(defn ->identity-projection-spec ^core2.operator.IProjectionSpec [col-name col-type]
+  (->IdentityProjectionSpec col-name col-type))
 
-(defn ->row-number-projection-spec ^core2.operator.IProjectionSpec [^String col-name]
+(defn ->row-number-projection-spec ^core2.operator.IProjectionSpec [col-name]
   (let [row-num (long-array [1])]
     (reify IProjectionSpec
       (getColumnName [_] col-name)
+      (getColumnType [_] :i64)
       (project [_ allocator in-rel _params]
-        (let [out-vec (BigIntVector. col-name allocator)
+        (let [out-vec (BigIntVector. (name col-name) allocator)
               start-row-num (aget row-num 0)
               row-count (.rowCount in-rel)]
           (try
@@ -88,21 +90,24 @@
 (defn ->project-cursor [{:keys [allocator, params] :as _opts} in-cursor projection-specs]
   (->ProjectCursor allocator in-cursor projection-specs params))
 
-(defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-names] :as args}]
+(defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-types] :as args}]
   (lp/unary-expr relation args
-    (fn [inner-col-names]
+    (fn [inner-col-types]
       (let [projection-specs (concat (when append-columns?
-                                       (for [col-name inner-col-names]
-                                         (->identity-projection-spec (name col-name))))
+                                       (for [[col-name col-type] inner-col-types]
+                                         (->identity-projection-spec col-name col-type)))
                                      (for [[p-type arg] projections]
                                        (case p-type
-                                         :column (->identity-projection-spec (name arg))
+                                         :column (->identity-projection-spec arg (get inner-col-types arg))
                                          :row-number-column (let [[col-name _form] (first arg)]
-                                                              (->row-number-projection-spec (name col-name)))
+                                                              (->row-number-projection-spec col-name))
                                          :extend (let [[col-name form] (first arg)]
-                                                   (expr/->expression-projection-spec (name col-name) form (into #{} (map symbol) inner-col-names) param-names)))))]
-        {:col-names (->> projection-specs
-                         (into #{} (map #(.getColumnName ^IProjectionSpec %))))
+                                                   (expr/->expression-projection-spec col-name form
+                                                                                      {:col-types inner-col-types
+                                                                                       :param-types param-types})))))]
+        {:col-types (->> projection-specs
+                         (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
+                                             #(.getColumnType ^IProjectionSpec %)))))
          :->cursor (fn [opts in-cursor] (->project-cursor opts in-cursor projection-specs))}))))
 
 (defmethod lp/emit-expr :map [op args]
