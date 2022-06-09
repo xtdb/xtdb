@@ -165,8 +165,8 @@
          :i64 'long
          :f32 'float
          :f64 'double
-         :timestamp-micro-tz 'long
-         :duration-micro 'long}
+         :timestamp-tz 'long
+         :duration 'long}
         types/col-type-head))
 
 (def idx-sym (gensym 'idx))
@@ -1725,7 +1725,7 @@
                    (if (instance? ArrowType$Union (.getType struct-field))
                      (types/->field (name col-name) types/dense-union-type false)
                      (or (get-struct-child struct-field)
-                         (types/->field (name col-name) types/null-type true))))
+                         (types/col-type->field col-name :null))))
 
    :eval-call-expr (fn [[^ValueVector in-vec] ^ValueVector out-vec _params]
                      (let [out-writer (vw/vec->writer out-vec)]

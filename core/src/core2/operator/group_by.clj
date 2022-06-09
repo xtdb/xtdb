@@ -17,7 +17,7 @@
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector Float8Vector IntVector NullVector ValueVector)
            (org.apache.arrow.vector.complex ListVector)
-           (org.apache.arrow.vector.types.pojo FieldType)))
+           (org.apache.arrow.vector.types.pojo ArrowType$Null FieldType)))
 
 (s/def ::aggregate-expr
   (s/cat :aggregate-fn simple-symbol?
@@ -222,7 +222,7 @@
 
                     (let [new-vec (.createVector (types/->field (.getName cur-vec) new-type false) allocator)]
                       (try
-                        (when-not (= types/null-type cur-type)
+                        (when-not (= ArrowType$Null/INSTANCE cur-type)
                           (let [copy-vec (emit-copy-vec cur-type new-type)]
                             (copy-vec cur-vec new-vec)))
                         new-vec

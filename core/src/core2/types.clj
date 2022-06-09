@@ -23,15 +23,10 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def null-type (.getType Types$MinorType/NULL))
 (def bool-type (.getType Types$MinorType/BIT))
-(def smallint-type (.getType Types$MinorType/SMALLINT))
 (def int-type (.getType Types$MinorType/INT))
 (def bigint-type (.getType Types$MinorType/BIGINT))
-(def float4-type (.getType Types$MinorType/FLOAT4))
-(def float8-type (.getType Types$MinorType/FLOAT8))
 (def varchar-type (.getType Types$MinorType/VARCHAR))
-(def varbinary-type (.getType Types$MinorType/VARBINARY))
 (def timestamp-micro-tz-type (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (ArrowType$Union. UnionMode/Dense (int-array 0)))

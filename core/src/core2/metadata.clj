@@ -66,7 +66,7 @@
 
             (t/->field "types" t/struct-type true)
 
-            (t/->field "bloom" t/varbinary-type true)]))
+            (t/col-type->field "bloom" [:union #{:null :varbinary}])]))
 
 (definterface ContentMetadataWriter
   (^void writeContentMetadata [^int typesVecIdx]))

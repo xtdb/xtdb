@@ -44,10 +44,10 @@
 
 (comment
   (with-open [al (RootAllocator.)
-              root (VectorSchemaRoot/create (Schema. [(types/->field "id" types/varchar-type false)
-                                                      (types/->field "a-long" types/bigint-type false)
-                                                      (types/->field "a-double" types/float8-type false)
-                                                      (types/->field "an-inst" types/timestamp-micro-tz-type false)])
+              root (VectorSchemaRoot/create (Schema. [(types/col-type->field "id" :utf8)
+                                                      (types/col-type->field "a-long" :i64)
+                                                      (types/col-type->field "a-double" :f64)
+                                                      (types/col-type->field "an-inst" [:timestamp-tz :micro "UTC"])])
                                             al)]
     (doto (util/build-arrow-ipc-byte-buffer root :file
             (fn [write-batch!]

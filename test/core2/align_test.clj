@@ -3,7 +3,6 @@
             [core2.align :as align]
             [core2.expression :as expr]
             [core2.test-util :as tu]
-            [core2.types :as ty]
             [core2.vector.indirect :as iv])
   (:import java.util.List
            org.apache.arrow.vector.VectorSchemaRoot))
@@ -11,14 +10,14 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-align
-  (with-open [age-vec (tu/->mono-vec "age" ty/bigint-type [12 42 15 83 25])
-              age-row-id-vec (tu/->mono-vec "_row-id" ty/bigint-type [2 5 9 12 13])
+  (with-open [age-vec (tu/->mono-vec "age" :i64 [12 42 15 83 25])
+              age-row-id-vec (tu/->mono-vec "_row-id" :i64 [2 5 9 12 13])
 
               age-root (let [^List vecs [age-row-id-vec age-vec]]
                          (VectorSchemaRoot. vecs))
 
-              name-vec (tu/->mono-vec "name" ty/varchar-type ["Al" "Dave" "Bob" "Steve"])
-              name-row-id-vec (tu/->mono-vec "_row-id" ty/bigint-type [1 2 9 13])
+              name-vec (tu/->mono-vec "name" :utf8 ["Al" "Dave" "Bob" "Steve"])
+              name-row-id-vec (tu/->mono-vec "_row-id" :i64 [1 2 9 13])
 
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]

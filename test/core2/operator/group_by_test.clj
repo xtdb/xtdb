@@ -101,8 +101,8 @@
           "aggregate without group")))
 
 (t/deftest test-promoting-sum
-  (with-open [group-mapping (tu/->mono-vec "gm" types/int-type (map int [0 0 0]))
-              v0 (tu/->mono-vec "v" types/bigint-type [1 2 3])
+  (with-open [group-mapping (tu/->mono-vec "gm" :i32 (map int [0 0 0]))
+              v0 (tu/->mono-vec "v" :i64 [1 2 3])
               v1 (tu/->duv "v" [1 2.0 3])]
     (let [sum-factory (group-by/->aggregate-factory :sum "v" [:union #{:i64 :f64}] "vsum")
           sum-spec (.build sum-factory tu/*allocator*)]
@@ -116,11 +116,11 @@
           (util/try-close sum-spec))))))
 
 (t/deftest test-array-agg
-  (with-open [gm0 (tu/->mono-vec "gm0" types/int-type (map int [0 1 0]))
-              k0 (tu/->mono-vec "k" types/bigint-type [1 2 3])
+  (with-open [gm0 (tu/->mono-vec "gm0" :i32 (map int [0 1 0]))
+              k0 (tu/->mono-vec "k" :i64 [1 2 3])
 
-              gm1 (tu/->mono-vec "gm1" types/int-type (map int [1 2 0]))
-              k1 (tu/->mono-vec "k" types/bigint-type [4 5 6])]
+              gm1 (tu/->mono-vec "gm1" :i32 (map int [1 2 0]))
+              k1 (tu/->mono-vec "k" :i64 [4 5 6])]
     (let [agg-factory (group-by/->aggregate-factory :array-agg "k" :i64 "vs")
           agg-spec (.build agg-factory tu/*allocator*)]
       (try

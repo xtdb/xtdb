@@ -315,14 +315,14 @@
 (t/deftest test-apply-operator
   (letfn [(q [mode]
             (op/query-ra [:apply mode '{c-id ?c-id}
-                          [::tu/blocks (Schema. [(types/->field "c-id" types/varchar-type false)
-                                                 (types/->field "c-name" types/varchar-type false)])
+                          [::tu/blocks (Schema. [(types/col-type->field "c-id" :utf8)
+                                                 (types/col-type->field "c-name" :utf8)])
                            [[{:c-id "c1", :c-name "Alan"}
                              {:c-id "c2", :c-name "Bob"}
                              {:c-id "c3", :c-name "Charlie"}]]]
                           [:select '(= o-customer-id ?c-id)
-                           [::tu/blocks (Schema. [(types/->field "o-customer-id" types/varchar-type false)
-                                                  (types/->field "o-value" types/float8-type false)])
+                           [::tu/blocks (Schema. [(types/col-type->field "o-customer-id" :utf8)
+                                                  (types/col-type->field "o-value" :f64)])
                             [[{:o-customer-id "c1", :o-value 12.34}
                               {:o-customer-id "c1", :o-value 14.80}
                               {:o-customer-id "c2", :o-value 91.46}

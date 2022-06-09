@@ -132,18 +132,15 @@
     v))
 
 (defn ->mono-vec
-  (^org.apache.arrow.vector.ValueVector [^String col-name col-type]
-   (let [^FieldType field-type (cond
-                                 (instance? FieldType col-type) col-type
-                                 (instance? ArrowType col-type) (FieldType/notNullable col-type)
-                                 :else (throw (UnsupportedOperationException.)))]
-     (.createNewSingleVector field-type col-name *allocator* nil)))
+  (^org.apache.arrow.vector.ValueVector [col-name col-type]
+   (-> (types/col-type->field col-name col-type)
+       (.createVector *allocator*)))
 
-  (^org.apache.arrow.vector.ValueVector [^String col-name col-type vs]
+  (^org.apache.arrow.vector.ValueVector [col-name col-type vs]
    (let [res (->mono-vec col-name col-type)]
      (try
        (doto res (write-vec! vs))
-       (catch Exception e
+       (catch Throwable e
          (.close res)
          (throw e))))))
 

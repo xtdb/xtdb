@@ -57,10 +57,10 @@
     parsed-tx-ops))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-start-field
-  (types/->field "_valid-time-start" types/timestamp-micro-tz-type true))
+  (types/col-type->field "_valid-time-start" [:union #{:null [:timestamp-tz :micro "UTC"]}]))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-end-field
-  (types/->field "_valid-time-end" types/timestamp-micro-tz-type true))
+  (types/col-type->field "_valid-time-end" [:union #{:null [:timestamp-tz :micro "UTC"]}]))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(types/->field "tx-ops" types/list-type false
