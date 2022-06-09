@@ -11,6 +11,7 @@
             [xtdb.api :as xt]
             [xtdb.bus :as bus]
             [xtdb.cache :as cache]
+            [xtdb.fork :as fork]
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.error :as err]
@@ -2046,9 +2047,9 @@
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
       (->> (xt/q db
-                  {:find [(list 'pull ?eid projection)]
-                   :in [?eid]}
-                  eid)
+                 {:find [(list 'pull ?eid projection)]
+                  :in [?eid]}
+                 eid)
            ffirst)))
 
   (pull-many [db projection eids]
@@ -2110,10 +2111,17 @@
                                                 (inc (.getTime ^Date (::xt/tx-time latest-completed-tx)))))}
                       {::xt/tx-time (Date.)
                        ::xt/tx-id 0}))
+
+          forked-index-store (fork/begin-forked-index-store index-store valid-time tx-id)
+
           conformed-tx-ops (map txc/conform-tx-op tx-ops)
           in-flight-tx (db/begin-tx tx-indexer tx {::xt/valid-time valid-time
                                                    ::xt/tx-time tx-time
                                                    ::xt/tx-id tx-id})
+
+          in-flight-tx (-> in-flight-tx
+                           (assoc :index-store-tx (db/begin-index-tx forked-index-store tx {}))
+                           (update :db-provider merge {:index-store forked-index-store}))
 
           docs (->> conformed-tx-ops
                     (into {} (comp (mapcat :docs)

@@ -3,8 +3,12 @@
             [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.db :as db]
+            [xtdb.status :as status]
             [xtdb.io :as xio]
-            [xtdb.memory :as mem])
+            [xtdb.memory :as mem]
+            [xtdb.kv.mutable-kv :as mut-kv]
+            [xtdb.cache]
+            [xtdb.kv.index-store :as index-store])
   (:import xtdb.codec.EntityTx
            org.agrona.DirectBuffer
            java.util.Date))
@@ -223,3 +227,50 @@
 
 (defn begin-document-store-tx [doc-store]
   (->ForkedDocumentStore doc-store (atom {})))
+
+(defrecord ForkedIndexStore [base-index-store, delta-index-store, valid-time, tx-id]
+  db/IndexStore
+  (begin-index-tx [_ tx fork-at]
+    ;; Todo, no need for fork-at threading through
+    (db/begin-index-tx delta-index-store tx fork-at))
+
+  (store-index-meta [_ k v]
+    (db/store-index-meta delta-index-store k v))
+
+  (index-stats [_ docs]
+    (db/index-stats delta-index-store docs))
+
+  (tx-failed? [_ tx-id]
+    (db/tx-failed? delta-index-store tx-id))
+
+  db/LatestCompletedTx
+  (latest-completed-tx [_]
+    (db/latest-completed-tx delta-index-store))
+
+  db/IndexMeta
+  (-read-index-meta [_ k not-found]
+    (db/-read-index-meta delta-index-store k not-found))
+
+  db/IndexSnapshotFactory
+  (open-index-snapshot [_]
+    ;; TODO handle the eviction case
+    (->MergedIndexSnapshot (-> (db/open-index-snapshot base-index-store)
+                               (->CappedIndexSnapshot valid-time tx-id))
+                           (db/open-index-snapshot delta-index-store)
+                           {}))
+
+  status/Status
+  (status-map [_]
+    (status/status-map delta-index-store))
+
+  java.io.Closeable
+  (close [_]
+    (xio/try-close base-index-store)
+    (xio/try-close delta-index-store)))
+
+(defn begin-forked-index-store [index-store, valid-time, tx-id]
+  (let [delta-index-store (index-store/->kv-index-store {:kv-store (mut-kv/->mutable-kv-store)
+                                                         :cav-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
+                                                         :canonical-buffer-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
+                                                         :stats-kvs-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})})]
+    (->ForkedIndexStore index-store delta-index-store valid-time, tx-id)))

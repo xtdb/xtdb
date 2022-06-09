@@ -33,6 +33,15 @@
     (t/is (= #{["Ivan"]}
              (xt/q db2 all-names-query)))
 
+    (t/is (= [#:xtdb.api{:tx-id 0, :doc {:name "Ivna", :xt/id :ivan}}
+	      #:xtdb.api{:tx-id 1, :doc {:name "Ivan", :xt/id :ivan}}]
+             (->> (xt/entity-history db2
+                                     :ivan
+                                     :asc
+                                     {:with-docs? true
+                                      :with-corrections? true})
+                  (mapv #(select-keys % [::xt/tx-id ::xt/doc])))))
+
     (t/testing "can delete an entity"
       (t/is (= #{}
                (xt/q (xt/with-tx db [[::xt/delete :ivan]])
