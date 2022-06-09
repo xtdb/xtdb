@@ -19,7 +19,7 @@
 (defprotocol IndexStore
   (store-index-meta [this k v])
   (tx-failed? [this tx-id])
-  (begin-index-tx [index-store tx fork-at])
+  (begin-index-tx [index-store tx])
   (index-stats [this docs]))
 
 (defprotocol LatestCompletedTx
@@ -74,7 +74,7 @@
   (abort [in-flight-tx]))
 
 (defprotocol TxIndexer
-  (begin-tx [tx-indexer tx fork-at]))
+  (begin-tx [tx-indexer tx]))
 
 (defprotocol TxIngester
   (ingester-error [tx-ingester]))

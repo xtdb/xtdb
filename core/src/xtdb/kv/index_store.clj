@@ -997,7 +997,7 @@
 (def ^:private ^ThreadLocal nippy-buffer-tl (buffer-tl))
 (def ^:private ^ThreadLocal hash-key-buffer-tl (buffer-tl))
 
-(defrecord KvIndexStoreTx [kv-store kv-tx tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache !docs]
+(defrecord KvIndexStoreTx [kv-store kv-tx tx !evicted-eids thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache !docs]
   db/IndexStoreTx
   (index-docs [_ docs]
     (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
@@ -1129,11 +1129,11 @@
 
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStore
-  (begin-index-tx [_ tx fork-at]
+  (begin-index-tx [_ tx]
     (let [{::xt/keys [tx-id tx-time]} tx
           kv-tx (kv/begin-kv-tx kv-store)]
       (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)
-      (->KvIndexStoreTx kv-store kv-tx tx fork-at
+      (->KvIndexStoreTx kv-store kv-tx tx
                         (atom #{}) thread-mgr
                         (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache (atom {}))))
 

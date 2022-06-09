@@ -270,7 +270,7 @@
 (defmethod index-tx-event :default [[op & _] _tx _in-flight-tx]
   (throw (err/illegal-arg :unknown-tx-op {:op op})))
 
-(defrecord InFlightTx [tx fork-at !tx-state !tx
+(defrecord InFlightTx [tx !tx-state !tx
                        index-store-tx document-store-tx
                        db-provider bus]
   db/DocumentStore
@@ -345,9 +345,6 @@
     (when-not (compare-and-set! !tx-state :open :committed)
       (throw (IllegalStateException. (str "Transaction marked as " (name @!tx-state)))))
 
-    (when fork-at
-      (throw (IllegalStateException. "Can't commit from fork.")))
-
     (fork/commit-doc-store-tx document-store-tx)
     (db/commit-index-tx index-store-tx)
 
@@ -366,9 +363,6 @@
                          (throw (IllegalStateException. "Transaction marked as " tx-state))
                          :aborted)))
 
-    (when (:fork-at tx)
-      (throw (IllegalStateException. "Can't abort from fork.")))
-
     (fork/abort-doc-store-tx document-store-tx)
     (db/abort-index-tx index-store-tx)
 
@@ -381,14 +375,14 @@
 
 (defrecord TxIndexer [index-store document-store bus query-engine]
   db/TxIndexer
-  (begin-tx [_ tx fork-at]
-    (when-not fork-at
-      (log/debug "Indexing tx-id:" (::xt/tx-id tx))
-      (bus/send bus {::xt/event-type ::indexing-tx, :submitted-tx tx}))
+  (begin-tx [_ tx]
 
-    (let [index-store-tx (db/begin-index-tx index-store tx fork-at)
+    (log/debug "Indexing tx-id:" (::xt/tx-id tx))
+    (bus/send bus {::xt/event-type ::indexing-tx, :submitted-tx tx})
+
+    (let [index-store-tx (db/begin-index-tx index-store tx)
           document-store-tx (fork/begin-document-store-tx document-store)]
-      (->InFlightTx tx fork-at
+      (->InFlightTx tx
                     (atom :open)
                     (atom {:tx-events [] :av-count 0 :bytes-indexed 0 :doc-ids #{}})
                     index-store-tx
@@ -557,7 +551,7 @@
                                                                     (assoc tx :abort? true))
                                                                   tx)]
                                                          (reset! latest-tx! tx)
-                                                         (let [in-flight-tx (db/begin-tx tx-indexer (select-keys tx [::xt/tx-time ::xt/tx-id]) nil)]
+                                                         (let [in-flight-tx (db/begin-tx tx-indexer (select-keys tx [::xt/tx-time ::xt/tx-id]))]
                                                            (db/index-tx-docs in-flight-tx docs)
                                                            (assoc m :tx tx :in-flight-tx in-flight-tx)))))]
                                             (submit-job! txs-index-executor txs-index-fn txs)))

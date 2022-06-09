@@ -2115,12 +2115,13 @@
           forked-index-store (fork/begin-forked-index-store index-store valid-time tx-id)
 
           conformed-tx-ops (map txc/conform-tx-op tx-ops)
-          in-flight-tx (db/begin-tx tx-indexer tx {::xt/valid-time valid-time
-                                                   ::xt/tx-time tx-time
-                                                   ::xt/tx-id tx-id})
+
+          in-flight-tx (db/begin-tx (assoc tx-indexer :bus (reify xtdb.bus/EventSink
+                                                             (send [_ _])))
+                                    tx)
 
           in-flight-tx (-> in-flight-tx
-                           (assoc :index-store-tx (db/begin-index-tx forked-index-store tx {}))
+                           (assoc :index-store-tx (db/begin-index-tx forked-index-store tx))
                            (update :db-provider merge {:index-store forked-index-store}))
 
           docs (->> conformed-tx-ops

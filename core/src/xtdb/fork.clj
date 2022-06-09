@@ -242,10 +242,10 @@
     (db/index-entity-txs index-store-tx entity-txs))
 
   (commit-index-tx [_]
-    (db/commit-index-tx index-store-tx))
+    (throw (IllegalStateException. "Can't commit from fork.")))
 
   (abort-index-tx [_]
-    (db/abort-index-tx index-store-tx))
+    (throw (IllegalStateException. "Can't abort from fork.")))
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
@@ -257,8 +257,8 @@
 
 (defrecord ForkedIndexStore [base-index-store, delta-index-store, valid-time, tx-id, !evicted-eids]
   db/IndexStore
-  (begin-index-tx [_ tx fork-at]
-    (let [index-store-tx (db/begin-index-tx delta-index-store tx fork-at)]
+  (begin-index-tx [_ tx]
+    (let [index-store-tx (db/begin-index-tx delta-index-store tx)]
       (->ForkedKvIndexStoreTx base-index-store, delta-index-store, valid-time, tx-id, index-store-tx !evicted-eids)))
 
   (store-index-meta [_ k v]
