@@ -95,16 +95,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: >-
-          clojure -M -m core2.sql.logic-test.runner --verify --db xtdb
-          test/core2/sql/logic_test/sqlite_test/select1.test
-          test/core2/sql/logic_test/sqlite_test/select2.test
-          test/core2/sql/logic_test/sqlite_test/select3.test
-          test/core2/sql/logic_test/sqlite_test/select4.test
-          test/core2/sql/logic_test/sqlite_test/random/expr/slt_good_0.test
-          test/core2/sql/logic_test/sqlite_test/random/aggregates/slt_good_0.test
-          test/core2/sql/logic_test/sqlite_test/random/groupby/slt_good_0.test
-          test/core2/sql/logic_test/sqlite_test/random/select/slt_good_0.test
+      - run: 'clojure -Srepro -M:slt-test'
 
 workflows:
   build:

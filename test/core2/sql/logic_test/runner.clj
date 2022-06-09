@@ -323,6 +323,7 @@
                 plan/*include-table-column-in-scan?* true]
         (doseq [script-name arguments
                 :let [f #(swap! results assoc script-name (:results (execute-records *db-engine* (parse-script script-name (slurp script-name)))))]]
+          (println "Running " script-name)
           (case db
             "xtdb" (tu/with-node
                      #(with-xtdb f))
