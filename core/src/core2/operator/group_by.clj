@@ -1,6 +1,5 @@
 (ns core2.operator.group-by
-  (:require [clojure.set :as set]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [core2.expression :as expr]
             [core2.expression.map :as emap]
             [core2.logical-plan :as lp]
@@ -10,7 +9,7 @@
             [core2.vector.writer :as vw])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap IRelationMapBuilder)
-           (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
+           (core2.vector IIndirectVector IVectorWriter)
            (java.io Closeable)
            (java.util ArrayList HashMap LinkedList List Spliterator)
            (java.util.function Consumer IntConsumer)
@@ -130,7 +129,7 @@
               eval)))
       (memoize)))
 
-(defn- monomorphic-agg-factory {:style/indent 2} [^String from-name, ^String to-name, to-type, emit-init-group, emit-step & {:keys [set-default-fn]}]
+(defn- monomorphic-agg-factory {:style/indent 3} [^String from-name, ^String to-name, to-type, emit-init-group, emit-step & [{:keys [set-default-fn]}]]
   (let [from-var (symbol from-name)
         to-field (types/col-type->field to-name to-type)]
     (reify IAggregateSpecFactory
@@ -177,7 +176,7 @@
             `(.set ~acc-sym ~group-idx-sym
                    (inc (.get ~acc-sym ~group-idx-sym))))))
 
-    :set-default-fn (fn [^BigIntVector v] (.set v 0 0))))
+    {:set-default-fn (fn [^BigIntVector v] (.set v 0 0))}))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IPromotableVector
@@ -274,8 +273,11 @@
             Closeable
             (close [_] (util/try-close out-pvec))))))))
 
-(defmethod ->aggregate-factory :sum [_ ^String from-name, _from-type, ^String to-name]
-  (let [to-type :f64] ; HACK!
+(defmethod ->aggregate-factory :sum [_ ^String from-name, from-type, ^String to-name]
+  (let [to-type (->> (types/flatten-union-types from-type)
+                     (filter #(isa? types/col-type-hierarchy % :num))
+                     (types/least-upper-bound*)
+                     (types/merge-col-types :null))]
     (promotable-agg-factory from-name to-name to-type
       (fn emit-sum-init [acc-type acc-sym group-idx-sym]
         (let [vec-type (-> (.getType (types/col-type->field acc-type))
@@ -422,8 +424,7 @@
   [from-name from-type to-name update-if-f-kw]
 
   ;; TODO: this still only works for fixed-width values, but it's reasonable to want (e.g.) `(min <string-col>)`
-  ;; TODO: is the return type just the incoming type?
-  (promotable-agg-factory from-name to-name from-type
+  (promotable-agg-factory from-name to-name (types/merge-col-types from-type :null)
     (fn emit-min-max-init [_acc-type _acc-sym _group-idx-sym] nil)
 
     (fn emit-min-max-step [acc-type var-type acc-sym group-idx-sym val-code]
@@ -560,22 +561,23 @@
       (wrap-distinct from-name)))
 
 (defn- bool-agg-factory [^String from-name, ^String to-name, zero-value step-f-kw]
-  (monomorphic-agg-factory from-name to-name :bool
+  (monomorphic-agg-factory from-name to-name [:union #{:null :bool}]
     (fn emit-bool-agg-init [acc-sym group-idx-sym]
       `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym]
          (.setIndexDefined ~acc-sym ~group-idx-sym)
          ~(expr/set-value-form :bool acc-sym group-idx-sym zero-value)))
 
     (fn emit-bool-agg-step [var-type acc-sym group-idx-sym val-code]
-      (let [{:keys [continue]} (expr/codegen-call {:op :call, :f step-f-kw
-                                                    :emitted-args [{:return-type [:union #{:bool :null}]
-                                                                    :continue (fn [f]
-                                                                                `(if (.isNull ~acc-sym ~group-idx-sym)
-                                                                                   ~(f :null nil)
-                                                                                   ~(f :bool (expr/get-value-form :bool acc-sym group-idx-sym))))}
-                                                                   {:return-type var-type
-                                                                    :continue (fn [f]
-                                                                                (f var-type val-code))}]})]
+      (let [{:keys [continue]} (expr/codegen-call
+                                {:op :call, :f step-f-kw
+                                 :emitted-args [{:return-type [:union #{:bool :null}]
+                                                 :continue (fn [f]
+                                                             `(if (.isNull ~acc-sym ~group-idx-sym)
+                                                                ~(f :null nil)
+                                                                ~(f :bool (expr/get-value-form :bool acc-sym group-idx-sym))))}
+                                                {:return-type var-type
+                                                 :continue (fn [f]
+                                                             (f var-type val-code))}]})]
 
         `(let [~(-> acc-sym (expr/with-tag BitVector)) ~acc-sym]
            ~(continue (fn [value-type res-code]

@@ -792,8 +792,10 @@
 (defmethod least-upper-bound2* :default [_ _] :any)
 
 (defn least-upper-bound* [col-types]
-  (reduce (fn [lub col-type]
-            (if (= lub col-type)
-              lub
-              (least-upper-bound2* lub col-type)))
+  (reduce (fn
+            ([] :null)
+            ([lub col-type]
+             (if (= lub col-type)
+               lub
+               (least-upper-bound2* lub col-type))))
           col-types))
