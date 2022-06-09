@@ -146,15 +146,15 @@
                               ^long validTimeStart, ^long validTimeEnd
                               ^boolean tombstone])
 
+(def temporal-col-type [:timestamp-tz :micro "UTC"])
+
 (def temporal-fields
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
-         [col-name (t/->field col-name t/timestamp-micro-tz-type false)])
+         [col-name (t/col-type->field col-name temporal-col-type)])
        (into {})))
 
 (defn temporal-column? [col-name]
   (contains? temporal-fields (name col-name)))
-
-(def temporal-col-type [:timestamp-tz :micro "UTC"])
 
 (defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]
   (Schema. [t/row-id-field (get temporal-fields (name col-name))]))

@@ -23,15 +23,9 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def bool-type (.getType Types$MinorType/BIT))
-(def int-type (.getType Types$MinorType/INT))
-(def bigint-type (.getType Types$MinorType/BIGINT))
-(def varchar-type (.getType Types$MinorType/VARCHAR))
-(def timestamp-micro-tz-type (ArrowType$Timestamp. TimeUnit/MICROSECOND "UTC"))
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (ArrowType$Union. UnionMode/Dense (int-array 0)))
 (def list-type (.getType Types$MinorType/LIST))
-(def keyword-type KeywordType/INSTANCE)
 
 (defprotocol ArrowWriteable
   (value->col-type [v])
@@ -457,9 +451,6 @@
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 
-(def ^org.apache.arrow.vector.types.pojo.Field row-id-field
-  (->field "_row-id" bigint-type false))
-
 (defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, ^String col-name]
   (Field. col-name (.getFieldType field) (.getChildren field)))
 
@@ -797,3 +788,6 @@
                lub
                (least-upper-bound2* lub col-type))))
           col-types))
+
+(def ^org.apache.arrow.vector.types.pojo.Field row-id-field
+  (col-type->field "_row-id" :i64))

@@ -75,7 +75,7 @@
                                                          valid-time-end-field)
                                           (types/->field "evict" types/struct-type false
                                                          (types/->field "_id" types/dense-union-type false))))
-            (types/->field "tx-time" types/timestamp-micro-tz-type true)]))
+            (types/col-type->field "tx-time" [:union #{:null [:timestamp-tz :micro "UTC"]}])]))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops {:keys [^Instant tx-time]} ^BufferAllocator allocator]
   (let [tx-ops (conform-tx-ops tx-ops)

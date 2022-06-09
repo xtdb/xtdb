@@ -92,19 +92,19 @@
           (.remove i))))))
 
 (def ^:private log-schema
-  (Schema. [(t/->field "_tx-id" t/bigint-type false)
-            (t/->field "_tx-time" t/timestamp-micro-tz-type false)
+  (Schema. [(t/col-type->field "_tx-id" :i64)
+            (t/col-type->field "_tx-time" [:timestamp-tz :micro "UTC"])
             (t/->field "ops" t/list-type true
                        (t/->field "ops" t/struct-type false
-                                  (t/->field "_row-id" t/bigint-type false)
+                                  (t/col-type->field "_row-id" :i64)
                                   (t/->field "op" (ArrowType$Union. UnionMode/Dense (int-array [0 1 2])) false
-                                             (t/->field "put" t/struct-type false
-                                                        (t/->field "_valid-time-start" t/timestamp-micro-tz-type true)
-                                                        (t/->field "_valid-time-end" t/timestamp-micro-tz-type true))
+                                             (t/col-type->field "put"
+                                                                [:struct {"_valid-time-start" [:union #{:null [:timestamp-tz :micro "UTC"]}]
+                                                                          "_valid-time-end" [:union #{:null [:timestamp-tz :micro "UTC"]}]}])
                                              (t/->field "delete" t/struct-type false
                                                         (t/->field "_id" t/dense-union-type false)
-                                                        (t/->field "_valid-time-start" t/timestamp-micro-tz-type true)
-                                                        (t/->field "_valid-time-end" t/timestamp-micro-tz-type true))
+                                                        (t/col-type->field "_valid-time-start" [:union #{:null [:timestamp-tz :micro "UTC"]}])
+                                                        (t/col-type->field "_valid-time-end" [:union #{:null [:timestamp-tz :micro "UTC"]}]))
                                              (t/->field "evict" t/struct-type false))))]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -306,8 +306,8 @@
   (getLiveRoot [_ field-name]
     (.computeIfAbsent live-roots field-name
                       (util/->jfn
-                       (fn [field-name]
-                         (->live-root field-name allocator)))))
+                        (fn [field-name]
+                          (->live-root field-name allocator)))))
 
   (getWatermark [_]
     (let [stamp (.writeLock open-watermarks-lock)]
@@ -448,13 +448,13 @@
             row-counts (blocks/row-id-aligned-blocks live-root (.chunk-idx watermark) max-rows-per-block)]
         (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
           (util/build-arrow-ipc-byte-buffer write-root :file
-                                            (fn [write-batch!]
-                                              (.forEachRemaining slices
-                                                                 (reify Consumer
-                                                                   (accept [_ sliced-root]
-                                                                     (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                                                                       (.load loader arb)
-                                                                       (write-batch!)))))))))))
+            (fn [write-batch!]
+              (.forEachRemaining slices
+                                 (reify Consumer
+                                   (accept [_ sliced-root]
+                                     (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                                       (.load loader arb)
+                                       (write-batch!)))))))))))
 
   (closeCols [_this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]

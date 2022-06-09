@@ -20,7 +20,8 @@
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
            (org.apache.arrow.vector BigIntVector BitVector IntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot)
            (org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo Field FieldType Schema)
+           (org.apache.arrow.vector.types Types$MinorType)
+           (org.apache.arrow.vector.types.pojo ArrowType$Bool Field FieldType Schema)
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
@@ -53,16 +54,16 @@
           (Long/parseLong 16)))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
-  (Schema. [(t/->field "column" t/varchar-type false)
-            (t/->field "block-idx" t/int-type true)
+  (Schema. [(t/col-type->field "column" :utf8)
+            (t/col-type->field "block-idx" [:union #{:i32 :null}])
 
             (t/->field "root-column" t/struct-type true
                        ;; here because they're only easily accessible for non-nested columns.
                        ;; and we happen to need a marker for root columns anyway.
-                       (t/->field "min-row-id" t/bigint-type true)
-                       (t/->field "max-row-id" t/bigint-type true))
+                       (t/col-type->field "min-row-id" [:union #{:null :i64}])
+                       (t/col-type->field "max-row-id" [:union #{:null :i64}]))
 
-            (t/->field "count" t/bigint-type false)
+            (t/col-type->field "count" :i64)
 
             (t/->field "types" t/struct-type true)
 
@@ -101,7 +102,7 @@
   (let [^StructVector types-vec (.getVector metadata-root "types")
         ^BitVector bit-vec (add-struct-child types-vec
                                              (Field. (t/col-type->field-name col-type)
-                                                     (FieldType. true t/bool-type nil (col-type->type-metadata col-type))
+                                                     (FieldType. true ArrowType$Bool/INSTANCE nil (col-type->type-metadata col-type))
                                                      []))]
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ _content-vec]
@@ -201,7 +202,7 @@
   (let [^StructVector types-vec (.getVector metadata-root "types")
         ^IntVector list-meta-vec (add-struct-child types-vec
                                                    (Field. (t/col-type->field-name col-type)
-                                                           (FieldType. true t/int-type nil (col-type->type-metadata col-type))
+                                                           (FieldType. true (.getType Types$MinorType/INT) nil (col-type->type-metadata col-type))
                                                            []))]
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ content-vec]
@@ -221,7 +222,7 @@
         ^ListVector struct-meta-vec (add-struct-child types-vec
                                                       (Field. (str (t/col-type->field-name col-type) "-" (count (seq types-vec)))
                                                               (FieldType. true t/list-type nil (col-type->type-metadata col-type))
-                                                              [(t/->field "$data" t/int-type true)]))
+                                                              [(t/col-type->field "$data" [:union #{:null :i32}])]))
         ^IntVector nested-col-idxs-vec (.getDataVector struct-meta-vec)]
     (reify NestedMetadataWriter
       (appendNestedMetadata [_ content-vec]

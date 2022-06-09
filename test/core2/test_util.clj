@@ -6,13 +6,12 @@
             [core2.local-node :as node]
             core2.object-store
             [core2.temporal :as temporal]
-            [core2.types :as ty]
+            [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
             [core2.logical-plan :as lp]
-            [clojure.spec.alpha :as s]
-            [core2.types :as types])
+            [clojure.spec.alpha :as s])
   (:import core2.ICursor
            core2.local_node.Node
            core2.object_store.FileSystemObjectStore
@@ -21,13 +20,13 @@
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            [java.time Clock Duration Instant Period ZoneId]
-           [java.util ArrayList LinkedList]
+           [java.util LinkedList]
            java.util.concurrent.TimeUnit
            java.util.function.Consumer
            (org.apache.arrow.memory BufferAllocator RootAllocator)
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo ArrowType Field FieldType Schema]))
+           [org.apache.arrow.vector.types.pojo Schema]))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 
@@ -53,12 +52,6 @@
 (defn component
   ([k] (component *node* k))
   ([node k] (util/component node k)))
-
-(defn ->list ^java.util.List [^ValueVector v]
-  (let [acc (ArrayList.)]
-    (dotimes [n (.getValueCount v)]
-      (.add acc (ty/get-object v n)))
-    acc))
 
 (defn then-await-tx
   (^core2.api.TransactionInstant [tx node]
@@ -99,9 +92,9 @@
   (let [writer (-> (vw/vec->writer duv) .asDenseUnion)]
     (doseq [v vs]
       (.startValue writer)
-      (doto (.writerForType writer (ty/value->col-type v))
+      (doto (.writerForType writer (types/value->col-type v))
         (.startValue)
-        (->> (ty/write-value! v))
+        (->> (types/write-value! v))
         (.endValue))
       (.endValue writer))
 
@@ -110,7 +103,7 @@
     duv))
 
 (defn ->duv ^org.apache.arrow.vector.complex.DenseUnionVector [col-name vs]
-  (let [res (.createVector (ty/->field col-name ty/dense-union-type false) *allocator*)]
+  (let [res (.createVector (types/->field col-name types/dense-union-type false) *allocator*)]
     (try
       (doto res (write-duv! vs))
       (catch Exception e
@@ -124,7 +117,7 @@
     (doseq [v vs]
       (doto writer
         (.startValue)
-        (->> (ty/write-value! v))
+        (->> (types/write-value! v))
         (.endValue)))
 
     (util/set-value-count v (count vs))
@@ -198,7 +191,7 @@
 
 (defn <-column [^IIndirectVector col]
   (mapv (fn [idx]
-          (ty/get-object (.getVector col) (.getIndex col idx)))
+          (types/get-object (.getVector col) (.getIndex col idx)))
         (range (.getValueCount col))))
 
 (defn <-cursor [^ICursor cursor]
@@ -215,8 +208,8 @@
       (let [blocks [[{:name "foo", :age 20}
                      {:name "bar", :age 25}]
                     [{:name "baz", :age 30}]]]
-        (with-open [cursor (->cursor (Schema. [(ty/->field "name" ty/varchar-type false)
-                                               (ty/->field "age" ty/bigint-type false)])
+        (with-open [cursor (->cursor (Schema. [(types/col-type->field "name" :utf8)
+                                               (types/col-type->field "age" :i64)])
                                      blocks)]
 
           (t/is (= blocks (<-cursor cursor))))))))

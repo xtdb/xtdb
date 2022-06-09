@@ -10,10 +10,8 @@
 
 (t/deftest test-list-count-blocks
   (letfn [(row-count-seq [el-counts max-el-count]
-            (with-open [^ListVector
-                        list-vec (.createVector (ty/->field "my-list" ty/list-type false
-                                                            (ty/->field "els" ty/bigint-type false))
-                                                tu/*allocator*)]
+            (with-open [^ListVector list-vec (-> (ty/col-type->field "my-list" [:list :i64])
+                                                 (.createVector tu/*allocator*))]
               (.setValueCount list-vec (count el-counts))
               (let [^BigIntVector el-vec (.getDataVector list-vec)]
                 (dorun
