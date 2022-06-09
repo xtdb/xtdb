@@ -1,12 +1,13 @@
 (ns core2.sql.jdbc
   (:require [core2.sql.plan :as plan]
             [core2.sql.analyze :as sem]
-            [core2.sql :as sql]
+            [core2.sql.parser :as parser]
             [core2.api :as c2]
             [core2.local-node :as node]
             [core2.rewrite :as r])
   (:import [java.sql Connection Driver DriverManager DriverPropertyInfo
-            ResultSet ResultSetMetaData PreparedStatement SQLException SQLFeatureNotSupportedException]))
+                     ResultSet ResultSetMetaData PreparedStatement SQLException SQLFeatureNotSupportedException]
+           [java.util HashMap]))
 
 ;; Spike using wrapping a local node in JDBC. Should really work on
 ;; Arrow and not the already converted maps.
@@ -48,15 +49,16 @@
       (reset! result nil))))
 
 (defn- ->prepared-statement [node sql]
-  (let [projection (->> (r/$ (r/vector-zip (sql/parse sql)) 1)
-                        (sem/projected-columns)
-                        (first)
-                        (mapv (comp keyword plan/unqualified-projection-symbol)))
+  (let [projection (binding [r/*memo* (HashMap.)]
+                     (->> (r/$ (r/vector-zip (parser/parse sql)) 1)
+                          (sem/projected-columns)
+                          (first)
+                          (mapv (comp keyword plan/unqualified-projection-symbol))))
         result (atom nil)]
     (reify PreparedStatement
       (execute [_]
         (try
-          (reset! result {:row nil :result (c2/sql-query node sql)})
+          (reset! result {:row nil :result (c2/sql-query node sql {})})
           true
           (catch Exception e
             (throw (SQLException. e)))))
