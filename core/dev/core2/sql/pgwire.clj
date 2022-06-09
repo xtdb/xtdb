@@ -2,17 +2,17 @@
   (:require [core2.api :as c2]
             [core2.sql.plan :as plan]
             [core2.sql.analyze :as sem]
-            [core2.sql :as sql]
+            [core2.sql.parser :as parser]
             [core2.rewrite :as r]
             [core2.local-node :as node]
             [core2.util :as util]
-            [instaparse.core :as insta]
             [clojure.string :as str])
   (:import java.nio.charset.StandardCharsets
            [java.io Closeable ByteArrayOutputStream
-            DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream]
+                    DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream]
            [java.net Socket ServerSocket]
-           [java.util.concurrent Executors ExecutorService]))
+           [java.util.concurrent Executors ExecutorService]
+           [java.util HashMap]))
 
 (set! *warn-on-reflection* true)
 
@@ -218,13 +218,13 @@
   (let [message (if (or (empty-query? message)
                         (= "SET" (statement-command message)))
                   message
-                  (with-meta message {:tree (sql/parse (strip-query-semi-colon (:pgwire.parse/query-string message)))}))]
-    (if-let [parse-failure (insta/get-failure (:tree (meta message)))]
+                  (with-meta message {:tree (parser/parse (strip-query-semi-colon (:pgwire.parse/query-string message)))}))]
+    (if-let [parse-failure (when (parser/failure? (:tree (meta message))) (:tree (meta message)))]
       (do (send-error-response out {:severity "ERROR"
                                     :localized-severity "ERROR"
                                     :sql-state sql-state-syntax-error
                                     :message (first (str/split-lines (pr-str parse-failure)))
-                                    :detail (prn-str parse-failure)
+                                    :detail (parser/failure->str parse-failure)
                                     :position (str (inc (:index parse-failure)))})
           session)
       (do (send-parse-complete out)
@@ -263,9 +263,10 @@
   session)
 
 (defn- query-projection [tree]
-  (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
-       (first)
-       (mapv (comp name plan/unqualified-projection-symbol))))
+  (binding [r/*memo* (HashMap.)]
+    (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
+         (first)
+         (mapv (comp name plan/unqualified-projection-symbol)))))
 
 (defmethod handle-message :pgwire/describe [session message out]
   (cond
