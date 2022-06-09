@@ -228,11 +228,38 @@
 (defn begin-document-store-tx [doc-store]
   (->ForkedDocumentStore doc-store (atom {})))
 
-(defrecord ForkedIndexStore [base-index-store, delta-index-store, valid-time, tx-id]
+(defrecord ForkedKvIndexStoreTx [base-index-store, delta-index-store, valid-time, tx-id, index-store-tx !evicted-eids]
+  db/IndexStoreTx
+  (index-docs [_ docs]
+    (db/index-docs index-store-tx docs))
+
+  (unindex-eids [_ eids]
+    (when (seq eids)
+      (swap! !evicted-eids into eids))
+    (db/unindex-eids index-store-tx eids))
+
+  (index-entity-txs [_ entity-txs]
+    (db/index-entity-txs index-store-tx entity-txs))
+
+  (commit-index-tx [_]
+    (db/commit-index-tx index-store-tx))
+
+  (abort-index-tx [_]
+    (db/abort-index-tx index-store-tx))
+
+  db/IndexSnapshotFactory
+  (open-index-snapshot [_]
+    (->MergedIndexSnapshot (-> (db/open-index-snapshot base-index-store)
+                               (->CappedIndexSnapshot valid-time tx-id))
+                           (db/open-index-snapshot delta-index-store)
+                           @!evicted-eids)))
+
+
+(defrecord ForkedIndexStore [base-index-store, delta-index-store, valid-time, tx-id, !evicted-eids]
   db/IndexStore
   (begin-index-tx [_ tx fork-at]
-    ;; Todo, no need for fork-at threading through
-    (db/begin-index-tx delta-index-store tx fork-at))
+    (let [index-store-tx (db/begin-index-tx delta-index-store tx fork-at)]
+      (->ForkedKvIndexStoreTx base-index-store, delta-index-store, valid-time, tx-id, index-store-tx !evicted-eids)))
 
   (store-index-meta [_ k v]
     (db/store-index-meta delta-index-store k v))
@@ -253,11 +280,10 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    ;; TODO handle the eviction case
     (->MergedIndexSnapshot (-> (db/open-index-snapshot base-index-store)
                                (->CappedIndexSnapshot valid-time tx-id))
                            (db/open-index-snapshot delta-index-store)
-                           {}))
+                           @!evicted-eids))
 
   status/Status
   (status-map [_]
@@ -273,4 +299,4 @@
                                                          :cav-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
                                                          :canonical-buffer-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
                                                          :stats-kvs-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})})]
-    (->ForkedIndexStore index-store delta-index-store valid-time, tx-id)))
+    (->ForkedIndexStore index-store delta-index-store valid-time, tx-id, (atom #{}))))
