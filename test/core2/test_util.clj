@@ -131,18 +131,16 @@
 
     v))
 
-(defn ->mono-vec
-  (^org.apache.arrow.vector.ValueVector [col-name col-type]
-   (-> (types/col-type->field col-name col-type)
-       (.createVector *allocator*)))
-
-  (^org.apache.arrow.vector.ValueVector [col-name col-type vs]
-   (let [res (->mono-vec col-name col-type)]
-     (try
+(defn ->mono-vec ^org.apache.arrow.vector.ValueVector [col-name vs]
+  (let [col-type (->> (into #{} (map types/value->col-type) vs)
+                      (apply types/merge-col-types))
+        res (-> (types/col-type->field col-name col-type)
+                (.createVector *allocator*))]
+    (try
        (doto res (write-vec! vs))
        (catch Throwable e
          (.close res)
-         (throw e))))))
+         (throw e)))))
 
 (defn populate-root ^core2.vector.IIndirectRelation [^VectorSchemaRoot root rows]
   (.clear root)

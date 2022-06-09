@@ -25,10 +25,10 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (defn ->data-vecs []
-  [(tu/->mono-vec "a" :f64 (map double (range 1000)))
-   (tu/->mono-vec "b" :f64 (map double (range 1000)))
-   (tu/->mono-vec "d" :i64 (range 1000))
-   (tu/->mono-vec "e" :utf8 (map #(format "%04d" %) (range 1000)))])
+  [(tu/->mono-vec "a" (map double (range 1000)))
+   (tu/->mono-vec "b" (map double (range 1000)))
+   (tu/->mono-vec "d" (range 1000))
+   (tu/->mono-vec "e" (map #(format "%04d" %) (range 1000)))])
 
 (defn- open-rel ^core2.vector.IIndirectRelation [vecs]
   (iv/->indirect-rel (map iv/->direct-vec vecs)))
@@ -251,8 +251,8 @@
 
 (t/deftest test-nils
   (letfn [(run-test [f xs ys]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" [:union #{:null :i64}] xs)
-                                       (tu/->mono-vec "y" [:union #{:null :i64}] ys)])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" xs)
+                                       (tu/->mono-vec "y" ys)])]
               (-> (run-projection rel (list f 'x 'y))
                   :res)))]
 
@@ -261,11 +261,11 @@
 
 (t/deftest test-method-too-large-147
   (letfn [(run-test [form]
-            (with-open [rel (open-rel [(tu/->mono-vec "a" [:union #{:i64 :null}] [1 nil 3])
-                                       (tu/->mono-vec "b" [:union #{:f64 :null}] [1.2 5.3 nil])
-                                       (tu/->mono-vec "c" [:union #{:i64 :null}] [2 nil 8])
-                                       (tu/->mono-vec "d" [:union #{:f64 :null}] [3.4 nil 5.3])
-                                       (tu/->mono-vec "e" [:union #{:i64 :null}] [8 5 3])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "a" [1 nil 3])
+                                       (tu/->mono-vec "b" [1.2 5.3 nil])
+                                       (tu/->mono-vec "c" [2 nil 8])
+                                       (tu/->mono-vec "d" [3.4 nil 5.3])
+                                       (tu/->mono-vec "e" [8 5 3])])]
               (-> (run-projection rel form)
                   :res)))]
 
@@ -284,9 +284,9 @@
 
 (t/deftest test-variadics
   (letfn [(run-test [f x y z]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" :i64 [x])
-                                       (tu/->mono-vec "y" :i64 [y])
-                                       (tu/->mono-vec "z" :i64 [z])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" [x])
+                                       (tu/->mono-vec "y" [y])
+                                       (tu/->mono-vec "z" [z])])]
               (-> (run-projection rel (list f 'x 'y 'z))
                   :res first)))]
 
@@ -296,7 +296,7 @@
     (t/is (false? (run-test '> 4 1 2)))))
 
 (defn- project-mono-value [f-sym val col-type]
-  (with-open [rel (open-rel [(tu/->mono-vec "s" col-type [val])])]
+  (with-open [rel (open-rel [(tu/->mono-vec "s" [val])])]
     (-> (run-projection rel (list f-sym 's))
         :res
         first)))
@@ -1059,21 +1059,21 @@
               (-> (run-projection rel form)
                   :res first)))]
     (t/is (= 9 (run-test '(max x y)
-                         [(tu/->mono-vec "x" :i64 [1])
-                          (tu/->mono-vec "y" :i64 [9])])))
+                         [(tu/->mono-vec "x" [1])
+                          (tu/->mono-vec "y" [9])])))
     (t/is (= 1.0 (run-test '(min x y)
-                           [(tu/->mono-vec "x" :f64 [1.0])
-                            (tu/->mono-vec "y" :f64 [9.0])])))))
+                           [(tu/->mono-vec "x" [1.0])
+                            (tu/->mono-vec "y" [9.0])])))))
 
 (t/deftest can-return-string-multiple-times
-  (with-open [rel (open-rel [(tu/->mono-vec "x" [:union #{:null :i64}] [1 2 3])])]
+  (with-open [rel (open-rel [(tu/->mono-vec "x" [1 2 3])])]
     (t/is (= {:res ["foo" "foo" "foo"]
               :res-type :utf8}
              (run-projection rel "foo")))))
 
 (t/deftest test-cond
   (letfn [(run-test [expr xs]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" [:union #{:null :i64}] xs)])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" xs)])]
               (run-projection rel expr)))]
 
     (t/is (= {:res ["big" "small" "tiny" "tiny"]
@@ -1087,7 +1087,7 @@
                        [500 50 5 nil])))))
 
 (t/deftest test-let
-  (with-open [rel (open-rel [(tu/->mono-vec "x" [:union #{:null :i64}] [1 2 3 nil])])]
+  (with-open [rel (open-rel [(tu/->mono-vec "x" [1 2 3 nil])])]
     (t/is (= {:res [6 9 12 nil]
               :res-type [:union #{:null :i64}]}
              (run-projection rel '(let [y (* x 2)
@@ -1095,7 +1095,7 @@
                                     (+ x y)))))))
 
 (t/deftest test-case
-  (with-open [rel (open-rel [(tu/->mono-vec "x" [:union #{:null :i64}] [1 2 3 nil])])]
+  (with-open [rel (open-rel [(tu/->mono-vec "x" [1 2 3 nil])])]
     (t/is (= {:res ["x=1" "x=2" "none of the above" "none of the above"]
               :res-type :utf8}
              (run-projection rel '(case (* x 2)
@@ -1105,8 +1105,8 @@
 
 (t/deftest test-coalesce
   (letfn [(run-test [expr]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" [:union #{:null :utf8}] ["x" nil nil])
-                                       (tu/->mono-vec "y" [:union #{:null :utf8}] ["y" "y" nil])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" ["x" nil nil])
+                                       (tu/->mono-vec "y" ["y" "y" nil])])]
               (run-projection rel expr)))]
 
     (t/is (= {:res ["x" "y" nil]
@@ -1123,8 +1123,8 @@
 
 (t/deftest test-nullif
   (letfn [(run-test [expr]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" [:union #{:utf8 :null}] ["x" "y" nil "x"])
-                                       (tu/->mono-vec "y" [:union #{:utf8 :null}] ["y" "y" nil nil])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" ["x" "y" nil "x"])
+                                       (tu/->mono-vec "y" ["y" "y" nil nil])])]
               (run-projection rel expr)))]
 
     (t/is (= {:res ["x" nil nil "x"]
@@ -1133,8 +1133,8 @@
 
 (t/deftest test-mixing-numeric-types
   (letfn [(run-test [f x y]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (types/value->col-type x) [x])
-                                       (tu/->mono-vec "y" (types/value->col-type y) [y])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" [x])
+                                       (tu/->mono-vec "y" [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 
@@ -1173,13 +1173,13 @@
 
 (t/deftest test-throws-on-overflow
   (letfn [(run-unary-test [f x]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (types/value->col-type x) [x])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" [x])])]
               (-> (run-projection rel (list f 'x))
                   (update :res first))))
 
           (run-binary-test [f x y]
-            (with-open [rel (open-rel [(tu/->mono-vec "x" (types/value->col-type x) [x])
-                                       (tu/->mono-vec "y" (types/value->col-type y) [y])])]
+            (with-open [rel (open-rel [(tu/->mono-vec "x" [x])
+                                       (tu/->mono-vec "y" [y])])]
               (-> (run-projection rel (list f 'x 'y))
                   (update :res first))))]
 
@@ -1223,8 +1223,7 @@
              :res-type [:union #{:null :bool}]}
             {:res [true true true true false nil true nil nil]
              :res-type [:union #{:null :bool}]}]
-           (with-open [rel (open-rel [(tu/->mono-vec "x" [:union #{:null :bool}]
-                                                     [true true true false false false nil nil nil])
+           (with-open [rel (open-rel [(tu/->mono-vec "x" [true true true false false false nil nil nil])
                                       (tu/->duv "y" [true false nil true false nil true false nil])])]
              [(run-projection rel '(and x y))
               (run-projection rel '(or x y))])))
@@ -1237,7 +1236,7 @@
              :res-type :bool}
             {:res [false false true]
              :res-type :bool}]
-           (with-open [rel (open-rel [(tu/->mono-vec "x" [:union #{:null :bool}] [true false nil])])]
+           (with-open [rel (open-rel [(tu/->mono-vec "x" [true false nil])])]
              [(run-projection rel '(not x))
               (run-projection rel '(true? x))
               (run-projection rel '(false? x))
@@ -1299,10 +1298,10 @@
 
     (t/testing "durations"
       (letfn [(->bigint-vec [^String col-name, ^long value]
-                (tu/->mono-vec col-name :i64 [value]))
+                (tu/->mono-vec col-name [value]))
 
               (->float8-vec [^String col-name, ^double value]
-                (tu/->mono-vec col-name :f64 [value]))]
+                (tu/->mono-vec col-name [value]))]
 
         (t/is (= {:res [(Duration/parse "PT0.002001S")]
                   :res-type [:duration :micro]}
@@ -1341,8 +1340,8 @@
                                   #(->bigint-vec "y" 3))))))))
 
 (t/deftest test-struct-literals
-  (with-open [rel (open-rel [(tu/->mono-vec "x" :f64 [1.2 3.4])
-                             (tu/->mono-vec "y" :f64 [3.4 8.25])])]
+  (with-open [rel (open-rel [(tu/->mono-vec "x" [1.2 3.4])
+                             (tu/->mono-vec "y" [3.4 8.25])])]
     (t/is (= {:res [{:x 1.2, :y 3.4}
                     {:x 3.4, :y 8.25}]
               :res-type [:struct {"x" :f64, "y" :f64}]}
@@ -1355,7 +1354,7 @@
              (run-projection rel '(. {:x x, :y y} z))))))
 
 (t/deftest test-nested-structs
-  (with-open [rel (open-rel [(tu/->mono-vec "y" :f64 [1.2 3.4])])]
+  (with-open [rel (open-rel [(tu/->mono-vec "y" [1.2 3.4])])]
     (t/is (= {:res [{:x {:y 1.2}}
                     {:x {:y 3.4}}]
               :res-type [:struct {"x" [:struct {"y" :f64}]}]}
@@ -1371,8 +1370,8 @@
 
 (t/deftest test-lists
   (t/testing "simple lists"
-    (with-open [rel (open-rel [(tu/->mono-vec "x" :f64 [1.2 3.4])
-                               (tu/->mono-vec "y" :f64 [3.4 8.25])])]
+    (with-open [rel (open-rel [(tu/->mono-vec "x" [1.2 3.4])
+                               (tu/->mono-vec "y" [3.4 8.25])])]
       (t/is (= {:res [[1.2 3.4 10.0]
                       [3.4 8.25 10.0]]
                 :res-type [:fixed-size-list 3 :f64]}
@@ -1384,18 +1383,18 @@
                                      (nth [x y] 1)])))))
 
   (t/testing "nil idxs"
-    (with-open [rel (open-rel [(tu/->mono-vec "x" :f64 [1.2 3.4])
-                               (tu/->mono-vec "y" [:union #{:null :i64}] [0 nil])])]
+    (with-open [rel (open-rel [(tu/->mono-vec "x" [1.2 3.4])
+                               (tu/->mono-vec "y" [0 nil])])]
       (t/is (= {:res [1.2 nil]
                 :res-type [:union #{:f64 :null}]}
                (run-projection rel '(nth [x] y))))))
 
   (t/testing "IOOBE"
-    (with-open [rel (open-rel [(tu/->mono-vec "x" :f64 [1.2 3.4])])]
+    (with-open [rel (open-rel [(tu/->mono-vec "x" [1.2 3.4])])]
       (t/is (thrown? IndexOutOfBoundsException
                      (run-projection rel '(nth [x] -1)))))
 
-    (with-open [rel (open-rel [(tu/->mono-vec "x" :f64 [1.2 3.4])])]
+    (with-open [rel (open-rel [(tu/->mono-vec "x" [1.2 3.4])])]
       (t/is (thrown? IndexOutOfBoundsException
                      (run-projection rel '(nth [x] 1))))))
 
@@ -1413,9 +1412,7 @@
     (t/is (= [42] (project1 '[(+ 1 a)] {:a 41})))))
 
 (t/deftest test-mixing-prims-with-non-prims
-  (with-open [rel (open-rel [(tu/->mono-vec "x" [:struct {"a" :i64, "b" :i64}]
-                                            [{:a 42, :b 8}
-                                             {:a 12, :b 5}])])]
+  (with-open [rel (open-rel [(tu/->mono-vec "x" [{:a 42, :b 8}, {:a 12, :b 5}])])]
     (t/is (= {:res [{:a 42, :b 8, :sum 50}
                     {:a 12, :b 5, :sum 17}]
               :res-type [:struct {"a" :i64, "b" :i64, "sum" :i64}]}
