@@ -43,6 +43,7 @@
 ;; and MDB_MAPASYNC might solve this, but doesn't allow nested
 ;; transactions. See: https://github.com/dw/py-lmdb/issues/113
 (defn- increase-mapsize [^StampedLock mapsize-lock env ^long factor]
+  (println "Increasing map size")
   (let [stamp (acquire-write-lock mapsize-lock)]
     (try
       (with-open [stack (MemoryStack/stackPush)]
@@ -132,28 +133,29 @@
       (success? rc)
       (UnsafeBuffer. (.mv_data kv) 0 (.mv_size kv)))))
 
-(defn- cursor-put [mapsize-lock env dbi kvs]
-  (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction mapsize-lock env 0)
-              cursor (new-cursor dbi (:txn tx))]
+(defn- -put [dbi, ^xtdb.lmdb.LMDBTransaction tx, k, v]
+  (with-open [cursor (new-cursor dbi (:txn tx))
+              stack (MemoryStack/stackPush)]
     (let [{:keys [cursor]} cursor
+          ;;todo ThreadLocal
+          kb (ExpandableDirectByteBuffer.)
+          vb (ExpandableDirectByteBuffer.)
           kv (MDBVal/mallocStack stack)
           dv (MDBVal/mallocStack stack)
-          kb (ExpandableDirectByteBuffer.)
-          vb (ExpandableDirectByteBuffer.)]
-      (doseq [[k v] kvs]
-        (let [k (mem/ensure-off-heap k kb)
-              v (some-> v (mem/ensure-off-heap vb))
-              kv (-> kv
-                     (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
-                     (.mv_size (.capacity k)))]
-          (if v
-            (let [dv (.mv_size dv (.capacity v))]
-              (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
-              (.getBytes v 0 (.mv_data dv) (.mv_size dv)))
-            (let [rc (LMDB/mdb_del (:txn tx) dbi kv nil)]
-              (when-not (= LMDB/MDB_NOTFOUND rc)
-                (success? rc)))))))))
+
+
+          k (mem/ensure-off-heap k kb)
+          v (some-> v (mem/ensure-off-heap vb))
+          kv (-> kv
+                 (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
+                 (.mv_size (.capacity k)))]
+      (if v
+        (let [dv (.mv_size dv (.capacity v))]
+          (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
+          (.getBytes v 0 (.mv_data dv) (.mv_size dv)))
+        (let [rc (LMDB/mdb_del (:txn tx) dbi kv nil)]
+          (when-not (= LMDB/MDB_NOTFOUND rc)
+            (success? rc)))))))
 
 (defn- tx-get [dbi ^LMDBTransaction tx k]
   (with-open [stack (MemoryStack/stackPush)]
@@ -183,13 +185,13 @@
                  (.mv_size (.capacity k)))]
       (cursor->key (.cursor cursor) kv dv LMDB/MDB_SET_RANGE)))
 
-  (next [this]
+  (next [_]
     (cursor->key (.cursor cursor) kv dv LMDB/MDB_NEXT))
 
-  (prev [this]
+  (prev [_]
     (cursor->key (.cursor cursor) kv dv LMDB/MDB_PREV))
 
-  (value [this]
+  (value [_]
     (UnsafeBuffer. (.mv_data dv) 0 (.mv_size dv)))
 
   Closeable
@@ -215,27 +217,71 @@
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
 
+(defrecord LMDBKvTx [env, dbi, ^StampedLock mapsize-lock, !tx, ^java.util.ArrayList !kvs ;^LMDBTransaction tx
+                     ]
+  kv/KvStoreTx
+  (new-tx-snapshot ^java.io.Closeable [_]
+    (->LMDBKvSnapshot env dbi @!tx))
+  (abort-kv-tx [_]
+    (let [{:keys [txn]} @!tx]
+      (try
+        (LMDB/mdb_txn_abort txn)
+        (finally
+                                        ;          (close-fn)
+          ))))
+  (commit-kv-tx [_]
+    (println "Commiting")
+    (try
+      (let [{:keys [txn]} @!tx
+            rc (LMDB/mdb_txn_commit txn)]
+        (when-not (= LMDB/MDB_BAD_TXN rc)
+          (success? rc)))
+      (finally
+                                        ;(close-fn)
+        ))
+
+    ;(.close ^Closeable @!tx)
+)
+  (put-kv [this k v]
+    (try
+      (.add !kvs [k v])
+      (-put dbi @!tx, k v)
+      (catch ExceptionInfo e
+        (kv/abort-kv-tx this)
+
+        (let [{:keys [close-fn]} @!tx]
+          (close-fn))
+
+        (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
+          (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
+            (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
+              (throw (IllegalStateException. "Too large size of key values to store at once.")))
+            (increase-mapsize mapsize-lock env *mapsize-increase-factor*)
+            (reset! !tx (new-transaction mapsize-lock env 0))
+            (doseq [[k v] !kvs]
+              (-put dbi @!tx, k v)))
+          (throw e)))))
+  Closeable
+  (close [this]
+    (println "closing")
+    (let [{:keys [close-fn]} @!tx]
+      (close-fn)
+      (println "closed"))
+;    (kv/abort-kv-tx this)
+    ))
+
 (defrecord LMDBKv [db-dir env env-flags dbi ^StampedLock mapsize-lock sync? cp-job]
   kv/KvStore
   (new-snapshot [_]
     (let [tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]
       (->LMDBKvSnapshot env dbi tx)))
 
-  (store [this kvs]
-    (try
-      (cursor-put mapsize-lock env dbi kvs)
-      (catch ExceptionInfo e
-        (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
-          (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
-            (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
-              (throw (IllegalStateException. "Too large size of key values to store at once.")))
-            (increase-mapsize mapsize-lock env *mapsize-increase-factor*)
-            (kv/store this kvs))
-          (throw e)))))
+  (begin-kv-tx ^java.io.Closeable [_]
+    (->LMDBKvTx env dbi mapsize-lock (atom (new-transaction mapsize-lock env 0)) (java.util.ArrayList.)))
 
   (compact [_])
 
-  (fsync [this]
+  (fsync [_]
     (when-not sync?
       (success? (LMDB/mdb_env_sync env true))))
 
@@ -246,7 +292,7 @@
         (LMDB/mdb_stat (.txn tx) dbi stat)
         (.ms_entries stat))))
 
-  (db-dir [this]
+  (db-dir [_]
     (str db-dir))
 
   (kv-name [this]
