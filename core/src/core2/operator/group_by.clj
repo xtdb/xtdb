@@ -546,18 +546,19 @@
     (util/try-close acc-col)
     (util/try-close out-vec)))
 
-(defmethod ->aggregate-factory :array-agg [_ ^String from-name, to-type, ^String to-name]
-  (reify IAggregateSpecFactory
-    (getToColumnName [_] to-name)
-    (getToColumnType [_] to-type)
+(defmethod ->aggregate-factory :array-agg [_ ^String from-name, from-type, ^String to-name]
+  (let [to-type [:list from-type]]
+    (reify IAggregateSpecFactory
+      (getToColumnName [_] to-name)
+      (getToColumnType [_] to-type)
 
-    (build [_ al]
-      (ArrayAggAggregateSpec. al from-name to-name
-                              (vw/->vec-writer al to-name)
-                              nil 0 (ArrayList.)))))
+      (build [_ al]
+        (ArrayAggAggregateSpec. al from-name to-name
+                                (vw/->vec-writer al to-name)
+                                nil 0 (ArrayList.))))))
 
 (defmethod ->aggregate-factory :array-agg-distinct [_ from-name from-type to-name]
-  (-> (->aggregate-factory :array-agg from-name [:list from-type] to-name)
+  (-> (->aggregate-factory :array-agg from-name from-type to-name)
       (wrap-distinct from-name)))
 
 (defn- bool-agg-factory [^String from-name, ^String to-name, zero-value step-f-kw]

@@ -1,15 +1,12 @@
 (ns core2.operator.rename-test
   (:require [clojure.test :as t]
             [core2.test-util :as tu]
-            [core2.types :as ty]
-            [core2.operator :as op])
-  (:import org.apache.arrow.vector.types.pojo.Schema))
+            [core2.operator :as op]))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-rename
-  (let [blocks-expr [::tu/blocks (Schema. [(ty/->field "a" ty/bigint-type false)
-                                           (ty/->field "b" ty/bigint-type false)])
+  (let [blocks-expr [::tu/blocks
                      [[{:a 12, :b 10}, {:a 0, :b 15}]
                       [{:a 100, :b 83}]]]]
     (with-open [res (op/open-ra [:rename '{a c}

@@ -1,15 +1,7 @@
 (ns core2.operator.join-test
   (:require [clojure.test :as t]
             [core2.operator :as op]
-            [core2.test-util :as tu]
-            [core2.types :as types])
-  (:import (org.apache.arrow.vector.types.pojo Schema)))
-
-(def ^:private a-field (types/->field "a" types/bigint-type false))
-(def ^:private b-field (types/->field "b" types/bigint-type false))
-(def ^:private c-field (types/->field "c" types/bigint-type false))
-(def ^:private d-field (types/->field "d" types/bigint-type false))
-(def ^:private e-field (types/->field "e" types/bigint-type false))
+            [core2.test-util :as tu]))
 
 (defn- run-ra [ra-expr]
   (with-open [res (op/open-ra ra-expr)]
@@ -26,10 +18,10 @@
                   {{:a 100, :b 83, :c 3} 1}]
             :col-types '{a :i64, b :i64, c :i64}}
            (-> (run-ra [:cross-join
-                        [::tu/blocks (Schema. [a-field])
+                        [::tu/blocks
                          [[{:a 12}, {:a 12}, {:a 0}]
                           [{:a 100}]]]
-                        [::tu/blocks (Schema. [b-field c-field])
+                        [::tu/blocks
                          [[{:b 10 :c 1}, {:b 15 :c 2}]
                           [{:b 83 :c 3}]]]])
                (update :res #(mapv frequencies %)))))
@@ -37,20 +29,17 @@
   (t/is (= {:res []
             :col-types '{a :i64, b :i64}}
            (run-ra [:cross-join
-                         [::tu/blocks (Schema. [a-field])
+                         [::tu/blocks
                           [[{:a 12}, {:a 0}]
                            [{:a 100}]]]
-                         [::tu/blocks (Schema. [b-field])
-                          []]]))
+                         [::tu/blocks '{b :i64} []]]))
         "empty input and output")
 
   (t/is (= {:res [[{} {} {} {} {} {}]]
             :col-types {}}
            (run-ra [:cross-join
-                    [::tu/blocks (Schema. [])
-                     [[{} {} {}]]]
-                    [::tu/blocks (Schema. [])
-                     [[{} {}]]]]))
+                    [::tu/blocks [[{} {} {}]]]
+                    [::tu/blocks [[{} {}]]]]))
         "tables with no cols"))
 
 (t/deftest test-equi-join
@@ -59,10 +48,10 @@
                     {:a 0, :b 0}}]
             :col-types '{a :i64, b :i64}}
            (-> (run-ra [:join '[{a b}]
-                        [::tu/blocks (Schema. [a-field])
+                        [::tu/blocks
                          [[{:a 12}, {:a 0}]
                           [{:a 100}]]]
-                        [::tu/blocks (Schema. [b-field])
+                        [::tu/blocks
                          [[{:b 12}, {:b 2}]
                           [{:b 100} {:b 0}]]]])
                (update :res (partial mapv set)))))
@@ -71,10 +60,10 @@
                   {{:a 100} 1, {:a 0} 1}]
             :col-types '{a :i64}}
            (-> (run-ra [:join '[{a a}]
-                        [::tu/blocks (Schema. [a-field])
+                        [::tu/blocks
                          [[{:a 12}, {:a 0}]
                           [{:a 12}, {:a 100}]]]
-                        [::tu/blocks (Schema. [a-field])
+                        [::tu/blocks
                          [[{:a 12}, {:a 2}]
                           [{:a 100} {:a 0}]]]])
                (update :res (partial mapv frequencies))))
@@ -83,20 +72,20 @@
   (t/is (= {:res []
             :col-types '{a :i64, b :i64}}
            (run-ra [:join '[{a b}]
-                    [::tu/blocks (Schema. [a-field])
+                    [::tu/blocks
                      [[{:a 12}, {:a 0}]
                       [{:a 100}]]]
-                    [::tu/blocks (Schema. [b-field])
+                    [::tu/blocks '{b :i64}
                      []]]))
         "empty input")
 
   (t/is (= {:res []
             :col-types '{a :i64, b :i64, c :i64}}
            (run-ra [:join '[{a b}]
-                    [::tu/blocks (Schema. [a-field])
+                    [::tu/blocks
                      [[{:a 12}, {:a 0}]
                       [{:a 100}]]]
-                    [::tu/blocks (Schema. [b-field c-field])
+                    [::tu/blocks
                      [[{:b 10 :c 1}, {:b 15 :c 2}]
                       [{:b 83 :c 3}]]]]))
         "empty output"))
@@ -107,12 +96,12 @@
                  {{:a 12, :b 42, :c 12, :d 42, :e 0} 4
                   {:a 12, :b 42, :c 12, :d 42, :e 1} 2}]
                 (->> (run-ra [:join '[{a c} {b d}]
-                              [::tu/blocks (Schema. [a-field b-field])
+                              [::tu/blocks
                                [[{:a 12, :b 42}
                                  {:a 12, :b 42}
                                  {:a 11, :b 44}
                                  {:a 10, :b 42}]]]
-                              [::tu/blocks (Schema. [c-field d-field e-field])
+                              [::tu/blocks
                                [[{:c 12, :d 42, :e 0}
                                  {:c 12, :d 43, :e 0}
                                  {:c 11, :d 42, :e 0}]
@@ -125,11 +114,11 @@
 (t/deftest test-theta-inner-join
   (t/is (= [{{:a 12, :b 44, :c 12, :d 43} 1}]
            (->> (run-ra [:join '[{a c} (> b d)]
-                         [::tu/blocks (Schema. [a-field b-field])
+                         [::tu/blocks
                           [[{:a 12, :b 42}
                             {:a 12, :b 44}
                             {:a 10, :b 42}]]]
-                         [::tu/blocks (Schema. [c-field d-field])
+                         [::tu/blocks
                           [[{:c 12, :d 43}
                             {:c 11, :d 42}]]]])
                 :res
@@ -138,10 +127,10 @@
 (t/deftest test-semi-equi-join
   (t/is (= [{{:a 12} 2} {{:a 100} 1}]
            (->> (run-ra [:semi-join '{a b}
-                         [::tu/blocks (Schema. [a-field])
+                         [::tu/blocks
                           [[{:a 12}, {:a 12}, {:a 0}]
                            [{:a 100}]]]
-                         [::tu/blocks (Schema. [b-field])
+                         [::tu/blocks
                           [[{:b 12}, {:b 2}]
                            [{:b 100}]]]])
                 :res
@@ -149,31 +138,29 @@
 
   (t/testing "empty input"
     (t/is (empty? (:res (run-ra [:semi-join '[{a b}]
-                                 [::tu/blocks (Schema. [a-field])
+                                 [::tu/blocks
                                   [[{:a 12}, {:a 0}]
                                    [{:a 100}]]]
-                                 [::tu/blocks (Schema. [b-field])
-                                  []]]))))
+                                 [::tu/blocks '{b :i64} []]]))))
 
     (t/is (empty? (:res (run-ra [:semi-join '[{a b}]
-                                 [::tu/blocks (Schema. [a-field])
-                                  []]
-                                 [::tu/blocks (Schema. [b-field])
+                                 [::tu/blocks '{a :i64} []]
+                                 [::tu/blocks
                                   [[{:b 12}, {:b 2}]
                                    [{:b 100} {:b 0}]]]]))))
 
     (t/is (empty? (:res (run-ra [:semi-join '[{a b}]
-                                 [::tu/blocks (Schema. [a-field])
+                                 [::tu/blocks
                                   [[{:a 12}, {:a 0}]
                                    [{:a 100}]]]
-                                 [::tu/blocks (Schema. [b-field])
+                                 [::tu/blocks '{b :i64}
                                   [[]]]])))))
 
   (t/is (empty? (:res (run-ra [:semi-join '[{a b}]
-                               [::tu/blocks (Schema. [a-field c-field])
+                               [::tu/blocks
                                 [[{:a 12}, {:a 0}]
                                  [{:a 100}]]]
-                               [::tu/blocks (Schema. [b-field c-field])
+                               [::tu/blocks
                                 [[{:b 10 :c 1}, {:b 15 :c 2}]
                                  [{:b 83 :c 3}]]]])))
         "empty output"))
@@ -182,12 +169,12 @@
   (->> "multi column semi"
        (t/is (= [{{:a 12, :b 42} 2}]
                 (->> (run-ra [:semi-join '[{a c} {b d}]
-                              [::tu/blocks (Schema. [a-field b-field])
+                              [::tu/blocks
                                [[{:a 12, :b 42}
                                  {:a 12, :b 42}
                                  {:a 11, :b 44}
                                  {:a 10, :b 42}]]]
-                              [::tu/blocks (Schema. [c-field d-field])
+                              [::tu/blocks
                                [[{:c 12, :d 42, :e 0}
                                  {:c 12, :d 43, :e 0}
                                  {:c 11, :d 42, :e 0}]
@@ -200,11 +187,11 @@
 (t/deftest test-theta-semi-join
   (t/is (= [{{:a 12, :b 44} 1}]
            (->> (run-ra [:semi-join '[{a c} (> b d)]
-                         [::tu/blocks (Schema. [a-field b-field])
+                         [::tu/blocks
                           [[{:a 12, :b 42}
                             {:a 12, :b 44}
                             {:a 10, :b 42}]]]
-                         [::tu/blocks (Schema. [c-field d-field])
+                         [::tu/blocks
                           [[{:c 12, :d 43}
                             {:c 12, :d 43}
                             {:c 11, :d 42}]]]])
@@ -216,10 +203,10 @@
                   {{:a 12, :b 12, :c 2} 1, {:a 100, :b 100, :c 3} 1, {:a 12, :b 12, :c 0} 1}]
             :col-types '{a :i64, b [:union #{:null :i64}], c [:union #{:null :i64}]}}
            (-> (run-ra [:left-outer-join '[{a b}]
-                         [::tu/blocks (Schema. [a-field])
+                         [::tu/blocks
                           [[{:a 12}, {:a 0}]
                            [{:a 12}, {:a 100}]]]
-                         [::tu/blocks (Schema. [b-field c-field])
+                         [::tu/blocks
                           [[{:b 12, :c 0}, {:b 2, :c 1}]
                            [{:b 12, :c 2}, {:b 100, :c 3}]]]])
                 (update :res (partial mapv frequencies)))))
@@ -229,19 +216,17 @@
                     #{{:a 100, :b nil}}]
               :col-types '{a :i64, b [:union #{:null :i64}]}}
              (-> (run-ra [:left-outer-join '[{a b}]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks
                            [[{:a 12}, {:a 0}]
                             [{:a 100}]]]
-                          [::tu/blocks (Schema. [b-field])
-                           []]])
+                          [::tu/blocks '{b :i64} []]])
                  (update :res (partial mapv set)))))
 
     (t/is (= {:res []
               :col-types '{a :i64, b [:union #{:null :i64}]}}
              (run-ra [:left-outer-join '[{a b}]
-                      [::tu/blocks (Schema. [a-field])
-                       []]
-                      [::tu/blocks (Schema. [b-field])
+                      [::tu/blocks '{a :i64} []]
+                      [::tu/blocks
                        [[{:b 12}, {:b 2}]
                         [{:b 100} {:b 0}]]]])))
 
@@ -249,10 +234,10 @@
                     #{{:a 100, :b nil}}]
               :col-types '{a :i64, b [:union #{:null :i64}]}}
              (-> (run-ra [:left-outer-join '[{a b}]
-                           [::tu/blocks (Schema. [a-field])
+                           [::tu/blocks
                             [[{:a 12}, {:a 0}]
                              [{:a 100}]]]
-                           [::tu/blocks (Schema. [b-field])
+                           [::tu/blocks '{b :i64}
                             [[]]]])
                   (update :res (partial mapv set)))))))
 
@@ -263,12 +248,12 @@
                   {:a 12, :b 42, :c 12, :d 42, :e 0} 6
                   {:a 12, :b 42, :c 12, :d 42, :e 1} 2}]
                 (->> (run-ra [:left-outer-join '[{a c} {b d}]
-                              [::tu/blocks (Schema. [a-field b-field])
+                              [::tu/blocks
                                [[{:a 12, :b 42}
                                  {:a 12, :b 42}
                                  {:a 11, :b 44}
                                  {:a 10, :b 42}]]]
-                              [::tu/blocks (Schema. [c-field d-field e-field])
+                              [::tu/blocks
                                [[{:c 12, :d 42, :e 0}
                                  {:c 12, :d 43, :e 0}
                                  {:c 11, :d 42, :e 0}]
@@ -279,12 +264,12 @@
                      (mapv frequencies))))))
 
 (t/deftest test-left-theta-join
-  (let [left [::tu/blocks (Schema. [a-field b-field])
+  (let [left [::tu/blocks
               [[{:a 12, :b 42}
                 {:a 12, :b 44}
                 {:a 10, :b 42}
                 {:a 10, :b 42}]]]
-        right [::tu/blocks (Schema. [c-field d-field])
+        right [::tu/blocks
                [[{:c 12, :d 43}
                  {:c 11, :d 42}]]]]
 
@@ -323,10 +308,10 @@
                     {{:a 0, :b nil, :c nil} 1}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks
                            [[{:a 12}, {:a 0}]
                             [{:a 12}, {:a 100}]]]
-                          [::tu/blocks (Schema. [b-field c-field])
+                          [::tu/blocks
                            [[{:b 12, :c 0}, {:b 2, :c 1}]
                             [{:b 12, :c 2}, {:b 100, :c 3}]]]])
                  (update :res (partial mapv frequencies)))))
@@ -336,10 +321,10 @@
                     {{:a 0, :b nil, :c nil} 1}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks
                            [[{:a 12}, {:a 0}]
                             [{:a 12}, {:a 100}]]]
-                          [::tu/blocks (Schema. [b-field c-field])
+                          [::tu/blocks
                            [[{:b 12, :c 0}, {:b 12, :c 2}, {:b 2, :c 1}]
                             [{:b 100, :c 3}]]]])
                  (update :res (partial mapv frequencies))))))
@@ -349,10 +334,10 @@
                     {{:a 12, :b 12, :c 2} 2}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks
                            [[{:a 12}]
                             [{:a 12}, {:a 100}]]]
-                          [::tu/blocks (Schema. [b-field c-field])
+                          [::tu/blocks
                            [[{:b 12, :c 0}, {:b 100, :c 3}]
                             [{:b 12, :c 2}]]]])
                  (update :res (partial mapv frequencies)))))
@@ -361,10 +346,10 @@
                     {{:a 100, :b 100, :c 3} 1}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}], c [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks
                            [[{:a 12}]
                             [{:a 12}, {:a 100}]]]
-                          [::tu/blocks (Schema. [b-field c-field])
+                          [::tu/blocks
                            [[{:b 12, :c 0}, {:b 12, :c 2}]
                             [{:b 100, :c 3}]]]])
                  (update :res (partial mapv frequencies))))))
@@ -373,19 +358,18 @@
     (t/is (= {:res [{{:a 0, :b nil} 1, {:a 100, :b nil} 1, {:a 12, :b nil} 1}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks
                            [[{:a 12}, {:a 0}]
                             [{:a 100}]]]
-                          [::tu/blocks (Schema. [b-field])
-                           []]])
+                          [::tu/blocks '{b :i64} []]])
                  (update :res (partial mapv frequencies)))))
 
     (t/is (= {:res [{{:a nil, :b 12} 1, {:a nil, :b 2} 1}
                     {{:a nil, :b 100} 1, {:a nil, :b 0} 1}]
               :col-types '{a [:union #{:null :i64}], b [:union #{:null :i64}]}}
              (-> (run-ra [:full-outer-join '[{a b}]
-                          [::tu/blocks (Schema. [a-field]) []]
-                          [::tu/blocks (Schema. [b-field])
+                          [::tu/blocks '{a :i64} []]
+                          [::tu/blocks
                            [[{:b 12}, {:b 2}]
                             [{:b 100} {:b 0}]]]])
                  (update :res (partial mapv frequencies)))))))
@@ -400,12 +384,12 @@
                  {{:a 10 :b 42 :c nil :d nil :e nil} 1
                   {:a 11 :b 44 :c nil :d nil :e nil} 1}]
                 (->> (run-ra [:full-outer-join '[{a c} {b d}]
-                              [::tu/blocks (Schema. [a-field b-field])
+                              [::tu/blocks
                                [[{:a 12, :b 42}
                                  {:a 12, :b 42}
                                  {:a 11, :b 44}
                                  {:a 10, :b 42}]]]
-                              [::tu/blocks (Schema. [c-field d-field e-field])
+                              [::tu/blocks
                                [[{:c 12, :d 42, :e 0}
                                  {:c 12, :d 43, :e 0}
                                  {:c 11, :d 42, :e 0}]
@@ -416,12 +400,12 @@
                      (mapv frequencies))))))
 
 (t/deftest test-full-outer-join-theta
-  (let [left [::tu/blocks (Schema. [a-field b-field])
+  (let [left [::tu/blocks
               [[{:a 12, :b 42}
                 {:a 12, :b 44}
                 {:a 10, :b 42}
                 {:a 10, :b 42}]]]
-        right [::tu/blocks (Schema. [c-field d-field])
+        right [::tu/blocks
                [[{:c 12, :d 43}
                  {:c 11, :d 42}]]]]
 
@@ -449,38 +433,36 @@
   (t/is (= {:res [{{:a 0} 2}]
             :col-types '{a :i64}}
            (-> (run-ra [:anti-join '[{a b}]
-                        [::tu/blocks (Schema. [a-field])
+                        [::tu/blocks
                          [[{:a 12}, {:a 0}, {:a 0}]
                           [{:a 100}]]]
-                        [::tu/blocks (Schema. [b-field])
+                        [::tu/blocks
                          [[{:b 12}, {:b 2}]
                           [{:b 100}]]]])
                (update :res (partial mapv frequencies)))))
 
   (t/testing "empty input"
     (t/is (empty? (:res (run-ra [:anti-join '[{a b}]
-                                 [::tu/blocks (Schema. [a-field])
-                                  []]
-                                 [::tu/blocks (Schema. [b-field])
+                                 [::tu/blocks '{a :i64} []]
+                                 [::tu/blocks
                                   [[{:b 12}, {:b 2}]
                                    [{:b 100}]]]]))))
 
     (t/is (= [#{{:a 12}, {:a 0}}
               #{{:a 100}}]
              (->> (run-ra [:anti-join '[{a b}]
-                           [::tu/blocks (Schema. [a-field])
+                           [::tu/blocks
                             [[{:a 12}, {:a 0}]
                              [{:a 100}]]]
-                           [::tu/blocks (Schema. [b-field])
-                            []]])
+                           [::tu/blocks '{b :i64} []]])
                   :res
                   (mapv set)))))
 
   (t/is (empty? (:res (run-ra [:anti-join '[{a b}]
-                               [::tu/blocks (Schema. [a-field])
+                               [::tu/blocks
                                 [[{:a 12}, {:a 2}]
                                  [{:a 100}]]]
-                               [::tu/blocks (Schema. [b-field])
+                               [::tu/blocks
                                 [[{:b 12}, {:b 2}]
                                  [{:b 100}]]]])))
         "empty output"))
@@ -490,12 +472,12 @@
        (t/is (= [{{:a 10 :b 42} 1
                   {:a 11 :b 44} 1}]
                 (->> (run-ra [:anti-join '[{a c} {b d}]
-                              [::tu/blocks (Schema. [a-field b-field])
+                              [::tu/blocks
                                [[{:a 12, :b 42}
                                  {:a 12, :b 42}
                                  {:a 11, :b 44}
                                  {:a 10, :b 42}]]]
-                              [::tu/blocks (Schema. [c-field d-field])
+                              [::tu/blocks
                                [[{:c 12, :d 42, :e 0}
                                  {:c 12, :d 43, :e 0}
                                  {:c 11, :d 42, :e 0}]
@@ -506,12 +488,12 @@
                      (mapv frequencies))))))
 
 (t/deftest test-anti-join-theta
-  (let [left [::tu/blocks (Schema. [a-field b-field])
+  (let [left [::tu/blocks
               [[{:a 12, :b 42}
                 {:a 12, :b 44}
                 {:a 10, :b 42}
                 {:a 10, :b 42}]]]
-        right [::tu/blocks (Schema. [c-field d-field])
+        right [::tu/blocks
                [[{:c 12, :d 43}
                  {:c 11, :d 42}]]]]
 
@@ -534,9 +516,9 @@
 (t/deftest test-join-on-true
   (letfn [(run-join [left? right? theta-expr]
             (->> (run-ra [:join [theta-expr]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks '{a :i64}
                            (if left? [[{:a 12}, {:a 0}]] [])]
-                          [::tu/blocks (Schema. [b-field])
+                          [::tu/blocks '{b :i64}
                            (if right? [[{:b 12}, {:b 2}]] [])]])
                  :res
                  (mapv frequencies)))]
@@ -561,9 +543,9 @@
 (t/deftest test-loj-on-true
   (letfn [(run-loj [left? right? theta-expr]
             (->> (run-ra [:left-outer-join [theta-expr]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks '{a :i64}
                            (if left? [[{:a 12}, {:a 0}]] [])]
-                          [::tu/blocks (Schema. [b-field])
+                          [::tu/blocks '{b :i64}
                            (if right? [[{:b 12}, {:b 2}]] [])]])
                  :res
                  (mapv frequencies)))]
@@ -598,9 +580,9 @@
 (t/deftest test-foj-on-true
   (letfn [(run-foj [left? right? theta-expr]
             (->> (run-ra [:full-outer-join [theta-expr]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks '{a :i64}
                            (if left? [[{:a 12}, {:a 0}]] [])]
-                          [::tu/blocks (Schema. [b-field])
+                          [::tu/blocks '{b :i64}
                            (if right? [[{:b 12}, {:b 2}]] [])]])
                  :res
                  (mapv frequencies)))]
@@ -641,10 +623,10 @@
 (t/deftest test-semi-join-on-true
   (letfn [(run-semi [left? right? theta-expr]
             (->> (run-ra [:semi-join [theta-expr]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks '{a :i64}
                            (if left? [[{:a 12}, {:a 0}]] [])]
 
-                          [::tu/blocks (Schema. [b-field])
+                          [::tu/blocks '{b :i64}
                            (if right? [[{:b 12}, {:b 2}]] [])]])
                  :res
                  (mapv frequencies)))]
@@ -660,9 +642,9 @@
 (t/deftest test-anti-join-on-true
   (letfn [(run-anti [left? right? theta-expr]
             (->> (run-ra [:anti-join [theta-expr]
-                          [::tu/blocks (Schema. [a-field])
+                          [::tu/blocks '{a :i64}
                            (if left? [[{:a 12}, {:a 0}]] [])]
-                          [::tu/blocks (Schema. [b-field])
+                          [::tu/blocks '{b :i64}
                            (if right? [[{:b 12}, {:b 2}]] [])]])
                  :res
                  (mapv frequencies)))]
@@ -680,8 +662,8 @@
 (t/deftest test-equi-join-expr
   (letfn [(test-equi-join [join-specs left-vals right-vals]
             (op/query-ra [:join join-specs
-                          [::tu/blocks (Schema. [(types/->field "a" types/bigint-type false)]) [left-vals]]
-                          [::tu/blocks (Schema. [(types/->field "b" types/bigint-type false)]) [right-vals]]]
+                          [::tu/blocks [left-vals]]
+                          [::tu/blocks [right-vals]]]
                          {}))]
     (t/is (= [{:a 42, :b 42}]
              (test-equi-join '[{(+ a 1) (+ b 1)}]

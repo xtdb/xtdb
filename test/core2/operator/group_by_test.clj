@@ -3,19 +3,15 @@
             [core2.operator :as op]
             [core2.operator.group-by :as group-by]
             [core2.test-util :as tu]
-            [core2.types :as types]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
-  (:import org.apache.arrow.vector.types.pojo.Schema))
+            [core2.vector.indirect :as iv]))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-group-by
   (letfn [(run-test [group-by-spec blocks]
             (-> (op/query-ra [:group-by group-by-spec
-                              [::tu/blocks (Schema. [(types/->field "a" types/bigint-type false)
-                                                     (types/->field "b" types/bigint-type false)])
-                               blocks]])
+                              [::tu/blocks '{a :i64, b :i64} blocks]])
                 (tu/raising-col-types)
                 (update :res set)))]
 
@@ -124,7 +120,7 @@
     (let [agg-factory (group-by/->aggregate-factory :array-agg "k" :i64 "vs")
           agg-spec (.build agg-factory tu/*allocator*)]
       (try
-        (t/is (= :i64 (.getToColumnType agg-factory)))
+        (t/is (= [:list :i64] (.getToColumnType agg-factory)))
 
         (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k0)]) gm0)
         (.aggregate agg-spec (iv/->indirect-rel [(iv/->direct-vec k1)]) gm1)
@@ -143,8 +139,7 @@
             :col-types '{k :utf8, all-vs [:union #{:null :bool}], any-vs [:union #{:null :bool}]}}
 
            (-> (op/query-ra [:group-by '[k {all-vs (all v)} {any-vs (any v)}]
-                             [::tu/blocks (Schema. [(types/->field "k" types/varchar-type false)
-                                                    (types/->field "v" types/bool-type true)])
+                             [::tu/blocks
                               [[{:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
                                 {:k "t", :v true} {:k "f", :v false} {:k "n", :v nil}
                                 {:k "tn", :v true} {:k "tn", :v nil} {:k "tn", :v true}
@@ -170,8 +165,8 @@
                          cnt :i64, cnt-distinct :i64,
                          sum [:union #{:null :i64}], sum-distinct [:union #{:null :i64}],
                          avg [:union #{:null :f64}], avg-distinct [:union #{:null :f64}],
-                         array-agg [:union #{:null :i64}],
-                         array-agg-distinct [:list [:union #{:null :i64}]]}}
+                         array-agg [:list :i64],
+                         array-agg-distinct [:list :i64]}}
 
            (-> (op/query-ra [:group-by '[k
                                          {cnt (count v)}
@@ -182,8 +177,7 @@
                                          {avg-distinct (avg-distinct v)}
                                          {array-agg (array-agg v)}
                                          {array-agg-distinct (array-agg-distinct v)}]
-                             [::tu/blocks (Schema. [(types/->field "k" types/keyword-type false)
-                                                    (types/->field "v" types/bigint-type true)])
+                             [::tu/blocks
                               [[{:k :a, :v 10}
                                 {:k :b, :v 12}
                                 {:k :b, :v 15}

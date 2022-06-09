@@ -7,14 +7,12 @@
             [core2.metadata :as meta]
             [core2.operator :as op]
             [core2.snapshot :as snap]
-            [core2.test-util :as tu]
-            [core2.types :as types])
+            [core2.test-util :as tu])
   (:import (core2.indexer IChunkManager)
            (core2.metadata IMetadataManager)
            (core2.snapshot ISnapshotFactory)
            (java.time LocalTime)
-           (org.roaringbitmap RoaringBitmap)
-           org.apache.arrow.vector.types.pojo.Schema))
+           (org.roaringbitmap RoaringBitmap)))
 
 (t/deftest test-find-gt-ivan
   (with-open [node (node/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
@@ -315,14 +313,12 @@
 (t/deftest test-apply-operator
   (letfn [(q [mode]
             (op/query-ra [:apply mode '{c-id ?c-id}
-                          [::tu/blocks (Schema. [(types/col-type->field "c-id" :utf8)
-                                                 (types/col-type->field "c-name" :utf8)])
+                          [::tu/blocks
                            [[{:c-id "c1", :c-name "Alan"}
                              {:c-id "c2", :c-name "Bob"}
                              {:c-id "c3", :c-name "Charlie"}]]]
                           [:select '(= o-customer-id ?c-id)
-                           [::tu/blocks (Schema. [(types/col-type->field "o-customer-id" :utf8)
-                                                  (types/col-type->field "o-value" :f64)])
+                           [::tu/blocks
                             [[{:o-customer-id "c1", :o-value 12.34}
                               {:o-customer-id "c1", :o-value 14.80}
                               {:o-customer-id "c2", :o-value 91.46}

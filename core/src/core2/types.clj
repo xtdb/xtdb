@@ -157,13 +157,16 @@
   (write-value! [v ^IVectorWriter writer]
     (let [writer (.asList writer)
           data-writer (.getDataWriter writer)
-          data-duv-writer (.asDenseUnion data-writer)]
+          duv? (instance? DenseUnionVector (.getVector data-writer))
+          ^IDenseUnionWriter data-duv-writer (when duv? (.asDenseUnion data-writer))]
       (doseq [el v]
         (.startValue data-writer)
-        (doto (.writerForType data-duv-writer (value->col-type el))
-          (.startValue)
-          (->> (write-value! el))
-          (.endValue))
+        (if duv?
+          (doto (.writerForType data-duv-writer (value->col-type el))
+            (.startValue)
+            (->> (write-value! el))
+            (.endValue))
+          (write-value! el data-writer))
         (.endValue data-writer))))
 
   Map

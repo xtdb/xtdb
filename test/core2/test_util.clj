@@ -174,14 +174,23 @@
 
 (defmethod lp/ra-expr ::blocks [_]
   (s/cat :op #{::blocks}
-         :schema #(instance? Schema %)
+         :col-types (s/? (s/map-of simple-symbol? some?))
          :blocks vector?))
 
-(defmethod lp/emit-expr ::blocks [{:keys [^Schema schema blocks]} _args]
-  {:col-types (->> (.getFields schema)
-                   (into {} (map (juxt #(symbol (.getName ^Field %)) types/field->col-type))))
-   :->cursor (fn [{:keys [allocator]}]
-               (->cursor allocator schema blocks))})
+(defmethod lp/emit-expr ::blocks [{:keys [col-types blocks]} _args]
+  (let [col-types (or col-types
+                      (let [rows (into [] cat blocks)]
+                        (->> (for [col-name (into #{} (mapcat keys) rows)]
+                               [(symbol col-name) (->> rows
+                                                       (into #{} (map (fn [row]
+                                                                        (types/value->col-type (get row col-name)))))
+                                                       (apply types/merge-col-types))])
+                             (into {}))))
+        ^Schema schema (Schema. (for [[col-name col-type] col-types]
+                                  (types/col-type->field col-name col-type)))]
+    {:col-types col-types
+     :->cursor (fn [{:keys [allocator]}]
+                 (->cursor allocator schema blocks))}))
 
 (defn raising-col-types [query-ra-res]
   {:res query-ra-res

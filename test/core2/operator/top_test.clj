@@ -2,9 +2,7 @@
   (:require [clojure.test :as t]
             [core2.operator :as op]
             [core2.operator.top :as top]
-            [core2.test-util :as tu]
-            [core2.types :as ty])
-  (:import org.apache.arrow.vector.types.pojo.Schema))
+            [core2.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -52,8 +50,7 @@
     (letfn [(top [offset length]
               (with-open [q (op/open-ra [:top (->> {:skip offset, :limit length}
                                                    (into {} (filter (comp some? val))))
-                                         [::tu/blocks (Schema. [(ty/->field "idx" ty/bigint-type false)])
-                                          blocks]])]
+                                         [::tu/blocks '{idx :i64} blocks]])]
                 (tu/<-cursor q)))]
       (t/is (= blocks (top nil nil)))
 

@@ -1,26 +1,22 @@
 (ns core2.operator.order-by-test
   (:require [clojure.test :as t]
             [core2.operator :as op]
-            [core2.test-util :as tu]
-            [core2.types :as ty])
-  (:import org.apache.arrow.vector.types.pojo.Schema))
+            [core2.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-order-by
-  (let [a-field (ty/->field "a" ty/bigint-type false)
-        b-field (ty/->field "b" ty/bigint-type false)]
-    (with-open [res (op/open-ra [:order-by [['a :asc :nulls-last]]
-                                 [::tu/blocks (Schema. [a-field b-field])
-                                  [[{:a 12, :b 10}
-                                    {:a 0, :b 15}]
-                                   [{:a 100, :b 83}]
-                                   [{:a 83, :b 100}]]]])]
-      (t/is (= [[{:a 0, :b 15}
-                 {:a 12, :b 10}
-                 {:a 83, :b 100}
-                 {:a 100, :b 83}]]
-               (tu/<-cursor res)))))
+  (with-open [res (op/open-ra [:order-by [['a :asc :nulls-last]]
+                               [::tu/blocks
+                                [[{:a 12, :b 10}
+                                  {:a 0, :b 15}]
+                                 [{:a 100, :b 83}]
+                                 [{:a 83, :b 100}]]]])]
+    (t/is (= [[{:a 0, :b 15}
+               {:a 12, :b 10}
+               {:a 83, :b 100}
+               {:a 100, :b 83}]]
+             (tu/<-cursor res))))
 
   (t/is (= [{:a 0, :b 15}
             {:a 12.4, :b 10}
