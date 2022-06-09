@@ -224,20 +224,18 @@
                         (-> (assoc record :result-set result-str)
                             (dissoc :result-set-md5sum)))))
       (let [report-success #(update-in ctx [:results :success] (fnil inc 0))
-            report-failure #(update-in ctx [:results :failure] (fnil inc 0))
+            report-failure (fn [expected actual]
+                             (log/warn
+                               (format "Failure\n<Expected>\n%s\n<Actual>\n%s\n" expected actual)
+                               (dissoc record :result-set :result-set-md5sum))
+                             (update-in ctx [:results :failure] (fnil inc 0)))
             updated-ctx (if result-set-md5sum
                           (if (= result-set-md5sum (md5 result-str))
                             (report-success)
-                            (do
-                              (log/warn "Failure" {:expected result-set-md5sum
-                                                   :actual (md5 result-str)})
-                              (report-failure)))
+                            (report-failure result-set-md5sum (md5 result-str)))
                           (if (= result-set result-str)
                             (report-success)
-                            (do
-                              (log/warn "Failure" {:expected result-set
-                                                   :actual result-str})
-                              (report-failure))))]
+                            (report-failure result-set result-str)))]
         updated-ctx))))
 
 (def ^:dynamic *db-engine*)
