@@ -52,7 +52,7 @@ SELECT t1.a FROM t1
 ")]
 
     (t/is (= 3 (count records)))
-    (t/is (= {"t1" ["a" "b" "c" "d" "e"]} (:tables (slt/execute-records tu/*node* records))))))
+    (t/is (= {"t1" ["a" "b" "c" "d" "e"]} (:tables (:db-engine (slt/execute-records tu/*node* records)))))))
 
 (t/deftest test-sql-logic-test-completion
   (let [script  "statement ok

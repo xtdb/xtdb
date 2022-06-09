@@ -1,5 +1,6 @@
 (ns core2.sql.logic-test.runner
   (:require [clojure.java.io :as io]
+            [clojure.pprint :as pprint]
             [clojure.test :as t]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
@@ -10,6 +11,9 @@
            java.io.File
            java.security.MessageDigest
            [java.sql Connection DriverManager]))
+
+;;TODO move catch into query handling, I think statements shouldn't always be caught, but also need to work out how and if to report them
+;;TODO return errors/failures rather than logging them out
 
 (defprotocol DbEngine
   (get-engine-name [_])
@@ -177,7 +181,7 @@
           ctx))
       (case mode
         :ok (update ctx :db-engine execute-statement statement)
-        :error (do (t/is (thrown? Exception (execute-statement db-engine statement)))
+        :error (do (t/is (thrown? Exception (execute-statement db-engine statement))) ;;TODO shouldn't rely on t/is anymore 
                    ctx)))))
 
 (defn- format-result-str [sort-mode type-string result]
@@ -219,11 +223,22 @@
                             (dissoc :result-set))
                         (-> (assoc record :result-set result-str)
                             (dissoc :result-set-md5sum)))))
-      (when result-set
-        (t/is (= result-set result-str)))
-      (when result-set-md5sum
-        (t/is (= result-set-md5sum (md5 result-str))))
-      ctx)))
+      (let [report-success #(update-in ctx [:results :success] (fnil inc 0))
+            report-failure #(update-in ctx [:results :failure] (fnil inc 0))
+            updated-ctx (if result-set-md5sum
+                          (if (= result-set-md5sum (md5 result-str))
+                            (report-success)
+                            (do
+                              (log/warn "Failure" {:expected result-set-md5sum
+                                                   :actual (md5 result-str)})
+                              (report-failure)))
+                          (if (= result-set result-str)
+                            (report-success)
+                            (do
+                              (log/warn "Failure" {:expected result-set
+                                                   :actual result-str})
+                              (report-failure))))]
+        updated-ctx))))
 
 (def ^:dynamic *db-engine*)
 
@@ -233,13 +248,7 @@
 (def ^:private ^:dynamic *current-record* nil)
 
 (defn execute-records [db-engine records]
-  (with-redefs [clojure.test/do-report
-                (fn [m]
-                  (t/report
-                   (case (:type m)
-                     (:fail :error) (merge (select-keys *current-record* [:file :line]) m)
-                     m)))]
-    (let [ctx (merge {:db-engine db-engine :queries-run 0} *opts*)]
+  (let [ctx (merge {:db-engine db-engine :queries-run 0 :results {}} *opts*)]
       (->> records
            (reduce
             (fn [{:keys [queries-run query-limit] :as ctx} record]
@@ -252,9 +261,6 @@
                                                  1
                                                  0)))
                     (catch Throwable t
-                      (t/do-report
-                        {:type :error, :message "Error Executing Record"
-                         :expected record :actual t})
                       #_(swap!
                           error-counts-by-message
                           (fn [acc]
@@ -265,12 +271,14 @@
                                 (update-in
                                   [(ex-message t) :lines]
                                   #(conj % (:line record))))))
-                      (update ctx :queries-run + (if (= :query (:type record))
-                                                   1
-                                                   0))
+                      (log/error t "Error Executing Record" record)
+                      (-> ctx
+                          (update-in [:results :error] (fnil inc 0))
+                          (update :queries-run + (if (= :query (:type record))
+                                                       1
+                                                       0)))
                       #_(throw t))))))
-            ctx)
-           :db-engine))))
+            ctx))))
 
 (defn- ns-relative-path ^java.io.File [ns file]
   (str (str/replace (namespace-munge (ns-name ns)) "." "/") "/" file))
@@ -293,28 +301,16 @@
 
 (def with-sqlite (partial with-jdbc "jdbc:sqlite::memory:"))
 
-;; NOTE: this is called deftest to make cider-test happy, but could be
-;; configured via cider-test-defining-forms.
-;; Relative tests use hyphen instead of slash, as that confuses cider.
-(defmacro deftest [name]
-  (let [test-symbol (vary-meta name assoc :slt true)
-        test-path (ns-relative-path *ns* (str (str/replace name "-" "/") ".test"))]
-    `(alter-meta!
-      (t/deftest ~test-symbol
-        (binding [plan/*include-table-column-in-scan?* true]
-          (execute-records *db-engine* (parse-script ~test-path (slurp (io/resource ~test-path))))))
-      assoc :file ~test-path)))
-
 (def cli-options
   [[nil "--verify"]
    [nil "--limit LIMIT" :parse-fn #(Long/parseLong %)]
    [nil "--db DB" :default "xtdb" :validate [(fn [x]
                                                (or (contains? #{"xtdb" "sqlite"} x)
                                                    (str/starts-with? x "jdbc:"))) "Unknown db."]]])
-
 (defn -main [& args]
   (let [{:keys [options arguments errors]} (cli/parse-opts args cli-options)
-        {:keys [verify db]} options]
+        {:keys [verify db]} options
+        results (atom {})]
     (if (seq errors)
       (binding [*out* *err*]
         (doseq [error errors]
@@ -326,15 +322,16 @@
                         :query-limit (:limit options)}
                 plan/*include-table-column-in-scan?* true]
         (doseq [script-name arguments
-                :let [f #(binding [t/*report-counters* (ref t/*initial-report-counters*)]
-                           (execute-records *db-engine* (parse-script script-name (slurp script-name)))
-                           (when (:verify options)
-                             (println @t/*report-counters*)))]]
+                :let [f #(swap! results assoc script-name (:results (execute-records *db-engine* (parse-script script-name (slurp script-name)))))]]
           (case db
             "xtdb" (tu/with-node
                      #(with-xtdb f))
             "sqlite" (with-sqlite f)
-            (with-jdbc db f)))))))
+            (with-jdbc db f)))))
+    (pprint/pprint @results)
+    (println "===== Total =====")
+    (pprint/pprint (reduce (partial merge-with +) (vals @results)))))
+
 (comment
 
   (->> (sort-by (comp :count val) @error-counts-by-message)
@@ -343,7 +340,7 @@
   (sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
 
 
-  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/aggregates/slt_good_0.test"))
+  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/expr/slt_good_0.test"))
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 

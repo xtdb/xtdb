@@ -53,9 +53,6 @@
            :integration-test {:exec-fn cognitect.test-runner.api/test
                               :exec-args {:includes [:integration]}}
 
-           :slt-test {:exec-fn cognitect.test-runner.api/test
-                      :exec-args {:includes [:slt]}}
-
            :timescale-test {:exec-fn cognitect.test-runner.api/test
                             :exec-args {:includes [:timescale]}}
 
