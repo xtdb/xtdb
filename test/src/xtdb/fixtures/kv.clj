@@ -21,9 +21,11 @@
 (def rocks-dep {:xtdb/module 'xtdb.rocksdb/->kv-store, :db-dir-suffix "rocksdb"})
 (def lmdb-dep {:xtdb/module 'xtdb.lmdb/->kv-store, :db-dir-suffix "lmdb", :env-mapsize 4096})
 (def memkv-dep {:xtdb/module 'xtdb.mem-kv/->kv-store})
+(def mutablekv-dep {:xtdb/module 'xtdb.kv.mutable-kv/->mutable-kv-store})
 
 (defn with-each-kv-store* [f]
   (doseq [kv-opts [memkv-dep
+                   mutablekv-dep
                    rocks-dep
                    lmdb-dep]]
     (binding [*kv-opts* (merge *kv-opts* kv-opts)]
