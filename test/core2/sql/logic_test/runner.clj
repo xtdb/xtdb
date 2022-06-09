@@ -329,9 +329,10 @@
                      #(with-xtdb f))
             "sqlite" (with-sqlite f)
             (with-jdbc db f)))))
-    (pprint/pprint @results)
-    (println "===== Total =====")
-    (pprint/pprint (reduce (partial merge-with +) (vals @results)))))
+    (pprint/print-table
+      [:name :success :failure :error]
+      (conj (mapv (fn [[k v]] (assoc v :name k)) @results)
+            (assoc (reduce (partial merge-with +) (vals @results)) :name "Total")))))
 
 (comment
 
