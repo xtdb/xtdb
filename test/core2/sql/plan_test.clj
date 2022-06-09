@@ -698,16 +698,16 @@
   (t/are [sql expected]
     (= expected (plan-expr sql))
 
-    "CAST(NULL AS INT)" (list 'cast nil types/int-type)
-    "CAST(NULL AS INTEGER)" (list 'cast nil types/int-type)
-    "CAST(NULL AS BIGINT)" (list 'cast nil types/bigint-type)
-    "CAST(NULL AS SMALLINT)" (list 'cast nil types/smallint-type)
-    "CAST(NULL AS FLOAT)" (list 'cast nil types/float4-type)
-    "CAST(NULL AS REAL)" (list 'cast nil types/float4-type)
-    "CAST(NULL AS DOUBLE PRECISION)" (list 'cast nil types/float8-type)
+    "CAST(NULL AS INT)" (list 'cast nil :i32)
+    "CAST(NULL AS INTEGER)" (list 'cast nil :i32)
+    "CAST(NULL AS BIGINT)" (list 'cast nil :i64)
+    "CAST(NULL AS SMALLINT)" (list 'cast nil :i16)
+    "CAST(NULL AS FLOAT)" (list 'cast nil :f32)
+    "CAST(NULL AS REAL)" (list 'cast nil :f32)
+    "CAST(NULL AS DOUBLE PRECISION)" (list 'cast nil :f64)
 
-    "CAST(foo.a AS INT)" (list 'cast 'x1 types/int-type)
-    "CAST(42.0 AS INT)" (list 'cast 42.0 types/int-type)))
+    "CAST(foo.a AS INT)" (list 'cast 'x1 :i32)
+    "CAST(42.0 AS INT)" (list 'cast 42.0 :i32)))
 
 (t/deftest test-expr-in-equi-join
   (t/are [sql expected]
@@ -722,7 +722,7 @@
         [{(+ x1 1) (+ x3 1)}]
         [:rename {a x1} [:scan [a]]]
         [:rename {b x3} [:scan [b]]]]]]
-    
+
     "SELECT a.a FROM a JOIN bar b ON a.a = b.b+1"
     '[:rename
       {x1 a}

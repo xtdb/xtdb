@@ -1914,19 +1914,19 @@
   (t/are [expected expr variables]
     (= expected (project1 expr variables))
 
-    nil (list 'cast nil types/int-type) {}
-    nil (list 'cast nil types/bigint-type) {}
-    nil (list 'cast nil types/smallint-type) {}
-    nil (list 'cast nil types/float4-type) {}
-    nil (list 'cast nil types/float8-type) {}
+    nil (list 'cast nil :i32) {}
+    nil (list 'cast nil :i64) {}
+    nil (list 'cast nil :i16) {}
+    nil (list 'cast nil :f32) {}
+    nil (list 'cast nil :f64) {}
 
-    42 (list 'cast 42 types/int-type) {}
+    42 (list 'cast 42 :i32) {}
 
-    42 (list 'cast 42.0 types/int-type) {}
-    42 (list 'cast 42.0 types/smallint-type) {}
-    42 (list 'cast 42.0 types/bigint-type) {}
+    42 (list 'cast 42.0 :i32) {}
+    42 (list 'cast 42.0 :i16) {}
+    42 (list 'cast 42.0 :i64) {}
 
-    42.0 (list 'cast 42 types/float4-type) {}
-    42.0 (list 'cast 42 types/float8-type) {}
+    42.0 (list 'cast 42 :f32) {}
+    42.0 (list 'cast 42 :f64) {}
 
-    42 (list 'cast 'a types/int-type) {:a 42.0}))
+    42 (list 'cast 'a :i32) {:a 42.0}))

@@ -151,20 +151,20 @@
 (defn cast-expr [e cast-spec]
   (r/zmatch cast-spec
     [:exact_numeric_type "INTEGER"]
-    (list 'cast e types/int-type)
+    (list 'cast e :i32)
     [:exact_numeric_type "INT"]
-    (list 'cast e types/int-type)
+    (list 'cast e :i32)
     [:exact_numeric_type "BIGINT"]
-    (list 'cast e types/bigint-type)
+    (list 'cast e :i64)
     [:exact_numeric_type "SMALLINT"]
-    (list 'cast e types/smallint-type)
+    (list 'cast e :i16)
 
     [:approximate_numeric_type "FLOAT"]
-    (list 'cast e types/float4-type)
+    (list 'cast e :f32)
     [:approximate_numeric_type "REAL"]
-    (list 'cast e types/float4-type)
+    (list 'cast e :f32)
     [:approximate_numeric_type "DOUBLE" "PRECISION"]
-    (list 'cast e types/float8-type)
+    (list 'cast e :f64)
 
     (throw (IllegalArgumentException. (str "Cannot build cast for: " (pr-str cast-spec))))))
 

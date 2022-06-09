@@ -142,11 +142,11 @@
    :args [(form->expr arr env)
           (form->expr n env)]})
 
-(defmethod parse-list-form 'cast [[_ expr arrow-type] env]
+(defmethod parse-list-form 'cast [[_ expr cast-type] env]
   {:op :call
    :f :cast
    :args [(form->expr expr env)]
-   :cast-arrow-type arrow-type})
+   :cast-type cast-type})
 
 (defmethod parse-list-form ::default [[f & args] env]
   {:op :call, :f f, :args (mapv #(form->expr % env) args)})
@@ -163,6 +163,7 @@
          :i16 'short
          :i32 'int
          :i64 'long
+         :f32 'float
          :f64 'double
          :timestamp-micro-tz 'long
          :duration-micro 'long}
@@ -1467,27 +1468,9 @@
     {:return-type :f64
      :->call-code #(do `(~math-method ~@%))}))
 
-;; TODO cast-arrow-type -> col-type
-(defmethod codegen-mono-call [:cast :num] [{:keys [cast-arrow-type]}]
-  (condp instance? cast-arrow-type
-    ArrowType$Int
-    (let [^ArrowType$Int int-type cast-arrow-type
-          bw (.getBitWidth int-type)
-          signed (.getIsSigned int-type)]
-      (case [bw signed]
-        ;; TODO unsigned casts
-        [16 true] {:return-type :i16, :->call-code #(do `(short ~@%))}
-        [32 true] {:return-type :i32, :->call-code #(do `(int ~@%))}
-        [64 true] {:return-type :i64, :->call-code #(do `(long ~@%))}
-        (throw (IllegalArgumentException. "Unsupported cast"))))
-
-    ArrowType$FloatingPoint
-    (util/case-enum (.getPrecision ^ArrowType$FloatingPoint cast-arrow-type)
-      ;; TODO support HALF precision ...
-                    FloatingPointPrecision/SINGLE {:return-type :f32, :->call-code #(do `(float ~@%))}
-                    FloatingPointPrecision/DOUBLE {:return-type :f64, :->call-code #(do `(double ~@%))})
-
-    (throw (IllegalArgumentException. "Unsupported cast"))))
+(defmethod codegen-mono-call [:cast :num] [{:keys [cast-type]}]
+  {:return-type cast-type
+   :->call-code #(do `(~(type->cast cast-type) ~@%))})
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti set-value-form
