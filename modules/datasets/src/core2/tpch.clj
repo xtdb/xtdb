@@ -388,13 +388,13 @@
            [:join {p_partkey ps_partkey}
             [:semi-join {p_size p_size}
              [:scan [p_partkey {p_brand (<> p_brand ?brand)} {p_type (not (like p_type "MEDIUM POLISHED%"))} p_size]]
-             [:table $sizes]]
+             [:table ?sizes]]
             [:anti-join {ps_suppkey s_suppkey}
              [:scan [ps_partkey ps_suppkey]]
              [:scan [s_suppkey {s_comment (like s_comment "%Customer%Complaints%")}]]]]]]]]
       (with-meta {::params {'?brand "Brand#45"
                             ; '?type "MEDIUM POLISHED%"
-                            '$sizes [{:p_size 49}
+                            '?sizes [{:p_size 49}
                                      {:p_size 14}
                                      {:p_size 23}
                                      {:p_size 45}
@@ -526,7 +526,7 @@
   (-> '[:assign [Customer [:semi-join {cntrycode cntrycode}
                            [:project [c_custkey {cntrycode (substring c_phone 1 2 true)} c_acctbal]
                             [:scan [c_custkey c_phone c_acctbal]]]
-                           [:table $cntrycodes]]]
+                           [:table ?cntrycodes]]]
         [:order-by [[cntrycode :asc]]
          [:group-by [cntrycode {numcust (count c_custkey)} {totacctbal (sum c_acctbal)}]
           [:anti-join {c_custkey o_custkey}
@@ -537,7 +537,7 @@
               [:select (> c_acctbal 0.0)
                Customer]]]]
            [:scan [o_custkey]]]]]]
-      (with-meta {::params {'$cntrycodes [{:cntrycode "13"}
+      (with-meta {::params {'?cntrycodes [{:cntrycode "13"}
                                           {:cntrycode "31"}
                                           {:cntrycode "23"}
                                           {:cntrycode "29"}

@@ -194,14 +194,14 @@
               {:a 7, :b 5040}
               {:a 8, :b 40320}]
              (op/query-ra '[:fixpoint Fact
-                            [:table $table]
+                            [:table ?table]
                             [:select
                              (<= a 8)
                              [:project
                               [{a (+ a 1)}
                                {b (* (+ a 1) b)}]
                               Fact]]]
-                          {'$table [{:a 0 :b 1}]}
+                          {'?table [{:a 0 :b 1}]}
                           {}))))
 
   (t/testing "transitive closure"
@@ -222,12 +222,12 @@
               {:x "d", :y "d"}
               {:x "a", :y "a"}]
              (op/query-ra '[:fixpoint Path
-                            [:table $table]
+                            [:table ?table]
                             [:project [x y]
                              [:join [{z z}]
                               [:rename {y z} Path]
                               [:rename {x z} Path]]]]
-                          {'$table [{:x "a" :y "b"}
+                          {'?table [{:x "a" :y "b"}
                                     {:x "b" :y "c"}
                                     {:x "c" :y "d"}
                                     {:x "d" :y "a"}]}
@@ -235,20 +235,20 @@
 
 (t/deftest test-assignment-operator
   (t/is (= [{:a 1 :b 1}]
-           (op/query-ra '[:assign [X [:table $x]
-                                   Y [:table $y]]
+           (op/query-ra '[:assign [X [:table ?x]
+                                   Y [:table ?y]]
                           [:join [{a b}] X Y]]
-                        '{$x [{:a 1}]
-                          $y [{:b 1}]})))
+                        '{?x [{:a 1}]
+                          ?y [{:b 1}]})))
 
   (t/testing "can see earlier assignments"
     (t/is (= [{:a 1 :b 1}]
-             (op/query-ra '[:assign [X [:table $x]
-                                     Y [:join [{a b}] X [:table $y]]
+             (op/query-ra '[:assign [X [:table ?x]
+                                     Y [:join [{a b}] X [:table ?y]]
                                      X Y]
                             X]
-                          '{$x [{:a 1}]
-                            $y [{:b 1}]})))))
+                          '{?x [{:a 1}]
+                            ?y [{:b 1}]})))))
 
 (t/deftest test-unwind-operator
   (t/is (= [{:a 1, :b [1 2], :b* 1}
@@ -257,28 +257,28 @@
             {:a 2, :b [3 4 5], :b* 4}
             {:a 2, :b [3 4 5], :b* 5}]
            (op/query-ra '[:unwind {b* b}
-                          [:table $x]]
-                        '{$x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]})))
+                          [:table ?x]]
+                        '{?x [{:a 1, :b [1 2]} {:a 2, :b [3 4 5]}]})))
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (op/query-ra '[:project [a b*]
                           [:unwind {b* b}
-                           [:table $x]]]
-                        '{$x [{:a 1, :b [1 2]} {:a 2, :b []}]}))
+                           [:table ?x]]]
+                        '{?x [{:a 1, :b [1 2]} {:a 2, :b []}]}))
         "skips rows with empty lists")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* 2}]
            (op/query-ra '[:project [a b*]
                           [:unwind {b* b}
-                           [:table $x]]]
-                        '{$x [{:a 2, :b 1} {:a 1, :b [1 2]}]}))
+                           [:table ?x]]]
+                        '{?x [{:a 2, :b 1} {:a 1, :b [1 2]}]}))
         "skips rows with non-list unwind column")
 
   (t/is (= [{:a 1, :b* 1} {:a 1, :b* "foo"}]
            (op/query-ra '[:project [a b*]
                           [:unwind {b* b}
-                           [:table $x]]]
-                        '{$x [{:a 1, :b [1 "foo"]}]}))
+                           [:table ?x]]]
+                        '{?x [{:a 1, :b [1 "foo"]}]}))
         "handles multiple types")
 
   (t/is (= [{:a 1, :b* 1, :$ordinal 1}
@@ -288,29 +288,29 @@
             {:a 2, :b* 5, :$ordinal 3}]
            (op/query-ra '[:project [a b* $ordinal]
                           [:unwind {b* b} {:ordinality-column $ordinal}
-                           [:table $x]]]
-                        '{$x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}))
+                           [:table ?x]]]
+                        '{?x [{:a 1 :b [1 2]} {:a 2 :b [3 4 5]}]}))
         "with ordinality"))
 
 (t/deftest test-max-1-row-operator
   (t/is (= [{:a 1, :b 2}]
-           (op/query-ra '[:max-1-row [:table $x]]
-                        '{$x [{:a 1, :b 2}]})))
+           (op/query-ra '[:max-1-row [:table ?x]]
+                        '{?x [{:a 1, :b 2}]})))
 
   (t/is (thrown-with-msg? RuntimeException
                           #"cardinality violation"
-                          (op/query-ra '[:max-1-row [:table $x]]
-                                       '{$x [{:a 1, :b 2} {:a 3, :b 4}]}))
+                          (op/query-ra '[:max-1-row [:table ?x]]
+                                       '{?x [{:a 1, :b 2} {:a 3, :b 4}]}))
         "throws on cardinality > 1")
 
   (t/testing "returns null on empty"
     (t/is (= [{}]
-             (op/query-ra '[:max-1-row [:table $x]]
-                          '{$x []})))
+             (op/query-ra '[:max-1-row [:table ?x]]
+                          '{?x []})))
 
     (t/is (= [{:a nil, :b nil}]
-             (op/query-ra '[:max-1-row [:table #{a b} $x]]
-                          '{$x []})))))
+             (op/query-ra '[:max-1-row [:table #{a b} ?x]]
+                          '{?x []})))))
 
 (t/deftest test-apply-operator
   (letfn [(q [mode]
@@ -351,24 +351,24 @@
 (t/deftest test-project-row-number
   (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
            (op/query-ra '[:project [a {$row-num (row-number)}]
-                          [:table $a]]
+                          [:table ?a]]
 
-                        {'$a [{:a 12} {:a 0} {:a 100}]}))))
+                        {'?a [{:a 12} {:a 0} {:a 100}]}))))
 
 (t/deftest test-project-append-columns
   (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
            (op/query-ra '[:project {:append-columns? true} [{$row-num (row-number)}]
-                          [:table $a]]
+                          [:table ?a]]
 
-                        {'$a [{:a 12} {:a 0} {:a 100}]}))))
+                        {'?a [{:a 12} {:a 0} {:a 100}]}))))
 
 (t/deftest test-array-agg
   (t/is (= [{:a 1, :bs [1 3 6]}
             {:a 2, :bs [2 4]}
             {:a 3, :bs [5]}]
            (op/query-ra '[:group-by [a {bs (array-agg b)}]
-                          [:table $ab]]
-                        {'$ab [{:a 1, :b 1}
+                          [:table ?ab]]
+                        {'?ab [{:a 1, :b 1}
                                {:a 2, :b 2}
                                {:a 1, :b 3}
                                {:a 2, :b 4}
@@ -384,8 +384,8 @@
            (map (juxt :b :bs)
                 (op/query-ra '[:project [{b (between x l r)}
                                          {bs (between-symmetric x l r)}]
-                               [:table $xlr]]
-                             {'$xlr (map #(zipmap [:x :l :r] %)
+                               [:table ?xlr]]
+                             {'?xlr (map #(zipmap [:x :l :r] %)
                                          [[5 0 10] [5 10 0]
                                           [0 0 10] [0 10 0]
                                           [-1 0 10] [-1 10 0]

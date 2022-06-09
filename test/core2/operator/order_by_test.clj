@@ -37,18 +37,18 @@
   (let [table-with-nil [{:a 12.4, :b 10}, {:a nil, :b 15}, {:a 100, :b 83}, {:a 83.0, :b 100}]]
     (t/is (= [{:a nil, :b 15}, {:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}]
              (op/query-ra '[:order-by [[a :nulls-first]]
-                            [:table $table]]
-                          {'$table table-with-nil}))
+                            [:table ?table]]
+                          {'?table table-with-nil}))
           "nulls first")
 
     (t/is (= [{:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}, {:a nil, :b 15}]
              (op/query-ra '[:order-by [[a :nulls-last]]
-                            [:table $table]]
-                          {'$table table-with-nil}))
+                            [:table ?table]]
+                          {'?table table-with-nil}))
           "nulls last")
 
     (t/is (= [{:a 12.4, :b 10}, {:a 83.0, :b 100}, {:a 100, :b 83}, {:a nil, :b 15}]
              (op/query-ra '[:order-by [[a]]
-                            [:table $table]]
-                          {'$table table-with-nil}))
+                            [:table ?table]]
+                          {'?table table-with-nil}))
           "default nulls last")))

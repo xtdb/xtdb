@@ -82,10 +82,6 @@
                    ;; now that we're taking scan-col-types out, we might be able to cache emit-expr
                    {:keys [col-types ->cursor]} (lp/emit-expr conformed-query
                                                               {:src-keys (set (keys srcs)),
-                                                               :table-keys (->> (for [[src-k src-v] srcs
-                                                                                      :when (sequential? src-v)]
-                                                                                  [src-k (table/table->keys src-v)])
-                                                                                (into {}))
                                                                :scan-col-types scan-col-types
                                                                :param-types (expr/->param-types params)})
                    cursor (->cursor (into query-opts
@@ -126,4 +122,5 @@
   ([query inputs] (query-ra query inputs {}))
   ([query inputs query-opts]
    (with-open [res (cursor->result-set (open-ra query inputs query-opts))]
-     (vec (iterator-seq res)))))
+     (-> (vec (iterator-seq res))
+         (vary-meta assoc :col-types (.columnTypes res))))))

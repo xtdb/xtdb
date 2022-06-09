@@ -113,9 +113,9 @@
                         (into {} (keep (fn [[binding-type binding-arg]]
                                          (case binding-type
                                            :relation (MapEntry/create (set (first binding-arg))
-                                                                      (gensym "$in"))
+                                                                      (gensym "?in"))
                                            :collection (MapEntry/create #{(first binding-arg)}
-                                                                        (gensym "$in"))
+                                                                        (gensym "?in"))
                                            nil)))))]
 
     {:args (->> (mapcat (fn [[binding-type binding-arg] arg]

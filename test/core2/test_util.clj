@@ -188,6 +188,10 @@
    :->cursor (fn [{:keys [allocator]}]
                (->cursor allocator schema blocks))})
 
+(defn raising-col-types [query-ra-res]
+  {:res query-ra-res
+   :col-types (:col-types (meta query-ra-res))})
+
 (defn <-column [^IIndirectVector col]
   (mapv (fn [idx]
           (ty/get-object (.getVector col) (.getIndex col idx)))

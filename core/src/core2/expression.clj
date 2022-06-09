@@ -2031,15 +2031,3 @@
               (when (= 1 (.get sel-vec (.getIndex selection idx)))
                 (.add res idx)))
             (.toArray (.build res))))))))
-
-(defn eval-scalar-value [al form params]
-  (let [input-types {:param-types (->param-types params)}
-        expr (form->expr form input-types)]
-    (case (:op expr)
-      :literal form
-      :param (get params (:param expr))
-
-      ;; this is probably quite heavyweight to calculate a single value...
-      (let [projection-spec (->expression-projection-spec "_scalar" form input-types)]
-        (with-open [out-vec (.project projection-spec al (iv/->indirect-rel [] 1) params)]
-          (types/get-object (.getVector out-vec) (.getIndex out-vec 0)))))))

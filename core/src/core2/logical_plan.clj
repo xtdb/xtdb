@@ -21,6 +21,9 @@
 (s/def ::source
   (s/and simple-symbol? source-sym?))
 
+(s/def ::param
+  (s/and simple-symbol? #(str/starts-with? (name %) "?")))
+
 (s/def ::expression any?)
 
 (s/def ::column-expression (s/map-of ::column ::expression :conform-keys true :count 1))
