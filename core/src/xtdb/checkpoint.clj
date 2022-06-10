@@ -129,7 +129,10 @@
     (when (Files/exists root-path (make-array LinkOption 0))
       (for [metadata-path (->> (Files/newDirectoryStream root-path "checkpoint-*.edn")
                                .iterator iterator-seq
-                               (sort #(compare %2 %1)))
+                               (sort-by (fn [^Path path]
+                                          (let [[_ tx-id-str checkpoint-at] (re-matches #"checkpoint-(\d+)-(.+).edn" (str (.getFileName path)))]
+                                            [(Long/parseLong tx-id-str) checkpoint-at]))
+                                        #(compare %2 %1)))
             ;; Files/readString only added in JDK 11
             :let [cp (-> (Files/readAllBytes metadata-path)
                          (String. StandardCharsets/UTF_8)
