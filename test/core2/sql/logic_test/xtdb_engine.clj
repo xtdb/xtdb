@@ -1,6 +1,5 @@
 (ns core2.sql.logic-test.xtdb-engine
   (:require [clojure.string :as str]
-            [clojure.walk :as w]
             [core2.api :as c2]
             [core2.rewrite :as r]
             [core2.snapshot :as snap]
@@ -12,48 +11,6 @@
             [core2.test-util :as tu])
   (:import [java.util HashMap UUID]
            core2.local_node.Node))
-
-(defn- create-table [node {:keys [table-name columns]}]
-  (assert (nil? (get-in node [:tables table-name])))
-  (assoc-in node [:tables table-name] columns))
-
-(defn- create-view [node {:keys [view-name as]}]
-  (assert (nil? (get-in node [:views view-name])))
-  (assoc-in node [:views view-name] as))
-
-(defn- execute-record [node record]
-  (case (:type record)
-    :create-table (create-table node record)
-    :create-view (create-view node record)))
-
-(defn insert->docs [tables insert-statement]
-  (let [[_ _ _ insertion-target insert-columns-and-source] insert-statement
-        table (first (filter string? (flatten insertion-target)))
-        from-subquery insert-columns-and-source
-        columns (if (= 1 (count (rest from-subquery)))
-                  (get tables table)
-                  (let [insert-column-list (second from-subquery)]
-                    (->> (flatten insert-column-list)
-                         (filter string?))))
-        query-expression (last from-subquery)
-        [_ docs] (plan/plan query-expression)]
-    (for [doc docs
-          :let [vs (map doc (sort (keys doc)))]]
-      (into {:_table table} (zipmap (map keyword columns) vs)))))
-
-(defn- insert-statement [{:keys [tables] :as node} insert-statement]
-  (-> (c2/submit-tx node (vec (for [doc (insert->docs tables insert-statement)]
-                                [:put (merge {:_id (UUID/randomUUID)} doc)])))
-      (tu/then-await-tx node))
-  node)
-
-(defn skip-statement? [^String x]
-  (boolean (re-find #"(?is)^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(\w+)\s+ON\s+(\w+)\s*\((.+)\)\s*$" x)))
-
-(defn- execute-statement [node direct-sql-data-statement]
-  (binding [r/*memo* (HashMap.)]
-    (case (first direct-sql-data-statement)
-      :insert_statement (insert-statement node direct-sql-data-statement))))
 
 ;; TODO:
 ;; - needs cleanup.
@@ -159,6 +116,64 @@
          (r/topdown (r/adhoc-tp r/id-tp (normalize-rewrite column->table tables)))
          (r/node))))
 
+(defn- create-table [node {:keys [table-name columns]}]
+  (assert (nil? (get-in node [:tables table-name])))
+  (assoc-in node [:tables table-name] columns))
+
+(defn- create-view [node {:keys [view-name as]}]
+  (assert (nil? (get-in node [:views view-name])))
+  (assoc-in node [:views view-name] as))
+
+(defn- execute-record [node record]
+  (case (:type record)
+    :create-table (create-table node record)
+    :create-view (create-view node record)))
+
+(defn execute-query-expression [this from-subquery]
+  (let [snapshot-factory (tu/component this ::snap/snapshot-factory)
+        db (snap/snapshot snapshot-factory)]
+    (binding [r/*memo* (HashMap.)]
+      (let [tree (normalize-query (:tables this) from-subquery)
+            projection (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
+                            (first)
+                            (mapv plan/unqualified-projection-symbol)
+                            (plan/generate-unique-column-names))
+            {:keys [errs plan]} (plan/plan-query tree {:decorrelate? true
+                                                       :project-anonymous-columns? true})
+            column->anonymous-col (:column->name (meta plan))]
+        (if-let [err (first errs)]
+          (throw (IllegalArgumentException. ^String err))
+          (vec (for [row (op/query-ra plan {'$ db})]
+                 (mapv #(-> (get column->anonymous-col %) name keyword row) projection))))))))
+
+(defn insert->docs [{:keys [tables] :as node} insert-statement]
+  (let [[_ _ _ insertion-target insert-columns-and-source] insert-statement
+        table (first (filter string? (flatten insertion-target)))
+        from-subquery insert-columns-and-source
+        from-subquery-results (execute-query-expression node (last from-subquery))
+        columns (if (= 1 (count (rest from-subquery)))
+                  (get tables table)
+                  (let [insert-column-list (second from-subquery)]
+                    (->> (flatten insert-column-list)
+                         (filter string?))))]
+    (for [row from-subquery-results]
+      (into {:_table table} (zipmap (map keyword columns) row)))))
+
+(defn- insert-statement [node insert-statement]
+  (-> (c2/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
+                                [:put (merge {:_id (UUID/randomUUID)} doc)])))
+      (tu/then-await-tx node))
+  node)
+
+(defn skip-statement? [^String x]
+  (boolean (re-find #"(?is)^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(\w+)\s+ON\s+(\w+)\s*\((.+)\)\s*$" x)))
+
+(defn- execute-statement [node direct-sql-data-statement]
+  (binding [r/*memo* (HashMap.)]
+    (case (first direct-sql-data-statement)
+      :insert_statement (insert-statement node direct-sql-data-statement))))
+
+
 (defn parse-create-table [^String x]
   (when-let [[_ table-name columns] (re-find #"(?is)^\s*CREATE\s+TABLE\s+(\w+)\s*\((.+)\)\s*$" x)]
     {:type :create-table
@@ -199,21 +214,7 @@
 
   (execute-query [this query]
     (let [edited-query (preprocess-query query)
-          tree (p/parse edited-query :query_expression)
-          snapshot-factory (tu/component this ::snap/snapshot-factory)
-          db (snap/snapshot snapshot-factory)]
+          tree (p/parse edited-query :query_expression)]
       (when (p/failure? tree)
         (throw (IllegalArgumentException. (p/failure->str tree))))
-      (binding [r/*memo* (HashMap.)]
-        (let [tree (normalize-query (:tables this) tree)
-              projection   (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
-                                (first)
-                                (mapv plan/unqualified-projection-symbol)
-                                (plan/generate-unique-column-names))
-              {:keys [errs plan]} (plan/plan-query tree {:decorrelate? true
-                                                         :project-anonymous-columns? true})
-              column->anonymous-col (:column->name (meta plan))]
-          (if-let [err (first errs)]
-            (throw (IllegalArgumentException. ^String err))
-            (vec (for [row (op/query-ra plan {'$ db})]
-                   (mapv #(-> (get column->anonymous-col %) name keyword row) projection)))))))))
+      (execute-query-expression this tree))))
