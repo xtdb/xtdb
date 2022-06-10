@@ -1,4 +1,4 @@
-{:paths ["src" "target/classes"]
+{:paths ["src" "resources" "target/classes"]
 
  :deps {org.clojure/clojure {:mvn/version "1.11.1"}
         com.xtdb.labs/core2-api {:local/root "../api"}

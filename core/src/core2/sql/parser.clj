@@ -226,7 +226,7 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
      (dotimes [_ 1000]
        (spec-parser in)))))
 
-(def sql-cfg (read-string (slurp (io/resource "core2/sql/SQL2011.edn"))))
+(def sql-cfg (read-string (slurp (io/resource "core2/sql/parser/SQL2011.edn"))))
 
 (def sql-parser (build-ebnf-parser sql-cfg
                                    #"(?:\s+|(?<=\p{Punct}|\s)|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
