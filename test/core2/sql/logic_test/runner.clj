@@ -209,7 +209,7 @@
 
 (defmethod execute-record :query [{:keys [db-engine max-result-set-size script-mode] :as ctx}
                                   {:keys [query type-string sort-mode line
-                                          result-set result-set-md5sum]
+                                          result-set result-set-md5sum file]
                                    :as record}]
   (if (skip-record? (get-engine-name db-engine) record)
     (do (when (= :completion script-mode)
@@ -226,7 +226,9 @@
       (let [report-success #(update-in ctx [:results :success] (fnil inc 0))
             report-failure (fn [expected actual]
                              (log/warn
-                               (format "Failure\n<Line>\n%s\n\n<Query>\n%s\n\n<Expected>\n%s\n<Actual>\n%s\n" line query expected actual))
+                               (format
+                                 "Failure\n<File>\n%s\n\n<Line>\n%s\n\n<Query>\n%s\n\n<Expected>\n%s\n\n<Actual>\n%s\n\n"
+                                 file line query expected actual))
                              (update-in ctx [:results :failure] (fnil inc 0)))
             updated-ctx (if result-set-md5sum
                           (if (= result-set-md5sum (md5 result-str))
