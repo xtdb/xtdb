@@ -10,8 +10,6 @@
         com.xtdb.labs/core2-jdbc {:local/root "modules/jdbc"}
         com.xtdb.labs/core2-bench {:local/root "modules/bench"}
 
-        instaparse/instaparse {:mvn/version "1.4.11"}
-
         integrant/repl {:mvn/version "0.3.2"}
         org.slf4j/slf4j-api {:mvn/version "1.7.36"}
         ch.qos.logback/logback-classic {:mvn/version "1.2.10"}

@@ -25,8 +25,7 @@
                  :alias :build
                  :fn build/prep}
 
- :aliases {:dev {:extra-paths ["dev"]
-                 :deps {instaparse/instaparse {:mvn/version "1.4.11"}}}
+ :aliases {:dev {:extra-paths ["dev"]}
 
            :build {:deps {io.github.clojure/tools.build {:git/tag "v0.7.7" :git/sha "1474ad6"}}
                    :extra-paths ["dev"]
