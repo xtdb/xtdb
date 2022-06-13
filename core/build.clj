@@ -4,8 +4,6 @@
 (def basis (b/create-basis {:project "deps.edn"}))
 
 (defn prep [_opts]
-  (b/process {:command-args ["clojure" "-M:generate-sql-parser"]})
-
   (b/javac {:basis basis
             :src-dirs ["src"]
             :javac-opts ["-source" "11" "-target" "11"
