@@ -280,10 +280,7 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (->MergedIndexSnapshot (-> (db/open-index-snapshot base-index-store)
-                               (->CappedIndexSnapshot valid-time tx-id))
-                           (db/open-index-snapshot delta-index-store)
-                           @!evicted-eids))
+    (throw (IllegalStateException. "Can't open snapshot against non-tx")))
 
   status/Status
   (status-map [_]

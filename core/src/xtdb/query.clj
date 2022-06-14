@@ -2116,13 +2116,13 @@
 
           conformed-tx-ops (map txc/conform-tx-op tx-ops)
 
-          in-flight-tx (db/begin-tx (assoc tx-indexer :bus (reify xtdb.bus/EventSink
-                                                             (send [_ _])))
-                                    tx)
+          forked-index-store-tx (db/begin-index-tx forked-index-store tx)
 
-          in-flight-tx (-> in-flight-tx
-                           (assoc :index-store-tx (db/begin-index-tx forked-index-store tx))
-                           (update :db-provider merge {:index-store forked-index-store}))
+          in-flight-tx (-> (db/begin-tx (assoc tx-indexer :bus (reify xtdb.bus/EventSink
+                                                                 (send [_ _])))
+                                        tx)
+                           (assoc :index-store-tx forked-index-store-tx)
+                           (update :db-provider merge {:index-store forked-index-store-tx}))
 
           docs (->> conformed-tx-ops
                     (into {} (comp (mapcat :docs)
