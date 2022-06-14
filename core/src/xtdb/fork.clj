@@ -228,7 +228,7 @@
 (defn begin-document-store-tx [doc-store]
   (->ForkedDocumentStore doc-store (atom {})))
 
-(defrecord ForkedKvIndexStoreTx [base-index-store, delta-index-store, valid-time, tx-id, index-store-tx !evicted-eids]
+(defrecord ForkedKvIndexStoreTx [base-index-store, delta-index-store, valid-time, tx-id, !evicted-eids, index-store-tx]
   db/IndexStoreTx
   (index-docs [_ docs]
     (db/index-docs index-store-tx docs))
@@ -255,11 +255,11 @@
                            @!evicted-eids)))
 
 
-(defrecord ForkedIndexStore [base-index-store, delta-index-store, valid-time, tx-id, !evicted-eids]
+(defrecord ForkedIndexStore [base-index-store, delta-index-store, valid-time, tx-id]
   db/IndexStore
   (begin-index-tx [_ tx]
     (let [index-store-tx (db/begin-index-tx delta-index-store tx)]
-      (->ForkedKvIndexStoreTx base-index-store, delta-index-store, valid-time, tx-id, index-store-tx !evicted-eids)))
+      (->ForkedKvIndexStoreTx base-index-store, delta-index-store, valid-time, tx-id, (atom #{}), index-store-tx)))
 
   (store-index-meta [_ k v]
     (db/store-index-meta delta-index-store k v))
@@ -296,4 +296,4 @@
                                                          :cav-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
                                                          :canonical-buffer-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
                                                          :stats-kvs-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})})]
-    (->ForkedIndexStore index-store delta-index-store valid-time, tx-id, (atom #{}))))
+    (->ForkedIndexStore index-store delta-index-store valid-time, tx-id)))
