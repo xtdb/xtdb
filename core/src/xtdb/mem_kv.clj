@@ -69,32 +69,21 @@
   Closeable
   (close [_]))
 
-(defrecord MemKvTx [!db !db2]
-  kv/KvStoreTx
-  (new-tx-snapshot [_]
-    (->MemKvSnapshot @!db2))
-
-  (put-kv [_ k v]
-    (swap! !db2 (fn [db]
-                 (let [k-buf (mem/as-buffer k)]
-                   (if v
-                     (assoc db (mem/copy-to-unpooled-buffer k-buf) (mem/copy-to-unpooled-buffer (mem/as-buffer v)))
-                     (dissoc db k-buf))))))
-
-  (commit-kv-tx [_]
-    (reset! !db @!db2))
-
-  Closeable
-  (close [_]))
-
 (defrecord MemKv [!db db-dir cp-job]
-  kv/KvStoreWithReadTransaction
-  (begin-kv-tx [_]
-    (->MemKvTx !db (atom @!db)))
-
   kv/KvStore
   (new-snapshot [_]
     (MemKvSnapshot. @!db))
+
+  (store [_ kvs]
+    (swap! !db (fn [db]
+                 (reduce (fn [db [k v]]
+                           (let [k-buf (mem/as-buffer k)]
+                             (if v
+                               (assoc db (mem/copy-to-unpooled-buffer k-buf) (mem/copy-to-unpooled-buffer (mem/as-buffer v)))
+                               (dissoc db k-buf))))
+                         db
+                         kvs)))
+    nil)
 
   (compact [_])
 

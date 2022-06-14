@@ -347,13 +347,10 @@
               (throw (IndexVersionOutOfSyncException.
                       (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))))
 
-        (do
-          (with-open [kv-tx (kv/begin-kv-tx kv-store)]
-            (kv/put-kv kv-tx
-                       (encode-index-version-key-to nil)
-                       (encode-index-version-value-to nil c/index-version))
-            (kv/commit-kv-tx kv-tx))
-          (kv/fsync kv-store)))))
+        (doto kv-store
+          (kv/store [[(encode-index-version-key-to nil)
+                      (encode-index-version-value-to nil c/index-version)]])
+          (kv/fsync)))))
 
 ;; Meta
 
@@ -1134,16 +1131,18 @@
                                        (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache (atom {}))
         delta-snapshot (reify db/IndexSnapshotFactory
                          (open-index-snapshot [_]
-                           (new-kv-index-snapshot (kv/new-snapshot transient-kv) true thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))))]
-    (fork/->ForkedKvIndexStoreTx index-store delta-snapshot nil (::xt/tx-id tx) (atom #{}) transient-tx)))
+                           (new-kv-index-snapshot (kv/new-snapshot transient-kv) true thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))))
+        forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store delta-snapshot transient-kv nil (::xt/tx-id tx) (atom #{}) transient-tx)]
+    [forked-index-store-tx transient-kv-tx]))
 
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStore
   (begin-index-tx [this tx]
     (let [{::xt/keys [tx-id tx-time]} tx
-          {:keys [kv-tx] :as index-store-tx}
+          [index-store-tx kv-tx]
           (if (satisfies? kv/KvStoreWithReadTransaction kv-store)
-            (->KvIndexStoreTx kv-store (kv/begin-kv-tx kv-store) tx thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache (atom {}))
+            (let [index-store-tx (->KvIndexStoreTx kv-store (kv/begin-kv-tx kv-store) tx thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache (atom {}))]
+              [index-store-tx (:kv-tx index-store-tx)])
             (forked-index-tx this tx))]
       (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)
       index-store-tx))
@@ -1152,12 +1151,8 @@
     (store-meta kv-store k v))
 
   (index-stats [_ docs]
-    (with-open [kv-tx (kv/begin-kv-tx kv-store)]
-      (let [stats-kvs (when (seq docs)
-                        (stats-kvs stats-kvs-cache kv-store (vals docs)))]
-        (doseq [[k v] stats-kvs]
-          (kv/put-kv kv-tx k v)))
-      (kv/commit-kv-tx kv-tx)))
+    (when (seq docs)
+      (kv/store kv-store (stats-kvs stats-kvs-cache kv-store (vals docs)))))
 
   (tx-failed? [_ tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]

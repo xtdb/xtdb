@@ -106,6 +106,14 @@
                            (.setSnapshot snapshot))
                          snapshot)))
 
+  (store [_ kvs]
+    (with-open [wb (WriteBatch.)]
+      (doseq [[k v] kvs]
+        (if v
+          (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
+          (.remove wb (mem/direct-byte-buffer k))))
+      (.write db write-options wb)))
+
   (compact [_]
     (.compactRange db))
 

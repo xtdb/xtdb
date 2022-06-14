@@ -67,6 +67,10 @@
   (new-snapshot ^java.io.Closeable [this]
     (->MutableKvSnapshot db))
 
+  (store [this kvs]
+    (doseq [[k v] kvs]
+      (.put db (mem/as-buffer k) (some-> v mem/as-buffer))))
+
   (fsync [_])
   (compact [_])
   (count-keys [_] (count db))

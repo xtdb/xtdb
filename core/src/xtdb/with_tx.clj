@@ -6,9 +6,10 @@
             [xtdb.cache]))
 
 (defn ->forked-index-store-tx [index-store, valid-time, tx-id, tx]
-  (let [delta-index-store (index-store/->kv-index-store {:kv-store (mut-kv/->mutable-kv-store)
+  (let [transient-kv (mut-kv/->mutable-kv-store)
+        delta-index-store (index-store/->kv-index-store {:kv-store transient-kv
                                                          :cav-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
                                                          :canonical-buffer-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
                                                          :stats-kvs-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})})
         delta-index-store-tx (db/begin-index-tx delta-index-store tx)]
-    (fork/->ForkedKvIndexStoreTx index-store, delta-index-store, valid-time, tx-id, (atom #{}), delta-index-store-tx)))
+    (fork/->ForkedKvIndexStoreTx index-store, delta-index-store, transient-kv, valid-time, tx-id, (atom #{}), delta-index-store-tx)))

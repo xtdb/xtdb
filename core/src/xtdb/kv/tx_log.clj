@@ -46,13 +46,10 @@
           tx-id (inc (or (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id) -1))
           next-tx {::xt/tx-id tx-id, ::xt/tx-time tx-time}]
 
-      (with-open [kv-tx (kv/begin-kv-tx kv-store)]
-        (doseq [[k v] [[(encode-tx-event-key-to nil next-tx)
+      (kv/store kv-store [[(encode-tx-event-key-to nil next-tx)
                            (mem/->nippy-buffer {:xtdb.tx.event/tx-events tx-events
                                                 ::xt/submit-tx-opts opts})]
-                          (kvi/meta-kv :crux.kv-tx-log/latest-submitted-tx-id tx-id)]]
-          (kv/put-kv kv-tx k v))
-        (kv/commit-kv-tx kv-tx))
+                          (kvi/meta-kv :crux.kv-tx-log/latest-submitted-tx-id tx-id)])
 
       (when fsync?
         (kv/fsync kv-store))
