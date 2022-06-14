@@ -100,7 +100,8 @@
   (with-open [group-mapping (tu/->mono-vec "gm" (map int [0 0 0]))
               v0 (tu/->mono-vec "v" [1 2 3])
               v1 (tu/->duv "v" [1 2.0 3])]
-    (let [sum-factory (group-by/->aggregate-factory :sum "v" [:union #{:i64 :f64}] "vsum")
+    (let [sum-factory (group-by/->aggregate-factory {:f :sum, :from-name 'v, :from-type [:union #{:i64 :f64}]
+                                                     :to-name 'vsum, :zero-row? true})
           sum-spec (.build sum-factory tu/*allocator*)]
       (try
         (t/is (= [:union #{:null :f64}] (.getToColumnType sum-factory)))
@@ -111,13 +112,94 @@
         (finally
           (util/try-close sum-spec))))))
 
+(t/deftest test-count-empty-null-behaviour
+  (t/is (= [{:n 0}]
+           (op/query-ra '[:group-by [{n (count a)}]
+                          [::tu/blocks {a [:union #{:null :i64}]}
+                           []]])))
+
+  (t/is (= [{:n 0}]
+           (op/query-ra '[:group-by [{n (count a)}]
+                          [::tu/blocks {a [:union #{:null :i64}]}
+                           [[{:a nil}]]]])))
+
+  (t/is (= [{:n 1}]
+           (op/query-ra '[:group-by [{n (count a)}]
+                          [::tu/blocks {a [:union #{:null :i64}]}
+                           [[{:a nil}
+                             {:a 1}]]]])))
+
+  (t/is (= [{:a 1, :n 0}, {:a 2, :n 1}]
+           (op/query-ra '[:group-by [a {n (count b)}]
+                          [::tu/blocks {a :i64, b [:union #{:null :i64}]}
+                           [[{:a 1, :b nil}
+                             {:a 2, :b 1}
+                             {:a 2, :b nil}]]]])))
+
+  (t/is (= []
+           (op/query-ra '[:group-by [a {bs (count b)}]
+                          [::tu/blocks {a :i64, b [:union #{:null :i64}]}
+                           []]]))
+        "empty if there's a grouping key"))
+
+(t/deftest test-sum-empty-null-behaviour
+  (t/is (= [{:n nil}]
+           (op/query-ra '[:group-by [{n (sum a)}]
+                          [:table []]]))
+        "sum empty returns null")
+
+  (t/is (= []
+           (op/query-ra '[:group-by [b {n (sum a)}]
+                          [:table []]]))
+        "sum empty returns empty when there are groups")
+
+  (t/is (= [{:n nil}]
+           (op/query-ra '[:group-by [{n (sum a)}]
+                          [:table [{:a nil}]]]))
+        "sum all nulls returns null")
+
+  (t/testing "summed group all null"
+    (t/is (= [{:a 42, :n nil}]
+             (op/query-ra '[:group-by [a {n (sum b)}]
+                            [:table [{:a 42, :b nil}]]])))
+
+    (t/is (= [{:a 42, :n nil} {:a 45, :n 1}]
+             (op/query-ra '[:group-by [a {n (sum b)}]
+                            [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
+
+(t/deftest test-min-of-empty-rel-returns-nil
+  (t/is (= [{:n nil}]
+           (op/query-ra '[:group-by [{n (min a)}]
+                          [:table []]]))
+        "min empty returns null")
+
+  (t/is (= []
+           (op/query-ra '[:group-by [b {n (min a)}]
+                          [:table []]]))
+        "min empty returns empty when there are groups")
+
+  (t/is (= [{:n nil}]
+           (op/query-ra '[:group-by [{n (min a)}]
+                          [:table [{:a nil}]]]))
+        "min all nulls returns null")
+
+  (t/testing "min'd group all null"
+    (t/is (= [{:a 42, :n nil}]
+             (op/query-ra '[:group-by [a {n (min b)}]
+                            [:table [{:a 42, :b nil}]]])))
+
+    (t/is (= [{:a 42, :n nil} {:a 45, :n 1}]
+             (op/query-ra '[:group-by [a {n (min b)}]
+                            [:table [{:a 42, :b nil} {:a 45, :b 1}]]])))))
+
 (t/deftest test-array-agg
   (with-open [gm0 (tu/->mono-vec "gm0" (map int [0 1 0]))
               k0 (tu/->mono-vec "k" [1 2 3])
 
               gm1 (tu/->mono-vec "gm1" (map int [1 2 0]))
               k1 (tu/->mono-vec "k" [4 5 6])]
-    (let [agg-factory (group-by/->aggregate-factory :array-agg "k" :i64 "vs")
+    (let [agg-factory (group-by/->aggregate-factory {:f :array-agg, :from-name 'k, :from-type :i64
+                                                     :to-name 'vs, :zero-row? true})
           agg-spec (.build agg-factory tu/*allocator*)]
       (try
         (t/is (= [:list :i64] (.getToColumnType agg-factory)))
@@ -132,8 +214,8 @@
   (t/is (= {:res #{{:k "t", :all-vs true, :any-vs true}
                    {:k "f", :all-vs false, :any-vs false}
                    {:k "n", :all-vs nil, :any-vs nil}
-                   {:k "fn", :all-vs false, :any-vs nil}
-                   {:k "tn", :all-vs nil, :any-vs true}
+                   {:k "fn", :all-vs false, :any-vs false}
+                   {:k "tn", :all-vs true, :any-vs true}
                    {:k "tf", :all-vs false, :any-vs true}
                    {:k "tfn", :all-vs false, :any-vs true}}
             :col-types '{k :utf8, all-vs [:union #{:null :bool}], any-vs [:union #{:null :bool}]}}
@@ -147,7 +229,17 @@
                                 {:k "tf", :v true} {:k "tf", :v false} {:k "tf", :v true}
                                 {:k "tfn", :v true} {:k "tfn", :v false} {:k "tfn", :v nil}]]]])
                (tu/raising-col-types)
-               (update :res set)))))
+               (update :res set))))
+
+  (t/is (= []
+           (op/query-ra [:group-by '[k {all-vs (all v)} {any-vs (any v)}]
+                         [::tu/blocks '{k :utf8, v [:union #{:bool :null}]}
+                          []]])))
+
+  (t/is (= [{:all-vs nil, :any-vs nil}]
+           (op/query-ra [:group-by '[{all-vs (all v)} {any-vs (any v)}]
+                         [::tu/blocks '{v [:union #{:bool :null}]}
+                          []]]))))
 
 (t/deftest test-distinct
   (t/is (= {:res #{{:k :a,
@@ -204,24 +296,3 @@
                                        {:a nil, :b 1, :c 43}]]])
                (tu/raising-col-types)
                (update :res set)))))
-
-(t/deftest test-min-of-empty-rel-returns-nil
-  (t/is (= [{:a nil}] (op/query-ra '[:group-by [{a (min b)}] [:select false [:table [{:b 0}]]]] {}))))
-
-(t/deftest test-count-of-empty-rel-returns-zero
-  (t/is (= [{:a 0}] (op/query-ra '[:group-by [{a (count b)}] [:select false [:table [{:b 0}]]]] {}))))
-
-(t/deftest test-sum-empty-returns-null
-  (t/is (= [{:n nil}]  (op/query-ra '[:group-by [{n (sum a)}] [:table []]] {}))))
-
-(t/deftest test-no-groups-sum-empty-returns-empty
-  (t/is (= [] (op/query-ra '[:group-by [b {n (sum a)}] [:table []]] {}))))
-
-;; FIXME least-upper-bound https://github.com/xtdb/core2/issues/192
-#_#_
-(t/deftest test-sum-all-nulls-returns-null
-  (t/is (= [{:n nil}]  (op/query-ra '[:group-by [{n (sum a)}] [:table [{:a nil}]]] {}))))
-
-(t/deftest test-summed-group-all-null
-  (t/is (= [{:a 42, :n nil}] (op/query-ra '[:group-by [a {n (sum b)}] [:table [{:a 42, :b nil}]]] {})))
-  (t/is (= [{:a 42, :n nil} {:a 45, :b 1}] (op/query-ra '[:group-by [a {n (sum b)}] [:table [{:a 42, :b nil} {:a 45, :b 1}]]] {}))))

@@ -283,19 +283,19 @@
   (when-not (or (contains? col-preds "_valid-time-start")
                 (contains? col-preds "_valid-time-end"))
     (expr.temp/apply-constraint temporal-min-range temporal-max-range
-                                '<= "_valid-time-start" default-valid-time)
+                                :<= "_valid-time-start" default-valid-time)
     (expr.temp/apply-constraint temporal-min-range temporal-max-range
-                                '> "_valid-time-end" default-valid-time)))
+                                :> "_valid-time-end" default-valid-time)))
 
 (defn- apply-snapshot-tx! [[^longs temporal-min-range, ^longs temporal-max-range], ^Snapshot snapshot, col-preds]
   (when-let [tx-time (.tx-time ^TransactionInstant (.tx snapshot))]
     (expr.temp/apply-constraint temporal-min-range temporal-max-range
-                                '<= "_tx-time-start" tx-time)
+                                :<= "_tx-time-start" tx-time)
 
     (when-not (or (contains? col-preds "_tx-time-start")
                   (contains? col-preds "_tx-time-end"))
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
-                                  '> "_tx-time-end" tx-time))))
+                                  :> "_tx-time-end" tx-time))))
 
 (defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [scan-col-types param-types]}]
   (let [src-key (or source '$)

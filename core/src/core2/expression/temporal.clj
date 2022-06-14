@@ -261,14 +261,14 @@
   (let [range-idx (temporal/->temporal-column-idx col-name)
         time-μs (util/instant->micros time)]
     (case f
-      < (aset max-range range-idx (min (dec time-μs)
-                                       (aget max-range range-idx)))
-      <= (aset max-range range-idx (min time-μs
+      :< (aset max-range range-idx (min (dec time-μs)
                                         (aget max-range range-idx)))
-      > (aset min-range range-idx (max (inc time-μs)
-                                       (aget min-range range-idx)))
-      >= (aset min-range range-idx (max time-μs
+      :<= (aset max-range range-idx (min time-μs
+                                         (aget max-range range-idx)))
+      :> (aset min-range range-idx (max (inc time-μs)
                                         (aget min-range range-idx)))
+      :>= (aset min-range range-idx (max time-μs
+                                         (aget min-range range-idx)))
       nil)))
 
 (defn ->temporal-min-max-range [selects params]
@@ -285,7 +285,7 @@
            (ewalk/prewalk-expr
             (fn [{:keys [op] :as expr}]
               (case op
-                :call (when (not= 'or (:f expr))
+                :call (when (not= :or (:f expr))
                         expr)
 
                 :metadata-vp-call

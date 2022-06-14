@@ -24,8 +24,8 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector BigIntVector BitVector DurationVector IntVector IntervalDayVector IntervalYearVector NullVector PeriodDuration ValueVector)
            (org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector ListVector StructVector)
-           (org.apache.arrow.vector.types FloatingPointPrecision Types)
-           (org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList ArrowType$FloatingPoint ArrowType$Int ArrowType$List ArrowType$Union Field FieldType)
+           (org.apache.arrow.vector.types Types)
+           (org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList ArrowType$List ArrowType$Union Field FieldType)
            (org.apache.commons.codec.binary Hex)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -149,7 +149,9 @@
    :cast-type cast-type})
 
 (defmethod parse-list-form ::default [[f & args] env]
-  {:op :call, :f f, :args (mapv #(form->expr % env) args)})
+  {:op :call
+   :f (keyword (namespace f) (name f))
+   :args (mapv #(form->expr % env) args)})
 
 (defn with-tag [sym tag]
   (-> sym
@@ -481,7 +483,7 @@
     * `:->call-code` (fn [emitted-args])"
 
   (fn [{:keys [f arg-types]}]
-    (vec (cons (keyword (name f))
+    (vec (cons (keyword (namespace f) (name f))
                (map types/col-type-head arg-types))))
 
   :hierarchy #'types/col-type-hierarchy)
@@ -678,25 +680,25 @@
     (map #(list arg-cast %) emitted-args)))
 
 (defmethod codegen-mono-call [:+ :int :int] [{:keys [arg-types]}]
-  (let [return-type (types/least-upper-bound* arg-types)]
+  (let [return-type (types/least-upper-bound arg-types)]
     {:return-type return-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-type)
                           `(Math/addExact ~@(with-math-integer-cast return-type emitted-args))))}))
 
 (defmethod codegen-mono-call [:+ :num :num] [{:keys [arg-types]}]
-  {:return-type (types/least-upper-bound* arg-types)
+  {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(+ ~@%))})
 
 (defmethod codegen-mono-call [:- :int :int] [{:keys [arg-types]}]
-  (let [return-type (types/least-upper-bound* arg-types)]
+  (let [return-type (types/least-upper-bound arg-types)]
     {:return-type return-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-type)
                           `(Math/subtractExact ~@(with-math-integer-cast return-type emitted-args))))}))
 
 (defmethod codegen-mono-call [:- :num :num] [{:keys [arg-types]}]
-  {:return-type (types/least-upper-bound* arg-types)
+  {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(- ~@%))})
 
 (defmethod codegen-mono-call [:- :num] [{[x-type] :arg-types}]
@@ -710,35 +712,35 @@
    :->call-code #(do `(- ~@%))})
 
 (defmethod codegen-mono-call [:* :int :int] [{:keys [arg-types]}]
-  (let [return-type (types/least-upper-bound* arg-types)]
+  (let [return-type (types/least-upper-bound arg-types)]
     {:return-type return-type
      :->call-code (fn [emitted-args]
                     (list (type->cast return-type)
                           `(Math/multiplyExact ~@(with-math-integer-cast return-type emitted-args))))}))
 
 (defmethod codegen-mono-call [:* :num :num] [{:keys [arg-types]}]
-  {:return-type (types/least-upper-bound* arg-types)
+  {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(* ~@%))})
 
 (defmethod codegen-mono-call [:mod :num :num] [{:keys [arg-types]}]
-  {:return-type (types/least-upper-bound* arg-types)
+  {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(mod ~@%))})
 
 (defmethod codegen-mono-call [:/ :int :int] [{:keys [arg-types]}]
-  {:return-type (types/least-upper-bound* arg-types)
+  {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(quot ~@%))})
 
 (defmethod codegen-mono-call [:/ :num :num] [{:keys [arg-types]}]
-  {:return-type (types/least-upper-bound* arg-types)
+  {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(/ ~@%))})
 
 ;; TODO extend min/max to non-numeric
 (defmethod codegen-mono-call [:max :num :num] [{:keys [arg-types]}]
-  {:return-type (types/least-upper-bound* arg-types)
+  {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(Math/max ~@%))})
 
 (defmethod codegen-mono-call [:min :num :num] [{:keys [arg-types]}]
-  {:return-type (types/least-upper-bound* arg-types)
+  {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(Math/min ~@%))})
 
 (defmethod codegen-mono-call [:power :num :num] [_]

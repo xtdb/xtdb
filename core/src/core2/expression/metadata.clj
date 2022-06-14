@@ -19,7 +19,7 @@
 (defn- simplify-and-or-expr [{:keys [f args] :as expr}]
   (let [args (filterv some? args)]
     (case (count args)
-      0 {:op :literal, :literal (case f and true, or false)}
+      0 {:op :literal, :literal (case f :and true, :or false)}
       1 (first args)
       (-> expr (assoc :args args)))))
 
@@ -34,7 +34,7 @@
            :else (meta-fallback-expr else)})
     :call (let [{:keys [f args]} expr]
             (-> {:op :call
-                 :f (if (= f 'or) 'or 'and)
+                 :f (if (= f :or) :or :and)
                  :args (map meta-fallback-expr args)}
                 simplify-and-or-expr))))
 
@@ -44,7 +44,7 @@
   (letfn [(var-param-expr [f meta-value field {:keys [param-type] :as param-expr}]
             (simplify-and-or-expr
              {:op :call
-              :f 'or
+              :f :or
               ;; TODO this seems like it could make better use
               ;; of the polymorphic expr patterns?
               :args (vec (for [col-type (if (isa? types/col-type-hierarchy param-type :num)
@@ -71,24 +71,24 @@
                 nil)))]
 
     (or (case f
-          and (-> {:op :call, :f 'and, :args (map meta-expr args)}
+          :and (-> {:op :call, :f :and, :args (map meta-expr args)}
+                   simplify-and-or-expr)
+          :or (-> {:op :call, :f :or, :args (map meta-expr args)}
                   simplify-and-or-expr)
-          or (-> {:op :call, :f 'or, :args (map meta-expr args)}
-                 simplify-and-or-expr)
-          < (bool-expr '< :min, '> :max)
-          <= (bool-expr '<= :min, '>= :max)
-          > (bool-expr '> :max, '< :min)
-          >= (bool-expr '>= :max, '<= :min)
-          = (-> {:op :call
-                 :f 'and
-                 :args (->> [(meta-expr {:op :call,
-                                         :f 'and,
-                                         :args [{:op :call, :f '<=, :args args}
-                                                {:op :call, :f '>=, :args args}]})
+          :< (bool-expr :< :min, :> :max)
+          :<= (bool-expr :<= :min, :>= :max)
+          :> (bool-expr :> :max, :< :min)
+          :>= (bool-expr :>= :max, :<= :min)
+          := (-> {:op :call
+                  :f :and
+                  :args (->> [(meta-expr {:op :call,
+                                          :f :and,
+                                          :args [{:op :call, :f :<=, :args args}
+                                                 {:op :call, :f :>=, :args args}]})
 
-                             (bool-expr nil :bloom-filter, nil :bloom-filter)]
-                            (filterv some?))}
-                simplify-and-or-expr)
+                              (bool-expr nil :bloom-filter, nil :bloom-filter)]
+                             (filterv some?))}
+                 simplify-and-or-expr)
           nil)
 
         (meta-fallback-expr expr))))
@@ -98,10 +98,10 @@
     (:literal :param :let) nil
     :variable (meta-fallback-expr expr)
     :if {:op :call
-         :f 'and
+         :f :and
          :args [(meta-fallback-expr (:pred expr))
                 (-> {:op :call
-                     :f 'or
+                     :f :or
                      :args [(meta-expr (:then expr))
                             (meta-expr (:else expr))]}
                     simplify-and-or-expr)]}

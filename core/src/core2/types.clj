@@ -404,50 +404,6 @@
     (get-object (.getVectorByType this (.getTypeId this idx))
                 (.getOffset this idx))))
 
-(def arrow-type-hierarchy
-  (-> (make-hierarchy)
-      (derive ArrowType$FloatingPoint ::Number)
-      (derive ArrowType$Int ::Number)
-      (derive ArrowType ::Object)
-      (derive ::Number ::Object)))
-
-(defmulti least-upper-bound2
-  (fn [x-type y-type] [(class x-type) (class y-type)])
-  :hierarchy #'arrow-type-hierarchy)
-
-(defmethod least-upper-bound2 [ArrowType$Int ArrowType$Int]
-  [^ArrowType$Int x-type, ^ArrowType$Int y-type]
-  (assert (and (.getIsSigned x-type) (.getIsSigned y-type)))
-
-  (ArrowType$Int. (max (.getBitWidth x-type) (.getBitWidth y-type)) true))
-
-(defmethod least-upper-bound2 [ArrowType$Int ArrowType$FloatingPoint]
-  [^ArrowType$Int _x-type, ^ArrowType$FloatingPoint y-type]
-  y-type)
-
-(defmethod least-upper-bound2 [ArrowType$FloatingPoint ArrowType$Int]
-  [^ArrowType$FloatingPoint x-type, ^ArrowType$Int _y-type]
-  x-type)
-
-(defmethod least-upper-bound2 [ArrowType$FloatingPoint ArrowType$FloatingPoint]
-  [^ArrowType$FloatingPoint x-type, ^ArrowType$FloatingPoint y-type]
-  (let [x-precision (.getPrecision x-type)
-        y-precision (.getPrecision y-type)]
-    (ArrowType$FloatingPoint. (if (pos? (compare x-precision y-precision))
-                                x-precision
-                                y-precision))))
-
-(defmethod least-upper-bound2 :default [_ _] ::Object)
-
-(alter-meta! #'least-upper-bound2 assoc :private true)
-
-(defn least-upper-bound [arrow-types]
-  (reduce (fn [lub arrow-type]
-            (if (= lub arrow-type)
-              lub
-              (least-upper-bound2 lub arrow-type)))
-          arrow-types))
-
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 
@@ -762,7 +718,7 @@
 
 ;;; LUB
 
-(defmulti least-upper-bound2*
+(defmulti least-upper-bound2
   (fn [x-type y-type] [(col-type-head x-type) (col-type-head y-type)])
   :hierarchy #'col-type-hierarchy)
 
@@ -772,21 +728,21 @@
       (derive :f32 :f64)
       (derive :int :f64) (derive :int :f32)))
 
-(defmethod least-upper-bound2* [:num :num] [x-type y-type]
+(defmethod least-upper-bound2 [:num :num] [x-type y-type]
   (cond
     (isa? widening-hierarchy x-type y-type) y-type
     (isa? widening-hierarchy y-type x-type) x-type
     :else (throw (IllegalArgumentException. (format "can't LUB: %s ⊔ %s" x-type y-type)))))
 
-(defmethod least-upper-bound2* :default [_ _] :any)
+(defmethod least-upper-bound2 :default [_ _] :any)
 
-(defn least-upper-bound* [col-types]
+(defn least-upper-bound [col-types]
   (reduce (fn
             ([] :null)
             ([lub col-type]
              (if (= lub col-type)
                lub
-               (least-upper-bound2* lub col-type))))
+               (least-upper-bound2 lub col-type))))
           col-types))
 
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
