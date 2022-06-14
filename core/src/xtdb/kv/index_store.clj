@@ -1127,22 +1127,24 @@
 
 ;; TODO check the stats still work, don't see how they would? Would work for rocks, not for LMDB?
 
+(defn- forked-index-tx [{:keys [thread-mgr stats-kvs-cache] :as index-store} tx]
+  (let [transient-kv (mut-kv/->mutable-kv-store)
+        transient-kv-tx (kv/begin-kv-tx transient-kv)
+        transient-tx (->KvIndexStoreTx transient-kv transient-kv-tx tx thread-mgr
+                                       (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache (atom {}))
+        delta-snapshot (reify db/IndexSnapshotFactory
+                         (open-index-snapshot [_]
+                           (new-kv-index-snapshot (kv/new-snapshot transient-kv) true thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))))]
+    (fork/->ForkedKvIndexStoreTx index-store delta-snapshot nil (::xt/tx-id tx) (atom #{}) transient-tx)))
+
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStore
   (begin-index-tx [this tx]
-    (let [{:keys [kv-tx] :as index-store-tx}
+    (let [{::xt/keys [tx-id tx-time]} tx
+          {:keys [kv-tx] :as index-store-tx}
           (if (satisfies? kv/KvStoreWithReadTransaction kv-store)
             (->KvIndexStoreTx kv-store (kv/begin-kv-tx kv-store) tx thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache (atom {}))
-            (let [transient-kv (mut-kv/->mutable-kv-store)
-                  transient-kv-tx (kv/begin-kv-tx transient-kv)
-                  transient-tx (->KvIndexStoreTx transient-kv transient-kv-tx tx thread-mgr
-                                                 (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache (atom {}))
-                  delta-snapshot (reify db/IndexSnapshotFactory
-                                   (open-index-snapshot [_]
-                                     (new-kv-index-snapshot (kv/new-snapshot transient-kv) true thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))))]
-              (fork/->ForkedKvIndexStoreTx this delta-snapshot nil (::xt/tx-id tx) (atom #{}) transient-tx)))
-          {::xt/keys [tx-id tx-time]} tx]
-
+            (forked-index-tx this tx))]
       (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)
       index-store-tx))
 

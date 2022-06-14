@@ -252,39 +252,3 @@
                                (->CappedIndexSnapshot valid-time tx-id))
                            (db/open-index-snapshot delta-snapshot-factory)
                            @!evicted-eids)))
-
-(defrecord ForkedIndexStore [base-index-store, delta-index-store, valid-time, tx-id]
-  db/IndexStore
-  (begin-index-tx [_ tx]
-    (let [index-store-tx (db/begin-index-tx delta-index-store tx)]
-      (->ForkedKvIndexStoreTx base-index-store, delta-index-store, valid-time, tx-id, (atom #{}), index-store-tx)))
-
-  (store-index-meta [_ k v]
-    (db/store-index-meta delta-index-store k v))
-
-  (index-stats [_ docs]
-    (db/index-stats delta-index-store docs))
-
-  (tx-failed? [_ tx-id]
-    (db/tx-failed? delta-index-store tx-id))
-
-  db/LatestCompletedTx
-  (latest-completed-tx [_]
-    (db/latest-completed-tx delta-index-store))
-
-  db/IndexMeta
-  (-read-index-meta [_ k not-found]
-    (db/-read-index-meta delta-index-store k not-found))
-
-  db/IndexSnapshotFactory
-  (open-index-snapshot [_]
-    (throw (IllegalStateException. "Can't open snapshot against non-tx")))
-
-  status/Status
-  (status-map [_]
-    (status/status-map delta-index-store))
-
-  java.io.Closeable
-  (close [_]
-    (xio/try-close base-index-store)
-    (xio/try-close delta-index-store)))
