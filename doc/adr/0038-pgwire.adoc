@@ -18,13 +18,13 @@ There is also the possibility in the future that certain tools that are postgres
 
 === The problem of types
 
-One issue we discover when thinking about pgwire is what to do about the representation of arbitrary unions. That can occur due to the dynamic nature of XTDB, and the (currently) unqualified columns. Unions can be introduced by writing different types to the same attribute (say `id`) or can be introduced by expressions or `UNION` operators in queries.
+One issue we discover when thinking about pgwire is what to do about the representation of arbitrary unions. These can occur due to the dynamic nature of XTDB, With its (currently) unqualified columns, unions can be introduced by writing different types to the same attribute (say `id`) - or can be introduced by expressions or `UNION` operators in queries.
 
 Though many unions, for example numerics will have natural widening available to them to ensure a single type representation - this is not true for arbitrary unions, say the union between a string and a struct and an array.
 
 We have a few options for the representation of such unions
 
-* strings
+* strings / binary
 * json
 * custom pg type
 
@@ -48,8 +48,26 @@ You may be able to override the default string handling of next / java.jdbc and 
 
 If we map to json, the resultant PGObject will have to be interpreted by the user as json, and the value may need to be deserialized. You should be able to extend a `ReadableColumn` or similar protocol to install the parsing / deserialization hook globally.
 
+Luckily, XTDB does not have a JSON type, so we avoid ambiguity with _actual JSON_ columns.
+
 ==== custom type
 
 Similarly, the custom pg type will remove certain ambiguities (e.g we do not overload an existing type), however parsing / deserialization will still be necessary to make sense of values contained within the union.
 
 PGObject must always encode its value as a string, so there will be some performance cost for binary data (e.g to encode / decode from b64). It may make the performant decoding of structures and arrays more costly than on binary.
+
+=== Javascript
+
+The NPM ecosystem includes the `postgres` which speaks the pgwire protocol. This then allows us to talk to XT using this library in JS/TS.
+
+==== json
+
+JSON typed values are deserialized by the library into javascript objects (unsurprisingly), this means you will not be able to tell the difference between objects in a union, and native js objects. This is ideal - JSON being native in javascript makes all the difference.
+
+==== strings
+
+Much like in clojure, you would need tagging to disambiguate from regular strings. using the same custom type mechanism, you can add serialization rules for strings, so you could detect these tags and return the correct js type.
+
+==== custom type
+
+The postgres library provides custom type support that will allow a client library to detect and parse union-ed values using a function installed against that OID when constructing the connection.
