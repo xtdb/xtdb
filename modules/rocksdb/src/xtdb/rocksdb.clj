@@ -94,18 +94,17 @@
     (.close wb)))
 
 (defrecord RocksKv [^RocksDB db, ^WriteOptions write-options, ^Options options, ^Closeable metrics, ^Closeable cp-job, db-dir]
-  kv/KvStore
+  kv/KvStoreWithReadTransaction
+  (begin-kv-tx [_]
+    (->RocksKvTx db write-options (WriteBatchWithIndex.)))
 
-  ;; TODO, expect to move this
+  kv/KvStore
   (new-snapshot [_]
     (let [snapshot (.getSnapshot db)]
       (->RocksKvSnapshot db
                          (doto (ReadOptions.)
                            (.setSnapshot snapshot))
                          snapshot)))
-
-  (begin-kv-tx [_]
-    (->RocksKvTx db write-options (WriteBatchWithIndex.)))
 
   (compact [_]
     (.compactRange db))

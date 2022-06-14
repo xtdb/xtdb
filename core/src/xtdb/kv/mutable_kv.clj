@@ -59,12 +59,13 @@
   (close [_]))
 
 (deftype MutableKvStore [^NavigableMap db]
+  kv/KvStoreWithReadTransaction
+  (begin-kv-tx [_]
+    (->MutableKvTx db))
+
   kv/KvStore
   (new-snapshot ^java.io.Closeable [this]
     (->MutableKvSnapshot db))
-
-  (begin-kv-tx [_]
-    (->MutableKvTx db))
 
   (fsync [_])
   (compact [_])

@@ -88,12 +88,13 @@
   (close [_]))
 
 (defrecord MemKv [!db db-dir cp-job]
+  kv/KvStoreWithReadTransaction
+  (begin-kv-tx [_]
+    (->MemKvTx !db (atom @!db)))
+
   kv/KvStore
   (new-snapshot [_]
     (MemKvSnapshot. @!db))
-
-  (begin-kv-tx [_]
-    (->MemKvTx !db (atom @!db)))
 
   (compact [_])
 

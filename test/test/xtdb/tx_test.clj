@@ -260,8 +260,11 @@
 
 (defn index-tx [tx tx-events docs]
   (let [{:keys [xtdb/tx-indexer xtdb/index-store]} @(:!system *api*)
-        in-flight-tx (db/begin-tx tx-indexer tx nil)]
-    (db/index-tx-events in-flight-tx tx-events docs (db/encode-docs index-store docs))
+        in-flight-tx (db/begin-tx tx-indexer tx)]
+
+    (db/index-tx-docs in-flight-tx docs)
+    (db/index-tx-events in-flight-tx tx-events)
+
     (db/commit in-flight-tx)))
 
 (t/deftest test-handles-legacy-evict-events

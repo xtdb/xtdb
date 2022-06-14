@@ -11,7 +11,6 @@
             [xtdb.api :as xt]
             [xtdb.bus :as bus]
             [xtdb.cache :as cache]
-            [xtdb.fork :as fork]
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.error :as err]
@@ -21,7 +20,8 @@
             [xtdb.pull :as pull]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
-            [xtdb.tx.conform :as txc])
+            [xtdb.tx.conform :as txc]
+            [xtdb.with-tx :as with-tx])
   (:import (clojure.lang Box ExceptionInfo MapEntry)
            (java.io Closeable Writer)
            (java.util Collection Comparator Date HashMap List Map UUID)
@@ -2112,11 +2112,7 @@
                       {::xt/tx-time (Date.)
                        ::xt/tx-id 0}))
 
-          forked-index-store (fork/begin-forked-index-store index-store valid-time tx-id)
-
-          conformed-tx-ops (map txc/conform-tx-op tx-ops)
-
-          forked-index-store-tx (db/begin-index-tx forked-index-store tx)
+          forked-index-store-tx (with-tx/->forked-index-store-tx index-store valid-time tx-id, tx)
 
           in-flight-tx (-> (db/begin-tx (assoc tx-indexer :bus (reify xtdb.bus/EventSink
                                                                  (send [_ _])))
@@ -2124,12 +2120,12 @@
                            (assoc :index-store-tx forked-index-store-tx)
                            (update :db-provider merge {:index-store forked-index-store-tx}))
 
+          conformed-tx-ops (map txc/conform-tx-op tx-ops)
           docs (->> conformed-tx-ops
                     (into {} (comp (mapcat :docs)
                                    (xio/map-vals c/xt->crux))))]
 
       (db/submit-docs in-flight-tx docs)
-
       (let [tx-events (map txc/->tx-event conformed-tx-ops)]
         (db/index-tx-docs in-flight-tx docs)
         (when (db/index-tx-events in-flight-tx tx-events)

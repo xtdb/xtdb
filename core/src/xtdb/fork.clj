@@ -7,8 +7,7 @@
             [xtdb.io :as xio]
             [xtdb.memory :as mem]
             [xtdb.kv.mutable-kv :as mut-kv]
-            [xtdb.cache]
-            [xtdb.kv.index-store :as index-store])
+            [xtdb.cache])
   (:import xtdb.codec.EntityTx
            org.agrona.DirectBuffer
            java.util.Date))
@@ -228,7 +227,7 @@
 (defn begin-document-store-tx [doc-store]
   (->ForkedDocumentStore doc-store (atom {})))
 
-(defrecord ForkedKvIndexStoreTx [base-index-store, delta-index-store, valid-time, tx-id, !evicted-eids, index-store-tx]
+(defrecord ForkedKvIndexStoreTx [base-snapshot-factory, delta-snapshot-factory, valid-time, tx-id, !evicted-eids, index-store-tx]
   db/IndexStoreTx
   (index-docs [_ docs]
     (db/index-docs index-store-tx docs))
@@ -249,11 +248,10 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (->MergedIndexSnapshot (-> (db/open-index-snapshot base-index-store)
+    (->MergedIndexSnapshot (-> (db/open-index-snapshot base-snapshot-factory)
                                (->CappedIndexSnapshot valid-time tx-id))
-                           (db/open-index-snapshot delta-index-store)
+                           (db/open-index-snapshot delta-snapshot-factory)
                            @!evicted-eids)))
-
 
 (defrecord ForkedIndexStore [base-index-store, delta-index-store, valid-time, tx-id]
   db/IndexStore
@@ -290,10 +288,3 @@
   (close [_]
     (xio/try-close base-index-store)
     (xio/try-close delta-index-store)))
-
-(defn begin-forked-index-store [index-store, valid-time, tx-id]
-  (let [delta-index-store (index-store/->kv-index-store {:kv-store (mut-kv/->mutable-kv-store)
-                                                         :cav-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
-                                                         :canonical-buffer-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
-                                                         :stats-kvs-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})})]
-    (->ForkedIndexStore index-store delta-index-store valid-time, tx-id)))

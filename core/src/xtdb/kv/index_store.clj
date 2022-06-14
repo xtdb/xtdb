@@ -13,6 +13,8 @@
             [xtdb.memory :as mem]
             [xtdb.morton :as morton]
             [xtdb.status :as status]
+            [xtdb.kv.mutable-kv :as mut-kv]
+            [xtdb.fork :as fork]
             [xtdb.system :as sys])
   (:import clojure.lang.MapEntry
            java.io.Closeable
@@ -1121,18 +1123,28 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (new-kv-index-snapshot (kv/new-tx-snapshot kv-tx) true thread-mgr
-                           cav-cache canonical-buffer-cache)))
+    (new-kv-index-snapshot (kv/new-tx-snapshot kv-tx) true thread-mgr cav-cache canonical-buffer-cache)))
+
+;; TODO check the stats still work, don't see how they would? Would work for rocks, not for LMDB?
 
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStore
-  (begin-index-tx [_ tx]
-    (let [{::xt/keys [tx-id tx-time]} tx
-          kv-tx (kv/begin-kv-tx kv-store)]
+  (begin-index-tx [this tx]
+    (let [{:keys [kv-tx] :as index-store-tx}
+          (if (satisfies? kv/KvStoreWithReadTransaction kv-store)
+            (->KvIndexStoreTx kv-store (kv/begin-kv-tx kv-store) tx thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache (atom {}))
+            (let [transient-kv (mut-kv/->mutable-kv-store)
+                  transient-kv-tx (kv/begin-kv-tx transient-kv)
+                  transient-tx (->KvIndexStoreTx transient-kv transient-kv-tx tx thread-mgr
+                                                 (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache (atom {}))
+                  delta-snapshot (reify db/IndexSnapshotFactory
+                                   (open-index-snapshot [_]
+                                     (new-kv-index-snapshot (kv/new-snapshot transient-kv) true thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))))]
+              (fork/->ForkedKvIndexStoreTx this delta-snapshot nil (::xt/tx-id tx) (atom #{}) transient-tx)))
+          {::xt/keys [tx-id tx-time]} tx]
+
       (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)
-      (->KvIndexStoreTx kv-store kv-tx tx
-                        thread-mgr
-                        (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache (atom {}))))
+      index-store-tx))
 
   (store-index-meta [_ k v]
     (store-meta kv-store k v))

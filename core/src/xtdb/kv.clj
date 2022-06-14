@@ -28,9 +28,14 @@
   (compact [this])
   (count-keys [this])
   (db-dir [this])
-  (kv-name [this])
-  (begin-kv-tx ^java.io.Closeable [this]))
+  (kv-name [this]))
 ;; end::KvStore[]
+
+(defprotocol KvStoreWithReadTransaction
+  (begin-kv-tx ^java.io.Closeable [this]))
+
+(defprotocol KvStoreBulkWrite
+  (store [this kvs]))
 
 (def args
   {:db-dir {:doc "Directory to store K/V files"
