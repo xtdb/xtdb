@@ -1,0 +1,55 @@
+= 38. pgwire
+
+Date: 2022-06-14
+
+== Status
+
+Proposed
+
+== Context
+
+There is a desire to explore the postgres wire protocol (pgwire) as an early option for communicating with an XTDB node remotely.
+
+By targeting pgwire, we do not have to write client drivers (e.g jdbc, odbc) for different platforms. Existing postgres drivers can talk to XT.
+
+We do not have to design session negotiation, cancellation etc as those are specified by pgwire - though they must be implicated.
+
+There is also the possibility in the future that certain tools that are postgres aware will work with XTDB, e.g IDE's, BI/Analytical tooling. Though this remains a possibility it is in contingent on things we do not yet know the answer to, e.g metadata & discovery, function compatibility layer and so on.
+
+=== The problem of types
+
+One issue we discover when thinking about pgwire is what to do about the representation of arbitrary unions.
+
+Though many unions, for example numerics will have natural widening available to them to ensure a single type representation - this is not true for arbitrary unions, say the union between a string and a struct and an array.
+
+We have a few options for the representation of such unions
+
+* strings
+* json
+* custom pg type
+
+When considering which type is going to be a good fit, we must speculate a bit on how different languages and client toolkits would handle the above representations. We must also look at the problem of ambiguity, and necessity of complicated parsing rules.
+
+It may be possible to limit the impact of such unions on user programs, such as to encourage certain practices, to include type predicates or casts in your queries or views.
+
+The likelyhood of encountering such is also dependent on the representation of tables, e.g if columns are qualified - then it is far less likely than if columns are shared between tables.
+
+=== Clojure
+
+The typical ways to interact with SQL databases from clojure is to use the libraries `clojure.java.jdbc` (older, but still popular) and `next.jdbc` (newer, successor). They both wrap java JDBC, and therefore will work with XTDB via a postgres JDBC driver.
+
+==== strings
+
+If we map to strings, the string would likely need to include a type tag to determine how to parse / interpret it, and how to distinguish a tagged string from a regular string. It might be desirable in such a situation to include an XTDB client library which includes a parser.
+
+You may be able to override the default string handling of next / java.jdbc and include a type-tag check to determine how to interpret the string.
+
+==== json
+
+If we map to json, the resultant PGObject will have to be interpreted by the user as json, and the value may need to be deserialized. You should be able to extend a `ReadableColumn`` or similar protocol to install the parsing / deserialization hook globally.
+
+==== custom type
+
+Similarly, the custom pg type will remove certain ambiguities (e.g we do not overload an existing type), however parsing / deserialization will still be necessary to make sense of values contained within the union.
+
+PGObject must always encode its value as a string, so there will be some performance cost for binary data (e.g to encode / decode from b64). It may make the performant decoding of structures and arrays more costly than on binary.
