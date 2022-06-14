@@ -12,13 +12,13 @@ There is a desire to explore the postgres wire protocol (pgwire) as an early opt
 
 By targeting pgwire, we do not have to write client drivers (e.g jdbc, odbc) for different platforms. Existing postgres drivers can talk to XT.
 
-We do not have to design session negotiation, cancellation etc as those are specified by pgwire - though they must be implicated.
+We do not have to design session negotiation, cancellation etc as those are specified by pgwire - though they must be implemented.
 
 There is also the possibility in the future that certain tools that are postgres aware will work with XTDB, e.g IDE's, BI/Analytical tooling. Though this remains a possibility it is in contingent on things we do not yet know the answer to, e.g metadata & discovery, function compatibility layer and so on.
 
 === The problem of types
 
-One issue we discover when thinking about pgwire is what to do about the representation of arbitrary unions.
+One issue we discover when thinking about pgwire is what to do about the representation of arbitrary unions. That can occur due to the dynamic nature of XTDB, and the (currently) unqualified columns. Unions can be introduced by writing different types to the same attribute (say `id`) or can be introduced by expressions or `UNION` operators in queries.
 
 Though many unions, for example numerics will have natural widening available to them to ensure a single type representation - this is not true for arbitrary unions, say the union between a string and a struct and an array.
 
@@ -46,7 +46,7 @@ You may be able to override the default string handling of next / java.jdbc and 
 
 ==== json
 
-If we map to json, the resultant PGObject will have to be interpreted by the user as json, and the value may need to be deserialized. You should be able to extend a `ReadableColumn`` or similar protocol to install the parsing / deserialization hook globally.
+If we map to json, the resultant PGObject will have to be interpreted by the user as json, and the value may need to be deserialized. You should be able to extend a `ReadableColumn` or similar protocol to install the parsing / deserialization hook globally.
 
 ==== custom type
 
