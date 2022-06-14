@@ -54,7 +54,7 @@
   (maybeResizeCache [this]
     (when-not (.isEmpty hot)
       (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable hot)]
-        (when (< (double (/ (.size hot) (alength table))) downsize-load-factor)
+        (when (< (/ (double (.size hot)) (double (alength table))) downsize-load-factor)
           (set! (.hot this) (doto (ConcurrentHashMap. 0)
                               (.putAll hot)))))))
 
