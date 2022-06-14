@@ -3,8 +3,7 @@
             [clojure.tools.logging :as log]
             [core2.api :as c2])
   (:import [io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable]
-           [java.time Instant Period LocalDate]
-           java.util.Date))
+           [java.time LocalDate]))
 
 (def table->pkey
   {"part" [:p_partkey]
@@ -80,7 +79,7 @@
                     {avg_qty (avg l_quantity)}
                     {avg_price (avg l_extendedprice)}
                     {avg_disc (avg l_discount)}
-                    {count_order (count l_returnflag)}]
+                    {count_order (count-star)}]
          [:project [l_returnflag l_linestatus l_shipdate l_quantity l_extendedprice l_discount l_tax
                     {disc_price (* l_extendedprice (- 1 l_discount))}
                     {charge (* (* l_extendedprice (- 1 l_discount))
@@ -133,7 +132,7 @@
 
 (def tpch-q4-order-priority-checking
   (-> '[:order-by [[o_orderpriority :asc]]
-        [:group-by [o_orderpriority {order_count (count o_orderkey)}]
+        [:group-by [o_orderpriority {order_count (count-star)}]
          [:semi-join {o_orderkey l_orderkey}
           [:scan [{o_orderdate (and (>= o_orderdate ?start-date)
                                     (< o_orderdate ?end-date))} o_orderpriority o_orderkey]]
@@ -336,7 +335,7 @@
 
 (def tpch-q13-customer-distribution
   (-> '[:order-by [[custdist :desc] [c_count :desc]]
-        [:group-by [c_count {custdist (count c_custkey)}]
+        [:group-by [c_count {custdist (count-star)}]
          [:group-by [c_custkey {c_count (count o_comment)}]
           [:left-outer-join {c_custkey o_custkey}
            [:scan [c_custkey]]
@@ -509,7 +508,7 @@
                        [:scan [l_orderkey l_suppkey]]]]]]
         [:top {:limit 100}
          [:order-by [[numwait :desc] [s_name :asc]]
-          [:group-by [s_name {numwait (count l1_l_orderkey)}]
+          [:group-by [s_name {numwait (count-star)}]
            [:distinct
             [:project [s_name l1_l_orderkey]
              [:anti-join {l1_l_orderkey l3_l_orderkey}
@@ -528,7 +527,7 @@
                             [:scan [c_custkey c_phone c_acctbal]]]
                            [:table ?cntrycodes]]]
         [:order-by [[cntrycode :asc]]
-         [:group-by [cntrycode {numcust (count c_custkey)} {totacctbal (sum c_acctbal)}]
+         [:group-by [cntrycode {numcust (count-star)} {totacctbal (sum c_acctbal)}]
           [:anti-join {c_custkey o_custkey}
            [:select (> c_acctbal avg_acctbal)
             [:cross-join

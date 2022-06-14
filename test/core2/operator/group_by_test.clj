@@ -112,6 +112,36 @@
         (finally
           (util/try-close sum-spec))))))
 
+(t/deftest test-count-star
+  (t/is (= [{:n 0}]
+           (op/query-ra '[:group-by [{n (count-star)}]
+                          [::tu/blocks {a [:union #{:null :i64}]}
+                           []]])))
+
+  (t/is (= [{:n 1}]
+           (op/query-ra '[:group-by [{n (count-star)}]
+                          [::tu/blocks {a [:union #{:null :i64}]}
+                           [[{:a nil}]]]])))
+
+  (t/is (= [{:n 2}]
+           (op/query-ra '[:group-by [{n (count-star)}]
+                          [::tu/blocks {a [:union #{:null :i64}]}
+                           [[{:a nil}
+                             {:a 1}]]]])))
+
+  (t/is (= [{:a 1, :n 1}, {:a 2, :n 2}]
+           (op/query-ra '[:group-by [a {n (count-star)}]
+                          [::tu/blocks {a :i64, b [:union #{:null :i64}]}
+                           [[{:a 1, :b nil}
+                             {:a 2, :b 1}
+                             {:a 2, :b nil}]]]])))
+
+  (t/is (= []
+           (op/query-ra '[:group-by [a {bs (count-star)}]
+                          [::tu/blocks {a :i64, b [:union #{:null :i64}]}
+                           []]]))
+        "empty if there's a grouping key"))
+
 (t/deftest test-count-empty-null-behaviour
   (t/is (= [{:n 0}]
            (op/query-ra '[:group-by [{n (count a)}]

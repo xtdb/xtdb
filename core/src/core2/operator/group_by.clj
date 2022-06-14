@@ -1,5 +1,6 @@
 (ns core2.operator.group-by
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.core.match :refer [match]]
+            [clojure.spec.alpha :as s]
             [core2.expression :as expr]
             [core2.expression.macro :as macro]
             [core2.expression.map :as emap]
@@ -21,8 +22,12 @@
            (org.apache.arrow.vector.complex DenseUnionVector ListVector)))
 
 (s/def ::aggregate-expr
-  (s/cat :aggregate-fn simple-symbol?
-         :from-column ::lp/column))
+  (s/or :nullary (s/cat :f simple-symbol?)
+        :unary (s/cat :f simple-symbol?
+                      :from-column ::lp/column)
+        :binary (s/cat :f simple-symbol?
+                       :left-column ::lp/column
+                       :right-column ::lp/column)))
 
 (s/def ::aggregate
   (s/map-of ::lp/column ::aggregate-expr :conform-keys true :count 1))
@@ -102,6 +107,34 @@
 (defmulti ^core2.operator.group_by.IAggregateSpecFactory ->aggregate-factory
   (fn [{:keys [f from-name from-type to-name zero-row?]}]
     (keyword (name f))))
+
+(defmethod ->aggregate-factory :count-star [{:keys [to-name zero-row?]}]
+  (reify IAggregateSpecFactory
+    (getToColumnName [_] to-name)
+    (getToColumnType [_] :i64)
+
+    (build [_ al]
+      (let [^BigIntVector out-vec (-> (types/col-type->field to-name :i64)
+                                      (.createVector al))]
+        (reify
+          IAggregateSpec
+          (aggregate [_ in-rel group-mapping]
+            (dotimes [idx (.rowCount in-rel)]
+              (let [group-idx (.get group-mapping idx)]
+                (when (<= (.getValueCount out-vec) group-idx)
+                  (.setValueCount out-vec (inc group-idx))
+                  (.set out-vec group-idx 0))
+
+                (.set out-vec group-idx (inc (.get out-vec group-idx))))))
+
+          (finish [_]
+            (when (and zero-row? (zero? (.getValueCount out-vec)))
+              (.setValueCount out-vec 1)
+              (.set out-vec 0 0))
+            (iv/->direct-vec out-vec))
+
+          Closeable
+          (close [_] (.close out-vec)))))))
 
 (defmethod ->aggregate-factory :count [{:keys [from-name to-name zero-row?]}]
   (reify IAggregateSpecFactory
@@ -552,16 +585,21 @@
   (let [{group-cols :group-by, aggs :aggregate} (group-by first columns)
         group-cols (mapv second group-cols)]
     (lp/unary-expr relation args
-      (fn [inner-col-types]
+      (fn [col-types]
         (let [agg-factories (for [[_ agg] aggs]
-                              (let [[to-column {:keys [aggregate-fn from-column]}] (first agg)]
-                                (->aggregate-factory {:f aggregate-fn
-                                                      :from-name from-column
-                                                      :from-type (get inner-col-types from-column)
-                                                      :to-name to-column
-                                                      :zero-row? (empty? group-cols)})))]
+                              (let [[to-column agg-form] (first agg)]
+                                (->aggregate-factory (into {:to-name to-column
+                                                            :zero-row? (empty? group-cols)}
+                                                           (match agg-form
+                                                             [:nullary {:f f}]
+                                                             {:f f}
+
+                                                             [:unary {:f f, :from-column from-column}]
+                                                             {:f f
+                                                              :from-name from-column
+                                                              :from-type (get col-types from-column)})))))]
           {:col-types (-> (into (->> group-cols
-                                     (into {} (map (juxt identity inner-col-types))))
+                                     (into {} (map (juxt identity col-types))))
                                 (->> agg-factories
                                      (into {} (map (juxt #(.getToColumnName ^IAggregateSpecFactory %)
                                                          #(.getToColumnType ^IAggregateSpecFactory %)))))))
