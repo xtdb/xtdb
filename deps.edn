@@ -56,6 +56,7 @@
 
            :slt-test {:main-opts
                       ["-m" "core2.sql.logic-test.runner" "--verify" "--db" "xtdb"
+                       "test/core2/sql/logic_test/sqlite_test/xtdb.test"
                        "test/core2/sql/logic_test/sqlite_test/select1.test"
                        "test/core2/sql/logic_test/sqlite_test/select2.test"
                        "test/core2/sql/logic_test/sqlite_test/select3.test"

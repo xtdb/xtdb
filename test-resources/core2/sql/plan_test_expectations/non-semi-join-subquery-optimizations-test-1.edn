@@ -3,15 +3,13 @@
  [:project
   [x1]
   [:select
-   (or x6 (= x2 42))
-   [:apply
-    :cross-join
-    {x1 ?x9}
-    [:rename {a x1, b x2} [:scan [a b]]]
-    [:top
-     {:limit 1}
-     [:union-all
-      [:project
-       [{x6 true}]
-       [:select (= ?x9 x4) [:table [{x4 1} {x4 2}]]]]
-      [:table [{x6 false}]]]]]]]]
+   (or x7 (= x2 42))
+   [:group-by
+    [x1 x2 $row_number$ {x7 (any x6)}]
+    [:project
+     [x1 x2 $row_number$ {x6 (= x1 x4)}]
+     [:cross-join
+      [:map
+       [{$row_number$ (row-number)}]
+       [:rename {a x1, b x2} [:scan [a b]]]]
+      [:table [{x4 1} {x4 2}]]]]]]]]

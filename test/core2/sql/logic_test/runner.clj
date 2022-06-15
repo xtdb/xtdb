@@ -330,7 +330,7 @@
             (with-jdbc db f)))))
     (pprint/print-table
       [:name :success :failure :error]
-      (conj (mapv (fn [[k v]] (assoc v :name k)) @results)
+      (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
             (assoc (reduce (partial merge-with +) (vals @results)) :name "Total")))))
 
 (comment

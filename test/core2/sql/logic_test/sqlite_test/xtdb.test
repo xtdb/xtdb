@@ -1,0 +1,21 @@
+hash-threshold 100
+
+query T rowsort
+SELECT ( 4 ) IN ( NULL )
+----
+NULL
+
+query T rowsort
+SELECT ( 4 ) NOT IN ( NULL )
+----
+NULL
+
+query T rowsort
+SELECT ( NULL ) IN ( 4 )
+----
+NULL
+
+query T rowsort
+SELECT ( NULL ) NOT IN ( 4 )
+----
+NULL

@@ -629,6 +629,13 @@
      relation]
     [:table [{exists-column false}]]]])
 
+(defn- wrap-with-group-by-aggr [{:keys [quantifier plan sym predicate]}]
+  (let [predicate-result-sym (symbol (str sym "_predicate_result$"))]
+    [:group-by
+     [{sym (list (symbol (if (= :some quantifier) :any quantifier)) predicate-result-sym)}]
+     [:project [{predicate-result-sym predicate}]
+      plan]]))
+
 (defn- flip-comparison [co]
   (case co
     < '>=
@@ -761,7 +768,7 @@
   [relation subquery-info]
   (let [{:keys [type plan column->param sym predicate]} subquery-info]
     (case type
-      :quantified-comparison (build-apply :cross-join column->param relation (wrap-with-exists sym [:select predicate plan]))
+      :quantified-comparison (build-apply :cross-join column->param relation (wrap-with-group-by-aggr subquery-info))
       :exists (build-apply :cross-join column->param relation (wrap-with-exists sym plan))
       (build-apply :cross-join column->param relation plan))))
 

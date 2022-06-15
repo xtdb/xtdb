@@ -1,13 +1,11 @@
 [:rename
- {x5 $column_1$}
+ {x6 $column_1$}
  [:project
-  [x5]
-  [:apply
-   :cross-join
-   {x1 ?x8}
-   [:rename {z x1} [:scan [z]]]
-   [:top
-    {:limit 1}
-    [:union-all
-     [:project [{x5 true}] [:rename {z x3} [:scan [{z (<= ?x8 z)}]]]]
-     [:table [{x5 false}]]]]]]]
+  [x6]
+  [:group-by
+   [x1 $row_number$ {x6 (all x5)}]
+   [:project
+    [x1 $row_number$ {x5 (<= x1 x3)}]
+    [:cross-join
+     [:map [{$row_number$ (row-number)}] [:rename {z x1} [:scan [z]]]]
+     [:rename {z x3} [:scan [z]]]]]]]]
