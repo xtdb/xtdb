@@ -336,9 +336,9 @@
                    "subquery-in-join-corellated-equality-subquery"
                     (plan-sql "select foo.a from foo join bar on bar.c = (select foo.b from foo where foo.a = bar.b)")))))))
 
-(t/deftest parameters-in-e-resolved-from-r-test
+(t/deftest parameters-referenced-in-relation-test
   (t/are [expected plan apply-columns]
-         (= expected (plan/parameters-in-e-resolved-from-r? plan apply-columns))
+         (= expected (plan/parameters-referenced-in-relation? plan (vals apply-columns)))
          true '[:table [{x6 ?x8}]] '{x2 ?x8}
          false '[:table [{x6 ?x4}]] '{x2 ?x8}))
 

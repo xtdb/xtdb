@@ -2091,10 +2091,19 @@
        (merge-conjunctions predicate-1 predicate-2)
        relation])))
 
+(defn parameters-referenced-in-relation? [dependent-relation parameters]
+  (let [apply-symbols (set parameters)
+        found? (atom false)]
+    (w/prewalk
+      #(if (contains? apply-symbols %)
+         (reset! found? true)
+         %)
+      dependent-relation)
+    @found?))
 
 (defn- remove-unused-correlated-columns [columns dependent-relation]
   (->> columns
-       (filter (comp (expr-correlated-symbols dependent-relation) val))
+       (filter (comp (partial parameters-referenced-in-relation? dependent-relation) hash-set val))
        (into {})))
 
 (defn- decorrelate-group-by-apply [post-group-by-projection group-by-columns
@@ -2116,16 +2125,6 @@
                         smap
                         post-group-by-projection))]))))
 
-(defn parameters-in-e-resolved-from-r? [dependent-relation apply-columns]
-  (let [apply-symbols (set (vals apply-columns))
-        found? (atom false)]
-    (w/prewalk
-      #(if (contains? apply-symbols %)
-         (reset! found? true)
-         %)
-      dependent-relation)
-    @found?))
-
 (defn- decorrelate-apply-rule-1
   "R A⊗ E = R ⊗true E
   if no parameters in E resolved from R"
@@ -2134,12 +2133,12 @@
     z
     [:apply :cross-join columns independent-relation dependent-relation]
     ;;=>
-    (when-not (parameters-in-e-resolved-from-r? dependent-relation columns)
+    (when-not (parameters-referenced-in-relation? dependent-relation (vals columns))
       [:cross-join independent-relation dependent-relation])
 
     [:apply mode columns independent-relation dependent-relation]
     ;;=>
-    (when-not (parameters-in-e-resolved-from-r? dependent-relation columns)
+    (when-not (parameters-referenced-in-relation? dependent-relation (vals columns))
       [mode [] independent-relation dependent-relation])))
 
 (defn- decorrelate-apply-rule-2
@@ -2152,9 +2151,9 @@
      [:select predicate dependent-relation]]
     ;;=>
     (when (seq (expr-correlated-symbols predicate))
-      (when-not (parameters-in-e-resolved-from-r?
+      (when-not (parameters-referenced-in-relation?
                   dependent-relation
-                  columns)
+                  (vals columns))
         [(if (= :cross-join mode)
            :join
            mode)
@@ -2406,10 +2405,12 @@
                                                  (when-let [successful-rewrite (f z)]
                                                    (swap!
                                                     fired-rules
-                                                    #(conj ;; could also capture z before the rewrite
+                                                    #(conj
                                                       %
                                                       [(name (.toSymbol ^Var f))
-                                                       successful-rewrite]))
+                                                       (r/znode z)
+                                                       successful-rewrite
+                                                       "=================="]))
                                                    successful-rewrite)))
                                              rules)
                                        (mapv deref rules))))
