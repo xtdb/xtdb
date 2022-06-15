@@ -13,9 +13,7 @@
   (:import (java.util Arrays Date UUID)
            (java.util.concurrent TimeoutException)))
 
-;(t/use-fixtures :each fix/with-node)
-(t/use-fixtures :each (partial fkv/with-kv-store-opts* fkv/rocks-dep) fix/with-node)
-
+(t/use-fixtures :each fkv/with-each-kv-store* fix/with-node)
 
 (t/deftest test-sanity-check
   (fix/transact! *api* (fix/people [{:name "Ivan"}]))

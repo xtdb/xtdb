@@ -12,4 +12,4 @@
                                                          :canonical-buffer-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
                                                          :stats-kvs-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})})
         delta-index-store-tx (db/begin-index-tx delta-index-store tx)]
-    (fork/->ForkedKvIndexStoreTx index-store, delta-index-store, transient-kv, valid-time, tx-id, (atom #{}), delta-index-store-tx)))
+    (fork/->ForkedKvIndexStoreTx index-store, delta-index-store, transient-kv, valid-time, tx-id, (atom #{}), delta-index-store-tx, nil)))

@@ -270,7 +270,7 @@
 (defmethod index-tx-event :default [[op & _] _tx _in-flight-tx]
   (throw (err/illegal-arg :unknown-tx-op {:op op})))
 
-(defrecord InFlightTx [tx !tx-state !tx
+(defrecord InFlightTx [tx !tx-state !tx !docs
                        index-store-tx document-store-tx
                        db-provider bus]
   db/DocumentStore
@@ -291,7 +291,8 @@
   db/InFlightTx
   (index-tx-docs [_ docs]
     (let [stats (db/index-docs index-store-tx docs)]
-      (swap! !tx update-tx-stats stats)))
+      (swap! !tx update-tx-stats stats)
+      (swap! !docs merge docs)))
 
   (index-tx-events [this tx-events]
     (try
@@ -364,7 +365,7 @@
                          :aborted)))
 
     (fork/abort-doc-store-tx document-store-tx)
-    (db/abort-index-tx index-store-tx)
+    (db/abort-index-tx index-store-tx @!docs)
 
     (log/debug "Transaction aborted:" (pr-str tx))
 
@@ -385,6 +386,7 @@
       (->InFlightTx tx
                     (atom :open)
                     (atom {:tx-events [] :av-count 0 :bytes-indexed 0 :doc-ids #{}})
+                    (atom {})
                     index-store-tx
                     document-store-tx
                     (assoc query-engine

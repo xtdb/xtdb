@@ -14,7 +14,7 @@
   (unindex-eids [this eids])
   (index-entity-txs [this entity-txs])
   (commit-index-tx [this])
-  (abort-index-tx [this]))
+  (abort-index-tx [this docs]))
 
 (defprotocol IndexStore
   (store-index-meta [this k v])

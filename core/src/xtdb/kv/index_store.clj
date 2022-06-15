@@ -996,7 +996,7 @@
 (def ^:private ^ThreadLocal nippy-buffer-tl (buffer-tl))
 (def ^:private ^ThreadLocal hash-key-buffer-tl (buffer-tl))
 
-(defrecord KvIndexStoreTx [kv-store kv-tx tx thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache !docs]
+(defrecord KvIndexStoreTx [kv-store kv-tx tx thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStoreTx
   (index-docs [_ docs]
     (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
@@ -1030,8 +1030,6 @@
 
           (when (not (c/can-decode-value-buffer? value-buffer))
             (store (encode-hash-cache-key-to (.get content-buffer-tl) value-buffer eid-value-buffer) (mem/nippy->buffer v (.get nippy-buffer-tl))))))
-
-      (swap! !docs merge docs)
 
       {:bytes-indexed @bytes-indexed
        :doc-ids (into #{} (map c/new-id (keys docs)))
@@ -1092,31 +1090,31 @@
   (commit-index-tx [_]
     (kv/commit-kv-tx kv-tx))
 
-  (abort-index-tx [_]
-    (with-open [kv-tx (kv/begin-kv-tx kv-store)]
-      (let [{::xt/keys [tx-id tx-time]} tx
-            attr-bufs (->> (into #{} (mapcat keys) (vals @!docs))
-                           (into {} (map (juxt identity c/->id-buffer))))]
+  (abort-index-tx [_ docs]
+    (let [{::xt/keys [tx-id tx-time]} tx
+          attr-bufs (->> (into #{} (mapcat keys) (vals docs))
+                         (into {} (map (juxt identity c/->id-buffer))))]
 
-        (kv/put-kv kv-tx (encode-failed-tx-id-key-to (.get content-buffer-tl) tx-id) mem/empty-buffer)
-        (kv/put-kv kv-tx (encode-tx-time-mapping-key-to  (.get content-buffer-tl) tx-time tx-id) mem/empty-buffer)
+      ;; we still put the ECAV KVs in so that we can keep track of what we need to evict later
+      ;; the bitemp indices will ensure these are never returned in queries
 
-        ;; we still put the ECAV KVs in so that we can keep track of what we need to evict later
-        ;; the bitemp indices will ensure these are never returned in queries
+      (->> (for [[content-hash doc] docs
+                 :let [id (:crux.db/id doc)
+                       eid-value-buffer (c/->value-buffer id)
+                       content-hash (c/->id-buffer content-hash)]
 
-        (doseq [[content-hash doc] @!docs
-                :let [id (:crux.db/id doc)
-                      eid-value-buffer (c/value->buffer id (.get eid-buffer-tl))
-                      content-hash (c/id->buffer content-hash (.get content-hash-buffer-tl))]]
+                 [a v] doc
+                 :let [a (get attr-bufs a)]
 
-          (doseq [[a v] doc
-                  :let [a (get attr-bufs a)]
-                  [v idxs] (val-idxs v)
-                  :let [value-buffer (c/value->buffer v (.get value-buffer-tl))]
-                  :when (pos? (.capacity value-buffer))]
+                 [v idxs] (val-idxs v)
+                 :let [value-buffer (c/->value-buffer v)]
+                 :when (pos? (.capacity value-buffer))]
+             [(encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer) (encode-ecav-value idxs)])
 
-            (kv/put-kv kv-tx (encode-ecav-key-to (.get content-buffer-tl) eid-value-buffer content-hash a value-buffer) (encode-ecav-value idxs)))))
-      (kv/commit-kv-tx kv-tx)))
+           (into [[(encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer]
+                  [(encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer]])
+
+           (kv/store kv-store))))
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
@@ -1124,15 +1122,17 @@
 
 ;; TODO check the stats still work, don't see how they would? Would work for rocks, not for LMDB?
 
-(defn- forked-index-tx [{:keys [thread-mgr stats-kvs-cache] :as index-store} tx]
-  (let [transient-kv (mut-kv/->mutable-kv-store)
+(defn- forked-index-tx [{:keys [thread-mgr stats-kvs-cache kv-store] :as index-store} tx]
+  (let [abort-index-tx (->KvIndexStoreTx kv-store nil tx thread-mgr
+                                         (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache)
+        transient-kv (mut-kv/->mutable-kv-store)
         transient-kv-tx (kv/begin-kv-tx transient-kv)
         transient-tx (->KvIndexStoreTx transient-kv transient-kv-tx tx thread-mgr
-                                       (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache (atom {}))
+                                       (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache)
         delta-snapshot (reify db/IndexSnapshotFactory
                          (open-index-snapshot [_]
                            (new-kv-index-snapshot (kv/new-snapshot transient-kv) true thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))))
-        forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store delta-snapshot transient-kv nil (::xt/tx-id tx) (atom #{}) transient-tx)]
+        forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store delta-snapshot transient-kv nil (::xt/tx-id tx) (atom #{}) transient-tx abort-index-tx)]
     [forked-index-store-tx transient-kv-tx]))
 
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
@@ -1141,7 +1141,7 @@
     (let [{::xt/keys [tx-id tx-time]} tx
           [index-store-tx kv-tx]
           (if (satisfies? kv/KvStoreWithReadTransaction kv-store)
-            (let [index-store-tx (->KvIndexStoreTx kv-store (kv/begin-kv-tx kv-store) tx thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache (atom {}))]
+            (let [index-store-tx (->KvIndexStoreTx kv-store (kv/begin-kv-tx kv-store) tx thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache)]
               [index-store-tx (:kv-tx index-store-tx)])
             (forked-index-tx this tx))]
       (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)

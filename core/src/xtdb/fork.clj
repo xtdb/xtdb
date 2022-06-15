@@ -228,7 +228,7 @@
 (defn begin-document-store-tx [doc-store]
   (->ForkedDocumentStore doc-store (atom {})))
 
-(defrecord ForkedKvIndexStoreTx [base-index-store, delta-snapshot-factory, transient-kv, valid-time, tx-id, !evicted-eids, index-store-tx]
+(defrecord ForkedKvIndexStoreTx [base-index-store, delta-snapshot-factory, transient-kv, valid-time, tx-id, !evicted-eids, index-store-tx abort-index-tx]
   db/IndexStoreTx
   (index-docs [_ docs]
     (db/index-docs index-store-tx docs))
@@ -245,8 +245,9 @@
     (with-open [snapshot (kv/new-snapshot transient-kv)]
       (kv/store (:kv-store base-index-store) (seq snapshot))))
 
-  (abort-index-tx [_]
-    (throw (IllegalStateException. "Can't abort from fork.")))
+  (abort-index-tx [_ docs]
+    (when abort-index-tx
+      (db/abort-index-tx abort-index-tx docs)))
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
