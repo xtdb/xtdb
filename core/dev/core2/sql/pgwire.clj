@@ -7,7 +7,8 @@
             [core2.local-node :as node]
             [core2.util :as util]
             [clojure.string :as str]
-            [clojure.data.json :as json])
+            [clojure.data.json :as json]
+            [clojure.set :as set])
   (:import java.nio.charset.StandardCharsets
            [java.io Closeable ByteArrayOutputStream
                     DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException]
@@ -130,6 +131,7 @@
                               (write-c-string out v))
                             (.writeByte out 0))))
 
+(def ^:private ^:const ^long varchar-oid 1043)
 (def ^:private ^:const ^long json-oid 114)
 
 (def ^:private ^:const ^long typlen-varlena -1)
@@ -137,20 +139,38 @@
 
 (def ^:private ^:const ^long text-format-code 0)
 
+(defn- col-desc [col]
+  (if (string? col)
+    {:column-name col
+     :table-oid 0
+     :column-attribute-number 0
+     :oid json-oid
+     :data-type-size typlen-varlena
+     :type-modifier typmod-none
+     :format-code text-format-code}
+    {:column-name (:column-name col)
+     :table-oid 0
+     :column-attribute-number 0
+     :oid (:oid col json-oid)
+     :data-type-size typlen-varlena
+     :type-modifier typmod-none
+     :format-code text-format-code}))
+
 (defn- send-row-description [^DataOutputStream out columns]
   (send-message-with-body out
                           (byte \T)
                           (fn [^DataOutputStream out]
                             (.writeShort out (count columns))
-                            (doseq [column columns
-                                    :let [table-oid 0
-                                          column-attribute-number 0
-                                          oid json-oid
-                                          data-type-size typlen-varlena
-                                          type-modifier typmod-none
-                                          format-code text-format-code]]
+                            (doseq [{:keys [column-name
+                                            table-oid
+                                            column-attribute-number
+                                            oid
+                                            data-type-size
+                                            type-modifier
+                                            format-code]}
+                                    (map col-desc columns)]
                               (doto out
-                                (write-c-string column)
+                                (write-c-string column-name)
                                 (.writeInt table-oid)
                                 (.writeShort column-attribute-number)
                                 (.writeInt oid)
@@ -217,9 +237,47 @@
 
 (def ^:private sql-state-syntax-error "42601")
 
+(defn utf8 [s] (.getBytes (str s) StandardCharsets/UTF_8))
+
+(def canned-responses
+  "Some pre-baked responses to common queries issued as setup by Postgres drivers, e.g SQLAlchemy"
+  {"select pg_catalog.version()"
+   {:cols [{:column-name "version" :oid varchar-oid}]
+    :rows [["PostgreSQL 14.2"]]}
+
+   "show standard_conforming_strings"
+   {:cols [{:column-name "standard_conforming_strings" :oid varchar-oid}]
+    :rows [["on"]]}
+
+   "select current_schema"
+   {:cols [{:column-name "current_schema" :oid varchar-oid}]
+    :rows [["public"]]}
+
+   "show transaction isolation level"
+   {:cols [{:column-name "transaction_isolation" :oid varchar-oid}]
+    :rows [["read committed"]]}})
+
+;; yagni, is everything upper'd anyway by drivers / server?
+(defn- starts-with-case-insensitive? [s substr]
+  ;; todo replace with re solution
+  (str/starts-with? (str/lower-case s) (str/lower-case substr)))
+
+(defn canned-query [s]
+  (-> (filter #(starts-with-case-insensitive? s %) (keys canned-responses))
+      first
+      (canned-responses)))
+
+(def ignore-parse-bind-strings
+  (set/union
+    #{"set"
+      "begin"
+      "commit"
+      "rollback"}
+    (set (keys canned-responses))))
+
 (defn- ignore-parse-bind? [message]
   (boolean (or (empty-query? message)
-               (#{"SET" "BEGIN" "COMMIT" "ROLLBACK"} (statement-command message)))))
+               (some (partial starts-with-case-insensitive? (:pgwire.parse/query-string message)) ignore-parse-bind-strings))))
 
 (defmethod handle-message :pgwire/parse [session message out]
   (let [message (if (ignore-parse-bind? message)
@@ -304,11 +362,20 @@
 
 (defmethod handle-message :pgwire/execute [session message out]
   (let [bind-message (get-in session [:portals (:pgwire.execute/portal message)])
-        parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement bind-message)])]
+        parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement bind-message)])
+        canned (canned-query (:pgwire.parse/query-string parse-message))]
     (cond
       (empty-query? parse-message)
       (do (send-empty-query-response out)
           session)
+
+      canned
+      (let [{:keys [cols, rows]} canned]
+        (do (send-row-description out cols)
+            (doseq [row rows]
+              (send-data-row out (mapv (fn [v] (if (bytes? v) v (utf8 v))) row)))
+            (send-command-complete out (str (statement-command parse-message) " " (count rows)))
+            session))
 
       (= "SET" (statement-command parse-message))
       (let [[_ k v] (re-find #"SET\s+(\w+)\s*=\s*'?(.*)'?" (strip-query-semi-colon (:pgwire.parse/query-string parse-message)))]
@@ -491,25 +558,27 @@
         (when server
           (some-> (:server server) .close)
           (some-> (:node server) .close)
-          (println "Server stoppped")
+          (println "Server stopped")
           (alter-var-root #'server (constantly nil))))
 
-      (defn start-server [port]
-        (stop-server)
-        (let [node (node/start-node {})
-              server (->pg-wire-server node
-                                       {:server-parameters {"server_version" "14"
-                                                            "server_encoding" "UTF8"
-                                                            "client_encoding" "UTF8"
-                                                            "TimeZone" "UTC"}
-                                        :port port
-                                        :num-threads 16})
-              srv {:port port
-                   :node node
-                   :server server}]
-          (println "Listening on" port)
-          (alter-var-root #'server (constantly srv))
-          srv))
+      (defn start-server
+        ([] (start-server 5432))
+        ([port]
+         (stop-server)
+         (let [node (node/start-node {})
+               server (->pg-wire-server node
+                                        {:server-parameters {"server_version" "14"
+                                                             "server_encoding" "UTF8"
+                                                             "client_encoding" "UTF8"
+                                                             "TimeZone" "UTC"}
+                                         :port port
+                                         :num-threads 16})
+               srv {:port port
+                    :node node
+                    :server server}]
+           (println "Listening on" port)
+           (alter-var-root #'server (constantly srv))
+           srv)))
       )
   ;; eval for setup ^
 
