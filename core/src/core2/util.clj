@@ -669,9 +669,9 @@
   ([f]
    (lru-memoize default-lru-memoize-size f))
   ([^long cache-size f]
-   (let [cache (proxy [LinkedHashMap] [cache-size 0.75 true]
-                 (removeEldestEntry [_]
-                   (> (.size ^Map this) cache-size)))]
+   (let [cache (Collections/synchronizedMap (proxy [LinkedHashMap] [cache-size 0.75 true]
+                                              (removeEldestEntry [_]
+                                                (> (.size ^Map this) cache-size))))]
      (.put known-memo-tables f cache)
      (fn
        ([]
