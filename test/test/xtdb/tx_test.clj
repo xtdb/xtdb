@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [clojure.test :as t]
             [clojure.tools.logging.impl :as log-impl]
+            [xtdb.fixtures.kv :as fkv]
             [xtdb.api :as xt]
             [xtdb.bus :as bus]
             [xtdb.codec :as c]
@@ -17,7 +18,7 @@
            java.time.Duration
            [java.util Collections Date HashMap HashSet UUID]))
 
-(t/use-fixtures :each fix/with-node fix/with-silent-test-check
+(t/use-fixtures :each fkv/with-each-kv-store* fkv/with-kv-store-opts* fix/with-node fix/with-silent-test-check
   (fn [f]
     (f)
     (#'tx/reset-tx-fn-error)))
