@@ -50,7 +50,7 @@
 
   (put-kv [_ k v]
     (.put db2
-          (mem/copy-to-unpooled-buffer (mem/as-buffer k))
+          (-> k mem/as-buffer mem/copy-to-unpooled-buffer)
           (some-> v mem/as-buffer mem/copy-to-unpooled-buffer)))
 
   (commit-kv-tx [_]
