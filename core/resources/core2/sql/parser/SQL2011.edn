@@ -1696,7 +1696,7 @@
  :in_value_list
  {:tag :cat,
   :parsers
-  ({:tag :nt, :keyword :row_value_expression}
+  ({:tag :nt, :keyword :table_row_value_expression}
    {:tag :opt,
     :parser
     {:tag :plus,
@@ -1704,7 +1704,7 @@
      {:tag :cat,
       :parsers
       ({:tag :nt, :keyword :comma, :hide true}
-       {:tag :nt, :keyword :row_value_expression})}}})},
+       {:tag :nt, :keyword :table_row_value_expression})}}})},
  :binary_factor
  {:tag :nt, :keyword :binary_primary, :red {:reduction-type :raw}},
  :greater_than_or_equals_operator {:tag :string, :string ">="},
