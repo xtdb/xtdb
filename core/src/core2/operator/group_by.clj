@@ -410,7 +410,11 @@
                                              :else {:op :local, :local acc-local}}}))))
 
 (defmethod ->aggregate-factory :min [agg-opts] (min-max-factory :< agg-opts))
+(defmethod ->aggregate-factory :min-all [agg-opts] (min-max-factory :< agg-opts))
+(defmethod ->aggregate-factory :min-distinct [agg-opts] (min-max-factory :< agg-opts))
 (defmethod ->aggregate-factory :max [agg-opts] (min-max-factory :> agg-opts))
+(defmethod ->aggregate-factory :max-all [agg-opts] (min-max-factory :> agg-opts))
+(defmethod ->aggregate-factory :max-distinct [agg-opts] (min-max-factory :> agg-opts))
 
 (defn- wrap-distinct [^IAggregateSpecFactory agg-factory, from-name]
   (reify IAggregateSpecFactory
@@ -460,13 +464,22 @@
   (-> (->aggregate-factory (assoc agg-opts :f :count))
       (wrap-distinct from-name)))
 
+(defmethod ->aggregate-factory :count-all [agg-opts]
+  (->aggregate-factory (assoc agg-opts :f :count)))
+
 (defmethod ->aggregate-factory :sum-distinct [{:keys [from-name] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :sum))
       (wrap-distinct from-name)))
 
+(defmethod ->aggregate-factory :sum-all [agg-opts]
+  (->aggregate-factory (assoc agg-opts :f :sum)))
+
 (defmethod ->aggregate-factory :avg-distinct [{:keys [from-name] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :avg))
       (wrap-distinct from-name)))
+
+(defmethod ->aggregate-factory :avg-all [agg-opts]
+  (->aggregate-factory (assoc agg-opts :f :avg)))
 
 (deftype ArrayAggAggregateSpec [^BufferAllocator allocator
                                 from-name to-name
