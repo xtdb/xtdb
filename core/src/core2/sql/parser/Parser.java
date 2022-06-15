@@ -619,7 +619,7 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, int idx, final ParseState[][] memos, final IParseErrors errors, final boolean hide) {
-            if (in.regionMatches(true, idx, string, 0, string.length())) {
+            if (in.regionMatches(idx, string, 0, string.length())) {
                 idx = skipWhitespace(wsPattern, in, idx + string.length(), errors);
                 if (idx != -1) {
                     return new ParseState(hide ? PersistentVector.EMPTY : ast, idx);

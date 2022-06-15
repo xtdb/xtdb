@@ -164,7 +164,7 @@
                                    #"(?:\s+|(?<=\p{Punct}|\s)|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
                                    (fn [rule-name]
                                      (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
-                                              (re-find #"(^|_)(term|factor|primary|expression|query_expression_body)$" (name rule-name)))
+                                              (re-find #"(^|_)(term|factor|primary|expression|query_expression_body|boolean_test)$" (name rule-name)))
                                        Parser/SINGLE_CHILD
                                        Parser/NEVER_RAW))))
 
@@ -187,6 +187,9 @@
   (sql-parser "a[0]" :value_expression_primary)
 
   (sql-parser "- - 2" :factor)
+
+  (= (sql-parser "SELECT pk FROM tab0 WHERE ((col0 >= 6) OR (col1 = 2.11 AND col3 BETWEEN 3 AND 4) AND ((col1 > 9.58 AND col0 <= 4)) AND (col0 >= 6))" :directly_executable_statement)
+     (sql-parser (core2.sql.logic-test.xtdb-engine/remove-unnecessary-parens "SELECT pk FROM tab0 WHERE ((col0 >= 6) OR (col1 = 2.11 AND col3 BETWEEN 3 AND 4) AND ((col1 > 9.58 AND col0 <= 4)) AND (col0 >= 6))") :directly_executable_statement))
 
   (sql-parser "IN ( col0 * col0 )" :in_predicate_part_2)
 
