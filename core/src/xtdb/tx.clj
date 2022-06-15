@@ -582,8 +582,9 @@
 
         (.whenComplete job (reify BiConsumer
                              (accept [_ _v e]
-                               (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor stats-executor]]
-                                 (.shutdown executor)
-                                 (.awaitTermination executor 60, java.util.concurrent.TimeUnit/SECONDS)))))
+                               (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor]]
+                                 (.shutdownNow executor))
+                               (.shutdown ^ExecutorService  stats-executor)
+                               (.awaitTermination ^ExecutorService stats-executor 60, java.util.concurrent.TimeUnit/SECONDS))))
 
         (->TxIngester index-store !error job)))))
