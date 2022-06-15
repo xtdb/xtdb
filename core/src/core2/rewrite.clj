@@ -1,9 +1,8 @@
 (ns core2.rewrite
-  (:require [clojure.walk :as w]
-            [clojure.core.match :as m])
+  (:require [clojure.walk :as w])
   (:import java.util.regex.Pattern
            [java.util ArrayList HashMap List Map Objects]
-           [clojure.lang Box IPersistentVector ILookup MapEntry]))
+           [clojure.lang Box ILookup Indexed IObj IPersistentVector MapEntry]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -17,6 +16,18 @@
     (if (= :node k)
       node
       not-found))
+
+  Indexed
+  (count [_]
+    (if (instance? IPersistentVector node)
+      (.count ^IPersistentVector node)
+      0))
+
+  (nth [this idx]
+    (Zip. (.nth ^IPersistentVector node idx) idx this 0 (unchecked-inc-int (.depth this))))
+
+  (nth [this idx not-found]
+    (Zip. (.nth ^IPersistentVector node idx not-found) idx this 0 (unchecked-inc-int (.depth this))))
 
   Object
   (equals [this other]
@@ -227,33 +238,139 @@
 
 ;; Zipper pattern matching
 
-(defmethod m/count-inline ::m/vector
-  [_ ocr] `(.count ~(vary-meta ocr assoc :tag 'clojure.lang.IPersistentVector)))
+;; https://julesjacobs.com/notes/patternmatching/patternmatching.pdf
 
-(defmethod m/nth-inline ::m/vector
-  [_ ocr i] `(.nth ~(vary-meta ocr assoc :tag 'clojure.lang.IPersistentVector) ~i))
+(defn- init-clauses [var clauses]
+  (-> (vec (for [[pattern body] (partition 2 clauses)]
+             [{var pattern} body]))
+      (conj [{var '_} (when (odd? (count clauses))
+                        (last clauses))])))
 
-(derive ::m/zip ::m/vector)
+(defn- add-bindings [clause zip?]
+  (let [[patterns body] clause
+        smap (->> (for [[k v] patterns
+                        :when (symbol? v)]
+                    [v (if (or (not zip?)
+                               (:z (meta v)))
+                         k
+                         `(.node ~(with-meta k {:tag 'core2.rewrite.Zip})))])
+                  (into {}))]
+    [(into {} (remove (comp (partial contains? smap) val) patterns))
+     (if (instance? IObj body)
+       (vary-meta body update :bindings (fnil into []) (reduce into [] (dissoc smap '_)))
+       body)]))
 
-(defmethod m/nth-inline ::m/zip
-  [t ocr i]
-  `(let [^Zip z# ~ocr]
-     (Zip. (.nth ^IPersistentVector (.node z#) ~i) ~i z# 0 (unchecked-inc-int (.depth z#)))))
+(defn- find-branch-var [patterns clauses]
+  (let [freq (frequencies (for [[ps _] clauses
+                                var (keys ps)]
+                            var))]
+    (apply max-key freq (keys patterns))))
 
-(defmethod m/count-inline ::m/zip
-  [t ocr]
-  `(let [^Zip z# ~ocr
-         n# (.node z#)]
-     (if (instance? IPersistentVector n#)
-       (.count ^IPersistentVector n#)
-       0)))
+(defmacro count-indexed [x]
+  `(if (instance? Indexed ~x)
+     (.count ~(with-meta x {:tag `Indexed}))
+     (unchecked-int -1)))
 
-(defmethod m/subvec-inline ::m/zip
-  ([_ ocr start] (throw (UnsupportedOperationException.)))
-  ([_ ocr start end] (throw (UnsupportedOperationException.))))
+(defn- if-expr? [x]
+  (and (sequential? x)
+       (= 'if (first x))
+       (= 4 (count x))))
 
-(defmethod m/tag ::m/zip
-  [_] "core2.rewrite.Zip")
+(defn- case-expr? [x]
+  (and (sequential? x)
+       (= `case (first x))))
+
+(defn- equals-expr? [x]
+  (and (sequential? x)
+       (contains? `#{= identical?} (first x))
+       (= 3 (count x))))
+
+(defn- flatten-ifs-to-case [x]
+  (w/postwalk
+   (fn [x]
+     (or (when (if-expr? x)
+           (let [[_ cond-1 then-1 else-1] x]
+             (when (equals-expr? cond-1)
+               (cond
+                 (if-expr? else-1)
+                 (let [[_ cond-2 then-2 else-2] else-1]
+                   (when (and (equals-expr? cond-2)
+                              (= (last cond-1)
+                                 (last cond-2)))
+                     `(case ~(last cond-1)
+                        ~(second cond-1)
+                        ~then-1
+                        ~(second cond-2)
+                        ~then-2
+                        ~else-2)))
+
+                 (case-expr? else-1)
+                 (let [[_ case-test & clauses] else-1]
+                   (when (= (last cond-1) case-test)
+                     `(case ~case-test
+                        ~(second cond-1)
+                        ~then-1
+                        ~@clauses)))))))
+         x))
+   x))
+
+(defn- generate-match-tree
+  ([clauses]
+   (generate-match-tree clauses false))
+  ([clauses zip?]
+   (if (empty? clauses)
+     (throw (IllegalArgumentException. "Non-exhaustive pattern"))
+     (let [[[patterns body] :as clauses] (for [clause clauses]
+                                           (add-bindings clause zip?))]
+       (if (empty? patterns)
+         (if-let [bindings (not-empty (:bindings (meta body)))]
+           `(let [~@bindings]
+              ~body)
+           body)
+         (let [branch-var (find-branch-var patterns clauses)
+               pattern-1 (get patterns branch-var)]
+           (if (vector? pattern-1)
+             (let [vars (vec (repeatedly (count pattern-1) #(gensym '__x_)))
+                   yes-no (for [[patterns body :as clause] clauses]
+                            (if (contains? patterns branch-var)
+                              (let [pattern-2 (get patterns branch-var)]
+                                (if (and (vector? pattern-2)
+                                         (= (count pattern-1) (count pattern-2)))
+                                  {:yes [(merge (dissoc patterns branch-var)
+                                                (->> (for [[^long idx var] (map-indexed vector vars)
+                                                           :when (not= '_ (nth pattern-2 idx))]
+                                                       [var (nth pattern-2 idx)])
+                                                     (into {})))
+                                         body]}
+                                  {:no clause}))
+                              {:yes clause :no clause}))]
+               `(if (= ~(count pattern-1) (count-indexed ~branch-var))
+                  (let [~@(->> (for [[^long idx var] (map-indexed vector vars)]
+                                 `[~var (.nth ~(with-meta branch-var {:tag `Indexed}) ~idx)])
+                               (reduce into []))]
+                    ~(generate-match-tree (keep :yes yes-no) zip?))
+                  ~(generate-match-tree (keep :no yes-no) zip?)))
+             (let [yes-no (for [[patterns body :as clause] clauses]
+                            (if (contains? patterns branch-var)
+                              (let [pattern-2 (get patterns branch-var)]
+                                (if (= pattern-1 pattern-2)
+                                  {:yes [(dissoc patterns branch-var) body]}
+                                  {:no clause}))
+                              {:yes clause :no clause}))]
+               `(if (~(cond
+                        (keyword? pattern-1)
+                        `identical?
+                        (instance? Pattern pattern-1)
+                        `re-find
+                        :else
+                        `=) ~pattern-1 ~(if zip?
+                                          `(.node ~(with-meta branch-var {:tag 'core2.rewrite.Zip}))
+                                          branch-var))
+                  ~(generate-match-tree (keep :yes yes-no) zip?)
+                  ~(generate-match-tree (keep :no yes-no) zip?))))))))))
+
+(defmacro match-tree {:style/indent 1} [z zip? & clauses]
+  (flatten-ifs-to-case (generate-match-tree (init-clauses z clauses) zip?)))
 
 (defmacro zmatch {:style/indent 1} [z & clauses]
   (let [pattern+exprs (partition 2 clauses)
@@ -272,31 +389,21 @@
              node# (if (zip? z#)
                      (znode z#)
                      z#)]
-         (m/match node#
-                  ~@(->> (for [[pattern expr] pattern+exprs]
-                           [pattern expr])
-                         (reduce into []))
-                  :else ~else-clause))
-      `(m/matchv ::m/zip [(->zipper ~z)]
-                 ~@(->> (for [[pattern expr] pattern+exprs]
-                          [[(w/postwalk
-                             (fn [x]
-                               (cond
-                                 (symbol? x)
-                                 (if (or (= '_ x)
-                                         (:z (meta x)))
-                                   x
-                                   {:node x})
-
-                                 (vector? x)
-                                 x
-
-                                 :else
-                                 {:node x}))
-                             pattern)]
-                           expr])
-                        (reduce into []))
-                 :else ~else-clause))))
+         (match-tree
+             node#
+             false
+             ~@(->> (for [[pattern expr] pattern+exprs]
+                      [pattern expr])
+                    (reduce into []))
+             ~else-clause))
+      `(let [z# (->zipper ~z)]
+         (match-tree
+             z#
+             true
+             ~@(->> (for [[pattern expr] pattern+exprs]
+                      [pattern expr])
+                    (reduce into []))
+             ~else-clause)))))
 
 ;; Attribute Grammar spike.
 

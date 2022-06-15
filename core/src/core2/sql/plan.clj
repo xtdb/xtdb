@@ -168,6 +168,65 @@
 
     (throw (IllegalArgumentException. (str "Cannot build cast for: " (pr-str cast-spec))))))
 
+(defn- expr-varargs [z]
+  (r/zcase z
+    :array_element_list
+    (r/collect-stop
+     (fn [z]
+       (r/zcase z
+         (:array_element_list nil) nil
+         [(expr z)]))
+     z)
+
+    :case_abbreviation
+    (->> (r/collect-stop
+          (fn [z]
+            (r/zcase z
+              (:case_abbreviation nil) nil
+              [(expr z)]))
+          z)
+         (cons (case (r/lexeme z 1)
+                 "COALESCE" 'coalesce
+                 "NULLIF" 'nullif)))
+
+    :searched_case
+    (->> (r/collect-stop
+          (fn [z]
+            (r/zmatch z
+              [:searched_when_clause "WHEN" ^:z sc "THEN" [:result ^:z then]]
+              [(expr sc) (expr then)]
+
+              [:else_clause "ELSE" [:result ^:z else]]
+              [(expr else)]))
+          z)
+         (cons 'cond))
+
+    :simple_case
+    (->> (r/collect-stop
+          (fn [z]
+            (r/zmatch z
+              [:case_operand ^:z rvp]
+              [(expr rvp)]
+
+              [:simple_when_clause "WHEN" ^:z wol "THEN" [:result ^:z then]]
+              (let [then-expr (expr then)
+                    wo-exprs (r/collect-stop
+                              (fn [z]
+                                (r/zcase z
+                                  (:when_operand_list nil) nil
+                                  [(expr z)]))
+                              wol)]
+                (->> (for [wo-expr wo-exprs]
+                       [wo-expr then-expr])
+                     (reduce into [])))
+
+              [:else_clause "ELSE" [:result ^:z else]]
+              [(expr else)]))
+          z)
+         (cons 'case))
+
+    (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (r/node z)))))))
+
 (defn expr [z]
   (maybe-add-ref
    z
@@ -539,63 +598,7 @@
      ;;=>
      (symbol (str "?_" (sem/dynamic-param-idx z)))
 
-     (r/zcase z
-       :array_element_list
-       (r/collect-stop
-         (fn [z]
-           (r/zcase z
-             (:array_element_list nil) nil
-             [(expr z)]))
-         z)
-
-       :case_abbreviation
-       (->> (r/collect-stop
-             (fn [z]
-               (r/zcase z
-                 (:case_abbreviation nil) nil
-                 [(expr z)]))
-             z)
-            (cons (case (r/lexeme z 1)
-                    "COALESCE" 'coalesce
-                    "NULLIF" 'nullif)))
-
-       :searched_case
-       (->> (r/collect-stop
-             (fn [z]
-               (r/zmatch z
-                 [:searched_when_clause "WHEN" ^:z sc "THEN" [:result ^:z then]]
-                 [(expr sc) (expr then)]
-
-                 [:else_clause "ELSE" [:result ^:z else]]
-                 [(expr else)]))
-             z)
-            (cons 'cond))
-
-       :simple_case
-       (->> (r/collect-stop
-             (fn [z]
-               (r/zmatch z
-                 [:case_operand ^:z rvp]
-                 [(expr rvp)]
-
-                 [:simple_when_clause "WHEN" ^:z wol "THEN" [:result ^:z then]]
-                 (let [then-expr (expr then)
-                       wo-exprs (r/collect-stop
-                                 (fn [z]
-                                   (r/zcase z
-                                     (:when_operand_list nil) nil
-                                     [(expr z)]))
-                                 wol)]
-                   (->> (for [wo-expr wo-exprs]
-                          [wo-expr then-expr])
-                        (reduce into [])))
-
-                 [:else_clause "ELSE" [:result ^:z else]]
-                 [(expr else)]))
-             z)
-            (cons 'case))
-
-       (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (r/node z)))))))))
+     (expr-varargs z))))
 
 ;; Logical plan.
 
