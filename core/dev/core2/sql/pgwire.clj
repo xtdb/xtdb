@@ -6,13 +6,16 @@
             [core2.rewrite :as r]
             [core2.local-node :as node]
             [core2.util :as util]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [clojure.data.json :as json])
   (:import java.nio.charset.StandardCharsets
            [java.io Closeable ByteArrayOutputStream
-                    DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream]
+                    DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException]
            [java.net Socket ServerSocket]
            [java.util.concurrent Executors ExecutorService]
-           [java.util HashMap]))
+           [java.util HashMap]
+           [org.apache.arrow.vector PeriodDuration]
+           [java.time LocalDate]))
 
 (set! *warn-on-reflection* true)
 
@@ -214,9 +217,12 @@
 
 (def ^:private sql-state-syntax-error "42601")
 
+(defn- ignore-parse-bind? [message]
+  (boolean (or (empty-query? message)
+               (#{"SET" "BEGIN" "COMMIT" "ROLLBACK"} (statement-command message)))))
+
 (defmethod handle-message :pgwire/parse [session message out]
-  (let [message (if (or (empty-query? message)
-                        (= "SET" (statement-command message)))
+  (let [message (if (ignore-parse-bind? message)
                   message
                   (with-meta message {:tree (parser/parse (strip-query-semi-colon (:pgwire.parse/query-string message)))}))]
     (if-let [parse-failure (when (parser/failure? (:tree (meta message))) (:tree (meta message)))]
@@ -225,7 +231,7 @@
                                     :sql-state sql-state-syntax-error
                                     :message (first (str/split-lines (pr-str parse-failure)))
                                     :detail (parser/failure->str parse-failure)
-                                    :position (str (inc (:index parse-failure)))})
+                                    :position (str (inc (:idx parse-failure)))})
           session)
       (do (send-parse-complete out)
           (assoc-in session
@@ -234,8 +240,7 @@
 
 (defmethod handle-message :pgwire/bind [session message out]
   (let [parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement message)])
-        message (if (or (empty-query? parse-message)
-                        (= "SET" (statement-command parse-message)))
+        message (if (ignore-parse-bind? parse-message)
                   message
                   (with-meta message (plan/plan-query (:tree (meta parse-message)))))]
     (if-let [error (first (:errs (meta message)))]
@@ -286,6 +291,17 @@
         (send-no-data out))
       session)))
 
+(extend-protocol json/JSONWriter
+  PeriodDuration
+  (-write [pd out options]
+    (json/-write (str pd) out options))
+  LocalDate
+  (-write [ld out options]
+    (json/-write (str ld) out options)))
+
+(defn- json-str [obj]
+  (json/write-str obj))
+
 (defmethod handle-message :pgwire/execute [session message out]
   (let [bind-message (get-in session [:portals (:pgwire.execute/portal message)])
         parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement bind-message)])]
@@ -299,6 +315,9 @@
         (send-command-complete out (statement-command parse-message))
         (assoc-in session [:parameters k] v))
 
+      (#{"BEGIN" "COMMIT" "ROLLBACK"} (statement-command parse-message))
+      (do (send-command-complete out (statement-command parse-message))
+          session)
 
       :else
       (let [node (:node (meta session))
@@ -306,8 +325,7 @@
             result (c2/sql-query node (strip-query-semi-colon (:pgwire.parse/query-string parse-message)) {})]
         (doseq [row result]
           (send-data-row out (for [column (mapv row projection)]
-                               (when (some? column)
-                                 (.getBytes (pr-str column) StandardCharsets/UTF_8)))))
+                               (.getBytes (json-str column) StandardCharsets/UTF_8))))
         (send-command-complete out (str (statement-command parse-message) " " (count result)))
         session))))
 
@@ -357,17 +375,19 @@
   (loop [session session]
     (if (.isClosed socket)
       session
-      (do (prn session)
+      (do
           (recur (try
                    (let [message-code (char (.readByte in))]
                      (if-let [message-type (get message-code->type message-code)]
                        (let [size (- (.readInt in) Integer/BYTES)
                              message (assoc (parse-message message-type in) :pgwire/type message-type)]
-                         (prn message)
+                         #_(prn message)
                          (handle-message session message out))
                        (throw (IllegalArgumentException. (str "unknown message code: " message-code)))))
+                   (catch EOFException e
+                     (send-ready-for-query out :idle)
+                     session)
                    (catch Exception e
-                     (prn e)
                      (send-error-response out {:severity "ERROR"
                                                :localized-severity "ERROR"
                                                :sql-state sql-state-internal-error
@@ -404,7 +424,7 @@
 
         (= startup-message handshake)
         (let [startup-message (parse-startup-message in)]
-          (prn startup-message)
+          #_(prn startup-message)
           (send-authentication-ok out)
 
           (doseq [[k v] parameters]
@@ -429,7 +449,7 @@
             session (pg-establish-connection session in out)]
         (pg-message-exchange session socket in out)))
     (catch Throwable t
-      (prn t)
+      #_(prn t)
       (throw t))))
 
 (defn- pg-accept [{:keys [^ServerSocket server-socket ^ExecutorService pool] :as server}]
@@ -461,15 +481,51 @@
     server))
 
 (comment
+
+  ;; pre-req
   (do (require '[juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
-      (require '[cheshire.core :as json])
-      (with-open [node (node/start-node {})
-                  server (->pg-wire-server node
-                                           {:server-parameters {"server_version" "14"
-                                                                "server_encoding" "UTF8"
-                                                                "TimeZone" "UTC"}
-                                            :port 5432
-                                            :num-threads 16})]
-        (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
-          (vec (for [row (jdbc/execute! c ["SELECT * FROM (VALUES 1, true) AS x (a), (VALUES 3.14, 'foo') AS y (b)"])]
-                 (update-vals row (comp json/parse-string str))))))))
+
+      (def server nil)
+
+      (defn stop-server []
+        (when server
+          (some-> (:server server) .close)
+          (some-> (:node server) .close)
+          (println "Server stoppped")
+          (alter-var-root #'server (constantly nil))))
+
+      (defn start-server [port]
+        (stop-server)
+        (let [node (node/start-node {})
+              server (->pg-wire-server node
+                                       {:server-parameters {"server_version" "14"
+                                                            "server_encoding" "UTF8"
+                                                            "client_encoding" "UTF8"
+                                                            "TimeZone" "UTC"}
+                                        :port port
+                                        :num-threads 16})
+              srv {:port port
+                   :node node
+                   :server server}]
+          (println "Listening on" port)
+          (alter-var-root #'server (constantly srv))
+          srv))
+      )
+  ;; eval for setup ^
+
+  ;;;;
+  ;; start /stop the server
+
+  (start-server 5432)
+
+  (stop-server)
+
+  ;;;; clojure query
+  ;;
+
+  (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
+    (vec (for [row (jdbc/execute! c ["SELECT * FROM (VALUES (1 YEAR, true), (3.14, 'foo')) AS x (a, b)"])]
+           (update-vals row (comp json/read-str str)))))
+
+
+  )
