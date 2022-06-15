@@ -170,9 +170,9 @@
   (^org.agrona.MutableDirectBuffer [b entity content-hash attr]
    (encode-ecav-key-to b entity content-hash attr mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^DirectBuffer content-hash ^DirectBuffer attr ^DirectBuffer v]
-   (assert (or (zero? (.capacity attr)) (= c/id-size (.capacity attr)))
+   (assert (or (zero? (.capacity attr)) (< c/id-size (.capacity attr)))
            (mem/buffer->hex attr))
-   (assert (or (zero? (.capacity content-hash)) (= c/id-size (.capacity content-hash)))
+   (assert (or (zero? (.capacity content-hash)) (< c/id-size (.capacity content-hash)))
            (mem/buffer->hex content-hash))
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity entity) (.capacity content-hash) (.capacity attr) (.capacity v))))]
      (-> (doto b
