@@ -10,24 +10,22 @@
            java.nio.ByteBuffer
            [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
-           [java.nio.file CopyOption Files FileVisitResult LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
+           [java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.time Duration Instant LocalDateTime ZonedDateTime ZoneId]
+           [java.time Duration Instant ZoneId ZonedDateTime]
            java.time.temporal.ChronoUnit
-           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList Map Map$Entry Queue UUID WeakHashMap]
-           [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
+           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
+           [java.util.concurrent CompletableFuture ExecutorService Executors ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
            [java.util.function BiFunction Consumer Function IntUnaryOperator Supplier]
-           [org.apache.arrow.compression CommonsCompressionFactory ZstdCompressionCodec]
+           [org.apache.arrow.compression CommonsCompressionFactory]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
-           [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator RootAllocator]
+           [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers MemoryUtil]
-           [org.apache.arrow.vector BaseVariableWidthVector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BaseVariableWidthVector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
-           [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowStreamWriter ArrowWriter]
+           [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
-           [org.apache.arrow.vector.types.pojo Field Schema]
-           org.apache.arrow.vector.util.VectorSchemaRootAppender
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -54,7 +52,6 @@
   (s/and (s/conformer ->path) #(instance? Path %)))
 
 (s/def ::string-map (s/map-of string? string?))
-(s/def ::string-list (s/coll-of string?))
 
 (defn ->duration [d]
   (cond
@@ -74,8 +71,8 @@
 
 (extend-protocol TimeConversions
   nil
-  (->instant [i] nil)
-  (->zdt [i] nil)
+  (->instant [_] nil)
+  (->zdt [_] nil)
 
   Instant
   (->instant [i] i)
@@ -196,14 +193,6 @@
 (defn ->temp-file ^Path [^String prefix ^String suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
     (delete-file)))
-
-(def ^:private ^ZoneId utc (ZoneId/of "UTC"))
-
-(defn local-date-time->date ^java.util.Date [^LocalDateTime ldt]
-  (Date/from (.toInstant (.atZone ldt utc))))
-
-(defn date->local-date-time ^java.time.LocalDateTime [^Date d]
-  (LocalDateTime/ofInstant (.toInstant d) utc))
 
 (defn ->supplier {:style/indent :defn} ^java.util.function.Supplier [f]
   (reify Supplier
@@ -365,6 +354,7 @@
     (catch Exception e
       (log/warn e "could not open reflective access from" from "to" to))))
 
+#_{:clj-kondo/ignore [:unused-private-var]} ; side-effect
 (defonce ^:private direct-byte-buffer-access
   (try-open-reflective-access ArrowBuf (class (ByteBuffer/allocateDirect 0))))
 
@@ -382,7 +372,7 @@
               (when-not (and (instance? IllegalArgumentException cause)
                              (= "duplicate or slice" (.getMessage cause)))
                 (throw e)))))))
-    (catch ClassNotFoundException e
+    (catch ClassNotFoundException _
       (fn free-direct-buffer-nop [_]))))
 
 (defn inc-ref-count
@@ -395,18 +385,6 @@
                       (if (pos? x)
                         (+ x increment)
                         x))))))
-
-(defn dec-ref-count ^long [^AtomicInteger ref-count]
-  (let [new-ref-count (.updateAndGet ^AtomicInteger ref-count
-                                     (reify IntUnaryOperator
-                                       (applyAsInt [_ x]
-                                         (if (pos? x)
-                                           (dec x)
-                                           -1))))]
-    (when (neg? new-ref-count)
-      (.set ref-count 0)
-      (throw (IllegalStateException. "ref count has gone negative")))
-    new-ref-count))
 
 (def ^:private ^Method allocation-manager-associate-method
   (doto (.getDeclaredMethod AllocationManager "associate" (into-array Class [BufferAllocator]))
@@ -481,10 +459,10 @@
     (when close-buffer?
       (try-close buf))))
 
-(defn ^core2.ICursor ->chunks
-  ([^ArrowBuf ipc-file-format-buffer]
+(defn ->chunks
+  (^core2.ICursor [^ArrowBuf ipc-file-format-buffer]
    (->chunks ipc-file-format-buffer {}))
-  ([^ArrowBuf ipc-file-format-buffer {:keys [^RoaringBitmap block-idxs close-buffer?]}]
+  (^core2.ICursor [^ArrowBuf ipc-file-format-buffer {:keys [^RoaringBitmap block-idxs close-buffer?]}]
    (let [footer (read-arrow-footer ipc-file-format-buffer)
          root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager ipc-file-format-buffer)))]
      (ChunkCursor. ipc-file-format-buffer
@@ -510,7 +488,7 @@
                              (deliver res (f root)))))
         @res))))
 
-(defn ^core2.ICursor and-also-close [^ICursor cursor, ^AutoCloseable closeable]
+(defn and-also-close ^core2.ICursor [^ICursor cursor, ^AutoCloseable closeable]
   (reify ICursor
     (characteristics [_] (.characteristics cursor))
     (estimateSize [_] (.estimateSize cursor))
@@ -578,71 +556,6 @@
         end-offset (.getInt offset-buffer (+ offset-idx BaseVariableWidthVector/OFFSET_WIDTH))]
     (.nioBuffer value-buffer offset (- end-offset offset))))
 
-(defn ->region-allocator
-  (^org.apache.arrow.memory.BufferAllocator []
-   (let [buffers (ArrayList.)]
-     (proxy [RootAllocator] []
-       (buffer [size]
-         (let [^RootAllocator this this
-               ^ArrowBuf buf (proxy-super buffer size)]
-           (.add buffers buf)
-           buf))
-
-       (close []
-         (let [^RootAllocator this this]
-           (doseq [^ArrowBuf buf buffers
-                   :let [ref-count (.refCnt buf)]
-                   :when (pos? ref-count)]
-             (.release (.getReferenceManager buf) ref-count))
-           (.clear buffers)
-           (proxy-super close)))))))
-
-(def ^:private ^java.lang.reflect.Field arrow-writer-unloader-field
-  (doto (.getDeclaredField ArrowWriter "unloader")
-    (.setAccessible true)))
-
-(defn compress-arrow-ipc-file-blocks
-  (^java.nio.file.Path [^Path path]
-   (let [compressed-path (.resolve (.getParent path) (str (.getFileName path) ".compressed"))]
-     (compress-arrow-ipc-file-blocks path compressed-path)
-     (atomic-move compressed-path path)))
-  (^java.nio.file.Path [^Path from ^Path to]
-   (with-open [allocator (RootAllocator.)
-               from-ch (->file-channel from)
-               in (ArrowFileReader. from-ch allocator)
-               to-ch (->file-channel to write-new-file-opts)
-               out (ArrowFileWriter. (.getVectorSchemaRoot in) nil to-ch)]
-     (while (.loadNextBatch in)
-       (let [root (.getVectorSchemaRoot in)]
-         (with-open [inner-allocator (->region-allocator)]
-           (let [out-root (VectorSchemaRoot/create (.getSchema root) inner-allocator)]
-             (VectorSchemaRootAppender/append out-root (into-array [root]))
-             (.set arrow-writer-unloader-field out (VectorUnloader. out-root true (ZstdCompressionCodec.) true))
-             (.writeBatch out)))))
-     to)))
-
-(defn into-linked-map
-  ([coll]
-   (let [res (LinkedHashMap.)]
-     (doseq [^Map$Entry entry coll]
-       (.put res (.getKey entry) (.getValue entry)))))
-
-  ([xform coll]
-   (transduce xform
-              (completing (fn [^LinkedHashMap lhm ^Map$Entry el]
-                            (doto lhm (.put (.getKey el) (.getValue el)))))
-              (LinkedHashMap.)
-              coll)))
-
-(defn map-entries [f]
-  (map (fn [^Map$Entry entry]
-         (f (.getKey entry) (.getValue entry)))))
-
-(defn map-values [f]
-  (map (fn [^Map$Entry entry]
-         (let [k (.getKey entry)]
-           (MapEntry/create k (f k (.getValue entry)))))))
-
 (defn ->identity-set []
   (Collections/newSetFromMap (IdentityHashMap.)))
 
@@ -703,6 +616,7 @@
               (->> (.put cache k)))
             v)))))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (defn clear-known-lru-memo-tables! []
   (doseq [[_ ^Map table] known-memo-tables]
     (.clear table)))
