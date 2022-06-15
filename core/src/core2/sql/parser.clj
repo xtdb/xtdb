@@ -156,6 +156,27 @@
              (first (.ast state))
              (ParseFailure. in (.getErrors errors) (.getIndex errors)))))))))
 
+(def sql-cfg (read-string (slurp (io/resource "core2/sql/parser/SQL2011.edn"))))
+
+;; API
+
+(def sql-parser (build-ebnf-parser sql-cfg
+                                   #"(?:\s+|(?<=\p{Punct}|\s)|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
+                                   (fn [rule-name]
+                                     (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
+                                              (re-find #"(^|_)(term|factor|primary|expression|query_expression_body)$" (name rule-name)))
+                                       Parser/SINGLE_CHILD
+                                       Parser/NEVER_RAW))))
+
+(def parse (util/lru-memoize
+            (fn self
+              ([in]
+               (self in :directly_executable_statement))
+              ([in start-rule]
+               (vary-meta
+                (sql-parser in start-rule)
+                assoc :sql in)))))
+
 (comment
 
   (let [grammar "prog:	(expr NEWLINE)* ;
@@ -226,25 +247,6 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
     (time
      (dotimes [_ 1000]
        (spec-parser in)))))
-
-(def sql-cfg (read-string (slurp (io/resource "core2/sql/parser/SQL2011.edn"))))
-
-(def sql-parser (build-ebnf-parser sql-cfg
-                                   #"(?:\s+|(?<=\p{Punct}|\s)|\b|\s*--[^\r\n]*\s*|\s*/[*].*?(?:[*]/\s*|$))"
-                                   (fn [rule-name]
-                                     (if (and (not (contains? #{:table_primary :query_expression :table_expression} rule-name))
-                                              (re-find #"(^|_)(term|factor|primary|expression|query_expression_body)$" (name rule-name)))
-                                       Parser/SINGLE_CHILD
-                                       Parser/NEVER_RAW))))
-
-(def parse (util/lru-memoize
-            (fn self
-              ([in]
-               (self in :directly_executable_statement))
-              ([in start-rule]
-               (vary-meta
-                (sql-parser in start-rule)
-                assoc :sql in)))))
 
 (comment
   (sql-parser "SELECT * FROMfoo" :directly_executable_statement)
