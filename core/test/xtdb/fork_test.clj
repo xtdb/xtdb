@@ -105,15 +105,6 @@
                                      {:with-docs? true})
                   (mapv #(select-keys % [::xt/tx-id ::xt/doc])))))))
 
-;; put a doc v1
-;; put a doc v2 into the future
-;; play tx-fn when valid-time is in the future
-;; play tx-fn when valid-time is in the past
-;; Compare the two (neither should see the updated entity, neither should see the future value
-;; consult tx-index, index-tx 441
-;; potentially two nodes, one to replay
-;; Theory here is that valid-time is not capped on this branch
-
 (t/deftest test-speculative-from-point-in-past
   (let [ivan0 {:xt/id :ivan, :name "Ivan0"}
         tt0 (::xt/tx-time (fix/submit+await-tx [[::xt/put ivan0]]))
