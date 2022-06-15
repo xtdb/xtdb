@@ -241,39 +241,34 @@
 
 (def canned-responses
   "Some pre-baked responses to common queries issued as setup by Postgres drivers, e.g SQLAlchemy"
-  {"select pg_catalog.version()"
-   {:cols [{:column-name "version" :oid varchar-oid}]
+  [{:q "select pg_catalog.version()"
+    :cols [{:column-name "version" :oid varchar-oid}]
     :rows [["PostgreSQL 14.2"]]}
-
-   "show standard_conforming_strings"
-   {:cols [{:column-name "standard_conforming_strings" :oid varchar-oid}]
+   {:q "show standard_conforming_strings"
+    :cols [{:column-name "standard_conforming_strings" :oid varchar-oid}]
     :rows [["on"]]}
-
-   "select current_schema"
-   {:cols [{:column-name "current_schema" :oid varchar-oid}]
+   {:q "select current_schema"
+    :cols [{:column-name "current_schema" :oid varchar-oid}]
     :rows [["public"]]}
-
-   "show transaction isolation level"
-   {:cols [{:column-name "transaction_isolation" :oid varchar-oid}]
-    :rows [["read committed"]]}})
+   {:q "show transaction isolation level"
+    :cols [{:column-name "transaction_isolation" :oid varchar-oid}]
+    :rows [["read committed"]]}])
 
 ;; yagni, is everything upper'd anyway by drivers / server?
 (defn- starts-with-case-insensitive? [s substr]
   ;; todo replace with re solution
   (str/starts-with? (str/lower-case s) (str/lower-case substr)))
 
-(defn canned-query [s]
-  (-> (filter #(starts-with-case-insensitive? s %) (keys canned-responses))
-      first
-      (canned-responses)))
+(defn get-canned-response [sql-str]
+  (first (filter #(starts-with-case-insensitive? sql-str (:q %)) canned-responses)))
 
 (def ignore-parse-bind-strings
-  (set/union
-    #{"set"
-      "begin"
-      "commit"
-      "rollback"}
-    (set (keys canned-responses))))
+  (-> ["set"
+       "begin"
+       "commit"
+       "rollback"]
+      (concat (map :q canned-responses))
+      set))
 
 (defn- ignore-parse-bind? [message]
   (boolean (or (empty-query? message)
@@ -363,19 +358,19 @@
 (defmethod handle-message :pgwire/execute [session message out]
   (let [bind-message (get-in session [:portals (:pgwire.execute/portal message)])
         parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement bind-message)])
-        canned (canned-query (:pgwire.parse/query-string parse-message))]
+        canned-response (get-canned-response (:pgwire.parse/query-string parse-message))]
     (cond
       (empty-query? parse-message)
       (do (send-empty-query-response out)
           session)
 
-      canned
-      (let [{:keys [cols, rows]} canned]
-        (do (send-row-description out cols)
-            (doseq [row rows]
-              (send-data-row out (mapv (fn [v] (if (bytes? v) v (utf8 v))) row)))
-            (send-command-complete out (str (statement-command parse-message) " " (count rows)))
-            session))
+      canned-response
+      (let [{:keys [cols, rows]} canned-response]
+        (send-row-description out cols)
+        (doseq [row rows]
+          (send-data-row out (mapv (fn [v] (if (bytes? v) v (utf8 v))) row)))
+        (send-command-complete out (str (statement-command parse-message) " " (count rows)))
+        session)
 
       (= "SET" (statement-command parse-message))
       (let [[_ k v] (re-find #"SET\s+(\w+)\s*=\s*'?(.*)'?" (strip-query-semi-colon (:pgwire.parse/query-string parse-message)))]
