@@ -74,10 +74,7 @@
    (mem/buffers=? (mem/as-buffer a) (mem/as-buffer b) max-length)))
 
 (defn- store [kv-store kvs]
-  (with-open [kv-tx (kv/begin-kv-tx kv-store)]
-    (doseq [[k v] kvs]
-      (kv/put-kv kv-tx k v))
-    (kv/commit-kv-tx kv-tx)))
+  (kv/store kv-store kvs))
 
 (t/deftest test-store-and-value []
   (fkv/with-kv-store [kv-store]
@@ -174,63 +171,67 @@
 
 (t/deftest test-transaction-isolation
   (fkv/with-kv-store [kv-store]
-    (with-open [tx1 (kv/begin-kv-tx kv-store)]
+    (when (satisfies? kv/KvStoreWithReadTransaction kv-store)
+      (with-open [tx1 (kv/begin-kv-tx kv-store)]
 
-      (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB"))
-      (t/is (= "XTDB" (String. ^bytes (value-tx tx1 (long->bytes 1)))))
+        (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB"))
+        (t/is (= "XTDB" (String. ^bytes (value-tx tx1 (long->bytes 1)))))
 
-      (with-open [tx1-snapshot (kv/new-tx-snapshot tx1)]
-        (store kv-store [[(long->bytes 2) (.getBytes "XTDB2")]])
-        (t/is (String. ^bytes (value kv-store (long->bytes 2))))
-        (t/is (nil? (value-snapshot tx1-snapshot (long->bytes 2))))))))
+        (with-open [tx1-snapshot (kv/new-tx-snapshot tx1)]
+          (store kv-store [[(long->bytes 2) (.getBytes "XTDB2")]])
+          (t/is (String. ^bytes (value kv-store (long->bytes 2))))
+          (t/is (nil? (value-snapshot tx1-snapshot (long->bytes 2)))))))))
 
 (t/deftest test-commit-empty-tx
   (fkv/with-kv-store [kv-store]
-    (let [tx1 (kv/begin-kv-tx kv-store)]
-      (kv/commit-kv-tx tx1))))
+    (when (satisfies? kv/KvStoreWithReadTransaction kv-store)
+      (let [tx1 (kv/begin-kv-tx kv-store)]
+        (kv/commit-kv-tx tx1)))))
 
 (t/deftest test-can-read-writes-in-tx
   (fkv/with-kv-store [kv-store]
-    (let [tx1 (kv/begin-kv-tx kv-store)
-          tx2 (kv/begin-kv-tx kv-store)]
+    (when (satisfies? kv/KvStoreWithReadTransaction kv-store)
+      (let [tx1 (kv/begin-kv-tx kv-store)
+            tx2 (kv/begin-kv-tx kv-store)]
 
-      (t/testing "read a put"
-        (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB"))
-        (t/is (= "XTDB" (String. ^bytes (value-tx tx1 (long->bytes 1)))))
-        (t/is (nil? (value-tx tx2 (long->bytes 1))))
-        (t/is (nil? (value kv-store (long->bytes 1)))))
+        (t/testing "read a put"
+          (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB"))
+          (t/is (= "XTDB" (String. ^bytes (value-tx tx1 (long->bytes 1)))))
+          (t/is (nil? (value-tx tx2 (long->bytes 1))))
+          (t/is (nil? (value kv-store (long->bytes 1)))))
 
-      (t/testing "delete"
-        (kv/put-kv tx2 (long->bytes 1) (.getBytes "XTDB"))
-        (kv/put-kv tx1 (long->bytes 1) nil)
-        (t/is (nil? (value-tx tx1 (long->bytes 1))))
-        (t/is (value-tx tx2 (long->bytes 1))))
-
-      (t/testing "update"
-        (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB2"))
-        (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB3"))
-        (t/is (= "XTDB3" (String. ^bytes (value-tx tx1 (long->bytes 1)))))
-        (t/is (= "XTDB" (String. ^bytes (value-tx tx2 (long->bytes 1))))))
-
-      (t/testing "seek"
-        (with-open [snapshot (kv/new-tx-snapshot tx1)
-                    i (kv/new-iterator snapshot)]
-          (t/is (kv/seek i (long->bytes 0)))
-          (t/is (kv/seek i (long->bytes 1)))
-          (t/is (nil? (kv/seek i (long->bytes 2))))
+        (t/testing "delete"
+          (kv/put-kv tx2 (long->bytes 1) (.getBytes "XTDB"))
           (kv/put-kv tx1 (long->bytes 1) nil)
-          (t/is (nil? (kv/seek i (long->bytes 0)))))))))
+          (t/is (nil? (value-tx tx1 (long->bytes 1))))
+          (t/is (value-tx tx2 (long->bytes 1))))
+
+        (t/testing "update"
+          (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB2"))
+          (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB3"))
+          (t/is (= "XTDB3" (String. ^bytes (value-tx tx1 (long->bytes 1)))))
+          (t/is (= "XTDB" (String. ^bytes (value-tx tx2 (long->bytes 1))))))
+
+        (t/testing "seek"
+          (with-open [snapshot (kv/new-tx-snapshot tx1)
+                      i (kv/new-iterator snapshot)]
+            (t/is (kv/seek i (long->bytes 0)))
+            (t/is (kv/seek i (long->bytes 1)))
+            (t/is (nil? (kv/seek i (long->bytes 2))))
+            (kv/put-kv tx1 (long->bytes 1) nil)
+            (t/is (nil? (kv/seek i (long->bytes 0))))))))))
 
 (t/deftest test-can-commit-txs
   (fkv/with-kv-store [kv-store]
-    (let [^java.io.Closeable tx1 (kv/begin-kv-tx kv-store)]
-      (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB"))
-      (t/is (value-tx tx1 (long->bytes 1)))
-      (t/is (nil? (value kv-store (long->bytes 1))))
+    (when (satisfies? kv/KvStoreWithReadTransaction kv-store)
+      (let [^java.io.Closeable tx1 (kv/begin-kv-tx kv-store)]
+        (kv/put-kv tx1 (long->bytes 1) (.getBytes "XTDB"))
+        (t/is (value-tx tx1 (long->bytes 1)))
+        (t/is (nil? (value kv-store (long->bytes 1))))
 
-      (kv/commit-kv-tx tx1)
+        (kv/commit-kv-tx tx1)
 
-      (t/is (value kv-store (long->bytes 1))))))
+        (t/is (value kv-store (long->bytes 1)))))))
 
 (t/deftest test-checkpoint-and-restore-db
   (fkv/with-kv-store [kv-store]

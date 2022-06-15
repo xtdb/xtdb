@@ -224,6 +224,7 @@
 
 (defn- index-docs [index-store-tx docs]
   (db/index-docs index-store-tx docs)
+  (db/commit-index-tx index-store-tx)
   (db/index-stats *index-store* docs))
 
 (t/deftest test-statistics
@@ -244,19 +245,15 @@
 
           (index-docs index-store-tx {(c/new-id ivan) ivan})
           (t/is (= {:doc-count 1, :doc-value-count 1, :values 1, :eids 1} (:name (->stats *index-store*))))
-          (t/is (= {:doc-count 1, :doc-value-count 2, :values 2, :eids 1} (:interests (->stats *index-store*))))
+          (t/is (= {:doc-count 1, :doc-value-count 2, :values 2, :eids 1} (:interests (->stats *index-store*)))))
 
-          (index-docs index-store-tx {(c/new-id petr) petr})
-          (t/is (= {:doc-count 2, :doc-value-count 2, :values 2, :eids 2} (:name (->stats *index-store*))))
-
-          (db/commit-index-tx index-store-tx))
-
-        (t/is (= {:doc-count 2, :doc-value-count 2, :values 2, :eids 2} (:name (->stats *index-store*))))
+        (let [index-store-tx (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021-01", :tx-id 1})]
+                    (index-docs index-store-tx {(c/new-id petr) petr})
+          (t/is (= {:doc-count 2, :doc-value-count 2, :values 2, :eids 2} (:name (->stats *index-store*)))))
 
         (t/testing "updated"
           (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1})
-            (index-docs {(c/new-id ivan2) ivan2})
-            (db/commit-index-tx))
+            (index-docs {(c/new-id ivan2) ivan2}))
 
           (t/is (= {:doc-count 3, :doc-value-count 3, :values 3, :eids 2} (:name (->stats *index-store*))))
           (t/is (= {:doc-count 2, :doc-value-count 5, :values 3, :eids 1} (:interests (->stats *index-store*)))))
@@ -265,12 +262,9 @@
           ;; this isn't ideal, but stats won't ever be 100% accurate
 
           (let [index-store-tx (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1})]
-
             (index-docs index-store-tx {(c/new-id petr) petr})
             (t/is (= {:doc-count 4, :doc-value-count 4, :values 3, :eids 2}
-                     (:name (->stats *index-store*))))
-
-            (db/commit-index-tx index-store-tx)))))
+                     (:name (->stats *index-store*))))))))
 
     (with-fresh-index-store
       (let [id-iterator (.iterator ^Iterable (range))]
@@ -283,13 +277,10 @@
           (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0})
 
             (index-docs (mk-docs 50))
-            (index-docs (mk-docs 50))
-
-            (db/commit-index-tx))
+            (index-docs (mk-docs 50)))
 
           (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1})
-            (index-docs (mk-docs 50))
-            (db/commit-index-tx))))
+            (index-docs (mk-docs 50)))))
 
       (t/is (= {:crux.db/id {:doc-count 3675, :doc-value-count 3675, :values 3554, :eids 3554}
                 :sub-idx {:doc-count 3675, :doc-value-count 3675, :values 50, :eids 3554}}
@@ -303,8 +294,7 @@
                :vec-val [1 4 6 2 6 1]}
           doc-id (c/new-id doc)]
       (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0})
-        (index-docs {doc-id doc})
-        (db/commit-index-tx))
+        (index-docs {doc-id doc}))
 
       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
         (t/is (= doc (db/entity index-snapshot :foo doc-id)))))))

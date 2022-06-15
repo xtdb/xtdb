@@ -242,7 +242,7 @@
     (db/index-entity-txs index-store-tx entity-txs))
 
   (commit-index-tx [_]
-    (with-open [snapshot (kv/new-snapshot transient-kv)]
+    (with-open [snapshot (kv/new-tx-snapshot (:kv-tx index-store-tx))]
       (kv/store (:kv-store base-index-store) (seq snapshot))))
 
   (abort-index-tx [_ docs]
