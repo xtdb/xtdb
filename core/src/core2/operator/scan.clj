@@ -1,6 +1,5 @@
 (ns core2.operator.scan
-  (:require [clojure.core.match :refer [match]]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [core2.align :as align]
             [core2.bloom :as bloom]
             [core2.coalesce :as coalesce]
@@ -11,6 +10,7 @@
             [core2.indexer :as idx]
             [core2.logical-plan :as lp]
             [core2.metadata :as meta]
+            [core2.rewrite :refer [zmatch]]
             core2.snapshot
             [core2.temporal :as temporal]
             [core2.types :as t]
@@ -74,7 +74,7 @@
              (into {} (comp (mapcat (fn ->scan-col-keys [{:keys [source columns]}]
                                       (let [src-key (or source '$)]
                                         (for [column columns]
-                                          [src-key (match column
+                                          [src-key (zmatch column
                                                      [:column col] col
                                                      [:select col-map] (key (first col-map)))]))))
                             (distinct)

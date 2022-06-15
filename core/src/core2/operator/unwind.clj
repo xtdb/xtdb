@@ -1,7 +1,7 @@
 (ns core2.operator.unwind
-  (:require [clojure.core.match :refer [match]]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [core2.logical-plan :as lp]
+            [core2.rewrite :refer [zmatch]]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
@@ -126,10 +126,9 @@
         (let [unwind-col-type (->> (get col-types from-col)
                                    types/flatten-union-types
                                    (keep (fn [col-type]
-                                           (match col-type
+                                           (zmatch col-type
                                              [:list inner-type] inner-type
-                                             [:fixed-size-list _list-size inner-type] inner-type
-                                             :else nil)))
+                                             [:fixed-size-list _list-size inner-type] inner-type)))
                                    (apply types/merge-col-types))]
           {:col-types (-> col-types
                           (assoc to-col unwind-col-type)

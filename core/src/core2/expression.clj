@@ -1,9 +1,9 @@
 (ns core2.expression
-  (:require [clojure.core.match :refer [match]]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [core2.error :as err]
             [core2.expression.macro :as macro]
             [core2.expression.walk :as walk]
+            [core2.rewrite :refer [zmatch]]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
@@ -335,7 +335,7 @@
 
 (defn- wrap-boxed-poly-return [{:keys [return-type continue] :as ret} {:keys [return-boxes]}]
   (-> ret
-      (assoc :continue (match return-type
+      (assoc :continue (zmatch return-type
                          [:union inner-types]
                          (let [boxes (->> (for [rt inner-types]
                                             [rt (box-for return-boxes rt)])
@@ -351,7 +351,6 @@
                                              [box-sym (f ret-type `(.value ~box-sym))])
                                            (apply concat)))))))
 
-                         :else
                          (fn [f]
                            (f return-type (continue (fn [_ code] code))))))))
 
@@ -1615,26 +1614,27 @@
 
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
 
-          {:expr-fn (delay (-> `(fn [~(-> out-vec-sym (with-tag ValueVector))
-                              ~(-> rel-sym (with-tag IIndirectRelation))
-                              ~params-sym]
-                           (let [~@(batch-bindings expr)
+          {:expr-fn (delay
+                      (-> `(fn [~(-> out-vec-sym (with-tag ValueVector))
+                                ~(-> rel-sym (with-tag IIndirectRelation))
+                                ~params-sym]
+                             (let [~@(batch-bindings expr)
 
-                                 ~@(box-bindings (concat boxes (vals return-boxes)))
+                                   ~@(box-bindings (concat boxes (vals return-boxes)))
 
-                                 ~out-writer-sym (vw/vec->writer ~out-vec-sym)
-                                 ~@writer-bindings
+                                   ~out-writer-sym (vw/vec->writer ~out-vec-sym)
+                                   ~@writer-bindings
 
-                                 row-count# (.rowCount ~rel-sym)]
-                             (.setValueCount ~out-vec-sym row-count#)
-                             (dotimes [~idx-sym row-count#]
-                               (.startValue ~out-writer-sym)
-                               ~(continue (fn [t c]
-                                            (write-value-out! t c)))
-                               (.endValue ~out-writer-sym))))
+                                   row-count# (.rowCount ~rel-sym)]
+                               (.setValueCount ~out-vec-sym row-count#)
+                               (dotimes [~idx-sym row-count#]
+                                 (.startValue ~out-writer-sym)
+                                 ~(continue (fn [t c]
+                                              (write-value-out! t c)))
+                                 (.endValue ~out-writer-sym))))
 
-                        #_(doto clojure.pprint/pprint)
-                        eval))
+                          #_(doto clojure.pprint/pprint)
+                          eval))
 
            :return-type return-type}))
       (util/lru-memoize)

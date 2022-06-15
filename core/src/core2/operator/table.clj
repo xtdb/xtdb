@@ -1,9 +1,9 @@
 (ns core2.operator.table
-  (:require [clojure.core.match :refer [match]]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [core2.error :as err]
             [core2.expression :as expr]
             [core2.logical-plan :as lp]
+            [core2.rewrite :refer [zmatch]]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
@@ -112,18 +112,16 @@
 
 (defn- param-type->col-types [param-type]
   (letfn [(->struct-cols-inner [col-type]
-            (match col-type
-              [:struct struct-cols] #{struct-cols}
-              :else nil))
+            (zmatch col-type
+              [:struct struct-cols] #{struct-cols}))
 
           (->struct-cols-outer [col-type]
-            (match col-type
+            (zmatch col-type
               [:list [:union inner-types]] (->> inner-types (into #{} (mapcat ->struct-cols-inner)))
               [:list inner-type] (->struct-cols-inner inner-type)
               [:fixed-size-list _ [:union inner-types]] (->> inner-types (into #{} (mapcat ->struct-cols-inner)))
               [:fixed-size-list _ inner-type] (->struct-cols-inner inner-type)
-              [:union inner-types] (->> inner-types (into #{} (mapcat ->struct-cols-outer)))
-              :else nil))]
+              [:union inner-types] (->> inner-types (into #{} (mapcat ->struct-cols-outer)))))]
 
     (let [struct-cols (->struct-cols-outer param-type)]
       (->> (for [table-key (into #{} (mapcat keys) struct-cols)]
@@ -152,7 +150,7 @@
                                 (into {})))}))}))
 
 (defmethod lp/emit-expr :table [{:keys [table] :as table-expr} opts]
-  (let [{:keys [col-types ->table]} (match table
+  (let [{:keys [col-types ->table]} (zmatch table
                                       [:rows rows] (emit-rows-table rows table-expr opts)
                                       [:param param] (emit-param-table param table-expr opts))]
 

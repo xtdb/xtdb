@@ -1,11 +1,11 @@
 (ns core2.operator.group-by
-  (:require [clojure.core.match :refer [match]]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [core2.expression :as expr]
             [core2.expression.macro :as macro]
             [core2.expression.map :as emap]
             [core2.expression.walk :as walk]
             [core2.logical-plan :as lp]
+            [core2.rewrite :refer [zmatch]]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
@@ -606,14 +606,15 @@
                               (let [[to-column agg-form] (first agg)]
                                 (->aggregate-factory (into {:to-name to-column
                                                             :zero-row? (empty? group-cols)}
-                                                           (match agg-form
-                                                             [:nullary {:f f}]
-                                                             {:f f}
+                                                           (zmatch agg-form
+                                                             [:nullary agg-opts]
+                                                             (select-keys agg-opts [:f])
 
-                                                             [:unary {:f f, :from-column from-column}]
-                                                             {:f f
-                                                              :from-name from-column
-                                                              :from-type (get col-types from-column)})))))]
+                                                             [:unary agg-opts]
+                                                             (let [{:keys [f from-column]} agg-opts]
+                                                               {:f f
+                                                                :from-name from-column
+                                                                :from-type (get col-types from-column)}))))))]
           {:col-types (-> (into (->> group-cols
                                      (into {} (map (juxt identity col-types))))
                                 (->> agg-factories

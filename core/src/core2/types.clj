@@ -1,6 +1,6 @@
 (ns core2.types
-  (:require [clojure.core.match :refer [match]]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
+            [core2.rewrite :refer [zmatch]]
             [core2.util :as util])
   (:import clojure.lang.Keyword
            (core2.vector IDenseUnionWriter IVectorWriter)
@@ -435,9 +435,9 @@
       (derive :extension-type :any)))
 
 (defn flatten-union-types [col-type]
-  (match col-type
-    [:union inner-types] inner-types
-    :else #{col-type}))
+  (if (= :union (col-type-head col-type))
+    (second col-type)
+    #{col-type}))
 
 (defn merge-col-types [& col-types]
   (let [new-col-types (->> (for [col-type col-types
@@ -500,10 +500,10 @@
   (^org.apache.arrow.vector.types.pojo.Field [col-name col-type] (col-type->field* (name col-name) false col-type)))
 
 (defn col-type->duv-leg-key [col-type]
-  (match col-type
+  (zmatch col-type
     [:struct inner-types] [:struct-keys (set (keys inner-types))]
     [:list _inner-types] :list
-    :else col-type))
+    col-type))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti arrow-type->col-type

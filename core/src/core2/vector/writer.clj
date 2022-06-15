@@ -1,5 +1,5 @@
 (ns core2.vector.writer
-  (:require [clojure.core.match :refer [match]]
+  (:require [core2.rewrite :refer [zmatch]]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
@@ -98,7 +98,7 @@
 (defn- vec->duv-copier ^core2.vector.IRowCopier [^ValueVector src-vec, ^IDenseUnionWriter dest-col]
   (let [field (.getField src-vec)
         col-type (types/field->col-type field)]
-    (match col-type
+    (zmatch col-type
       [:union inner-types]
       (let [without-null (disj inner-types :null)]
         (assert (= 1 (count without-null)))
@@ -113,7 +113,6 @@
                 (.copyRow null-copier src-idx)
                 (.copyRow non-null-copier src-idx))))))
 
-      :else
       (-> (.writerForType dest-col col-type)
           (.rowCopier src-vec)))))
 
@@ -166,10 +165,7 @@
           writer)))
 
   (writerForType [this col-type]
-    (.computeIfAbsent writers-by-type (match col-type
-                                        [:struct inner-types] [:struct (set (keys inner-types))]
-                                        [:list _inner-type] :list
-                                        :else col-type)
+    (.computeIfAbsent writers-by-type (types/col-type->duv-leg-key col-type)
                       (reify Function
                         (apply [_ _]
                           (let [field-name (types/col-type->field-name col-type)
