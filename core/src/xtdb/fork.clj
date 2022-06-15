@@ -233,10 +233,14 @@
   (index-docs [_ docs]
     (db/index-docs index-store-tx docs))
 
-  (unindex-eids [_ eids]
+  (unindex-eids [_ _ eids]
     (when (seq eids)
       (swap! !evicted-eids into eids))
-    (db/unindex-eids index-store-tx eids))
+
+    ;; This isn't ideal. Ideally, the index-store-tx should be fork unaware, and forkness all happens here.
+    ;; Fork unaware, as to avoid pushing down the edge-case into the main code-path
+    (with-open [base-kv-snapshot (kv/new-snapshot (:kv-store base-index-store))]
+      (db/unindex-eids index-store-tx base-kv-snapshot eids)))
 
   (index-entity-txs [_ entity-txs]
     (db/index-entity-txs index-store-tx entity-txs))

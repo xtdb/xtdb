@@ -11,7 +11,7 @@
 
 (defprotocol IndexStoreTx
   (index-docs [this docs])
-  (unindex-eids [this eids])
+  (unindex-eids [this base-snapshot eids])
   (index-entity-txs [this entity-txs])
   (commit-index-tx [this])
   (abort-index-tx [this docs]))

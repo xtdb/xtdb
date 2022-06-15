@@ -25,7 +25,6 @@
 
 (defn with-each-kv-store* [f]
   (doseq [kv-opts [memkv-dep
-                   mutablekv-dep
                    rocks-dep
                    lmdb-dep]]
     (binding [*kv-opts* (merge *kv-opts* kv-opts)]

@@ -326,7 +326,7 @@
 
                                (db/index-entity-txs index-store-tx etxs)
                                (let [{:keys [tombstones]} (when (seq evict-eids)
-                                                            (db/unindex-eids index-store-tx evict-eids))]
+                                                            (db/unindex-eids index-store-tx nil evict-eids))]
                                  (when-let [docs (seq (concat docs tombstones))]
                                    (db/submit-docs document-store-tx docs)))
 

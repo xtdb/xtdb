@@ -1033,52 +1033,62 @@
        :doc-ids (into #{} (map c/new-id (keys docs)))
        :av-count (->> (vals docs) (apply concat) (count))}))
 
-  (unindex-eids [_ eids]
-    (with-open [p-snapshot (kv/new-tx-snapshot kv-tx)
-                pi (kv/new-iterator p-snapshot)]
-      (let [bitemp-ks (->> (for [eid eids
-                                 :let [eid-buf (c/->id-buffer eid)]
-                                 k (concat (all-keys-in-prefix pi (encode-bitemp-key-to nil eid-buf))
-                                           (all-keys-in-prefix pi (encode-bitemp-z-key-to nil eid-buf)))]
-                             k)
-                           (into #{}))
+  (unindex-eids [_ base-snapshot eids]
+    (let [snapshot (kv/new-tx-snapshot kv-tx)
+          pi (kv/new-iterator snapshot)
+          ti (some-> base-snapshot kv/new-iterator)]
+      (try
+        (letfn [(merge-idxs [k]
+                  (if ti
+                    (fork/merge-seqs (all-keys-in-prefix pi k)
+                                     (all-keys-in-prefix ti k))
+                    (all-keys-in-prefix pi k)))]
+          (let [bitemp-ks (->> (for [eid eids
+                                     :let [eid-buf (c/->id-buffer eid)]
+                                     k (concat (merge-idxs (encode-bitemp-key-to nil eid-buf))
+                                               (merge-idxs (encode-bitemp-z-key-to nil eid-buf)))]
+                                 k)
+                               (into #{}))
 
-            ecav-ks (->> (for [eid eids
-                               :let [eid-buf (c/->value-buffer eid)]
-                               ecav-key (all-keys-in-prefix pi (encode-ecav-key-to nil eid-buf))]
-                           [eid eid-buf ecav-key (decode-ecav-key-from ecav-key (.capacity eid-buf))])
-                         (vec))
+                ecav-ks (->> (for [eid eids
+                                   :let [eid-buf (c/->value-buffer eid)]
+                                   ecav-key (merge-idxs (encode-ecav-key-to nil eid-buf))]
+                               [eid eid-buf ecav-key (decode-ecav-key-from ecav-key (.capacity eid-buf))])
+                             (vec))
 
-            tombstones (->> (for [[eid _ _ ^Quad quad] ecav-ks]
-                              (MapEntry/create (.content-hash quad) eid))
-                            (into {})
-                            (into {} (map (fn [[ch eid]]
-                                            (MapEntry/create ch
-                                                             {:crux.db/id (c/new-id eid)
-                                                              ::xt/evicted? true})))))
-            content-ks (->> (for [[_ eid-buf ecav-key ^Quad quad] ecav-ks
-                                  :let [attr-buf (c/->id-buffer (.attr quad))
-                                        value-buf ^DirectBuffer (.value quad)
-                                        sole-av? (empty? (->> (all-keys-in-prefix pi (encode-ave-key-to nil attr-buf value-buf))
-                                                              (remove (comp #(mem/buffers=? % eid-buf)
-                                                                            #(decode-ave-key->e-from % (.capacity value-buf))))))]
+                tombstones (->> (for [[eid _ _ ^Quad quad] ecav-ks]
+                                  (MapEntry/create (.content-hash quad) eid))
+                                (into {})
+                                (into {} (map (fn [[ch eid]]
+                                                (MapEntry/create ch
+                                                                 {:crux.db/id (c/new-id eid)
+                                                                  ::xt/evicted? true})))))
+                content-ks (->> (for [[_ eid-buf ecav-key ^Quad quad] ecav-ks
+                                      :let [attr-buf (c/->id-buffer (.attr quad))
+                                            value-buf ^DirectBuffer (.value quad)
+                                            sole-av? (empty? (->> (merge-idxs (encode-ave-key-to nil attr-buf value-buf))
+                                                                  (remove (comp #(mem/buffers=? % eid-buf)
+                                                                                #(decode-ave-key->e-from % (.capacity value-buf))))))]
 
-                                  k (cond-> [ecav-key
-                                             (encode-ae-key-to nil attr-buf eid-buf)
-                                             (encode-ave-key-to nil attr-buf value-buf eid-buf)]
-                                      sole-av? (conj (encode-av-key-to nil attr-buf value-buf))
+                                      k (cond-> [ecav-key
+                                                 (encode-ae-key-to nil attr-buf eid-buf)
+                                                 (encode-ave-key-to nil attr-buf value-buf eid-buf)]
+                                          sole-av? (conj (encode-av-key-to nil attr-buf value-buf))
 
-                                      (c/can-decode-value-buffer? value-buf)
-                                      (conj (encode-hash-cache-key-to nil value-buf eid-buf)))]
-                              k)
-                            (into #{}))]
+                                          (c/can-decode-value-buffer? value-buf)
+                                          (conj (encode-hash-cache-key-to nil value-buf eid-buf)))]
+                                  k)
+                                (into #{}))]
 
-        (run! #(cache/evict cav-cache %) (keys tombstones))
+            (run! #(cache/evict cav-cache %) (keys tombstones))
 
-        (doseq [k (concat bitemp-ks content-ks)]
-          (kv/put-kv kv-tx k nil))
+            (doseq [k (concat bitemp-ks content-ks)]
+              (kv/put-kv kv-tx k nil))
 
-        {:tombstones tombstones})))
+            {:tombstones tombstones}))
+        (finally
+          (doseq [^Closeable c [snapshot pi ti]]
+            (when c (.close c)))))))
 
   (index-entity-txs [_ entity-txs]
     (doseq [kv (->> (mapcat etx->kvs entity-txs)
