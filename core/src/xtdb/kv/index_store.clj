@@ -1127,10 +1127,7 @@
         transient-kv-tx (kv/begin-kv-tx transient-kv)
         transient-tx (->KvIndexStoreTx transient-kv transient-kv-tx tx thread-mgr
                                        (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) stats-kvs-cache)
-        delta-snapshot (reify db/IndexSnapshotFactory
-                         (open-index-snapshot [_]
-                           (new-kv-index-snapshot (kv/new-snapshot transient-kv) true thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))))
-        forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store delta-snapshot transient-kv nil (::xt/tx-id tx) (atom #{}) transient-tx abort-index-tx)]
+        forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store transient-kv nil (::xt/tx-id tx) (atom #{}) transient-tx abort-index-tx)]
     [forked-index-store-tx transient-kv-tx]))
 
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]

@@ -228,7 +228,7 @@
 (defn begin-document-store-tx [doc-store]
   (->ForkedDocumentStore doc-store (atom {})))
 
-(defrecord ForkedKvIndexStoreTx [base-index-store, delta-snapshot-factory, transient-kv, valid-time, tx-id, !evicted-eids, index-store-tx abort-index-tx]
+(defrecord ForkedKvIndexStoreTx [base-index-store, transient-kv, valid-time, tx-id, !evicted-eids, index-store-tx abort-index-tx]
   db/IndexStoreTx
   (index-docs [_ docs]
     (db/index-docs index-store-tx docs))
@@ -253,5 +253,5 @@
   (open-index-snapshot [_]
     (->MergedIndexSnapshot (-> (db/open-index-snapshot base-index-store)
                                (->CappedIndexSnapshot valid-time tx-id))
-                           (db/open-index-snapshot delta-snapshot-factory)
+                           (db/open-index-snapshot index-store-tx)
                            @!evicted-eids)))

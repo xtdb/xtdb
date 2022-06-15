@@ -42,7 +42,7 @@
   Closeable
   (close [_]))
 
-(deftype MutableKvTx [!db ^NavigableMap db2]
+(deftype MutableKvTx [^TreeMap db, ^NavigableMap db2]
   kv/KvStoreTx
 
   (new-tx-snapshot [_]
@@ -54,30 +54,30 @@
           (some-> v mem/as-buffer mem/copy-to-unpooled-buffer)))
 
   (commit-kv-tx [_]
-    (reset! !db db2))
+    (.putAll db db2))
 
   Closeable
   (close [_]))
 
-(deftype MutableKvStore [!db]
+(deftype MutableKvStore [^TreeMap db]
   kv/KvStoreWithReadTransaction
   (begin-kv-tx [_]
-    (->MutableKvTx !db (.clone ^TreeMap @!db)))
+    (->MutableKvTx db (.clone db)))
 
   kv/KvStore
   (new-snapshot ^java.io.Closeable [this]
-    (->MutableKvSnapshot @!db))
+    (->MutableKvSnapshot db))
 
   (store [_ kvs]
     (doseq [[k v] kvs]
-      (.put ^NavigableMap @!db (mem/as-buffer k) (some-> v mem/as-buffer))))
+      (.put db (mem/as-buffer k) (some-> v mem/as-buffer))))
 
   (fsync [_])
   (compact [_])
-  (count-keys [_] (count ^NavigableMap @!db))
+  (count-keys [_] (count db))
   (db-dir [_])
   (kv-name [this] (str (class this))))
 
 (defn ->mutable-kv-store
   ([] (->mutable-kv-store nil))
-  ([_] (->MutableKvStore (atom (TreeMap. mem/buffer-comparator)))))
+  ([_] (->MutableKvStore (TreeMap. mem/buffer-comparator))))

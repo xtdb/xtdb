@@ -7,7 +7,7 @@
             [xtdb.tx :as tx])
   (:import java.util.Date))
 
-(t/use-fixtures :each fkv/with-each-kv-store* fix/with-node)
+(t/use-fixtures :each fkv/with-each-kv-store* fkv/with-kv-store-opts* fix/with-node)
 
 (t/deftest test-empty-fork
   (let [db (-> (xt/db *api*)
