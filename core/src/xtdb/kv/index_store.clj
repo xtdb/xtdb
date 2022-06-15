@@ -368,9 +368,7 @@
    (mem/->nippy-buffer v)])
 
 (defn store-meta [kv k v]
-  (with-open [kv-tx (kv/begin-kv-tx kv)]
-    (apply kv/put-kv kv-tx (meta-kv k v))
-    (kv/commit-kv-tx kv-tx)))
+  (kv/store kv [(meta-kv k v)]))
 
 (defn- read-meta-snapshot
   ([snapshot k] (read-meta-snapshot snapshot k nil))

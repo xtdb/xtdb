@@ -78,5 +78,5 @@
   (kv-name [this] (str (class this))))
 
 (defn ->mutable-kv-store
-  ([] (->mutable-kv-store (TreeMap. mem/buffer-comparator)))
-  ([^NavigableMap db] (->MutableKvStore db)))
+  ([] (->mutable-kv-store nil))
+  ([_] (->MutableKvStore (TreeMap. mem/buffer-comparator))))
