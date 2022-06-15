@@ -343,12 +343,15 @@
                                                      (into {})))
                                          body]}
                                   {:no clause}))
-                              {:yes clause :no clause}))]
+                              {:yes clause :no clause}))
+                   yes-tree (generate-match-tree (keep :yes yes-no) zip?)
+                   yes-vars (set (filter symbol? (flatten yes-tree)))]
                `(if (= ~(count pattern-1) (count-indexed ~branch-var))
-                  (let [~@(->> (for [[^long idx var] (map-indexed vector vars)]
+                  (let [~@(->> (for [[^long idx var] (map-indexed vector vars)
+                                     :when (contains? yes-vars var)]
                                  `[~var (.nth ~(with-meta branch-var {:tag `Indexed}) ~idx)])
                                (reduce into []))]
-                    ~(generate-match-tree (keep :yes yes-no) zip?))
+                    ~yes-tree)
                   ~(generate-match-tree (keep :no yes-no) zip?)))
              (let [yes-no (for [[patterns body :as clause] clauses]
                             (if (contains? patterns branch-var)
