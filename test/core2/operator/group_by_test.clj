@@ -269,7 +269,12 @@
   (t/is (= [{:all-vs nil, :any-vs nil}]
            (op/query-ra [:group-by '[{all-vs (all v)} {any-vs (any v)}]
                          [::tu/blocks '{v [:union #{:bool :null}]}
-                          []]]))))
+                          []]])))
+
+  (t/is (= [{:n nil}]
+           (op/query-ra '[:group-by [{n (all b)}]
+                          [::tu/blocks
+                           [[{:b nil}]]]]))))
 
 (t/deftest test-distinct
   (t/is (= {:res #{{:k :a,

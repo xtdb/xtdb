@@ -205,7 +205,10 @@
                             :else {:op :literal, :literal nil}}
                            (prepare-expr input-opts))
 
-              {:keys [return-type continue boxes]} (expr/codegen-expr agg-expr (assoc input-opts :return-boxes return-boxes))
+              {:keys [continue boxes]} (expr/codegen-expr agg-expr (assoc input-opts :return-boxes return-boxes))
+              ;; ignore return-type of the codegen because it may be more specific than the acc type
+
+              return-type [:union (conj #{:null} to-type)]
 
               vec-type (-> (.getType (types/col-type->field return-type))
                            (types/arrow-type->vector-type))]
