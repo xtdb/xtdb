@@ -4,6 +4,7 @@
             [core2.expression.macro :as emacro]
             [core2.expression.walk :as ewalk]
             [core2.metadata :as meta]
+            [core2.util :as util]
             [core2.types :as types]
             [core2.vector.indirect :as iv])
   (:import core2.metadata.IMetadataIndices
@@ -211,7 +212,7 @@
 
       ;; TODO passing gensym'd bloom-hash-syms into the memoized fn means we're unlikely to get cache hits
       ;; pass values instead?
-      memoize))
+      (util/lru-memoize)))
 
 (defn ->metadata-selector [form col-types params]
   (let [{:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types (expr/->param-types params), :col-types col-types})

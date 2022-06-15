@@ -96,7 +96,7 @@
                                              (cont (fn [_arrow-type code] code)))))))))))
               #_(doto clojure.pprint/pprint)
               (eval))))
-      (memoize)))
+      (util/lru-memoize)))
 
 (defn ->comparator ^java.util.function.IntBinaryOperator [^IIndirectVector left-col, ^IIndirectVector right-col, null-ordering]
   (let [left-field (.getField (.getVector left-col))

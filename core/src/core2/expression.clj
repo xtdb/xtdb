@@ -1636,7 +1636,7 @@
                         eval)
 
            :return-type return-type}))
-      (memoize)
+      (util/lru-memoize)
       wrap-zone-id-cache-buster))
 
 (defn field->value-types [^Field field]

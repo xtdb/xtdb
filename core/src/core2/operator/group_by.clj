@@ -225,7 +225,7 @@
                                                (expr/set-value-form acc-type acc-sym group-idx-sym acc-code)))))))
                          #_(doto clojure.pprint/pprint)
                          eval)}))
-      (memoize)))
+      (util/lru-memoize)))
 
 (defn- reducing-agg-factory [{:keys [to-name to-type zero-row?] :as agg-opts}]
   (let [to-type [:union (conj #{:null} to-type)]

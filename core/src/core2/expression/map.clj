@@ -105,7 +105,7 @@
                                                            :arg-types [left-type right-type]})]
                              (when-not (= :null eq-type)
                                (->eq-code [left-code right-code]))))))))))))))
-      (memoize)))
+      (util/lru-memoize)))
 
 (defn- ->comparator ^core2.expression.map.IntIntPredicate [left-cols right-cols nil-equal]
   (->> (map (fn [^IIndirectVector left-col, ^IIndirectVector right-col]

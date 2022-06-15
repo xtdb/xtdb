@@ -1,6 +1,7 @@
 (ns core2.sql.parser
   (:require [clojure.java.io :as io]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [core2.util :as util])
   (:import java.io.File
            [java.util ArrayDeque Arrays HashSet Map Set]
            [java.util.regex Matcher Pattern]
@@ -236,7 +237,7 @@ HEADER_COMMENT: #'// *\\d.*?\\n' ;
                                        Parser/SINGLE_CHILD
                                        Parser/NEVER_RAW))))
 
-(def parse (memoize
+(def parse (util/lru-memoize
             (fn self
               ([in]
                (self in :directly_executable_statement))

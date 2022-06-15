@@ -14,7 +14,7 @@
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant LocalDateTime ZonedDateTime ZoneId]
            java.time.temporal.ChronoUnit
-           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList Map$Entry Queue UUID]
+           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList Map Map$Entry Queue UUID WeakHashMap]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
            [java.util.function BiFunction Consumer Function IntUnaryOperator Supplier]
@@ -660,3 +660,49 @@
                    (partition 2 clauses))
            (when (odd? (count clauses))
              (list (last clauses)))))))
+
+(def ^:const default-lru-memoize-size (* 4 1024))
+
+(def ^:private ^Map known-memo-tables (WeakHashMap.))
+
+(defn lru-memoize
+  ([f]
+   (lru-memoize default-lru-memoize-size f))
+  ([^long cache-size f]
+   (let [cache (proxy [LinkedHashMap] [cache-size 0.75 true]
+                 (removeEldestEntry [_]
+                   (> (.size ^Map this) cache-size)))]
+     (.put known-memo-tables f cache)
+     (fn
+       ([]
+        (let [k f
+              v (.getOrDefault cache k ::not-found)]
+          (if (identical? ::not-found v)
+            (doto (f)
+              (->> (.put cache k)))
+            v)))
+       ([x]
+        (let [k x
+              v (.getOrDefault cache k ::not-found)]
+          (if (identical? ::not-found v)
+            (doto (f x)
+              (->> (.put cache k)))
+            v)))
+       ([x y]
+        (let [k (MapEntry/create x y)
+              v (.getOrDefault cache k ::not-found)]
+          (if (identical? ::not-found v)
+            (doto (f x y)
+              (->> (.put cache k)))
+            v)))
+       ([x y & args]
+        (let [k (cons x (cons y args))
+              v (.getOrDefault cache k ::not-found)]
+          (if (identical? ::not-found v)
+            (doto (apply f k)
+              (->> (.put cache k)))
+            v)))))))
+
+(defn clear-known-lru-memo-tables! []
+  (doseq [[_ ^Map table] known-memo-tables]
+    (.clear table)))
