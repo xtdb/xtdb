@@ -279,11 +279,12 @@
                                   (cond-> `(get ~params-sym '~param)
                                     param-class (with-tag param-class))))]]))))
 
-(defmethod codegen-expr :param [{:keys [param param-type] :as expr} _]
-  (into {:return-type param-type
-         :continue (fn [f]
-                     (f param-type param))}
-        (select-keys expr #{:literal})))
+(defmethod codegen-expr :param [{:keys [param param-type] :as expr} {:keys [param-types]}]
+  (let [param-type (get param-types param param-type)]
+    (into {:return-type param-type
+           :continue (fn [f]
+                       (f param-type param))}
+          (select-keys expr #{:literal}))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti get-value-form
@@ -1614,7 +1615,7 @@
 
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
 
-          {:expr-fn (-> `(fn [~(-> out-vec-sym (with-tag ValueVector))
+          {:expr-fn (delay (-> `(fn [~(-> out-vec-sym (with-tag ValueVector))
                               ~(-> rel-sym (with-tag IIndirectRelation))
                               ~params-sym]
                            (let [~@(batch-bindings expr)
@@ -1633,7 +1634,7 @@
                                (.endValue ~out-writer-sym))))
 
                         #_(doto clojure.pprint/pprint)
-                        eval)
+                        eval))
 
            :return-type return-type}))
       (util/lru-memoize)
@@ -1943,7 +1944,7 @@
                                                      (.withName (name variable)))))
                                 (iv/->indirect-rel (.rowCount in-rel)))]
 
-                 (expr-fn out-vec in-rel params))
+                 (@expr-fn out-vec in-rel params))
 
                out-vec
                (catch Throwable e
@@ -1974,7 +1975,7 @@
 (defn param-classes [params]
   (->> params (into {} (map (juxt key (comp class val))))))
 
-(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [col-name form {:keys [col-types] :as input-types}]
+(defn ->expression-projection-spec ^core2.operator.IProjectionSpec [col-name form {:keys [col-types param-types] :as input-types}]
   (let [expr (form->expr form input-types)
 
         ;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
@@ -1982,7 +1983,8 @@
         ;; (i.e. we lose the exact DUV type-id mapping by converting to col-types)
         ;; ideally we'd lose var-fields altogether.
         widest-out-type (-> (emit-expr expr col-name
-                                       {:var->col-type col-types
+                                       {:param-types param-types
+                                        :var->col-type col-types
                                         :var-fields (->> col-types
                                                          (into {} (map (juxt key
                                                                              (fn [[col-name col-type]]
@@ -2000,7 +2002,8 @@
                                                  [(symbol (.getName iv))
                                                   (types/field->col-type (.getField (.getVector iv)))]))))
 
-              {:keys [eval-expr]} (emit-expr expr col-name {:param-classes (param-classes params)
+              {:keys [eval-expr]} (emit-expr expr col-name {:param-types (->param-types params)
+                                                            :param-classes (param-classes params)
                                                             :var-fields (->var-fields in-rel expr)
                                                             :var->col-type var->col-type})]
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))
