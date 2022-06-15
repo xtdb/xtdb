@@ -282,7 +282,7 @@
 
 (defn- equals-expr? [x]
   (and (sequential? x)
-       (contains? `#{= identical?} (first x))
+       (= `= (first x))
        (= 3 (count x))))
 
 (defn- flatten-ifs-to-case [x]
