@@ -4,7 +4,7 @@
 
 This is **not production code.**
 Do not run anything in this repository expecting it to work.
-The modules in this repository are _experiments_ which may or may not be used in the upcoming 2.x series of XTDB.
+The modules in this repository are _experiments_ which may or may not be used in future releases of XTDB.
 
 If you are looking for the stable, production-quality XTDB source code, you will always find it here: https://github.com/xtdb/xtdb
 
