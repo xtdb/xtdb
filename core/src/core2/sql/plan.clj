@@ -999,24 +999,15 @@
                        (assoc projection-col :unique-unqualified-column-name unique-unqualified-column-name))
                      projection
                      (generate-unique-column-names (map #(unqualified-projection-symbol %) projection)))
-        qualified->unqualified-rename (->> (for [{:keys [qualified-column unique-unqualified-column-name] :as projection} projection
-                                            :when qualified-column
-                                            :let [column (qualified-projection-symbol projection)]]
-                                        [column unique-unqualified-column-name])
-                                           (into {}))
-        qualified-projection (vec (for [{:keys [qualified-column unique-unqualified-column-name] :as projection} projection
-                                        :let [derived-column (:ref (meta projection))]]
+        qualified-projection (vec (for [{:keys [qualified-column unique-unqualified-column-name] :as column} projection
+                                        :let [derived-column (:ref (meta column))]]
                                     (if qualified-column
-                                      (qualified-projection-symbol projection)
+                                      {unique-unqualified-column-name
+                                       (qualified-projection-symbol column)}
                                       {unique-unqualified-column-name
                                        (expr (r/$ derived-column 1))})))
-        relation (wrap-with-apply sl (plan te))
-        qualified-project [:project qualified-projection relation]]
-    (if (not-empty qualified->unqualified-rename)
-      [:rename
-       qualified->unqualified-rename
-       qualified-project]
-      qualified-project)))
+        relation (wrap-with-apply sl (plan te))]
+    [:project qualified-projection relation]))
 
 (defn- build-set-op [set-op lhs rhs]
   (let [lhs-unqualified-project (mapv unqualified-projection-symbol (first (sem/projected-columns lhs)))
