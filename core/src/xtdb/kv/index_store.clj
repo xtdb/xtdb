@@ -987,7 +987,6 @@
      (get [_]
        (ExpandableDirectByteBuffer. 32)))))
 
-(def ^:private ^ThreadLocal content-hash-buffer-tl (buffer-tl))
 (def ^:private ^ThreadLocal content-buffer-tl (buffer-tl))
 (def ^:private ^ThreadLocal eid-buffer-tl (buffer-tl))
 (def ^:private ^ThreadLocal value-buffer-tl (buffer-tl))
@@ -1010,7 +1009,7 @@
       (doseq [[content-hash doc] docs
               :let [id (:crux.db/id doc)
                     eid-value-buffer (c/value->buffer id (.get eid-buffer-tl))
-                    content-hash (c/id->buffer content-hash (.get content-hash-buffer-tl))]]
+                    content-hash (c/->id-buffer content-hash)]]
 
         (store (encode-hash-cache-key-to (.get hash-key-buffer-tl) (c/id->buffer id (.get content-buffer-tl)) eid-value-buffer)
                (mem/nippy->buffer id (.get nippy-buffer-tl)))
