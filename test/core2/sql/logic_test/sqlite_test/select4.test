@@ -3089,47 +3089,47 @@ statement ok
 INSERT INTO t1 VALUES(996,297,177,577,602,'table tn1 row 128')
 
 query IIIIIT rowsort all1
-SELECT * FROM t1
+SELECT a1, b1, c1, d1, e1, x1 FROM t1
 ----
 768 values hashing to 5d3fe674077ba48f8afa1c6f4e61ced4
 
 query IIIIIT rowsort all2
-SELECT * FROM t2
+SELECT a2, b2, c2, d2, e2, x2 FROM t2
 ----
 678 values hashing to 09dd0a67e7c6bbb0b2aa2bc8364b9cb8
 
 query IIIIIT rowsort all3
-SELECT * FROM t3
+SELECT a3, b3, c3, d3, e3, x3 FROM t3
 ----
 774 values hashing to a4da0dfc78895ffb5c59ae7f49afed54
 
 query IIIIIT rowsort all4
-SELECT * FROM t4
+SELECT a4, b4, c4, d4, e4, x4 FROM t4
 ----
 666 values hashing to 66f651904b7b83fadcbddc7f15fc16b1
 
 query IIIIIT rowsort all5
-SELECT * FROM t5
+SELECT a5, b5, c5, d5, e5, x5 FROM t5
 ----
 660 values hashing to 168733c3c947e4cd1b1cad5b997ece30
 
 query IIIIIT rowsort all6
-SELECT * FROM t6
+SELECT a6, b6, c6, d6, e6, x6 FROM t6
 ----
 552 values hashing to 1498df6d8ab3f812e84f8e318dc53704
 
 query IIIIIT rowsort all7
-SELECT * FROM t7
+SELECT a7, b7, c7, d7, e7, x7 FROM t7
 ----
 660 values hashing to fa70f972b3a5f3339f77037444cb54d5
 
 query IIIIIT rowsort all8
-SELECT * FROM t8
+SELECT a8, b8, c8, d8, e8, x8 FROM t8
 ----
 654 values hashing to 55dc70aa8548b692aa3a7f2156fdeea5
 
 query IIIIIT rowsort all9
-SELECT * FROM t9
+SELECT a9, b9, c9, d9, e9, x9 FROM t9
 ----
 588 values hashing to be47bb47837e44b32abdcfb5f1645153
 
@@ -3182,47 +3182,47 @@ statement ok
 CREATE INDEX t8all ON t8(e8 DESC, d8 ASC, c8 DESC, b8 ASC, a8 DESC)
 
 query IIIIIT rowsort all1
-SELECT * FROM t1
+SELECT a1, b1, c1, d1, e1, x1 FROM t1
 ----
 768 values hashing to 5d3fe674077ba48f8afa1c6f4e61ced4
 
 query IIIIIT rowsort all2
-SELECT * FROM t2
+SELECT a2, b2, c2, d2, e2, x2 FROM t2
 ----
 678 values hashing to 09dd0a67e7c6bbb0b2aa2bc8364b9cb8
 
 query IIIIIT rowsort all3
-SELECT * FROM t3
+SELECT a3, b3, c3, d3, e3, x3 FROM t3
 ----
 774 values hashing to a4da0dfc78895ffb5c59ae7f49afed54
 
 query IIIIIT rowsort all4
-SELECT * FROM t4
+SELECT a4, b4, c4, d4, e4, x4 FROM t4
 ----
 666 values hashing to 66f651904b7b83fadcbddc7f15fc16b1
 
 query IIIIIT rowsort all5
-SELECT * FROM t5
+SELECT a5, b5, c5, d5, e5, x5 FROM t5
 ----
 660 values hashing to 168733c3c947e4cd1b1cad5b997ece30
 
 query IIIIIT rowsort all6
-SELECT * FROM t6
+SELECT a6, b6, c6, d6, e6, x6 FROM t6
 ----
 552 values hashing to 1498df6d8ab3f812e84f8e318dc53704
 
 query IIIIIT rowsort all7
-SELECT * FROM t7
+SELECT a7, b7, c7, d7, e7, x7 FROM t7
 ----
 660 values hashing to fa70f972b3a5f3339f77037444cb54d5
 
 query IIIIIT rowsort all8
-SELECT * FROM t8
+SELECT a8, b8, c8, d8, e8, x8 FROM t8
 ----
 654 values hashing to 55dc70aa8548b692aa3a7f2156fdeea5
 
 query IIIIIT rowsort all9
-SELECT * FROM t9
+SELECT a9, b9, c9, d9, e9, x9 FROM t9
 ----
 588 values hashing to be47bb47837e44b32abdcfb5f1645153
 
