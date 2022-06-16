@@ -97,6 +97,16 @@ jobs:
 
       - run: 'clojure -Srepro -M:slt-test'
 
+  slt-test-2:
+    executor: clojure
+    resource_class: large
+
+    steps:
+      - attach_workspace:
+          at: ~/
+
+      - run: 'clojure -Srepro -M:slt-test-2'
+
 workflows:
   build:
     jobs:

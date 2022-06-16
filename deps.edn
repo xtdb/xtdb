@@ -65,13 +65,16 @@
                        "test/core2/sql/logic_test/sqlite_test/random/expr/slt_good_0.test"
                        "test/core2/sql/logic_test/sqlite_test/random/aggregates/slt_good_0.test"
                        "test/core2/sql/logic_test/sqlite_test/random/groupby/slt_good_0.test"
-                       "test/core2/sql/logic_test/sqlite_test/random/select/slt_good_0.test"
-                       #_"test/core2/sql/logic_test/sqlite_test/index/between/1/slt_good_0.test"
-                       #_"test/core2/sql/logic_test/sqlite_test/index/commute/10/slt_good_0.test"
-                       #_"test/core2/sql/logic_test/sqlite_test/index/in/10/slt_good_0.test"
-                       #_"test/core2/sql/logic_test/sqlite_test/index/orderby/10/slt_good_0.test"
-                       #_"test/core2/sql/logic_test/sqlite_test/index/orderby_nosort/10/slt_good_0.test"
-                       #_"test/core2/sql/logic_test/sqlite_test/index/random/10/slt_good_0.test"]}
+                       "test/core2/sql/logic_test/sqlite_test/random/select/slt_good_0.test"]}
+
+           :slt-test-2  {:main-opts
+                         ["-m" "core2.sql.logic-test.runner" "--verify" "--db" "xtdb"
+                          "test/core2/sql/logic_test/sqlite_test/index/between/1/slt_good_0.test"
+                          "test/core2/sql/logic_test/sqlite_test/index/commute/10/slt_good_0.test"
+                          "test/core2/sql/logic_test/sqlite_test/index/in/10/slt_good_0.test"
+                          "test/core2/sql/logic_test/sqlite_test/index/orderby/10/slt_good_0.test"
+                          "test/core2/sql/logic_test/sqlite_test/index/orderby_nosort/10/slt_good_0.test"
+                          "test/core2/sql/logic_test/sqlite_test/index/random/10/slt_good_0.test"]}
 
            :s3-test {:exec-fn cognitect.test-runner.api/test
                      :exec-args {:includes [:s3]}}
