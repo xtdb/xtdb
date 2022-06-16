@@ -23,10 +23,6 @@ Some may be limited to providing inspiration.
 
 The XTDB vision is explained in the https://xtdb.com/pdfs/vision-doc.pdf[Vision Document] (PDF).
 
-== FAQ
-
-Please read the https://github.com/xtdb/core2/blob/master/FAQ.adoc[Frequently Asked Questions] to see if we have already answered a question you have.
-
 == Developers
 
 See https://github.com/xtdb/core2/blob/master/HACKING.adoc[HACKING].
