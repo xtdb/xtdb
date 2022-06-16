@@ -47671,6 +47671,7 @@ SELECT 77 + col0 AS col2 FROM tab2 AS cor0 GROUP BY cor0.col0
 92
 
 skipif postgresql # PostgreSQL requires AS when renaming output columns
+skipif xtdb
 query I rowsort
 SELECT ALL + COALESCE ( + 86, - cor0.col2 ) * cor1.col1 + + cor1.col1 col1 FROM tab1 AS cor0 CROSS JOIN tab2 cor1 GROUP BY cor0.col1, cor1.col1
 ----
@@ -57516,6 +57517,7 @@ SELECT ALL + cor0.col2 / 79 AS col0 FROM tab2 cor0 GROUP BY cor0.col2, cor0.col1
 1
 
 skipif postgresql # PostgreSQL requires AS when renaming output columns
+skipif xtdb
 query I rowsort
 SELECT + cor0.col2 * COALESCE ( 49, cor0.col0 + col0, cor0.col1 * + cor0.col0 ) col2 FROM tab2 AS cor0 GROUP BY cor0.col2
 ----
