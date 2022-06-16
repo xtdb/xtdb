@@ -495,7 +495,7 @@
   :default ::default)
 
 (def ^:private shortcut-null-args?
-  (complement (comp #{:true? :false? :nil? :boolean
+  (complement (comp #{:true? :false? :nil? :boolean :null-eq
                       :compare-nulls-first :compare-nulls-last}
                     keyword)))
 
