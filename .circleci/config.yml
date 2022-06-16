@@ -123,3 +123,6 @@ workflows:
       - slt-test:
           requires:
             - setup
+      - slt-test-2:
+          requires:
+            - setup
