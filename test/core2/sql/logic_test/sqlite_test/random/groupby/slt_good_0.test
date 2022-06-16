@@ -70834,6 +70834,7 @@ SELECT ALL - 45 + - 2 col0 FROM tab0 AS cor0 GROUP BY cor0.col1
 -47
 
 skipif postgresql # PostgreSQL requires AS when renaming output columns
+skipif xtdb
 query I rowsort
 SELECT COALESCE ( 77, - cor0.col2 + + cor0.col1 * - 24, - cor0.col1 + - cor0.col2 ) col0 FROM tab0 AS cor0 GROUP BY cor0.col1
 ----
