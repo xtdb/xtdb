@@ -525,6 +525,7 @@
                          (apply types/merge-col-types))]
 
     {:return-type return-type
+     :batch-bindings (->> (vals emitted-calls) (sequence (mapcat :batch-bindings)))
      :continue (fn continue-call-expr [handle-emitted-expr]
                  (let [build-args-then-call
                        (reduce (fn step [build-next-arg {continue-this-arg :continue}]
@@ -1312,23 +1313,23 @@
 
 (defmethod codegen-mono-call [:date-trunc :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ [_tstz _time-unit tz :as ts-type]] :arg-types}]
   ;; FIXME this assumes micros
-  {:return-type ts-type
-   :->call-code (fn [[_ x]]
-                  `(util/instant->micros (-> (util/micros->instant ~x)
-                                             ;; TODO only need to create the ZoneId once per batch
-                                             ;; but getting calls to have batch-bindings isn't straightforward
-                                             (ZonedDateTime/ofInstant (ZoneId/of ~tz))
-                                             ~(case field
-                                                "YEAR" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfYear 1))
-                                                "MONTH" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfMonth 1))
-                                                `(.truncatedTo ~(case field
-                                                                  "DAY" `ChronoUnit/DAYS
-                                                                  "HOUR" `ChronoUnit/HOURS
-                                                                  "MINUTE" `ChronoUnit/MINUTES
-                                                                  "SECOND" `ChronoUnit/SECONDS
-                                                                  "MILLISECOND" `ChronoUnit/MILLIS
-                                                                  "MICROSECOND" `ChronoUnit/MICROS)))
-                                             (.toInstant))))})
+  (let [zone-id-sym (gensym 'zone-id)]
+    {:return-type ts-type
+     :batch-bindings [[zone-id-sym `(ZoneId/of ~tz)]]
+     :->call-code (fn [[_ x]]
+                    `(util/instant->micros (-> (util/micros->instant ~x)
+                                               (ZonedDateTime/ofInstant ~zone-id-sym)
+                                               ~(case field
+                                                  "YEAR" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfYear 1))
+                                                  "MONTH" `(-> (.truncatedTo ChronoUnit/DAYS) (.withDayOfMonth 1))
+                                                  `(.truncatedTo ~(case field
+                                                                    "DAY" `ChronoUnit/DAYS
+                                                                    "HOUR" `ChronoUnit/HOURS
+                                                                    "MINUTE" `ChronoUnit/MINUTES
+                                                                    "SECOND" `ChronoUnit/SECONDS
+                                                                    "MILLISECOND" `ChronoUnit/MILLIS
+                                                                    "MICROSECOND" `ChronoUnit/MICROS)))
+                                               (.toInstant))))}))
 
 (defmethod codegen-mono-call [:date-trunc :utf8 :date] [{[{field :literal} _] :args, [_ [_date _date-unit :as date-type]] :arg-types}]
   ;; FIXME this assumes epoch-day
