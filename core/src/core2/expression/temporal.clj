@@ -1,6 +1,5 @@
 (ns core2.expression.temporal
   (:require [core2.expression :as expr]
-            [core2.expression.macro :as emacro]
             [core2.expression.metadata :as expr.meta]
             [core2.expression.walk :as ewalk]
             [core2.temporal :as temporal]
@@ -279,8 +278,7 @@
     (doseq [[col-name select-form] selects
             :when (temporal/temporal-column? col-name)]
       (->> (expr/form->expr select-form {:param-types (expr/->param-types params) :col-types col-types})
-           (emacro/macroexpand-all)
-           (ewalk/postwalk-expr expr/lit->param)
+           (expr/prepare-expr)
            (expr.meta/meta-expr)
            (ewalk/prewalk-expr
             (fn [{:keys [op] :as expr}]

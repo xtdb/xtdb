@@ -17,7 +17,7 @@
            (java.time Clock Duration Instant LocalDate ZonedDateTime ZoneId Period)
            (java.time.temporal ChronoUnit)
            (org.apache.arrow.vector DurationVector TimeStampVector ValueVector PeriodDuration)
-           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp FieldType)
+           (org.apache.arrow.vector.types.pojo ArrowType$Duration ArrowType$Timestamp)
            org.apache.arrow.vector.types.TimeUnit
            (core2 StringUtil)
            (java.nio ByteBuffer)))

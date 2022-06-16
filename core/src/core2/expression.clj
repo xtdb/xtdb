@@ -175,14 +175,6 @@
 (def rel-sym (gensym 'rel))
 (def params-sym (gensym 'params))
 
-#_{:clj-kondo/ignore [:unused-binding]}
-(defmulti with-batch-bindings
-  (fn [expr opts]
-    (:op expr))
-  :default ::default)
-
-(defmethod with-batch-bindings ::default [expr _] expr)
-
 (defmulti ->box-class types/col-type-head, :hierarchy #'types/col-type-hierarchy)
 
 (defmethod ->box-class :bool [_] BoolBox)
@@ -200,6 +192,10 @@
                       (apply [_ col-type]
                         {:box-sym (gensym (types/col-type->field-name col-type))
                          :box-class (->box-class col-type)}))))
+
+(defn box-batch-bindings [boxes]
+  (for [{:keys [box-sym box-class]} boxes]
+    [box-sym `(new ~box-class)]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti codegen-expr
@@ -269,19 +265,15 @@
        :literal literal})
     expr))
 
-(defmethod with-batch-bindings :param [{:keys [param] :as expr} {:keys [param-classes]}]
-  (let [param-class (get expr :param-class (get param-classes param))]
-    (-> expr
-        (assoc :batch-bindings
-               [[param
-                 (emit-value param-class
-                             (get expr :literal
-                                  (cond-> `(get ~params-sym '~param)
-                                    param-class (with-tag param-class))))]]))))
-
-(defmethod codegen-expr :param [{:keys [param param-type] :as expr} {:keys [param-types]}]
-  (let [param-type (get param-types param param-type)]
+(defmethod codegen-expr :param [{:keys [param param-type] :as expr} {:keys [param-types param-classes]}]
+  (let [param-type (get param-types param param-type)
+        param-class (get expr :param-class (get param-classes param))]
     (into {:return-type param-type
+           :batch-bindings [[param
+                             (emit-value param-class
+                                         (get expr :literal
+                                              (cond-> `(get ~params-sym '~param)
+                                                param-class (with-tag param-class))))]]
            :continue (fn [f]
                        (f param-type param))}
           (select-keys expr #{:literal}))))
@@ -327,12 +319,6 @@
   ;; a reasonable default, but implement it for more specific types if this doesn't work
   (get-value-form underlying-type `(.getUnderlyingVector ~vec-sym) idx-sym))
 
-(defmethod with-batch-bindings :variable [{:keys [variable] :as expr} _]
-  (-> expr
-      (assoc :batch-bindings
-             [[(-> variable (with-tag IIndirectVector))
-               `(.vectorForName ~rel-sym ~(name variable))]])))
-
 (defn- wrap-boxed-poly-return [{:keys [return-type continue] :as ret} {:keys [return-boxes]}]
   (-> ret
       (assoc :continue (zmatch return-type
@@ -354,15 +340,24 @@
                          (fn [f]
                            (f return-type (continue (fn [_ code] code))))))))
 
-(defmethod codegen-expr :variable [{:keys [variable idx], :or {idx idx-sym}} {:keys [var->types var->col-type]}]
+(defmethod codegen-expr :variable [{:keys [variable idx], :or {idx idx-sym}}
+                                   {:keys [var->types var->col-type extract-vecs-from-rel?]
+                                    :or {extract-vecs-from-rel? true}}]
   ;; NOTE we now get the widest var-type in the expr itself, but don't use it here (yet? at all?)
   (let [col-type (or (get var->col-type variable)
+
                      (throw (AssertionError. (str "unknown variable: " variable))))
+
         field-types (or (get var->types variable)
                         (throw (AssertionError. (str "unknown variable: " variable))))
+
         var-idx-sym (gensym 'var-idx)
         var-vec-sym (gensym 'var-vec)]
+
     {:return-type col-type
+     :batch-bindings (when extract-vecs-from-rel?
+                       [[(-> variable (with-tag IIndirectVector))
+                         `(.vectorForName ~rel-sym ~(name variable))]])
      :continue (fn [f]
                  ;; HACK this wants to use col-types throughout, really...
                  (letfn [(cont [^FieldType field-type]
@@ -410,7 +405,8 @@
                                              (pr-str p-ret)))))
 
     (-> {:return-type return-type
-         :boxes (into (vec (vals p-boxes)) (mapcat :boxes) [emitted-p emitted-t emitted-e])
+         :children [emitted-p emitted-t emitted-e]
+         :batch-bindings (box-batch-bindings (vals p-boxes))
          :continue (fn [f]
                      `(if ~(p-cont (fn [_ code] code))
                         ~(t-cont f)
@@ -431,7 +427,8 @@
                             (into {}))
         return-type (apply types/merge-col-types (into #{} (map :return-type) (vals emitted-bodies)))]
     (-> {:return-type return-type
-         :boxes (into (vec (vals expr-boxes)) (mapcat :boxes) (into [emitted-expr] (vals emitted-bodies)))
+         :children (cons emitted-expr (vals emitted-bodies))
+         :batch-bindings (box-batch-bindings (vals expr-boxes))
          :continue (fn [f]
                      (continue-expr (fn [local-type code]
                                       `(let [~local ~code]
@@ -453,11 +450,12 @@
         then-rets (into #{} (map :return-type) (vals emitted-thens))
         then-ret (apply types/merge-col-types then-rets)
 
-        boxes (into (vec (vals expr-boxes)) (mapcat :boxes) (cons emitted-expr (vals emitted-thens)))]
+        children (cons emitted-expr (vals emitted-thens))]
 
     (-> (if-not (contains? expr-rets :null)
           {:return-type then-ret
-           :boxes boxes
+           :children children
+           :batch-bindings (box-batch-bindings (vals expr-boxes))
            :continue (fn [f]
                        (continue-expr (fn [local-type code]
                                         `(let [~local ~code]
@@ -465,7 +463,8 @@
 
           (let [{e-ret :return-type, e-cont :continue, :as emitted-else} (codegen-expr else opts)]
             {:return-type (apply types/merge-col-types e-ret then-rets)
-             :boxes (into boxes (:boxes emitted-else))
+             :children (cons emitted-else children)
+             :batch-bindings (box-batch-bindings (vals expr-boxes))
              :continue (fn [f]
                          (continue-expr (fn [local-type code]
                                           (if (= local-type :null)
@@ -598,9 +597,9 @@
   (let [emitted-args (for [arg args]
                        (let [boxes (HashMap.)]
                          (-> (codegen-expr arg (assoc opts :return-boxes boxes))
-                             (update :boxes (fnil into []) (vals boxes)))))]
+                             (update :batch-bindings concat (box-batch-bindings (vals boxes))))))]
     (-> (codegen-call (-> expr (assoc :emitted-args emitted-args)))
-        (update :boxes (fnil into []) (mapcat :boxes) emitted-args)
+        (assoc :children emitted-args)
         (wrap-boxed-poly-return opts))))
 
 (doseq [[f-kw cmp] [[:< #(do `(neg? ~%))]
@@ -1584,20 +1583,23 @@
                              `(.getPosition ~out-writer-sym)
                              code))))})))
 
-(defn batch-bindings [expr]
-  (->> (walk/expr-seq expr)
-       (mapcat :batch-bindings)
-       (distinct)
-       (apply concat)))
-
 (defn- wrap-zone-id-cache-buster [f]
   (fn [expr opts]
     (f expr (assoc opts :zone-id (.getZone *clock*)))))
 
-(defn box-bindings [boxes]
-  (->> (for [{:keys [box-sym box-class]} boxes]
-         [box-sym `(new ~box-class)])
-       (apply concat)))
+(defn batch-bindings [emitted-expr]
+  (letfn [(child-seq [{:keys [children] :as expr}]
+            (lazy-seq
+             (cons expr (mapcat child-seq children))))]
+    (->> (for [{:keys [batch-bindings]} (child-seq emitted-expr)
+               batch-binding batch-bindings]
+           batch-binding)
+         (sequence (comp (distinct) cat)))))
+
+(defn prepare-expr [expr]
+  (->> expr
+       (macro/macroexpand-all)
+       (walk/postwalk-expr lit->param)))
 
 (def ^:private memo-generate-projection
   "NOTE: we macroexpand inside the memoize on the assumption that
@@ -1605,12 +1607,10 @@
    assumption wouldn't hold if macroexpansion created new variable exprs, for example.
    macroexpansion is non-deterministic (gensym), so busts the memo cache."
   (-> (fn [expr opts]
-        (let [expr (->> expr
-                        (macro/macroexpand-all)
-                        (walk/postwalk-expr (comp #(with-batch-bindings % opts) lit->param)))
-
+        ;; TODO should lit->param be outside the memoize, s.t. we don't have a cache entry for each literal value?
+        (let [expr (prepare-expr expr)
               return-boxes (HashMap.)
-              {:keys [return-type continue boxes]} (codegen-expr expr (-> opts (assoc :return-boxes return-boxes)))
+              {:keys [return-type continue] :as emitted-expr} (codegen-expr expr (-> opts (assoc :return-boxes return-boxes)))
 
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
 
@@ -1618,9 +1618,7 @@
                       (-> `(fn [~(-> out-vec-sym (with-tag ValueVector))
                                 ~(-> rel-sym (with-tag IIndirectRelation))
                                 ~params-sym]
-                             (let [~@(batch-bindings expr)
-
-                                   ~@(box-bindings (concat boxes (vals return-boxes)))
+                             (let [~@(batch-bindings {:batch-bindings (box-batch-bindings (vals return-boxes)), :children [emitted-expr]})
 
                                    ~out-writer-sym (vw/vec->writer ~out-vec-sym)
                                    ~@writer-bindings

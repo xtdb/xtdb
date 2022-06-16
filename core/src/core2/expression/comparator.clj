@@ -68,32 +68,29 @@
               right-idx-sym (gensym 'right-idx)
               left-col-sym (gensym 'left-col)
               right-col-sym (gensym 'right-col)
-              codegen-opts {:var->types {left-col-sym left-field-types
-                                         right-col-sym right-field-types}
-                            :var->col-type {left-col-sym left-col-type
-                                            right-col-sym right-col-type}}
-              left-boxes (HashMap.)
-              {cont-l :continue} (expr/codegen-expr {:op :variable, :variable left-col-sym, :idx left-idx-sym}
-                                                    (assoc codegen-opts :return-boxes left-boxes))
-              right-boxes (HashMap.)
-              {cont-r :continue} (expr/codegen-expr {:op :variable, :variable right-col-sym, :idx right-idx-sym}
-                                                    (assoc codegen-opts :return-boxes right-boxes))]
+
+              return-boxes (HashMap.)
+
+              {cont :continue, :as emitted-expr}
+              (expr/codegen-expr {:op :call,
+                                  :f (case null-ordering
+                                       :nulls-first :compare-nulls-first
+                                       :nulls-last :compare-nulls-last)
+                                  :args [{:op :variable, :variable left-col-sym, :idx left-idx-sym}
+                                         {:op :variable, :variable right-col-sym, :idx right-idx-sym}]}
+
+                                 {:var->types {left-col-sym left-field-types, right-col-sym right-field-types}
+                                  :var->col-type {left-col-sym left-col-type, right-col-sym right-col-type}
+                                  :return-boxes return-boxes
+                                  :extract-vecs-from-rel? false})]
+
           (-> `(fn [~(-> left-col-sym (expr/with-tag IIndirectVector))
                     ~(-> right-col-sym (expr/with-tag IIndirectVector))]
-                 (let [~@(expr/box-bindings (concat (vals left-boxes) (vals right-boxes)))]
+                 (let [~@(expr/batch-bindings {:batch-bindings (expr/box-batch-bindings (vals return-boxes))
+                                               :children [emitted-expr]})]
                    (reify IntBinaryOperator
                      (~'applyAsInt [_# ~left-idx-sym ~right-idx-sym]
-                      ~(cont-l (fn continue-left [left-type left-code]
-                                 (cont-r (fn continue-right [right-type right-code]
-                                           (let [{cont :continue}
-                                                 (expr/codegen-call {:f (case null-ordering
-                                                                           :nulls-first :compare-nulls-first
-                                                                           :nulls-last :compare-nulls-last)
-                                                                      :emitted-args [{:return-type left-type
-                                                                                      :continue (fn [f] (f left-type left-code))}
-                                                                                     {:return-type right-type
-                                                                                      :continue (fn [f] (f right-type right-code))}]})]
-                                             (cont (fn [_arrow-type code] code)))))))))))
+                      ~(cont (fn [_ code] code))))))
               #_(doto clojure.pprint/pprint)
               (eval))))
       (util/lru-memoize)))

@@ -5,7 +5,7 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import (core2.vector IIndirectVector IRowCopier IVectorWriter)
+  (:import (core2.vector IIndirectVector IIndirectRelation IRowCopier IVectorWriter)
            (java.lang AutoCloseable)
            (java.util HashMap List)
            (java.util.function Function)
@@ -77,34 +77,30 @@
               right-idx (gensym 'right-idx)
               eq-fn (if nil-equal :null-eq :=)
 
-              left-boxes (HashMap.)
-              {continue-left :continue} (-> (expr/form->expr left-vec {:col-types {left-vec left-col-type}})
-                                            (assoc :idx left-idx)
-                                            (expr/codegen-expr {:var->types {left-vec left-val-types}
-                                                                :var->col-type {left-vec left-col-type}
-                                                                :return-boxes left-boxes}))
+              return-boxes (HashMap.)
 
-              right-boxes (HashMap.)
-              {continue-right :continue} (-> (expr/form->expr right-vec {:col-types {right-vec right-col-type}})
-                                             (assoc :idx right-idx)
-                                             (expr/codegen-expr {:var->types {right-vec right-val-types}
-                                                                 :var->col-type {right-vec right-col-type}
-                                                                 :return-boxes right-boxes}))]
-          (eval
-           `(fn [~(expr/with-tag left-vec IIndirectVector)
-                 ~(expr/with-tag right-vec IIndirectVector)]
-              (let [~@(expr/box-bindings (concat (vals left-boxes) (vals right-boxes)))]
-                (reify IntIntPredicate
-                  (test [_ ~left-idx ~right-idx]
-                    ~(continue-left
-                      (fn [left-type left-code]
-                        (continue-right
-                         (fn [right-type right-code]
-                           (let [{eq-type :return-type, ->eq-code :->call-code}
-                                 (expr/codegen-mono-call {:op :call, :f eq-fn,
-                                                           :arg-types [left-type right-type]})]
-                             (when-not (= :null eq-type)
-                               (->eq-code [left-code right-code]))))))))))))))
+              {:keys [continue], :as emitted-expr}
+              (expr/codegen-expr {:op :call, :f :boolean
+                                  :args [{:op :call, :f eq-fn
+                                          :args [{:op :variable, :variable left-vec, :idx left-idx}
+                                                 {:op :variable, :variable right-vec, :idx right-idx}]}]}
+                                 {:var->types {left-vec left-val-types
+                                               right-vec right-val-types}
+                                  :var->col-type {left-vec left-col-type
+                                                  right-vec right-col-type}
+                                  :return-boxes return-boxes
+                                  :extract-vecs-from-rel? false})]
+
+          (-> `(fn [~(expr/with-tag left-vec IIndirectVector)
+                    ~(expr/with-tag right-vec IIndirectVector)]
+                 (let [~@(expr/batch-bindings {:batch-bindings (expr/box-batch-bindings (vals return-boxes))
+                                               :children [emitted-expr]})]
+                   (reify IntIntPredicate
+                     (~'test [_# ~left-idx ~right-idx]
+                      ~(continue (fn [_ code] code))))))
+
+              #_(doto clojure.pprint/pprint)
+              (eval))))
       (util/lru-memoize)))
 
 (defn- ->comparator ^core2.expression.map.IntIntPredicate [left-cols right-cols nil-equal]

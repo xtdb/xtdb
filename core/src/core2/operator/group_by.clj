@@ -1,9 +1,7 @@
 (ns core2.operator.group-by
   (:require [clojure.spec.alpha :as s]
             [core2.expression :as expr]
-            [core2.expression.macro :as macro]
             [core2.expression.map :as emap]
-            [core2.expression.walk :as walk]
             [core2.logical-plan :as lp]
             [core2.rewrite :refer [zmatch]]
             [core2.types :as types]
@@ -179,11 +177,6 @@
 (def ^:private acc-local (gensym 'acc-local))
 (def ^:private val-local (gensym 'val-local))
 
-(defn- prepare-expr [expr opts]
-  (->> expr
-       (macro/macroexpand-all)
-       (walk/postwalk-expr (comp #(expr/with-batch-bindings % opts) expr/lit->param))))
-
 (defmethod expr/codegen-expr ::read-acc [{::keys [acc-type]} _]
   {:return-type [:union (conj #{:null} acc-type)]
    :continue (fn [f]
@@ -203,9 +196,9 @@
                                    :then step-expr
                                    :else {:op :local, :local val-local}}
                             :else {:op :literal, :literal nil}}
-                           (prepare-expr input-opts))
+                           (expr/prepare-expr))
 
-              {:keys [continue boxes]} (expr/codegen-expr agg-expr (assoc input-opts :return-boxes return-boxes))
+              {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr (assoc input-opts :return-boxes return-boxes))
               ;; ignore return-type of the codegen because it may be more specific than the acc type
 
               return-type [:union (conj #{:null} to-type)]
@@ -217,8 +210,7 @@
            :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag vec-type))
                                ~(-> expr/rel-sym (expr/with-tag IIndirectRelation))
                                ~(-> group-mapping-sym (expr/with-tag IntVector))]
-                            (let [~@(expr/box-bindings (into (vals return-boxes) boxes))
-                                  ~@(expr/batch-bindings agg-expr)]
+                            (let [~@(expr/batch-bindings {:batch-bindings (expr/box-batch-bindings (vals return-boxes)), :children [emitted-expr]})]
                               (dotimes [~expr/idx-sym (.rowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
                                   (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)

@@ -1,7 +1,6 @@
 (ns core2.expression.metadata
   (:require [core2.bloom :as bloom]
             [core2.expression :as expr]
-            [core2.expression.macro :as emacro]
             [core2.expression.walk :as ewalk]
             [core2.metadata :as meta]
             [core2.util :as util]
@@ -139,37 +138,44 @@
                         (.columnIndex ~metadata-idxs-sym ~field-name)))))}))
 
 (defmethod expr/codegen-expr :metadata-vp-call [{:keys [f meta-value field param-expr col-type bloom-hash-sym]} opts]
-  (let [field-name (str field)]
-    {:return-type :bool
-     :continue
-     (fn [cont]
-       (cont :bool
-             `(boolean
-               (when-let [~expr/idx-sym (if ~block-idx-sym
-                                          (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
-                                          (.columnIndex ~metadata-idxs-sym ~field-name))]
-                 ~(if (= meta-value :bloom-filter)
-                    `(bloom/bloom-contains? ~bloom-vec-sym ~expr/idx-sym ~bloom-hash-sym)
+  (let [field-name (str field)
 
-                    (let [vec-sym (get metadata-vec-syms meta-value)
-                          col-sym (gensym 'meta-col)
-                          col-field (types/col-type->field col-type)
-                          arrow-type (.getType col-field)]
-                      `(when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
-                                  (some-> ^StructVector (.getChild ~types-vec-sym ~(.getName col-field))
-                                          (.getChild ~(name meta-value)))]
-                         (when-not (.isNull ~vec-sym ~expr/idx-sym)
-                           (let [~(-> col-sym (expr/with-tag IIndirectVector)) (iv/->direct-vec ~vec-sym)]
-                             ~((:continue (expr/codegen-expr
-                                           {:op :call
-                                            :f f
-                                            :args [{:op :variable, :variable col-sym}
-                                                   param-expr]}
-                                           (-> opts
-                                               ;; HACK remove :var->types (eventually)
-                                               (assoc-in [:var->types col-sym] (FieldType/notNullable arrow-type))
-                                               (assoc-in [:var->col-type col-sym] col-type))))
-                               (fn [_ code] code)))))))))))}))
+        idx-code `(if ~block-idx-sym
+                    (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
+                    (.columnIndex ~metadata-idxs-sym ~field-name))]
+
+    (if (= meta-value :bloom-filter)
+      {:return-type :bool
+       :continue (fn [cont]
+                   (cont :bool
+                         `(boolean
+                           (when-let [~expr/idx-sym ~idx-code]
+                             (bloom/bloom-contains? ~bloom-vec-sym ~expr/idx-sym ~bloom-hash-sym)))))}
+
+      (let [vec-sym (get metadata-vec-syms meta-value)
+            col-sym (gensym 'meta-col)
+            col-field (types/col-type->field col-type)
+            arrow-type (.getType col-field)
+
+            {:keys [continue] :as emitted-expr}
+            (expr/codegen-expr {:op :call, :f f
+                                :args [{:op :variable, :variable col-sym}, param-expr]}
+                               (-> opts
+                                   ;; HACK remove :var->types (eventually)
+                                   (assoc-in [:var->types col-sym] (FieldType/notNullable arrow-type))
+                                   (assoc-in [:var->col-type col-sym] col-type)))]
+        {:return-type :bool
+         :children [emitted-expr]
+         :continue (fn [cont]
+                     (cont :bool
+                           `(boolean
+                             (when-let [~expr/idx-sym ~idx-code]
+                               (when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
+                                          (some-> ^StructVector (.getChild ~types-vec-sym ~(.getName col-field))
+                                                  (.getChild ~(name meta-value)))]
+                                 (when-not (.isNull ~vec-sym ~expr/idx-sym)
+                                   (let [~(-> col-sym (expr/with-tag IIndirectVector)) (iv/->direct-vec ~vec-sym)]
+                                     ~(continue (fn [_ code] code)))))))))}))))
 
 (defmethod ewalk/walk-expr :metadata-vp-call [inner outer expr]
   (outer (-> expr (update :param-expr inner))))
@@ -188,10 +194,8 @@
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
-        (let [expr (->> expr
-                        (emacro/macroexpand-all)
-                        (ewalk/postwalk-expr (comp #(expr/with-batch-bindings % opts) expr/lit->param))
-                        (meta-expr))]
+        (let [expr (meta-expr (expr/prepare-expr expr))
+              {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
            :f (-> `(fn [chunk-idx#
                         ~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))
@@ -202,11 +206,10 @@
                            ~(-> types-vec-sym (expr/with-tag StructVector)) (.getVector ~metadata-root-sym "types")
                            ~(-> bloom-vec-sym (expr/with-tag VarBinaryVector)) (.getVector ~metadata-root-sym "bloom")
 
-                           ~@(expr/batch-bindings expr)]
+                           ~@(expr/batch-bindings emitted-expr)]
                        (check-meta chunk-idx# ~metadata-idxs-sym
                                    (fn check-meta# [~block-idx-sym]
-                                     ~(let [{:keys [continue]} (expr/codegen-expr expr opts)]
-                                        (continue (fn [_ code] code)))))))
+                                     ~(continue (fn [_ code] code))))))
                   #_(doto clojure.pprint/pprint)
                   (eval))}))
 
@@ -216,6 +219,7 @@
 
 (defn ->metadata-selector [form col-types params]
   (let [{:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types (expr/->param-types params), :col-types col-types})
-                                            {:param-classes (expr/param-classes params)})]
+                                            {:param-classes (expr/param-classes params)
+                                             :extract-vecs-from-rel? false})]
     (fn [chunk-idx metadata-root]
       (f chunk-idx metadata-root params (->bloom-hashes expr params)))))
