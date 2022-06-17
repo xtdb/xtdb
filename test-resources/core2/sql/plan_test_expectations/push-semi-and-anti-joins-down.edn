@@ -1,0 +1,10 @@
+[:rename
+ {x1 foo}
+ [:project
+  [x1]
+  [:semi-join
+   [{x1 x5} {x3 x6}]
+   [:cross-join
+    [:rename {foo x1} [:scan [foo]]]
+    [:rename {biz x3} [:scan [biz]]]]
+   [:rename {bar x5, baz x6} [:scan [bar baz]]]]]]

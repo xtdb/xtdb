@@ -732,3 +732,24 @@
         [{x1 (+ x3 1)}]
         [:rename {a x1} [:scan [a]]]
         [:rename {b x3} [:scan [b]]]]]]))
+
+(deftest push-semi-and-anti-joins-down-test
+;;semi-join was previously been pushed down below the cross join
+;;where the cols it required weren't in scope
+(t/is
+  (=plan-file
+    "push-semi-and-anti-joins-down"
+    (plan-sql "SELECT
+              x.foo
+              FROM
+              x,
+              y
+              WHERE
+              EXISTS (
+              SELECT z.bar
+              FROM z
+              WHERE
+              z.bar = x.foo
+              AND
+              z.baz = y.biz
+              )"))))

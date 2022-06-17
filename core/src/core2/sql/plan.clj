@@ -1714,6 +1714,16 @@
   [expr relation]
   (every? (set (relation-columns relation)) (expr-symbols expr)))
 
+(defn- all-columns-across-both-relations-with-one-in-each?
+  "Returns true if all columns are present across both relations, with at least one column in each"
+  [expr left-relation right-relation]
+ (let [columns (expr-symbols expr)]
+   (-> columns
+       (set/difference (set (relation-columns left-relation)))
+       (not-empty)
+       (set/difference (set (relation-columns right-relation)))
+       (empty?))))
+
 (defn- columns-in-both-relations? [predicate lhs rhs]
   (let [predicate-columns (expr-symbols predicate)]
     (and
@@ -2315,12 +2325,12 @@
      [:cross-join inner-lhs inner-rhs]
      rhs]
     ;;=>
-    (cond (columns-in-both-relations? join-condition inner-lhs rhs)
+    (cond (all-columns-across-both-relations-with-one-in-each? join-condition inner-lhs rhs)
           [:cross-join
            [:semi-join join-condition inner-lhs rhs]
            inner-rhs]
 
-          (columns-in-both-relations? join-condition inner-rhs rhs)
+          (all-columns-across-both-relations-with-one-in-each? join-condition inner-rhs rhs)
           [:cross-join
            inner-lhs
            [:semi-join join-condition inner-rhs rhs]])
@@ -2329,12 +2339,12 @@
      [:cross-join inner-lhs inner-rhs]
      rhs]
     ;;=>
-    (cond (columns-in-both-relations? join-condition inner-lhs rhs)
+    (cond (all-columns-across-both-relations-with-one-in-each? join-condition inner-lhs rhs)
           [:cross-join
            [:anti-join join-condition inner-lhs rhs]
            inner-rhs]
 
-          (columns-in-both-relations? join-condition inner-rhs rhs)
+          (all-columns-across-both-relations-with-one-in-each? join-condition inner-rhs rhs)
           [:cross-join
            inner-lhs
            [:anti-join join-condition inner-rhs rhs]])
@@ -2343,12 +2353,12 @@
      [:join inner-join-condition inner-lhs inner-rhs]
      rhs]
     ;;=>
-    (cond (columns-in-both-relations? join-condition inner-lhs rhs)
+    (cond (all-columns-across-both-relations-with-one-in-each? join-condition inner-lhs rhs)
           [:join inner-join-condition
            [:semi-join join-condition inner-lhs rhs]
            inner-rhs]
 
-          (columns-in-both-relations? join-condition inner-rhs rhs)
+          (all-columns-across-both-relations-with-one-in-each? join-condition inner-rhs rhs)
           [:join inner-join-condition
            inner-lhs
            [:semi-join join-condition inner-rhs rhs]])
@@ -2357,12 +2367,12 @@
      [:join inner-join-condition inner-lhs inner-rhs]
      rhs]
     ;;=>
-    (cond (columns-in-both-relations? join-condition inner-lhs rhs)
+    (cond (all-columns-across-both-relations-with-one-in-each? join-condition inner-lhs rhs)
           [:join inner-join-condition
            [:anti-join join-condition inner-lhs rhs]
            inner-rhs]
 
-          (columns-in-both-relations? join-condition inner-rhs rhs)
+          (all-columns-across-both-relations-with-one-in-each? join-condition inner-rhs rhs)
           [:join inner-join-condition
            inner-lhs
            [:anti-join join-condition inner-rhs rhs]])))
