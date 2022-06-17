@@ -263,7 +263,7 @@
           (.setName (str name-prefix "-" (swap! idx inc)))
           (.setUncaughtExceptionHandler uncaught-exception-handler))))))
 
-(defn bounded-thread-pool ^ExecutorService [^long pool-size, ^long queue-size thread-factory]
+(defn bounded-thread-pool ^ExecutorService [^long pool-size, ^long queue-size, thread-factory]
   (let [queue (LinkedBlockingQueue. queue-size)]
     (ThreadPoolExecutor. pool-size 1
                          0 TimeUnit/MILLISECONDS

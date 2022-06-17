@@ -508,7 +508,7 @@
       (let [latest-tx! (atom (db/latest-completed-tx index-store))
             txs-docs-fetch-executor (xio/bounded-thread-pool 1 1 docs-fetcher-thread-factory)
             txs-docs-encode-executor (xio/bounded-thread-pool 1 1 docs-encoder-thread-factory)
-            txs-index-executor (xio/bounded-thread-pool 1 1 txs-processor-thread-factory)
+            txs-index-executor (xio/bounded-thread-pool 1 5 txs-processor-thread-factory)
             stats-executor (xio/bounded-thread-pool 1 1 stats-processor-thread-factory)
 
             job (db/subscribe tx-log
