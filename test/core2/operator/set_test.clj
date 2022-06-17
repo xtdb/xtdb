@@ -122,7 +122,13 @@
   (t/testing "empty input and output"
     (with-open [res (op/open-ra [:distinct
                                  [::tu/blocks '{a :i64} []]])]
-      (t/is (empty? (tu/<-cursor res))))))
+      (t/is (empty? (tu/<-cursor res)))))
+
+  (t/testing "distinct null"
+    (t/is (= [{:a nil}]
+             (op/query-ra [:distinct
+                           [::tu/blocks '{a :null}
+                            [{:a nil}, {:a nil}, {:a nil}]]])))))
 
 (t/deftest test-fixpoint
   (with-open [res (op/open-ra [:fixpoint 'R {:incremental? true}

@@ -194,7 +194,8 @@
     (fn [inner-col-types]
       {:col-types inner-col-types
        :->cursor (fn [{:keys [allocator]} in-cursor]
-                   (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (set (keys inner-col-types))})))})))
+                   (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (set (keys inner-col-types))
+                                                                              :nil-keys-equal? true})))})))
 
 (defn- ->set-key [^List cols ^long idx]
   (let [set-key (ArrayList. (count cols))]
