@@ -527,36 +527,30 @@
                                         (stats-fn [docs]
                                           (db/index-stats index-store docs))
 
-                                        (txs-index-fn [txs]
-                                          (let [committed-docs (atom '())]
-                                            (doseq [{:keys [tx docs in-flight-tx]} txs
-                                                    :let [{::txe/keys [tx-events] :keys [abort?]} tx]]
-                                              (let [committing? (and (not abort?) (db/index-tx-events in-flight-tx tx-events))]
+                                        (txs-index-fn [{:keys [tx docs in-flight-tx]}]
+                                          (let [{::txe/keys [tx-events] :keys [abort?]} tx
+                                                committing? (and (not abort?) (db/index-tx-events in-flight-tx tx-events))]
 
-                                                (process-tx-f in-flight-tx (assoc tx :committing? committing?))
+                                            (process-tx-f in-flight-tx (assoc tx :committing? committing?))
 
-                                                (if committing?
-                                                  (do
-                                                    (db/commit in-flight-tx)
-                                                    (swap! committed-docs concat docs))
-                                                  (db/abort in-flight-tx))))
-
-                                            (submit-job! stats-executor stats-fn @committed-docs)))
+                                            (if committing?
+                                              (do
+                                                (db/commit in-flight-tx)
+                                                (submit-job! stats-executor stats-fn docs))
+                                              (db/abort in-flight-tx))))
 
                                         (txs-doc-encoder-fn [txs]
-                                          (let [txs (doall
-                                                     (for [{:keys [docs tx] :as m} txs]
-                                                       (let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])
-                                                             tx (if tx-time-override
-                                                                  (if (validate-tx-time-override! @latest-tx! tx tx-time-override)
-                                                                    (assoc tx ::xt/tx-time tx-time-override)
-                                                                    (assoc tx :abort? true))
-                                                                  tx)]
-                                                         (reset! latest-tx! tx)
-                                                         (let [in-flight-tx (db/begin-tx tx-indexer (select-keys tx [::xt/tx-time ::xt/tx-id]))]
-                                                           (db/index-tx-docs in-flight-tx docs)
-                                                           (assoc m :tx tx :in-flight-tx in-flight-tx)))))]
-                                            (submit-job! txs-index-executor txs-index-fn txs)))
+                                          (doseq [{:keys [docs tx] :as m} txs]
+                                            (let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])
+                                                  tx (if tx-time-override
+                                                       (if (validate-tx-time-override! @latest-tx! tx tx-time-override)
+                                                         (assoc tx ::xt/tx-time tx-time-override)
+                                                         (assoc tx :abort? true))
+                                                       tx)
+                                                  _ (reset! latest-tx! tx)
+                                                  in-flight-tx (db/begin-tx tx-indexer (select-keys tx [::xt/tx-time ::xt/tx-id]))]
+                                              (db/index-tx-docs in-flight-tx docs)
+                                              (submit-job! txs-index-executor txs-index-fn (assoc m :tx tx :in-flight-tx in-flight-tx)))))
 
                                         (txs-doc-fetch-fn [txs]
                                           (let [docs (strict-fetch-docs document-store
