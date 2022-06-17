@@ -94,16 +94,12 @@
   (when-not (contains? seen parser)
     (let [seen (conj seen parser)]
       (case tag
-        :nt (let [parser (get grammar (:keyword parser))]
-              (case (:tag parser)
-                (:star :opt) #{::undecided-lookahead}
-                (recur grammar seen parser)))
-        :star (recur grammar seen (:parser parser))
+        :nt (recur grammar seen (get grammar (:keyword parser)))
+        (:star :opt :neg :epsilon) #{::undecided-lookahead}
         :plus (recur grammar seen (:parser parser))
-        :opt (recur grammar seen (:parser parser))
         :cat ((fn step [[parser & parsers]]
                 (case (:tag parser)
-                  (:star :opt) (set/union (lookahead grammar seen parser)
+                  (:star :opt) (set/union (lookahead grammar seen (:parser parser))
                                           (step parsers))
                   :neg (step parsers)
                   (when parser
@@ -116,7 +112,6 @@
                                               [parser2])))
                             parser)]
                (reduce set/union (map (partial lookahead grammar seen) parsers)))
-        (:neg :epsilon) #{::undecided-lookahead}
         :regexp (if-let [lookahead-set (not-empty (set (for [n (range 256)
                                                              :let [m (re-matcher (:regexp parser) (str (char n)))]
                                                              :when (or (.lookingAt m)
