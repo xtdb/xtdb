@@ -7,11 +7,9 @@
             [core2.local-node :as node]
             [core2.util :as util]
             [clojure.string :as str]
-            [clojure.data.json :as json]
-            [clojure.set :as set])
+            [clojure.data.json :as json])
   (:import java.nio.charset.StandardCharsets
-           [java.io Closeable ByteArrayOutputStream
-                    DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException]
+           [java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException]
            [java.net Socket ServerSocket]
            [java.util.concurrent Executors ExecutorService]
            [java.util HashMap]
@@ -252,15 +250,22 @@
     :rows [["public"]]}
    {:q "show transaction isolation level"
     :cols [{:column-name "transaction_isolation" :oid varchar-oid}]
-    :rows [["read committed"]]}])
+    :rows [["read committed"]]}
+   ;; jdbc meta getKeywords (hibernate)
+   ;; I think this should work, but it causes some kind of low level issue, likely
+   ;; because our query protocol impl is broken, or partially implemented.
+   ;; java.lang.IllegalStateException: Received resultset tuples, but no field structure for them
+   {:q "select string_agg(word, ',') from pg_catalog.pg_get_keywords()"
+    :cols [{:column-name "col1" :oid varchar-oid}]
+    :rows [["xtdb"]]}])
 
 ;; yagni, is everything upper'd anyway by drivers / server?
-(defn- starts-with-case-insensitive? [s substr]
-  ;; todo replace with re solution
+(defn- probably-same-query? [s substr]
+  ;; todo I bet this may cause some amusement. Not sure what to do about non-parsed query matching, it'll do for now.
   (str/starts-with? (str/lower-case s) (str/lower-case substr)))
 
 (defn get-canned-response [sql-str]
-  (first (filter #(starts-with-case-insensitive? sql-str (:q %)) canned-responses)))
+  (when sql-str (first (filter #(probably-same-query? sql-str (:q %)) canned-responses))))
 
 (def ignore-parse-bind-strings
   (-> ["set"
@@ -272,7 +277,7 @@
 
 (defn- ignore-parse-bind? [message]
   (boolean (or (empty-query? message)
-               (some (partial starts-with-case-insensitive? (:pgwire.parse/query-string message)) ignore-parse-bind-strings))))
+               (some (partial probably-same-query? (:pgwire.parse/query-string message)) ignore-parse-bind-strings))))
 
 (defmethod handle-message :pgwire/parse [session message out]
   (let [message (if (ignore-parse-bind? message)
@@ -573,23 +578,25 @@
                     :server server}]
            (println "Listening on" port)
            (alter-var-root #'server (constantly srv))
-           srv)))
-      )
+           srv))))
   ;; eval for setup ^
 
-  ;;;;
-  ;; start /stop the server
+  server
 
   (start-server 5432)
 
   (stop-server)
 
-  ;;;; clojure query
+  ;;;; clojure JDBC
   ;;
 
-  (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
-    (vec (for [row (jdbc/execute! c ["SELECT * FROM (VALUES (1 YEAR, true), (3.14, 'foo')) AS x (a, b)"])]
-           (update-vals row (comp json/read-str str)))))
+  (defn q [s]
+    (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
+      (mapv #(update-vals % (comp json/read-str str)) (jdbc/execute! c [s]))))
+  
+  (q "SELECT * FROM (VALUES (1 YEAR, true), (3.14, 'foo')) AS x (a, b)")
 
+  ;; explodes! (see canned-queries comment)
+  (q "select string_agg(word, ',') from pg_catalog.pg_get_keywords()")
 
   )
