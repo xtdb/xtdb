@@ -40,7 +40,7 @@ public final class Parser {
         Set<?> getErrors();
     }
 
-    private static final IParseErrors NULL_PARSE_ERRORS = new IParseErrors() {
+    public static final IParseErrors NULL_PARSE_ERRORS = new IParseErrors() {
             public void addError(final IPersistentVector error, final int idx) {
             }
 
@@ -556,14 +556,21 @@ public final class Parser {
 
     public static final class AltParser extends AParser {
         private final AParser[] parsers;
+        private final boolean[][] lookahead;
 
-        public AltParser(final List<AParser> parsers) {
+        public AltParser(final List<AParser> parsers, final List<boolean[]> lookahead) {
             this.parsers = parsers.toArray(new AParser[parsers.size()]);
+            this.lookahead = lookahead.toArray(new boolean[parsers.size()][256]);
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[][] memos, final IParseErrors errors, final boolean hide) {
+            int c = idx < in.length() ? in.charAt(idx) : -1;
+            c = c < 256 ? c : -1;
             ParseState state1 = null;
             for (int i = 0; i < parsers.length; i++) {
+                if (errors == NULL_PARSE_ERRORS && c != -1 && !lookahead[i][c]) {
+                    continue;
+                }
                 final ParseState state2 = parsers[i].parse(in, idx, memos, errors, hide);
                 if (state1 == null || (state2 != null && state2.idx > state1.idx)) {
                     state1 = state2;
