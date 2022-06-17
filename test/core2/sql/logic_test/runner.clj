@@ -303,12 +303,14 @@
 (def cli-options
   [[nil "--verify"]
    [nil "--limit LIMIT" :parse-fn #(Long/parseLong %)]
+   [nil "--max-errors COUNT" :parse-fn #(Long/parseLong %)]
+   [nil "--max-failures COUNT" :parse-fn #(Long/parseLong %)]
    [nil "--db DB" :default "xtdb" :validate [(fn [x]
                                                (or (contains? #{"xtdb" "sqlite"} x)
                                                    (str/starts-with? x "jdbc:"))) "Unknown db."]]])
 (defn -main [& args]
   (let [{:keys [options arguments errors]} (cli/parse-opts args cli-options)
-        {:keys [verify db]} options
+        {:keys [verify db max-failures max-errors]} options
         results (atom {})]
     (if (seq errors)
       (binding [*out* *err*]
@@ -328,10 +330,19 @@
                      #(with-xtdb f))
             "sqlite" (with-sqlite f)
             (with-jdbc db f)))))
-    (pprint/print-table
-      [:name :success :failure :error]
-      (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
-            (assoc (reduce (partial merge-with +) (vals @results)) :name "Total")))))
+    (let [{:keys [failure error] :as total-results} (reduce (partial merge-with +) (vals @results))]
+      (pprint/print-table
+        [:name :success :failure :error]
+        (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
+              (assoc total-results :name "Total")))
+      (when max-failures
+        (when (> failure max-failures)
+          (println "Failure count (" failure ") above expected (" max-failures ")")
+          (System/exit 1)))
+      (when max-errors
+        (when (> error max-errors)
+          (println "Error count (" error ") above expected (" max-errors ")")
+          (System/exit 1))))))
 
 (comment
 
