@@ -332,21 +332,35 @@
          (mapv (comp name plan/unqualified-projection-symbol)))))
 
 (defmethod handle-message :pgwire/describe [session message out]
+
   (cond
     (:pgwire.describe/portal message)
     (let [bind-message (get-in session [:portals (:pgwire.describe/portal message)])
           parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement bind-message)])]
-      (if (= "SELECT" (statement-command parse-message))
+      (cond
+        (get-canned-response (:pgwire.parse/query-string parse-message))
+        (let [{:keys [cols]} (get-canned-response (:pgwire.parse/query-string parse-message))]
+          (send-row-description out cols))
+
+        (= "SELECT" (str/upper-case (statement-command parse-message)))
         (send-row-description out (query-projection (:tree (meta parse-message))))
-        (send-no-data out))
+
+        :else (send-no-data out))
       session)
 
     (:pgwire.describe/statement message)
     (let [parse-message (get-in session [:prepared-statements (:pgwire.describe/statement message)])]
       (send-parameter-description out (:pgwire.parse/parameter-oids parse-message))
-      (if (= "SELECT" (statement-command parse-message))
+      (cond
+
+        (get-canned-response (:pgwire.parse/query-string parse-message))
+        (let [{:keys [cols]} (get-canned-response (:pgwire.parse/query-string parse-message))]
+          (send-row-description out cols))
+
+        (= "SELECT" (str/upper-case (statement-command parse-message)))
         (send-row-description out (query-projection (:tree (meta parse-message))))
-        (send-no-data out))
+
+        :else (send-no-data out))
       session)))
 
 (extend-protocol json/JSONWriter
@@ -370,8 +384,7 @@
           session)
 
       canned-response
-      (let [{:keys [cols, rows]} canned-response]
-        (send-row-description out cols)
+      (let [{:keys [rows]} canned-response]
         (doseq [row rows]
           (send-data-row out (mapv (fn [v] (if (bytes? v) v (utf8 v))) row)))
         (send-command-complete out (str (statement-command parse-message) " " (count rows)))
@@ -423,13 +436,18 @@
           (do (.write out (.toByteArray baos))
               (send-ready-for-query out :idle)
               session)
-          (let [session (cond-> session
-                          (= "SELECT" (statement-command parse-message)) (handle-message {:pgwire/type :pgwire/describe
-                                                                                          :pgwire.describe/portal ""}
-                                                                                         out)
-                          true (handle-message {:pgwire/type :pgwire/execute
-                                                :pgwire.execute/portal ""}
-                                               out))]
+          (let [session (cond->
+                          session
+
+                          (#{"SELECT" "SHOW"} (str/upper-case (statement-command parse-message)))
+                          (handle-message
+                            {:pgwire/type :pgwire/describe, :pgwire.describe/portal ""}
+                            out)
+
+                          true
+                          (handle-message
+                            {:pgwire/type :pgwire/execute, :pgwire.execute/portal ""}
+                            out))]
             (send-ready-for-query out :idle)
             session))))))
 
@@ -550,35 +568,38 @@
 (comment
 
   ;; pre-req
-  (do (require '[juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
+  (do
+    (require '[juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
+    (require 'dev)
 
-      (def server nil)
+    (when-not (bound? #'dev/node) (dev/go))
 
-      (defn stop-server []
-        (when server
-          (some-> (:server server) .close)
-          (some-> (:node server) .close)
-          (println "Server stopped")
-          (alter-var-root #'server (constantly nil))))
+    (defonce server nil)
 
-      (defn start-server
-        ([] (start-server 5432))
-        ([port]
-         (stop-server)
-         (let [node (node/start-node {})
-               server (->pg-wire-server node
-                                        {:server-parameters {"server_version" "14"
-                                                             "server_encoding" "UTF8"
-                                                             "client_encoding" "UTF8"
-                                                             "TimeZone" "UTC"}
-                                         :port port
-                                         :num-threads 16})
-               srv {:port port
-                    :node node
-                    :server server}]
-           (println "Listening on" port)
-           (alter-var-root #'server (constantly srv))
-           srv))))
+    (defn stop-server []
+      (when server
+        (some-> (:server server) .close)
+        (println "Server stopped")
+        (alter-var-root #'server (constantly nil))))
+
+    (defn start-server
+      ([] (start-server 5432))
+      ([port]
+       (stop-server)
+       (let [node dev/node
+             server (->pg-wire-server node
+                                      {:server-parameters {"server_version" "14"
+                                                           "server_encoding" "UTF8"
+                                                           "client_encoding" "UTF8"
+                                                           "TimeZone" "UTC"}
+                                       :port port
+                                       :num-threads 16})
+             srv {:port port
+                  :node node
+                  :server server}]
+         (println "Listening on" port)
+         (alter-var-root #'server (constantly srv))
+         srv))))
   ;; eval for setup ^
 
   server
@@ -590,13 +611,20 @@
   ;;;; clojure JDBC
   ;;
 
+  (defn read-xtdb [o]
+    (if (instance? org.postgresql.util.PGobject o)
+      (json/read-str (str o))
+      o))
+
   (defn q [s]
     (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
-      (mapv #(update-vals % (comp json/read-str str)) (jdbc/execute! c [s]))))
-  
+      (mapv #(update-vals % read-xtdb) (jdbc/execute! c [s]))))
+
   (q "SELECT * FROM (VALUES (1 YEAR, true), (3.14, 'foo')) AS x (a, b)")
 
-  ;; explodes! (see canned-queries comment)
-  (q "select string_agg(word, ',') from pg_catalog.pg_get_keywords()")
+  ;; canned query example (hibernate calls something like this (with a big where clause) via JDBC db metadata.
+  (q "SELECT string_agg(word, ',') from pg_catalog.pg_get_keywords()")
+
+  (q "SELECT x.a from x where x.a = 42")
 
   )
