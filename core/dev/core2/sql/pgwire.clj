@@ -7,7 +7,8 @@
             [core2.local-node :as node]
             [core2.util :as util]
             [clojure.string :as str]
-            [clojure.data.json :as json])
+            [clojure.data.json :as json]
+            [core2.api :as api])
   (:import java.nio.charset.StandardCharsets
            [java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException]
            [java.net Socket ServerSocket]
@@ -599,7 +600,26 @@
                   :server server}]
          (println "Listening on" port)
          (alter-var-root #'server (constantly srv))
-         srv))))
+         srv)))
+
+    (defn i [& rows]
+      (assert (:node server) "No running pgwire, try (start-server)!")
+      (->> (for [row rows
+                 :let [auto-id (str "pgwire-" (random-uuid))]]
+             [:put (merge {:_id auto-id} row)])
+           (api/submit-tx (:node server))
+           deref))
+
+    (defn read-xtdb [o]
+      (if (instance? org.postgresql.util.PGobject o)
+        (json/read-str (str o))
+        o))
+
+    (defn q [s]
+      (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
+        (mapv #(update-vals % read-xtdb) (jdbc/execute! c [s]))))
+    )
+
   ;; eval for setup ^
 
   server
@@ -608,23 +628,11 @@
 
   (stop-server)
 
-  ;;;; clojure JDBC
-  ;;
+  ;; insert something, be aware as we haven't set an :_id, it will keep creating rows each time it is evaluated!
+  (i {:user "wot", :bio "Hello, world", :age 34})
 
-  (defn read-xtdb [o]
-    (if (instance? org.postgresql.util.PGobject o)
-      (json/read-str (str o))
-      o))
+  ;; query with aliases otherwise XT explodes, and no *.
+  (q "SELECT u.user, u.bio, u.age FROM users u where u.user = 'wot'")
 
-  (defn q [s]
-    (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
-      (mapv #(update-vals % read-xtdb) (jdbc/execute! c [s]))))
-
-  (q "SELECT * FROM (VALUES (1 YEAR, true), (3.14, 'foo')) AS x (a, b)")
-
-  ;; canned query example (hibernate calls something like this (with a big where clause) via JDBC db metadata.
-  (q "SELECT string_agg(word, ',') from pg_catalog.pg_get_keywords()")
-
-  (q "SELECT x.a from x where x.a = 42")
-
-  )
+  ;; you can use values for inline SQL tables
+  (q "SELECT * FROM (VALUES (1 YEAR, true), (3.14, 'foo')) AS x (a, b)"))
