@@ -1,7 +1,6 @@
 (ns core2.sql.parser
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.set :as set]
             [core2.util :as util])
   (:import java.io.File
            [java.util ArrayDeque Arrays HashSet Map Set]
@@ -90,59 +89,6 @@
                       parser
                       (Parser$EpsilonParser. ws-pattern)]))
 
-(defn- lookahead [grammar seen {:keys [tag] :as parser}]
-  (when-not (contains? seen parser)
-    (let [seen (conj seen parser)]
-      (case tag
-        :nt (let [parser (get grammar (:keyword parser))]
-              (case (:tag parser)
-                (:star :opt) #{::undecided-lookahead}
-                (recur grammar seen parser)))
-        :star (recur grammar seen (:parser parser))
-        :plus (recur grammar seen (:parser parser))
-        :opt (recur grammar seen (:parser parser))
-        :cat ((fn step [[parser & parsers]]
-                (case (:tag parser)
-                  (:star :opt) (set/union (lookahead grammar seen parser)
-                                          (step parsers))
-                  :neg (step parsers)
-                  (when parser
-                    (lookahead grammar seen parser))))
-              (:parsers parser))
-        :alt (reduce set/union (map (partial lookahead grammar seen) (:parsers parser)))
-        :ord (let [parsers ((fn step [{:keys [parser1 parser2]}]
-                              (cons parser1 (if (= :ord (:tag parser2))
-                                              (step parser2)
-                                              [parser2])))
-                            parser)]
-               (reduce set/union (map (partial lookahead grammar seen) parsers)))
-        (:neg :epsilon) #{::undecided-lookahead}
-        :regexp (if-let [lookahead-set (not-empty (set (for [n (range 256)
-                                                             :let [m (re-matcher (:regexp parser) (str (char n)))]
-                                                             :when (or (.lookingAt m)
-                                                                       (.hitEnd m))]
-                                                         (char n))))]
-                  lookahead-set
-                  #{::undecided-lookahead})
-        :string (hash-set (Character/toLowerCase (char (first (:string parser))))
-                          (Character/toUpperCase (char (first (:string parser)))))))))
-
-(def ^:private undecided-lookahead-table (boolean-array 256 true))
-
-(defn- lookahead-alt-table [grammar parsers]
-  (vec (for [parser parsers
-             :let [lookahead-set (lookahead grammar #{} parser)]]
-         (if (contains? lookahead-set ::undecided-lookahead)
-           undecided-lookahead-table
-           (reduce
-            (fn [^booleans acc ^long c]
-              (if (< c 256)
-                (doto acc
-                  (aset c true))
-                acc))
-            (boolean-array 256)
-            (map long lookahead-set))))))
-
 (defn build-ebnf-parser
   ([grammar ws-pattern]
    (build-ebnf-parser grammar ws-pattern (fn [rule-name]
@@ -158,8 +104,7 @@
                               :plus (Parser$RepeatParser. (build-parser rule-name (:parser parser)) false)
                               :opt (Parser$OptParser. (build-parser rule-name (:parser parser)))
                               :cat (Parser$CatParser. (mapv (partial build-parser rule-name) (:parsers parser)))
-                              :alt (Parser$AltParser. (mapv (partial build-parser rule-name) (:parsers parser))
-                                                      (lookahead-alt-table grammar (:parsers parser)))
+                              :alt (Parser$AltParser. (mapv (partial build-parser rule-name) (:parsers parser)))
                               :ord (let [parsers ((fn step [{:keys [parser1 parser2]}]
                                                     (cons parser1 (if (= :ord (:tag parser2))
                                                                     (step parser2)
@@ -167,8 +112,7 @@
                                                   parser)]
                                      (if (every? (comp #{:string :regexp} :tag) parsers)
                                        (Parser$OrdParser. (mapv (partial build-parser rule-name) parsers))
-                                       (Parser$AltParser. (mapv (partial build-parser rule-name) parsers)
-                                                          (lookahead-alt-table grammar parsers))))
+                                       (Parser$AltParser. (mapv (partial build-parser rule-name) parsers))))
                               :neg (Parser$NegParser. (build-parser rule-name (:parser parser)))
                               :epsilon (Parser$EpsilonParser. ws-pattern)
                               :regexp (Parser$RegexpParser. (:regexp parser)
@@ -243,8 +187,6 @@
   (sql-parser "a[0]" :value_expression_primary)
 
   (sql-parser "- - 2" :factor)
-
-  (time (sql-parser "(((((((((1)))))))))" :value_expression_primary))
 
   (= (sql-parser "SELECT pk FROM tab0 WHERE ((col0 >= 6) OR (col1 = 2.11 AND col3 BETWEEN 3 AND 4) AND ((col1 > 9.58 AND col0 <= 4)) AND (col0 >= 6))" :directly_executable_statement)
      (sql-parser (core2.sql.logic-test.xtdb-engine/remove-unnecessary-parens "SELECT pk FROM tab0 WHERE ((col0 >= 6) OR (col1 = 2.11 AND col3 BETWEEN 3 AND 4) AND ((col1 > 9.58 AND col0 <= 4)) AND (col0 >= 6))") :directly_executable_statement))
