@@ -160,10 +160,8 @@
                                                                     (step parser2)
                                                                     [parser2])))
                                                   parser)]
-                                     (if (every? (comp #{:string :regexp} :tag) parsers)
-                                       (Parser$OrdParser. (mapv (partial build-parser rule-name) parsers))
-                                       (Parser$AltParser. (mapv (partial build-parser rule-name) parsers)
-                                                          (lookahead-alt-table grammar parsers))))
+                                     (Parser$AltParser. (mapv (partial build-parser rule-name) parsers)
+                                                        (lookahead-alt-table grammar parsers)))
                               :neg (Parser$NegParser. (build-parser rule-name (:parser parser)))
                               :epsilon (Parser$EpsilonParser. ws-pattern)
                               :regexp (Parser$RegexpParser. (:regexp parser)
