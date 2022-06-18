@@ -1,5 +1,6 @@
 package core2.sql.parser;
 
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -346,7 +347,6 @@ public final class Parser {
     private static final ParseState NOT_FOUND = new ParseState(null, -1);
 
     private static final int MAX_RULE_ID = 512;
-    public static final int RULE_ID_SHIFT = Integer.numberOfTrailingZeros(MAX_RULE_ID);
 
     public static final class MemoizeParser extends AParser {
         private final RuleParser parser;
@@ -556,19 +556,30 @@ public final class Parser {
 
     public static final class AltParser extends AParser {
         private final AParser[] parsers;
-        private final boolean[][] lookahead;
+        private final boolean[][] charToParserMatchesLookahead;
 
         public AltParser(final List<AParser> parsers, final List<boolean[]> lookahead) {
             this.parsers = parsers.toArray(new AParser[parsers.size()]);
-            this.lookahead = lookahead.toArray(new boolean[parsers.size()][256]);
+            this.charToParserMatchesLookahead = new boolean[128][parsers.size()];
+            for (int i = 0; i < 128; i++) {
+                for (int j = 0; j < parsers.size(); j++) {
+                    this.charToParserMatchesLookahead[i][j] = lookahead.get(j)[i];
+                }
+            }
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[][] memos, final IParseErrors errors, final boolean hide) {
-            int c = idx < in.length() ? in.charAt(idx) : -1;
-            c = c < 256 ? c : -1;
+            boolean[] parserMatchesLookahead = null;
+            if (errors == NULL_PARSE_ERRORS && idx < in.length()) {
+                final int c = in.charAt(idx);
+                if (c < 128) {
+                    parserMatchesLookahead = charToParserMatchesLookahead[c];
+                }
+            }
+
             ParseState state1 = null;
             for (int i = 0; i < parsers.length; i++) {
-                if (errors == NULL_PARSE_ERRORS && c != -1 && !lookahead[i][c]) {
+                if (parserMatchesLookahead != null && !parserMatchesLookahead[i]) {
                     continue;
                 }
                 final ParseState state2 = parsers[i].parse(in, idx, memos, errors, hide);

@@ -112,7 +112,7 @@
                                               [parser2])))
                             parser)]
                (reduce set/union (map (partial lookahead grammar seen) parsers)))
-        :regexp (if-let [lookahead-set (not-empty (set (for [n (range 256)
+        :regexp (if-let [lookahead-set (not-empty (set (for [n (range 128)
                                                              :let [m (re-matcher (:regexp parser) (str (char n)))]
                                                              :when (or (.lookingAt m)
                                                                        (.hitEnd m))]
@@ -122,7 +122,7 @@
         :string (hash-set (Character/toLowerCase (char (first (:string parser))))
                           (Character/toUpperCase (char (first (:string parser)))))))))
 
-(def ^:private undecided-lookahead-table (boolean-array 256 true))
+(def ^:private undecided-lookahead-table (boolean-array 128 true))
 
 (defn- lookahead-alt-table [grammar parsers]
   (vec (for [parser parsers
@@ -131,11 +131,11 @@
            undecided-lookahead-table
            (reduce
             (fn [^booleans acc ^long c]
-              (if (< c 256)
+              (if (< c 128)
                 (doto acc
                   (aset c true))
                 acc))
-            (boolean-array 256)
+            (boolean-array 128)
             (map long lookahead-set))))))
 
 (defn build-ebnf-parser
