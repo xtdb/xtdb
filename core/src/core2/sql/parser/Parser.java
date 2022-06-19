@@ -1,6 +1,5 @@
 package core2.sql.parser;
 
-import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -19,7 +18,6 @@ import clojure.lang.IPersistentVector;
 import clojure.lang.ISeq;
 import clojure.lang.ITransientCollection;
 import clojure.lang.Keyword;
-import clojure.lang.PersistentArrayMap;
 import clojure.lang.PersistentVector;
 import clojure.lang.RT;
 
@@ -246,7 +244,7 @@ public final class Parser {
         }
 
         private IPersistentMap asMap() {
-            return new PersistentArrayMap(new Object[] {START_IDX, startIdx, END_IDX, endIdx});
+            return RT.map(START_IDX, startIdx, END_IDX, endIdx);
         }
 
         public IPersistentMap meta() {
@@ -296,7 +294,7 @@ public final class Parser {
         }
 
         public IPersistentMap empty() {
-            return PersistentArrayMap.EMPTY;
+            return RT.map();
         }
 
         public int count() {
