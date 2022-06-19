@@ -88,7 +88,7 @@
 (defn- surround-parser-with-ws ^core2.sql.parser.Parser$AParser [parser ^Pattern ws-pattern]
   (Parser$CatParser. [(Parser$HideParser. (Parser$StringParser. "" ws-pattern))
                       parser
-                      (Parser$EpsilonParser. ws-pattern)]))
+                      (Parser$EpsilonParser.)]))
 
 (defn- lookahead [grammar seen {:keys [tag] :as parser}]
   (when-not (contains? seen parser)
@@ -163,7 +163,7 @@
                                      (Parser$AltParser. (mapv (partial build-parser rule-name) parsers)
                                                         (lookahead-alt-table grammar parsers)))
                               :neg (Parser$NegParser. (build-parser rule-name (:parser parser)))
-                              :epsilon (Parser$EpsilonParser. ws-pattern)
+                              :epsilon (Parser$EpsilonParser.)
                               :regexp (Parser$RegexpParser. (:regexp parser)
                                                             [:expected (rule-kw->name rule-name)]
                                                             (reify Function

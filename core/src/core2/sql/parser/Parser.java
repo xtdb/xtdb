@@ -105,11 +105,6 @@ public final class Parser {
 
     public static final class EpsilonParser extends AParser {
         private static final IPersistentVector ERROR = RT.vector(Keyword.intern("expected"), "<EOF>");
-        private final Pattern wsPattern;
-
-        public EpsilonParser(final Pattern wsPattern) {
-            this.wsPattern = wsPattern;
-        }
 
         public ParseState parse(final String in, int idx, final ParseState[][] memos, final IParseErrors errors, final boolean hide) {
             if (idx == in.length()) {
