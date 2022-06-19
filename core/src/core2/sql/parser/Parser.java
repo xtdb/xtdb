@@ -21,6 +21,7 @@ import clojure.lang.ITransientCollection;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
 import clojure.lang.PersistentVector;
+import clojure.lang.RT;
 
 public final class Parser {
     public static final class ParseState {
@@ -82,7 +83,7 @@ public final class Parser {
         }
     }
 
-    private static final IPersistentVector WS_ERROR = PersistentVector.create(Keyword.intern("expected"), "<WS>");
+    private static final IPersistentVector WS_ERROR = RT.vector(Keyword.intern("expected"), "<WS>");
 
     private static int skipWhitespace(final Pattern pattern, final String in, final int idx, final IParseErrors errors) {
         final Matcher m = pattern.matcher(in).region(idx, in.length()).useTransparentBounds(true);
@@ -105,7 +106,7 @@ public final class Parser {
     }
 
     public static final class EpsilonParser extends AParser {
-        private static final IPersistentVector ERROR = PersistentVector.create(Keyword.intern("expected"), "<EOF>");
+        private static final IPersistentVector ERROR = RT.vector(Keyword.intern("expected"), "<EOF>");
         private final Pattern wsPattern;
 
         public EpsilonParser(final Pattern wsPattern) {
@@ -194,7 +195,7 @@ public final class Parser {
             for (int i = 0; i < vectors.length; i++) {
                 newVectors[i] = vectors[i];
             }
-            newVectors[vectors.length] = PersistentVector.create(x);
+            newVectors[vectors.length] = RT.vector(x);
             return new CatPersistentVector(newVectors);
         }
 
@@ -311,11 +312,13 @@ public final class Parser {
         private final Keyword ruleName;
         private final Predicate<IPersistentVector> rawPred;
         private AParser parser;
+        private final IPersistentVector astPrefix;
 
         public RuleParser(final Keyword ruleName, Predicate<IPersistentVector> rawPred, final AParser parser) {
             this.ruleName = ruleName;
             this.rawPred = rawPred;
             this.parser = parser;
+            this.astPrefix = RT.vector(ruleName);
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[][] memos, final IParseErrors errors, final boolean hide) {
@@ -327,11 +330,8 @@ public final class Parser {
                     return state;
                 } else {
                     final PositionInfo meta = new PositionInfo(idx, state.idx);
-                    IPersistentVector[] newVectors = new IPersistentVector[2];
-                    newVectors[0] = PersistentVector.create(ruleName);
-                    newVectors[1] = state.ast;
-                    IPersistentVector newAst = new CatPersistentVector(meta, newVectors);
-                    return new ParseState(PersistentVector.create((Object) newAst), state.idx);
+                    final IPersistentVector newAst = new CatPersistentVector(meta, astPrefix, state.ast);
+                    return new ParseState(RT.vector(newAst), state.idx);
                 }
             } else {
                 return null;
@@ -472,7 +472,9 @@ public final class Parser {
         public ParseState parse(final String in, final int idx, final ParseState[][] memos, final IParseErrors errors, final boolean hide) {
             final ParseState state = parser.parse(in, idx, memos, NULL_PARSE_ERRORS, true);
             if (state != null) {
-                errors.addError(PersistentVector.create(UNEXPECTED, in.substring(idx, state.idx)), idx);
+                if (errors != NULL_PARSE_ERRORS) {
+                    errors.addError(RT.vector(UNEXPECTED, in.substring(idx, state.idx)), idx);
+                }
                 return null;
             } else {
                 return new ParseState(PersistentVector.EMPTY, idx);
@@ -631,8 +633,8 @@ public final class Parser {
 
         public StringParser(final String string, final Pattern wsPattern) {
             this.string = string;
-            this.ast = PersistentVector.create(string);
-            this.err = PersistentVector.create(Keyword.intern("expected"), string);
+            this.ast = RT.vector(string);
+            this.err = RT.vector(Keyword.intern("expected"), string);
             this.wsPattern = wsPattern;
         }
 
