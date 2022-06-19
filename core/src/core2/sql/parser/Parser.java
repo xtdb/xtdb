@@ -495,7 +495,7 @@ public final class Parser {
         }
 
         public ParseState parse(final String in, int idx, final ParseState[][] memos, final IParseErrors errors, final boolean hide) {
-            final List<IPersistentVector> asts = new ArrayList<>();
+            final List<IPersistentVector> asts = hide ? null : new ArrayList<>();
             boolean isMatch = false;
             while (true) {
                 final ParseState state = parser.parse(in, idx, memos, errors, hide);
@@ -507,7 +507,7 @@ public final class Parser {
                     }
                 } else {
                     if (isStar || isMatch) {
-                        IPersistentVector newAst = new CatPersistentVector(asts.toArray(new IPersistentVector[asts.size()]));
+                        IPersistentVector newAst = hide ? PersistentVector.EMPTY : new CatPersistentVector(asts.toArray(new IPersistentVector[asts.size()]));
                         return new ParseState(newAst, idx);
                     } else {
                         return null;
