@@ -142,8 +142,8 @@
   ([grammar ws-pattern]
    (build-ebnf-parser grammar ws-pattern (fn [rule-name]
                                            Parser/NEVER_RAW)))
-  ([grammar ws-pattern ->raw?]
-   (let [rule->id (zipmap (keys grammar) (range))
+  ([^Map grammar ws-pattern ->raw?]
+   (let [^Map rule->id (zipmap (keys grammar) (range))
          ^"[Lcore2.sql.parser.Parser$AParser;" rules (make-array Parser$AParser (count rule->id))
          parse-state-array-class (Class/forName "[Lcore2.sql.parser.Parser$ParseState;")]
      (letfn [(build-parser [rule-name {:keys [tag hide] :as parser}]
@@ -198,10 +198,10 @@
          (.init rule-parser rules))
 
        (fn [^String in start-rule]
-         (let [memos (make-array parse-state-array-class (count grammar))
-               parser (surround-parser-with-ws (aget rules (get rule->id start-rule)) ws-pattern)]
+         (let [memos (make-array parse-state-array-class (.size grammar))
+               parser (surround-parser-with-ws (aget rules (.get rule->id start-rule)) ws-pattern)]
            (if-let [state (.parse parser in 0 memos Parser/NULL_PARSE_ERRORS false)]
-             (first (.ast state))
+             (.nth (.ast state) 0 nil)
              (let [errors (Parser$ParseErrors.)]
                (Arrays/fill ^objects memos nil)
                (.parse parser in 0 memos errors true)
