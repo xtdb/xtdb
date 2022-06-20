@@ -571,15 +571,12 @@
   ;; pre-req
   (do
     (require '[juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
-    (require 'dev)
-
-    (when-not (bound? #'dev/node) (dev/go))
 
     (defonce server nil)
 
     (defn stop-server []
       (when server
-        (some-> (:server server) .close)
+        (run! util/try-close ((juxt :server :node) server))
         (println "Server stopped")
         (alter-var-root #'server (constantly nil))))
 
@@ -587,7 +584,7 @@
       ([] (start-server 5432))
       ([port]
        (stop-server)
-       (let [node dev/node
+       (let [node (node/start-node {})
              server (->pg-wire-server node
                                       {:server-parameters {"server_version" "14"
                                                            "server_encoding" "UTF8"
