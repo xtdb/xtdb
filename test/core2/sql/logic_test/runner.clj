@@ -327,14 +327,14 @@
                            assoc
                            script-name (let [start-time (. System (nanoTime))
                                              results (:results (execute-records *db-engine* (parse-script script-name (slurp script-name))))]
-                                         (assoc results :time (str (math/round (/ (double (- (. System (nanoTime)) start-time)) 1000000.0)) "ms"))))]]
+                                         (assoc results :time (math/round (/ (double (- (. System (nanoTime)) start-time)) 1000000.0)))))]]
           (println "Running " script-name)
           (case db
             "xtdb" (tu/with-node
                      #(with-xtdb f))
             "sqlite" (with-sqlite f)
             (with-jdbc db f)))))
-    (let [{:keys [failure error] :as total-results} (reduce (partial merge-with +) (vals @results))]
+    (let [{:keys [failure error] :or {failure 0 error 0} :as total-results} (reduce (partial merge-with +) (vals @results))]
       (pprint/print-table
         [:name :success :failure :error :time]
         (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
