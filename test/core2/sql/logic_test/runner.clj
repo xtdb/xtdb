@@ -1,5 +1,5 @@
 (ns core2.sql.logic-test.runner
-  (:require [clojure.java.io :as io]
+  (:require [clojure.math :as math]
             [clojure.pprint :as pprint]
             [clojure.test :as t]
             [clojure.string :as str]
@@ -8,7 +8,6 @@
             [core2.sql.plan :as plan]
             [core2.test-util :as tu])
   (:import java.nio.charset.StandardCharsets
-           java.io.File
            java.security.MessageDigest
            [java.sql Connection DriverManager]))
 
@@ -323,7 +322,12 @@
                         :query-limit (:limit options)}
                 plan/*include-table-column-in-scan?* true]
         (doseq [script-name arguments
-                :let [f #(swap! results assoc script-name (:results (execute-records *db-engine* (parse-script script-name (slurp script-name)))))]]
+                :let [f #(swap!
+                           results
+                           assoc
+                           script-name (let [start-time (. System (nanoTime))
+                                             results (:results (execute-records *db-engine* (parse-script script-name (slurp script-name))))]
+                                         (assoc results :time (str (math/round (/ (double (- (. System (nanoTime)) start-time)) 1000000.0)) "ms"))))]]
           (println "Running " script-name)
           (case db
             "xtdb" (tu/with-node
@@ -332,7 +336,7 @@
             (with-jdbc db f)))))
     (let [{:keys [failure error] :as total-results} (reduce (partial merge-with +) (vals @results))]
       (pprint/print-table
-        [:name :success :failure :error]
+        [:name :success :failure :error :time]
         (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
               (assoc total-results :name "Total")))
       (when max-failures
