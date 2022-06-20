@@ -5,7 +5,8 @@
             [core2.log :as log]
             [core2.test-util :as tu :refer [*node*]]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [core2.local-node :as node])
   (:import java.time.Duration
            java.util.concurrent.ExecutionException))
 
@@ -142,3 +143,7 @@
              (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN (?, ?)"
                            {:basis {:tx !tx}
                             :? ["James", "Matt"]})))))
+
+(t/deftest start-and-query-empty-node-re-231-test
+  (with-open [n (node/start-node {})]
+    (t/is (= [] (c2/sql-query n "select a.a from a a" {})))))
