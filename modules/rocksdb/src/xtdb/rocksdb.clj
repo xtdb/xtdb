@@ -71,7 +71,7 @@
       (doseq [[k v] kvs]
         (if v
           (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
-          (.remove wb (mem/direct-byte-buffer k))))
+          (.delete wb (mem/direct-byte-buffer k))))
       (.write db write-options wb)))
 
   (compact [_]
