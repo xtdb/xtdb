@@ -1289,7 +1289,7 @@
                     `(parse-multi-field-interval (resolve-string ~s) ~unit1 ~unit2))}))
 
 (defmethod codegen-mono-call [:extract :utf8 :timestamp-tz] [{[{field :literal} _] :args}]
-  {:return-type :i64
+  {:return-type :i32
    :->call-code (fn [[_ ts-code]]
                   `(.get (.atOffset ^Instant (util/micros->instant ~ts-code) ZoneOffset/UTC)
                          ~(case field
@@ -1308,8 +1308,8 @@
                     "YEAR" `(.getYear (LocalDate/ofEpochDay ~epoch-day-code))
                     "MONTH" `(.getMonthValue (LocalDate/ofEpochDay ~epoch-day-code))
                     "DAY" `(.getDayOfMonth (LocalDate/ofEpochDay ~epoch-day-code))
-                    "HOUR" 0
-                    "MINUTE" 0))})
+                    "HOUR" `(int 0)
+                    "MINUTE" `(int 0)))})
 
 (defmethod codegen-mono-call [:date-trunc :utf8 :timestamp-tz] [{[{field :literal} _] :args, [_ [_tstz _time-unit tz :as ts-type]] :arg-types}]
   ;; FIXME this assumes micros
