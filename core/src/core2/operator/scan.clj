@@ -288,7 +288,7 @@
                                 :> "_valid-time-end" default-valid-time)))
 
 (defn- apply-snapshot-tx! [[^longs temporal-min-range, ^longs temporal-max-range], ^Snapshot snapshot, col-preds]
-  (when-let [tx-time (.tx-time ^TransactionInstant (.tx snapshot))]
+  (when-let [tx-time (some-> ^TransactionInstant (.tx snapshot) (.tx_time))]
     (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                 :<= "_tx-time-start" tx-time)
 
