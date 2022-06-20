@@ -201,7 +201,7 @@
         (t/is (= (LocalDate/of 2022 1 1) (project1 '(date-trunc "YEAR" (date-trunc "MONTH" date)) {:date ld})))))))
 
 (t/deftest test-date-extract
-  ;; todo units below minute are not yet implemented for any type
+  ;; TODO units below minute are not yet implemented for any type
   (letfn [(extract [part date-like] (project1 (list 'extract part 'date) {:date date-like}))
           (extract-all [part date-likes] (project (list 'extract part 'date) (map (partial array-map :date) date-likes)))]
     (t/testing "java.time.Instant"

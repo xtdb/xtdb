@@ -2,8 +2,8 @@
   (:require [core2.types :as types])
   (:import (core2.vector.reader BitUtil IMonoVectorReader IPolyVectorReader)
            java.util.List
-           (org.apache.arrow.vector BaseFixedWidthVector BaseVariableWidthVector ExtensionTypeVector FixedSizeBinaryVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector ValueVector)
-           (org.apache.arrow.vector.complex DenseUnionVector )))
+           (org.apache.arrow.vector BaseFixedWidthVector BaseVariableWidthVector DateMilliVector ExtensionTypeVector FixedSizeBinaryVector IntervalDayVector IntervalMonthDayNanoVector IntervalYearVector NullVector TimeMicroVector TimeMilliVector TimeNanoVector TimeSecVector ValueVector)
+           (org.apache.arrow.vector.complex DenseUnionVector)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -73,8 +73,41 @@
   (->mono-reader [arrow-vec]
     (->VariableWidthReader arrow-vec))
 
-  ;; the Interval vectors just return PeriodDuration objects for now.
-  ;; eventually (see discussion on #112) we may want these to have their own box objects.
+  ExtensionTypeVector
+  (->mono-reader [arrow-vec] (->mono-reader (.getUnderlyingVector arrow-vec))))
+
+;; (@wot) read as an epoch int, do not think it is worth branching for both cases in all date functions.
+(extend-protocol MonoReaderFactory
+  DateMilliVector
+  (->mono-reader [arrow-vec]
+    (reify IMonoVectorReader
+      (readInt [_ idx] (-> (.get arrow-vec idx) (quot 86400000) (int))))))
+
+;; (@wot) unifies to nanos (of day) long
+(extend-protocol MonoReaderFactory
+  TimeSecVector
+  (->mono-reader [arrow-vec]
+    (reify IMonoVectorReader
+      (readLong [_ idx] (* (long 1e9) (.get arrow-vec idx)))))
+
+  TimeMilliVector
+  (->mono-reader [arrow-vec]
+    (reify IMonoVectorReader
+      (readLong [_ idx] (* (long 1e6) (.get arrow-vec idx)))))
+
+  TimeMicroVector
+  (->mono-reader [arrow-vec]
+    (reify IMonoVectorReader
+      (readLong [_ idx] (* (long 1e3) (.get arrow-vec idx)))))
+
+  TimeNanoVector
+  (->mono-reader [arrow-vec]
+    (reify IMonoVectorReader
+      (readLong [_ idx] (.get arrow-vec idx)))))
+
+;; the Interval vectors just return PeriodDuration objects for now.
+;; eventually (see discussion on #112) we may want these to have their own box objects.
+(extend-protocol MonoReaderFactory
   IntervalYearVector
   (->mono-reader [arrow-vec]
     (reify IMonoVectorReader
@@ -88,10 +121,7 @@
   IntervalMonthDayNanoVector
   (->mono-reader [arrow-vec]
     (reify IMonoVectorReader
-      (readObject [_ idx] (.getObject arrow-vec idx))))
-
-  ExtensionTypeVector
-  (->mono-reader [arrow-vec] (->mono-reader (.getUnderlyingVector arrow-vec))))
+      (readObject [_ idx] (.getObject arrow-vec idx)))))
 
 (deftype NullableVectorReader [^ValueVector arrow-vec
                                ^IMonoVectorReader inner,

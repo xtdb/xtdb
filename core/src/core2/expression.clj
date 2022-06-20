@@ -10,16 +10,16 @@
             [core2.vector.writer :as vw])
   (:import (clojure.lang Keyword MapEntry)
            (core2 StringUtil)
-           (core2.expression.boxes BoolBox DoubleBox LongBox ObjectBox)
            (core2.operator IProjectionSpec IRelationSelector)
            (core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter)
+           core2.vector.reader.PolyValueBox
            (core2.vector.extensions KeywordType UuidType)
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate Period ZoneId ZoneOffset ZonedDateTime)
            (java.time.temporal ChronoField ChronoUnit)
-           (java.util Arrays Date HashMap LinkedList Map)
-           (java.util.function Function IntUnaryOperator)
+           (java.util Arrays Date HashMap LinkedList)
+           (java.util.function IntUnaryOperator)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
            (org.apache.arrow.vector BigIntVector BitVector IntVector IntervalDayVector IntervalYearVector NullVector PeriodDuration ValueVector)
@@ -174,28 +174,6 @@
 (def rel-sym (gensym 'rel))
 (def params-sym (gensym 'params))
 
-(defmulti ->box-class types/col-type-head, :hierarchy #'types/col-type-hierarchy)
-
-(defmethod ->box-class :bool [_] BoolBox)
-(defmethod ->box-class :int [_] LongBox) ; TODO different box for different int-types
-(defmethod ->box-class :float [_] DoubleBox) ; TODO different box for different float-types
-
-(doseq [k #{:timestamp-tz :timestamp-local :date :time :duration}]
-  (defmethod ->box-class k [_] LongBox))
-
-(defmethod ->box-class :any [_] ObjectBox)
-
-(defn- box-for [^Map boxes, col-type]
-  (.computeIfAbsent boxes col-type
-                    (reify Function
-                      (apply [_ col-type]
-                        {:box-sym (gensym (types/col-type->field-name col-type))
-                         :box-class (->box-class col-type)}))))
-
-(defn box-batch-bindings [boxes]
-  (for [{:keys [box-sym box-class]} boxes]
-    [box-sym `(new ~box-class)]))
-
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti codegen-expr
   "Returns a map containing
@@ -277,27 +255,6 @@
                        (f param-type param))}
           (select-keys expr #{:literal}))))
 
-(defn- wrap-boxed-poly-return [{:keys [return-type continue] :as ret} {:keys [return-boxes]}]
-  (-> ret
-      (assoc :continue (zmatch return-type
-                         [:union inner-types]
-                         (let [boxes (->> (for [rt inner-types]
-                                            [rt (box-for return-boxes rt)])
-                                          (into {}))]
-                           (fn [f]
-                             (let [res-sym (gensym 'res)]
-                               `(let [~res-sym
-                                      ~(continue (fn [return-type code]
-                                                   (let [{:keys [box-sym]} (get boxes return-type)]
-                                                     `(.withValue ~box-sym ~code))))]
-                                  (condp identical? ~res-sym
-                                    ~@(->> (for [[ret-type {:keys [box-sym]}] boxes]
-                                             [box-sym (f ret-type `(.value ~box-sym))])
-                                           (apply concat)))))))
-
-                         (fn [f]
-                           (f return-type (continue (fn [_ code] code))))))))
-
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti read-value-code
   (fn [col-type & args]
@@ -305,26 +262,43 @@
   :default ::default,
   :hierarchy #'types/col-type-hierarchy)
 
+#_{:clj-kondo/ignore [:unused-binding]}
+(defmulti write-value-code
+  (fn [col-type & args]
+    (types/col-type-head col-type))
+  :default ::default,
+  :hierarchy #'types/col-type-hierarchy)
+
 (defmethod read-value-code ::default [_ & args] `(.readObject ~@args))
+(defmethod write-value-code ::default [_ & args] `(.writeObject ~@args))
+
 (defmethod read-value-code :null [_ & _args] nil)
 
-(doseq [[k read-sym] '{:bool .readBoolean, :i8 .readByte, :i16 .readShort, :i32 .readInt, :i64 .readLong :f32 .readFloat, :f64 .readDouble
-                       :timestamp-tz .readLong, :timestamp-local .readLong, :duration .readLong, :interval .readObject}]
-  (defmethod read-value-code k [_ & args] `(~read-sym ~@args)))
+(doseq [[k sym] '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double
+                  :date Int, :time Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :interval Object}]
+  (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" sym)) ~@args))
+  (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" sym)) ~@args)))
 
-;; (@wot) as an epoch int, do not think it is worth branching for both cases in all date functions.
-(defmethod read-value-code :date [[_ date-unit] & args]
-  (case date-unit
-    :day `(.readInt ~@args)
-    :milli `(int (quot (.readLong ~@args) 86400000))))
+(defn- wrap-boxed-poly-return [{:keys [return-type continue] :as emitted-expr} _]
+  (zmatch return-type
+    [:union inner-types]
+    (let [type-ids (->> inner-types
+                        (into {} (map-indexed (fn [idx val-type]
+                                                (MapEntry/create val-type (byte idx))))))
+          box-sym (gensym 'box)]
+      (-> emitted-expr
+          (update :batch-bindings (fnil conj []) [box-sym `(PolyValueBox.)])
+          (assoc :continue (fn [f]
+                             `(do
+                                ~(continue (fn [return-type code]
+                                             (write-value-code return-type box-sym (get type-ids return-type) code)))
 
-;; unifies to nanos (of day) long
-(defmethod read-value-code :time [[_ time-unit] & args]
-  (case time-unit
-    :nano `(.readLong ~@args)
-    :micro `(* 1e3 (.readLong ~@args))
-    :milli `(* 1e6 (long (.readInt ~@args)))
-    :second `(* 1e9 (long (.readInt ~@args)))))
+                                (case (.getTypeId ~box-sym)
+                                  ~@(->> (for [[ret-type type-id] type-ids]
+                                           [type-id (f ret-type (read-value-code ret-type box-sym))])
+                                         (apply concat))))))))
+
+    emitted-expr))
 
 (defmethod codegen-expr :variable [{:keys [variable idx], :or {idx idx-sym}}
                                    {:keys [var->col-type extract-vecs-from-rel?]
@@ -359,8 +333,7 @@
                    (f col-type (read-value-code col-type variable idx)))})))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} opts]
-  (let [p-boxes (HashMap.)
-        {p-ret :return-type, p-cont :continue, :as emitted-p} (codegen-expr pred (assoc opts :return-boxes p-boxes))
+  (let [{p-ret :return-type, p-cont :continue, :as emitted-p} (codegen-expr pred opts)
         {t-ret :return-type, t-cont :continue, :as emitted-t} (codegen-expr then opts)
         {e-ret :return-type, e-cont :continue, :as emitted-e} (codegen-expr else opts)
         return-type (types/merge-col-types t-ret e-ret)]
@@ -370,7 +343,6 @@
 
     (-> {:return-type return-type
          :children [emitted-p emitted-t emitted-e]
-         :batch-bindings (box-batch-bindings (vals p-boxes))
          :continue (fn [f]
                      `(if ~(p-cont (fn [_ code] code))
                         ~(t-cont f)
@@ -383,8 +355,7 @@
      :continue (fn [f] (f return-type local))}))
 
 (defmethod codegen-expr :let [{:keys [local expr body]} opts]
-  (let [expr-boxes (HashMap.)
-        {local-type :return-type, continue-expr :continue, :as emitted-expr} (codegen-expr expr (assoc opts :return-boxes expr-boxes))
+  (let [{local-type :return-type, continue-expr :continue, :as emitted-expr} (codegen-expr expr opts)
         emitted-bodies (->> (for [local-type (types/flatten-union-types local-type)]
                               (MapEntry/create local-type
                                                (codegen-expr body (assoc-in opts [:local-types local] local-type))))
@@ -392,7 +363,6 @@
         return-type (apply types/merge-col-types (into #{} (map :return-type) (vals emitted-bodies)))]
     (-> {:return-type return-type
          :children (cons emitted-expr (vals emitted-bodies))
-         :batch-bindings (box-batch-bindings (vals expr-boxes))
          :continue (fn [f]
                      (continue-expr (fn [local-type code]
                                       `(let [~local ~code]
@@ -400,10 +370,8 @@
         (wrap-boxed-poly-return opts))))
 
 (defmethod codegen-expr :if-some [{:keys [local expr then else]} opts]
-  (let [expr-boxes (HashMap.)
-
-        {continue-expr :continue, expr-ret :return-type, :as emitted-expr}
-        (codegen-expr expr (assoc opts :return-boxes expr-boxes))
+  (let [{continue-expr :continue, expr-ret :return-type, :as emitted-expr}
+        (codegen-expr expr opts)
 
         expr-rets (types/flatten-union-types expr-ret)
 
@@ -419,7 +387,6 @@
     (-> (if-not (contains? expr-rets :null)
           {:return-type then-ret
            :children children
-           :batch-bindings (box-batch-bindings (vals expr-boxes))
            :continue (fn [f]
                        (continue-expr (fn [local-type code]
                                         `(let [~local ~code]
@@ -428,7 +395,6 @@
           (let [{e-ret :return-type, e-cont :continue, :as emitted-else} (codegen-expr else opts)]
             {:return-type (apply types/merge-col-types e-ret then-rets)
              :children (cons emitted-else children)
-             :batch-bindings (box-batch-bindings (vals expr-boxes))
              :continue (fn [f]
                          (continue-expr (fn [local-type code]
                                           (if (= local-type :null)
@@ -560,9 +526,7 @@
 
 (defmethod codegen-expr :call [{:keys [args] :as expr} opts]
   (let [emitted-args (for [arg args]
-                       (let [boxes (HashMap.)]
-                         (-> (codegen-expr arg (assoc opts :return-boxes boxes))
-                             (update :batch-bindings concat (box-batch-bindings (vals boxes))))))]
+                       (codegen-expr arg opts))]
     (-> (codegen-call (-> expr (assoc :emitted-args emitted-args)))
         (assoc :children emitted-args)
         (wrap-boxed-poly-return opts))))
@@ -1574,8 +1538,7 @@
   (-> (fn [expr opts]
         ;; TODO should lit->param be outside the memoize, s.t. we don't have a cache entry for each literal value?
         (let [expr (prepare-expr expr)
-              return-boxes (HashMap.)
-              {:keys [return-type continue] :as emitted-expr} (codegen-expr expr (-> opts (assoc :return-boxes return-boxes)))
+              {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
 
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
 
@@ -1583,7 +1546,7 @@
                       (-> `(fn [~(-> out-vec-sym (with-tag ValueVector))
                                 ~(-> rel-sym (with-tag IIndirectRelation))
                                 ~params-sym]
-                             (let [~@(batch-bindings {:batch-bindings (box-batch-bindings (vals return-boxes)), :children [emitted-expr]})
+                             (let [~@(batch-bindings emitted-expr)
 
                                    ~out-writer-sym (vw/vec->writer ~out-vec-sym)
                                    ~@writer-bindings

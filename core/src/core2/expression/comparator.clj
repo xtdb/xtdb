@@ -84,8 +84,7 @@
 
           (-> `(fn [~(-> left-col-sym (expr/with-tag IIndirectVector))
                     ~(-> right-col-sym (expr/with-tag IIndirectVector))]
-                 (let [~@(expr/batch-bindings {:batch-bindings (expr/box-batch-bindings (vals return-boxes))
-                                               :children [emitted-expr]})]
+                 (let [~@(expr/batch-bindings emitted-expr)]
                    (reify IntBinaryOperator
                      (~'applyAsInt [_# ~left-idx-sym ~right-idx-sym]
                       ~(cont (fn [_ code] code))))))

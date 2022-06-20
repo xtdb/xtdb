@@ -189,7 +189,6 @@
 (def emit-agg
   (-> (fn [{:keys [to-type val-expr step-expr]} input-opts]
         (let [group-mapping-sym (gensym 'group-mapping)
-              return-boxes (HashMap.)
               agg-expr (-> {:op :if-some, :local val-local, :expr val-expr
                             :then {:op :if-some, :local acc-local, :expr {:op ::read-acc, ::acc-type to-type}
                                    :then step-expr
@@ -197,7 +196,7 @@
                             :else {:op :literal, :literal nil}}
                            (expr/prepare-expr))
 
-              {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr (assoc input-opts :return-boxes return-boxes))
+              {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr input-opts)
               ;; ignore return-type of the codegen because it may be more specific than the acc type
 
               return-type [:union (conj #{:null} to-type)]
@@ -210,7 +209,7 @@
                                ~(-> expr/rel-sym (expr/with-tag IIndirectRelation))
                                ~(-> group-mapping-sym (expr/with-tag IntVector))]
                             (let [~acc-reader-sym (rdr/->poly-reader ~acc-sym [:null ~to-type])
-                                  ~@(expr/batch-bindings {:batch-bindings (expr/box-batch-bindings (vals return-boxes)), :children [emitted-expr]})]
+                                  ~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.rowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
                                   (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)

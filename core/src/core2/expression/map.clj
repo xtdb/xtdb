@@ -91,8 +91,7 @@
 
           (-> `(fn [~(expr/with-tag left-vec IIndirectVector)
                     ~(expr/with-tag right-vec IIndirectVector)]
-                 (let [~@(expr/batch-bindings {:batch-bindings (expr/box-batch-bindings (vals return-boxes))
-                                               :children [emitted-expr]})]
+                 (let [~@(expr/batch-bindings emitted-expr)]
                    (reify IntIntPredicate
                      (~'test [_# ~left-idx ~right-idx]
                       ~(continue (fn [_ code] code))))))
