@@ -337,8 +337,10 @@
     (let [{:keys [failure error] :or {failure 0 error 0} :as total-results} (reduce (partial merge-with +) (vals @results))]
       (pprint/print-table
         [:name :success :failure :error :time]
-        (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
-              (assoc total-results :name "Total")))
+        (mapv
+          #(update % :time (fn [t] (str t "ms")))
+          (conj (vec (sort-by :name (map (fn [[k v]] (assoc v :name k)) @results)))
+                (assoc total-results :name "Total"))))
       (when max-failures
         (when (> failure max-failures)
           (println "Failure count (" failure ") above expected (" max-failures ")")
