@@ -7,6 +7,7 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
+            [core2.vector.reader :as rdr]
             [core2.vector.writer :as vw])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap IRelationMapBuilder)
@@ -173,6 +174,7 @@
           (close [_] (.close out-vec)))))))
 
 (def ^:private acc-sym (gensym 'acc))
+(def ^:private acc-reader-sym (gensym 'acc-reader))
 (def ^:private group-idx-sym (gensym 'group-idx))
 (def ^:private acc-local (gensym 'acc-local))
 (def ^:private val-local (gensym 'val-local))
@@ -180,12 +182,9 @@
 (defmethod expr/codegen-expr ::read-acc [{::keys [acc-type]} _]
   {:return-type [:union (conj #{:null} acc-type)]
    :continue (fn [f]
-               `(if (.isNull ~acc-sym ~group-idx-sym)
-                  ~(f :null nil)
-                  ~(f acc-type (expr/get-value-form acc-type acc-sym group-idx-sym))))})
-
-(defmethod expr/codegen-expr [::read-acc] [_]
-  {:return-type :null, :->call-code (constantly nil)})
+               `(case (.read ~acc-reader-sym ~group-idx-sym)
+                  0 ~(f :null nil)
+                  1 ~(f acc-type (expr/read-value-code acc-type acc-reader-sym))))})
 
 (def emit-agg
   (-> (fn [{:keys [to-type val-expr step-expr]} input-opts]
@@ -210,7 +209,8 @@
            :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag vec-type))
                                ~(-> expr/rel-sym (expr/with-tag IIndirectRelation))
                                ~(-> group-mapping-sym (expr/with-tag IntVector))]
-                            (let [~@(expr/batch-bindings {:batch-bindings (expr/box-batch-bindings (vals return-boxes)), :children [emitted-expr]})]
+                            (let [~acc-reader-sym (rdr/->poly-reader ~acc-sym [:null ~to-type])
+                                  ~@(expr/batch-bindings {:batch-bindings (expr/box-batch-bindings (vals return-boxes)), :children [emitted-expr]})]
                               (dotimes [~expr/idx-sym (.rowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
                                   (when (<= (.getValueCount ~acc-sym) ~group-idx-sym)
@@ -236,10 +236,7 @@
             (aggregate [_ in-rel group-mapping]
               (let [input-opts {:var->col-type (->> (seq in-rel)
                                                     (into {} (map (juxt #(symbol (.getName ^IIndirectVector %))
-                                                                        #(-> (.getVector ^IIndirectVector %) .getField types/field->col-type)))))
-                                :var->types (->> (seq in-rel)
-                                                 (into {} (map (juxt #(symbol (.getName ^IIndirectVector %))
-                                                                     #(-> (.getVector ^IIndirectVector %) .getField expr/field->value-types)))))}
+                                                                        #(-> (.getVector ^IIndirectVector %) .getField types/field->col-type)))))}
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
                 (eval-agg out-vec in-rel group-mapping)))
 

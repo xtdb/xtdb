@@ -1,5 +1,6 @@
 (ns core2.vector.indirect
-  (:require [core2.types :as ty]
+  (:require [core2.vector.reader :as rdr]
+            [core2.types :as ty]
             [core2.util :as util])
   (:import core2.DenseUnionUtil
            [core2.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader IVectorWriter]
@@ -156,7 +157,10 @@
 
   (rowCopier [_ w] (.rowCopier w v))
   (structReader [_] (->StructReader v))
-  (listReader [_] (->list-reader v)))
+  (listReader [_] (->list-reader v))
+
+  (monoReader [_] (rdr/->mono-reader v))
+  (polyReader [_ ordered-col-types] (rdr/->poly-reader v ordered-col-types)))
 
 (defn compose-selection
   "Returns the composition of the selections sel1, sel2 which when applied to a vector will be the same as (select (select iv sel1) sel2).
@@ -213,7 +217,15 @@
     (let [copier (.rowCopier w v)]
       (reify IRowCopier
         (copyRow [_ idx]
-          (.copyRow copier (.getIndex this-vec idx)))))))
+          (.copyRow copier (.getIndex this-vec idx))))))
+
+  (monoReader [_]
+    (-> (rdr/->mono-reader v)
+        (rdr/->IndirectVectorMonoReader idxs)))
+
+  (polyReader [_ ordered-col-types]
+    (-> (rdr/->poly-reader v ordered-col-types)
+        (rdr/->IndirectVectorPolyReader idxs))))
 
 (defn ->direct-vec ^core2.vector.IIndirectVector [^ValueVector in-vec]
   (DirectVector. in-vec (.getName in-vec)))

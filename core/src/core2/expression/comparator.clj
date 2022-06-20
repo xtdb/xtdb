@@ -62,8 +62,7 @@
     (expr/codegen-mono-call (assoc expr :f :compare))))
 
 (def ^:private build-comparator
-  (-> (fn [left-field-types left-col-type right-field-types right-col-type null-ordering]
-        ;; HACK we temporarily take both field-types and col-type while the expr eng needs both
+  (-> (fn [left-col-type right-col-type null-ordering]
         (let [left-idx-sym (gensym 'left-idx)
               right-idx-sym (gensym 'right-idx)
               left-col-sym (gensym 'left-col)
@@ -79,8 +78,7 @@
                                   :args [{:op :variable, :variable left-col-sym, :idx left-idx-sym}
                                          {:op :variable, :variable right-col-sym, :idx right-idx-sym}]}
 
-                                 {:var->types {left-col-sym left-field-types, right-col-sym right-field-types}
-                                  :var->col-type {left-col-sym left-col-type, right-col-sym right-col-type}
+                                 {:var->col-type {left-col-sym left-col-type, right-col-sym right-col-type}
                                   :return-boxes return-boxes
                                   :extract-vecs-from-rel? false})]
 
@@ -98,9 +96,7 @@
 (defn ->comparator ^java.util.function.IntBinaryOperator [^IIndirectVector left-col, ^IIndirectVector right-col, null-ordering]
   (let [left-field (.getField (.getVector left-col))
         right-field (.getField (.getVector right-col))
-        f (build-comparator (expr/field->value-types left-field)
-                            (types/field->col-type left-field)
-                            (expr/field->value-types right-field)
+        f (build-comparator (types/field->col-type left-field)
                             (types/field->col-type right-field)
                             null-ordering)]
     (f left-col right-col)))
