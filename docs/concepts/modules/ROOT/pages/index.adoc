@@ -4,3 +4,4 @@
 * xref:bitemporality.adoc[Bitemporality]
 * xref:strength-of-the-record.adoc[Strength of the Record]
 * xref:blockchain-without-crypto.adoc[Blockchain Without the Crypto]
+* xref:trucks-tubes-truth.adoc[Trucks, Tubes, and Truth]

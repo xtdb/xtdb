@@ -1,0 +1,437 @@
+= Trucks, Tubes, and Truth
+:page-subtitle: Just what is "data", anyway?
+:page-author: Steven Deobald
+:page-header: truth-veluwemeer-aquaduct.jpg
+:page-published: 2022-06-21T00:00:00Z
+:page-category: Concepts
+:thumbnail: truth-veluwemeer-aquaduct.jpg
+:page-thumbnail: {thumbnail}
+:page-thumbnailalt: Trucks, Tubes, and Truth
+
+
+I am carrying a bucket of human waste. Two buckets, actually. I'm visiting an off-grid cabin in an Acadian forest where the vegetable garden is nourished by a https://www.goodreads.com/book/show/56246289-the-humanure-handbook-4th-edition[humanure,title="The Humanure Handbook, 4th Edition"] composting system. It's my turn to take out the, uh, compost. Every visit to this forest is an opportunity to get away from Twitter, away from the noise of the city, and enjoy a simpler life as a temporary monastic hobo. My intention coming out here is to get closer to nature -- closer to its candor and integrity -- but I'm more likely to spend my time thinking about toilets and databases.
+
+Cabin life it isn't for everyone. The anxieties caused by mortgage, insurance, water, heat, and electricity bills are replaced by unconventional stress: of empty solar batteries, tainted well water, and keeping the wood stove stocked. The cabin has a well but no running water and every morning when I carry the water buckets I daydream about the methods humans use to supply potable water to an entire city. Modern life is remarkable. Automated, convenient and fragile. If you've ever had a water main break on your street, you appreciate that -- while pipes automate the water supply -- the plumbers are the real heroes. They are the city's DevOps team.
+
+[quote,Hans Rosling,Factfulness]
+____
+Sometimes, when I turn the water on to wash my face in the morning and warm water comes out just like magic, I silently praise those who made it possible: the plumbers. When I’m in that mode I’m often overwhelmed by the number of opportunities I have to feel grateful to civil servants, nurses, teachers, lawyers, police officers, firefighters, electricians, accountants, and receptionists. These are the people building societies. These are the invisible people working in a web of related services that make up society’s institutions. These are the people we should celebrate when things are going well.
+____
+
+These are the two broad methods humans have for moving things around: pipes and buckets. Sometimes we put our buckets on the back of a truck, sometimes we stack them on top of one another and ship them across the Atlantic Ocean, and occasionally we fill them with compost and carry them by hand. Pipes are more
+https://www.youtube.com/watch?v=46bA6dNkkI4&t=1064s[sophisticated,title="...at least, according to Master Shake."].
+Instead of filling a truck with cylinders of liquified petroleum gas (the "buckets of buckets" technique), that same LPG can slither around the country as liquid snakes.
+
+It may be the trees playing tricks with my mind, but it feels like I can categorize almost anything this way. Gas lines and propane tanks, water mains and plastic buckets, UNIX streams and files, sewers and composting toilets, waves and particles, Law and Order episodes, queues and hashmaps, verbs and nouns.
+
+Of these two, there is something _honest_ about a bucket. Pipes abstract away effort and complexity. Buckets are immediate with their truth because the state of a bucket is self-asserting. Until this cabin has pipes installed, an extra-long shower today means that I'll be carrying two additional 20-litre buckets of water up to the bath house tomorrow. Here at the cabin, I'm the DevOps team supporting the archaic sewage and freshwater systems.
+
+In the real world, we usually choose to move society's drinking water, sewage, fuel, and electricity around in pipes. We prefer fragile convenience over tedious honesty. And although humanity does not yet have trans-Atlantic pipelines, we do have trans-Atlantic cables. Cables are pipes for bytes. Our data pipes range from these transoceanic cables, with cross-sections the diameter of a dinner plate, to wires barely wider than an atom.
+
+== "A Series of Tubes"
+
+I sympathize with Ted Stevens' incoherent speech from 2006. He
+link:++https://www.youtube.com/watch?v=_cZC67wXUTs++[infamously,title="Memes were spirited back in 2006."]
+stated
+"the internet is not a big truck; it's a series of tubes".
+The internet operates by moving enormous amounts of _data_ not "enormous amounts of material", as Stevens posited, but the imagery gets one thing right: movement. Data is only interesting because it can be transmitted and software engineering has created many real-world analogs for conveying and duplicating data, from coffee shop queues to infinite traincars on infinite tracks.
+
+image::https://xtdb.com/images/blog/truth-01a-train.svg[Train Image,align="center",width=400]
+
+image::https://xtdb.com/images/blog/truth-01b-pipe.svg[Pipe Image,align="center",width=400]
+
+Like all metaphors, these visuals are tools of the imagination. They are not rigorous. They are only liasons for the realities of a single computer (say, with
+https://www.youtube.com/watch?v=9HspeHGBg-Q&t=650s[CSP,title="Rich Hickey on Communicating Sequential Processes"])
+or across a network (say, with https://queue.acm.org/detail.cfm?id=3321612[OLEP,title="Online Event Processing"]). footnote:kleppmannkafkadb[Martin Kleppmann, https://martin.kleppmann.com/2019/05/13/kafka-summit.html[Is Kafka a Database? (2019)]]
+
+Direct human comprehension is severely limited in perceiving the true nature of the universe because the universe is stuck in a state of constant motion.
+Anything we might point to and say _"it's like this!"_ is really a network of processes, altering each other as they slide through time. We know this -- but we also know this dimension of our world is difficult to observe. As a result, we are far more likely to hear "Apple is worth three trillion dollars" than a casual discussion about the rate of change in its valuation. We are far less likely still to hear a discussion about the company's objectively finite lifespan. We understand processes but, given the option, prefer to talk about states.
+
+image::https://xtdb.com/images/blog/truth-10thdim-time-snake.png[Time Snake (pipe02),align="center",width=400]
+
+Because our intuition prefers static values, we do not conceive of our bodies as a "long, undulating snake with our embryonic self at one end and our deceased self at the other", as
+https://www.youtube.com/watch?v=p4Gotl9vRGs[the early 2000s Macromedia Flash animation,title="Worth ten minutes of your time, if you haven't seen it."]
+suggests we might.
+footnote:10thdim2012[or
+https://www.youtube.com/watch?v=zqeqW3g8N2Q[the 2012 remake]]
+Outside the realm of our imagination, we don't conceive of anything this way. Instead, we see the world in three dimensions, one moment at a time. To us three-dimensional flatlanders, identity is imaginary.
+
+We thus get two types of "data tubes": physical tubes shooting photons across the ocean and tubes of _time,_ which we are limited to observing in our imaginations.
+
+image::https://xtdb.com/images/blog/truth-03-buckets-21.svg[Pipe-of-Buckets Image,align="center",width=420]
+
+We can visualize our imaginary time tube with these buckets of water. Much like the snake, we can count and measure the cross-sections of buckets by bringing them into the 4th dimension. "3 buckets per day" is discrete, whereas our decaying body is continuous, but the principle is the same.
+
+== What is "data", anyway?
+
+Without a microscope, a bucket of data is more interesting than a bucket of water. But we need to be precise when we define "data" since the term is so often used in a careless and inexact way. We are imagining timelines as tubes, since we cannot precisely define time, but we can't rely on our imagination to define _data._
+
+When we imagine data in the large, many of us will paint marketing clipart in our mind: a cube of blue ones and zeroes shooting through a black void. The dictionary definition of "data" is precise, though:
+
+Data::
+    (1) See Datum; (2) a collection of facts; (3) (of computers) information, most commonly in the form of a series of binary digits, stored on a physical storage medium; (4) encoded facts
+Datum::
+    (1) a fact or principle granted; (2) a single piece of information; (3) a fact; (4) an item of factual information derived from measurement
+
+Let's use all these definitions, since they don't contradict one another. (Note that the "physical storage medium" bit is of particular interest.) If we then dig into _"facts"_ we are forced to choose between _"an assertion"_ and _"reality; actuality; truth."_ Those last three are a big ask for mindless computer programs, so let's stick to the former for now.
+
+Fact::
+    (1) the assertion or statement of a thing done or existing; sometimes, even when false; an act; an event; a circumstance; a piece of information about circumstances that exist or events that have occurred; (2) reality; actuality; truth; a concept whose truth can be proved;
+
+////
+TODO: I'm tempted to continue revisiting the following paragraph.
+      It's sufficient, but it doesn't flow very well.
+////
+
+Setting aside the complexities of time and identity for a moment, every fact must be three-dimensional, the smallest possible unit of information.
+footnote:leibniznouveaux[Gottfried Leibniz, https://download.tuxfamily.org/openmathdep/epistemology/Human_Understanding-Leibniz.pdf[Nouveaux essais sur l'entendement humain]]
+footnote:begriffsschrift[Gottlob Frege, http://dec59.ruk.cuni.cz/~kolmanv/Begriffsschrift.pdf[Begriffsschrift, a formal language, modeled upon that of arithmetic, for pure thought]]
+A three-dimensional fact might be represented as a proposition, a triple, or an attribute assigned to an entity. These are equivalent.
+
+Obviously, we risk perverting the metaphor. Facts aren't physical things. It is merely a representational quirk that a proposition has three dimensions of information and our physical reality has three spacial dimensions. But as we'll see, the higher dimensions of information adhere to this curious symmetry with the physical world.
+
+The Domain-Driven Design folks have argued in favour of _small, compound facts_ since the early 2000s, in the form of Value Objects. It is reasonable to think of any instance of a Value Object as a limited collection of three-part facts. A Kotlin data class of `Person` initialized with `val p = Person("John")`, for example, says "_p_'s name is John". Though early-2000s DDD and https://martinfowler.com/bliki/CQRS.html[CQRS,title="Command Query Responsibility Segregation"] might disagree, entities and their identities are both _imaginary_ -- "a superimposition we place on a bunch of values that are causally-related."
+footnote:hickey1[Rich Hickey, https://www.infoq.com/presentations/Are-We-There-Yet-Rich-Hickey/[Are We There Yet?]]
+footnote:cqrsfaq[https://cqrs.nu/Faq[CQRS FAQ]]
+
+image::https://xtdb.com/images/blog/truth-04-causally-related-values-as-entity-06.svg[Casually-related values-as-entity Image,align="center",width=400]
+
+Immutability has always been the lynchpin of Value Objects. In the 2010s, mainstream thinking on immutability broadened to include collections. Clojure, OCaml, and Haskell users have enjoyed immutable lists, maps, and sets throughout their programs for over a decade. Although sometimes claiming the title "immutability in the large," this era was largely defined by immutable data structures limited to main memory.
+
+The 2020s brought a new wave of persistent _event-oriented_ systems, again with substantial proclamations from the DDD crowd.
+footnote:dddeurope[https://dddeurope.com/]
+Although _Time_ has always been an integral part of DDD, it is only recently that the software industry has begun to acknowledge that Time permeates absolutely everything. No fact exists outside time.
+footnote:liuzhu[Liu, Zhu: https://arxiv.org/pdf/1908.00301.pdf[General Information Theory: Time and Information]]
+footnote:fraassen[Fraassen: https://www.princeton.edu/~fraassen/BvF%20-%20IPTS.pdf[An Introduction to the Philosophy of Time and Space]]
+Events help us track the cause-and-effect relationship that creates the illusion of identity. This is the boundary where one fact is replaced by another.
+
+image::https://xtdb.com/images/blog/truth-05-events-as-entity-09.svg[Casually-related events-as-entity Image,align="center",width=400]
+
+The evolution of data modeling over the past two decades is not a coincidence. The ability to record facts as immutable collections or events grew as memory and disk space permitted. But Computer Science has understood data as a chain of events for a long time. Indeed, even much older concepts -- say, Turing Machines -- reflect this.
+
+[quote, Donald Knuth, Semantics of Context-Free Languages]
+____
+A Turing machine (in the classical sense) processes an infinite tape which may be thought of as divided into squares; the machine can read or write characters from a finite alphabet on the tape in the square which is currently being scanned, and it can move the scanning position to the left or right.
+____
+
+////
+TODO: The following is an obscure use of 'noetic' and perhaps not appropriate
+      for this article. I'm struggling to come up with an alternative word
+      that hasn't already been abused elsewhere in the document, though.
+////
+
+image::https://xtdb.com/images/blog/truth-06-turing-10.svg[Turing Machine Events Image,float="right",width=200]
+This image of an infinite tape sliding through the gaze of an observer gives us a concrete representation of "data". This tape full of characters may represent events as instructions (code) or noetic events (data). It also looks an awful lot like the "infinite traincars on an infinite track" variation of a tube.
+
+A Turing Machine is a computational model and a persistent event log is a time model, so they are not equivalent. But if we imagine a Turing Machine in which the observer duplicates every datum it sees onto a permanent record (visualized here as the vertical pipe), we can see how each is the mirror of the other.
+footnote:knuthsample[This particular Turing Machine is running Knuth's sample program from page 11 of _Semantics of Context-Free Languages_.]
+
+== Why events?
+
+Humans perceive the natural world one moment at a time, making an _event_ an intuitive cross-sectional unit of the time model. The one cross-section readily available to us is the concept of _"now"_ -- again intuitive, since this is the only timeslice we're capable of directly perceiving. Of course, even before the advent of computation by machine, humans didn't restrict knowledge to "now" -- we recorded logs of events. Big events became news, stored in library archives. Small events became transactions, stored in accountants' ledgers.
+
+image::https://xtdb.com/images/blog/truth-07a-world-events.svg[Historical Events Image,align="center",width=400]
+
+This timeline of events exists for every person, every city, every business, every government. The fact that the timeline is imaginary is irrelevant since the act of logging each event makes it real within our model.
+footnote:reifyevent[Logging an event makes it real within our model, but it also creates a corresponding _state_, even if that state is only implicit. Unlike events, which are discrete, state is continuous. A state inferred by any given event exists in this continuum until the next event is logged.]
+Before computers, every business had access to these events -- but they would only record the superlative. In archaic software without an event model, these events were, at best, logged in a text file no one would ever read. At worst, they were thrown away. Executing `UPDATE accounts SET balance = balance + 100 WHERE id = 12345` is an event, whether it is recorded or not.
+
+It is increasingly important that businesses persist these seemingly benign events.
+footnote:sparsamkeit[This is not, of course, an endorsement of abuse. GDPR and the philosophy of datensparsamkeit exemplify welcome resistence to data exploitation. There are volumes written about the value of seemingly unbounded data mimicking the value of seemingly limitless oil, which itself mimicked the value of seemingly inexhaustible fish. In the interest of brevity, we may defer to Lao Tzu on the topic of value. https://www.wussu.com/laotzu/laotzu11.html[_"Shape clay into a vessel; It is the space within that makes it useful. Therefore profit comes from what is there; Usefulness from what is not there."_]]
+A friend working for the world's largest office retailer in the early 2000s once recounted his experience:
+
+[quote,A frustrated but prescient developer]
+____
+They were throwing away their year-old inventory data. I couldn't believe it. I tried to explain to them, _'This is gold! You're throwing away gold!'_ but they just didn't get it.
+____
+
+Every company today knows better than to throw all its data on the floor to be swept up by the night janitor. But _some_ data is going in the garbage and it's not always obvious which data is worth keeping. Each year, it is cheaper and cheaper to record the undertakings of your business... but it still isn't free.
+
+Separation of Storage and Compute (SoSaC) is the natural progression for commodity database systems in the current https://en.wikipedia.org/wiki/Zettabyte_Era[Zettabyte Era,title="Sometimes synonymous with unbounded data capacity."].
+footnote:sosac[XTDB Bibliography: https://docs.xtdb.com/resources/bibliography/#storagevscompute[Storage vs. Compute]]
+SoSaC will bring databases in line with the infinite storage fantasies of 80s kids, whose imaginations were tainted by comic books paired with the first PCs. It might be the closest we ever get to
+https://www.metroid-database.com/old_site/manga/captain_n_comics/ch_0006/scaled/sc_cn5-17.jpg[Samus Aran's Space Locker,title="N.B. The Space Locker is not Metroid canon."]. footnote:samus[https://metroid.fandom.com/wiki/The_Locker[Captain N: The Locker] (https://www.metroid-database.com/old_site/manga/?vid=4&cid=26#thumbs[scan])]
+
+////
+Not sure if this belongs yet:
+The goal of data teams is thus to winnow the events which will redefine an industry from those which will remain forever noise.
+////
+
+== What is an "event", anyway?
+
+////
+Reference this?
+http://vanguardea.com/killing-the-command-message-should-we-use-events-or-documents/
+////
+
+Terms so familiar they feel self-explanatory are always worthy of closer inspection. The word "event" is used in a multitude of ways, so it's helpful to first identify what we _don't_ mean when encountering this word. We do not mean function calls, callbacks, event loops, or other forms of method dispatch. We don't mean reactive user interfaces. We are also not interested in notifications. "Jeremy posted a photo" is not an event; it's just a pointer to an event. We also don't mean the ephemeral events of _reality_, since we're discussing computer abstractions.
+
+Instead, we are referring to those real world events -- instantaneous self-describing cause/effect relationships -- encoded _as data_. An event is a fact encoded "on a physical storage medium."
+
+Within that definition, there are further ways we can slice up "events". Let's use a simple example of crediting an account balance to illustrate our slices. footnote:eventmodels[There are many other valid event models, such as https://blog.frankdejonge.nl/the-different-types-of-events-in-event-driven-systems/[Frank de Jonge's event archetypes] and https://www.enterpriseintegrationpatterns.com/[Gregor Hohpe's Enterprise Integration Patterns].]
+
+=== Commands
+
+(_Commands_ are also known as _Command Messages_ or, somewhat unfortunately, _Command Events._)
+
+The first type of event to address isn't really an event at all. The `UPDATE` statement in the previous section is actually a _Command._ Our example command might be named `CreditAccount`. Commands are often shaped like events and wind up in an "event streaming" system like Kafka so this common confusion is understandable.
+footnote:fowlereventdriven[Martin Fowler, https://martinfowler.com/articles/201701-event-driven.html[What do you mean by "Event-Driven"?]]
+footnote:fowlermanymeanings[Martin Fowler, https://www.youtube.com/watch?v=STKCRSUsyP0[The Many Meanings of Event-Driven Architecture]]
+footnote:natprycemistakes[Nat Pryce,
+https://www.youtube.com/watch?v=osk0ZBdBbx4[Mistakes made adopting event sourcing (and how we recovered)]]
+And although commands are just immutable data, like events, they connote a form of agency. Commands are easy to identify in their name and intent, as they are imperative and imply downstream side-effects. For our purposes, we won't excuse "passive-aggressive events"
+footnote:passiveaggressive[A "passive-aggressive event" is an event which _unintentionally_ implies downstream side-effects. There is a subtle distinction to be made here from _intentional_ Commands which are not framed as imperatives. `LoanRequested` is a good example. If the system responsible for creating loan requests expects that those requests will be handled in a side-effecty way (and it likely does -- in most cases, a loan request can only be processed once), the producer and consumer of that message are coupled. This is symptomatic of a Command. Whether `LoanRequested` is labelled a passive-aggressive event or an intentional Command is a subtle distinction, but the naming is poor in both cases. Imperatives remove ambiguity.]
+-- if an event implies _anything at all_ will happen when it is read, it isn't an event.
+
+
+=== Application Events
+
+(_Application Events_ are also known as _Domain Events._)
+
+image::https://xtdb.com/images/blog/truth-kafka-event-account-transfer.png[Account Transfer,float="right",width=200]
+Next up, we have _Application Events._ Application events are pure human observations about a change in the state of the universe, within our domain. In our example, we might name this event `AccountCredited`. But application events tend toward a CQRS-shaped world which is often asymmetrical with the domain model (in our example, an _account_).
+footnote:whittaker6smells[Daniel Whittaker, https://danielwhittaker.me/2014/10/18/6-code-smells-cqrs-events-avoid/[6 Code Smells with your CQRS Events – and How to Avoid Them]]
+For example, we are equally likely to have an event named `FundsTransferred` which involves two accounts.
+
+
+=== System Events
+
+(_System Events_ are also known as _Change Data Capture (CDC)_.
+footnote:cdc[CDC almost always maintains symmetry with the underlying data model, since the intention of most CDC is to avoid batches.]
+)
+
+Next, we have _System Events._ System events are pure computational observations. While they still pertain to our domain, they will have names like `AccountUpdated`, making them opaque -- even to an expert. Rather than a CQRS-shaped world, system events tend toward a CRUD-shaped world and _tend_ to be symmetrical with the domain model but that symmetry is not required. A batch update is allowed and is difficult to derive from the resulting state. For example, an `AccountsUpdated` batch event cannot be derived from the eventual state of the database.
+
+
+=== Document Events
+
+(_Document Events_ are also known as _Document Messages_, _RESTful Events_, _Fat Events_, or _Event-Carried State Transfer._)
+
+Last, we have _Document Events._ footnote:eipdocumentmessage[https://www.enterpriseintegrationpatterns.com/DocumentMessage.html[Enterprise Integration Patterns: Document Message]]
+footnote:dejongerestfulevent[Frank de Jonge, https://blog.frankdejonge.nl/the-different-types-of-events-in-event-driven-systems/#the-restful-or-fat-event[RESTful Event]]
+Document Events are pure stateful observations useful to both humans and computers. Rather than CQRS or CRUD, document events tend toward a REST-shaped world and are always symmetrical with the domain model. A document event might be partial (think HTTP `PATCH`) or whole (think HTTP `PUT/POST`), but it is always a declaration of state at a point in time. This means document events are a misnomer by our strict definition. They don't describe the cause/effect relationship -- only the effect. However, they are a useful contribution to the space, just as Commands are. If we don't name them, they are likely to slide into another category. It's worth noting that an imperative document event is still a command. In our example domain, this is the difference between `AccountPatched` (document event) and `PatchAccount` (command).
+
+Git, the anointed poster child of event logs, uses document events whether we are considering the model presented in the user interface (say, `git-show`, which simulates a diff and implies a prior state) or the underlying model of Git Objects, which stores whole files verbatim.
+footnote:gitobjects[Chacon, Straub:
+https://git-scm.com/book/en/v2/Git-Internals-Git-Objects[Pro Git, 10.2 Git Internals - Git Objects]]
+footnote:gitpackfiles[Chacon, Straub:
+https://git-scm.com/book/en/v2/Git-Internals-Packfiles[Pro Git, 10.4 Git Internals - Packfiles]]
+Given that so many of us appreciate Git can behave as an event log (from a user's perspective) it seems reasonable to allow the "document event" misnomer.
+
+
+[frame=none]
+|===
+| |
+a|image::https://xtdb.com/images/blog/truth-08-app-events-21.svg[Fold Image,width=200]
+a|image::https://xtdb.com/images/blog/truth-09-document-events-23.svg[Fold Image 2,width=400]
+|===
+
+Both system events and application events can be asymmetrical with the domain model and this makes them lossy. If you want to integrate events into an aggregate state by folding over them from the beginning, you can. But if you want to later derive your events from that aggregate state, you can only do so if they were perfectly symmetrical (had a one-to-one mapping) with your domain model to begin with. Particularly when schema changes over time, this may be very difficult. Document Events, on the other hand, do not have this problem. We can integrate document events into state and derive document events from state because they are always symmetrical (by definition).
+
+== Modeling Events
+
+To model a domain as events is to model space-time, which is quite a fun exercise. But as any video game developer will tell you, it pays to get the idiosyncrasies of your universe sorted out before you fill it with matter.
+
+image::https://xtdb.com/images/blog/truth-10-encoding-change.svg[Encoding Change Image,align="center",width=400]
+
+In the same way that the goal of a datum is to encode a fact from reality into our system, the goal of an event is to encode that _something in reality has happened._ That sounds vague -- and it is. Events on their own are not very useful so we usually integrate events into states. In doing so, we record something more specific than "a happening"; we record a change.
+
+To materialize change we need three elements: the earlier fact, the new fact, and the time when the change took place. Document Events make this particularly easy for two reasons. We can elide the earlier fact, since it is known already. We can also easily group facts into compounds (like Value Objects), since document events are symmetrical to domain models.
+
+[source,kotlin]
+----
+data class User(val id: UUID, val name: String, val email: String)
+----
+
+Just as we don't want to mix up our sewer pipes and drinking water pipes, it's important to keep event archetypes segregated from one another. They do not have compatible shapes, nor compatible semantics.
+footnote:homogeneousrule[There are occasional exceptions to this rule, when total ordering matters more than the identification of event type by channel.]
+
+image::https://xtdb.com/images/blog/truth-11-homo-pipes.svg[homogeneous pipes image,float="right",width=200]
+Once we've chosen one of these event models as our fundamental unit for signalling change, we do need to decide the space and time semantics of each individual event.
+
+There will be some special cases to consider, particularly with respect to _time._ Jensen and Snodgrass have contributed an extensive body of work on the subject. They are also the progenitors of important timeline modelling concepts, such as the _chronon._
+
+The term is derived from its use in Physics, where a _chronon_ is proposed as an indivisible unit of time. Setting aside the abstruse definitions of theoretical physicists, an indivisible unit of time is precisely what we need to model timelines.
+
+It is tempting to choose a tiny chronon which is only bound by the capabilities of hardware clocks, but many systems don't require this. For example, an algorithmic trading system may choose a chronon of 1/1440th of a day if it does not care about resolutions narrower than sixty seconds.
+
+Transactions are another special case and categorically include macro events and sagas.
+footnote:semanticsoftime[Jensen, Snodgrass: https://www.cs.arizona.edu/sites/default/files/TR96-02.pdf[Semantics of Time-Varying
+Information]]
+footnote:transactionprocessing[Gray, Reuter: https://www.oreilly.com/library/view/transaction-processing/9780080519555/[Transaction Processing]]
+footnote:sagas[Molina, Salem:  https://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf[Sagas (1987)]]
+The event model can be extended to build transactions -- but they do not require special treatment.
+
+[quote, Richard T. Snodgrass and Christian S. Jensen, Semantics of Time-Varying Information]
+____
+We do not consider the so-called "macro events" that are true, or take place, for an interval of time, but are not true for any subset of their interval. A wedding is an example, as the first, say, 20 minutes of a "wedding macro event" is not itself a wedding [11,35].
+____
+
+The last special case to consider is the paradoxical relationship between events and commands. While commands are imperative, and do carry the aforementioned sense of agency, they actually carry _less authority_ than events. An event says "we cut down your favourite tree and there is nothing you can do about it." A command infirmly proposes "please someone cut down his favourite tree?" A listener may obey, fail, or refuse that proposal.
+
+Events are a simple concept on the surface. An event only needs to identify a change the business predicts will hold future value. As a result, predicting the most valuable size, shape, and interval for those events has become its own career.
+
+
+== Events are Comfortable
+
+A 12-year-old learning about flow rates in Science class will rely on her understanding of natural numbers she gained when she was 2 years old. If she initially struggles with the concept, she can break it down into its component parts. Adults, too, love to disassemble concepts to make them easier to reason about. Pipes full of events (or commands) do this for software because we don't need to look at the entire pipe. We just look at the faucet.
+
+image::https://xtdb.com/images/blog/truth-12-pipe-of-bits.svg[Pipe of Bits Image,float="right",width=100]
+
+There is something honest -- something _true_ -- about each individual, immutable event we observe at the faucet. In the same way carrying buckets of water to fill a reservoir feels more honest than turning on a magical tap, each event is like a tiny bucket of water. It is both tangible and atomic.
+
+Even though events span a 4-dimensional tube, we only need to think about them one at a time. By examining only discrete events, we are able to reduce a complex and imaginary 4-dimensional model into 3 dimensions. The unfortunate consequence of this reduction is that it remains difficult for us to reason about event streams in their totality. This is why event streams have "low queryability" -- it's hard to ask comprehensive questions of a ticker tape.
+
+It is even harder when our events, which live in a timeline defined by the system, describe _other_ events which live on another orthogonal timeline defined by human beings. Event streams are stuck in a 4-dimensional world. Attempting to add a 5th dimension (a second timeline, which makes data "bi-temporal") can create a lot of
+https://2018.dddeurope.com/speakers/thomas-pierrain/#talk2["confusion and pain",title="Thomas Pierrain discusses bi-temporal event sourcing"].
+footnote:5thdim[This is only a "fifth dimension" in terms of the dimensionality of the data. We haven't actually created a fifth dimension comprised of all possible timelines by adding a second timeline.]
+
+Unfortunately, this 5th dimension of time is essential, not a luxury. Humans and computers do not understand time in the same way and the human timeline exists, whether we encode it or not (and most systems don't).
+footnote:udidahan[Udi Dahan https://www.youtube.com/watch?v=-iuMjjKQnhg[argues that event sourcing is inherently bitemporal].]
+
+image::https://xtdb.com/images/blog/truth-13-pierrains-pipe.svg[Pierrain's Pipe Image,align="center",width=400]
+
+Humans cannot directly perceive 4D or 5D spaces, be they physical or informational. When attempting to deal with 4D or 5D data, developers are left to flatten the events pouring out of the faucet into a new, easy-to-reason-about, 3-dimensional information space. This space is stateful, like a bucket.
+
+Maybe that space is a database table.
+Maybe it's just a file.
+Maybe it's streaming data materialization like Materialize or Rockset.
+But our time dimensions are lost in this transition.
+We may have timestamps declaring when our account was credited or audit records which show us the before-and-after, but neither of these allows us to _stop time_ the way our events did. Even an append-only table which effectively mirrors the events into states simply gives us another event log -- it's not a database that understands time. If we want to query that append-only table, we are stuck making sense of time ourselves, compiling ad-hoc temporal queries from scratch. We're back to square one.
+
+This is why developers increasingly prefer to model their domain as a pipe full of events. It is a perfect record of what actually happened, even if it is hard to query.
+
+Sometimes we attempt to flatten, rather than reduce, these four dimensions. Again, Git is the tendered example in circulation. Most of the time, we work with stateful text files in Git. Our events are commits, and they're handy to have if we need to go back to them, but we try to spend as little time thinking about them as possible. The timeline of commits becomes incredibly powerful when we can observe it seamlessly with tools like `git-grep`. But, if we're being honest with ourselves, `git grep "foo" $(git rev-list --all)` is more like inspecting every single inch of a pipe than asking a comprehensive question of an oracle. Given a large enough git history such a query becomes prohibitively expensive.
+
+In reality, we have very few commodity tools to query time over live operational data. Most organizations continue to build ad-hoc tooling for modelling time, whether in 4D or 5D space. This is a mistake.
+
+== Commodity Tools are a Good Thing
+
+The first time a software team solves a problem in four dimensions, they always feel very satisfied with themselves. But developers who solve the temporal data problem more than once know they are wasting their time. No one's business model is _"flatten temporal data into 3D space so we can query it"_ unless they are selling a temporal database.
+Not only are these teams repeating themselves, they are bound to create ad-hoc systems with no formal definition. Like plumbing without standard pipe diameters or building trains for tracks of varying gauges, such poorly-defined systems cause frustration and waste.
+
+Knuth, in his definition of "Turingol", a language for programming the aforementioned Turing Machine, is actually more interested in avoiding ad-hoc systems than he is in building toy Turing Machine representations.
+
+[quote, Donald Knuth, Semantics of Context-Free Languages]
+____
+This definition of Turingol seems to approach the desirable goal of stating almost exactly the same things which would appear in an informal programmer's manual explaining the language, except that the description is completely formal and unambiguous. In other words, this definition perhaps corresponds to the way we actually understand the language in our minds.
+____
+
+A great deal of research and consideration is required to build systems which not only reflect our own intellect -- our own mental models -- but to do so unambiguously. This is especially true when the mental models in question are things like 5-dimensional space.
+
+[quote, Donald Knuth, Semantics of Context-Free Languages]
+____
+The most striking difference between the previous methods and the definition of Turingol in Table 1 is that the other definitions are processes which are defined on programs as a whole in a rather intricate manner; it may be said that a person must understand an entire compiler for the language before he can understand the defintion of the language.
+____
+
+This second warning could just as easily be about temporal data models instead of programming languages. Unless a software team has a decade of slack available, their ad-hoc temporal system is destined to be defined by fragile and intricate processes, not rigour.
+
+Avoiding these pitfalls can be very difficult -- particularly for a novel system. If building temporal OLTP systems was easy, we would have quite a few of them by now. A portion of this difficulty comes from constructing a truly commodity solution to a generic problem. But there is also the challenge of ergonomics. Let's assume it is possible to build a general purpose tool, capable of querying all data at all times. What on earth does it look like? If our mental model is often insufficient (stuck in 3 dimensions) or our way of understanding is process-oriented (streaming architectures), what is our bridge to this 5-dimensional world?
+
+== We need a permanent store of events: a time-traveling panopticon
+
+////
+TODO: these paragraphs need a lot of rework, but it's mostly a question of
+      clarity, grammar, and fewer sentences. the content is okay-ish.
+////
+
+Our event-streaming model already has a very simple logical structure. The pipe receives one event (or command) at the tail and, once that item has made its way to the head, it's received by some other process. Our state-serving data buckets need an equally simple logical structure. We want to ask naive questions like "is this true?" or "what is this?" -- the sorts of questions which imply, inherently, that they are being asked _now_ -- with both the 4th and 5th dimensions flattened into the answer we receive. These are called _as-of_ and _as-at_ queries, and their semantics are well understood.
+footnote:jensensemantics[Jensen, https://homes.cs.aau.dk/~csj/Thesis/pdf/partI.pdf[Semantics of Temporal Data]]
+
+What is interesting about this problem is that we can actually exploit the fact that _there is only now_ to resolve it. In reality, the past is irreversible and the future doesn't exist. In reality, the system follows these same rules; the system only knows facts in the past, since we cannot assert facts (which, by definition, cannot change) about a future which hasn't happened yet.
+
+Because our model timeline does not exist anywhere but our imaginations, the system only has its accumulated knowledge since its epoch. To move around within this knowledge, we only need to flatten it by projecting time into space. In theory, this is easy to do precisely because these timelines do not really exist.
+(This is actually https://docs.xtdb.com/resources/bibliography/["easier said than done",title="XTDB Bibliography"], which is another good reason to use a trusted commodity system instead of building a temporal database in your garage.)
+If the system has been told "this event is in the future," it only needs to record that additional fact, since only the model is in the future. The fact that there are two timelines is inconsequential -- time simply becomes a new kind of data. Returning to physical imagery, we can imagine events on both timelines recorded in a single 3-dimensional space where "time" is a special kind of physical property.
+
+The solution, as is so often the case, is to consume more disk space -- but unbounded disk usage is scary to many developers. The safety provided by SoSaC is essential to make it tenable.
+
+The goal of this time-traveling panopticon is to disentangle _data_ from _time._ We want to understand our facts, separate from the events which announced them. Whether we imagine the two timelines are recorded into 3D space or whether we imagine 5D space collapses into 3D space when we view it, the end results are the same. We see state. A bucket. But it's really a bucket in time, in time.
+
+image::https://xtdb.com/images/blog/truth-14-disentangling-data-from-time.svg[Disentangling Data from Time Image,align="center",width=400]
+
+
+== States are Comfortable, too
+
+Although event sourcing is a comfortable and intuitive model, there are many arguments against representing data as events in a persistent log, from the Awelon Blue article https://web.archive.org/web/20140724072806/https://awelonblue.wordpress.com/2012/07/01/why-not-events/[_Why Not Events?_] to Valentin Waeselynck's https://vvvvalvalval.github.io/posts/2018-11-12-datomic-event-sourcing-without-the-hassle.html[_Datomic: Event sourcing without the hassle_].
+
+The combative dichotomy between states and events is not unlike earlier OOP vs FP writing. Steve Yegge's http://steve-yegge.blogspot.com/2006/03/execution-in-kingdom-of-nouns.html[_Execution in the Kingdom of Nouns_] once prompted a colleague to facetiously shout _"that's right! not blue! green! green is the colour we love!"_ Events and states need not always be positioned as enemies. Each approach has its strengths.
+
+Intuitively, human beings prefer state to events. Most of the time, we would rather know our account balance than the details of a single `AccountDebited` event. And even if we stare at an event in isolation, it _becomes a state_. "Debit" is also a noun.
+
+Events are comfortable because they are actually a little immutable value, a tiny bucket. Immediate. Tangible. Atomic. State-serving databases, on the other hand, are like a _giant_ bucket. They are also tangible, but we rarely look at a database and say, "yeah, just tell me everything all at once." Instead, we ask questions in languages like SQL.
+
+Where event streams have "low queryability", state-serving data stores are only useful if they provide "high queryability". The higher the better. It should be easy to ask questions. Answers should come quickly. This constraint is no different because a database understands 4- or 5-dimensional data.
+
+A true database, capable of storing real facts, will always treat _time_ as immanent. Ad-hoc systems tend to make Time important, loud, and annoying. Everyone who has built a significant temporal system has war stories about the queryability of the database. _"Don't forget to include `VALID_TO` and `VALID_FROM` on every. single. query."_ A rigorous system will instead make Time intrinsic to every fact. A rigorous system makes Time invisible. Every recorded fact must _automatically_ record itself onto both timelines and every question asked must _automatically_ query those timelines.
+
+Such a database will behave, by default, exactly as one would expect it to behave. `SELECT actors.name FROM actors WHERE actors.id = 123` should query 5-dimensional data without the user batting an eye. _Now_ is always assumed, but can be overridden. It should be effortless to tell the database, "there will be a stock split in one month." Likewise, "what equity instruments will exist in one month?" should be effortless to ask.
+
+
+== Postgres isn't a Data Base
+
+Once we have immutable, time-aware, stateful data stores -- the _yin_ to event streams' _yang_ -- it's hard to look at old-fashioned, ephemeral databases in the same way. In the plural, data are facts. Since facts are immutable values, and most "databases" don't know how to record those, systems like Postgres start to look a lot less like a database ... and more like a queryable cache. We could try to coin a new term like _factbase_, but this would no doubt lead to confusion with similar (if malapropos) terms used in American politics.
+
+This creates a new spectrum of data tools. On the far left, we have event streams and logs, such as Kafka and Amazon Kinesis. On the far right, we have immutable, time-aware data stores like XTDB. Left of centre are streaming materialized views like Materialize. And right of centre are old-fashioned, queryable caches, such as SQL Server and Postgres.
+
+image::https://xtdb.com/images/blog/truth-15-streams-views-caches-db.svg[Streams Views Caches and Databases Image,align="center",width=600]
+
+Unlike Postgres, Kafka makes a shrewd source of truth. It can be a trustworthy source of facts. It is not, however, a database. Users will still demand fast and easy queries of aggregate states. There is a great deal of merit to the concept of
+https://martin.kleppmann.com/2015/03/04/turning-the-database-inside-out.html["\"unbundling\" databases",title="Martin Kleppmann on 'Turning the Database Inside-Out'"],
+but such decisions are up to systems architects. No one wants to _buy_ an unbundled database for the same reason no one wants to buy an "unbundled" computer like the original Apple-1, or an "unbundled" vehicle in the form of a kit car. Developers today expect to press a button and begin.
+footnote:databaseunbundled[Tim Berglund, https://www.youtube.com/watch?v=Q5EXNv0t2fw[The Database Unbundled: Commit Logs in an Age of Microservices]]
+footnote:iskafkaadatabase[Martin Kleppmann, https://martin.kleppmann.com/2018/10/17/kafka-summit.html[Is Kafka a Database? (2018)]]
+
+True databases are fact-based, immutable, time-aware, and queryable. And, even in 2022, they're few and far between.
+
+image::https://xtdb.com/images/blog/truth-16b-apple-1-mac-comparison-1600px.png[Apple I vs Macintosh 128k,align="center",width=400]
+
+////
+TODO: I'm not sure this paragraph matters, but it's fun.
+////
+
+Of course, convincing the developer community to adopt this terminology would be an exercise in futility. Nobody wants to redefine "database" across the entire industry. But there is a deeper problem. The novel aspects of true databases, although only incremental, require a great deal of energy to explain. Like the parable of the blind men and the elephant, or explaining monads through burrito analogies, or explaining the internet on daytime TV in 1992, the holistic image of immutable databases is bound to be misunderstood.
+
+
+== On Truth
+
+If the goal of a database is to record data -- _facts_ -- then how should we navigate our https://www.youtube.com/watch?v=ua4QMFQATco&t=299s[inability,title="CGP Grey discusses research, expertise, and existential crises"] to know if anything is true at all? An adequate starting point could be to admit that we are not speaking to some sort of ultimate, universal truth. When we speak of facts in a database, we are inherently choosing some ground reality about which we're speaking.
+
+image::https://xtdb.com/images/blog/truth-cgp-grey-what-is-true.png[CGP Grey: What is true?,float="right",width=200]
+Reality exists in layers. At the bottom might be some cosmic, universal truth (if one exists), upon which rest the orderly laws of Science. Alone in the forest might be the closest anyone can come to such natural truth, away from urban tumult and the incessant jangle of pocket computers. Beyond this boundary are scattered individual truths, intersubjective truths, and collective hallucinations. Here, on the human side of the canvas, there isn't a unified objective truth to record.
+
+Let's look at an example. In 2022, large social media systems track trillions of "likes" per day. Something akin to _"Steven liked Jeremy's photo."_ -- but a million times a second. We can inspect one fact to be more exacting. Did Steven _really_ like Jeremy's photo? What was his Heart Rate Variability from the time he saw the photo to the time he clicked the _like_ button? What was his electroencephalogram reading? fMRI?
+
+If we desperately want to measure the truth of a single "like", we probably can, and many systems (particularly those that want to change your emotional state or opinion) will go to great lengths to calculate your sentiments. But Facebook doesn't have you in an fMRI machine all day. Not yet.
+
+Which, then, is the ground reality we want to encode in our model? Carpenters say a timber is _true_ not if it is perfect but, rather, if it's in agreement with the rest of the construction. To "true up" two pieces of wood is to make them align. This is the brand of truth we want in the world of data -- not chaste universal harmony, but local agreement. As long as we're consistent, the ground reality we choose isn't very important.
+
+As far as a database is concerned, _truth_ is only about faithful records. Intentionally or unintentionally, the database must never lose, destroy, alter, conflate or confuse its records. An unerring database, which transcribes its input exactly as it is received, is an honest database.
+
+== On whose authority?
+
+Largely, we already know the kinds of truth we care about in business. They involve pragmatic hallucinations like the British Pound and over-the-counter equity derivatives. footnote:hararihomodeus[Yuval Noah Harari, https://www.ynharari.com/book/homo-deus/[Homo Deus]]
+footnote:hararirsa[Yuval Noah Harari, https://www.youtube.com/watch?v=zen-m0rMp4I[Imagined Realities (2014)].] Some external authority may determine the space and time shaping categories of facts but the actual hand of authority belongs to the scribe, even if the form is preordained. A financial exchange may have no choice but to execute trades encoded as https://www.fixtrading.org/what-is-fix/[FIX,title="Financial Information eXchange"], but any trade it stores is true to that system.
+
+We touched on authority with events and commands. While, of the two, events have stronger authority, this is only because they represent a _fact._ It is always the act of choosing these tidbits of reality and encoding them into an immutable record which is the _act_ of authority.
+footnote:linegoesup[Dan Olson, https://www.youtube.com/watch?v=YQ_xWvX1n9g&t=1474s[Line Goes Up: The Machine]]
+The resultant record is hypostatized imagination. It matters a great deal whose imagination is recorded. When an observer comes along to query the facts we have recorded, they are bound to a reality we have created. Hopefully we did a good job.
+
+This property, that writers are infinitely more important than readers in terms of deciding what is true, isn't unique to immutable, time-aware databases. In the olden days, it was also true of queryable caches like Postgres and Neo4j. However, cache invalidation is an objectively Hard Problem™ and users of mutable databases tend to look elsewhere for their source of truth. In modern systems, this usually takes the form of an event log like Kafka. In archaic systems, write-ahead-logs were all we had.
+
+image::https://xtdb.com/images/blog/truth-17-network-diagram.svg[A data mesh of different data tools,float="right",width=300]
+
+And thus we are back where we started. Events are _true_ but difficult to query. States are _true_ but don't always map directly to the events which created them. Events and states are different kinds of facts and most systems demand both. Buckets and pipes. Trucks and tubes.
+footnote:alvaro[There exist models in which these two categories are combined or blurred, as the example query language explored in https://www.youtube.com/watch?v=R2Aa4PivG0g&t=920s[this Peter Alvaro talk from StrangeLoop 2015], but they are not commonly observed in the business world.]
+
+Event streaming is often said to be the digital equivalent of the human body's central nervous system. What, then, is the brain? Who is answering our questions? Only a database can fulfill this purpose. A cache forgets.
+
+{zwsp} +
+{zwsp} +
+
+'''
+
+Cover photo of the Veluwemeer Aquaduct by Edou Hoekstra. Huge thanks to https://twitter.com/luigia_dalessan[Luigia D'Alessandro] for the many diagrams.
+
+This work by https://deobald.ca[Steven Deobald] for https://juxt.pro[JUXT Ltd.] is licensed under
+http://creativecommons.org/licenses/by-sa/4.0/[CC BY-SA 4.0]. image:https://mirrors.creativecommons.org/presskit/icons/cc.svg[Creative Commons,22,22]image:https://mirrors.creativecommons.org/presskit/icons/by.svg[Attribution,22,22]image:https://mirrors.creativecommons.org/presskit/icons/sa.svg[Share-Alike,22,22]
