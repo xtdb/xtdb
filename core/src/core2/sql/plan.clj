@@ -672,6 +672,35 @@
 ;; e.g decorrelation rule-9 caused a problem in this case as it introduced a dependency in the group-by on the $exists column - only to later find
 ;; that column had been rewritten away by the semi/anti join apply rule.
 
+(defn find-table-operators [tree]
+  (let [table-ops (volatile! [])]
+    (w/prewalk
+      (fn [node]
+        (when (and (vector? node)
+                   (= :table (first node)))
+          (vswap! table-ops conj node))
+        node)
+      tree)
+    @table-ops))
+
+(defn find-aggr-out-column-refs [tree]
+  (let [column-refs (volatile! [])]
+    (w/prewalk
+      (fn [node]
+        (when (and (symbol? node)
+                   (str/starts-with? (str node) "$agg_out"))
+          (vswap! column-refs conj node))
+        node
+        node)
+      tree)
+    @column-refs))
+
+(defn build-column->param [columns]
+  (zipmap
+    columns
+    (map
+      #(->> % (name) (str "?") (symbol)) columns)))
+
 (defn- interpret-subquery
   "Returns a map of data about the given subquery AST zipper.
 
@@ -685,8 +714,7 @@
       [:subquery ^:z qe]
       (let [subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
             column->param (correlated-column->param qe scope-id)
-            subquery-type (sem/subquery-type sq)
-            projected-columns (set (subquery-projection-symbols qe))]
+            subquery-type (sem/subquery-type sq)]
         {:type :subquery
          :plan (case (:type subquery-type)
                  (:scalar_subquery
@@ -698,8 +726,7 @@
        [:subquery ^:z qe]]
       (let [exists-symbol (exists-symbol qe)
             subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
-            column->param (correlated-column->param qe scope-id)
-            projected-columns #{exists-symbol}]
+            column->param (correlated-column->param qe scope-id)]
         {:type :exists
          :plan subquery-plan
          :column->param column->param
@@ -722,10 +749,15 @@
                  (throw (IllegalArgumentException. "unknown in type")))
             exists-symbol (exists-symbol qe)
             predicate (list co (expr rvp) (first (subquery-projection-symbols qe)))
-            subquery-plan [:rename (subquery-reference-symbol qe) (plan qe)]
-            column->param (merge (correlated-column->param qe scope-id)
-                                 (correlated-column->param rvp scope-id))
-            projected-columns #{exists-symbol}]
+            in-value-list-plan (plan qe)
+            subquery-plan [:rename (subquery-reference-symbol qe) in-value-list-plan]
+            column->param (merge
+                            (build-column->param (find-aggr-out-column-refs predicate))
+                            (build-column->param
+                              (find-aggr-out-column-refs
+                                (find-table-operators in-value-list-plan)))
+                            (correlated-column->param qe scope-id)
+                            (correlated-column->param rvp scope-id))]
         {:type :quantified-comparison
          :quantifier (if (= co '=) :some :all)
          :plan subquery-plan
