@@ -190,7 +190,9 @@
                           "NULL"
                           (case t
                             \R (format "%.3f" v)
-                            \I (format "%d" (long v))
+                            \I (if (instance? java.lang.String v) ;; expected behaviour by for SLT
+                                 "0"
+                                 (format "%d" (long v)))
                             (if (= "" v)
                               "(empty)"
                               (str v))))))
@@ -352,15 +354,15 @@
 
 (comment
 
-  (->> (sort-by (comp :count val) @error-counts-by-message)
+(->> (sort-by (comp :count val) @error-counts-by-message)
        (map #(vector (first %) ((comp (partial take 5) reverse :lines second) %) (:count (second %)))))
 
   (sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
 
 
-  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/expr/slt_good_0.test"))
+  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/index/random/10/slt_good_0.test"))
 
-  (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
+ (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
   (time (-main "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/select1.test"))
 
