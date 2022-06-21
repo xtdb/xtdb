@@ -89,7 +89,7 @@ jobs:
 
   slt-test:
     executor: clojure
-    resource_class: large
+    resource_class: medium
 
     steps:
       - attach_workspace:
@@ -99,7 +99,7 @@ jobs:
 
   slt-test-2:
     executor: clojure
-    resource_class: large
+    resource_class: medium
 
     steps:
       - attach_workspace:
