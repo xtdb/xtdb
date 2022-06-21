@@ -569,7 +569,9 @@
       1 (col-type->field* col-name nullable? (first without-null))
 
       (apply ->field col-name (.getType Types$MinorType/DENSEUNION) false
-             (map col-type->field col-types)))))
+             (map-indexed (fn [idx col-type]
+                            (col-type->field (str (col-type->field-name col-type) "-" idx) col-type))
+                          col-types)))))
 
 (defmethod arrow-type->col-type ArrowType$Union [_ & child-fields]
   (->> child-fields
