@@ -49,6 +49,28 @@
           [:identifier_chain
            [:regular_identifier (str "col__" ordinal)]]]]
 
+        [:sort_specification
+         [:exact_numeric_literal ordinal]
+         ordering-spec]
+        ;;=>
+        [:sort_specification
+         [:column_reference
+          [:identifier_chain
+           [:regular_identifier (str "col__" ordinal)]]]
+          ordering-spec]
+
+        [:sort_specification
+         [:exact_numeric_literal ordinal]
+         ordering-spec
+         null-ordering]
+        ;;=>
+        [:sort_specification
+         [:column_reference
+          [:identifier_chain
+           [:regular_identifier (str "col__" ordinal)]]]
+          ordering-spec
+          null-ordering]
+
         [:table_primary
          [:regular_identifier table]
          "AS"
