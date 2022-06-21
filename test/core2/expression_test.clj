@@ -1353,10 +1353,10 @@
                              (tu/open-vec "y" [3.4 8.25])])]
     (t/is (= {:res [{:x 1.2, :y 3.4}
                     {:x 3.4, :y 8.25}]
-              :res-type [:struct {"x" :f64, "y" :f64}]}
+              :res-type [:struct '{x :f64, y :f64}]}
              (run-projection rel '{:x x, :y y})))
 
-    (t/is (= {:res [3.4 8.25], :res-type :f64}
+    (t/is (= {:res [3.4 8.25], :res-type [:union #{:null :f64}]}
              (run-projection rel '(. {:x x, :y y} y))))
 
     (t/is (= {:res [nil nil], :res-type :null}
@@ -1366,15 +1366,15 @@
   (with-open [rel (open-rel [(tu/open-vec "y" [1.2 3.4])])]
     (t/is (= {:res [{:x {:y 1.2}}
                     {:x {:y 3.4}}]
-              :res-type [:struct {"x" [:struct {"y" :f64}]}]}
+              :res-type [:struct '{x [:struct {y :f64}]}]}
              (run-projection rel '{:x {:y y}})))
 
     (t/is (= {:res [{:y 1.2} {:y 3.4}]
-              :res-type [:struct {"y" :f64}]}
+              :res-type [:union #{:null [:struct '{y :f64}]}]}
              (run-projection rel '(. {:x {:y y}} x))))
 
     (t/is (= {:res [1.2 3.4]
-              :res-type :f64}
+              :res-type [:union #{:null :f64}]}
              (run-projection rel '(.. {:x {:y y}} x y))))))
 
 (t/deftest test-lists
@@ -1387,7 +1387,7 @@
                (run-projection rel '[x y 10.0])))
 
       (t/is (= {:res [[1.2 3.4] [3.4 8.25]]
-                :res-type [:fixed-size-list 2 :f64]}
+                :res-type [:fixed-size-list 2 [:union #{:null :f64}]]}
                (run-projection rel '[(nth [x y] 0)
                                      (nth [x y] 1)])))))
 
@@ -1424,7 +1424,7 @@
   (with-open [rel (open-rel [(tu/open-vec "x" [{:a 42, :b 8}, {:a 12, :b 5}])])]
     (t/is (= {:res [{:a 42, :b 8, :sum 50}
                     {:a 12, :b 5, :sum 17}]
-              :res-type [:struct {"a" :i64, "b" :i64, "sum" :i64}]}
+              :res-type [:struct '{a [:union #{:null :i64}], b [:union #{:null :i64}] sum [:union #{:null :i64}]}]}
              (run-projection rel '{:a (. x a)
                                    :b (. x b)
                                    :sum (+ (. x a) (. x b))})))))
@@ -1441,9 +1441,9 @@
                     {:b 10}
                     {:a 15, :b 25}
                     10.0]
-              :res-type [:union #{[:struct {"a" :i64}]
-                                  [:struct {"a" :i64, "b" :i64}]
-                                  [:struct {"b" :i64}]
+              :res-type [:union #{[:struct '{a :i64}]
+                                  [:struct '{a :i64, b :i64}]
+                                  [:struct '{b :i64}]
                                   :f64}]}
              (run-projection rel 'x)))
 
@@ -1625,6 +1625,7 @@
     (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "DAY" "DAY")))
     (t/is (thrown-with-msg? IllegalArgumentException #"Interval end field must have less significance than the start field\." (p "MINUTE" "HOUR")))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec single-field-interval-string-parse-same-as-int-prop
   (tcp/for-all [i (tcg/choose -99 99)
                 unit (tcg/elements ["YEAR" "MONTH" "DAY" "HOUR" "MINUTE" "SECOND"])

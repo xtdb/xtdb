@@ -407,8 +407,8 @@
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 
-(defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, ^String col-name]
-  (Field. col-name (.getFieldType field) (.getChildren field)))
+(defn field-with-name ^org.apache.arrow.vector.types.pojo.Field [^Field field, col-name]
+  (Field. (name col-name) (.getFieldType field) (.getChildren field)))
 
 ;;;; col-types
 
@@ -440,35 +440,40 @@
     #{col-type}))
 
 (defn merge-col-types [& col-types]
-  (let [new-col-types (->> (for [col-type col-types
-                                 :when col-type
-                                 child-col-type (flatten-union-types col-type)]
-                             child-col-type)
-                           (group-by col-type-head)
-                           (mapcat (fn [[type-head col-types]]
-                                     (case type-head
-                                       :list
-                                       [[:list (->> col-types
-                                                    (map second)
-                                                    (apply merge-col-types))]]
-
-                                       :struct
-                                       (->> col-types
-                                            (group-by (fn [[_ struct-col-types]]
-                                                        (set (keys struct-col-types))))
-                                            (map (comp (fn [col-types]
-                                                         [:struct (->> (for [[col-name col-types] (->> (mapcat second col-types)
-                                                                                                       (group-by key))]
-                                                                         [col-name (->> (map second col-types)
-                                                                                        (apply merge-col-types))])
-                                                                       (into {}))])
-                                                       val)))
-
-                                       (set col-types)))))]
-    (case (count new-col-types)
+  (let [col-types (distinct col-types)]
+    (case (count col-types)
       0 :null
-      1 (first new-col-types)
-      [:union (set new-col-types)])))
+      1 (first col-types)
+
+      (let [new-col-types (->> (for [col-type col-types
+                                     :when col-type
+                                     child-col-type (flatten-union-types col-type)]
+                                 child-col-type)
+                               (group-by col-type-head)
+                               (mapcat (fn [[type-head col-types]]
+                                         (case type-head
+                                           :list
+                                           [[:list (->> col-types
+                                                        (map second)
+                                                        (apply merge-col-types))]]
+
+                                           :struct
+                                           (->> col-types
+                                                (group-by (fn [[_ struct-col-types]]
+                                                            (set (keys struct-col-types))))
+                                                (map (comp (fn [col-types]
+                                                             [:struct (->> (for [[col-name col-types] (->> (mapcat second col-types)
+                                                                                                           (group-by key))]
+                                                                             [col-name (->> (map second col-types)
+                                                                                            (apply merge-col-types))])
+                                                                           (into {}))])
+                                                           val)))
+
+                                           (set col-types)))))]
+        (case (count new-col-types)
+          0 :null
+          1 (first new-col-types)
+          [:union (set new-col-types)])))))
 
 ;;; multis
 
@@ -554,7 +559,7 @@
 
 (defmethod arrow-type->col-type ArrowType$Struct [_ & child-fields]
   [:struct (->> (for [^Field child-field child-fields]
-                  [(.getName child-field) (field->col-type child-field)])
+                  [(symbol (.getName child-field)) (field->col-type child-field)])
                 (into {}))])
 
 ;;; union

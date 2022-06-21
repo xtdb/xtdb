@@ -1574,16 +1574,18 @@
 
 (defmethod emit-expr :struct [{:keys [entries]} col-name opts]
   (let [entries (vec (for [[k v] entries]
-                       (emit-expr v (name k) opts)))
-        ^Field return-field (apply types/->field (name col-name) types/struct-type false
-                                   (map :return-field entries))]
+                       (MapEntry/create k (emit-expr v (name k) opts))))
+        return-type [:struct (->> entries
+                                  (into {} (map (juxt (comp symbol key)
+                                                      (comp :return-type val)))))]
+        return-field (types/col-type->field col-name return-type)]
 
-    {:return-field return-field
+    {:return-type return-type
      :eval-expr
      (fn [^IIndirectRelation in-rel, al params]
        (let [evald-entries (LinkedList.)]
          (try
-           (doseq [{:keys [eval-expr]} entries]
+           (doseq [{:keys [eval-expr]} (vals entries)]
              (.add evald-entries (eval-expr in-rel al params)))
 
            (let [row-count (.rowCount in-rel)
@@ -1609,13 +1611,14 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti emit-call-expr
-  (fn [{:keys [f] :as expr} out-vec]
+  (fn [{:keys [f] :as expr}]
     (keyword f)))
 
 (defmethod emit-expr :vectorised-call [{:keys [args] :as expr} col-name opts]
   (let [emitted-args (mapv #(emit-expr % "arg" opts) args)
-        {:keys [^Field return-field eval-call-expr]} (emit-call-expr (assoc expr :emitted-args emitted-args) col-name)]
-    {:return-field return-field
+        {:keys [return-type eval-call-expr]} (emit-call-expr (assoc expr :emitted-args emitted-args))
+        return-field (types/col-type->field col-name return-type)]
+    {:return-type return-type
      :eval-expr
      (fn [^IIndirectRelation in-rel al params]
        (let [evald-args (LinkedList.)]
@@ -1634,18 +1637,14 @@
            (finally
              (run! util/try-close evald-args)))))}))
 
-(defmethod emit-call-expr :get-field [{[{^Field struct-field :return-field}] :emitted-args
-                                       :keys [field]}
-                                      col-name]
-  {:return-field (letfn [(get-struct-child [^Field struct-field]
-                           (first
-                            (for [^Field child-field (.getChildren struct-field)
-                                  :when (= (name field) (.getName child-field))]
-                              child-field)))]
-                   (if (instance? ArrowType$Union (.getType struct-field))
-                     (types/->field (name col-name) types/dense-union-type false)
-                     (or (get-struct-child struct-field)
-                         (types/col-type->field col-name :null))))
+(defmethod emit-call-expr :get-field [{[{struct-type :return-type}] :emitted-args, :keys [field]}]
+  {:return-type (letfn [(->inner-types [col-type]
+                          (zmatch col-type
+                            [:union inner-types] (mapcat ->inner-types inner-types)
+                            [:struct col-types] (some-> (get col-types field) vector)
+                            []))]
+                  (->> (->inner-types struct-type)
+                       (apply types/merge-col-types :null)))
 
    :eval-call-expr (fn [[^ValueVector in-vec] ^ValueVector out-vec _params]
                      (let [out-writer (vw/vec->writer out-vec)]
@@ -1660,15 +1659,16 @@
                            (.copyRow copier idx)
                            (.endValue out-writer)))))})
 
-(defmethod emit-expr :variable [{:keys [variable]} col-name {:keys [var-fields]}]
-  (let [^Field out-field (-> (or (get var-fields variable)
-                                 (throw (IllegalArgumentException. (str "missing variable: " variable ", available " (pr-str (set (keys var-fields)))))))
-                             (types/field-with-name (name col-name)))]
-    {:return-field out-field
+(defmethod emit-expr :variable [{:keys [variable]} col-name {:keys [var->col-type]}]
+  (let [out-type (or (get var->col-type variable)
+                     (throw (IllegalArgumentException. (str "missing variable: " variable ", available " (pr-str (set (keys var->col-type)))))))]
+    {:return-type out-type
      :eval-expr
      (fn [^IIndirectRelation in-rel al _params]
        (let [in-vec (.vectorForName in-rel (name variable))
-             out-vec (.createVector out-field al)]
+             out-vec (.createVector (-> (.getField (.getVector in-vec))
+                                        (types/field-with-name col-name))
+                                    al)]
          (try
            (.copyTo in-vec out-vec)
            out-vec
@@ -1679,9 +1679,9 @@
 (defmethod emit-expr :list [{:keys [elements]} col-name opts]
   (let [el-count (count elements)
         emitted-els (mapv #(emit-expr % "list-el" opts) elements)
-        out-field (types/->field (name col-name) (ArrowType$FixedSizeList. el-count) false
-                                 (types/->field "$data" types/dense-union-type false))]
-    {:return-field out-field
+        out-type [:fixed-size-list el-count (->> emitted-els (map :return-type) (apply types/merge-col-types))]
+        out-field (types/col-type->field col-name out-type)]
+    {:return-type out-type
      :eval-expr
      (fn [^IIndirectRelation in-rel al params]
        (let [els (LinkedList.)]
@@ -1721,8 +1721,18 @@
            (finally
              (run! util/try-close els)))))}))
 
-(defmethod emit-call-expr :nth-const-n [{:keys [^long n]} col-name]
-  {:return-field (types/->field col-name types/dense-union-type false)
+(defn- ->list-el-type [list-type {:keys [nullable?]}]
+  (letfn [(->inner-types [col-type]
+            (zmatch col-type
+              [:union inner-types] (mapcat ->inner-types inner-types)
+              [:fixed-size-list _ inner-type] [inner-type]
+              [:list inner-type] [inner-type]))]
+    (-> (->inner-types list-type)
+        (cond->> nullable? (cons :null))
+        (->> (apply types/merge-col-types)))))
+
+(defmethod emit-call-expr :nth-const-n [{:keys [^long n], [{:keys [return-type]}] :emitted-args}]
+  {:return-type (->list-el-type return-type {:nullable? true})
 
    :eval-call-expr
    (fn [[^ValueVector coll-vec] ^ValueVector out-vec _params]
@@ -1746,38 +1756,30 @@
     BigIntVector (reify IntUnaryOperator
                    (applyAsInt [_ idx]
                      (int (.get ^BigIntVector n-res idx))))))
+(defmethod emit-call-expr :nth [{[{:keys [return-type]}] :emitted-args}]
+  {:return-type (->list-el-type return-type {:nullable? true})
+   :eval-call-expr
+   (fn [[^ValueVector coll-res ^ValueVector n-res] ^ValueVector out-vec _params]
+     (let [list-rdr (.listReader (iv/->direct-vec coll-res))
+           coll-count (.getValueCount coll-res)
+           out-writer (vw/vec->writer out-vec)
+           copier (.elementCopier list-rdr out-writer)]
 
-(defmethod emit-call-expr :nth [_ col-name]
-  (let [out-field (types/->field col-name types/dense-union-type false)]
-    {:return-field out-field
-     :eval-call-expr
-     (fn [[^ValueVector coll-res ^ValueVector n-res] ^ValueVector out-vec _params]
-       (let [list-rdr (.listReader (iv/->direct-vec coll-res))
-             coll-count (.getValueCount coll-res)
-             out-writer (.asDenseUnion (vw/vec->writer out-vec))
-             copier (.elementCopier list-rdr out-writer)
-             !null-writer (delay (.writerForType out-writer :null))]
+       (.setValueCount out-vec coll-count)
 
-         (.setValueCount out-vec coll-count)
+       (let [->n (long-getter n-res)]
+         (dotimes [idx coll-count]
+           (.startValue out-writer)
+           (if (or (not (.isPresent list-rdr idx))
+                   (.isNull n-res idx))
+             (doto out-writer
+               (.startValue)
+               (.endValue))
+             (.copyElement copier idx (.applyAsInt ->n idx)))
+           (.endValue out-writer)))))})
 
-         (let [->n (long-getter n-res)]
-           (dotimes [idx coll-count]
-             (.startValue out-writer)
-             (if (or (not (.isPresent list-rdr idx))
-                     (.isNull n-res idx))
-               (doto ^IVectorWriter @!null-writer
-                 (.startValue)
-                 (.endValue))
-               (.copyElement copier idx (.applyAsInt ->n idx)))
-             (.endValue out-writer)))))}))
-
-(defmethod emit-call-expr :trim-array [{[{^Field array-field :return-field}] :emitted-args}
-                                       col-name]
-  {:return-field (types/->field (name col-name) types/list-type true
-                                (if (or (instance? ArrowType$List (.getType array-field))
-                                        (instance? ArrowType$FixedSizeList (.getType array-field)))
-                                  (first (.getChildren array-field))
-                                  (types/->field "$data" types/dense-union-type false)))
+(defmethod emit-call-expr :trim-array [{[{array-type :return-type}] :emitted-args}]
+  {:return-type [:list (->list-el-type array-type {:nullable? false})]
    :eval-call-expr
    (fn [[^ValueVector array-res ^ValueVector n-res], ^ListVector out-vec, _params]
      (let [list-rdr (.listReader (iv/->direct-vec array-res))
@@ -1828,18 +1830,17 @@
                                 (assoc :variable variable)))
 
         var->col-type (into var->col-type
-                            (for [{:keys [variable return-field]} emitted-sub-exprs]
-                              (MapEntry/create variable (types/field->col-type return-field))))
+                            (for [{:keys [variable return-type]} emitted-sub-exprs]
+                              (MapEntry/create variable return-type)))
 
         {:keys [expr-fn return-type]} (memo-generate-projection prim-expr
                                                                 {:var->col-type var->col-type
                                                                  :param-classes param-classes
                                                                  :param-types param-types})
-
         out-field (types/col-type->field col-name return-type)]
 
     ;; TODO what are we going to do about needing to close over locals?
-    {:return-field out-field
+    {:return-type return-type
      :eval-expr
      (fn [^IIndirectRelation in-rel al params]
        (let [evald-sub-exprs (HashMap.)]
@@ -1869,15 +1870,6 @@
   (defmethod emit-expr op [prim-expr col-name opts]
     (emit-prim-expr prim-expr col-name opts)))
 
-(defn ->var-fields [^IIndirectRelation in-rel, expr]
-  (->> (for [var-sym (->> (walk/expr-seq expr)
-                          (into #{} (comp (filter #(= :variable (:op %)))
-                                          (map :variable))))]
-         (let [^IIndirectVector ivec (or (.vectorForName in-rel (name var-sym))
-                                         (throw (IllegalArgumentException. (str "missing read-col: " var-sym))))]
-           (MapEntry/create var-sym (-> ivec (.getVector) (.getField)))))
-       (into {})))
-
 (defn ->param-types [params]
   (->> params
        (into {} (map (juxt key (comp types/value->col-type val))))))
@@ -1889,18 +1881,11 @@
   (let [expr (form->expr form input-types)
 
         ;; HACK - this runs the analyser (we discard the emission) to get the widest possible out-type.
-        ;; we assume that we don't need `:param-classes` nor accurate `var-fields`
-        ;; (i.e. we lose the exact DUV type-id mapping by converting to col-types)
-        ;; ideally we'd lose var-fields altogether.
+        ;; we assume that we don't need `:param-classes`
         widest-out-type (-> (emit-expr expr col-name
                                        {:param-types param-types
-                                        :var->col-type col-types
-                                        :var-fields (->> col-types
-                                                         (into {} (map (juxt key
-                                                                             (fn [[col-name col-type]]
-                                                                               (types/col-type->field col-name col-type))))))})
-                            :return-field
-                            (types/field->col-type))]
+                                        :var->col-type col-types})
+                            :return-type)]
     (reify IProjectionSpec
       (getColumnName [_] col-name)
 
@@ -1914,7 +1899,6 @@
 
               {:keys [eval-expr]} (emit-expr expr col-name {:param-types (->param-types params)
                                                             :param-classes (param-classes params)
-                                                            :var-fields (->var-fields in-rel expr)
                                                             :var->col-type var->col-type})]
           (iv/->direct-vec (eval-expr in-rel allocator params)))))))
 

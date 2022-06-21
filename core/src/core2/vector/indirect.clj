@@ -117,14 +117,12 @@
             (let [^IListReader rdr (nth rdrs (.getTypeId v idx))]
               (.getElementEndIndex rdr idx)))
           (elementCopier [this w]
-            (let [copiers (mapv #(some-> ^IListReader % (.elementCopier w)) rdrs)
-                  !null-writer (delay (.writerForType (.asDenseUnion w) :null))]
+            (let [copiers (mapv #(some-> ^IListReader % (.elementCopier w)) rdrs)]
               (reify IListElementCopier
                 (copyElement [_ idx n]
                   (let [^IListElementCopier copier (nth copiers (.getTypeId v idx))]
-                    (if (.isPresent this idx)
-                      (.copyElement copier (.getOffset v idx) n)
-                      (doto ^IVectorWriter @!null-writer (.startValue) (.endValue))))))))))
+                    (when (.isPresent this idx)
+                      (.copyElement copier (.getOffset v idx) n)))))))))
 
       :else
       (reify IListReader

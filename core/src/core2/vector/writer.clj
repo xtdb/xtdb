@@ -321,11 +321,22 @@
   (clear [this] (set! (.pos this) 0))
 
   (rowCopier [this-writer src-vec]
-    (if (instance? NullVector dest-vec)
+    (cond
+      (instance? NullVector dest-vec)
       ;; `NullVector/.copyFromSafe` throws UOE
       (reify IRowCopier
         (copyRow [_ _src-idx]))
 
+      (instance? DenseUnionVector src-vec)
+      (let [^DenseUnionVector src-vec src-vec]
+        (reify IRowCopier
+          (copyRow [_ src-idx]
+            (.copyFromSafe dest-vec
+                           (.getOffset src-vec src-idx)
+                           (.getPosition this-writer)
+                           (.getVectorByType src-vec (.getTypeId src-vec src-idx))))))
+
+      :else
       (reify IRowCopier
         (copyRow [_ src-idx]
           (.copyFromSafe dest-vec
