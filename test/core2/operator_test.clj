@@ -344,6 +344,24 @@
     (t/is (= [{:c-id "c3", :c-name "Charlie"}]
              (q :anti-join)))))
 
+(t/deftest test-apply-empty-rel-bug-237
+  (t/is (= {:res [{:x3 nil}], :col-types '{x3 [:union #{:null :bool}]}}
+           (-> (op/query-ra
+                '[:group-by [{x3 (any x2)}]
+                  [:apply :cross-join {}
+                   [:table [{x1 15}]]
+                   [:select false
+                    [:table [{x2 20}]]]]])
+               (tu/raising-col-types))))
+
+  (t/is (= {:res [], :col-types '{x1 :i64, x2 :i64}}
+           (-> (op/query-ra '[:project [x1 x2]
+                              [:apply :cross-join {}
+                               [:table [{x1 15}]]
+                               [:select false
+                                [:table [{x2 20}]]]]])
+               (tu/raising-col-types)))))
+
 (t/deftest test-project-row-number
   (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
            (op/query-ra '[:project [a {$row-num (row-number)}]

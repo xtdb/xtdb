@@ -35,29 +35,36 @@
     :cross-join
     (reify ModeStrategy
       (accept [_ dep-cursor dep-out-writer idxs in-idx]
-        (while (.tryAdvance dep-cursor
-                            (reify Consumer
-                              (accept [_ dep-rel]
-                                (let [^IIndirectRelation dep-rel dep-rel]
-                                  (vw/append-rel dep-out-writer dep-rel)
+        (doseq [col-name dependent-col-names]
+          (.writerForName dep-out-writer (name col-name)))
 
-                                  (dotimes [_ (.rowCount dep-rel)]
-                                    (.add idxs in-idx)))))))))
+        (.forEachRemaining dep-cursor
+                           (reify Consumer
+                             (accept [_ dep-rel]
+                               (let [^IIndirectRelation dep-rel dep-rel]
+                                 (vw/append-rel dep-out-writer dep-rel)
+
+                                 (dotimes [_ (.rowCount dep-rel)]
+                                   (.add idxs in-idx))))))))
 
     :left-outer-join
     (reify ModeStrategy
       (accept [_ dep-cursor dep-out-writer idxs in-idx]
-        (let [match? (boolean-array [false])]
-          (while (.tryAdvance dep-cursor
-                              (reify Consumer
-                                (accept [_ dep-rel]
-                                  (let [^IIndirectRelation dep-rel dep-rel]
-                                    (when (pos? (.rowCount dep-rel))
-                                      (aset match? 0 true)
-                                      (vw/append-rel dep-out-writer dep-rel)
+        (doseq [col-name dependent-col-names]
+          (.writerForName dep-out-writer (name col-name)))
 
-                                      (dotimes [_ (.rowCount dep-rel)]
-                                        (.add idxs in-idx))))))))
+        (let [match? (boolean-array [false])]
+          (.forEachRemaining dep-cursor
+                             (reify Consumer
+                               (accept [_ dep-rel]
+                                 (let [^IIndirectRelation dep-rel dep-rel]
+                                   (when (pos? (.rowCount dep-rel))
+                                     (aset match? 0 true)
+                                     (vw/append-rel dep-out-writer dep-rel)
+
+                                     (dotimes [_ (.rowCount dep-rel)]
+                                       (.add idxs in-idx)))))))
+
           (when-not (aget match? 0)
             (.add idxs in-idx)
             (doseq [^String col-name (map name dependent-col-names)]
