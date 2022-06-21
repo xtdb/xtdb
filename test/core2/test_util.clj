@@ -86,54 +86,42 @@
   (.finishChunk ^core2.indexer.Indexer (.indexer node))
   (await-temporal-snapshot-build node))
 
-(defn write-duv! [^DenseUnionVector duv, vs]
-  (.clear duv)
-
-  (let [writer (-> (vw/vec->writer duv) .asDenseUnion)]
-    (doseq [v vs]
-      (.startValue writer)
-      (doto (.writerForType writer (types/value->col-type v))
-        (.startValue)
-        (->> (types/write-value! v))
-        (.endValue))
-      (.endValue writer))
-
-    (util/set-value-count duv (count vs))
-
-    duv))
-
-(defn ->duv ^org.apache.arrow.vector.complex.DenseUnionVector [col-name vs]
-  (let [res (.createVector (types/->field col-name types/dense-union-type false) *allocator*)]
-    (try
-      (doto res (write-duv! vs))
-      (catch Exception e
-        (.close res)
-        (throw e)))))
-
 (defn write-vec! [^ValueVector v, vs]
   (.clear v)
 
-  (let [writer (vw/vec->writer v)]
+  (let [duv? (instance? DenseUnionVector v)
+        writer (vw/vec->writer v)]
     (doseq [v vs]
-      (doto writer
-        (.startValue)
-        (->> (types/write-value! v))
-        (.endValue)))
+      (.startValue writer)
+      (if duv?
+        (doto (.writerForType (.asDenseUnion writer) (types/value->col-type v))
+          (.startValue)
+          (->> (types/write-value! v))
+          (.endValue))
 
-    (util/set-value-count v (count vs))
+        (types/write-value! v writer))
+
+      (.endValue writer))
+
+    (.setValueCount v (count vs))
 
     v))
 
-(defn ->mono-vec ^org.apache.arrow.vector.ValueVector [col-name vs]
-  (let [col-type (->> (into #{} (map types/value->col-type) vs)
-                      (apply types/merge-col-types))
-        res (-> (types/col-type->field col-name col-type)
-                (.createVector *allocator*))]
-    (try
+(defn open-vec
+  (^org.apache.arrow.vector.ValueVector [col-name vs]
+   (open-vec col-name
+             (->> (into #{} (map types/value->col-type) vs)
+                  (apply types/merge-col-types))
+             vs))
+
+  (^org.apache.arrow.vector.ValueVector [col-name col-type vs]
+   (let [res (-> (types/col-type->field col-name col-type)
+                 (.createVector *allocator*))]
+     (try
        (doto res (write-vec! vs))
        (catch Throwable e
          (.close res)
-         (throw e)))))
+         (throw e))))))
 
 (defn populate-root ^core2.vector.IIndirectRelation [^VectorSchemaRoot root rows]
   (.clear root)

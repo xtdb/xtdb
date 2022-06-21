@@ -10,14 +10,14 @@
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-align
-  (with-open [age-vec (tu/->mono-vec "age" [12 42 15 83 25])
-              age-row-id-vec (tu/->mono-vec "_row-id" [2 5 9 12 13])
+  (with-open [age-vec (tu/open-vec "age" [12 42 15 83 25])
+              age-row-id-vec (tu/open-vec "_row-id" [2 5 9 12 13])
 
               age-root (let [^List vecs [age-row-id-vec age-vec]]
                          (VectorSchemaRoot. vecs))
 
-              name-vec (tu/->mono-vec "name" ["Al" "Dave" "Bob" "Steve"])
-              name-row-id-vec (tu/->mono-vec "_row-id" [1 2 9 13])
+              name-vec (tu/open-vec "name" ["Al" "Dave" "Bob" "Steve"])
+              name-row-id-vec (tu/open-vec "_row-id" [1 2 9 13])
 
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
