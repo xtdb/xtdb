@@ -70,7 +70,7 @@
 
            :slt-test-2  {:main-opts
                          ["-m" "core2.sql.logic-test.runner" "--verify" "--db" "xtdb"
-                          "--max-failures" "4280" "--max-errors" "170"
+                          "--max-failures" "4290" "--max-errors" "0"
                           "test/core2/sql/logic_test/sqlite_test/index/between/1/slt_good_0.test"
                           "test/core2/sql/logic_test/sqlite_test/index/commute/10/slt_good_0.test"
                           "test/core2/sql/logic_test/sqlite_test/index/in/10/slt_good_0.test"
