@@ -265,7 +265,7 @@
 
 (defn bounded-thread-pool ^ExecutorService [^long pool-size, ^long queue-size, thread-factory]
   (let [queue (LinkedBlockingQueue. queue-size)]
-    (ThreadPoolExecutor. pool-size 1
+    (ThreadPoolExecutor. 1 pool-size
                          0 TimeUnit/MILLISECONDS
                          queue
                          thread-factory
