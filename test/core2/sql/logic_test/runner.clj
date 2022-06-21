@@ -327,7 +327,7 @@
                            assoc
                            script-name (let [start-time (. System (nanoTime))
                                              results (:results (execute-records *db-engine* (parse-script script-name (slurp script-name))))]
-                                         (assoc results :time (math/round (/ (double (- (. System (nanoTime)) start-time)) 1000000.0)))))]]
+                                         (assoc results :time (math/round (/ (double (- ^long (. System (nanoTime)) start-time)) 1000000.0)))))]]
           (println "Running " script-name)
           (case db
             "xtdb" (tu/with-node
