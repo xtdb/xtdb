@@ -25,7 +25,13 @@ public interface IIndirectVector<V extends ValueVector> extends AutoCloseable {
 
     @SuppressWarnings("unchecked")
     default IIndirectVector<V> copy(BufferAllocator allocator) {
-        return copyTo((V) getVector().getField().createVector(allocator));
+        var res = (V) getVector().getField().createVector(allocator);
+        try {
+            return copyTo(res);
+        } catch (Throwable e) {
+            res.close();
+            throw e;
+        }
     }
 
     IIndirectVector<V> copyTo(V vector);

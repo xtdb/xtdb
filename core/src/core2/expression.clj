@@ -1669,8 +1669,8 @@
      (fn [^IIndirectRelation in-rel al _params]
        (let [in-vec (.vectorForName in-rel (name variable))
              out-vec (.createVector out-field al)]
-         (.copyTo in-vec out-vec)
          (try
+           (.copyTo in-vec out-vec)
            out-vec
            (catch Throwable e
              (.close out-vec)
