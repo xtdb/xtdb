@@ -70,7 +70,7 @@
             (.test p2 l r))))))
 
 (def build-comparator
-  (-> (fn [left-val-types left-col-type right-val-types right-col-type nil-equal]
+  (-> (fn [left-col-type right-col-type nil-equal]
         (let [left-vec (gensym 'left-vec)
               left-idx (gensym 'left-idx)
               right-vec (gensym 'right-vec)
@@ -84,17 +84,14 @@
                                   :args [{:op :call, :f eq-fn
                                           :args [{:op :variable, :variable left-vec, :idx left-idx}
                                                  {:op :variable, :variable right-vec, :idx right-idx}]}]}
-                                 {:var->types {left-vec left-val-types
-                                               right-vec right-val-types}
-                                  :var->col-type {left-vec left-col-type
+                                 {:var->col-type {left-vec left-col-type
                                                   right-vec right-col-type}
                                   :return-boxes return-boxes
                                   :extract-vecs-from-rel? false})]
 
           (-> `(fn [~(expr/with-tag left-vec IIndirectVector)
                     ~(expr/with-tag right-vec IIndirectVector)]
-                 (let [~@(expr/batch-bindings {:batch-bindings (expr/box-batch-bindings (vals return-boxes))
-                                               :children [emitted-expr]})]
+                 (let [~@(expr/batch-bindings emitted-expr)]
                    (reify IntIntPredicate
                      (~'test [_# ~left-idx ~right-idx]
                       ~(continue (fn [_ code] code))))))
@@ -105,11 +102,9 @@
 
 (defn- ->comparator ^core2.expression.map.IntIntPredicate [left-cols right-cols nil-equal]
   (->> (map (fn [^IIndirectVector left-col, ^IIndirectVector right-col]
-              (let [left-val-types (expr/field->value-types (.getField (.getVector left-col)))
-                    left-col-type (types/field->col-type (.getField (.getVector left-col)))
-                    right-val-types (expr/field->value-types (.getField (.getVector right-col)))
+              (let [left-col-type (types/field->col-type (.getField (.getVector left-col)))
                     right-col-type (types/field->col-type (.getField (.getVector right-col)))
-                    f (build-comparator left-val-types left-col-type right-val-types right-col-type nil-equal)]
+                    f (build-comparator left-col-type right-col-type nil-equal)]
                 (f left-col right-col)))
             left-cols
             right-cols)

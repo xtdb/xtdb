@@ -172,10 +172,10 @@
                      {:x false, :y false, :z true}]))))
 
 (t/deftest test-date-trunc
-  (let [test-doc {:_id  :foo,
+  (let [test-doc {:_id :foo,
                   :date (util/->instant #inst "2021-10-21T12:34:56Z")
-                  :zdt  (-> (util/->zdt #inst "2021-08-21T12:34:56Z")
-                            (.withZoneSameLocal (ZoneId/of "Europe/London")))}]
+                  :zdt (-> (util/->zdt #inst "2021-08-21T12:34:56Z")
+                           (.withZoneSameLocal (ZoneId/of "Europe/London")))}]
     (letfn [(simple-trunc [time-unit] (project1 (list 'date-trunc time-unit 'date) test-doc))]
 
       (t/is (= (util/->zdt #inst "2021-10-21") (simple-trunc "DAY")))
@@ -201,7 +201,7 @@
         (t/is (= (LocalDate/of 2022 1 1) (project1 '(date-trunc "YEAR" (date-trunc "MONTH" date)) {:date ld})))))))
 
 (t/deftest test-date-extract
-  ;; todo units below minute are not yet implemented for any type
+  ;; TODO units below minute are not yet implemented for any type
   (letfn [(extract [part date-like] (project1 (list 'extract part 'date) {:date date-like}))
           (extract-all [part date-likes] (project (list 'extract part 'date) (map (partial array-map :date) date-likes)))]
     (t/testing "java.time.Instant"
@@ -325,8 +325,7 @@
 
 (t/deftest test-octet-length
   (letfn [(len [s vec-type] (project-mono-value 'octet-length s vec-type))]
-    (t/are [s]
-      (= (alength (.getBytes s "utf-8")) (len s :utf8) (len s :varbinary))
+    (t/are [s] (= (alength (.getBytes s "utf-8")) (len s :utf8) (len s :varbinary))
       ""
       "a"
       "hello"
@@ -480,6 +479,7 @@
 (t/deftest test-like-on-newline-str-regress
   (t/is (not (project1 '(like a b) {:a "\n", :b ""}))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec binary-like-is-equiv-to-string-like-on-utf8-prop
   (tcp/for-all [^String s tcg/string
                 ^String ptn (tcg/fmap str/join (tcg/vector (tcg/elements [tcg/string (tcg/return "_") (tcg/return "%")])))]
@@ -565,6 +565,7 @@
   [s]
   (str/join (remove #(Character/isWhitespace ^Character %) s)))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec sql-trim-is-equiv-to-java-trim-on-space-prop
   (tcp/for-all [s (tcg/fmap (comp all-whitespace-to-spaces str/join) (tcg/vector (tcg/elements [tcg/string (tcg/return " ")])))]
     (and
@@ -727,6 +728,7 @@
     "AA" "aa"
     "aa" "aa"))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec lower-is-equiv-to-java-lower-prop
   (tcp/for-all [^String s tcg/string]
     (= (.toLowerCase s) (project1 '(lower a) {:a s}))))
@@ -741,13 +743,17 @@
     "" "" ""
     "a" "b" "ab"))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec concat-equiv-to-str-prop
   (tcp/for-all [s1 tcg/string
                 s2 tcg/string]
     (= (str s1 s2) (project1 '(concat a b) {:a s1 :b s2}))))
 
 (defn- bconcat [b1 b2]
-  (some-> (project1 '(concat a b) {:a (some-> b1 byte-array), :b (some-> b2 byte-array)}) expr/resolve-bytes vec))
+  (some-> (project1 '(concat a b) {:a (some-> b1 byte-array),
+                                   :b (some-> b2 byte-array)})
+          expr/resolve-bytes
+          vec))
 
 (t/deftest bin-concat-test
   (t/are [b1 b2 expected]
@@ -758,15 +764,18 @@
     [] [] []
     [42] [32] [42 32]))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec bin-concat-equiv-to-str-concat-on-utf8-prop
   (tcp/for-all [^String s1 tcg/string
                 ^String s2 tcg/string]
     (= (str s1 s2) (String. (byte-array (bconcat (.getBytes s1 "utf-8") (.getBytes s2 "utf-8"))) "utf-8"))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec variadic-str-concat-prop
   (tcp/for-all [^String strs (tcg/vector tcg/string 2 99)]
     (= (apply str strs) (project1 (list* 'concat strs) {}))))
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec variadic-bin-concat-prop
   (tcp/for-all [^bytes barrs (tcg/vector tcg/bytes 2 99)]
     (= (vec (apply concat barrs)) (vec (expr/resolve-bytes (project1 (list* 'concat barrs) {}))))))
@@ -1834,7 +1843,7 @@
                       use-fractional-value
                       precision
                       use-precision
-                      fractional-precision
+                      ^long fractional-precision
                       use-fractional-precision]}]
 
            (let [[leading-unit ending-unit] fields

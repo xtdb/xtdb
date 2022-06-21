@@ -11,7 +11,6 @@
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex StructVector]
-           [org.apache.arrow.vector.types.pojo FieldType]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -123,10 +122,6 @@
 (def ^:private types-vec-sym (gensym "types-vec"))
 (def ^:private bloom-vec-sym (gensym "bloom-vec"))
 
-(def ^:private metadata-vec-syms
-  {:min (gensym "min-vec")
-   :max (gensym "max-vec")})
-
 (defmethod expr/codegen-expr :metadata-field-present [{:keys [field]} _]
   (let [field-name (str field)]
     {:return-type :bool
@@ -152,30 +147,26 @@
                            (when-let [~expr/idx-sym ~idx-code]
                              (bloom/bloom-contains? ~bloom-vec-sym ~expr/idx-sym ~bloom-hash-sym)))))}
 
-      (let [vec-sym (get metadata-vec-syms meta-value)
-            col-sym (gensym 'meta-col)
+      (let [col-sym (gensym 'meta-col)
             col-field (types/col-type->field col-type)
-            arrow-type (.getType col-field)
 
             {:keys [continue] :as emitted-expr}
             (expr/codegen-expr {:op :call, :f f
                                 :args [{:op :variable, :variable col-sym}, param-expr]}
                                (-> opts
-                                   ;; HACK remove :var->types (eventually)
-                                   (assoc-in [:var->types col-sym] (FieldType/notNullable arrow-type))
                                    (assoc-in [:var->col-type col-sym] col-type)))]
         {:return-type :bool
+         :batch-bindings [[(-> col-sym (expr/with-tag IIndirectVector))
+                           `(some-> ^StructVector (.getChild ~types-vec-sym ~(.getName col-field))
+                                    (.getChild ~(name meta-value))
+                                    iv/->direct-vec)]]
          :children [emitted-expr]
          :continue (fn [cont]
                      (cont :bool
                            `(boolean
-                             (when-let [~expr/idx-sym ~idx-code]
-                               (when-let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
-                                          (some-> ^StructVector (.getChild ~types-vec-sym ~(.getName col-field))
-                                                  (.getChild ~(name meta-value)))]
-                                 (when-not (.isNull ~vec-sym ~expr/idx-sym)
-                                   (let [~(-> col-sym (expr/with-tag IIndirectVector)) (iv/->direct-vec ~vec-sym)]
-                                     ~(continue (fn [_ code] code)))))))))}))))
+                             (when ~col-sym
+                               (when-let [~expr/idx-sym ~idx-code]
+                                 ~(continue (fn [_ code] code)))))))}))))
 
 (defmethod ewalk/walk-expr :metadata-vp-call [inner outer expr]
   (outer (-> expr (update :param-expr inner))))
