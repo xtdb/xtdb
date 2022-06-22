@@ -71,7 +71,7 @@
       (doseq [[k v] kvs]
         (if v
           (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
-          (.remove wb (mem/direct-byte-buffer k))))
+          (.delete wb (mem/direct-byte-buffer k))))
       (.write db write-options wb)))
 
   (compact [_]
@@ -110,7 +110,7 @@
     (xio/try-close metrics)
     (xio/try-close cp-job)))
 
-(def ^:private cp-format {:index-version c/index-version, ::version "6"})
+(def ^:private cp-format {:index-version c/index-version, ::version "7"})
 
 (defn ->lru-block-cache {::sys/args {:cache-size {:doc "Cache size"
                                                   :default (* 8 1024 1024)
