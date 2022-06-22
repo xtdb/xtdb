@@ -1,7 +1,8 @@
 [:rename
  {x7 c_count, x10 custdist}
  [:order-by
-  [[x10 :desc :nulls-last] [x7 :desc :nulls-last]]
+  [[x10 {:direction :desc, :null-ordering :nulls-last}]
+   [x7 {:direction :desc, :null-ordering :nulls-last}]]
   [:group-by
    [x7 {x10 (count x9)}]
    [:map

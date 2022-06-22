@@ -1,5 +1,5 @@
 [:rename
  {x1 movieTitle}
  [:order-by
-  [[x1 :asc :nulls-last]]
+  [[x1 {:direction :asc, :null-ordering :nulls-last}]]
   [:rename {movieTitle x1} [:scan [movieTitle]]]]]

@@ -1,7 +1,7 @@
 [:rename
  {x19 cntrycode, x21 numcust, x22 totacctbal}
  [:order-by
-  [[x19 :asc :nulls-last]]
+  [[x19 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
    [x19 {x21 (count x20)} {x22 (sum x2)}]
    [:map

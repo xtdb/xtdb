@@ -1,7 +1,7 @@
 [:rename
  {x1 o_orderpriority, x11 order_count}
  [:order-by
-  [[x1 :asc :nulls-last]]
+  [[x1 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
    [x1 {x11 (count x10)}]
    [:map

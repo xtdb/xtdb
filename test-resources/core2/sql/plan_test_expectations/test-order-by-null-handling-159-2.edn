@@ -1,3 +1,5 @@
 [:rename
  {x1 a}
- [:order-by [[x1 :asc :nulls-last]] [:rename {a x1} [:scan [a]]]]]
+ [:order-by
+  [[x1 {:direction :asc, :null-ordering :nulls-last}]]
+  [:rename {a x1} [:scan [a]]]]]

@@ -1,7 +1,7 @@
 [:rename
  {x1 name}
  [:order-by
-  [[x1 :asc :nulls-last]]
+  [[x1 {:direction :asc, :null-ordering :nulls-last}]]
   [:distinct
    [:union-all
     [:rename {name x1} [:scan [name]]]

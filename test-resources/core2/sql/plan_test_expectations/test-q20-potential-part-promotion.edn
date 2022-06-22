@@ -1,7 +1,7 @@
 [:rename
  {x1 s_name, x2 s_address}
  [:order-by
-  [[x1 :asc :nulls-last]]
+  [[x1 {:direction :asc, :null-ordering :nulls-last}]]
   [:project
    [x1 x2]
    [:join

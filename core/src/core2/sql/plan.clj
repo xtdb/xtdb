@@ -968,18 +968,12 @@
         order-by-specs (r/collect-stop
                         (fn [z]
                           (letfn [(->order-by-spec [sk os no]
-                                    (let [direction (case os
-                                                      "ASC" :asc
-                                                      "DESC" :desc
-                                                      :asc)
-                                          null-ordering (case no
-                                                          "FIRST" :nulls-first
-                                                          "LAST" :nulls-last
-                                                          :nulls-last)]
+                                    (let [spec-opts {:direction (case os "ASC" :asc, "DESC" :desc, :asc)
+                                                     :null-ordering (case no "FIRST" :nulls-first, "LAST" :nulls-last, :nulls-last)}]
                                       [(if-let [idx (sem/order-by-index z)]
-                                         {:spec [(unqualified-projection-symbol (nth projection idx)) direction null-ordering]}
+                                         {:spec [(unqualified-projection-symbol (nth projection idx)) spec-opts]}
                                          (let [column (symbol (str "$order_by" relation-id-delimiter query-id relation-prefix-delimiter (r/child-idx z) "$"))]
-                                           {:spec [column direction null-ordering]
+                                           {:spec [column spec-opts]
                                             :projection {column (expr sk)}}))]))]
 
                             (r/zmatch z

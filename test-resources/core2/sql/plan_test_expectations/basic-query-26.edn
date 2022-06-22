@@ -3,7 +3,8 @@
  [:project
   [x1]
   [:order-by
-   [[x4 :desc :nulls-last] [x1 :asc :nulls-last]]
+   [[x4 {:direction :desc, :null-ordering :nulls-last}]
+    [x1 {:direction :asc, :null-ordering :nulls-last}]]
    [:project
     [x1 x4]
     [:map

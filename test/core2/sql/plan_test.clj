@@ -1,11 +1,9 @@
 (ns core2.sql.plan-test
   (:require [clojure.test :as t :refer [deftest]]
             [clojure.java.io :as io]
-            [core2.edn :as edn]                             ;; Enables data literals
-            [core2.operator :as op]
+            core2.edn ; Enables data literals
             [core2.sql.parser :as p]
-            [core2.sql.plan :as plan]
-            [core2.types :as types]))
+            [core2.sql.plan :as plan]))
 
 (defn plan-sql
   ([sql] (plan-sql sql {:decorrelate? true :validate-plan? true :instrument-rules? true}))

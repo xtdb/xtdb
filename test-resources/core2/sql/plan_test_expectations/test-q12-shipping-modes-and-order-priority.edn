@@ -1,7 +1,7 @@
 [:rename
  {x4 l_shipmode, x15 high_line_count, x16 low_line_count}
  [:order-by
-  [[x4 :asc :nulls-last]]
+  [[x4 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
    [x4 {x15 (sum x13)} {x16 (sum x14)}]
    [:map

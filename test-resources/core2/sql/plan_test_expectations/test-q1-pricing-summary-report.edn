@@ -10,7 +10,8 @@
   x18 avg_disc,
   x19 count_order}
  [:order-by
-  [[x1 :asc :nulls-last] [x2 :asc :nulls-last]]
+  [[x1 {:direction :asc, :null-ordering :nulls-last}]
+   [x2 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
    [x1
     x2

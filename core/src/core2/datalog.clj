@@ -326,11 +326,11 @@
                       [(case arg-type
                          :logic-var arg
                          :aggregate (aggregate-logic-var-name arg))
-                       (or direction :asc)]))
+                       {:direction (or direction :asc)}]))
      plan]
     plan))
 
-(defn- with-top [plan {:keys [limit offset] :as query}]
+(defn- with-top [plan {:keys [limit offset]}]
   (if (or limit offset)
     [:top (cond-> {}
             offset (assoc :skip offset)

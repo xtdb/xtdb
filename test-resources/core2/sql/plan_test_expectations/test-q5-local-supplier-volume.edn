@@ -1,7 +1,7 @@
 [:rename
  {x16 n_name, x24 revenue}
  [:order-by
-  [[x24 :desc :nulls-last]]
+  [[x24 {:direction :desc, :null-ordering :nulls-last}]]
   [:group-by
    [x16 {x24 (sum x23)}]
    [:map

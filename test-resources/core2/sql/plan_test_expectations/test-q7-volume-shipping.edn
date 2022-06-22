@@ -1,9 +1,9 @@
 [:rename
  {x16 supp_nation, x19 cust_nation, x22 l_year, x24 revenue}
  [:order-by
-  [[x16 :asc :nulls-last]
-   [x19 :asc :nulls-last]
-   [x22 :asc :nulls-last]]
+  [[x16 {:direction :asc, :null-ordering :nulls-last}]
+   [x19 {:direction :asc, :null-ordering :nulls-last}]
+   [x22 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
    [x16 x19 x22 {x24 (sum x23)}]
    [:project

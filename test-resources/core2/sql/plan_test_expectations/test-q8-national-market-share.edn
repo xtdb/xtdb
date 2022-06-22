@@ -1,7 +1,7 @@
 [:rename
  {x29 o_year, x35 mkt_share}
  [:order-by
-  [[x29 :asc :nulls-last]]
+  [[x29 {:direction :asc, :null-ordering :nulls-last}]]
   [:project
    [x29 {x35 (/ x32 x33)}]
    [:group-by

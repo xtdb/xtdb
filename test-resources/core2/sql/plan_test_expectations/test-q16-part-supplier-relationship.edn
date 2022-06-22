@@ -1,10 +1,10 @@
 [:rename
  {x4 p_brand, x5 p_type, x6 p_size, x16 supplier_cnt}
  [:order-by
-  [[x16 :desc :nulls-last]
-   [x4 :asc :nulls-last]
-   [x5 :asc :nulls-last]
-   [x6 :asc :nulls-last]]
+  [[x16 {:direction :desc, :null-ordering :nulls-last}]
+   [x4 {:direction :asc, :null-ordering :nulls-last}]
+   [x5 {:direction :asc, :null-ordering :nulls-last}]
+   [x6 {:direction :asc, :null-ordering :nulls-last}]]
   [:group-by
    [x4 x5 x6 {x16 (count-distinct x1)}]
    [:join

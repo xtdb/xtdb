@@ -10,10 +10,10 @@
  [:top
   {:limit 100}
   [:order-by
-   [[x6 :desc :nulls-last]
-    [x18 :asc :nulls-last]
-    [x7 :asc :nulls-last]
-    [x1 :asc :nulls-last]]
+   [[x6 {:direction :desc, :null-ordering :nulls-last}]
+    [x18 {:direction :asc, :null-ordering :nulls-last}]
+    [x7 {:direction :asc, :null-ordering :nulls-last}]
+    [x1 {:direction :asc, :null-ordering :nulls-last}]]
    [:project
     [x6 x7 x18 x1 x2 x8 x9 x10]
     [:select

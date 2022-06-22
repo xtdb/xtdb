@@ -1,7 +1,7 @@
 [:rename
  {x1 ps_partkey, x14 value}
  [:order-by
-  [[x14 :desc :nulls-last]]
+  [[x14 {:direction :desc, :null-ordering :nulls-last}]]
   [:project
    [x1 x14]
    [:join

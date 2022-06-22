@@ -1,7 +1,7 @@
 [:rename
  {x1 s_suppkey, x2 s_name, x3 s_address, x4 s_phone, x12 total_revenue}
  [:order-by
-  [[x1 :asc :nulls-last]]
+  [[x1 {:direction :asc, :null-ordering :nulls-last}]]
   [:project
    [x1 x2 x3 x4 x12]
    [:join

@@ -12,13 +12,15 @@
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator))
 
-(s/def ::order-direction #{:asc :desc})
+(s/def ::direction #{:asc :desc})
+(s/def ::null-ordering #{:nulls-first :nulls-last})
 
 (defmethod lp/ra-expr :order-by [_]
   (s/cat :op '#{:τ :tau :order-by order-by}
-         :order (s/coll-of (s/cat :column ::lp/column
-                                  :direction (s/? ::order-direction)
-                                  :null-ordering (s/? #{:nulls-first :nulls-last})))
+         :order-specs (s/coll-of (-> (s/cat :column ::lp/column
+                                            :spec-opts (s/? (s/keys :opt-un [::direction ::null-ordering])))
+                                     (s/nonconforming))
+                                 :kind vector?)
          :relation ::lp/ra-expression))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -39,8 +41,9 @@
 (defn- sorted-idxs ^ints [^IIndirectRelation read-rel, order-specs]
   (-> (IntStream/range 0 (.rowCount read-rel))
       (.boxed)
-      (.sorted (reduce (fn [^Comparator acc, {:keys [^String col-name direction null-ordering]}]
-                         (let [read-col (.vectorForName read-rel col-name)
+      (.sorted (reduce (fn [^Comparator acc, [column {:keys [direction null-ordering]
+                                                      :or {direction :asc, null-ordering :nulls-last}}]]
+                         (let [read-col (.vectorForName read-rel (name column))
                                col-comparator (expr.comp/->comparator read-col read-col null-ordering)
 
                                ^Comparator
@@ -72,11 +75,9 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defmethod lp/emit-expr :order-by [{:keys [order relation]} args]
-  (let [order-specs (for [{:keys [column direction null-ordering], :or {direction :asc, null-ordering :nulls-last}} order]
-                      {:col-name (name column), :direction direction, :null-ordering null-ordering})]
-    (lp/unary-expr relation args
-      (fn [col-types]
-        {:col-types col-types
-         :->cursor (fn [{:keys [allocator]} in-cursor]
-                     (OrderByCursor. allocator in-cursor order-specs))}))))
+(defmethod lp/emit-expr :order-by [{:keys [order-specs relation]} args]
+  (lp/unary-expr relation args
+    (fn [col-types]
+      {:col-types col-types
+       :->cursor (fn [{:keys [allocator]} in-cursor]
+                   (OrderByCursor. allocator in-cursor order-specs))})))
