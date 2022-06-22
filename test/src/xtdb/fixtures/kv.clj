@@ -27,12 +27,7 @@
   (doseq [kv-opts [memkv-dep
                    mutablekv-dep
                    rocks-dep
-                   {:xtdb/module `xtdb.rocksdb.jnr/->kv-store
-                    :db-dir-suffix "rocksdb-jnr"}
-                   lmdb-dep
-                   {:xtdb/module `xtdb.lmdb.jnr/->kv-store
-                    :db-dir-suffix "lmdb-jnr"
-                    :env-mapsize 4096}]]
+                   lmdb-dep]]
     (binding [*kv-opts* (merge *kv-opts* kv-opts)]
       (t/testing (:xtdb/module *kv-opts*)
         (f)))))
