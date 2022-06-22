@@ -56,7 +56,6 @@
     (.close read-options)
     (.releaseSnapshot db snapshot)))
 
-;; TODO should die:
 (defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
   kv/KvSnapshot
   (new-iterator [_]
