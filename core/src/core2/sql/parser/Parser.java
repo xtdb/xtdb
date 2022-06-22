@@ -344,21 +344,23 @@ public final class Parser {
     public static final class MemoizeParser extends AParser {
         private final RuleParser parser;
         private final int ruleId;
+        private final int grammarSize;
 
-        public MemoizeParser(final RuleParser parser, final int ruleId) {
+        public MemoizeParser(final RuleParser parser, final int ruleId, final int grammarSize) {
             this.parser = parser;
             this.ruleId = ruleId;
+            this.grammarSize = grammarSize;
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[][] memos, final IParseErrors errors, final boolean hide) {
-            ParseState[] memo = memos[ruleId];
+            ParseState[] memo = memos[idx];
             if (memo == null) {
-                memo = memos[ruleId] = new ParseState[in.length() + 1];
+                memo = memos[idx] = new ParseState[grammarSize];
             }
-            ParseState state = memo[idx];
+            ParseState state = memo[ruleId];
             if (null == state) {
                 state = parser.parse(in, idx, memos, errors, hide);
-                memo[idx] = state == null ? NOT_FOUND : state;
+                memo[ruleId] = state == null ? NOT_FOUND : state;
                 return state;
             } else {
                 return state == NOT_FOUND ? null : state;
@@ -374,32 +376,34 @@ public final class Parser {
     public static final class MemoizeLeftRecParser extends AParser {
         private final RuleParser parser;
         private final int ruleId;
+        private final int grammarSize;
 
-        public MemoizeLeftRecParser(final RuleParser parser, final int ruleId) {
+        public MemoizeLeftRecParser(final RuleParser parser, final int ruleId, final int grammarSize) {
             this.parser = parser;
             this.ruleId = ruleId;
+            this.grammarSize = grammarSize;
         }
 
         public ParseState parse(final String in, final int idx, final ParseState[][] memos, final IParseErrors errors, final boolean hide) {
-            ParseState[] memo = memos[ruleId];
+            ParseState[] memo = memos[idx];
             if (memo == null) {
-                memo = memos[ruleId] = new ParseState[in.length() + 1];
+                memo = memos[idx] = new ParseState[grammarSize];
             }
-            ParseState state = memo[idx];
+            ParseState state = memo[ruleId];
             if (null == state) {
                 state = NOT_FOUND;
                 while (true) {
-                    memo[idx] = state;
+                    memo[ruleId] = state;
                     final ParseState newState = parser.parse(in, idx, memos, errors, hide);
                     if (newState != null) {
                         if (state != NOT_FOUND && newState.idx <= state.idx) {
-                            memo[idx] = null;
+                            memo[ruleId] = null;
                             return state;
                         } else {
                             state = newState;
                         }
                     } else {
-                        memo[idx] = null;
+                        memo[ruleId] = null;
                         return state == NOT_FOUND ? null : state;
                     }
                 }

@@ -190,15 +190,15 @@
                             (->raw? k))
                      parser (Parser$RuleParser. k raw? (build-parser k v))
                      parser (if (left-recursive? grammar k)
-                              (Parser$MemoizeLeftRecParser. parser rule-id)
-                              (Parser$MemoizeParser. parser rule-id))]]
+                              (Parser$MemoizeLeftRecParser. parser rule-id (count grammar))
+                              (Parser$MemoizeParser. parser rule-id (count grammar)))]]
          (aset rules rule-id ^Parser$AParser parser))
 
        (doseq [^Parser$AParser rule-parser rules]
          (.init rule-parser rules))
 
        (fn [^String in start-rule]
-         (let [memos (make-array parse-state-array-class (.size grammar))
+         (let [memos (make-array parse-state-array-class (inc (.length in)))
                parser (surround-parser-with-ws (aget rules (.get rule->id start-rule)) ws-pattern)]
            (if-let [state (.parse parser in 0 memos Parser/NULL_PARSE_ERRORS false)]
              (.nth (.ast state) 0 nil)
