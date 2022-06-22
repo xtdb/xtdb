@@ -424,7 +424,7 @@ image::https://xtdb.com/images/blog/truth-17-network-diagram.svg[A data mesh of 
 And thus we are back where we started. Events are _true_ but difficult to query. States are _true_ but don't always map directly to the events which created them. Events and states are different kinds of facts and most systems demand both. Buckets and pipes. Trucks and tubes.
 footnote:alvaro[There exist models in which these two categories are combined or blurred, as the example query language explored in https://www.youtube.com/watch?v=R2Aa4PivG0g&t=920s[this Peter Alvaro talk from StrangeLoop 2015], but they are not commonly observed in the business world.]
 
-Event streaming is often said to be the digital equivalent of the human body's central nervous system. What, then, is the brain? Who is answering our questions? Only a database can fulfill this purpose. A cache forgets.
+Event streaming is often said to be the digital equivalent of the human body's central nervous system. What, then, is the brain? Who is answering our questions? Only an immutable database can fulfill this purpose. A cache forgets.
 
 {zwsp} +
 {zwsp} +
