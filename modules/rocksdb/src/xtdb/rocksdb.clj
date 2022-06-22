@@ -110,7 +110,7 @@
     (xio/try-close metrics)
     (xio/try-close cp-job)))
 
-(def ^:private cp-format {:index-version c/index-version, ::version "6"})
+(def ^:private cp-format {:index-version c/index-version, ::version "7"})
 
 (defn ->lru-block-cache {::sys/args {:cache-size {:doc "Cache size"
                                                   :default (* 8 1024 1024)
