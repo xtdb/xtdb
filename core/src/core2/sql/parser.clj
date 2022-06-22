@@ -148,7 +148,11 @@
          parse-state-array-class (Class/forName "[Lcore2.sql.parser.Parser$ParseState;")]
      (letfn [(build-parser [rule-name {:keys [tag hide] :as parser}]
                (let [parser (case tag
-                              :nt (Parser$NonTerminalParser. (get rule->id (:keyword parser)))
+                              :nt (let [body (get grammar (:keyword parser))]
+                                    (if (and (or hide (= {:reduction-type :raw} (:red body)))
+                                             (contains? #{:string :regexp :nt} (:tag body)))
+                                      (build-parser rule-name body)
+                                      (Parser$NonTerminalParser. (get rule->id (:keyword parser)))))
                               :star (Parser$RepeatParser. (build-parser rule-name (:parser parser)) true)
                               :plus (Parser$RepeatParser. (build-parser rule-name (:parser parser)) false)
                               :opt (Parser$OptParser. (build-parser rule-name (:parser parser)))
