@@ -377,7 +377,7 @@
                                          (->> (for [type-vec-data-idx (range (.getElementStartIndex type-vec col-idx)
                                                                              (.getElementEndIndex type-vec col-idx))
                                                     :let [col-idx (.get type-vec-data type-vec-data-idx)
-                                                          col-name (str (.getObject col-name-vec col-idx))]]
+                                                          col-name (symbol (str (.getObject col-name-vec col-idx)))]]
                                                 [col-name (->col-type col-idx)])
                                               (into {})))]
 

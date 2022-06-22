@@ -180,7 +180,7 @@
           ctx))
       (case mode
         :ok (update ctx :db-engine execute-statement statement)
-        :error (do (t/is (thrown? Exception (execute-statement db-engine statement))) ;;TODO shouldn't rely on t/is anymore 
+        :error (do (t/is (thrown? Exception (execute-statement db-engine statement))) ;;TODO shouldn't rely on t/is anymore
                    ctx)))))
 
 (defn- format-result-str [sort-mode type-string result]
@@ -362,9 +362,9 @@
 
   (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/index/random/10/slt_good_0.test"))
 
- (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
+  (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
-  (time (-main "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/select1.test"))
+  (time (-main "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/select3.test"))
 
   (= (time
       (with-out-str

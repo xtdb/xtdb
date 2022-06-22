@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [core2.rewrite :refer [zmatch]]
             [core2.util :as util])
-  (:import clojure.lang.Keyword
+  (:import (clojure.lang Keyword MapEntry)
            (core2.vector IDenseUnionWriter IVectorWriter)
            (core2.vector.extensions KeywordType KeywordVector UriType UriVector UuidType UuidVector)
            java.net.URI
@@ -440,40 +440,36 @@
     #{col-type}))
 
 (defn merge-col-types [& col-types]
-  (let [col-types (distinct col-types)]
-    (case (count col-types)
-      0 :null
-      1 (first col-types)
+  (letfn [(merge-col-type* [acc col-type]
+            (zmatch col-type
+              [:union inner-types] (reduce merge-col-type* acc inner-types)
+              [:list inner-type] (update acc :list merge-col-type* inner-type)
+              [:fixed-size-list el-count inner-type] (update acc [:fixed-size-list el-count] merge-col-type* inner-type)
+              [:struct struct-col-types] (update acc [:struct (set (keys struct-col-types))]
+                                                 (fn [acc]
+                                                   (reduce-kv (fn [acc col-name col-type]
+                                                                (update acc col-name merge-col-type* col-type))
+                                                              acc
+                                                              struct-col-types)))
+              (assoc acc col-type nil)))
 
-      (let [new-col-types (->> (for [col-type col-types
-                                     :when col-type
-                                     child-col-type (flatten-union-types col-type)]
-                                 child-col-type)
-                               (group-by col-type-head)
-                               (mapcat (fn [[type-head col-types]]
-                                         (case type-head
-                                           :list
-                                           [[:list (->> col-types
-                                                        (map second)
-                                                        (apply merge-col-types))]]
+          (kv->col-type [[head opts]]
+            (case (if (vector? head) (first head) head)
+              :list [:list (map->col-type opts)]
+              :fixed-size-list [:fixed-size-list (second head) (map->col-type opts)]
+              :struct [:struct (->> (for [[col-name col-type-map] opts]
+                                      (MapEntry/create col-name (map->col-type col-type-map)) )
+                                    (into {}))]
+              head))
 
-                                           :struct
-                                           (->> col-types
-                                                (group-by (fn [[_ struct-col-types]]
-                                                            (set (keys struct-col-types))))
-                                                (map (comp (fn [col-types]
-                                                             [:struct (->> (for [[col-name col-types] (->> (mapcat second col-types)
-                                                                                                           (group-by key))]
-                                                                             [col-name (->> (map second col-types)
-                                                                                            (apply merge-col-types))])
-                                                                           (into {}))])
-                                                           val)))
+          (map->col-type [col-type-map]
+            (case (count col-type-map)
+              0 :null
+              1 (kv->col-type (first col-type-map))
+              [:union (into #{} (map kv->col-type) col-type-map)]))]
 
-                                           (set col-types)))))]
-        (case (count new-col-types)
-          0 :null
-          1 (first new-col-types)
-          [:union (set new-col-types)])))))
+    (-> (transduce (comp (remove nil?) (distinct)) (completing merge-col-type*) {} col-types)
+        (map->col-type))))
 
 ;;; multis
 
@@ -520,11 +516,16 @@
 (defmethod arrow-type->col-type ArrowType$Utf8 [_] :utf8)
 (defmethod arrow-type->col-type ArrowType$Binary [_] :varbinary)
 
+(defn- col-type->nullable-col-type [col-type]
+  (zmatch col-type
+    [:union inner-types] [:union (conj inner-types :null)]
+    :null :null
+    [:union #{:null col-type}]))
+
 (defn field->col-type [^Field field]
   (let [inner-type (apply arrow-type->col-type (.getType field) (.getChildren field))]
-    (if (.isNullable field)
-      (apply merge-col-types :null (flatten-union-types inner-type))
-      inner-type)))
+    (cond-> inner-type
+      (.isNullable field) col-type->nullable-col-type)))
 
 ;;; fixed size binary
 

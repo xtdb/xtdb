@@ -253,9 +253,9 @@
         (t/is (= [:list [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64 :bool}]]
                  (.columnType mm "list")))
 
-        (t/is (= [:struct {"a" [:union #{:bool :i64}]
-                           "b" [:union #{:utf8
-                                         [:struct {"c" :utf8, "d" :utf8}]}]}]
+        (t/is (= [:struct '{a [:union #{:bool :i64}]
+                            b [:union #{:utf8
+                                        [:struct {c :utf8, d :utf8}]}]}]
                  (.columnType mm "struct")))))))
 
 (t/deftest round-trips-nils
