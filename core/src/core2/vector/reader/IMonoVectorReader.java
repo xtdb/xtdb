@@ -1,38 +1,18 @@
 package core2.vector.reader;
 
-import org.apache.arrow.memory.ArrowBuf;
+import java.nio.ByteBuffer;
 
 public interface IMonoVectorReader {
 
-    default boolean readBoolean(int idx) {
-        throw new UnsupportedOperationException("can't read boolean");
-    }
+    boolean readBoolean(int idx);
+    byte readByte(int idx);
+    short readShort(int idx);
+    int readInt(int idx);
+    long readLong(int idx);
 
-    default byte readByte(int idx) {
-        throw new UnsupportedOperationException("can't read byte");
-    }
+    float readFloat(int idx);
+    double readDouble(int idx);
 
-    default short readShort(int idx) {
-        throw new UnsupportedOperationException("can't read short");
-    }
-
-    default int readInt(int idx) {
-        throw new UnsupportedOperationException("can't read int");
-    }
-
-    default long readLong(int idx) {
-        throw new UnsupportedOperationException("can't read long");
-    }
-
-    default float readFloat(int idx) {
-        throw new UnsupportedOperationException("can't read float");
-    }
-
-    default double readDouble(int idx) {
-        throw new UnsupportedOperationException("can't read double");
-    }
-
-    default Object readObject(int idx) {
-        throw new UnsupportedOperationException("can't read Object");
-    }
+    ByteBuffer readBuffer(int idx);
+    Object readObject(int idx);
 }

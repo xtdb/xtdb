@@ -37,12 +37,12 @@
 
 (deftype FixedSizeBinaryReader [^FixedSizeBinaryVector arrow-vec, ^int byte-width]
   IMonoVectorReader
-  (readObject [_ idx]
+  (readBuffer [_ idx]
     (.nioBuffer (.getDataBuffer arrow-vec) (* byte-width idx) byte-width)))
 
 (deftype VariableWidthReader [^BaseVariableWidthVector arrow-vec]
   IMonoVectorReader
-  (readObject [_ idx]
+  (readBuffer [_ idx]
     (.nioBuffer (.getDataBuffer arrow-vec) (.getStartOffset arrow-vec idx) (.getValueLength arrow-vec idx))))
 
 (extend-protocol MonoReaderFactory
@@ -144,6 +144,7 @@
   (readLong [_] (.readLong inner idx))
   (readFloat [_] (.readFloat inner idx))
   (readDouble [_] (.readDouble inner idx))
+  (readBuffer [_] (.readBuffer inner idx))
   (readObject [_] (.readObject inner idx)))
 
 (deftype MonoToPolyReader [^IMonoVectorReader inner
@@ -163,6 +164,7 @@
   (readLong [_] (.readLong inner idx))
   (readFloat [_] (.readFloat inner idx))
   (readDouble [_] (.readDouble inner idx))
+  (readBuffer [_] (.readBuffer inner idx))
   (readObject [_] (.readObject inner idx)))
 
 (deftype DuvReader [^DenseUnionVector duv, ^bytes type-id-mapping,
@@ -188,6 +190,7 @@
   (readLong [_] (.readLong inner-rdr inner-offset))
   (readFloat [_] (.readFloat inner-rdr inner-offset))
   (readDouble [_] (.readDouble inner-rdr inner-offset))
+  (readBuffer [_] (.readBuffer inner-rdr inner-offset))
   (readObject [_] (.readObject inner-rdr inner-offset)))
 
 (extend-protocol PolyReaderFactory
@@ -237,6 +240,7 @@
   (readLong [_ idx] (.readLong inner (aget idxs idx)))
   (readFloat [_ idx] (.readFloat inner (aget idxs idx)))
   (readDouble [_ idx] (.readDouble inner (aget idxs idx)))
+  (readBuffer [_ idx] (.readBuffer inner (aget idxs idx)))
   (readObject [_ idx] (.readObject inner (aget idxs idx))))
 
 (deftype IndirectVectorPolyReader [^IPolyVectorReader inner, ^ints idxs]
@@ -251,4 +255,5 @@
   (readLong [_] (.readLong inner))
   (readFloat [_] (.readFloat inner))
   (readDouble [_] (.readDouble inner))
+  (readBuffer [_] (.readBuffer inner))
   (readObject [_] (.readObject inner)))

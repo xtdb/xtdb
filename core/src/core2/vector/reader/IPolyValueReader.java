@@ -1,37 +1,19 @@
 package core2.vector.reader;
 
+import java.nio.ByteBuffer;
+
 public interface IPolyValueReader {
     byte getTypeId();
 
-    default boolean readBoolean() {
-        throw new UnsupportedOperationException("can't read boolean");
-    }
+    boolean readBoolean();
+    byte readByte();
+    short readShort();
+    int readInt();
+    long readLong();
 
-    default byte readByte() {
-        throw new UnsupportedOperationException("can't read byte");
-    }
+    float readFloat();
+    double readDouble();
 
-    default short readShort() {
-        throw new UnsupportedOperationException("can't read short");
-    }
-
-    default int readInt() {
-        throw new UnsupportedOperationException("can't read int");
-    }
-
-    default long readLong() {
-        throw new UnsupportedOperationException("can't read long");
-    }
-
-    default float readFloat() {
-        throw new UnsupportedOperationException("can't read float");
-    }
-
-    default double readDouble() {
-        throw new UnsupportedOperationException("can't read double");
-    }
-
-    default Object readObject() {
-        throw new UnsupportedOperationException("can't read Object");
-    }
+    ByteBuffer readBuffer();
+    Object readObject();
 }

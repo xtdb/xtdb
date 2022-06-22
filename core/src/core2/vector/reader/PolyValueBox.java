@@ -1,5 +1,7 @@
 package core2.vector.reader;
 
+import java.nio.ByteBuffer;
+
 public class PolyValueBox implements IPolyValueReader {
     private byte typeId;
 
@@ -12,6 +14,7 @@ public class PolyValueBox implements IPolyValueReader {
     private float floatValue;
     private double doubleValue;
 
+    private ByteBuffer bufferValue;
     private Object objectValue;
 
     @Override
@@ -55,8 +58,17 @@ public class PolyValueBox implements IPolyValueReader {
     }
 
     @Override
+    public ByteBuffer readBuffer() {
+        return bufferValue;
+    }
+
+    @Override
     public Object readObject() {
         return objectValue;
+    }
+
+    public void writeNull(byte typeId, Void nullValue) {
+        this.typeId = typeId;
     }
 
     public void writeBoolean(byte typeId, boolean booleanValue) {
@@ -94,7 +106,12 @@ public class PolyValueBox implements IPolyValueReader {
         this.doubleValue = doubleValue;
     }
 
-    public void writeObject(byte typeId, Object objectValue) {
+    public void writeBuffer(byte typeId, ByteBuffer bufferValue) {
+        this.typeId = typeId;
+        this.bufferValue = bufferValue;
+    }
+
+    public void writeObject(byte typeId, Object bufferValue) {
         this.typeId = typeId;
         this.objectValue = objectValue;
     }

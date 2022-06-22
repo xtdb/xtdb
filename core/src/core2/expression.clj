@@ -11,7 +11,7 @@
   (:import (clojure.lang Keyword MapEntry)
            (core2 StringUtil)
            (core2.operator IProjectionSpec IRelationSelector)
-           (core2.vector IIndirectRelation IIndirectVector IRowCopier IVectorWriter)
+           (core2.vector IIndirectRelation IIndirectVector IRowCopier)
            core2.vector.reader.PolyValueBox
            (core2.vector.extensions KeywordType UuidType)
            (java.nio ByteBuffer)
@@ -24,7 +24,7 @@
            (java.util.stream IntStream)
            (org.apache.arrow.vector BigIntVector BitVector IntVector IntervalDayVector IntervalYearVector NullVector PeriodDuration ValueVector)
            (org.apache.arrow.vector.complex FixedSizeListVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList ArrowType$List ArrowType$Union Field)
+           (org.apache.arrow.vector.types.pojo ArrowType$Union)
            (org.apache.commons.codec.binary Hex)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -269,15 +269,20 @@
   :default ::default,
   :hierarchy #'types/col-type-hierarchy)
 
-(defmethod read-value-code ::default [_ & args] `(.readObject ~@args))
-(defmethod write-value-code ::default [_ & args] `(.writeObject ~@args))
-
 (defmethod read-value-code :null [_ & _args] nil)
+(defmethod write-value-code :null [_ & args] `(.writeNull ~@args))
 
 (doseq [[k sym] '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double
-                  :date Int, :time Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :interval Object}]
+                  :date Int, :time Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :interval Object
+                  :utf8 Buffer, :varbinary Buffer}]
   (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" sym)) ~@args))
   (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" sym)) ~@args)))
+
+(defmethod read-value-code :extension-type [[_ _ underlying-type _] & args]
+  (apply read-value-code underlying-type args))
+
+(defmethod write-value-code :extension-type [[_ _ underlying-type _] & args]
+  (apply write-value-code underlying-type args))
 
 (defn- wrap-boxed-poly-return [{:keys [return-type continue] :as emitted-expr} _]
   (zmatch return-type
