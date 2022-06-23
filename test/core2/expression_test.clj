@@ -296,7 +296,7 @@
     (t/is (false? (run-test '> 4 1 2)))))
 
 (defn- project-mono-value [f-sym val col-type]
-  (with-open [rel (open-rel [(tu/open-vec "s" [val])])]
+  (with-open [rel (open-rel [(tu/open-vec "s" col-type [val])])]
     (-> (run-projection rel (list f-sym 's))
         :res
         first)))
@@ -1544,48 +1544,48 @@
   (t/are [expected expr data]
     (= (some-> expected edn/period-duration-reader) (project1 expr data))
 
-    ;; nil '(single-field-interval nil "YEAR" 2 0) {}
-    ;; nil '(single-field-interval nil "MONTH" 2 0) {}
-    ;; nil '(single-field-interval nil "DAY" 2 0) {}
-    ;; nil '(single-field-interval nil "HOUR" 2 0) {}
-    ;; nil '(single-field-interval nil "MINUTE" 2 0) {}
-    ;; nil '(single-field-interval nil "SECOND" 2 6) {}
+    nil '(single-field-interval nil "YEAR" 2 0) {}
+    nil '(single-field-interval nil "MONTH" 2 0) {}
+    nil '(single-field-interval nil "DAY" 2 0) {}
+    nil '(single-field-interval nil "HOUR" 2 0) {}
+    nil '(single-field-interval nil "MINUTE" 2 0) {}
+    nil '(single-field-interval nil "SECOND" 2 6) {}
 
-    ;; "P0D PT0S" '(single-field-interval 0 "YEAR" 2 0) {}
-    ;; "P0D PT0S" '(single-field-interval 0 "MONTH" 2 0) {}
-    ;; "P0D PT0S" '(single-field-interval 0 "DAY" 2 0) {}
-    ;; "P0D PT0S" '(single-field-interval 0 "HOUR" 2 0) {}
-    ;; "P0D PT0S" '(single-field-interval 0 "MINUTE" 2 0) {}
-    ;; "P0D PT0S" '(single-field-interval 0 "SECOND" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "YEAR" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "MONTH" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "DAY" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "HOUR" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "MINUTE" 2 0) {}
+    "P0D PT0S" '(single-field-interval 0 "SECOND" 2 0) {}
 
-    ;; "P0D PT0S" '(single-field-interval a "YEAR" 2 0) {:a 0}
-    ;; "P0D PT0S" '(single-field-interval a "MONTH" 2 0) {:a 0}
-    ;; "P0D PT0S" '(single-field-interval a "DAY" 2 0) {:a 0}
-    ;; "P0D PT0S" '(single-field-interval a "HOUR" 2 0) {:a 0}
-    ;; "P0D PT0S" '(single-field-interval a "MINUTE" 2 0) {:a 0}
-    ;; "P0D PT0S" '(single-field-interval a "SECOND" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "YEAR" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "MONTH" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "DAY" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "HOUR" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "MINUTE" 2 0) {:a 0}
+    "P0D PT0S" '(single-field-interval a "SECOND" 2 0) {:a 0}
 
-    ;; ;; Y / M distinction is lost when writing to IntervalYear vectors
-    ;; "P12M PT0S" '(single-field-interval 1 "YEAR" 2 0) {}
-    ;; "P-24M PT0S" '(single-field-interval -2 "YEAR" 2 0) {}
+    ;; Y / M distinction is lost when writing to IntervalYear vectors
+    "P12M PT0S" '(single-field-interval 1 "YEAR" 2 0) {}
+    "P-24M PT0S" '(single-field-interval -2 "YEAR" 2 0) {}
 
-    ;; "P1M PT0S" '(single-field-interval 1 "MONTH" 2 0) {}
-    ;; "P-2M PT0S" '(single-field-interval -2 "MONTH" 2 0) {}
+    "P1M PT0S" '(single-field-interval 1 "MONTH" 2 0) {}
+    "P-2M PT0S" '(single-field-interval -2 "MONTH" 2 0) {}
 
-    ;; "P1D PT0S" '(single-field-interval 1 "DAY" 2 0) {}
-    ;; "P-2D PT0S" '(single-field-interval -2 "DAY" 2 0) {}
+    "P1D PT0S" '(single-field-interval 1 "DAY" 2 0) {}
+    "P-2D PT0S" '(single-field-interval -2 "DAY" 2 0) {}
 
-    ;; "P0D PT1H" '(single-field-interval 1 "HOUR" 2 0) {}
-    ;; "P0D PT-2H" '(single-field-interval -2 "HOUR" 2 0) {}
+    "P0D PT1H" '(single-field-interval 1 "HOUR" 2 0) {}
+    "P0D PT-2H" '(single-field-interval -2 "HOUR" 2 0) {}
 
-    ;; "P0D PT1M" '(single-field-interval 1 "MINUTE" 2 0) {}
-    ;; "P0D PT-2M" '(single-field-interval -2 "MINUTE" 2 0) {}
+    "P0D PT1M" '(single-field-interval 1 "MINUTE" 2 0) {}
+    "P0D PT-2M" '(single-field-interval -2 "MINUTE" 2 0) {}
 
-    ;; "P0D PT1S" '(single-field-interval 1 "SECOND" 2 6) {}
-    ;; "P0D PT-2S" '(single-field-interval -2 "SECOND" 2 6) {}
+    "P0D PT1S" '(single-field-interval 1 "SECOND" 2 6) {}
+    "P0D PT-2S" '(single-field-interval -2 "SECOND" 2 6) {}
 
-    ;; ;; fractional seconds
-    ;; "P0D PT1.34S" '(single-field-interval "1.34" "SECOND" 2 6) {}
+    ;; fractional seconds
+    "P0D PT1.34S" '(single-field-interval "1.34" "SECOND" 2 6) {}
 
     ;; multi part parsing
     nil '(multi-field-interval nil "YEAR" 2 "MONTH" 2) {}
