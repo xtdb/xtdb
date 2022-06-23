@@ -152,7 +152,6 @@
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
         (writeInt [_ v] (.set arrow-vec (.getPositionAndIncrement wp) (* v 86400000)))))))
 
-;; (@wot) unifies to nanos (of day) long
 (extend-protocol MonoFactory
   TimeSecVector
   (->mono-reader [arrow-vec]
