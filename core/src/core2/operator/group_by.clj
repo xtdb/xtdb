@@ -179,19 +179,31 @@
 (def ^:private acc-local (gensym 'acc-local))
 (def ^:private val-local (gensym 'val-local))
 (def ^:private acc-writer-sym (gensym 'acc-writer))
-(def ^:private group-mapping-sym (gensym 'group-mapping))
 
-(def ^:private emit-agg
-  (-> (fn [agg-expr acc-type input-opts]
-        (let [^List ordered-col-types (vec (second acc-type))
+(def emit-agg
+  (-> (fn [{:keys [to-type val-expr step-expr]} input-opts]
+        (let [group-mapping-sym (gensym 'group-mapping)
 
-              ;; ignore return-type of the codegen because it may be more specific than the acc type
+              return-type [:union (conj #{:null} to-type)]
+              ^List ordered-col-types (vec (second return-type))
+
+              acc-expr {:op :variable, :variable acc-col-sym, :idx group-idx-sym
+                        :extract-vec-from-rel? false}
+              agg-expr (-> {:op :if-some, :local val-local, :expr val-expr
+                            :then {:op :if-some, :local acc-local,
+                                   :expr acc-expr
+                                   :then step-expr
+                                   :else {:op :local, :local val-local}}
+                            :else acc-expr}
+                           (expr/prepare-expr))
+
               {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr input-opts)
+              ;; ignore return-type of the codegen because it may be more specific than the acc type
 
-              vec-type (-> (.getType (types/col-type->field acc-type))
+              vec-type (-> (.getType (types/col-type->field return-type))
                            (types/arrow-type->vector-type))]
 
-          {:return-type acc-type
+          {:return-type return-type
            :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag vec-type))
                                ~(-> expr/rel-sym (expr/with-tag IIndirectRelation))
                                ~(-> group-mapping-sym (expr/with-tag IntVector))]
@@ -213,7 +225,7 @@
                          eval)}))
       (util/lru-memoize)))
 
-(defn- reducing-agg-factory [{:keys [to-name to-type zero-row? val-expr step-expr]}]
+(defn- reducing-agg-factory [{:keys [to-name to-type zero-row?] :as agg-opts}]
   (let [to-type [:union (conj #{:null} to-type)]
         to-field (types/col-type->field to-name to-type)]
     (reify IAggregateSpecFactory
@@ -229,18 +241,7 @@
                                                     (into {acc-col-sym to-type}
                                                           (map (juxt #(symbol (.getName ^IIndirectVector %))
                                                                      #(-> (.getVector ^IIndirectVector %) .getField types/field->col-type)))))}
-                    acc-expr {:op :variable, :variable acc-col-sym, :idx group-idx-sym
-                              :extract-vec-from-rel? false}
-
-                    {:keys [eval-agg]} (emit-agg (-> {:op :if-some, :local val-local, :expr val-expr
-                                                      :then {:op :if-some, :local acc-local,
-                                                             :expr acc-expr
-                                                             :then step-expr
-                                                             :else {:op :local, :local val-local}}
-                                                      :else acc-expr}
-                                                     (expr/prepare-expr))
-                                                 [:union (conj #{to-type} :null)]
-                                                 input-opts)]
+                    {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
                 (eval-agg out-vec in-rel group-mapping)))
 
             (finish [_]
