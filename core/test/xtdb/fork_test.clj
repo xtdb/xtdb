@@ -14,6 +14,58 @@
                (xt/with-tx [[::xt/put {:xt/id :foo}]]))]
     (t/is (= {:xt/id :foo} (xt/entity db :foo)))))
 
+;; problem is valid-time capping, not just tx-fn
+;; original @jms notes:
+;;
+;; put a doc v1
+;; put a doc v2 into the future
+;; play tx-fn when valid-time is in the future
+;; play tx-fn when valid-time is in the past
+;; Compare the two (neither should see the updated entity, neither should see the future value
+;; consult tx-index, index-tx 441
+;; potentially two nodes, one to replay
+;; Theory here is that valid-time is not capped on this branch
+
+(t/deftest test-valid-time-capping-for-cas
+  (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2020"} #inst "2020"]])
+  (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2025"} #inst "2025"]])
+
+
+  (t/is (false? (xt/tx-committed? *api* (fix/submit+await-tx [[::xt/match :ivan {:xt/id :ivan :version "2025"}]
+                                                              [::xt/put {:xt/id :ivan :name "present-day"}]]))))
+  (t/is (true? (xt/tx-committed? *api* (fix/submit+await-tx [[::xt/match :ivan {:xt/id :ivan :version "2020"}]
+                                                             [::xt/put {:xt/id :ivan :name "present-day"}]])))))
+
+(t/deftest test-valid-time-capping-for-tx-fn
+  (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2020"} #inst "2020"]])
+  (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2025"} #inst "2025"]])
+
+  (assert (true? (xt/tx-committed? *api*
+                                   (fix/submit+await-tx [[::xt/put {:xt/id :update-fn
+                                                                    :xt/fn '(fn [ctx doc]
+                                                                              [[::xt/put (assoc (xtdb.api/entity (xtdb.api/db ctx) :ivan) :updated? true)]])}]]))))
+
+  (fix/submit+await-tx [[::xt/fn :update-fn {:name "Ivan"}]])
+
+  (t/is (= [#:xtdb.api{:tx-id 0, :doc {:version "2020", :xt/id :ivan}}
+            #:xtdb.api{:tx-id 3, :doc {:version "2020", :updated? true, :xt/id :ivan}}]
+           (->> (xt/entity-history (xt/db *api*  #inst "2024")
+                                   :ivan
+                                   :asc
+                                   {:with-docs? true
+                                    :with-corrections? true})
+                (mapv #(select-keys % [::xt/tx-id ::xt/doc])))))
+
+  (t/is (= [#:xtdb.api{:tx-id 0, :doc {:version "2020", :xt/id :ivan}}
+            #:xtdb.api{:tx-id 3, :doc {:version "2020", :updated? true, :xt/id :ivan}}
+            #:xtdb.api{:tx-id 1, :doc {:version "2025", :xt/id :ivan}}]
+           (->> (xt/entity-history (xt/db *api* #inst "2026")
+                                   :ivan
+                                   :asc
+                                   {:with-docs? true
+                                    :with-corrections? true})
+                (mapv #(select-keys % [::xt/tx-id ::xt/doc]))))))
+
 (t/deftest test-simple-fork
   (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :name "Ivna"}]])
 
