@@ -1,4 +1,4 @@
-package core2.vector.reader;
+package core2.vector;
 
 import java.nio.ByteBuffer;
 

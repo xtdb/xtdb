@@ -7,13 +7,13 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
-            [core2.vector.reader :as rdr]
+            [core2.vector :as vec]
             [core2.vector.writer :as vw])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap IRelationMapBuilder)
            (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (java.io Closeable)
-           (java.util ArrayList HashMap LinkedList List Spliterator)
+           (java.util ArrayList LinkedList List Spliterator)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream IntStream$Builder)
            (org.apache.arrow.memory BufferAllocator)
@@ -174,32 +174,31 @@
           (close [_] (.close out-vec)))))))
 
 (def ^:private acc-sym (gensym 'acc))
-(def ^:private acc-reader-sym (gensym 'acc-reader))
+(def ^:private acc-col-sym (gensym 'acc-col))
 (def ^:private group-idx-sym (gensym 'group-idx))
 (def ^:private acc-local (gensym 'acc-local))
 (def ^:private val-local (gensym 'val-local))
-
-(defmethod expr/codegen-expr ::read-acc [{::keys [acc-type]} _]
-  {:return-type [:union (conj #{:null} acc-type)]
-   :continue (fn [f]
-               `(case (.read ~acc-reader-sym ~group-idx-sym)
-                  0 ~(f :null nil)
-                  1 ~(f acc-type (expr/read-value-code acc-type acc-reader-sym))))})
+(def ^:private acc-writer-sym (gensym 'acc-writer))
 
 (def emit-agg
   (-> (fn [{:keys [to-type val-expr step-expr]} input-opts]
         (let [group-mapping-sym (gensym 'group-mapping)
+
+              return-type [:union (conj #{:null} to-type)]
+              ^List ordered-col-types (vec (second return-type))
+
+              acc-expr {:op :variable, :variable acc-col-sym, :idx group-idx-sym
+                        :extract-vec-from-rel? false}
               agg-expr (-> {:op :if-some, :local val-local, :expr val-expr
-                            :then {:op :if-some, :local acc-local, :expr {:op ::read-acc, ::acc-type to-type}
+                            :then {:op :if-some, :local acc-local,
+                                   :expr acc-expr
                                    :then step-expr
                                    :else {:op :local, :local val-local}}
-                            :else {:op :literal, :literal nil}}
+                            :else acc-expr}
                            (expr/prepare-expr))
 
               {:keys [continue] :as emitted-expr} (expr/codegen-expr agg-expr input-opts)
               ;; ignore return-type of the codegen because it may be more specific than the acc type
-
-              return-type [:union (conj #{:null} to-type)]
 
               vec-type (-> (.getType (types/col-type->field return-type))
                            (types/arrow-type->vector-type))]
@@ -208,7 +207,8 @@
            :eval-agg (-> `(fn [~(-> acc-sym (expr/with-tag vec-type))
                                ~(-> expr/rel-sym (expr/with-tag IIndirectRelation))
                                ~(-> group-mapping-sym (expr/with-tag IntVector))]
-                            (let [~acc-reader-sym (rdr/->poly-reader ~acc-sym [:null ~to-type])
+                            (let [~acc-col-sym (iv/->direct-vec ~acc-sym)
+                                  ~acc-writer-sym (vec/->poly-writer ~acc-sym ~ordered-col-types)
                                   ~@(expr/batch-bindings emitted-expr)]
                               (dotimes [~expr/idx-sym (.rowCount ~expr/rel-sym)]
                                 (let [~group-idx-sym (.get ~group-mapping-sym ~expr/idx-sym)]
@@ -216,7 +216,11 @@
                                     (.setValueCount ~acc-sym (inc ~group-idx-sym)))
 
                                   ~(continue (fn [acc-type acc-code]
-                                               (expr/set-value-form acc-type acc-sym group-idx-sym acc-code)))))))
+                                               `(do
+                                                  (.setPosition (.writerPosition ~acc-writer-sym) ~group-idx-sym)
+                                                  ~(expr/write-value-code acc-type acc-writer-sym
+                                                                          (.indexOf ordered-col-types acc-type)
+                                                                          acc-code))))))))
                          #_(doto clojure.pprint/pprint)
                          eval)}))
       (util/lru-memoize)))
@@ -234,8 +238,9 @@
             IAggregateSpec
             (aggregate [_ in-rel group-mapping]
               (let [input-opts {:var->col-type (->> (seq in-rel)
-                                                    (into {} (map (juxt #(symbol (.getName ^IIndirectVector %))
-                                                                        #(-> (.getVector ^IIndirectVector %) .getField types/field->col-type)))))}
+                                                    (into {acc-col-sym to-type}
+                                                          (map (juxt #(symbol (.getName ^IIndirectVector %))
+                                                                     #(-> (.getVector ^IIndirectVector %) .getField types/field->col-type)))))}
                     {:keys [eval-agg]} (emit-agg agg-opts input-opts)]
                 (eval-agg out-vec in-rel group-mapping)))
 

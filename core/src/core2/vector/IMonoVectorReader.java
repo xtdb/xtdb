@@ -1,4 +1,6 @@
-package core2.vector.reader;
+package core2.vector;
+
+import org.apache.arrow.memory.ArrowBuf;
 
 import java.nio.ByteBuffer;
 

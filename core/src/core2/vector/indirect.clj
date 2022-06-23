@@ -1,9 +1,9 @@
 (ns core2.vector.indirect
-  (:require [core2.vector.reader :as rdr]
+  (:require [core2.vector :as vec]
             [core2.types :as ty]
             [core2.util :as util])
   (:import core2.DenseUnionUtil
-           [core2.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader IVectorWriter]
+           [core2.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader]
            [java.util LinkedHashMap Map]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
@@ -45,15 +45,15 @@
 
                 (instance? DenseUnionVector v)
                 (let [^DenseUnionVector v v
-                      rdrs (mapv #(reader-for-key % col-name) (.getChildrenFromFields v))]
+                      vecs (mapv #(reader-for-key % col-name) (.getChildrenFromFields v))]
                   (reify IIndirectVector
                     (isPresent [_ idx]
                       ;; TODO `(.getOffset v idx)` rather than just `idx`?
                       ;; haven't made a test fail with it yet, either way.
-                      (.isPresent ^IIndirectVector (nth rdrs (.getTypeId v idx)) idx))
+                      (.isPresent ^IIndirectVector (nth vecs (.getTypeId v idx)) idx))
 
                     (rowCopier [_ivec w]
-                      (let [copiers (mapv #(.rowCopier ^IIndirectVector % w) rdrs)]
+                      (let [copiers (mapv #(.rowCopier ^IIndirectVector % w) vecs)]
                         (reify IRowCopier
                           (copyRow [_ idx]
                             (.copyRow ^IRowCopier (nth copiers (.getTypeId v idx))
@@ -106,18 +106,18 @@
 
       (instance? DenseUnionVector v)
       (let [^DenseUnionVector v v
-            rdrs (mapv ->list-reader (.getChildrenFromFields v))]
+            vecs (mapv ->list-reader (.getChildrenFromFields v))]
         (reify IListReader
           (isPresent [_ idx]
-            (.isPresent ^IListReader (nth rdrs (.getTypeId v idx)) (.getOffset v idx)))
+            (.isPresent ^IListReader (nth vecs (.getTypeId v idx)) (.getOffset v idx)))
           (getElementStartIndex [_ idx]
-            (let [^IListReader rdr (nth rdrs (.getTypeId v idx))]
-              (.getElementStartIndex rdr idx)))
+            (let [^IListReader vec (nth vecs (.getTypeId v idx))]
+              (.getElementStartIndex vec idx)))
           (getElementEndIndex [_ idx]
-            (let [^IListReader rdr (nth rdrs (.getTypeId v idx))]
-              (.getElementEndIndex rdr idx)))
+            (let [^IListReader vec (nth vecs (.getTypeId v idx))]
+              (.getElementEndIndex vec idx)))
           (elementCopier [this w]
-            (let [copiers (mapv #(some-> ^IListReader % (.elementCopier w)) rdrs)]
+            (let [copiers (mapv #(some-> ^IListReader % (.elementCopier w)) vecs)]
               (reify IListElementCopier
                 (copyElement [_ idx n]
                   (let [^IListElementCopier copier (nth copiers (.getTypeId v idx))]
@@ -157,8 +157,8 @@
   (structReader [_] (->StructReader v))
   (listReader [_] (->list-reader v))
 
-  (monoReader [_] (rdr/->mono-reader v))
-  (polyReader [_ ordered-col-types] (rdr/->poly-reader v ordered-col-types)))
+  (monoReader [_] (vec/->mono-reader v))
+  (polyReader [_ ordered-col-types] (vec/->poly-reader v ordered-col-types)))
 
 (defn compose-selection
   "Returns the composition of the selections sel1, sel2 which when applied to a vector will be the same as (select (select iv sel1) sel2).
@@ -218,12 +218,12 @@
           (.copyRow copier (.getIndex this-vec idx))))))
 
   (monoReader [_]
-    (-> (rdr/->mono-reader v)
-        (rdr/->IndirectVectorMonoReader idxs)))
+    (-> (vec/->mono-reader v)
+        (vec/->IndirectVectorMonoReader idxs)))
 
   (polyReader [_ ordered-col-types]
-    (-> (rdr/->poly-reader v ordered-col-types)
-        (rdr/->IndirectVectorPolyReader idxs))))
+    (-> (vec/->poly-reader v ordered-col-types)
+        (vec/->IndirectVectorPolyReader idxs))))
 
 (defn ->direct-vec ^core2.vector.IIndirectVector [^ValueVector in-vec]
   (DirectVector. in-vec (.getName in-vec)))

@@ -1,13 +1,9 @@
 package core2.vector;
 
-import core2.vector.reader.IMonoVectorReader;
-import core2.vector.reader.IPolyVectorReader;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.ValueVector;
-import org.apache.arrow.vector.types.pojo.Field;
 
 import java.util.List;
-import java.util.Set;
 
 public interface IIndirectVector<V extends ValueVector> extends AutoCloseable {
 

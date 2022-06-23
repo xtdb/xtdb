@@ -7,13 +7,13 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
+            [core2.vector :as vec]
             [core2.vector.writer :as vw])
   (:import (clojure.lang Keyword MapEntry)
            (core2 StringUtil)
            (core2.operator IProjectionSpec IRelationSelector)
            (core2.vector IIndirectRelation IIndirectVector IRowCopier)
-           core2.vector.reader.PolyValueBox
-           (core2.vector.extensions KeywordType UuidType)
+           core2.vector.PolyValueBox
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
            (java.time Clock Duration Instant LocalDate Period ZoneId ZoneOffset ZonedDateTime)
@@ -22,9 +22,8 @@
            (java.util.function IntUnaryOperator)
            (java.util.regex Pattern)
            (java.util.stream IntStream)
-           (org.apache.arrow.vector BigIntVector BitVector IntVector IntervalDayVector IntervalYearVector NullVector PeriodDuration ValueVector)
+           (org.apache.arrow.vector BigIntVector BitVector IntVector NullVector PeriodDuration ValueVector)
            (org.apache.arrow.vector.complex FixedSizeListVector ListVector StructVector)
-           (org.apache.arrow.vector.types.pojo ArrowType$Union)
            (org.apache.commons.codec.binary Hex)))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -197,6 +196,36 @@
     x))
 
 #_{:clj-kondo/ignore [:unused-binding]}
+(defmulti read-value-code
+  (fn [col-type & args]
+    (types/col-type-head col-type))
+  :default ::default,
+  :hierarchy #'types/col-type-hierarchy)
+
+#_{:clj-kondo/ignore [:unused-binding]}
+(defmulti write-value-code
+  (fn [col-type & args]
+    (types/col-type-head col-type))
+  :default ::default,
+  :hierarchy #'types/col-type-hierarchy)
+
+(defmethod read-value-code :null [_ & _args] nil)
+(defmethod write-value-code :null [_ & args] `(.writeNull ~@args))
+
+(doseq [[k sym] '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double
+                  :date Int, :time Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :interval Object
+                  :utf8 Buffer, :varbinary Buffer}]
+  (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" sym)) ~@args))
+  (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" sym)) ~@args)))
+
+(defmethod read-value-code :extension-type [[_ _ underlying-type _] & args]
+  (apply read-value-code underlying-type args))
+
+(defmethod write-value-code :extension-type [[_ _ underlying-type _] & args]
+  (apply write-value-code underlying-type args))
+
+
+#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti emit-value
   (fn [val-class code] val-class)
   :default ::default)
@@ -242,6 +271,11 @@
        :literal literal})
     expr))
 
+(defn prepare-expr [expr]
+  (->> expr
+       (macro/macroexpand-all)
+       (walk/postwalk-expr lit->param)))
+
 (defmethod codegen-expr :param [{:keys [param param-type] :as expr} {:keys [param-types param-classes]}]
   (let [param-type (get param-types param param-type)
         param-class (get expr :param-class (get param-classes param))]
@@ -254,35 +288,6 @@
            :continue (fn [f]
                        (f param-type param))}
           (select-keys expr #{:literal}))))
-
-#_{:clj-kondo/ignore [:unused-binding]}
-(defmulti read-value-code
-  (fn [col-type & args]
-    (types/col-type-head col-type))
-  :default ::default,
-  :hierarchy #'types/col-type-hierarchy)
-
-#_{:clj-kondo/ignore [:unused-binding]}
-(defmulti write-value-code
-  (fn [col-type & args]
-    (types/col-type-head col-type))
-  :default ::default,
-  :hierarchy #'types/col-type-hierarchy)
-
-(defmethod read-value-code :null [_ & _args] nil)
-(defmethod write-value-code :null [_ & args] `(.writeNull ~@args))
-
-(doseq [[k sym] '{:bool Boolean, :i8 Byte, :i16 Short, :i32 Int, :i64 Long, :f32 Float, :f64 Double
-                  :date Int, :time Long, :timestamp-tz Long, :timestamp-local Long, :duration Long, :interval Object
-                  :utf8 Buffer, :varbinary Buffer}]
-  (defmethod read-value-code k [_ & args] `(~(symbol (str ".read" sym)) ~@args))
-  (defmethod write-value-code k [_ & args] `(~(symbol (str ".write" sym)) ~@args)))
-
-(defmethod read-value-code :extension-type [[_ _ underlying-type _] & args]
-  (apply read-value-code underlying-type args))
-
-(defmethod write-value-code :extension-type [[_ _ underlying-type _] & args]
-  (apply write-value-code underlying-type args))
 
 (defn- wrap-boxed-poly-return [{:keys [return-type continue] :as emitted-expr} _]
   (zmatch return-type
@@ -305,7 +310,8 @@
 
     emitted-expr))
 
-(defmethod codegen-expr :variable [{:keys [variable idx], :or {idx idx-sym}}
+(defmethod codegen-expr :variable [{:keys [variable idx extract-vec-from-rel?],
+                                    :or {idx idx-sym, extract-vec-from-rel? true}}
                                    {:keys [var->col-type extract-vecs-from-rel?]
                                     :or {extract-vecs-from-rel? true}}]
   ;; NOTE we now get the widest var-type in the expr itself, but don't use it here (yet? at all?)
@@ -318,7 +324,7 @@
       [:union inner-types]
       (let [ordered-col-types (vec inner-types)]
         {:return-type col-type
-         :batch-bindings (if extract-vecs-from-rel?
+         :batch-bindings (if (and extract-vecs-from-rel? extract-vec-from-rel?)
                            [[variable `(.polyReader (.vectorForName ~rel-sym ~(name variable))
                                                     ~ordered-col-types)]]
                            [[variable `(some-> ~variable (.polyReader ~ordered-col-types))]])
@@ -331,7 +337,7 @@
                                       cat)))))})
 
       {:return-type col-type
-       :batch-bindings (if extract-vecs-from-rel?
+       :batch-bindings (if (and extract-vecs-from-rel? extract-vec-from-rel?)
                          [[variable `(.monoReader (.vectorForName ~rel-sym ~(name variable)))]]
                          [[variable `(some-> ~variable (.monoReader))]])
        :continue (fn [f]
@@ -1408,170 +1414,6 @@
    :->call-code #(do `(~(type->cast cast-type) ~@%))})
 
 #_{:clj-kondo/ignore [:unused-binding]}
-(defmulti set-value-form
-  (fn [value-type out-vec-sym idx-sym code]
-    (types/col-type-head value-type))
-  :default ::default
-  :hierarchy #'types/col-type-hierarchy)
-
-(defmethod set-value-form :null [_ _out-vec-sym _idx-sym _code])
-
-(defmethod set-value-form :bool [_ out-vec-sym idx-sym code]
-  `(.set ~out-vec-sym ~idx-sym (if ~code 1 0)))
-
-(defmethod set-value-form :int [_ out-vec-sym idx-sym code]
-  `(.set ~out-vec-sym ~idx-sym (long ~code)))
-
-(defmethod set-value-form :float [_ out-vec-sym idx-sym code]
-  `(.set ~out-vec-sym ~idx-sym (double ~code)))
-
-(defn- set-bytebuf-form [out-vec-sym idx-sym code]
-  `(let [^ByteBuffer buf# ~code
-         pos# (.position buf#)]
-     (.setSafe ~out-vec-sym ~idx-sym buf#
-               pos# (.remaining buf#))
-     ;; setSafe mutates the buffer's position, so we reset it
-     (.position buf# pos#)))
-
-(defmethod set-value-form :utf8 [_ out-vec-sym idx-sym code]
-  (set-bytebuf-form out-vec-sym idx-sym code))
-
-(defmethod set-value-form :varbinary [_ out-vec-sym idx-sym code]
-  (set-bytebuf-form out-vec-sym idx-sym code))
-
-(defmethod set-value-form :timestamp-tz [_ out-vec-sym idx-sym code] `(.set ~out-vec-sym ~idx-sym ~code))
-(defmethod set-value-form :timestamp-local [_ out-vec-sym idx-sym code] `(.set ~out-vec-sym ~idx-sym ~code))
-(defmethod set-value-form :duration [_ out-vec-sym idx-sym code] `(.set ~out-vec-sym ~idx-sym ~code))
-
-(defmethod set-value-form :date [_ out-vec-sym idx-sym code]
-  ;; assuming we are writing to a date day vector, as that is the canonical representation
-  ;; TODO not convinced we can assume this?
-  `(.set ~out-vec-sym ~idx-sym ~code))
-
-(defmethod set-value-form :time [_ out-vec-sym idx-sym code] `(.set ~out-vec-sym ~idx-sym ~code))
-
-(defmethod set-value-form :interval [[_ interval-unit] out-vec-sym idx-sym code]
-  (case interval-unit
-    :year-month `(let [^PeriodDuration period-duration# ~code
-                       period# (.getPeriod period-duration#)]
-                   (.set ^IntervalYearVector ~out-vec-sym ~idx-sym (.toTotalMonths period#)))
-
-    :day-time `(let [^PeriodDuration period-duration# ~code
-                     period# (.getPeriod period-duration#)
-                     duration# (.getDuration period-duration#)
-                     ddays# (.toDaysPart duration#)
-                     dsecs# (Math/subtractExact (.getSeconds duration#) (Math/multiplyExact ddays# (long 86400)))
-                     dmillis# (.toMillisPart duration#)]
-                 (.set ^IntervalDayVector ~out-vec-sym ~idx-sym (Math/addExact (.getDays period#) (int ddays#)) (Math/addExact (Math/multiplyExact (int dsecs#) (int 1000)) dmillis#)))
-
-    :month-day-nano `(let [^PeriodDuration period-duration# ~code
-                           period# (.getPeriod period-duration#)
-                           duration# (.getDuration period-duration#)
-                           ddays# (.toDaysPart duration#)
-                           dsecs# (Math/subtractExact (.getSeconds duration#) (Math/multiplyExact ddays# (long 86400)))
-                           dnanos# (.toNanosPart duration#)]
-                       (.set ~out-vec-sym ~idx-sym (.toTotalMonths period#) (Math/addExact (.getDays period#) (int ddays#)) (Math/addExact (Math/multiplyExact dsecs# (long 1000000000)) (long dnanos#))))))
-
-(def ^:private out-vec-sym (gensym 'out-vec))
-(def ^:private out-writer-sym (gensym 'out-writer-sym))
-
-(defmulti extension-type-literal-form class)
-
-(defmethod extension-type-literal-form KeywordType [_] `KeywordType/INSTANCE)
-(defmethod extension-type-literal-form UuidType [_] `UuidType/INSTANCE)
-
-(defn- write-value-out-code [return-type]
-  (let [out-field (types/col-type->field return-type)]
-    (if (instance? ArrowType$Union (.getType out-field))
-      (let [[_ inner-types] return-type
-            ->writer-sym (->> inner-types
-                              (into {} (map (juxt identity (fn [_] (gensym 'writer))))))]
-        {:writer-bindings
-         (->> (cons [out-writer-sym `(.asDenseUnion ~out-writer-sym)]
-                    (for [[inner-type writer-sym] ->writer-sym]
-                      [writer-sym `(.writerForType ~out-writer-sym ~inner-type)]))
-              (apply concat))
-
-         :write-value-out!
-         (fn [return-type code]
-           (let [writer-sym (->writer-sym return-type)
-                 vec-type (-> (.getType (types/col-type->field return-type))
-                              (types/arrow-type->vector-type))]
-             `(do
-                (.startValue ~writer-sym)
-                ~(set-value-form return-type
-                                 (-> `(.getVector ~writer-sym)
-                                     (with-tag vec-type))
-                                 `(.getPosition ~writer-sym)
-                                 code)
-                (.endValue ~writer-sym))))})
-
-      {:write-value-out!
-       (fn [value-type code]
-         (when-not (= value-type :null)
-           (let [vec-type (-> (.getType (types/col-type->field value-type))
-                              (types/arrow-type->vector-type))]
-             (set-value-form value-type
-                             (-> `(.getVector ~out-writer-sym)
-                                 (with-tag vec-type))
-                             `(.getPosition ~out-writer-sym)
-                             code))))})))
-
-(defn- wrap-zone-id-cache-buster [f]
-  (fn [expr opts]
-    (f expr (assoc opts :zone-id (.getZone *clock*)))))
-
-(defn batch-bindings [emitted-expr]
-  (letfn [(child-seq [{:keys [children] :as expr}]
-            (lazy-seq
-             (cons expr (mapcat child-seq children))))]
-    (->> (for [{:keys [batch-bindings]} (child-seq emitted-expr)
-               batch-binding batch-bindings]
-           batch-binding)
-         (sequence (comp (distinct) cat)))))
-
-(defn prepare-expr [expr]
-  (->> expr
-       (macro/macroexpand-all)
-       (walk/postwalk-expr lit->param)))
-
-(def ^:private memo-generate-projection
-  "NOTE: we macroexpand inside the memoize on the assumption that
-   everything outside yields the same result on the pre-expanded expr - this
-   assumption wouldn't hold if macroexpansion created new variable exprs, for example.
-   macroexpansion is non-deterministic (gensym), so busts the memo cache."
-  (-> (fn [expr opts]
-        ;; TODO should lit->param be outside the memoize, s.t. we don't have a cache entry for each literal value?
-        (let [expr (prepare-expr expr)
-              {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
-
-              {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
-
-          {:expr-fn (delay
-                      (-> `(fn [~(-> out-vec-sym (with-tag ValueVector))
-                                ~(-> rel-sym (with-tag IIndirectRelation))
-                                ~params-sym]
-                             (let [~@(batch-bindings emitted-expr)
-
-                                   ~out-writer-sym (vw/vec->writer ~out-vec-sym)
-                                   ~@writer-bindings
-
-                                   row-count# (.rowCount ~rel-sym)]
-                               (.setValueCount ~out-vec-sym row-count#)
-                               (dotimes [~idx-sym row-count#]
-                                 (.startValue ~out-writer-sym)
-                                 ~(continue (fn [t c]
-                                              (write-value-out! t c)))
-                                 (.endValue ~out-writer-sym))))
-
-                          #_(doto clojure.pprint/pprint)
-                          eval))
-
-           :return-type return-type}))
-      (util/lru-memoize)
-      wrap-zone-id-cache-buster))
-
-#_{:clj-kondo/ignore [:unused-binding]}
 (defmulti emit-expr
   (fn [{:keys [op]} col-name opts]
     op)
@@ -1812,6 +1654,68 @@
                (.endValue out-data-writer))))
          (.endValue out-writer))))})
 
+(def ^:private out-vec-sym (gensym 'out-vec))
+(def ^:private out-writer-sym (gensym 'out-writer-sym))
+
+(defn batch-bindings [emitted-expr]
+  (letfn [(child-seq [{:keys [children] :as expr}]
+            (lazy-seq
+             (cons expr (mapcat child-seq children))))]
+    (->> (for [{:keys [batch-bindings]} (child-seq emitted-expr)
+               batch-binding batch-bindings]
+           batch-binding)
+         (sequence (comp (distinct) cat)))))
+
+(defn- write-value-out-code [return-type]
+  (zmatch return-type
+    [:union inner-types]
+    (let [ordered-col-types (vec inner-types)
+          type-ids (->> ordered-col-types
+                        (into {} (map-indexed (fn [idx val-type]
+                                                (MapEntry/create val-type (byte idx))))))]
+      {:writer-bindings [out-writer-sym `(vec/->poly-writer ~out-vec-sym ~ordered-col-types)]
+
+       :write-value-out! (fn [value-type code]
+                           (write-value-code value-type out-writer-sym (get type-ids value-type) code))})
+
+    {:writer-bindings [out-writer-sym `(vec/->mono-writer ~out-vec-sym)]
+     :write-value-out! (fn [value-type code]
+                         (write-value-code value-type out-writer-sym code))}))
+
+(defn- wrap-zone-id-cache-buster [f]
+  (fn [expr opts]
+    (f expr (assoc opts :zone-id (.getZone *clock*)))))
+
+(def ^:private memo-generate-projection
+  "NOTE: we macroexpand inside the memoize on the assumption that
+   everything outside yields the same result on the pre-expanded expr - this
+   assumption wouldn't hold if macroexpansion created new variable exprs, for example.
+   macroexpansion is non-deterministic (gensym), so busts the memo cache."
+  (-> (fn [expr opts]
+        ;; TODO should lit->param be outside the memoize, s.t. we don't have a cache entry for each literal value?
+        (let [expr (prepare-expr expr)
+              {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
+
+              {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
+
+          {:expr-fn (delay
+                      (-> `(fn [~(-> rel-sym (with-tag IIndirectRelation))
+                                ~params-sym
+                                ~(-> out-vec-sym (with-tag ValueVector))]
+                             (let [~@(batch-bindings emitted-expr)
+                                   ~@writer-bindings
+                                   row-count# (.rowCount ~rel-sym)]
+                               (dotimes [~idx-sym row-count#]
+                                 ~(continue (fn [t c]
+                                              (write-value-out! t c))))))
+
+                          #_(doto clojure.pprint/pprint)
+                          eval))
+
+           :return-type return-type}))
+      (util/lru-memoize)
+      wrap-zone-id-cache-buster))
+
 (def ^:private primitive-ops
   #{:variable :param :literal
     :call :let :local
@@ -1855,12 +1759,18 @@
 
            (let [out-vec (.createVector out-field al)]
              (try
-               (let [in-rel (-> (concat in-rel (for [[variable sub-expr-vec] evald-sub-exprs]
+               (let [row-count (.rowCount in-rel)
+                     in-rel (-> (concat in-rel (for [[variable sub-expr-vec] evald-sub-exprs]
                                                  (-> (iv/->direct-vec sub-expr-vec)
                                                      (.withName (name variable)))))
-                                (iv/->indirect-rel (.rowCount in-rel)))]
+                                (iv/->indirect-rel row-count))]
 
-                 (@expr-fn out-vec in-rel params))
+                 (.setInitialCapacity out-vec row-count)
+                 (.allocateNew out-vec)
+
+                 (@expr-fn in-rel params out-vec)
+
+                 (.setValueCount out-vec row-count))
 
                out-vec
                (catch Throwable e

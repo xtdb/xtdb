@@ -1,8 +1,8 @@
-package core2.vector.reader;
+package core2.vector;
 
 import java.nio.ByteBuffer;
 
-public class PolyValueBox implements IPolyValueReader {
+public class PolyValueBox implements IPolyValueReader, IPolyValueWriter {
     private byte typeId;
 
     private boolean booleanValue;
@@ -67,50 +67,60 @@ public class PolyValueBox implements IPolyValueReader {
         return objectValue;
     }
 
+    @Override
     public void writeNull(byte typeId, Void nullValue) {
         this.typeId = typeId;
     }
 
+    @Override
     public void writeBoolean(byte typeId, boolean booleanValue) {
         this.typeId = typeId;
         this.booleanValue = booleanValue;
     }
 
+    @Override
     public void writeByte(byte typeId, byte byteValue) {
         this.typeId = typeId;
         this.byteValue = byteValue;
     }
 
+    @Override
     public void writeShort(byte typeId, short shortValue) {
         this.typeId = typeId;
         this.shortValue = shortValue;
     }
 
+    @Override
     public void writeInt(byte typeId, int intValue) {
         this.typeId = typeId;
         this.intValue = intValue;
     }
 
+    @Override
     public void writeLong(byte typeId, long longValue) {
         this.typeId = typeId;
         this.longValue = longValue;
     }
 
+    @Override
     public void writeFloat(byte typeId, float floatValue) {
         this.typeId = typeId;
         this.floatValue = floatValue;
     }
 
+    @Override
     public void writeDouble(byte typeId, double doubleValue) {
         this.typeId = typeId;
         this.doubleValue = doubleValue;
     }
 
+    @Override
     public void writeBuffer(byte typeId, ByteBuffer bufferValue) {
         this.typeId = typeId;
         this.bufferValue = bufferValue;
     }
 
+    @Override
     public void writeObject(byte typeId, Object bufferValue) {
         this.typeId = typeId;
         this.objectValue = objectValue;
