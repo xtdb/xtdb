@@ -83,22 +83,21 @@
     (reify IMonoVectorReader
       (readInt [_ idx] (-> (.get arrow-vec idx) (quot 86400000) (int))))))
 
-;; (@wot) unifies to nanos (of day) long
 (extend-protocol MonoReaderFactory
   TimeSecVector
   (->mono-reader [arrow-vec]
     (reify IMonoVectorReader
-      (readLong [_ idx] (* (long 1e9) (.get arrow-vec idx)))))
+      (readLong [_ idx] (.get arrow-vec idx))))
 
   TimeMilliVector
   (->mono-reader [arrow-vec]
     (reify IMonoVectorReader
-      (readLong [_ idx] (* (long 1e6) (.get arrow-vec idx)))))
+      (readLong [_ idx] (.get arrow-vec idx))))
 
   TimeMicroVector
   (->mono-reader [arrow-vec]
     (reify IMonoVectorReader
-      (readLong [_ idx] (* (long 1e3) (.get arrow-vec idx)))))
+      (readLong [_ idx] (.get arrow-vec idx))))
 
   TimeNanoVector
   (->mono-reader [arrow-vec]
