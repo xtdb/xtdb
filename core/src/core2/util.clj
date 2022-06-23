@@ -502,34 +502,6 @@
       (try-close cursor)
       (try-close closeable))))
 
-(defn element-addressable-vector? [^ValueVector v]
-  (and (instance? ElementAddressableVector v)
-       (not (instance? BitVector v))))
-
-(defn pointer-or-object
-  ([^ValueVector v ^long idx]
-   (pointer-or-object v idx nil))
-  ([^ValueVector v ^long idx ^ArrowBufPointer pointer]
-   (cond
-     (element-addressable-vector? v)
-     (.getDataPointer ^ElementAddressableVector v idx (or pointer (ArrowBufPointer.)))
-
-     (instance? DenseUnionVector v)
-     (let [v ^DenseUnionVector v]
-       (recur (.getVectorByType v (.getTypeId v idx)) (.getOffset v idx) pointer))
-
-     :else
-     (.getObject v idx))))
-
-(defn maybe-copy-pointer [^BufferAllocator allocator x]
-  (if (instance? ArrowBufPointer x)
-    (let [^ArrowBufPointer x x
-          length (.getLength x)
-          buffer-copy (.buffer allocator length)]
-      (.setBytes buffer-copy 0 (.getBuf x) (.getOffset x) length)
-      (ArrowBufPointer. buffer-copy 0 length))
-    x))
-
 (defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
   (let [rem-x (.remaining x)
         rem-y (.remaining y)

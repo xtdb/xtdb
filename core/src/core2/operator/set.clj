@@ -197,24 +197,6 @@
                    (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (set (keys inner-col-types))
                                                                               :nil-keys-equal? true})))})))
 
-(defn- ->set-key [^List cols ^long idx]
-  (let [set-key (ArrayList. (count cols))]
-    (doseq [^IIndirectVector col cols]
-      (.add set-key (util/pointer-or-object (.getVector col) (.getIndex col idx))))
-    set-key))
-
-(defn- copy-set-key [^BufferAllocator allocator ^List k]
-  (dotimes [n (.size k)]
-    (let [x (.get k n)]
-      (.set k n (util/maybe-copy-pointer allocator x))))
-  k)
-
-(defn- release-set-key [k]
-  (doseq [x k
-          :when (instance? ArrowBufPointer x)]
-    (util/try-close (.getBuf ^ArrowBufPointer x)))
-  k)
-
 (definterface ICursorFactory
   (^core2.ICursor createCursor []))
 
@@ -224,10 +206,10 @@
 ;; https://core.ac.uk/download/pdf/11454271.pdf "Algebraic optimization of recursive queries"
 ;; http://webdam.inria.fr/Alice/pdfs/Chapter-14.pdf "Recursion and Negation"
 
-(defn ->fixpoint-cursor-factory [rels incremental?]
+(defn ->fixpoint-cursor-factory [rel]
   (reify ICursorFactory
     (createCursor [_]
-      (let [rels-queue (LinkedList. rels)]
+      (let [rels-queue (LinkedList. [rel])]
         (reify
           ICursor
           (tryAdvance [_ c]
@@ -237,16 +219,14 @@
                 true)
               false))
 
-          (close [_]
-            (when incremental?
-              (run! util/try-close rels))))))))
+          (close [_]))))))
 
 (deftype FixpointCursor [^BufferAllocator allocator
                          ^ICursor base-cursor
                          ^IFixpointCursorFactory recursive-cursor-factory
-                         ^Set fixpoint-set
-                         ^List rels
-                         incremental?
+                         ^IRelationMap rel-map
+                         ^boolean incremental?
+                         ^:unsynchronized-mutable ^ints new-idxs
                          ^:unsynchronized-mutable ^ICursor recursive-cursor
                          ^:unsynchronized-mutable continue?]
   ICursor
@@ -259,22 +239,19 @@
                       (accept [_ in-rel]
                         (let [^IIndirectRelation in-rel in-rel]
                           (when (pos? (.rowCount in-rel))
-                            (let [cols (seq in-rel)
-                                  idxs (IntStream/builder)]
+                            (let [rel-builder (.buildFromRelation rel-map in-rel)
+                                  new-idxs (IntStream/builder)]
                               (dotimes [idx (.rowCount in-rel)]
-                                (let [k (->set-key cols idx)]
-                                  (when-not (.contains fixpoint-set k)
-                                    (.add fixpoint-set (copy-set-key allocator k))
-                                    (.add idxs idx))))
+                                (let [map-idx (.addIfNotPresent rel-builder idx)]
+                                  (when (neg? map-idx)
+                                    (.add new-idxs (emap/inserted-idx map-idx)))))
 
-                              (let [idxs (.toArray (.build idxs))]
-                                (when-not (empty? idxs)
-                                  (let [out-rel (-> (iv/select in-rel idxs)
-                                                    (iv/copy allocator))]
-                                    (.add rels out-rel)
-                                    (.accept c out-rel)
-                                    (set! (.continue? this) true)
-                                    (aset advanced? 0 true)))))))))]
+                              (let [new-idxs (.toArray (.build new-idxs))]
+                                (when-not (empty? new-idxs)
+                                  (.accept c (-> (.getBuiltRelation rel-map) (iv/select new-idxs)))
+                                  (set! (.continue? this) true)
+                                  (set! (.new-idxs this) new-idxs)
+                                  (aset advanced? 0 true))))))))]
 
         (.tryAdvance base-cursor inner-c)
 
@@ -285,8 +262,8 @@
                                                 (when continue?
                                                   (set! (.continue? this) false)
                                                   (let [cursor (.createCursor recursive-cursor-factory
-                                                                              (->fixpoint-cursor-factory (vec rels) incremental?))]
-                                                    (when incremental? (.clear rels))
+                                                                              (->fixpoint-cursor-factory (cond-> (.getBuiltRelation rel-map)
+                                                                                                           incremental? (iv/select new-idxs))))]
                                                     (set! (.recursive-cursor this) cursor)
                                                     cursor)))]
 
@@ -300,10 +277,8 @@
               (aget advanced? 0))))))
 
   (close [_]
+    (util/try-close rel-map)
     (util/try-close recursive-cursor)
-    (run! util/try-close rels)
-    (run! release-set-key fixpoint-set)
-    (.clear fixpoint-set)
     (util/try-close base-cursor)))
 
 (def ^:dynamic ^:private *relation-variable->col-types* {})
@@ -321,9 +296,11 @@
   (let [{base-col-types :col-types, ->base-cursor :->cursor} (lp/emit-expr base args)
         {recursive-col-types :col-types, ->recursive-cursor :->cursor} (binding [*relation-variable->col-types* (-> *relation-variable->col-types*
                                                                                                                     (assoc mu-variable base-col-types))]
-                                                                         (lp/emit-expr recursive args))]
-    ;; HACK I think `:col-types` needs to be a fixpoint as well?
-    {:col-types (union-col-types base-col-types recursive-col-types)
+                                                                         (lp/emit-expr recursive args))
+
+        ;; HACK I think `:col-types` needs to be a fixpoint as well?
+        col-types (union-col-types base-col-types recursive-col-types)]
+    {:col-types col-types
      :->cursor
      (fn [{:keys [allocator] :as opts}]
        (FixpointCursor. allocator
@@ -333,8 +310,9 @@
                             (binding [*relation-variable->cursor-factory* (-> *relation-variable->cursor-factory*
                                                                               (assoc mu-variable cursor-factory))]
                               (->recursive-cursor opts))))
-                        (HashSet.) (LinkedList.)
+                        (emap/->relation-map allocator {:key-col-names (set (keys col-types))})
                         (boolean incremental?)
+                        #_new-idxs nil
                         #_recursive-cursor nil
                         #_continue? true))}))
 
