@@ -1692,9 +1692,7 @@
    assumption wouldn't hold if macroexpansion created new variable exprs, for example.
    macroexpansion is non-deterministic (gensym), so busts the memo cache."
   (-> (fn [expr opts]
-        ;; TODO should lit->param be outside the memoize, s.t. we don't have a cache entry for each literal value?
-        (let [expr (prepare-expr expr)
-              {:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
+        (let [{:keys [return-type continue] :as emitted-expr} (codegen-expr expr opts)
 
               {:keys [writer-bindings write-value-out!]} (write-value-out-code return-type)]
 
@@ -1730,7 +1728,8 @@
                                               {:op :variable
                                                :variable (gensym 'var)
                                                :idx idx-sym
-                                               :expr expr}))))
+                                               :expr expr})))
+                       prepare-expr)
 
         emitted-sub-exprs (for [{:keys [variable expr]} (->> (walk/expr-seq prim-expr)
                                                              (filter #(= :variable (:op %))))

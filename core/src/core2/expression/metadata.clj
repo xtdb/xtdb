@@ -185,7 +185,7 @@
 
 (def ^:private compile-meta-expr
   (-> (fn [expr opts]
-        (let [expr (meta-expr (expr/prepare-expr expr))
+        (let [expr (meta-expr expr)
               {:keys [continue] :as emitted-expr} (expr/codegen-expr expr opts)]
           {:expr expr
            :f (-> `(fn [chunk-idx#
@@ -209,7 +209,8 @@
       (util/lru-memoize)))
 
 (defn ->metadata-selector [form col-types params]
-  (let [{:keys [expr f]} (compile-meta-expr (expr/form->expr form {:param-types (expr/->param-types params), :col-types col-types})
+  (let [{:keys [expr f]} (compile-meta-expr (-> (expr/form->expr form {:param-types (expr/->param-types params), :col-types col-types})
+                                                (expr/prepare-expr))
                                             {:param-classes (expr/param-classes params)
                                              :extract-vecs-from-rel? false})]
     (fn [chunk-idx metadata-root]
