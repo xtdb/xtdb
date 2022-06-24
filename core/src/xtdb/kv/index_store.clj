@@ -1095,7 +1095,11 @@
       (apply kv/put-kv kv-tx kv)))
 
   (commit-index-tx [_]
-    (kv/commit-kv-tx kv-tx))
+    (kv/commit-kv-tx kv-tx)
+
+
+    ;; TODO I don't think we're calling close on this underlying TX, leaving the WriteBatch open
+    )
 
   (abort-index-tx [_ docs]
     (let [{::xt/keys [tx-id tx-time]} tx
