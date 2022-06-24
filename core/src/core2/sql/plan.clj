@@ -5,6 +5,7 @@
             [clojure.walk :as w]
             [clojure.spec.alpha :as s]
             [core2.logical-plan :as lp]
+            core2.operator ;; Adds impls logical plan spec
             [core2.rewrite :as r]
             [core2.sql.analyze :as sem]
             [core2.sql.parser :as p]
