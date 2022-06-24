@@ -896,11 +896,14 @@
           common-disjuncts (->> (map set disjuncts)
                                 (reduce set/intersection))
           disjuncts (for [disjunct disjuncts
-                          :let [disjunct (remove common-disjuncts disjunct)]
-                          :when (seq disjunct)]
-                      (if (= 1 (count disjunct))
-                        (first disjunct)
-                        (cons 'and disjunct)))
+                          :let [filtered-disjunct (remove common-disjuncts disjunct)]]
+                      (if (seq filtered-disjunct)
+                        (if (= 1 (count filtered-disjunct))
+                          (first filtered-disjunct)
+                          (cons 'and filtered-disjunct))
+                        (if (= 1 (count disjunct))
+                          (first disjunct)
+                          (cons 'and disjunct))))
           disjuncts (if (> (count disjuncts) 1)
                       (cons 'or disjuncts)
                       (first disjuncts))]
