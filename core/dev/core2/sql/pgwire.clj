@@ -240,7 +240,10 @@
 
 (def canned-responses
   "Some pre-baked responses to common queries issued as setup by Postgres drivers, e.g SQLAlchemy"
-  [{:q "select pg_catalog.version()"
+  [{:q ";"
+    :cols []
+    :rows []}
+   {:q "select pg_catalog.version()"
     :cols [{:column-name "version" :oid varchar-oid}]
     :rows [["PostgreSQL 14.2"]]}
    {:q "show standard_conforming_strings"
