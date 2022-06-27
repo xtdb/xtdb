@@ -255,6 +255,12 @@
    {:q "show transaction isolation level"
     :cols [{:column-name "transaction_isolation" :oid varchar-oid}]
     :rows [["read committed"]]}
+
+   ;; ODBC issues this query by default, you may be able to disable with an option
+   {:q "select oid, typbasetype from pg_type where typname = 'lo'"
+    :cols [{:column-name "oid", :oid varchar-oid} {:column-name "typebasetype", :oid varchar-oid}]
+    :rows []}
+
    ;; jdbc meta getKeywords (hibernate)
    ;; I think this should work, but it causes some kind of low level issue, likely
    ;; because our query protocol impl is broken, or partially implemented.
