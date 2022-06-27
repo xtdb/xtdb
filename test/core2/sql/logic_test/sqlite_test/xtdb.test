@@ -1,5 +1,11 @@
 hash-threshold 100
 
+statement ok
+CREATE TABLE tab0(col0 INTEGER, col1 INTEGER, col2 INTEGER)
+
+statement ok
+INSERT INTO tab0 VALUES(97,1,99)
+
 query T rowsort
 SELECT ( 4 ) IN ( NULL )
 ----
@@ -17,5 +23,99 @@ NULL
 
 query T rowsort
 SELECT ( NULL ) NOT IN ( 4 )
+----
+NULL
+
+query T rowsort
+SELECT ( 4 ) IN (NULL , 4)
+----
+true
+
+query T rowsort
+SELECT ( 4 ) NOT IN (NULL, 4)
+----
+false
+
+query T rowsort
+SELECT ( 4 ) IN (NULL , 3)
+----
+false
+
+query T rowsort
+SELECT ( 4 ) NOT IN (NULL, 3)
+----
+true
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE NOT ( NULL ) NOT IN (1, 2, 3)
+----
+
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE ( NULL ) IN (1, 2, 3)
+----
+
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE ( NULL ) NOT IN (1, 2, 3)
+----
+
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE NOT ( NULL ) IN (1, 2, 3)
+----
+
+
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE NOT ( 4 ) IN (1, 2, 3)
+----
+97
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE ( 4 ) NOT IN (1, 2, 3)
+----
+97
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE ( 3 ) IN (1, 2, 3)
+----
+97
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE ( 3 ) NOT IN (1, 2, 3)
+----
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE NOT ( 3 ) IN (1, 2, 3)
+----
+
+query T rowsort
+SELECT tab0.col0 FROM tab0 WHERE NOT 4 NOT IN (1, 2, 3, NULL)
+----
+
+
+query T rowsort
+SELECT tab0.col0 FROM tab0 WHERE 4 NOT IN (1, 2, 3, NULL)
+----
+
+
+query T rowsort
+SELECT tab0.col0 FROM tab0 WHERE 4 IN (1, 2, 3, NULL)
+----
+
+
+query T rowsort
+SELECT ( NULL ) IN (SELECT 1 FROM tab0 WHERE FALSE) FROM tab0
+----
+NULL
+
+query T rowsort
+SELECT ( NULL ) NOT IN (SELECT 1 FROM tab0 WHERE FALSE) FROM tab0
+----
+NULL
+
+query T rowsort
+SELECT NOT ( NULL ) IN (SELECT 1 FROM tab0 WHERE FALSE) FROM tab0
 ----
 NULL
