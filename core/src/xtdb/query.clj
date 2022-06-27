@@ -21,7 +21,9 @@
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
             [xtdb.tx.conform :as txc]
-            [xtdb.with-tx :as with-tx])
+            [xtdb.fork :as fork]
+            [xtdb.kv.index-store :as index-store]
+            [xtdb.kv.mutable-kv :as mut-kv])
   (:import (clojure.lang Box ExceptionInfo MapEntry)
            (java.io Closeable Writer)
            (java.util Collection Comparator Date HashMap List Map UUID)
@@ -2112,7 +2114,13 @@
                       {::xt/tx-time (Date.)
                        ::xt/tx-id 0}))
 
-          forked-index-store-tx (with-tx/->forked-index-store-tx index-store valid-time tx-id, tx)
+          transient-kv (mut-kv/->mutable-kv-store)
+          delta-index-store (index-store/->kv-index-store {:kv-store transient-kv
+                                                           :cav-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
+                                                           :canonical-buffer-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
+                                                           :stats-kvs-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})})
+          delta-index-store-tx (db/begin-index-tx delta-index-store tx)
+          forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store, transient-kv, valid-time, tx-id, (atom #{}), delta-index-store-tx, nil)
 
           in-flight-tx (-> (db/begin-tx (assoc tx-indexer :bus (reify xtdb.bus/EventSink
                                                                  (send [_ _])))
