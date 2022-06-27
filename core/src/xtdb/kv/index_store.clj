@@ -1095,13 +1095,11 @@
       (apply kv/put-kv kv-tx kv)))
 
   (commit-index-tx [_]
-    (kv/commit-kv-tx kv-tx)
-
-
-    ;; TODO I don't think we're calling close on this underlying TX, leaving the WriteBatch open
-    )
+    (kv/commit-kv-tx kv-tx))
 
   (abort-index-tx [_ docs]
+    (when kv-tx
+      (kv/abort-kv-tx kv-tx))
     (let [{::xt/keys [tx-id tx-time]} tx
           attr-bufs (->> (into #{} (mapcat keys) (vals docs))
                          (into {} (map (juxt identity c/->id-buffer))))]

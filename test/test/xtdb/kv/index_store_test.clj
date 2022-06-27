@@ -275,11 +275,12 @@
                                :sub-idx sub-idx}]
                       (MapEntry/create (c/new-id doc) doc))))]
           (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0})
-
-            (index-docs (mk-docs 50))
             (index-docs (mk-docs 50)))
 
-          (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1})
+          (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021-01", :tx-id 1})
+            (index-docs (mk-docs 50)))
+
+          (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 2})
             (index-docs (mk-docs 50)))))
 
       (t/is (= {:crux.db/id {:doc-count 3675, :doc-value-count 3675, :values 3554, :eids 3554}

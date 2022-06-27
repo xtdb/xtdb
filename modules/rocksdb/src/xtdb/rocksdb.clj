@@ -85,8 +85,12 @@
       (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
       (.delete wb (mem/direct-byte-buffer k))))
 
-  (commit-kv-tx [_]
-    (.write db write-options wb))
+  (commit-kv-tx [this]
+    (.write db write-options wb)
+    (.close this))
+
+  (abort-kv-tx [this]
+    (.close this))
 
   Closeable
   (close [_]

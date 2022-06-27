@@ -56,6 +56,8 @@
   (commit-kv-tx [_]
     (.putAll db db2))
 
+  (abort-kv-tx [_])
+
   Closeable
   (close [_]))
 
