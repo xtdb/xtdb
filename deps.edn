@@ -56,7 +56,7 @@
 
            :slt-test {:main-opts
                       ["-m" "core2.sql.logic-test.runner" "--verify" "--db" "xtdb"
-                       "--max-failures" "2" "--max-errors" "0"
+                       "--max-failures" "8" "--max-errors" "0"
                        "test/core2/sql/logic_test/sqlite_test/xtdb.test"
                        "test/core2/sql/logic_test/sqlite_test/select1.test"
                        "test/core2/sql/logic_test/sqlite_test/select2.test"

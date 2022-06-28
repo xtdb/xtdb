@@ -39,22 +39,20 @@ false
 query T rowsort
 SELECT ( 4 ) IN (NULL , 3)
 ----
-false
+NULL
 
 query T rowsort
 SELECT ( 4 ) NOT IN (NULL, 3)
 ----
-true
+NULL
 
 query I rowsort
 SELECT tab0.col0 FROM tab0 WHERE NOT ( NULL ) NOT IN (1, 2, 3)
 ----
 
-
 query I rowsort
 SELECT tab0.col0 FROM tab0 WHERE ( NULL ) IN (1, 2, 3)
 ----
-
 
 query I rowsort
 SELECT tab0.col0 FROM tab0 WHERE ( NULL ) NOT IN (1, 2, 3)
@@ -64,8 +62,6 @@ SELECT tab0.col0 FROM tab0 WHERE ( NULL ) NOT IN (1, 2, 3)
 query I rowsort
 SELECT tab0.col0 FROM tab0 WHERE NOT ( NULL ) IN (1, 2, 3)
 ----
-
-
 
 query I rowsort
 SELECT tab0.col0 FROM tab0 WHERE NOT ( 4 ) IN (1, 2, 3)
@@ -94,28 +90,40 @@ query T rowsort
 SELECT tab0.col0 FROM tab0 WHERE NOT 4 NOT IN (1, 2, 3, NULL)
 ----
 
-
 query T rowsort
 SELECT tab0.col0 FROM tab0 WHERE 4 NOT IN (1, 2, 3, NULL)
 ----
-
 
 query T rowsort
 SELECT tab0.col0 FROM tab0 WHERE 4 IN (1, 2, 3, NULL)
 ----
 
-
 query T rowsort
 SELECT ( NULL ) IN (SELECT 1 FROM tab0 WHERE FALSE) FROM tab0
 ----
-NULL
+false
 
 query T rowsort
 SELECT ( NULL ) NOT IN (SELECT 1 FROM tab0 WHERE FALSE) FROM tab0
 ----
-NULL
+true
 
 query T rowsort
 SELECT NOT ( NULL ) IN (SELECT 1 FROM tab0 WHERE FALSE) FROM tab0
 ----
-NULL
+true
+
+skipif sqlite
+query IT rowsort
+SELECT bar.x, bar.x IN (SELECT 4 FROM (VALUES (0)) AS foo WHERE FALSE=TRUE) FROM (VALUES (0), (1)) AS bar (x)
+----
+0
+false
+1
+false
+
+skipif sqlite
+query IT rowsort
+SELECT bar.x FROM (VALUES (0), (1)) AS bar (x) WHERE bar.x IN (SELECT 4 FROM (VALUES (0)) AS foo WHERE FALSE=TRUE)
+----
+
