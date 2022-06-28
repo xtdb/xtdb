@@ -4,7 +4,7 @@
             [clojure.set :as set]
             [core2.util :as util])
   (:import java.io.File
-           [java.util ArrayDeque Arrays HashSet Map Set]
+           [java.util ArrayDeque HashSet Map Set]
            [java.util.regex Matcher Pattern]
            java.util.function.Function
            [core2.sql.parser Parser$ParseState Parser$ParseErrors Parser$AParser
@@ -164,8 +164,7 @@
                                                                     (step parser2)
                                                                     [parser2])))
                                                   parser)]
-                                     (Parser$AltParser. (mapv (partial build-parser rule-name) parsers)
-                                                        (lookahead-alt-table grammar parsers)))
+                                     (Parser$OrdParser. (mapv (partial build-parser rule-name) parsers)))
                               :neg (Parser$NegParser. (build-parser rule-name (:parser parser)))
                               :epsilon (Parser$EpsilonParser.)
                               :regexp (Parser$RegexpParser. (:regexp parser)

@@ -24,14 +24,14 @@
  :insertion_target
  {:tag :nt, :keyword :table_name, :red {:reduction-type :raw}},
  :time_zone_specifier
- {:tag :ord,
-  :parser1 {:tag :string, :string "LOCAL"},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "TIME"}
-    {:tag :string, :string "ZONE"}
-    {:tag :nt, :keyword :interval_primary})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "LOCAL"}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "TIME"}
+     {:tag :string, :string "ZONE"}
+     {:tag :nt, :keyword :interval_primary})})},
  :interval_absolute_value_function
  {:tag :cat,
   :parsers
@@ -40,9 +40,10 @@
    {:tag :nt, :keyword :interval_value_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :numeric_primary
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :value_expression_primary},
-  :parser2 {:tag :nt, :keyword :numeric_value_function},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :value_expression_primary}
+   {:tag :nt, :keyword :numeric_value_function}),
   :red {:reduction-type :raw}},
  :trigonometric_function
  {:tag :cat,
@@ -65,46 +66,45 @@
  {:tag :cat,
   :parsers
   ({:tag :string, :string "FETCH"}
-   {:tag :ord,
-    :parser1 {:tag :string, :string "FIRST"},
-    :parser2 {:tag :string, :string "NEXT"}}
+   {:tag :alt,
+    :parsers
+    ({:tag :string, :string "FIRST"} {:tag :string, :string "NEXT"})}
    {:tag :opt, :parser {:tag :nt, :keyword :fetch_first_quantity}}
-   {:tag :ord,
-    :parser1 {:tag :string, :string "ROW"},
-    :parser2 {:tag :string, :string "ROWS"}}
-   {:tag :ord,
-    :parser1 {:tag :string, :string "ONLY"},
-    :parser2
-    {:tag :cat,
-     :parsers
-     ({:tag :string, :string "WITH"}
-      {:tag :string, :string "TIES"})}})},
+   {:tag :alt,
+    :parsers
+    ({:tag :string, :string "ROW"} {:tag :string, :string "ROWS"})}
+   {:tag :alt,
+    :parsers
+    ({:tag :string, :string "ONLY"}
+     {:tag :cat,
+      :parsers
+      ({:tag :string, :string "WITH"}
+       {:tag :string, :string "TIES"})})})},
  :binary_large_object_string_type
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "BINARY"}
-    {:tag :string, :string "LARGE"}
-    {:tag :string, :string "OBJECT"}
-    {:tag :opt,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :large_object_length}
-       {:tag :nt, :keyword :right_paren, :hide true})}})},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "BLOB"}
-    {:tag :opt,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :large_object_length}
-       {:tag :nt, :keyword :right_paren, :hide true})}})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "BINARY"}
+     {:tag :string, :string "LARGE"}
+     {:tag :string, :string "OBJECT"}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :large_object_length}
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "BLOB"}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :large_object_length}
+        {:tag :nt, :keyword :right_paren, :hide true})}})})},
  :trim_character
  {:tag :nt,
   :keyword :character_value_expression,
@@ -122,9 +122,10 @@
  :exponent
  {:tag :nt, :keyword :signed_integer, :red {:reduction-type :raw}},
  :datetime_primary
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :value_expression_primary},
-  :parser2 {:tag :nt, :keyword :datetime_value_function},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :value_expression_primary}
+   {:tag :nt, :keyword :datetime_value_function}),
   :red {:reduction-type :raw}},
  :array_value_constructor_by_query
  {:tag :cat,
@@ -132,129 +133,104 @@
   ({:tag :string, :string "ARRAY"}
    {:tag :nt, :keyword :table_subquery})},
  :table_primary
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :table_or_query_name}
-    {:tag :opt,
-     :parser
-     {:tag :nt, :keyword :query_system_time_period_specification}}
-    {:tag :opt,
-     :parser {:tag :nt, :keyword :correlation_or_recognition}})},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :table_or_query_name}
+     {:tag :opt,
+      :parser
+      {:tag :nt, :keyword :query_system_time_period_specification}}
+     {:tag :opt,
+      :parser {:tag :nt, :keyword :correlation_or_recognition}})}
    {:tag :cat,
     :parsers
     ({:tag :nt, :keyword :derived_table}
-     {:tag :nt, :keyword :correlation_or_recognition})},
-   :parser2
-   {:tag :ord,
-    :parser1
-    {:tag :cat,
-     :parsers
-     ({:tag :nt, :keyword :lateral_derived_table}
-      {:tag :nt, :keyword :correlation_or_recognition})},
-    :parser2
-    {:tag :ord,
-     :parser1
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :collection_derived_table}
-       {:tag :nt, :keyword :correlation_or_recognition})},
-     :parser2 {:tag :nt, :keyword :parenthesized_joined_table}}}}},
+     {:tag :nt, :keyword :correlation_or_recognition})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :lateral_derived_table}
+     {:tag :nt, :keyword :correlation_or_recognition})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :collection_derived_table}
+     {:tag :nt, :keyword :correlation_or_recognition})}
+   {:tag :nt, :keyword :parenthesized_joined_table})},
  :parenthesized_joined_table
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :left_paren, :hide true}
-    {:tag :nt, :keyword :parenthesized_joined_table}
-    {:tag :nt, :keyword :right_paren, :hide true})},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :left_paren, :hide true}
-    {:tag :nt, :keyword :joined_table}
-    {:tag :nt, :keyword :right_paren, :hide true})},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :parenthesized_joined_table}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :joined_table}
+     {:tag :nt, :keyword :right_paren, :hide true})}),
   :red {:reduction-type :raw}},
  :result_offset_clause
  {:tag :cat,
   :parsers
   ({:tag :string, :string "OFFSET"}
    {:tag :nt, :keyword :offset_row_count}
-   {:tag :ord,
-    :parser1 {:tag :string, :string "ROW"},
-    :parser2 {:tag :string, :string "ROWS"}})},
+   {:tag :alt,
+    :parsers
+    ({:tag :string, :string "ROW"} {:tag :string, :string "ROWS"})})},
  :predefined_type
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :character_string_type},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :binary_string_type},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :numeric_type},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :nt, :keyword :boolean_type},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :nt, :keyword :datetime_type},
-      :parser2 {:tag :nt, :keyword :interval_type}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :character_string_type}
+   {:tag :nt, :keyword :binary_string_type}
+   {:tag :nt, :keyword :numeric_type}
+   {:tag :nt, :keyword :boolean_type}
+   {:tag :nt, :keyword :datetime_type}
+   {:tag :nt, :keyword :interval_type}),
   :red {:reduction-type :raw}},
  :numeric_type
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :exact_numeric_type},
-  :parser2 {:tag :nt, :keyword :approximate_numeric_type},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :exact_numeric_type}
+   {:tag :nt, :keyword :approximate_numeric_type}),
   :red {:reduction-type :raw}},
  :character_value_function
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :character_substring_function},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :fold},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :trim_function},
-    :parser2 {:tag :nt, :keyword :character_overlay_function}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :character_substring_function}
+   {:tag :nt, :keyword :fold}
+   {:tag :nt, :keyword :trim_function}
+   {:tag :nt, :keyword :character_overlay_function}),
   :red {:reduction-type :raw}},
  :multiplier
- {:tag :ord,
-  :parser1 {:tag :string, :string "K"},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :string, :string "M"},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :string, :string "G"},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :string, :string "T"},
-     :parser2 {:tag :string, :string "P"}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "K"}
+   {:tag :string, :string "M"}
+   {:tag :string, :string "G"}
+   {:tag :string, :string "T"}
+   {:tag :string, :string "P"})},
  :contextually_typed_value_specification
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :implicitly_typed_value_specification},
-  :parser2 {:tag :nt, :keyword :default_specification},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :implicitly_typed_value_specification}
+   {:tag :nt, :keyword :default_specification}),
   :red {:reduction-type :raw}},
  :trim_specification
- {:tag :ord,
-  :parser1 {:tag :string, :string "LEADING"},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :string, :string "TRAILING"},
-   :parser2 {:tag :string, :string "BOTH"}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "LEADING"}
+   {:tag :string, :string "TRAILING"}
+   {:tag :string, :string "BOTH"})},
  :left_bracket
  {:tag :string, :string "[", :red {:reduction-type :raw}},
  :asterisk {:tag :string, :string "*"},
  :value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :common_value_expression},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :boolean_value_expression},
-   :parser2 {:tag :nt, :keyword :row_value_expression}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :common_value_expression}
+   {:tag :nt, :keyword :boolean_value_expression}
+   {:tag :nt, :keyword :row_value_expression}),
   :red {:reduction-type :raw}},
  :escape_character
  {:tag :nt,
@@ -306,50 +282,38 @@
    {:tag :nt, :keyword :unquoted_timestamp_string}
    {:tag :nt, :keyword :quote, :hide true})},
  :binary_primary
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :value_expression_primary},
-  :parser2 {:tag :nt, :keyword :string_value_function},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :value_expression_primary}
+   {:tag :nt, :keyword :string_value_function}),
   :red {:reduction-type :raw}},
  :contextually_typed_row_value_constructor
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :common_value_expression},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :boolean_value_expression},
-   :parser2
-   {:tag :ord,
-    :parser1
-    {:tag :nt, :keyword :contextually_typed_value_specification},
-    :parser2
-    {:tag :ord,
-     :parser1
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :contextually_typed_value_specification}
-       {:tag :nt, :keyword :right_paren, :hide true})},
-     :parser2
-     {:tag :ord,
-      :parser1
-      {:tag :cat,
-       :parsers
-       ({:tag :nt, :keyword :left_paren, :hide true}
-        {:tag :nt,
-         :keyword :contextually_typed_row_value_constructor_element}
-        {:tag :nt, :keyword :comma, :hide true}
-        {:tag :nt,
-         :keyword
-         :contextually_typed_row_value_constructor_element_list}
-        {:tag :nt, :keyword :right_paren, :hide true})},
-      :parser2
-      {:tag :cat,
-       :parsers
-       ({:tag :string, :string "ROW"}
-        {:tag :nt, :keyword :left_paren, :hide true}
-        {:tag :nt,
-         :keyword
-         :contextually_typed_row_value_constructor_element_list}
-        {:tag :nt, :keyword :right_paren, :hide true})}}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :common_value_expression}
+   {:tag :nt, :keyword :boolean_value_expression}
+   {:tag :nt, :keyword :contextually_typed_value_specification}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :contextually_typed_value_specification}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt,
+      :keyword :contextually_typed_row_value_constructor_element}
+     {:tag :nt, :keyword :comma, :hide true}
+     {:tag :nt,
+      :keyword :contextually_typed_row_value_constructor_element_list}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "ROW"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt,
+      :keyword :contextually_typed_row_value_constructor_element_list}
+     {:tag :nt, :keyword :right_paren, :hide true})})},
  :set_target_list
  {:tag :cat,
   :parsers
@@ -382,9 +346,9 @@
  :table_subquery
  {:tag :nt, :keyword :subquery, :red {:reduction-type :raw}},
  :sign
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :plus_sign},
-  :parser2 {:tag :nt, :keyword :minus_sign},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :plus_sign} {:tag :nt, :keyword :minus_sign}),
   :red {:reduction-type :raw}},
  :space {:tag :regexp, :regexp #"(?<= )", :red {:reduction-type :raw}},
  :seconds_value
@@ -398,27 +362,28 @@
      ({:tag :nt, :keyword :period, :hide true}
       {:tag :opt, :parser {:tag :nt, :keyword :seconds_fraction}})}})},
  :array_value_constructor
- {:tag :ord,
-  :parser1
-  {:tag :nt, :keyword :array_value_constructor_by_enumeration},
-  :parser2 {:tag :nt, :keyword :array_value_constructor_by_query},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :array_value_constructor_by_enumeration}
+   {:tag :nt, :keyword :array_value_constructor_by_query}),
   :red {:reduction-type :raw}},
  :boolean_predicand
- {:tag :ord,
-  :parser1
-  {:tag :nt, :keyword :parenthesized_boolean_value_expression},
-  :parser2
-  {:tag :nt, :keyword :nonparenthesized_value_expression_primary},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :parenthesized_boolean_value_expression}
+   {:tag :nt, :keyword :nonparenthesized_value_expression_primary}),
   :red {:reduction-type :raw}},
  :grouping_element
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :ordinary_grouping_set},
-  :parser2 {:tag :nt, :keyword :empty_grouping_set},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :ordinary_grouping_set}
+   {:tag :nt, :keyword :empty_grouping_set}),
   :red {:reduction-type :raw}},
  :cast_operand
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :value_expression},
-  :parser2 {:tag :nt, :keyword :implicitly_typed_value_specification},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :value_expression}
+   {:tag :nt, :keyword :implicitly_typed_value_specification}),
   :red {:reduction-type :raw}},
  :unquoted_timestamp_string
  {:tag :cat,
@@ -439,48 +404,46 @@
    {:tag :nt, :keyword :numeric_value_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :query_expression_body
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :query_term},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :query_term}
    {:tag :cat,
     :parsers
     ({:tag :nt, :keyword :query_expression_body}
      {:tag :string, :string "UNION"}
      {:tag :opt,
       :parser
-      {:tag :ord,
-       :parser1 {:tag :string, :string "ALL"},
-       :parser2 {:tag :string, :string "DISTINCT"}}}
-     {:tag :nt, :keyword :query_term})},
-   :parser2
+      {:tag :alt,
+       :parsers
+       ({:tag :string, :string "ALL"}
+        {:tag :string, :string "DISTINCT"})}}
+     {:tag :nt, :keyword :query_term})}
    {:tag :cat,
     :parsers
     ({:tag :nt, :keyword :query_expression_body}
      {:tag :string, :string "EXCEPT"}
      {:tag :opt,
       :parser
-      {:tag :ord,
-       :parser1 {:tag :string, :string "ALL"},
-       :parser2 {:tag :string, :string "DISTINCT"}}}
-     {:tag :nt, :keyword :query_term})}}},
+      {:tag :alt,
+       :parsers
+       ({:tag :string, :string "ALL"}
+        {:tag :string, :string "DISTINCT"})}}
+     {:tag :nt, :keyword :query_term})})},
  :left_brace {:tag :string, :string "{", :red {:reduction-type :raw}},
  :string_value_function
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :character_value_function},
-  :parser2 {:tag :nt, :keyword :binary_value_function},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :character_value_function}
+   {:tag :nt, :keyword :binary_value_function}),
   :red {:reduction-type :raw}},
  :binary_string_literal
  {:tag :regexp, :regexp #"X('[a-fA-F0-9\s]+'\s*)+"},
  :insert_column_list
  {:tag :nt, :keyword :column_name_list, :red {:reduction-type :raw}},
  :datetime_type
- {:tag :ord,
-  :parser1 {:tag :string, :string "DATE"},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "DATE"}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "TIME"}
@@ -492,8 +455,7 @@
         {:tag :nt, :keyword :time_precision}
         {:tag :nt, :keyword :right_paren, :hide true})}}
      {:tag :opt,
-      :parser {:tag :nt, :keyword :with_or_without_time_zone}})},
-   :parser2
+      :parser {:tag :nt, :keyword :with_or_without_time_zone}})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "TIMESTAMP"}
@@ -505,53 +467,43 @@
         {:tag :nt, :keyword :timestamp_precision}
         {:tag :nt, :keyword :right_paren, :hide true})}}
      {:tag :opt,
-      :parser {:tag :nt, :keyword :with_or_without_time_zone}})}}},
+      :parser {:tag :nt, :keyword :with_or_without_time_zone}})})},
  :comp_op
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :equals_operator},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :not_equals_operator},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :less_than_operator},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :nt, :keyword :greater_than_operator},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :nt, :keyword :less_than_or_equals_operator},
-      :parser2
-      {:tag :nt, :keyword :greater_than_or_equals_operator}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :equals_operator}
+   {:tag :nt, :keyword :not_equals_operator}
+   {:tag :nt, :keyword :less_than_operator}
+   {:tag :nt, :keyword :greater_than_operator}
+   {:tag :nt, :keyword :less_than_or_equals_operator}
+   {:tag :nt, :keyword :greater_than_or_equals_operator}),
   :red {:reduction-type :raw}},
  :right_paren {:tag :string, :string ")", :red {:reduction-type :raw}},
  :implicitly_typed_value_specification
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :null_specification},
-  :parser2 {:tag :nt, :keyword :empty_specification},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :null_specification}
+   {:tag :nt, :keyword :empty_specification}),
   :red {:reduction-type :raw}},
  :exact_numeric_type
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "NUMERIC"}
-    {:tag :opt,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :precision}
-       {:tag :opt,
-        :parser
-        {:tag :cat,
-         :parsers
-         ({:tag :nt, :keyword :comma, :hide true}
-          {:tag :nt, :keyword :scale})}}
-       {:tag :nt, :keyword :right_paren, :hide true})}})},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "NUMERIC"}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :precision}
+        {:tag :opt,
+         :parser
+         {:tag :cat,
+          :parsers
+          ({:tag :nt, :keyword :comma, :hide true}
+           {:tag :nt, :keyword :scale})}}
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "DECIMAL"}
@@ -567,36 +519,27 @@
           :parsers
           ({:tag :nt, :keyword :comma, :hide true}
            {:tag :nt, :keyword :scale})}}
-        {:tag :nt, :keyword :right_paren, :hide true})}})},
-   :parser2
-   {:tag :ord,
-    :parser1
-    {:tag :cat,
-     :parsers
-     ({:tag :string, :string "DEC"}
-      {:tag :opt,
-       :parser
-       {:tag :cat,
-        :parsers
-        ({:tag :nt, :keyword :left_paren, :hide true}
-         {:tag :nt, :keyword :precision}
-         {:tag :opt,
-          :parser
-          {:tag :cat,
-           :parsers
-           ({:tag :nt, :keyword :comma, :hide true}
-            {:tag :nt, :keyword :scale})}}
-         {:tag :nt, :keyword :right_paren, :hide true})}})},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :string, :string "SMALLINT"},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :string, :string "INTEGER"},
-      :parser2
-      {:tag :ord,
-       :parser1 {:tag :string, :string "INT"},
-       :parser2 {:tag :string, :string "BIGINT"}}}}}}},
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "DEC"}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :precision}
+        {:tag :opt,
+         :parser
+         {:tag :cat,
+          :parsers
+          ({:tag :nt, :keyword :comma, :hide true}
+           {:tag :nt, :keyword :scale})}}
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
+   {:tag :string, :string "SMALLINT"}
+   {:tag :string, :string "INTEGER"}
+   {:tag :string, :string "INT"}
+   {:tag :string, :string "BIGINT"})},
  :cast_specification
  {:tag :cat,
   :parsers
@@ -686,9 +629,10 @@
       ({:tag :nt, :keyword :comma, :hide true}
        {:tag :nt, :keyword :when_operand})}}})},
  :period_or_point_in_time_predicand
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :period_predicand},
-  :parser2 {:tag :nt, :keyword :datetime_value_expression},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :period_predicand}
+   {:tag :nt, :keyword :datetime_value_expression}),
   :red {:reduction-type :raw}},
  :binary_trim_source
  {:tag :nt,
@@ -733,18 +677,15 @@
   ({:tag :string, :string "DEFAULT"}
    {:tag :string, :string "VALUES"})},
  :query_system_time_period_specification
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "FOR"}
-    {:tag :string, :string "SYSTEM_TIME"}
-    {:tag :string, :string "AS"}
-    {:tag :string, :string "OF"}
-    {:tag :nt, :keyword :point_in_time_1})},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "FOR"}
+     {:tag :string, :string "SYSTEM_TIME"}
+     {:tag :string, :string "AS"}
+     {:tag :string, :string "OF"}
+     {:tag :nt, :keyword :point_in_time_1})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "FOR"}
@@ -752,13 +693,13 @@
      {:tag :string, :string "BETWEEN"}
      {:tag :opt,
       :parser
-      {:tag :ord,
-       :parser1 {:tag :string, :string "ASYMMETRIC"},
-       :parser2 {:tag :string, :string "SYMMETRIC"}}}
+      {:tag :alt,
+       :parsers
+       ({:tag :string, :string "ASYMMETRIC"}
+        {:tag :string, :string "SYMMETRIC"})}}
      {:tag :nt, :keyword :point_in_time_1}
      {:tag :string, :string "AND"}
-     {:tag :nt, :keyword :point_in_time_2})},
-   :parser2
+     {:tag :nt, :keyword :point_in_time_2})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "FOR"}
@@ -766,25 +707,22 @@
      {:tag :string, :string "FROM"}
      {:tag :nt, :keyword :point_in_time_1}
      {:tag :string, :string "TO"}
-     {:tag :nt, :keyword :point_in_time_2})}}},
+     {:tag :nt, :keyword :point_in_time_2})})},
  :character_large_object_type
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "CHARACTER"}
-    {:tag :string, :string "LARGE"}
-    {:tag :string, :string "OBJECT"}
-    {:tag :opt,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :character_large_object_length}
-       {:tag :nt, :keyword :right_paren, :hide true})}})},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "CHARACTER"}
+     {:tag :string, :string "LARGE"}
+     {:tag :string, :string "OBJECT"}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :character_large_object_length}
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "CHAR"}
@@ -796,8 +734,7 @@
        :parsers
        ({:tag :nt, :keyword :left_paren, :hide true}
         {:tag :nt, :keyword :character_large_object_length}
-        {:tag :nt, :keyword :right_paren, :hide true})}})},
-   :parser2
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "CLOB"}
@@ -807,7 +744,7 @@
        :parsers
        ({:tag :nt, :keyword :left_paren, :hide true}
         {:tag :nt, :keyword :character_large_object_length}
-        {:tag :nt, :keyword :right_paren, :hide true})}})}}},
+        {:tag :nt, :keyword :right_paren, :hide true})}})})},
  :empty_grouping_set
  {:tag :cat,
   :parsers
@@ -846,39 +783,37 @@
   ({:tag :nt, :keyword :row_value_predicand}
    {:tag :nt, :keyword :between_predicate_part_2})},
  :like_predicate
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :character_like_predicate},
-  :parser2 {:tag :nt, :keyword :octet_like_predicate},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :character_like_predicate}
+   {:tag :nt, :keyword :octet_like_predicate}),
   :red {:reduction-type :raw}},
  :join_type
- {:tag :ord,
-  :parser1 {:tag :string, :string "INNER"},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :outer_join_type}
-    {:tag :opt, :parser {:tag :string, :string "OUTER"}})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "INNER"}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :outer_join_type}
+     {:tag :opt, :parser {:tag :string, :string "OUTER"}})})},
  :timestamp_precision
  {:tag :nt,
   :keyword :time_fractional_seconds_precision,
   :red {:reduction-type :raw}},
  :numeric_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :term},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :term}
    {:tag :cat,
     :parsers
     ({:tag :nt, :keyword :numeric_value_expression}
      {:tag :nt, :keyword :plus_sign}
-     {:tag :nt, :keyword :term})},
-   :parser2
+     {:tag :nt, :keyword :term})}
    {:tag :cat,
     :parsers
     ({:tag :nt, :keyword :numeric_value_expression}
      {:tag :nt, :keyword :minus_sign}
-     {:tag :nt, :keyword :term})}}},
+     {:tag :nt, :keyword :term})})},
  :field_reference
  {:tag :cat,
   :parsers
@@ -893,21 +828,22 @@
    {:tag :nt, :keyword :select_list}
    {:tag :nt, :keyword :table_expression})},
  :period_predicand
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :period_reference},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "PERIOD"}
-    {:tag :nt, :keyword :left_paren, :hide true}
-    {:tag :nt, :keyword :period_start_value}
-    {:tag :nt, :keyword :comma, :hide true}
-    {:tag :nt, :keyword :period_end_value}
-    {:tag :nt, :keyword :right_paren, :hide true})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :period_reference}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "PERIOD"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :period_start_value}
+     {:tag :nt, :keyword :comma, :hide true}
+     {:tag :nt, :keyword :period_end_value}
+     {:tag :nt, :keyword :right_paren, :hide true})})},
  :string_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :character_value_expression},
-  :parser2 {:tag :nt, :keyword :binary_value_expression},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :character_value_expression}
+   {:tag :nt, :keyword :binary_value_expression}),
   :red {:reduction-type :raw}},
  :joined_table
  {:tag :nt, :keyword :qualified_join, :red {:reduction-type :raw}},
@@ -938,35 +874,18 @@
       {:tag :nt, :keyword :time_precision}
       {:tag :nt, :keyword :right_paren, :hide true})}})},
  :when_operand
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :row_value_predicand},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :comparison_predicate_part_2},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :between_predicate_part_2},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :nt, :keyword :in_predicate_part_2},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :nt, :keyword :character_like_predicate_part_2},
-      :parser2
-      {:tag :ord,
-       :parser1 {:tag :nt, :keyword :octet_like_predicate_part_2},
-       :parser2
-       {:tag :ord,
-        :parser1 {:tag :nt, :keyword :regex_like_predicate_part_2},
-        :parser2
-        {:tag :ord,
-         :parser1 {:tag :nt, :keyword :null_predicate_part_2},
-         :parser2
-         {:tag :ord,
-          :parser1
-          {:tag :nt, :keyword :quantified_comparison_predicate_part_2},
-          :parser2
-          {:tag :nt, :keyword :overlaps_predicate_part_2}}}}}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :row_value_predicand}
+   {:tag :nt, :keyword :comparison_predicate_part_2}
+   {:tag :nt, :keyword :between_predicate_part_2}
+   {:tag :nt, :keyword :in_predicate_part_2}
+   {:tag :nt, :keyword :character_like_predicate_part_2}
+   {:tag :nt, :keyword :octet_like_predicate_part_2}
+   {:tag :nt, :keyword :regex_like_predicate_part_2}
+   {:tag :nt, :keyword :null_predicate_part_2}
+   {:tag :nt, :keyword :quantified_comparison_predicate_part_2}
+   {:tag :nt, :keyword :overlaps_predicate_part_2}),
   :red {:reduction-type :raw}},
  :basic_identifier_chain
  {:tag :nt, :keyword :identifier_chain, :red {:reduction-type :raw}},
@@ -994,10 +913,10 @@
      #"(?i)(\b(NULL|WITH|SELECT|FROM|WHERE|GROUP|HAVING|ORDER|OFFSET|FETCH|UNION|EXCEPT|INTERSECT|CURRENT_TIME|CURRENT_TIMESTAMP|CURRENT_DATE|LOCALTIME|LOCALTIMESTAMP)\b)"}}
    {:tag :regexp, :regexp #"[a-zA-Z][a-zA-Z0-9_]*"})},
  :contextually_typed_row_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :row_value_special_case},
-  :parser2
-  {:tag :nt, :keyword :contextually_typed_row_value_constructor},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :row_value_special_case}
+   {:tag :nt, :keyword :contextually_typed_row_value_constructor}),
   :red {:reduction-type :raw}},
  :asterisked_identifier
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
@@ -1022,14 +941,16 @@
  :set_function_specification
  {:tag :nt, :keyword :aggregate_function, :red {:reduction-type :raw}},
  :extract_source
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :datetime_value_expression},
-  :parser2 {:tag :nt, :keyword :interval_value_expression},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :datetime_value_expression}
+   {:tag :nt, :keyword :interval_value_expression}),
   :red {:reduction-type :raw}},
  :character_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :concatenation},
-  :parser2 {:tag :nt, :keyword :character_factor},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :concatenation}
+   {:tag :nt, :keyword :character_factor}),
   :red {:reduction-type :raw}},
  :less_than_or_equals_operator {:tag :string, :string "<="},
  :time_zone_interval
@@ -1048,19 +969,20 @@
    {:tag :nt, :keyword :insert_columns_and_source})},
  :null_specification {:tag :string, :string "NULL"},
  :query_term
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :query_primary},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :query_term}
-    {:tag :string, :string "INTERSECT"}
-    {:tag :opt,
-     :parser
-     {:tag :ord,
-      :parser1 {:tag :string, :string "ALL"},
-      :parser2 {:tag :string, :string "DISTINCT"}}}
-    {:tag :nt, :keyword :query_primary})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :query_primary}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :query_term}
+     {:tag :string, :string "INTERSECT"}
+     {:tag :opt,
+      :parser
+      {:tag :alt,
+       :parsers
+       ({:tag :string, :string "ALL"}
+        {:tag :string, :string "DISTINCT"})}}
+     {:tag :nt, :keyword :query_primary})})},
  :array_aggregate_function
  {:tag :cat,
   :parsers
@@ -1076,52 +998,24 @@
       {:tag :nt, :keyword :sort_specification_list})}}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :numeric_value_function
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :position_expression},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :extract_expression},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :length_expression},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :nt, :keyword :cardinality_expression},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :nt, :keyword :max_cardinality_expression},
-      :parser2
-      {:tag :ord,
-       :parser1 {:tag :nt, :keyword :absolute_value_expression},
-       :parser2
-       {:tag :ord,
-        :parser1 {:tag :nt, :keyword :modulus_expression},
-        :parser2
-        {:tag :ord,
-         :parser1 {:tag :nt, :keyword :trigonometric_function},
-         :parser2
-         {:tag :ord,
-          :parser1 {:tag :nt, :keyword :general_logarithm_function},
-          :parser2
-          {:tag :ord,
-           :parser1 {:tag :nt, :keyword :common_logarithm},
-           :parser2
-           {:tag :ord,
-            :parser1 {:tag :nt, :keyword :natural_logarithm},
-            :parser2
-            {:tag :ord,
-             :parser1 {:tag :nt, :keyword :exponential_function},
-             :parser2
-             {:tag :ord,
-              :parser1 {:tag :nt, :keyword :power_function},
-              :parser2
-              {:tag :ord,
-               :parser1 {:tag :nt, :keyword :square_root},
-               :parser2
-               {:tag :ord,
-                :parser1 {:tag :nt, :keyword :floor_function},
-                :parser2
-                {:tag :nt, :keyword :ceiling_function}}}}}}}}}}}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :position_expression}
+   {:tag :nt, :keyword :extract_expression}
+   {:tag :nt, :keyword :length_expression}
+   {:tag :nt, :keyword :cardinality_expression}
+   {:tag :nt, :keyword :max_cardinality_expression}
+   {:tag :nt, :keyword :absolute_value_expression}
+   {:tag :nt, :keyword :modulus_expression}
+   {:tag :nt, :keyword :trigonometric_function}
+   {:tag :nt, :keyword :general_logarithm_function}
+   {:tag :nt, :keyword :common_logarithm}
+   {:tag :nt, :keyword :natural_logarithm}
+   {:tag :nt, :keyword :exponential_function}
+   {:tag :nt, :keyword :power_function}
+   {:tag :nt, :keyword :square_root}
+   {:tag :nt, :keyword :floor_function}
+   {:tag :nt, :keyword :ceiling_function}),
   :red {:reduction-type :raw}},
  :group_by_clause
  {:tag :cat,
@@ -1160,9 +1054,10 @@
   ({:tag :string, :string "LATERAL"}
    {:tag :nt, :keyword :table_subquery})},
  :general_value_specification
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :host_parameter_specification},
-  :parser2 {:tag :nt, :keyword :dynamic_parameter_specification},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :host_parameter_specification}
+   {:tag :nt, :keyword :dynamic_parameter_specification}),
   :red {:reduction-type :raw}},
  :array_value_function
  {:tag :nt,
@@ -1175,9 +1070,10 @@
    {:tag :string, :string "BETWEEN"}
    {:tag :opt,
     :parser
-    {:tag :ord,
-     :parser1 {:tag :string, :string "ASYMMETRIC"},
-     :parser2 {:tag :string, :string "SYMMETRIC"}}}
+    {:tag :alt,
+     :parsers
+     ({:tag :string, :string "ASYMMETRIC"}
+      {:tag :string, :string "SYMMETRIC"})}}
    {:tag :nt, :keyword :row_value_predicand}
    {:tag :string, :string "AND"}
    {:tag :nt, :keyword :row_value_predicand})},
@@ -1223,42 +1119,35 @@
       ({:tag :nt, :keyword :comma, :hide true}
        {:tag :nt, :keyword :set_clause})}}})},
  :quantifier
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :all},
-  :parser2 {:tag :nt, :keyword :some},
+ {:tag :alt,
+  :parsers ({:tag :nt, :keyword :all} {:tag :nt, :keyword :some}),
   :red {:reduction-type :raw}},
  :trim_octet
  {:tag :nt,
   :keyword :binary_value_expression,
   :red {:reduction-type :raw}},
  :interval_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :interval_term},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :interval_term}
    {:tag :cat,
     :parsers
     ({:tag :nt, :keyword :interval_value_expression_1}
      {:tag :nt, :keyword :plus_sign}
-     {:tag :nt, :keyword :interval_term_1})},
-   :parser2
-   {:tag :ord,
-    :parser1
-    {:tag :cat,
-     :parsers
-     ({:tag :nt, :keyword :interval_value_expression_1}
-      {:tag :nt, :keyword :minus_sign}
-      {:tag :nt, :keyword :interval_term_1})},
-    :parser2
-    {:tag :cat,
-     :parsers
-     ({:tag :nt, :keyword :left_paren, :hide true}
-      {:tag :nt, :keyword :datetime_value_expression}
-      {:tag :nt, :keyword :minus_sign}
-      {:tag :nt, :keyword :datetime_term}
-      {:tag :nt, :keyword :right_paren, :hide true}
-      {:tag :nt, :keyword :interval_qualifier})}}}},
+     {:tag :nt, :keyword :interval_term_1})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :interval_value_expression_1}
+     {:tag :nt, :keyword :minus_sign}
+     {:tag :nt, :keyword :interval_term_1})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :datetime_value_expression}
+     {:tag :nt, :keyword :minus_sign}
+     {:tag :nt, :keyword :datetime_term}
+     {:tag :nt, :keyword :right_paren, :hide true}
+     {:tag :nt, :keyword :interval_qualifier})})},
  :trim_source
  {:tag :nt,
   :keyword :character_value_expression,
@@ -1302,21 +1191,22 @@
  {:tag :nt, :keyword :interval_term, :red {:reduction-type :raw}},
  :comma {:tag :string, :string ",", :red {:reduction-type :raw}},
  :outer_join_type
- {:tag :ord,
-  :parser1 {:tag :string, :string "LEFT"},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :string, :string "RIGHT"},
-   :parser2 {:tag :string, :string "FULL"}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "LEFT"}
+   {:tag :string, :string "RIGHT"}
+   {:tag :string, :string "FULL"})},
  :character_primary
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :value_expression_primary},
-  :parser2 {:tag :nt, :keyword :string_value_function},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :value_expression_primary}
+   {:tag :nt, :keyword :string_value_function}),
   :red {:reduction-type :raw}},
  :boolean_primary
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :predicate},
-  :parser2 {:tag :nt, :keyword :boolean_predicand},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :predicate}
+   {:tag :nt, :keyword :boolean_predicand}),
   :red {:reduction-type :raw}},
  :precision
  {:tag :nt, :keyword :unsigned_integer, :red {:reduction-type :raw}},
@@ -1333,9 +1223,10 @@
    {:tag :string, :string "THEN"}
    {:tag :nt, :keyword :result})},
  :unsigned_value_specification
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :unsigned_literal},
-  :parser2 {:tag :nt, :keyword :general_value_specification},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :unsigned_literal}
+   {:tag :nt, :keyword :general_value_specification}),
   :red {:reduction-type :raw}},
  :trim_function
  {:tag :cat,
@@ -1348,61 +1239,58 @@
  {:tag :nt, :keyword :query_expression, :red {:reduction-type :raw}},
  :solidus {:tag :string, :string "/"},
  :unsigned_numeric_literal
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :exact_numeric_literal},
-  :parser2 {:tag :nt, :keyword :approximate_numeric_literal},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :exact_numeric_literal}
+   {:tag :nt, :keyword :approximate_numeric_literal}),
   :red {:reduction-type :raw}},
  :single_datetime_field
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :non_second_primary_datetime_field}
-    {:tag :opt,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :interval_leading_field_precision}
-       {:tag :nt, :keyword :right_paren, :hide true})}})},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "SECOND"}
-    {:tag :opt,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :interval_leading_field_precision}
-       {:tag :opt,
-        :parser
-        {:tag :cat,
-         :parsers
-         ({:tag :nt, :keyword :comma, :hide true}
-          {:tag :nt,
-           :keyword :interval_fractional_seconds_precision})}}
-       {:tag :nt, :keyword :right_paren, :hide true})}})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :non_second_primary_datetime_field}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :interval_leading_field_precision}
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "SECOND"}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :interval_leading_field_precision}
+        {:tag :opt,
+         :parser
+         {:tag :cat,
+          :parsers
+          ({:tag :nt, :keyword :comma, :hide true}
+           {:tag :nt,
+            :keyword :interval_fractional_seconds_precision})}}
+        {:tag :nt, :keyword :right_paren, :hide true})}})})},
  :direct_sql_data_statement
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :delete_statement__searched},
-  :parser2
-  {:tag :ord,
-   :parser1
-   {:tag :nt, :keyword :direct_select_statement__multiple_rows},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :insert_statement},
-    :parser2 {:tag :nt, :keyword :update_statement__searched}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :delete_statement__searched}
+   {:tag :nt, :keyword :direct_select_statement__multiple_rows}
+   {:tag :nt, :keyword :insert_statement}
+   {:tag :nt, :keyword :update_statement__searched}),
   :red {:reduction-type :raw}},
  :overlaps_predicate_part_1
  {:tag :nt,
   :keyword :row_value_predicand_1,
   :red {:reduction-type :raw}},
  :array_primary
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :array_value_function},
-  :parser2 {:tag :nt, :keyword :value_expression_primary},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :array_value_function}
+   {:tag :nt, :keyword :value_expression_primary}),
   :red {:reduction-type :raw}},
  :field_name
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
@@ -1454,9 +1342,10 @@
    {:tag :nt, :keyword :unsigned_numeric_literal})},
  :vertical_bar {:tag :string, :string "|"},
  :table_reference
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :table_factor},
-  :parser2 {:tag :nt, :keyword :joined_table},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :table_factor}
+   {:tag :nt, :keyword :joined_table}),
   :red {:reduction-type :raw}},
  :right_bracket
  {:tag :string, :string "]", :red {:reduction-type :raw}},
@@ -1473,14 +1362,15 @@
    {:tag :opt, :parser {:tag :string, :string "NOT"}}
    {:tag :string, :string "NULL"})},
  :left_bracket_or_trigraph
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :left_bracket, :hide true},
-  :parser2 {:tag :nt, :keyword :left_bracket_trigraph, :hide true},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :left_bracket, :hide true}
+   {:tag :nt, :keyword :left_bracket_trigraph, :hide true}),
   :red {:reduction-type :raw}},
  :some
- {:tag :ord,
-  :parser1 {:tag :string, :string "SOME"},
-  :parser2 {:tag :string, :string "ANY"}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "SOME"} {:tag :string, :string "ANY"})},
  :array_element_list
  {:tag :cat,
   :parsers
@@ -1494,15 +1384,15 @@
       ({:tag :nt, :keyword :comma, :hide true}
        {:tag :nt, :keyword :array_element})}}})},
  :target_table
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :table_name},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "ONLY"}
-    {:tag :nt, :keyword :left_paren, :hide true}
-    {:tag :nt, :keyword :table_name}
-    {:tag :nt, :keyword :right_paren, :hide true})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :table_name}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "ONLY"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :table_name}
+     {:tag :nt, :keyword :right_paren, :hide true})})},
  :character_substring_function
  {:tag :cat,
   :parsers
@@ -1539,9 +1429,9 @@
  :fold
  {:tag :cat,
   :parsers
-  ({:tag :ord,
-    :parser1 {:tag :string, :string "UPPER"},
-    :parser2 {:tag :string, :string "LOWER"}}
+  ({:tag :alt,
+    :parsers
+    ({:tag :string, :string "UPPER"} {:tag :string, :string "LOWER"})}
    {:tag :nt, :keyword :left_paren, :hide true}
    {:tag :nt, :keyword :character_value_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
@@ -1551,27 +1441,26 @@
   ({:tag :string, :string "INTERVAL"}
    {:tag :nt, :keyword :interval_qualifier})},
  :select_list
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :asterisk},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :select_sublist}
-    {:tag :opt,
-     :parser
-     {:tag :plus,
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :asterisk}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :select_sublist}
+     {:tag :opt,
       :parser
-      {:tag :cat,
-       :parsers
-       ({:tag :nt, :keyword :comma, :hide true}
-        {:tag :nt, :keyword :select_sublist})}}})}},
+      {:tag :plus,
+       :parser
+       {:tag :cat,
+        :parsers
+        ({:tag :nt, :keyword :comma, :hide true}
+         {:tag :nt, :keyword :select_sublist})}}})})},
  :row_value_constructor_predicand
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :common_value_expression},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :boolean_predicand},
-   :parser2 {:tag :nt, :keyword :explicit_row_value_constructor}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :common_value_expression}
+   {:tag :nt, :keyword :boolean_predicand}
+   {:tag :nt, :keyword :explicit_row_value_constructor}),
   :red {:reduction-type :raw}},
  :octet_like_predicate_part_2
  {:tag :cat,
@@ -1586,10 +1475,10 @@
      ({:tag :string, :string "ESCAPE"}
       {:tag :nt, :keyword :escape_octet})}})},
  :value_expression_primary
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :parenthesized_value_expression},
-  :parser2
-  {:tag :nt, :keyword :nonparenthesized_value_expression_primary},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :parenthesized_value_expression}
+   {:tag :nt, :keyword :nonparenthesized_value_expression_primary}),
   :red {:reduction-type :raw}},
  :contextually_typed_row_value_constructor_element_list
  {:tag :cat,
@@ -1628,9 +1517,9 @@
      ({:tag :string, :string "ESCAPE"}
       {:tag :nt, :keyword :escape_character})}})},
  :ordering_specification
- {:tag :ord,
-  :parser1 {:tag :string, :string "ASC"},
-  :parser2 {:tag :string, :string "DESC"}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "ASC"} {:tag :string, :string "DESC"})},
  :named_columns_join
  {:tag :cat,
   :parsers
@@ -1662,30 +1551,17 @@
    {:tag :string, :string "AS"}
    {:tag :nt, :keyword :table_subquery})},
  :nonparenthesized_value_expression_primary
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :unsigned_value_specification},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :column_reference},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :set_function_specification},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :nt, :keyword :scalar_subquery},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :nt, :keyword :case_expression},
-      :parser2
-      {:tag :ord,
-       :parser1 {:tag :nt, :keyword :cast_specification},
-       :parser2
-       {:tag :ord,
-        :parser1 {:tag :nt, :keyword :field_reference},
-        :parser2
-        {:tag :ord,
-         :parser1 {:tag :nt, :keyword :collection_value_constructor},
-         :parser2 {:tag :nt, :keyword :array_element_reference}}}}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :unsigned_value_specification}
+   {:tag :nt, :keyword :column_reference}
+   {:tag :nt, :keyword :set_function_specification}
+   {:tag :nt, :keyword :scalar_subquery}
+   {:tag :nt, :keyword :case_expression}
+   {:tag :nt, :keyword :cast_specification}
+   {:tag :nt, :keyword :field_reference}
+   {:tag :nt, :keyword :collection_value_constructor}
+   {:tag :nt, :keyword :array_element_reference}),
   :red {:reduction-type :raw}},
  :empty_specification
  {:tag :cat,
@@ -1723,27 +1599,27 @@
  :ceiling_function
  {:tag :cat,
   :parsers
-  ({:tag :ord,
-    :parser1 {:tag :string, :string "CEIL"},
-    :parser2 {:tag :string, :string "CEILING"}}
+  ({:tag :alt,
+    :parsers
+    ({:tag :string, :string "CEIL"} {:tag :string, :string "CEILING"})}
    {:tag :nt, :keyword :left_paren, :hide true}
    {:tag :nt, :keyword :numeric_value_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :row_value_constructor
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :common_value_expression},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :boolean_value_expression},
-   :parser2 {:tag :nt, :keyword :explicit_row_value_constructor}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :common_value_expression}
+   {:tag :nt, :keyword :boolean_value_expression}
+   {:tag :nt, :keyword :explicit_row_value_constructor}),
   :red {:reduction-type :raw}},
  :right_brace {:tag :string, :string "}", :red {:reduction-type :raw}},
  :minutes_value
  {:tag :nt, :keyword :datetime_value, :red {:reduction-type :raw}},
  :time_zone_field
- {:tag :ord,
-  :parser1 {:tag :string, :string "TIMEZONE_HOUR"},
-  :parser2 {:tag :string, :string "TIMEZONE_MINUTE"}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "TIMEZONE_HOUR"}
+   {:tag :string, :string "TIMEZONE_MINUTE"})},
  :sort_specification_list
  {:tag :cat,
   :parsers
@@ -1781,9 +1657,10 @@
    {:tag :nt,
     :keyword :period_immediately_precedes_predicate_part_2})},
  :simple_table
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :query_specification},
-  :parser2 {:tag :nt, :keyword :table_value_constructor},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :query_specification}
+   {:tag :nt, :keyword :table_value_constructor}),
   :red {:reduction-type :raw}},
  :period_equals_predicate
  {:tag :cat,
@@ -1796,26 +1673,24 @@
   ({:tag :regexp, :regexp #"[0-9]+"}
    {:tag :nt, :keyword :multiplier})},
  :row_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :row_value_special_case},
-  :parser2 {:tag :nt, :keyword :explicit_row_value_constructor},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :row_value_special_case}
+   {:tag :nt, :keyword :explicit_row_value_constructor}),
   :red {:reduction-type :raw}},
  :character_string_type
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "CHARACTER"}
-    {:tag :opt,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :character_length}
-       {:tag :nt, :keyword :right_paren, :hide true})}})},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "CHARACTER"}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :character_length}
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "CHAR"}
@@ -1825,37 +1700,28 @@
        :parsers
        ({:tag :nt, :keyword :left_paren, :hide true}
         {:tag :nt, :keyword :character_length}
-        {:tag :nt, :keyword :right_paren, :hide true})}})},
-   :parser2
-   {:tag :ord,
-    :parser1
-    {:tag :cat,
-     :parsers
-     ({:tag :string, :string "CHARACTER"}
-      {:tag :string, :string "VARYING"}
-      {:tag :nt, :keyword :left_paren, :hide true}
-      {:tag :nt, :keyword :character_length}
-      {:tag :nt, :keyword :right_paren, :hide true})},
-    :parser2
-    {:tag :ord,
-     :parser1
-     {:tag :cat,
-      :parsers
-      ({:tag :string, :string "CHAR"}
-       {:tag :string, :string "VARYING"}
-       {:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :character_length}
-       {:tag :nt, :keyword :right_paren, :hide true})},
-     :parser2
-     {:tag :ord,
-      :parser1
-      {:tag :cat,
-       :parsers
-       ({:tag :string, :string "VARCHAR"}
-        {:tag :nt, :keyword :left_paren, :hide true}
-        {:tag :nt, :keyword :character_length}
-        {:tag :nt, :keyword :right_paren, :hide true})},
-      :parser2 {:tag :nt, :keyword :character_large_object_type}}}}}},
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "CHARACTER"}
+     {:tag :string, :string "VARYING"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :character_length}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "CHAR"}
+     {:tag :string, :string "VARYING"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :character_length}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "VARCHAR"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :character_length}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :nt, :keyword :character_large_object_type})},
  :regex_like_predicate_part_2
  {:tag :cat,
   :parsers
@@ -1871,29 +1737,28 @@
  :colon {:tag :string, :string ":", :red {:reduction-type :raw}},
  :plus_sign {:tag :string, :string "+"},
  :case_abbreviation
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "NULLIF"}
-    {:tag :nt, :keyword :left_paren, :hide true}
-    {:tag :nt, :keyword :value_expression}
-    {:tag :nt, :keyword :comma, :hide true}
-    {:tag :nt, :keyword :value_expression}
-    {:tag :nt, :keyword :right_paren, :hide true})},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "COALESCE"}
-    {:tag :nt, :keyword :left_paren, :hide true}
-    {:tag :nt, :keyword :value_expression}
-    {:tag :plus,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :comma, :hide true}
-       {:tag :nt, :keyword :value_expression})}}
-    {:tag :nt, :keyword :right_paren, :hide true})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "NULLIF"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :value_expression}
+     {:tag :nt, :keyword :comma, :hide true}
+     {:tag :nt, :keyword :value_expression}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "COALESCE"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :value_expression}
+     {:tag :plus,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :comma, :hide true}
+        {:tag :nt, :keyword :value_expression})}}
+     {:tag :nt, :keyword :right_paren, :hide true})})},
  :extract_expression
  {:tag :cat,
   :parsers
@@ -1918,17 +1783,15 @@
   :keyword :datetime_value_expression,
   :red {:reduction-type :raw}},
  :update_source
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :value_expression},
-  :parser2
-  {:tag :nt, :keyword :contextually_typed_value_specification},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :value_expression}
+   {:tag :nt, :keyword :contextually_typed_value_specification}),
   :red {:reduction-type :raw}},
  :term
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :factor},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :factor}
    {:tag :cat,
     :parsers
     ({:tag :nt, :keyword :term}
@@ -1937,94 +1800,84 @@
      {:tag :neg,
       :parser
       {:tag :regexp,
-       :regexp #"(?i)(\b(YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)\b)"}})},
-   :parser2
+       :regexp #"(?i)(\b(YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)\b)"}})}
    {:tag :cat,
     :parsers
     ({:tag :nt, :keyword :term}
      {:tag :nt, :keyword :solidus}
-     {:tag :nt, :keyword :factor})}}},
+     {:tag :nt, :keyword :factor})})},
  :right_bracket_or_trigraph
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :right_bracket, :hide true},
-  :parser2 {:tag :nt, :keyword :right_bracket_trigraph, :hide true},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :right_bracket, :hide true}
+   {:tag :nt, :keyword :right_bracket_trigraph, :hide true}),
   :red {:reduction-type :raw}},
  :binary_string_type
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "BINARY"}
-    {:tag :opt,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :length}
-       {:tag :nt, :keyword :right_paren, :hide true})}})},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "BINARY"}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :length}
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "BINARY"}
      {:tag :string, :string "VARYING"}
      {:tag :nt, :keyword :left_paren, :hide true}
      {:tag :nt, :keyword :length}
-     {:tag :nt, :keyword :right_paren, :hide true})},
-   :parser2
-   {:tag :ord,
-    :parser1
-    {:tag :cat,
-     :parsers
-     ({:tag :string, :string "VARBINARY"}
-      {:tag :nt, :keyword :left_paren, :hide true}
-      {:tag :nt, :keyword :length}
-      {:tag :nt, :keyword :right_paren, :hide true})},
-    :parser2 {:tag :nt, :keyword :binary_large_object_string_type}}}},
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "VARBINARY"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :length}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :nt, :keyword :binary_large_object_string_type})},
  :primary_datetime_field
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :non_second_primary_datetime_field},
-  :parser2 {:tag :string, :string "SECOND"}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :non_second_primary_datetime_field}
+   {:tag :string, :string "SECOND"})},
  :table_row_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :row_value_special_case},
-  :parser2 {:tag :nt, :keyword :row_value_constructor},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :row_value_special_case}
+   {:tag :nt, :keyword :row_value_constructor}),
   :red {:reduction-type :raw}},
  :exact_numeric_literal
  {:tag :regexp, :regexp #"(\d*\.\d+|\d+\.\d*|\d+)"},
  :non_second_primary_datetime_field
- {:tag :ord,
-  :parser1 {:tag :string, :string "YEAR"},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :string, :string "MONTH"},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :string, :string "DAY"},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :string, :string "HOUR"},
-     :parser2 {:tag :string, :string "MINUTE"}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "YEAR"}
+   {:tag :string, :string "MONTH"}
+   {:tag :string, :string "DAY"}
+   {:tag :string, :string "HOUR"}
+   {:tag :string, :string "MINUTE"})},
  :cast_target
  {:tag :nt, :keyword :data_type, :red {:reduction-type :raw}},
  :correlation_or_recognition
  {:tag :cat,
   :parsers
-  ({:tag :ord,
-    :parser1
-    {:tag :cat,
-     :parsers
-     ({:tag :string, :string "AS"}
-      {:tag :nt, :keyword :correlation_name})},
-    :parser2
-    {:tag :cat,
-     :parsers
-     ({:tag :neg,
-       :parser
-       {:tag :regexp,
-        :regexp #"(?i)(\b(ON|JOIN|INNER|LEFT|RIGHT|USING|OUTER)\b)"}}
-      {:tag :nt, :keyword :correlation_name})}}
+  ({:tag :alt,
+    :parsers
+    ({:tag :cat,
+      :parsers
+      ({:tag :string, :string "AS"}
+       {:tag :nt, :keyword :correlation_name})}
+     {:tag :cat,
+      :parsers
+      ({:tag :neg,
+        :parser
+        {:tag :regexp,
+         :regexp #"(?i)(\b(ON|JOIN|INNER|LEFT|RIGHT|USING|OUTER)\b)"}}
+       {:tag :nt, :keyword :correlation_name})})}
    {:tag :opt,
     :parser
     {:tag :cat,
@@ -2050,9 +1903,10 @@
   ({:tag :nt, :keyword :period_predicand_1}
    {:tag :nt, :keyword :period_contains_predicate_part_2})},
  :unsigned_literal
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :unsigned_numeric_literal},
-  :parser2 {:tag :nt, :keyword :general_literal},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :unsigned_numeric_literal}
+   {:tag :nt, :keyword :general_literal}),
   :red {:reduction-type :raw}},
  :timestamp_literal
  {:tag :cat,
@@ -2068,9 +1922,10 @@
    {:tag :string, :string "IN"}
    {:tag :nt, :keyword :in_predicate_value})},
  :simple_value_specification
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :literal},
-  :parser2 {:tag :nt, :keyword :host_parameter_name},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :literal}
+   {:tag :nt, :keyword :host_parameter_name}),
   :red {:reduction-type :raw}},
  :concatenation
  {:tag :cat,
@@ -2093,19 +1948,19 @@
   ({:tag :nt, :keyword :row_value_predicand}
    {:tag :nt, :keyword :comparison_predicate_part_2})},
  :end_field
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :non_second_primary_datetime_field},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "SECOND"}
-    {:tag :opt,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :interval_fractional_seconds_precision}
-       {:tag :nt, :keyword :right_paren, :hide true})}})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :non_second_primary_datetime_field}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "SECOND"}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :interval_fractional_seconds_precision}
+        {:tag :nt, :keyword :right_paren, :hide true})}})})},
  :row_value_expression_list
  {:tag :cat,
   :parsers
@@ -2131,28 +1986,28 @@
  :seconds_fraction
  {:tag :nt, :keyword :unsigned_integer, :red {:reduction-type :raw}},
  :case_operand
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :row_value_predicand},
-  :parser2 {:tag :nt, :keyword :overlaps_predicate_part_1}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :row_value_predicand}
+   {:tag :nt, :keyword :overlaps_predicate_part_1})},
  :join_condition
  {:tag :cat,
   :parsers
   ({:tag :string, :string "ON"}
    {:tag :nt, :keyword :search_condition})},
  :with_or_without_time_zone
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "WITH"}
-    {:tag :string, :string "TIME"}
-    {:tag :string, :string "ZONE"})},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "WITHOUT"}
-    {:tag :string, :string "TIME"}
-    {:tag :string, :string "ZONE"})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "WITH"}
+     {:tag :string, :string "TIME"}
+     {:tag :string, :string "ZONE"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "WITHOUT"}
+     {:tag :string, :string "TIME"}
+     {:tag :string, :string "ZONE"})})},
  :grouping_element_list
  {:tag :cat,
   :parsers
@@ -2203,9 +2058,10 @@
  :unquoted_date_string
  {:tag :nt, :keyword :date_value, :red {:reduction-type :raw}},
  :result
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :result_expression},
-  :parser2 {:tag :string, :string "NULL"}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :result_expression}
+   {:tag :string, :string "NULL"})},
  :character_pattern
  {:tag :nt,
   :keyword :character_value_expression,
@@ -2221,9 +2077,10 @@
    {:tag :nt, :keyword :value_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :case_specification
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :simple_case},
-  :parser2 {:tag :nt, :keyword :searched_case},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :simple_case}
+   {:tag :nt, :keyword :searched_case}),
   :red {:reduction-type :raw}},
  :minus_sign {:tag :string, :string "-"},
  :period_succeeds_predicate_part_2
@@ -2263,47 +2120,43 @@
      ({:tag :string, :string "WHERE"}
       {:tag :nt, :keyword :search_condition})}})},
  :set_quantifier
- {:tag :ord,
-  :parser1 {:tag :string, :string "DISTINCT"},
-  :parser2 {:tag :string, :string "ALL"}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "DISTINCT"} {:tag :string, :string "ALL"})},
  :factor
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :opt, :parser {:tag :nt, :keyword :sign}}
-    {:tag :nt, :keyword :numeric_primary})},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :sign}
-    {:tag :nt, :keyword :separator, :hide true}
-    {:tag :nt, :keyword :factor})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :opt, :parser {:tag :nt, :keyword :sign}}
+     {:tag :nt, :keyword :numeric_primary})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :sign}
+     {:tag :nt, :keyword :separator, :hide true}
+     {:tag :nt, :keyword :factor})})},
  :period_overlaps_predicate
  {:tag :cat,
   :parsers
   ({:tag :nt, :keyword :period_predicand_1}
    {:tag :nt, :keyword :period_overlaps_predicate_part_2})},
  :explicit_row_value_constructor
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :left_paren, :hide true}
-    {:tag :nt, :keyword :row_value_constructor_element}
-    {:tag :nt, :keyword :comma, :hide true}
-    {:tag :nt, :keyword :row_value_constructor_element_list}
-    {:tag :nt, :keyword :right_paren, :hide true})},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :row_value_constructor_element}
+     {:tag :nt, :keyword :comma, :hide true}
+     {:tag :nt, :keyword :row_value_constructor_element_list}
+     {:tag :nt, :keyword :right_paren, :hide true})}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "ROW"}
      {:tag :nt, :keyword :left_paren, :hide true}
      {:tag :nt, :keyword :row_value_constructor_element_list}
-     {:tag :nt, :keyword :right_paren, :hide true})},
-   :parser2 {:tag :nt, :keyword :row_subquery}}},
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :nt, :keyword :row_subquery})},
  :ordinary_grouping_set
  {:tag :nt,
   :keyword :grouping_column_reference,
@@ -2311,9 +2164,10 @@
  :right_bracket_trigraph
  {:tag :string, :string "??)", :red {:reduction-type :raw}},
  :length_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :char_length_expression},
-  :parser2 {:tag :nt, :keyword :octet_length_expression},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :char_length_expression}
+   {:tag :nt, :keyword :octet_length_expression}),
   :red {:reduction-type :raw}},
  :from_subquery
  {:tag :cat,
@@ -2359,18 +2213,21 @@
    {:tag :nt, :keyword :query_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :char_length_units
- {:tag :ord,
-  :parser1 {:tag :string, :string "CHARACTERS"},
-  :parser2 {:tag :string, :string "OCTETS"}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "CHARACTERS"}
+   {:tag :string, :string "OCTETS"})},
  :binary_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :binary_concatenation},
-  :parser2 {:tag :nt, :keyword :binary_factor},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :binary_concatenation}
+   {:tag :nt, :keyword :binary_factor}),
   :red {:reduction-type :raw}},
  :literal
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :signed_numeric_literal},
-  :parser2 {:tag :nt, :keyword :general_literal},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :signed_numeric_literal}
+   {:tag :nt, :keyword :general_literal}),
   :red {:reduction-type :raw}},
  :parenthesized_value_expression
  {:tag :cat,
@@ -2389,33 +2246,32 @@
  :years_value
  {:tag :nt, :keyword :datetime_value, :red {:reduction-type :raw}},
  :override_clause
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "OVERRIDING"}
-    {:tag :string, :string "USER"}
-    {:tag :string, :string "VALUE"})},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "OVERRIDING"}
-    {:tag :string, :string "SYSTEM"}
-    {:tag :string, :string "VALUE"})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "OVERRIDING"}
+     {:tag :string, :string "USER"}
+     {:tag :string, :string "VALUE"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "OVERRIDING"}
+     {:tag :string, :string "SYSTEM"}
+     {:tag :string, :string "VALUE"})})},
  :xquery_pattern
  {:tag :nt,
   :keyword :character_value_expression,
   :red {:reduction-type :raw}},
  :null_ordering
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "NULLS"} {:tag :string, :string "FIRST"})},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "NULLS"} {:tag :string, :string "LAST"})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "NULLS"} {:tag :string, :string "FIRST"})}
+   {:tag :cat,
+    :parsers
+    ({:tag :string, :string "NULLS"}
+     {:tag :string, :string "LAST"})})},
  :simple_case
  {:tag :cat,
   :parsers
@@ -2463,18 +2319,13 @@
    {:tag :nt, :keyword :interval_string}
    {:tag :nt, :keyword :interval_qualifier})},
  :common_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :numeric_value_expression},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :string_value_expression},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :datetime_value_expression},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :nt, :keyword :interval_value_expression},
-     :parser2 {:tag :nt, :keyword :collection_value_expression}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :numeric_value_expression}
+   {:tag :nt, :keyword :string_value_expression}
+   {:tag :nt, :keyword :datetime_value_expression}
+   {:tag :nt, :keyword :interval_value_expression}
+   {:tag :nt, :keyword :collection_value_expression}),
   :red {:reduction-type :raw}},
  :signed_integer
  {:tag :cat,
@@ -2482,22 +2333,20 @@
   ({:tag :opt, :parser {:tag :nt, :keyword :sign}}
    {:tag :nt, :keyword :unsigned_integer})},
  :insert_columns_and_source
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :from_subquery},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :from_constructor},
-   :parser2 {:tag :nt, :keyword :from_default}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :from_subquery}
+   {:tag :nt, :keyword :from_constructor}
+   {:tag :nt, :keyword :from_default}),
   :red {:reduction-type :raw}},
  :query_name
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
  :data_type
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :predefined_type},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :row_type},
-   :parser2 {:tag :nt, :keyword :collection_type}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :predefined_type}
+   {:tag :nt, :keyword :row_type}
+   {:tag :nt, :keyword :collection_type}),
   :red {:reduction-type :raw}},
  :square_root
  {:tag :cat,
@@ -2509,19 +2358,19 @@
  :length
  {:tag :nt, :keyword :unsigned_integer, :red {:reduction-type :raw}},
  :select_sublist
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :derived_column},
-  :parser2 {:tag :nt, :keyword :qualified_asterisk},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :derived_column}
+   {:tag :nt, :keyword :qualified_asterisk}),
   :red {:reduction-type :raw}},
  :identifier
  {:tag :nt, :keyword :actual_identifier, :red {:reduction-type :raw}},
  :datetime_literal
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :date_literal},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :time_literal},
-   :parser2 {:tag :nt, :keyword :timestamp_literal}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :date_literal}
+   {:tag :nt, :keyword :time_literal}
+   {:tag :nt, :keyword :timestamp_literal}),
   :red {:reduction-type :raw}},
  :derived_column_list
  {:tag :nt, :keyword :column_name_list, :red {:reduction-type :raw}},
@@ -2555,9 +2404,10 @@
  :char_length_expression
  {:tag :cat,
   :parsers
-  ({:tag :ord,
-    :parser1 {:tag :string, :string "CHAR_LENGTH"},
-    :parser2 {:tag :string, :string "CHARACTER_LENGTH"}}
+  ({:tag :alt,
+    :parsers
+    ({:tag :string, :string "CHAR_LENGTH"}
+     {:tag :string, :string "CHARACTER_LENGTH"})}
    {:tag :nt, :keyword :left_paren, :hide true}
    {:tag :nt, :keyword :character_value_expression}
    {:tag :opt,
@@ -2568,9 +2418,10 @@
       {:tag :nt, :keyword :char_length_units})}}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :extract_field
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :primary_datetime_field},
-  :parser2 {:tag :nt, :keyword :time_zone_field},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :primary_datetime_field}
+   {:tag :nt, :keyword :time_zone_field}),
   :red {:reduction-type :raw}},
  :time_zone
  {:tag :cat,
@@ -2588,23 +2439,23 @@
   :parsers
   ({:tag :string, :string "DATE"} {:tag :nt, :keyword :date_string})},
  :boolean_literal
- {:tag :ord,
-  :parser1 {:tag :string, :string "TRUE"},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :string, :string "FALSE"},
-   :parser2 {:tag :string, :string "UNKNOWN"}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "TRUE"}
+   {:tag :string, :string "FALSE"}
+   {:tag :string, :string "UNKNOWN"})},
  :application_time_period_name
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
  :contextually_typed_row_value_constructor_element
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :value_expression},
-  :parser2
-  {:tag :nt, :keyword :contextually_typed_value_specification}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :value_expression}
+   {:tag :nt, :keyword :contextually_typed_value_specification})},
  :actual_identifier
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :regular_identifier},
-  :parser2 {:tag :nt, :keyword :delimited_identifier},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :regular_identifier}
+   {:tag :nt, :keyword :delimited_identifier}),
   :red {:reduction-type :raw}},
  :derived_column
  {:tag :cat,
@@ -2617,36 +2468,33 @@
   ({:tag :nt, :keyword :row_value_predicand}
    {:tag :nt, :keyword :in_predicate_part_2})},
  :update_target
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :object_column},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :object_column}
-    {:tag :nt, :keyword :left_bracket_or_trigraph}
-    {:tag :nt, :keyword :simple_value_specification}
-    {:tag :nt, :keyword :right_bracket_or_trigraph})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :object_column}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :object_column}
+     {:tag :nt, :keyword :left_bracket_or_trigraph}
+     {:tag :nt, :keyword :simple_value_specification}
+     {:tag :nt, :keyword :right_bracket_or_trigraph})})},
  :approximate_numeric_type
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "FLOAT"}
-    {:tag :opt,
-     :parser
-     {:tag :cat,
-      :parsers
-      ({:tag :nt, :keyword :left_paren, :hide true}
-       {:tag :nt, :keyword :precision}
-       {:tag :nt, :keyword :right_paren, :hide true})}})},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :string, :string "REAL"},
-   :parser2
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "FLOAT"}
+     {:tag :opt,
+      :parser
+      {:tag :cat,
+       :parsers
+       ({:tag :nt, :keyword :left_paren, :hide true}
+        {:tag :nt, :keyword :precision}
+        {:tag :nt, :keyword :right_paren, :hide true})}})}
+   {:tag :string, :string "REAL"}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "DOUBLE"}
-     {:tag :string, :string "PRECISION"})}}},
+     {:tag :string, :string "PRECISION"})})},
  :dynamic_parameter_specification {:tag :nt, :keyword :question_mark},
  :character_factor
  {:tag :nt, :keyword :character_primary, :red {:reduction-type :raw}},
@@ -2659,9 +2507,10 @@
  :seconds_integer_value
  {:tag :nt, :keyword :unsigned_integer, :red {:reduction-type :raw}},
  :case_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :case_abbreviation},
-  :parser2 {:tag :nt, :keyword :case_specification},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :case_abbreviation}
+   {:tag :nt, :keyword :case_specification}),
   :red {:reduction-type :raw}},
  :period_immediately_succeeds_predicate
  {:tag :cat,
@@ -2683,14 +2532,14 @@
   :keyword :datetime_value_expression,
   :red {:reduction-type :raw}},
  :boolean_term
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :boolean_factor},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :boolean_term}
-    {:tag :string, :string "AND"}
-    {:tag :nt, :keyword :boolean_factor})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :boolean_factor}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :boolean_term}
+     {:tag :string, :string "AND"}
+     {:tag :nt, :keyword :boolean_factor})})},
  :table_factor
  {:tag :nt, :keyword :table_primary, :red {:reduction-type :raw}},
  :datetime_term
@@ -2712,19 +2561,20 @@
   ({:tag :string, :string "FROM"}
    {:tag :nt, :keyword :table_reference_list})},
  :array_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :array_concatenation},
-  :parser2 {:tag :nt, :keyword :array_primary},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :array_concatenation}
+   {:tag :nt, :keyword :array_primary}),
   :red {:reduction-type :raw}},
  :in_predicate_value
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :table_subquery},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :left_paren, :hide true}
-    {:tag :nt, :keyword :in_value_list}
-    {:tag :nt, :keyword :right_paren, :hide true})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :table_subquery}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :in_value_list}
+     {:tag :nt, :keyword :right_paren, :hide true})})},
  :cardinality_expression
  {:tag :cat,
   :parsers
@@ -2778,27 +2628,21 @@
       {:tag :nt, :keyword :right_paren, :hide true})}})},
  :boolean_type {:tag :string, :string "BOOLEAN"},
  :general_literal
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :character_string_literal},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :binary_string_literal},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :datetime_literal},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :nt, :keyword :interval_literal},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :nt, :keyword :boolean_literal},
-      :parser2 {:tag :nt, :keyword :null_specification}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :character_string_literal}
+   {:tag :nt, :keyword :binary_string_literal}
+   {:tag :nt, :keyword :datetime_literal}
+   {:tag :nt, :keyword :interval_literal}
+   {:tag :nt, :keyword :boolean_literal}
+   {:tag :nt, :keyword :null_specification}),
   :red {:reduction-type :raw}},
  :period {:tag :string, :string ".", :red {:reduction-type :raw}},
  :join_specification
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :join_condition},
-  :parser2 {:tag :nt, :keyword :named_columns_join},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :join_condition}
+   {:tag :nt, :keyword :named_columns_join}),
   :red {:reduction-type :raw}},
  :current_time_value_function
  {:tag :cat,
@@ -2817,58 +2661,39 @@
   ({:tag :nt, :keyword :colon, :hide true}
    {:tag :regexp, :regexp #"[a-zA-Z][a-zA-Z0-9_]*"})},
  :interval_qualifier
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :start_field}
-    {:tag :string, :string "TO"}
-    {:tag :nt, :keyword :end_field})},
-  :parser2 {:tag :nt, :keyword :single_datetime_field}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :start_field}
+     {:tag :string, :string "TO"}
+     {:tag :nt, :keyword :end_field})}
+   {:tag :nt, :keyword :single_datetime_field})},
  :character_string_literal
  {:tag :plus, :parser {:tag :regexp, :regexp #"'(''|[^'])*'"}},
  :table_or_query_name
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :table_name},
-  :parser2 {:tag :nt, :keyword :query_name},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :table_name} {:tag :nt, :keyword :query_name}),
   :red {:reduction-type :raw}},
  :column_name
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
  :default_specification {:tag :string, :string "DEFAULT"},
  :computational_operation
- {:tag :ord,
-  :parser1 {:tag :string, :string "AVG"},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :string, :string "MAX"},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :string, :string "MIN"},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :string, :string "SUM"},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :string, :string "EVERY"},
-      :parser2
-      {:tag :ord,
-       :parser1 {:tag :string, :string "ANY"},
-       :parser2
-       {:tag :ord,
-        :parser1 {:tag :string, :string "SOME"},
-        :parser2
-        {:tag :ord,
-         :parser1 {:tag :string, :string "COUNT"},
-         :parser2
-         {:tag :ord,
-          :parser1 {:tag :string, :string "STDDEV_POP"},
-          :parser2
-          {:tag :ord,
-           :parser1 {:tag :string, :string "STDDEV_SAMP"},
-           :parser2
-           {:tag :ord,
-            :parser1 {:tag :string, :string "VAR_SAMP"},
-            :parser2 {:tag :string, :string "VAR_POP"}}}}}}}}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "AVG"}
+   {:tag :string, :string "MAX"}
+   {:tag :string, :string "MIN"}
+   {:tag :string, :string "SUM"}
+   {:tag :string, :string "EVERY"}
+   {:tag :string, :string "ANY"}
+   {:tag :string, :string "SOME"}
+   {:tag :string, :string "COUNT"}
+   {:tag :string, :string "STDDEV_POP"}
+   {:tag :string, :string "STDDEV_SAMP"}
+   {:tag :string, :string "VAR_SAMP"}
+   {:tag :string, :string "VAR_POP"})},
  :ampersand {:tag :string, :string "&"},
  :left_paren {:tag :string, :string "(", :red {:reduction-type :raw}},
  :current_timestamp_value_function
@@ -2893,40 +2718,32 @@
  :table_name
  {:tag :nt, :keyword :identifier, :red {:reduction-type :raw}},
  :datetime_value_function
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :current_date_value_function},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :current_timestamp_value_function},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :current_time_value_function},
-    :parser2
-    {:tag :ord,
-     :parser1
-     {:tag :nt, :keyword :current_local_timestamp_value_function},
-     :parser2
-     {:tag :nt, :keyword :current_local_time_value_function}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :current_date_value_function}
+   {:tag :nt, :keyword :current_timestamp_value_function}
+   {:tag :nt, :keyword :current_time_value_function}
+   {:tag :nt, :keyword :current_local_timestamp_value_function}
+   {:tag :nt, :keyword :current_local_time_value_function}),
   :red {:reduction-type :raw}},
  :aggregate_function
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "COUNT"}
-    {:tag :nt, :keyword :left_paren, :hide true}
-    {:tag :nt, :keyword :asterisk}
-    {:tag :nt, :keyword :right_paren, :hide true})},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :general_set_function},
-   :parser2 {:tag :nt, :keyword :array_aggregate_function}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "COUNT"}
+     {:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :asterisk}
+     {:tag :nt, :keyword :right_paren, :hide true})}
+   {:tag :nt, :keyword :general_set_function}
+   {:tag :nt, :keyword :array_aggregate_function})},
  :join_column_list
  {:tag :nt, :keyword :column_name_list, :red {:reduction-type :raw}},
  :row_value_predicand
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :row_value_special_case},
-  :parser2 {:tag :nt, :keyword :row_value_constructor_predicand},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :row_value_special_case}
+   {:tag :nt, :keyword :row_value_constructor_predicand}),
   :red {:reduction-type :raw}},
  :separator {:tag :regexp, :regexp #"(?<=\s)"},
  :correlation_name
@@ -2949,33 +2766,18 @@
       ({:tag :nt, :keyword :comma, :hide true}
        {:tag :nt, :keyword :table_reference})}}})},
  :predicate
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :comparison_predicate},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :between_predicate},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :in_predicate},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :nt, :keyword :like_predicate},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :nt, :keyword :regex_like_predicate},
-      :parser2
-      {:tag :ord,
-       :parser1 {:tag :nt, :keyword :null_predicate},
-       :parser2
-       {:tag :ord,
-        :parser1 {:tag :nt, :keyword :quantified_comparison_predicate},
-        :parser2
-        {:tag :ord,
-         :parser1 {:tag :nt, :keyword :exists_predicate},
-         :parser2
-         {:tag :ord,
-          :parser1 {:tag :nt, :keyword :overlaps_predicate},
-          :parser2 {:tag :nt, :keyword :period_predicate}}}}}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :comparison_predicate}
+   {:tag :nt, :keyword :between_predicate}
+   {:tag :nt, :keyword :in_predicate}
+   {:tag :nt, :keyword :like_predicate}
+   {:tag :nt, :keyword :regex_like_predicate}
+   {:tag :nt, :keyword :null_predicate}
+   {:tag :nt, :keyword :quantified_comparison_predicate}
+   {:tag :nt, :keyword :exists_predicate}
+   {:tag :nt, :keyword :overlaps_predicate}
+   {:tag :nt, :keyword :period_predicate}),
   :red {:reduction-type :raw}},
  :escape_octet
  {:tag :nt,
@@ -2986,43 +2788,38 @@
   :keyword :numeric_value_expression,
   :red {:reduction-type :raw}},
  :interval_primary
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :value_expression_primary}
-    {:tag :opt, :parser {:tag :nt, :keyword :interval_qualifier}})},
-  :parser2 {:tag :nt, :keyword :interval_value_function}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :value_expression_primary}
+     {:tag :opt, :parser {:tag :nt, :keyword :interval_qualifier}})}
+   {:tag :nt, :keyword :interval_value_function})},
  :position_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :character_position_expression},
-  :parser2 {:tag :nt, :keyword :binary_position_expression},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :character_position_expression}
+   {:tag :nt, :keyword :binary_position_expression}),
   :red {:reduction-type :raw}},
  :interval_term
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :interval_factor},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :interval_factor}
    {:tag :cat,
     :parsers
     ({:tag :nt, :keyword :interval_term_2}
      {:tag :nt, :keyword :asterisk}
-     {:tag :nt, :keyword :factor})},
-   :parser2
-   {:tag :ord,
-    :parser1
-    {:tag :cat,
-     :parsers
-     ({:tag :nt, :keyword :interval_term_2}
-      {:tag :nt, :keyword :solidus}
-      {:tag :nt, :keyword :factor})},
-    :parser2
-    {:tag :cat,
-     :parsers
-     ({:tag :nt, :keyword :term}
-      {:tag :nt, :keyword :asterisk}
-      {:tag :nt, :keyword :interval_factor})}}}},
+     {:tag :nt, :keyword :factor})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :interval_term_2}
+     {:tag :nt, :keyword :solidus}
+     {:tag :nt, :keyword :factor})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :term}
+     {:tag :nt, :keyword :asterisk}
+     {:tag :nt, :keyword :interval_factor})})},
  :equals_operator {:tag :string, :string "="},
  :array_value_constructor_by_enumeration
  {:tag :cat,
@@ -3032,13 +2829,13 @@
    {:tag :nt, :keyword :array_element_list}
    {:tag :nt, :keyword :right_bracket_or_trigraph})},
  :large_object_length
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :length}
-    {:tag :opt, :parser {:tag :nt, :keyword :multiplier}})},
-  :parser2 {:tag :nt, :keyword :large_object_length_token}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :length}
+     {:tag :opt, :parser {:tag :nt, :keyword :multiplier}})}
+   {:tag :nt, :keyword :large_object_length_token})},
  :binary_position_expression
  {:tag :cat,
   :parsers
@@ -3072,36 +2869,34 @@
       {:tag :nt, :keyword :char_length_units})}}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :query_primary
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :simple_table},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :left_paren, :hide true}
-    {:tag :nt, :keyword :query_expression_body}
-    {:tag :nt, :keyword :right_paren, :hide true})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :simple_table}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :left_paren, :hide true}
+     {:tag :nt, :keyword :query_expression_body}
+     {:tag :nt, :keyword :right_paren, :hide true})})},
  :binary_value_function
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :binary_substring_function},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :binary_trim_function},
-   :parser2 {:tag :nt, :keyword :binary_overlay_function}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :binary_substring_function}
+   {:tag :nt, :keyword :binary_trim_function}
+   {:tag :nt, :keyword :binary_overlay_function}),
   :red {:reduction-type :raw}},
  :as_clause
- {:tag :ord,
-  :parser1
-  {:tag :cat,
-   :parsers
-   ({:tag :string, :string "AS"} {:tag :nt, :keyword :column_name})},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :neg,
-     :parser
-     {:tag :regexp,
-      :regexp #"(?i)(\b(YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)\b)"}}
-    {:tag :nt, :keyword :column_name})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :cat,
+    :parsers
+    ({:tag :string, :string "AS"} {:tag :nt, :keyword :column_name})}
+   {:tag :cat,
+    :parsers
+    ({:tag :neg,
+      :parser
+      {:tag :regexp,
+       :regexp #"(?i)(\b(YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)\b)"}}
+     {:tag :nt, :keyword :column_name})})},
  :array_value_expression_1
  {:tag :nt,
   :keyword :array_value_expression,
@@ -3126,27 +2921,15 @@
   :keyword :binary_value_expression,
   :red {:reduction-type :raw}},
  :period_predicate
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :period_overlaps_predicate},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :nt, :keyword :period_equals_predicate},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :nt, :keyword :period_contains_predicate},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :nt, :keyword :period_precedes_predicate},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :nt, :keyword :period_succeeds_predicate},
-      :parser2
-      {:tag :ord,
-       :parser1
-       {:tag :nt, :keyword :period_immediately_precedes_predicate},
-       :parser2
-       {:tag :nt,
-        :keyword :period_immediately_succeeds_predicate}}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :period_overlaps_predicate}
+   {:tag :nt, :keyword :period_equals_predicate}
+   {:tag :nt, :keyword :period_contains_predicate}
+   {:tag :nt, :keyword :period_precedes_predicate}
+   {:tag :nt, :keyword :period_succeeds_predicate}
+   {:tag :nt, :keyword :period_immediately_precedes_predicate}
+   {:tag :nt, :keyword :period_immediately_succeeds_predicate}),
   :red {:reduction-type :raw}},
  :left_bracket_trigraph
  {:tag :string, :string "??(", :red {:reduction-type :raw}},
@@ -3156,14 +2939,14 @@
   ({:tag :nt, :keyword :overlaps_predicate_part_1}
    {:tag :nt, :keyword :overlaps_predicate_part_2})},
  :boolean_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :boolean_term},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :boolean_value_expression}
-    {:tag :string, :string "OR"}
-    {:tag :nt, :keyword :boolean_term})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :boolean_term}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :boolean_value_expression}
+     {:tag :string, :string "OR"}
+     {:tag :nt, :keyword :boolean_term})})},
  :quantified_comparison_predicate
  {:tag :cat,
   :parsers
@@ -3177,30 +2960,17 @@
    {:tag :nt, :keyword :numeric_value_expression}
    {:tag :nt, :keyword :right_paren, :hide true})},
  :trigonometric_function_name
- {:tag :ord,
-  :parser1 {:tag :string, :string "SIN"},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :string, :string "COS"},
-   :parser2
-   {:tag :ord,
-    :parser1 {:tag :string, :string "TAN"},
-    :parser2
-    {:tag :ord,
-     :parser1 {:tag :string, :string "SINH"},
-     :parser2
-     {:tag :ord,
-      :parser1 {:tag :string, :string "COSH"},
-      :parser2
-      {:tag :ord,
-       :parser1 {:tag :string, :string "TANH"},
-       :parser2
-       {:tag :ord,
-        :parser1 {:tag :string, :string "ASIN"},
-        :parser2
-        {:tag :ord,
-         :parser1 {:tag :string, :string "ACOS"},
-         :parser2 {:tag :string, :string "ATAN"}}}}}}}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "SIN"}
+   {:tag :string, :string "COS"}
+   {:tag :string, :string "TAN"}
+   {:tag :string, :string "SINH"}
+   {:tag :string, :string "COSH"}
+   {:tag :string, :string "TANH"}
+   {:tag :string, :string "ASIN"}
+   {:tag :string, :string "ACOS"}
+   {:tag :string, :string "ATAN"})},
  :interval_value_function
  {:tag :nt,
   :keyword :interval_absolute_value_function,
@@ -3216,39 +2986,33 @@
    {:tag :nt, :keyword :period_precedes_predicate_part_2})},
  :unsigned_integer {:tag :regexp, :regexp #"[0-9]+"},
  :datetime_value_expression
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :datetime_term},
-  :parser2
-  {:tag :ord,
-   :parser1
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :datetime_term}
    {:tag :cat,
     :parsers
     ({:tag :nt, :keyword :interval_value_expression}
      {:tag :nt, :keyword :plus_sign}
-     {:tag :nt, :keyword :datetime_term})},
-   :parser2
-   {:tag :ord,
-    :parser1
-    {:tag :cat,
-     :parsers
-     ({:tag :nt, :keyword :datetime_value_expression}
-      {:tag :nt, :keyword :plus_sign}
-      {:tag :nt, :keyword :interval_term})},
-    :parser2
-    {:tag :cat,
-     :parsers
-     ({:tag :nt, :keyword :datetime_value_expression}
-      {:tag :nt, :keyword :minus_sign}
-      {:tag :nt, :keyword :interval_term})}}}},
+     {:tag :nt, :keyword :datetime_term})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :datetime_value_expression}
+     {:tag :nt, :keyword :plus_sign}
+     {:tag :nt, :keyword :interval_term})}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :datetime_value_expression}
+     {:tag :nt, :keyword :minus_sign}
+     {:tag :nt, :keyword :interval_term})})},
  :set_clause
- {:tag :ord,
-  :parser1 {:tag :nt, :keyword :multiple_column_assignment},
-  :parser2
-  {:tag :cat,
-   :parsers
-   ({:tag :nt, :keyword :set_target}
-    {:tag :nt, :keyword :equals_operator}
-    {:tag :nt, :keyword :update_source})}},
+ {:tag :alt,
+  :parsers
+  ({:tag :nt, :keyword :multiple_column_assignment}
+   {:tag :cat,
+    :parsers
+    ({:tag :nt, :keyword :set_target}
+     {:tag :nt, :keyword :equals_operator}
+     {:tag :nt, :keyword :update_source})})},
  :octet_length_expression
  {:tag :cat,
   :parsers
@@ -3273,12 +3037,11 @@
   ({:tag :opt, :parser {:tag :nt, :keyword :sign}}
    {:tag :nt, :keyword :interval_primary})},
  :truth_value
- {:tag :ord,
-  :parser1 {:tag :string, :string "TRUE"},
-  :parser2
-  {:tag :ord,
-   :parser1 {:tag :string, :string "FALSE"},
-   :parser2 {:tag :string, :string "UNKNOWN"}}},
+ {:tag :alt,
+  :parsers
+  ({:tag :string, :string "TRUE"}
+   {:tag :string, :string "FALSE"}
+   {:tag :string, :string "UNKNOWN"})},
  :time_literal
  {:tag :cat,
   :parsers
