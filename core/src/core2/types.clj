@@ -167,7 +167,7 @@
   (value->col-type [v]
     (if (every? keyword? (keys v))
       [:struct (->> v
-                    (into {} (map (juxt (comp name key)
+                    (into {} (map (juxt (comp symbol key)
                                         (comp value->col-type val)))))]
       [:map
        (apply merge-col-types (into #{} (map (comp value->col-type key)) v))
