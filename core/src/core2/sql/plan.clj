@@ -851,9 +851,7 @@
               `(~'or ~predicate
                      (~'nil? ~x)
                      (~'nil? ~y))
-              `(~'and ~predicate
-                     (~'not (~'nil? ~x))
-                     (~'not (~'nil? ~y))))
+              predicate)
             plan]
            plan))
        (disj predicate-set sym)]
@@ -868,9 +866,7 @@
          (if predicate
            [:select
             (if negated?
-              `(~'and ~predicate
-                     (~'not (~'nil? ~x))
-                     (~'not (~'nil? ~y)))
+              predicate
               `(~'or ~predicate
                      (~'nil? ~x)
                      (~'nil? ~y)))

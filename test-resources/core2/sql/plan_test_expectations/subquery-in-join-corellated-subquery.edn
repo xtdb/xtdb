@@ -11,8 +11,4 @@
     [:rename {c x3, b x4} [:scan [c b]]]]
    [:project
     [x6]
-    [:rename
-     {b x6, a x7}
-     [:select
-      (not (nil? ?x10))
-      [:scan [{b (and (= ?x10 b) (not (nil? b)))} {a (= a ?x9)}]]]]]]]]
+    [:rename {b x6, a x7} [:scan [{b (= ?x10 b)} {a (= a ?x9)}]]]]]]]
