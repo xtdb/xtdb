@@ -273,7 +273,10 @@
   (getVector [_] dest-vec)
   (getPosition [_] pos)
 
-  (startValue [_] pos)
+  (startValue [_]
+    (.setNotNull dest-vec pos)
+    pos)
+
   (endValue [this] (set! (.pos this) (inc pos)))
 
   (clear [this]

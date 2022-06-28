@@ -87,7 +87,6 @@
                             (throw (IndexOutOfBoundsException.))
                             (.copyRow copier copy-idx))))))))))]
     (cond
-
       (instance? ListVector v)
       (let [^ListVector v v]
         (->list-reader* (reify IAbstractListVector

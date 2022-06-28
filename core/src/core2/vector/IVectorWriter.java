@@ -20,8 +20,8 @@ public interface IVectorWriter<V extends ValueVector> extends AutoCloseable {
         return (IStructWriter) this;
     }
 
-    default IListWriter asList() {
-        return (IListWriter) this;
+    default IListWriter<V> asList() {
+        return (IListWriter<V>) this;
     }
 
     default IDenseUnionWriter asDenseUnion() {
