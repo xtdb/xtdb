@@ -3,11 +3,10 @@
             [clojure.string :as str]
             [clojure.set :as set]
             [core2.util :as util])
-  (:import java.io.File
-           [java.util ArrayDeque HashSet Map Set]
+  (:import [java.util ArrayDeque HashSet Map Set]
            [java.util.regex Matcher Pattern]
            java.util.function.Function
-           [core2.sql.parser Parser$ParseState Parser$ParseErrors Parser$AParser
+           [core2.sql.parser Parser$ParseErrors Parser$AParser
             Parser$EpsilonParser Parser$RuleParser Parser$MemoizeParser Parser$MemoizeLeftRecParser Parser$NonTerminalParser
             Parser$HideParser Parser$OptParser Parser$NegParser Parser$RepeatParser Parser$CatParser Parser$AltParser Parser$OrdParser
             Parser$RegexpParser Parser$StringParser Parser Parser$MemoTable]))
@@ -144,8 +143,7 @@
                                            Parser/NEVER_RAW)))
   ([^Map grammar ws-pattern ->raw?]
    (let [^Map rule->id (zipmap (keys grammar) (range))
-         ^"[Lcore2.sql.parser.Parser$AParser;" rules (make-array Parser$AParser (count rule->id))
-         parse-state-array-class (Class/forName "[Lcore2.sql.parser.Parser$ParseState;")]
+         ^"[Lcore2.sql.parser.Parser$AParser;" rules (make-array Parser$AParser (count rule->id))]
      (letfn [(build-parser [rule-name {:keys [tag hide] :as parser}]
                (let [parser (case tag
                               :nt (let [body (get grammar (:keyword parser))]
