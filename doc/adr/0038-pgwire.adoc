@@ -10,64 +10,127 @@ Proposed
 
 There is a desire to explore the postgres wire protocol (pgwire) as an early option for communicating with an XTDB node remotely.
 
-By targeting pgwire, we do not have to write client drivers (e.g jdbc, odbc) for different platforms. Existing postgres drivers can talk to XT.
+By targeting pgwire, we do not have to write client drivers (e.g jdbc, odbc) for different platforms. Existing postgres drivers can talk to XT, this extends our reach with minimal effort.
 
-We do not have to design session negotiation, cancellation etc as those are specified by pgwire - though they must be implemented.
+We do not have to design errors, session negotiation, query cancellation and other protocol level features as their behaviour is specified by pgwire - though they must be implemented correctly.
 
 There is also the possibility in the future that certain tools that are postgres aware will work with XTDB, e.g IDE's, BI/Analytical tooling. Though this remains a possibility it is in contingent on things we do not yet know the answer to, e.g metadata & discovery, function compatibility layer and so on.
 
-=== The problem of types
+=== Type unions
 
-One issue we discover when thinking about pgwire is what to do about the representation of arbitrary unions. These can occur due to the dynamic nature of XTDB, With its (currently) unqualified columns, unions can be introduced by writing different types to the same attribute (say `id`) - or can be introduced by expressions or `UNION` operators in queries.
+One issue we discover when thinking about pgwire is the challenge in representing columns whose type is a union.
+
+With XTDB's (currently) unqualified columns, unions can be introduced by writing different types to the same attribute (say `id`) - or can be introduced by expressions or `UNION` operators in queries.
+
+Here is a query that produces a union between an integer, and a string.
+
+`SELECT a.a FROM (VALUES (42), ('fourty-two')) a (a)`
 
 Though many unions, for example numerics will have natural widening available to them to ensure a single type representation - this is not true for arbitrary unions, say the union between a string and a struct and an array.
-
-We have a few options for the representation of such unions
-
-* strings / binary
-* json
-* custom pg type
-
-When considering which type is going to be a good fit, we must speculate a bit on how different languages and client toolkits would handle the above representations. We must also look at the problem of ambiguity, and necessity of complicated parsing rules.
 
 It may be possible to limit the impact of such unions on user programs, such as to encourage certain practices, to include type predicates or casts in your queries or views.
 
 The likelyhood of encountering such is also dependent on the representation of tables, e.g if columns are qualified - then it is far less likely than if columns are shared between tables.
 
-=== Clojure
+=== Arrow types are not postgres types
 
-The typical ways to interact with SQL databases from clojure is to use the libraries `clojure.java.jdbc` (older, but still popular) and `next.jdbc` (newer, successor). They both wrap java JDBC, and therefore will work with XTDB via a postgres JDBC driver.
+It is important to consider that the arrow type system is not quite the same thing as the postgres type system, and finding appropriate postgres representations (in terms of OID) must be done for all supported arrow types.
 
-==== strings
+=== Custom OID
 
-If we map to strings, the string would likely need to include a type tag to determine how to parse / interpret it, and how to distinguish a tagged string from a regular string. It might be desirable in such a situation to include an XTDB client library which includes a parser.
+As postgres supports type extension via UDT's and extensions to postgres itself, drivers often support extending the libraries type resolution to custom types - The custom representation could allow discrimination between two possible run time types for a particular value in a UNION.
 
-You may be able to override the default string handling of next / java.jdbc and include a type-tag check to determine how to interpret the string.
+=== JSON
 
-==== json
+One thing that is attractive about JSON, is that JSON/JSONB typed columns have been supported for some time and this support extends to client libraries / frameworks for multiple platforms. This is in contrast to a custom type, which would require applications to tell the library code how to deserialize the type.
 
-If we map to json, the resultant PGObject will have to be interpreted by the user as json, and the value may need to be deserialized. You should be able to extend a `ReadableColumn` or similar protocol to install the parsing / deserialization hook globally.
+Of course JSON does not permit unambiguous or efficient representation of anything other than booleans and strings. Numbers are a mixed bag (e.g all numbers are assumed arbitrary precision), things like dates, intervals and times would require string representation. Arrow has a Map type whose keys can be of any type (though this type has no XTDB support as of time of writing).
 
-Luckily, XTDB does not have a JSON type, so we avoid ambiguity with _actual JSON_ columns.
+== Option A: Use PG natives where possible, JSON / Custom when not.
 
-==== custom type
+As it is possible to determine the type of every column returned by a query, we can determine the most appropriate postgres type representation - falling back to JSON or a custom type when no built-in type will work.
 
-Similarly, the custom pg type will remove certain ambiguities (e.g we do not overload an existing type), however parsing / deserialization will still be necessary to make sense of values contained within the union.
+This would enable higher performance for those cases where columns are monomorphic and have compact binary / runtime representations (e.g integers).
 
-PGObject must always encode its value as a string, so there will be some performance cost for binary data (e.g to encode / decode from b64). It may make the performant decoding of structures and arrays more costly than on binary.
+Applications would be able to program against XTDB almost exactly as they would postgres, so long as columns remain monomorphic.
 
-=== Javascript
+=== Unions
 
-The NPM ecosystem includes the `postgres` which speaks the pgwire protocol. This then allows us to talk to XT using this library in JS/TS.
+If a custom type is used, then we would hope a deserializer has been set up and the application gives you a representation at runtime, that is shared with that of the monomorphic case. This can only be the case for platforms that give you boxed/tagged objects in query result sets (e.g JavaScript, Python, JDBC if using `.getObject`).
 
-==== json
+Application code that requires primitives might not work if a union is encountered at runtime. This will apply when reading / scanning driver bytes directly into fixed numeric variables (say when mapping to an int32 field in a struct / class), or if using a reader abstraction to get primitives (like JDBC's `getLong` on `ResultSet`).
 
-JSON typed values are deserialized by the library into javascript objects (unsurprisingly), this means you will not be able to tell the difference between objects in a union, and native js objects. This is ideal - JSON being native in javascript makes all the difference.
+In platforms where using correctly sized machine primitives is the default (e.g go's `Scan`), it may be necessary to determine the column type OID at runtime before interpreting the result.
 
-==== strings
+If JSON (or JSONB) is used, then on many dynamic platforms (JavaScript, Python) the JSON will be deserialized to a boxed object whose representation is likely shared with that of the ideal monomorphic case. In contrast to a custom type, it is likely the client library does this without any custom code for XTDB - indeed this is the case for the `postgres` library for Node, and Pythons `pandas`, `SQLAlchemy`, and `psycopg2`.
 
-Much like in clojure, you would need tagging to disambiguate from regular strings. using the same custom type mechanism, you can add serialization rules for strings, so you could detect these tags and return the correct js type.
+For static languages, mapping from JSON to DTO's is something that can normally be done (e.g https://github.com/vladmihalcea/hibernate-types[hibernate-types], https://www.npgsql.org/efcore/mapping/json.html?tabs=data-annotations%2Cpoco[C#'s npgsql]) - However, it is likely you will have to know statically whether you are to encounter JSON, or a typed column. I propose then static mappers may struggle with columns whose representation can only be determined at query time.
 
-==== custom type
 
-The postgres library provides custom type support that will allow a client library to detect and parse union-ed values using a function installed against that OID when constructing the connection.
+=== Un-representable as standard OID's
+
+Removing the possibility of unions, we find certain Arrow types do not have a good generic postgres (wire) representation, for example Arrow can contain structs, postgres typically would assign unique OID's to these (they are registered as composite (row) types with `CREATE TYPE`.)
+
+For structs then application code would need to be told how to unpack composites by extending the client to handle a new OID.
+
+=== Arrays
+
+Postgres arrays have mixed support. For example in JDBC arrays are represented as `PgArray` objects that implement `java.sql.Array`. You can transform a `PgArray` then into a java array using `.getArray` or a resultset with `.getResultSet`.
+
+As a dynamic document oriented database, we expect users to make a lot of use of lists, including heterogonous ones.
+
+Simple arrays of scalar primitives can be accommodated by setting the element oid to that of the pg native - though there is again no good solution if array elements must be lifted into a custom / json type due to a union.
+
+=== Nesting (UNIONS)
+
+Unions in XTDB can occur under struct fields as well as at the column level. This provides additional challenges to specialising such fields as a particular postgres type. This may mean mapping struct fields may suffer the same challenges in the presence of unions as column values - depending on the capability of the platform.
+
+=== Summary
+
+Works well when columns and fields are monomorphic, though nested structs may pose challenges due to their traditionally static type mapping via a unique OID.
+
+- if JSON is chosen to represent unions, then we suffer the problem of dual representation in static environments, e.g consider Date's.
+
+- If a custom object is chosen to represent unions, then we suffer the problem of callers having to extend support to those new OID's, either by installing a library, or by writing some type mapping code. Such code may be non-trivial, if considering cases like nested trees of structs, fields containing unions, heterogonous lists etc.
+
+- In static environments values that do not need to be boxed are often read from result sets directly from the bytes read from the server, and the tools you use to do this are _essentially_ different from the boxed, dynamic representation (JDBC's `getLong` vs `getObject`). There is an issue of brittleness with such apis in the presence of (the possibility of) unions, even if the ultimate runtime representation of all values remains the same.
+
+== Option B: Every column is JSON (With options)
+
+One option for presenting data whose type can vary at runtime is to supply columns as JSON by default, whether or not their types are representable as standard postgres OID's.
+
+I would then propose an a later extension to enable packed postgres natives as a per-query opt-in, to reclaim performance.
+
+=== Consistency & Predictability
+
+It would then be the case that applications can program consistently as all column values would _have_ to be treated as boxed, dynamic objects. The behaviour of JSON in each platform is quite predictable and often provides options in static langs to represent unions of multiple JSON types e.g by mapping to `Object` or `JsonNode` in Hibernate.
+
+It arguably has the broadest reach of the options, as most platforms are quite well equipped to deal with JSON out of the box, no custom extensions or OID hooks are necessary.
+
+It does mean the performance will be somewhat worse by default than if we were able to specialise for monomorphic columns, both in terms of bytes-on-the-wire and ser/de overheads.
+
+=== Ambiguity (everything is a string)
+
+One issue with using JSON for everything is certain values are forced to be strings e.g Dates, intervals, times.
+
+This means users will need to employ parsers to work with these values, and determine what types are likely at runtime. In the extreme, you could imagine a union of date and datetime, where you have to employ parsers speculatively in some order until you get a match.
+
+=== Nesting
+
+JSON objects and arrays are likely to be supported out of the box on all major platforms, both in mappers and when read dynamically. Furthermore, when objects are nested as JSON we find they retain the same representation, regardless of how unions are applied to child fields.
+
+=== Reclaiming performance
+
+Should a user be confident her query will only ever return data representable as a monomorphic postgres type, she may well be able to hint to XTDB to change behaviour and specialise the type of one or more columns. This will be most useful in environments where the JSON overhead is significant, and there is some advantage to ser/de bytes directly into machine primitives (Go, Java, C#). This becomes an optimisation then that can be worked towards or hinted at should performance become a concern.
+
+By making it opt-in you retain a predictable but no-guarantees dynamic experience by default, and ensure users are making a concious choice as to whether to program against static expectations of their data.
+
+== Option C: Every column uses a custom 'XTObject' OID
+
+This option is much the same as Option B, but removes the 'stringly typed' ambiguity, and trades it for the need to extend their applications to support a new type.
+
+You can imagine constructing a 'tagged box' object, who supplies a type descriptor (e.g col-type string), and a binary value. As the encoding of values then is fairly arbitrary, we can design a format that can accomodate arbitrary unions and nesting, and of course elements of all arrow vectors.
+
+Such an object can be unpacked by a library function into an appropriate native representation of the value.
+
+The main issue with this approach seems to be that for a good beginner experience, somebody is going to have to write extensions for all major platforms and frameworks to work with our custom type. This is particularly disappointing as pgwire itself is desirable precisely because it gives us out-of-the-box reach to many platforms with only a small amount of work ourselves (if any) to support them.
