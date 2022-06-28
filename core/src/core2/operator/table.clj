@@ -46,20 +46,24 @@
     (when (pos? row-count)
       (let [out-cols (ArrayList. (count col-types))]
         (try
-          (doseq [col-name (keys col-types)
+          (doseq [[col-name col-type] col-types
                   :let [col-kw (keyword col-name)
-                        out-vec (DenseUnionVector/empty (name col-name) allocator)
-                        out-writer (.asDenseUnion (vw/vec->writer out-vec))]]
+                        out-vec (-> (types/col-type->field col-name col-type)
+                                    (.createVector allocator))
+                        duv? (instance? DenseUnionVector out-vec)
+                        out-writer (vw/vec->writer out-vec)]]
             (.add out-cols (iv/->direct-vec out-vec))
             (util/set-value-count out-vec row-count)
             (dotimes [idx row-count]
               (let [row (nth rows idx)
                     v (-> (get row col-kw) (->v opts))]
                 (.startValue out-writer)
-                (doto (.writerForType out-writer (types/value->col-type v))
-                  (.startValue)
-                  (->> (types/write-value! v))
-                  (.endValue))
+                (if duv?
+                  (doto (.writerForType (.asDenseUnion out-writer) (types/value->col-type v))
+                    (.startValue)
+                    (->> (types/write-value! v))
+                    (.endValue))
+                  (types/write-value! v out-writer))
                 (.endValue out-writer))))
           (iv/->indirect-rel out-cols row-count)
           (catch Throwable e
