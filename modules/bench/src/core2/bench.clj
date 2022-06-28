@@ -54,7 +54,7 @@
 (defn download-s3-dataset-file [s3-key ^Path tmp-path]
   (.getObject ^S3Client @!s3-client
               (-> (GetObjectRequest/builder)
-                  (.bucket "crux-datasets")
+                  (.bucket "xtdb-datasets")
                   (.key s3-key)
                   ^GetObjectRequest (.build))
               tmp-path)

@@ -7,7 +7,7 @@
 
 (def bucket
   (or (System/getProperty "core2.s3-test.bucket")
-      "crux-s3-test"))
+      "core2-s3-test"))
 
 (def ^:dynamic *obj-store*)
 

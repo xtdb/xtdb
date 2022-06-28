@@ -9,7 +9,7 @@ TASKDEF_ARN=$(aws cloudformation describe-stack-resource \
                   --output text)
 
 VPC_STACK_ID=$(aws cloudformation describe-stack-resource \
-                   --stack-name crux-cloud \
+                   --stack-name xtdb-cloud \
                    --logical-resource-id VPCStack \
                    --query 'StackResourceDetail.PhysicalResourceId' \
                    --output text)

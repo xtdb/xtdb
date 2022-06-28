@@ -37,19 +37,19 @@
 
 (def node)
 
-(defmethod i/init-key ::crux [_ {:keys [node-opts]}]
+(defmethod i/init-key ::core2 [_ {:keys [node-opts]}]
   (alter-var-root #'node (constantly (node/start-node node-opts)))
   node)
 
-(defmethod i/halt-key! ::crux [_ node]
+(defmethod i/halt-key! ::core2 [_ node]
   (util/try-close node)
   (alter-var-root #'node (constantly nil)))
 
 (def standalone-config
-  {::crux {:node-opts {:core2.log/local-directory-log {:root-path (io/file dev-node-dir "log")}
-                       :core2.buffer-pool/buffer-pool {:cache-path (io/file dev-node-dir "buffers")}
-                       :core2.object-store/file-system-object-store {:root-path (io/file dev-node-dir "objects")}
-                       :core2/server {}}}})
+  {::core2 {:node-opts {:core2.log/local-directory-log {:root-path (io/file dev-node-dir "log")}
+                        :core2.buffer-pool/buffer-pool {:cache-path (io/file dev-node-dir "buffers")}
+                        :core2.object-store/file-system-object-store {:root-path (io/file dev-node-dir "objects")}
+                        :core2/server {}}}})
 
 (ir/set-prep! (fn [] standalone-config))
 

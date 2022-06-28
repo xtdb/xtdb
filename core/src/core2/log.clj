@@ -24,7 +24,7 @@
   (^void subscribe [^Long afterTxId, ^core2.log.LogSubscriber subscriber]))
 
 (def ^java.util.concurrent.ThreadFactory subscription-thread-factory
-  (util/->prefix-thread-factory "crux-tx-subscription"))
+  (util/->prefix-thread-factory "core2-tx-subscription"))
 
 (defn- tx-handler [^LogSubscriber subscriber]
   (fn [_last-tx-id ^LogRecord record]

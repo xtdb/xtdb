@@ -7,10 +7,10 @@ For example, Extended Queries and Function Calls and not supported.
 
 == Meta
 
-This document is written for a fictitious `2.1.0` version of xtdb/Crux.
-It assumes the transaction model is not unlike the current transaction model for Crux 1.17.0.
+This document is written for a fictitious `2.1.0` version of XTDB.
+It assumes the transaction model is not unlike the current transaction model for XTDB 1.17.0.
 As such, it refers to `INSERT` and `UPDATE` statements behaving in rather strange ways: ignoring the existing records in the database and simply behaving like `:xt/put`.
-This is probably not what we want, long-term, but a lot of this document could reasonably be implemented on top of Crux 1.x.
+This is probably not what we want, long-term, but a lot of this document could reasonably be implemented on top of XTDB 1.x.
 A more realistic transaction model can be found in a parallel version of this document (`sql-ddd-2.2.0.adoc`), which sets the bar a little higher.
 
 

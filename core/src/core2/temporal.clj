@@ -25,7 +25,7 @@
 
 ;; Temporal proof-of-concept plan:
 
-;; From a BCDM point of view, core2 (and Crux) are similar to Jensen's
+;; From a BCDM point of view, core2 (and XTDB) are similar to Jensen's
 ;; event log approach, that is, we know tx-time, and we know the vt
 ;; range, but not the actual real state as expressed in the Snodgrass'
 ;; timestamped tuple approach, which is the relation we want scan to

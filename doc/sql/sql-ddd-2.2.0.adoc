@@ -7,9 +7,9 @@ For example, Extended Queries and Function Calls and not supported.
 
 == Meta
 
-This document is written for a fictitious `2.2.0` version of xtdb/Crux.
+This document is written for a fictitious `2.2.0` version of XTDB.
 It assumes a fancy-pants transaction model, capable of realistic `INSERT` and `UPDATE` operations.
-A simpler version of this document, describing a SQL surface area easier to implement (even in Crux 1.x) can be found at `sql-ddd-2.1.0.adoc1`.
+A simpler version of this document, describing a SQL surface area easier to implement (even in Core1) can be found at `sql-ddd-2.1.0.adoc1`.
 
 
 == Installation

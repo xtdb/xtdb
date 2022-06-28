@@ -10,5 +10,5 @@ set -xe
         --capabilities CAPABILITY_IAM \
         --template-body file://$(pwd)/cloudformation/bench.yml \
         --stack-name core2-bench \
-        --tags Key=juxt:team,Value=crux-core
+        --tags Key=juxt:team,Value=xtdb-core
 )
