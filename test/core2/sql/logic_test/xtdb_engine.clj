@@ -216,7 +216,7 @@
         query (str/replace query "CROSS JOIN" ",")]
     (if (re-find #"(?i)( FROM |^\s*VALUES)" query)
       query
-      (str query " FROM (VALUES 0) AS no_from"))))
+      (str query " FROM (VALUES (0)) AS no_from"))))
 
 (extend-protocol slt/DbEngine
   Node
