@@ -32,14 +32,7 @@
         :pred-expr ::lp/expression))
 
 (s/def ::join-condition
-  (s/and
-    (s/or :vec-form (s/coll-of ::join-condition-clause :kind vector?)
-          :legacy-single-map-form (s/map-of ::lp/column ::lp/column :conform-keys true :count 1))
-    (s/conformer
-     (fn [[tag val]]
-       (case tag
-         :vec-form val
-         :legacy-single-map-form [[:equi-condition val]])))))
+  (s/coll-of ::join-condition-clause :kind vector?))
 
 (defmethod lp/ra-expr :join [_]
   (s/cat :op #{:⋈ :join}

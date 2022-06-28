@@ -28,7 +28,7 @@
           tx2 (c2/submit-tx node2 [[:put {:_id :foo, :col2 "col2"}]])
           db2 (snap/snapshot (tu/component node2 ::snap/snapshot-factory) tx2)]
       (t/is (= [{:_id :foo, :col1 "col1", :col2 "col2"}]
-               (op/query-ra '[:join {_id _id}
+               (op/query-ra '[:join [{_id _id}]
                               [:scan $db1 [_id col1]]
                               [:scan $db2 [_id col2]]]
                             {'$db1 db1, '$db2 db2}))))))

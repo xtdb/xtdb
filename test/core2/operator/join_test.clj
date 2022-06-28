@@ -126,7 +126,7 @@
 
 (t/deftest test-semi-equi-join
   (t/is (= [{{:a 12} 2} {{:a 100} 1}]
-           (->> (run-ra [:semi-join '{a b}
+           (->> (run-ra [:semi-join '[{a b}]
                          [::tu/blocks
                           [[{:a 12}, {:a 12}, {:a 0}]
                            [{:a 100}]]]
@@ -668,6 +668,7 @@
     (t/is (= [{:a 42, :b 42}]
              (test-equi-join '[{(+ a 1) (+ b 1)}]
                              [{:a 42}] [{:b 42} {:b 43}])))
+
     (t/is (= []
              (test-equi-join '[{(+ a 1) (+ b 1)}]
                              [{:a 42}] [{:b 43} {:b 44}])))

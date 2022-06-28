@@ -207,7 +207,7 @@
         vars (set/union left-vars right-vars)]
     (-> (if-let [[overlap-var & more-overlap-vars] (seq (set/intersection left-vars right-vars))]
           (if-not (seq more-overlap-vars)
-            [:join {overlap-var overlap-var} left-expr right-expr]
+            [:join [{overlap-var overlap-var}] left-expr right-expr]
 
             (let [var-mapping (->> (map (juxt identity gensym) more-overlap-vars)
                                    (into {}))]
@@ -216,7 +216,7 @@
                                   (list 'and acc el))
                                 (for [[left right] var-mapping]
                                   (list '= left right)))
-                [:join {overlap-var overlap-var}
+                [:join [{overlap-var overlap-var}]
                  left-expr
                  [:rename var-mapping right-expr]]]]))
 
