@@ -13,6 +13,7 @@
         org.apache.arrow/arrow-compression {:mvn/version "8.0.0"}
         org.apache.arrow/arrow-vector {:mvn/version "8.0.0"}
         org.apache.arrow/arrow-memory-netty {:mvn/version "8.0.0"}
+        io.netty/netty-common {:mvn/version "4.1.78.Final"}
 
         org.roaringbitmap/RoaringBitmap {:mvn/version "0.9.26"}
 

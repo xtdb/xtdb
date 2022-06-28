@@ -6,6 +6,7 @@
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
   (:import (core2.vector IIndirectVector IIndirectRelation IRowCopier IVectorWriter)
+           io.netty.util.collection.IntObjectHashMap
            (java.lang AutoCloseable)
            (java.util HashMap List)
            (java.util.function Function)
@@ -145,7 +146,7 @@
     :or {build-key-col-names key-col-names
          probe-key-col-names key-col-names}}]
 
-  (let [hash->bitmap (HashMap.)
+  (let [hash->bitmap (IntObjectHashMap.)
         out-rel (vw/->rel-writer allocator)]
     (doseq [col-name (set/union (set build-key-col-names) (set store-col-names))]
       (.writerForName out-rel (name col-name)))
@@ -155,11 +156,11 @@
 
       (vw/append-rel out-rel (->nil-rel store-col-names)))
 
-    (letfn [(compute-hash-bitmap [row-hash]
-              (.computeIfAbsent hash->bitmap row-hash
-                                (reify Function
-                                  (apply [_ _]
-                                    (RoaringBitmap.)))))]
+    (letfn [(compute-hash-bitmap [^long row-hash]
+              (or (.get hash->bitmap row-hash)
+                  (let [bitmap (RoaringBitmap.)]
+                    (.put hash->bitmap (int row-hash) bitmap)
+                    bitmap)))]
       (reify
         IRelationMap
         (buildFromRelation [_ in-rel]
