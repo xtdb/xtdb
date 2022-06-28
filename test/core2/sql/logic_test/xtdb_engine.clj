@@ -211,47 +211,9 @@
      :view-name view-name
      :as query}))
 
-(defn remove-unnecessary-parens [^String x]
-  (let [ch (.toCharArray x)
-        len (alength ch)
-        matched-parens (int-array len)
-        level-start-idx (int-array len)]
-    (loop [n 0
-           level 0
-           str? false]
-      (when (not= len n)
-        (let [c (aget ch n)]
-          (if (= \\ c)
-            (recur (inc (inc n)) level str?)
-            (recur (inc n)
-                   (if str?
-                     level
-                     (case c
-                       \( (let [level (inc level)]
-                            (aset level-start-idx level n)
-                            level)
-                       \) (let [start-idx (aget level-start-idx level)]
-                            (aset matched-parens n (inc start-idx))
-                            (aset matched-parens start-idx (inc n))
-                            (dec level))
-                       level))
-                   (if (= \' c)
-                     (not str?)
-                     str?))))))
-    (dotimes [n len]
-      (when (and (pos? n)
-                 (< n (dec len))
-                 (= \( (aget ch n))
-                 (= (aget matched-parens (dec n))
-                    (inc (aget matched-parens n))))
-        (aset ch n \space)
-        (aset ch (dec (aget matched-parens n)) \space)))
-    (String. ch)))
-
 (defn preprocess-query [^String query]
   (let [query (str/replace query #"(FROM\s+?)\(((?:[^(])+?CROSS\s+JOIN.+?)\)" "$1$2")
-        query (str/replace query "CROSS JOIN" ",")
-        query (remove-unnecessary-parens query)]
+        query (str/replace query "CROSS JOIN" ",")]
     (if (re-find #"(?i)( FROM |^\s*VALUES)" query)
       query
       (str query " FROM (VALUES 0) AS no_from"))))

@@ -10,7 +10,7 @@
            [core2.sql.parser Parser$ParseState Parser$ParseErrors Parser$AParser
             Parser$EpsilonParser Parser$RuleParser Parser$MemoizeParser Parser$MemoizeLeftRecParser Parser$NonTerminalParser
             Parser$HideParser Parser$OptParser Parser$NegParser Parser$RepeatParser Parser$CatParser Parser$AltParser Parser$OrdParser
-            Parser$RegexpParser Parser$StringParser Parser]))
+            Parser$RegexpParser Parser$StringParser Parser Parser$MemoTable]))
 
 ;; https://arxiv.org/pdf/1509.02439v1.pdf
 ;; https://medium.com/@gvanrossum_83706/left-recursive-peg-grammars-65dab3c580e1
@@ -202,12 +202,12 @@
          (.init rule-parser rules))
 
        (fn [^String in start-rule]
-         (let [memos (make-array parse-state-array-class (inc (.length in)))
+         (let [memos (Parser$MemoTable. (.length in))
                parser (surround-parser-with-ws (aget rules (.get rule->id start-rule)) ws-pattern)]
            (if-let [state (.parse parser in 0 memos Parser/NULL_PARSE_ERRORS false)]
              (.nth (.ast state) 0 nil)
-             (let [errors (Parser$ParseErrors.)]
-               (Arrays/fill ^objects memos nil)
+             (let [memos (Parser$MemoTable. (.length in))
+                   errors (Parser$ParseErrors.)]
                (.parse parser in 0 memos errors true)
                (ParseFailure. in (.getErrors errors) (.getIndex errors))))))))))
 
