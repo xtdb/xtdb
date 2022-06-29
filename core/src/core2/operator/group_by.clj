@@ -550,7 +550,7 @@
 (defmethod ->aggregate-factory :all [agg-opts] (bool-agg-factory :and agg-opts))
 (defmethod ->aggregate-factory :every [agg-opts] (->aggregate-factory (assoc agg-opts :f :all)))
 (defmethod ->aggregate-factory :any [agg-opts] (bool-agg-factory :or agg-opts))
-(defmethod ->aggregate-factory :some [agg-opts] (assoc agg-opts :f :any))
+(defmethod ->aggregate-factory :some [agg-opts] (->aggregate-factory (assoc agg-opts :f :any)))
 
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
