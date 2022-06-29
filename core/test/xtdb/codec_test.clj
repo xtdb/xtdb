@@ -210,3 +210,14 @@
                :uuid (java.util.UUID/randomUUID)}]
       (fix/submit+await-tx node [[::xt/put doc]])
       (t/is (= doc (xt/entity (xt/db node) :foo))))))
+
+(t/deftest test-id-reader-with-existing-buffer-1778
+  (t/testing "can read and convert to real id using existing buffer"
+    (t/is (= (-> #xtdb/id "http://google.com"
+                 c/->id-buffer
+                 mem/buffer->hex
+                 count)
+             (-> #xtdb/id "http://google.com"
+                 (c/id->buffer (mem/allocate-buffer 100))
+                 mem/buffer->hex
+                 count)))))

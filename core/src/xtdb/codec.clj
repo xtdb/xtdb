@@ -695,7 +695,7 @@
   ([hex to]
    (.putByte ^MutableDirectBuffer to 0 id-value-type-id)
    (mem/hex->buffer hex (mem/slice-buffer to value-type-id-size hash/id-hash-size))
-   to))
+   (mem/limit-buffer to id-size)))
 
 (deftype EDNId [hex original-id]
   IdToBuffer
