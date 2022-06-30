@@ -237,8 +237,6 @@
     (when (seq eids)
       (swap! !evicted-eids into eids))
 
-    ;; This isn't ideal. Ideally, the index-store-tx should be fork unaware, and forkness all happens here.
-    ;; Fork unaware, as to avoid pushing down the edge-case into the main code-path
     (with-open [base-kv-snapshot (kv/new-snapshot (:kv-store base-index-store))]
       (db/unindex-eids index-store-tx base-kv-snapshot eids)))
 
