@@ -14,18 +14,6 @@
                (xt/with-tx [[::xt/put {:xt/id :foo}]]))]
     (t/is (= {:xt/id :foo} (xt/entity db :foo)))))
 
-;; problem is valid-time capping, not just tx-fn
-;; original @jms notes:
-;;
-;; put a doc v1
-;; put a doc v2 into the future
-;; play tx-fn when valid-time is in the future
-;; play tx-fn when valid-time is in the past
-;; Compare the two (neither should see the updated entity, neither should see the future value
-;; consult tx-index, index-tx 441
-;; potentially two nodes, one to replay
-;; Theory here is that valid-time is not capped on this branch
-
 (t/deftest test-valid-time-capping-for-cas
   (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2020"} #inst "2020"]])
   (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :version "2025"} #inst "2025"]])
