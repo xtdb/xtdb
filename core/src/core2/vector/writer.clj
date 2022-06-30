@@ -3,7 +3,7 @@
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv])
-  (:import (core2.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter)
+  (:import (core2.vector IDenseUnionWriter IExtensionWriter IIndirectRelation IIndirectVector IListWriter IRelationWriter IRowCopier IStructWriter IVectorWriter IWriterPosition)
            (java.lang AutoCloseable)
            (java.util HashMap LinkedHashMap Map)
            (java.util.function Function)
@@ -311,8 +311,12 @@
 
   (clear [_] (.clear underlying-writer))
 
-  (rowCopier [_ src-vec]
-    (.rowCopier underlying-writer (.getUnderlyingVector ^ExtensionTypeVector src-vec)))
+  (rowCopier [this src-vec]
+    (if (instance? DenseUnionVector src-vec)
+      ;; assume it's a one-leg DUV
+      (.rowCopier this (first (seq src-vec)))
+
+      (.rowCopier underlying-writer (.getUnderlyingVector ^ExtensionTypeVector src-vec))))
 
   IExtensionWriter
   (getUnderlyingWriter [_] underlying-writer))
@@ -334,16 +338,21 @@
       (reify IRowCopier
         (copyRow [_ _src-idx] (.getPosition this-writer)))
 
+      (instance? NullVector src-vec)
+      (reify IRowCopier
+        (copyRow [_ _src-idx]
+          (let [pos (.getPosition this-writer)]
+            (util/set-value-count dest-vec (inc pos))
+            pos)))
+
       (instance? DenseUnionVector src-vec)
-      (let [^DenseUnionVector src-vec src-vec]
+      (let [^DenseUnionVector src-vec src-vec
+            copiers (object-array (for [child-vec src-vec]
+                                    (.rowCopier this-writer child-vec)))]
         (reify IRowCopier
           (copyRow [_ src-idx]
-            (let [pos (.getPosition this-writer)]
-              (.copyFromSafe dest-vec
-                             (.getOffset src-vec src-idx)
-                             pos
-                             (.getVectorByType src-vec (.getTypeId src-vec src-idx)))
-              pos))))
+            (.copyRow ^IRowCopier (aget copiers (.getTypeId src-vec src-idx))
+                      (.getOffset src-vec src-idx)))))
 
       :else
       (reify IRowCopier
@@ -392,18 +401,52 @@
      :else
      (ScalarWriter. dest-vec pos))))
 
-(defn ->vec-writer ^core2.vector.IVectorWriter [^BufferAllocator allocator, ^String col-name]
-  (vec->writer (-> (types/->field col-name types/dense-union-type false)
-                   (.createVector allocator))))
+(defn ->vec-writer
+  (^core2.vector.IVectorWriter [^BufferAllocator allocator, col-name]
+   (vec->writer (-> (types/->field col-name types/dense-union-type false)
+                    (.createVector allocator))))
+
+  (^core2.vector.IVectorWriter [^BufferAllocator allocator, col-name, col-type]
+   (vec->writer (-> (types/col-type->field col-name col-type)
+                    (.createVector allocator)))))
+
+(defn ->row-copier ^core2.vector.IRowCopier [^IVectorWriter vec-writer, ^IIndirectVector in-col]
+  (let [in-vec (.getVector in-col)
+        row-copier (.rowCopier vec-writer in-vec)]
+    (reify IRowCopier
+      (copyRow [_ src-idx]
+        (let [pos (.startValue vec-writer)]
+          (.copyRow row-copier (.getIndex in-col src-idx))
+          (.endValue vec-writer)
+          pos)))))
 
 (defn ->rel-writer ^core2.vector.IRelationWriter [^BufferAllocator allocator]
-  (let [writers (LinkedHashMap.)]
+  (let [writers (LinkedHashMap.)
+        wp (IWriterPosition/build)]
     (reify IRelationWriter
+      (writerPosition [_] wp)
+
       (writerForName [_ col-name]
         (.computeIfAbsent writers col-name
                           (reify Function
                             (apply [_ col-name]
                               (->vec-writer allocator col-name)))))
+
+      (writerForName [_ col-name col-type]
+        (.computeIfAbsent writers col-name
+                          (reify Function
+                            (apply [_ col-name]
+                              (->vec-writer allocator col-name col-type)))))
+
+      (rowCopier [_ in-rel]
+        (let [copiers (vec (for [^IIndirectVector in-vec in-rel]
+                              (->row-copier (.get writers (.getName in-vec)) in-vec)))]
+          (reify IRowCopier
+            (copyRow [_ src-idx]
+              (let [pos (.getPositionAndIncrement wp)]
+                (doseq [^IRowCopier copier copiers]
+                  (.copyRow copier src-idx))
+                pos)))))
 
       (iterator [_]
         (.iterator (.values writers)))
@@ -415,16 +458,6 @@
 (defn rel-writer->reader ^core2.vector.IIndirectRelation [^IRelationWriter rel-writer]
   (iv/->indirect-rel (for [^IVectorWriter vec-writer rel-writer]
                        (iv/->direct-vec (.getVector vec-writer)))))
-
-(defn ->row-copier ^core2.vector.IRowCopier [^IVectorWriter vec-writer, ^IIndirectVector in-col]
-  (let [in-vec (.getVector in-col)
-        row-copier (.rowCopier vec-writer in-vec)]
-    (reify IRowCopier
-      (copyRow [_ src-idx]
-        (let [pos (.startValue vec-writer)]
-          (.copyRow row-copier (.getIndex in-col src-idx))
-          (.endValue vec-writer)
-          pos)))))
 
 (defn append-vec [^IVectorWriter vec-writer, ^IIndirectVector in-col]
   (let [row-copier (->row-copier vec-writer in-col)]

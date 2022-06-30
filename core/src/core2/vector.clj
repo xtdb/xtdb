@@ -21,16 +21,6 @@
   (->poly-reader ^core2.vector.IPolyVectorReader [arrow-vec, ^List ordered-col-types])
   (->poly-writer ^core2.vector.IPolyVectorWriter [arrow-vec, ^List ordered-col-types]))
 
-(deftype WriterPosition [^:unsynchronized-mutable ^int pos]
-  IWriterPosition
-  (getPosition [_] pos)
-  (setPosition [this pos] (set! (.pos this) pos))
-
-  (getPositionAndIncrement [this]
-    (let [pos pos]
-      (set! (.pos this) (inc pos))
-      pos)))
-
 (extend-protocol MonoFactory
   ValueVector
   (->mono-reader [arrow-vec]
@@ -42,7 +32,7 @@
     (reify IMonoVectorReader))
 
   (->mono-writer [_]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.getPositionAndIncrement wp)))))
@@ -64,7 +54,7 @@
 
   (->mono-writer [arrow-vec]
     (let [byte-width (.getByteWidth arrow-vec)
-          wp (WriterPosition. 0)]
+          wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -93,7 +83,7 @@
       (readDouble [_ idx] (.getDouble (.getDataBuffer arrow-vec) (* idx Double/BYTES)))))
 
   (->mono-writer [arrow-vec]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify
         IMonoVectorWriter
         (writerPosition [_] wp)
@@ -122,7 +112,7 @@
         (.nioBuffer (.getDataBuffer arrow-vec) (.getStartOffset arrow-vec idx) (.getValueLength arrow-vec idx)))))
 
   (->mono-writer [arrow-vec]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
 
@@ -146,7 +136,7 @@
       (readInt [_ idx] (-> (.get arrow-vec idx) (quot 86400000) (int)))))
 
   (->mono-writer [arrow-vec]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -158,7 +148,7 @@
     (reify IMonoVectorReader
       (readLong [_ idx] (.get arrow-vec idx))))
   (->mono-writer [arrow-vec]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -169,7 +159,7 @@
     (reify IMonoVectorReader
       (readLong [_ idx] (.get arrow-vec idx))))
   (->mono-writer [arrow-vec]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -180,7 +170,7 @@
     (reify IMonoVectorReader
       (readLong [_ idx] (.get arrow-vec idx))))
   (->mono-writer [arrow-vec]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -191,7 +181,7 @@
     (reify IMonoVectorReader
       (readLong [_ idx] (.get arrow-vec idx))))
   (->mono-writer [arrow-vec]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -205,7 +195,7 @@
     (reify IMonoVectorReader
       (readObject [_ idx] (.getObject arrow-vec idx))))
   (->mono-writer [arrow-vec]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -219,7 +209,7 @@
     (reify IMonoVectorReader
       (readObject [_ idx] (.getObject arrow-vec idx))))
   (->mono-writer [arrow-vec]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -239,7 +229,7 @@
       (readObject [_ idx] (.getObject arrow-vec idx))))
 
   (->mono-writer [arrow-vec]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IMonoVectorWriter
         (writerPosition [_] wp)
         (writeNull [_ _] (.setNull arrow-vec (.getPositionAndIncrement wp)))
@@ -350,7 +340,7 @@
         (getTypeId [_] null-type-id))))
 
   (->poly-writer [_vec _ordered-col-types]
-    (let [wp (WriterPosition. 0)]
+    (let [wp (IWriterPosition/build)]
       (reify IPolyVectorWriter
         (writeNull [_ _type-id _] (.getPositionAndIncrement wp))
         (writerPosition [_] wp)))))
@@ -389,7 +379,7 @@
                    0 nil 0)))
 
   (->poly-writer [duv ordered-col-types]
-    (let [wp (WriterPosition. 0)
+    (let [wp (IWriterPosition/build)
           type-count (count ordered-col-types)
           type-id-mapping (duv-writer-type-id-mapping duv ordered-col-types)
           writers (object-array type-count)]

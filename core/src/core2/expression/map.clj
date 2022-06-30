@@ -1,17 +1,17 @@
 (ns core2.expression.map
-  (:require [clojure.set :as set]
-            [core2.expression :as expr]
+  (:require [core2.expression :as expr]
             [core2.types :as types]
             [core2.util :as util]
+            [core2.vector :as vec]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import (core2.vector IIndirectVector IRowCopier IVectorWriter)
+  (:import (core2.vector IIndirectVector IVectorWriter)
            io.netty.util.collection.IntObjectHashMap
            (java.lang AutoCloseable)
            (java.util HashMap List)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher)
-           org.apache.arrow.vector.NullVector
+           (org.apache.arrow.vector NullVector)
            (org.roaringbitmap IntConsumer RoaringBitmap)))
 
 (def ^:private ^org.apache.arrow.memory.util.hash.ArrowBufHasher hasher
@@ -50,6 +50,11 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IRelationMap
+  (^java.util.Map buildColumnTypes [])
+  (^java.util.List buildKeyColumnNames [])
+  (^java.util.Map probeColumnTypes [])
+  (^java.util.List probeKeyColumnNames [])
+
   (^core2.expression.map.IRelationMapBuilder buildFromRelation [^core2.vector.IIndirectRelation inRelation])
   (^core2.expression.map.IRelationMapProber probeFromRelation [^core2.vector.IIndirectRelation inRelation])
   (^core2.vector.IIndirectRelation getBuiltRelation []))
@@ -140,85 +145,97 @@
 
 (defn ->relation-map ^core2.expression.map.IRelationMap
   [^BufferAllocator allocator,
-   {:keys [key-col-names build-key-col-names probe-key-col-names store-col-names with-nil-row?
-           nil-keys-equal?]
+   {:keys [key-col-names store-full-build-rel?
+           build-col-types build-key-col-names
+           probe-col-types probe-key-col-names
+           with-nil-row? nil-keys-equal?]
     :or {build-key-col-names key-col-names
          probe-key-col-names key-col-names}}]
 
   (let [hash->bitmap (IntObjectHashMap.)
-        out-rel (vw/->rel-writer allocator)]
-    (doseq [col-name (set/union (set build-key-col-names) (set store-col-names))]
-      (.writerForName out-rel (name col-name)))
+        rel-writer (vw/->rel-writer allocator)]
+
+    (doseq [[col-name col-type] (cond-> build-col-types
+                                  (not store-full-build-rel?) (select-keys build-key-col-names)
+
+                                  with-nil-row? (->> (into {} (map (juxt key
+                                                                         (comp (fn [col-type]
+                                                                                 (cond-> col-type
+                                                                                   with-nil-row? (types/merge-col-types :null)))
+                                                                               val))))))]
+      (.writerForName rel-writer (name col-name) col-type))
 
     (when with-nil-row?
-      (assert store-col-names "supply `:store-col-names` with `:with-nil-row? true`")
+      (doto (.rowCopier rel-writer (->nil-rel (keys build-col-types)))
+        (.copyRow 0)))
 
-      (vw/append-rel out-rel (->nil-rel store-col-names)))
+    (let [build-key-cols (mapv #(iv/->direct-vec (.getVector (.writerForName rel-writer (name %))))
+                               build-key-col-names)]
+      (letfn [(compute-hash-bitmap [^long row-hash]
+                (or (.get hash->bitmap row-hash)
+                    (let [bitmap (RoaringBitmap.)]
+                      (.put hash->bitmap (int row-hash) bitmap)
+                      bitmap)))]
+        (reify
+          IRelationMap
+          (buildColumnTypes [_] build-col-types)
+          (buildKeyColumnNames [_] build-key-col-names)
+          (probeColumnTypes [_] probe-col-types)
+          (probeKeyColumnNames [_] probe-key-col-names)
 
-    (letfn [(compute-hash-bitmap [^long row-hash]
-              (or (.get hash->bitmap row-hash)
-                  (let [bitmap (RoaringBitmap.)]
-                    (.put hash->bitmap (int row-hash) bitmap)
-                    bitmap)))]
-      (reify
-        IRelationMap
-        (buildFromRelation [_ in-rel]
-          (let [in-rel (if store-col-names
-                         (->> (set/union (set build-key-col-names) (set store-col-names))
-                              (mapv #(.vectorForName in-rel (name %)))
-                              iv/->indirect-rel)
-                         in-rel)
-                in-key-cols (mapv #(.vectorForName in-rel (name %)) build-key-col-names)
-                out-writers (->> (mapv #(.writerForName out-rel (.getName ^IIndirectVector %)) in-rel))
-                out-copiers (mapv vw/->row-copier out-writers in-rel)
-                build-rel (vw/rel-writer->reader out-rel)
-                comparator (->comparator in-key-cols (mapv #(.vectorForName build-rel (name %)) build-key-col-names) nil-keys-equal?)
-                hasher (->hasher in-key-cols)]
+          (buildFromRelation [_ in-rel]
+            (let [in-rel (if store-full-build-rel?
+                           in-rel
+                           (->> (set build-key-col-names)
+                                (mapv #(.vectorForName in-rel (name %)))
+                                iv/->indirect-rel))
+                  in-key-cols (mapv #(.vectorForName in-rel (name %)) build-key-col-names)
+                  row-copier (.rowCopier rel-writer in-rel)
+                  comparator (->comparator in-key-cols build-key-cols nil-keys-equal?)
+                  hasher (->hasher in-key-cols)]
 
-            (letfn [(add ^long [^RoaringBitmap hash-bitmap, ^long idx]
-                      (let [out-idx (.getValueCount (.getVector ^IVectorWriter (first out-writers)))]
-                        (.add hash-bitmap out-idx)
+              (letfn [(add ^long [^RoaringBitmap hash-bitmap, ^long idx]
+                        (let [out-idx (.copyRow row-copier idx)]
+                          (.add hash-bitmap out-idx)
+                          (returned-idx out-idx)))]
 
-                        (doseq [^IRowCopier copier out-copiers]
-                          (.copyRow copier idx))
+                (reify IRelationMapBuilder
+                  (add [_ idx]
+                    (add (compute-hash-bitmap (.hashCode hasher idx)) idx))
 
-                        (returned-idx out-idx)))]
+                  (addIfNotPresent [_ idx]
+                    (let [^RoaringBitmap hash-bitmap (compute-hash-bitmap (.hashCode hasher idx))
+                          out-idx (find-in-hash-bitmap hash-bitmap comparator idx)]
+                      (if-not (neg? out-idx)
+                        out-idx
+                        (add hash-bitmap idx))))))))
 
-              (reify IRelationMapBuilder
-                (add [_ idx]
-                  (add (compute-hash-bitmap (.hashCode hasher idx)) idx))
+          (probeFromRelation [_ probe-rel]
+            (let [in-key-cols (mapv #(.vectorForName probe-rel (name %)) probe-key-col-names)
+                  comparator (->comparator in-key-cols build-key-cols nil-keys-equal?)
+                  hasher (->hasher in-key-cols)]
 
-                (addIfNotPresent [_ idx]
-                  (let [^RoaringBitmap hash-bitmap (compute-hash-bitmap (.hashCode hasher idx))
-                        out-idx (find-in-hash-bitmap hash-bitmap comparator idx)]
-                    (if-not (neg? out-idx)
-                      out-idx
-                      (add hash-bitmap idx))))))))
+              (reify IRelationMapProber
+                (indexOf [_ idx]
+                  (-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
+                      (find-in-hash-bitmap comparator idx)))
 
-        (probeFromRelation [_ probe-rel]
-          (let [in-key-cols (mapv #(.vectorForName probe-rel (name %)) probe-key-col-names)
-                build-rel (vw/rel-writer->reader out-rel)
-                comparator (->comparator in-key-cols (mapv #(.vectorForName build-rel (name %)) build-key-col-names) nil-keys-equal?)
-                hasher (->hasher in-key-cols)]
+                (getAll [_ idx]
+                  (let [res (RoaringBitmap.)]
+                    (some-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
+                            (.forEach (reify IntConsumer
+                                        (accept [_ out-idx]
+                                          (when (.test comparator idx out-idx)
+                                            (.add res out-idx))))))
+                    (when-not (.isEmpty res)
+                      res))))))
 
-            (reify IRelationMapProber
-              (indexOf [_ idx]
-                (-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
-                    (find-in-hash-bitmap comparator idx)))
+          (getBuiltRelation [_]
+            (let [pos (.getPosition (.writerPosition rel-writer))]
+              (doseq [^IVectorWriter w rel-writer]
+                (.setValueCount (.getVector w) pos)))
 
-              (getAll [_ idx]
-                (let [res (RoaringBitmap.)]
-                  (some-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
-                          (.forEach (reify IntConsumer
-                                      (accept [_ out-idx]
-                                        (when (.test comparator idx out-idx)
-                                          (.add res out-idx))))))
-                  (when-not (.isEmpty res)
-                    res))))))
+            (iv/->indirect-rel (mapv #(iv/->direct-vec (.getVector ^IVectorWriter %)) rel-writer)))
 
-        (getBuiltRelation [_]
-          (vw/rel-writer->reader out-rel))
-
-        AutoCloseable
-        (close [_]
-          (util/try-close out-rel))))))
+          AutoCloseable
+          (close [_] (.close rel-writer)))))))

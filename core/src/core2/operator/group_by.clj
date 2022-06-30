@@ -80,12 +80,12 @@
     (.close group-mapping)
     (util/try-close rel-map)))
 
-(defn- ->group-mapper [^BufferAllocator allocator, group-col-names]
+(defn- ->group-mapper [^BufferAllocator allocator, group-col-types]
   (let [gm-vec (IntVector. "group-mapping" allocator)]
-    (if (seq group-col-names)
+    (if-let [group-col-names (not-empty (set (keys group-col-types)))]
       (GroupMapper. group-col-names
-                    (emap/->relation-map allocator {:key-col-names group-col-names,
-                                                    :store-col-names #{}
+                    (emap/->relation-map allocator {:build-col-types group-col-types
+                                                    :build-key-col-names group-col-names
                                                     :nil-keys-equal? true})
                     gm-vec)
       (NullGroupMapper. gm-vec))))
@@ -412,7 +412,7 @@
 (defmethod ->aggregate-factory :max-all [agg-opts] (min-max-factory :> agg-opts))
 (defmethod ->aggregate-factory :max-distinct [agg-opts] (min-max-factory :> agg-opts))
 
-(defn- wrap-distinct [^IAggregateSpecFactory agg-factory, from-name]
+(defn- wrap-distinct [^IAggregateSpecFactory agg-factory, from-name, from-type]
   (reify IAggregateSpecFactory
     (getToColumnName [_] (.getToColumnName agg-factory))
     (getToColumnType [_] (.getToColumnType agg-factory))
@@ -429,7 +429,8 @@
               (dotimes [idx (.getValueCount in-vec)]
                 (let [group-idx (.get group-mapping idx)]
                   (while (<= (.size rel-maps) group-idx)
-                    (.add rel-maps (emap/->relation-map al {:key-col-names [from-name]})))
+                    (.add rel-maps (emap/->relation-map al {:build-col-types {from-name from-type}
+                                                            :build-key-col-names #{from-name}})))
                   (let [^IRelationMap rel-map (nth rel-maps group-idx)]
                     (while (<= (.size builders) group-idx)
                       (.add builders nil))
@@ -456,23 +457,23 @@
             (util/try-close agg-spec)
             (run! util/try-close rel-maps)))))))
 
-(defmethod ->aggregate-factory :count-distinct [{:keys [from-name] :as agg-opts}]
+(defmethod ->aggregate-factory :count-distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :count))
-      (wrap-distinct from-name)))
+      (wrap-distinct from-name from-type)))
 
 (defmethod ->aggregate-factory :count-all [agg-opts]
   (->aggregate-factory (assoc agg-opts :f :count)))
 
-(defmethod ->aggregate-factory :sum-distinct [{:keys [from-name] :as agg-opts}]
+(defmethod ->aggregate-factory :sum-distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :sum))
-      (wrap-distinct from-name)))
+      (wrap-distinct from-name from-type)))
 
 (defmethod ->aggregate-factory :sum-all [agg-opts]
   (->aggregate-factory (assoc agg-opts :f :sum)))
 
-(defmethod ->aggregate-factory :avg-distinct [{:keys [from-name] :as agg-opts}]
+(defmethod ->aggregate-factory :avg-distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :avg))
-      (wrap-distinct from-name)))
+      (wrap-distinct from-name from-type)))
 
 (defmethod ->aggregate-factory :avg-all [agg-opts]
   (->aggregate-factory (assoc agg-opts :f :avg)))
@@ -535,9 +536,9 @@
                                 (vw/->vec-writer al (name to-name))
                                 nil 0 (ArrayList.))))))
 
-(defmethod ->aggregate-factory :array-agg-distinct [{:keys [from-name] :as agg-opts}]
+(defmethod ->aggregate-factory :array-agg-distinct [{:keys [from-name from-type] :as agg-opts}]
   (-> (->aggregate-factory (assoc agg-opts :f :array-agg))
-      (wrap-distinct from-name)))
+      (wrap-distinct from-name from-type)))
 
 (defn- bool-agg-factory [step-f-kw {:keys [from-name] :as agg-opts}]
   (reducing-agg-factory (into agg-opts
@@ -621,7 +622,7 @@
                              (.add agg-specs (.build factory allocator)))
 
                            (GroupByCursor. allocator in-cursor
-                                           (->group-mapper allocator (mapv name group-cols))
+                                           (->group-mapper allocator (select-keys col-types group-cols))
                                            (vec agg-specs)
                                            false)
 

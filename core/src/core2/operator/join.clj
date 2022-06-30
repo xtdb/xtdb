@@ -1,17 +1,18 @@
 (ns core2.operator.join
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [core2.bloom :as bloom]
             [core2.expression :as expr]
             [core2.expression.map :as emap]
             [core2.logical-plan :as lp]
-            [core2.operator.scan :as scan]
-            [core2.util :as util]
-            [core2.vector.indirect :as iv]
             [core2.operator.project :as project]
-            [core2.types :as types])
+            [core2.operator.scan :as scan]
+            [core2.types :as types]
+            [core2.util :as util]
+            [core2.vector.indirect :as iv])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap)
-           (core2.operator IRelationSelector)
+           (core2.operator IProjectionSpec IRelationSelector)
            (core2.vector IIndirectRelation)
            (java.util ArrayList Iterator List)
            (java.util.function Consumer)
@@ -131,16 +132,16 @@
                    (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))})))
 
 (defn- build-phase [^IIndirectRelation build-rel
-                    build-column-names
                     ^IRelationMap rel-map
                     pushdown-blooms]
-  (let [rel-map-builder (.buildFromRelation rel-map build-rel)]
+  (let [rel-map-builder (.buildFromRelation rel-map build-rel)
+        build-key-col-names (vec (.buildKeyColumnNames rel-map))]
     (dotimes [build-idx (.rowCount build-rel)]
       (.add rel-map-builder build-idx))
 
-    (dotimes [col-idx (count build-column-names)]
-      (let [build-col-name (nth build-column-names col-idx)
-            build-col (.vectorForName build-rel build-col-name)
+    (dotimes [col-idx (count build-key-col-names)]
+      (let [build-col-name (nth build-key-col-names col-idx)
+            build-col (.vectorForName build-rel (name build-col-name))
             internal-vec (.getVector build-col)
             ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
         (dotimes [build-idx (.rowCount build-rel)]
@@ -148,7 +149,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^core2.vector.IIndirectRelation probe-phase
-  (fn [join-type allocator probe-rel rel-map probe-column-names matched-build-idxs theta-selector params]
+  (fn [join-type allocator probe-rel rel-map matched-build-idxs theta-selector params]
     join-type))
 
 (defn- probe-inner-join-select
@@ -213,7 +214,6 @@
    ^BufferAllocator allocator
    ^IIndirectRelation probe-rel
    ^IRelationMap rel-map
-   _probe-column-names
    _matched-build-idxs
    ^IRelationSelector theta-selector
    params]
@@ -226,7 +226,6 @@
    ^BufferAllocator allocator
    ^IIndirectRelation probe-rel
    ^IRelationMap rel-map
-   _probe-column-names
    _matched-build-idxs
    ^IRelationSelector theta-selector
    params]
@@ -237,7 +236,6 @@
    ^BufferAllocator allocator
    ^IIndirectRelation probe-rel
    ^IRelationMap rel-map
-   _probe-column-names
    _matched-build-idxs
    ^IRelationSelector theta-selector
    params]
@@ -295,16 +293,13 @@
    ^BufferAllocator allocator
    ^IIndirectRelation probe-rel
    ^IRelationMap rel-map
-   _probe-column-names
    ^RoaringBitmap matched-build-idxs
    ^IRelationSelector theta-selector
    params]
   (->> (probe-outer-join-select probe-rel rel-map allocator matched-build-idxs theta-selector params)
        (join-rels probe-rel rel-map)))
 
-(deftype JoinCursor [^BufferAllocator allocator
-                     ^ICursor build-cursor, build-key-column-names, build-column-names
-                     ^ICursor probe-cursor, probe-key-column-names, probe-column-names
+(deftype JoinCursor [^BufferAllocator allocator, ^ICursor build-cursor, ^ICursor probe-cursor
                      ^IRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
@@ -316,21 +311,19 @@
     (.forEachRemaining build-cursor
                        (reify Consumer
                          (accept [_ build-rel]
-                           (build-phase build-rel build-key-column-names rel-map pushdown-blooms))))
+                           (build-phase build-rel rel-map pushdown-blooms))))
 
     (let [yield-missing? (contains? #{::anti-semi-join ::left-outer-join ::full-outer-join} join-type)]
       (boolean
         (or (let [advanced? (boolean-array 1)]
-              (binding [scan/*column->pushdown-bloom*
-                        (if yield-missing?
-                          scan/*column->pushdown-bloom*
-                          (conj scan/*column->pushdown-bloom* (zipmap probe-key-column-names pushdown-blooms)))]
+              (binding [scan/*column->pushdown-bloom* (cond-> scan/*column->pushdown-bloom*
+                                                        (not yield-missing?) (conj (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms)))]
                 (while (and (not (aget advanced? 0))
                             (.tryAdvance probe-cursor
                                          (reify Consumer
                                            (accept [_ probe-rel]
                                              (when (pos? (.rowCount ^IIndirectRelation probe-rel))
-                                               (with-open [out-rel (-> (probe-phase join-type allocator probe-rel rel-map probe-column-names matched-build-idxs theta-selector params)
+                                               (with-open [out-rel (-> (probe-phase join-type allocator probe-rel rel-map matched-build-idxs theta-selector params)
                                                                        (iv/copy allocator))]
                                                  (when (pos? (.rowCount out-rel))
                                                    (aset advanced? 0 true)
@@ -347,7 +340,7 @@
                   ;; this means .isEmpty will be true on the next iteration (we flip the bitmap)
                   (.add matched-build-idxs 0 build-row-count)
 
-                  (let [nil-rel (emap/->nil-rel probe-column-names)
+                  (let [nil-rel (emap/->nil-rel (set (keys (.probeColumnTypes rel-map))))
                         build-sel (.toArray unmatched-build-idxs)
                         probe-sel (int-array (alength build-sel))]
                     (.accept c (join-rels nil-rel rel-map [probe-sel build-sel]))
@@ -359,85 +352,82 @@
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
-(defn- further-destructure-join-pred
-  [pred-index [tag val]]
-  (case tag
-    :equi-condition
-    (let [[left-expr right-expr] (first val)]
-      {:predicate-type :equi
-       :left {:expr left-expr
-              :col (if (symbol? left-expr) left-expr (symbol (str "?l-equi-expr-" pred-index)))
-              :project (not (symbol? left-expr))}
-       :right {:expr right-expr
-               :col (if (symbol? right-expr) right-expr (symbol (str "?r-equi-expr-" pred-index)))
-               :project (not (symbol? right-expr))}})
-    :pred-expr
-    {:predicate-type :theta
-     :expr val}))
+(defn- equi-spec [idx condition left-col-types right-col-types param-types]
+  (let [[left-expr right-expr] (first condition)]
+    (letfn [(equi-projection [side expr col-types]
+              (if (symbol? expr)
+                {:key-col-name expr}
 
-(defn- equi-projection [{:keys [col, expr, project]} col-types param-types]
-  (let [col-name (name col)]
-    (if project
-      (expr/->expression-projection-spec col-name expr {:col-types col-types, :param-types param-types})
-      (project/->identity-projection-spec col-name (get col-types col-name)))))
+                (let [col-name (symbol (format "?join-expr-%s-%d" (name side) idx))]
+                  {:key-col-name col-name
+                   :projection (expr/->expression-projection-spec col-name expr
+                                                                  {:col-types col-types
+                                                                   :param-types param-types})})))]
+
+      {:left (equi-projection :left left-expr left-col-types)
+       :right (equi-projection :right right-expr right-col-types)})))
+
+(defn- projection-specs->col-types [projection-specs]
+  (->> projection-specs
+       (into {} (map (juxt #(.getColumnName ^IProjectionSpec %)
+                           #(.getColumnType ^IProjectionSpec %))))))
 
 (defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-types] :as args} f]
   (lp/binary-expr left right args
     (fn [left-col-types right-col-types]
-      (let [left-col-names (set (keys left-col-types))
-            right-col-names (set (keys right-col-types))
+      (let [original-col-names (set/union (set (keys left-col-types))
+                                          (set (keys right-col-types)))
 
-            {:keys [equi, theta]} (group-by :predicate-type (map-indexed further-destructure-join-pred condition))
+            {equis :equi-condition, thetas :pred-expr} (group-by first condition)
 
-            col-types (merge-with types/merge-col-types left-col-types right-col-types)
+            theta-selector (when-let [theta-exprs (seq (map second thetas))]
+                             (let [col-types (merge-with types/merge-col-types left-col-types right-col-types)]
+                               (expr/->expression-relation-selector (list* 'and theta-exprs)
+                                                                    {:col-types col-types, :param-types param-types})))
 
-            theta-selector (when theta
-                             (expr/->expression-relation-selector (list* 'and (map :expr theta))
-                                                                  {:col-types col-types, :param-types param-types}))
+            equi-specs (->> (vals equis)
+                            (into [] (map-indexed (fn [idx condition]
+                                                    (equi-spec idx condition left-col-types right-col-types param-types)))))
 
-            {:keys [col-types ->cursor]} (f left-col-types right-col-types)
+            left-projections (vec (concat (for [[col-name col-type] left-col-types]
+                                            (project/->identity-projection-spec col-name col-type))
+                                          (keep (comp :projection :left) equi-specs)))
 
-            return-col-types col-types
+            right-projections (vec (concat (for [[col-name col-type] right-col-types]
+                                             (project/->identity-projection-spec col-name col-type))
+                                           (keep (comp :projection :right) equi-specs)))
 
-            left-key-col-names (mapv (comp name :col :left) equi)
-            right-key-col-names (mapv (comp name :col :right) equi)
+            {:keys [col-types ->cursor]} (f {:left-col-types (projection-specs->col-types left-projections)
+                                             :left-key-col-names (mapv (comp :key-col-name :left) equi-specs)
+                                             :right-col-types (projection-specs->col-types right-projections)
+                                             :right-key-col-names (mapv (comp :key-col-name :right) equi-specs)
+                                             :theta-selector theta-selector})
 
-            left-projections
-            (vec (concat (map (comp #(equi-projection % left-col-types param-types) :left) equi)
-                         (map #(project/->identity-projection-spec % (get left-col-types %)) (remove (set left-key-col-names) left-col-names))))
+            project-away-specs (->> (set/intersection (set (keys col-types)) original-col-names)
+                                    (mapv #(project/->identity-projection-spec % (get col-types %))))]
 
-            right-projections
-            (vec (concat (map (comp #(equi-projection % right-col-types param-types) :right) equi)
-                         (map #(project/->identity-projection-spec % (get right-col-types %)) (remove (set right-key-col-names) right-col-names))))]
+        {:col-types (projection-specs->col-types project-away-specs)
+         :->cursor (fn [opts left-cursor right-cursor]
+                     (let [left-project-cursor (project/->project-cursor opts left-cursor left-projections)
+                           right-project-cursor (project/->project-cursor opts right-cursor right-projections)
 
-        {:col-types return-col-types
-         :->cursor
-         (fn [opts left-cursor right-cursor]
-           (let [left-project-cursor (project/->project-cursor opts left-cursor left-projections)
-                 right-project-cursor (project/->project-cursor opts right-cursor right-projections)
+                           join-cursor (->cursor opts left-project-cursor right-project-cursor)]
 
-                 join-cursor (->cursor opts
-                                       left-project-cursor left-key-col-names left-col-names
-                                       right-project-cursor right-key-col-names right-col-names
-                                       theta-selector)
-
-                 project-away-cursor (project/->project-cursor opts join-cursor (mapv #(project/->identity-projection-spec % (get return-col-types %)) (keys return-col-types)))]
-
-             project-away-cursor))}))))
+                       (project/->project-cursor opts join-cursor project-away-specs)))}))))
 
 (defmethod lp/emit-expr :join [join-expr args]
   (emit-join-expr join-expr args
-    (fn [left-col-types right-col-types]
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-selector]}]
       {:col-types (merge-with types/merge-col-types left-col-types right-col-types)
-       :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
-                   (JoinCursor. allocator
-                                left-cursor left-key-cols left-cols
-                                right-cursor right-key-cols right-cols
-                                (emap/->relation-map allocator {:build-key-col-names left-key-cols
-                                                                :probe-key-col-names right-key-cols
-                                                                :store-col-names left-cols})
+       :->cursor (fn [{:keys [allocator params]} left-cursor right-cursor]
+                   (JoinCursor. allocator left-cursor right-cursor
+                                (emap/->relation-map allocator {:build-col-types left-col-types
+                                                                :build-key-col-names left-key-col-names
+                                                                :probe-col-types right-col-types
+                                                                :probe-key-col-names right-key-col-names
+                                                                :store-full-build-rel? true})
                                 nil
-                                (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
+                                (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
                                 ::inner-join
                                 theta-selector
                                 params))})))
@@ -448,70 +438,70 @@
 
 (defmethod lp/emit-expr :left-outer-join [join-expr args]
   (emit-join-expr join-expr args
-    (fn [left-col-types right-col-types]
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-selector]}]
       {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types with-nullable-cols))
-       :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
-                   (JoinCursor. allocator
-                                right-cursor right-key-cols right-cols
-                                left-cursor left-key-cols left-cols
-                                (emap/->relation-map allocator {:build-key-col-names right-key-cols
-                                                                :probe-key-col-names left-key-cols
-                                                                :store-col-names right-cols
+       :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
+                   (JoinCursor. allocator right-cursor left-cursor
+                                (emap/->relation-map allocator {:build-col-types right-col-types
+                                                                :build-key-col-names right-key-col-names
+                                                                :probe-col-types left-col-types
+                                                                :probe-key-col-names left-key-col-names
+                                                                :store-full-build-rel? true
                                                                 :with-nil-row? true})
                                 nil
-                                (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
+                                (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
                                 ::left-outer-join
                                 theta-selector
                                 params))})))
 
 (defmethod lp/emit-expr :full-outer-join [join-expr args]
   (emit-join-expr join-expr args
-    (fn [left-col-types right-col-types]
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-selector]}]
       {:col-types (merge-with types/merge-col-types (-> left-col-types with-nullable-cols) (-> right-col-types with-nullable-cols))
-       :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
-                   (JoinCursor. allocator
-                                left-cursor left-key-cols left-cols
-                                right-cursor right-key-cols right-cols
-                                (emap/->relation-map allocator {:build-key-col-names left-key-cols
-                                                                :probe-key-col-names right-key-cols
-                                                                :store-col-names left-cols
+       :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
+                   (JoinCursor. allocator left-cursor right-cursor
+                                (emap/->relation-map allocator {:build-col-types left-col-types
+                                                                :build-key-col-names left-key-col-names
+                                                                :probe-col-types right-col-types
+                                                                :probe-key-col-names right-key-col-names
+                                                                :store-full-build-rel? true
                                                                 :with-nil-row? true})
                                 (RoaringBitmap.)
-                                (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
+                                (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
                                 ::full-outer-join
                                 theta-selector
                                 params))})))
 
 (defmethod lp/emit-expr :semi-join [join-expr args]
   (emit-join-expr join-expr args
-    (fn [left-col-types _right-col-types]
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-selector]}]
       {:col-types left-col-types
-       :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
-                   (JoinCursor. allocator
-                                right-cursor right-key-cols right-cols
-                                left-cursor left-key-cols left-cols
-                                (emap/->relation-map allocator {:build-key-col-names right-key-cols
-                                                                :probe-key-col-names left-key-cols
-                                                                :store-col-names right-cols})
+       :->cursor (fn [{:keys [allocator params]} left-cursor right-cursor]
+                   (JoinCursor. allocator right-cursor left-cursor
+                                (emap/->relation-map allocator {:build-col-types right-col-types
+                                                                :build-key-col-names right-key-col-names
+                                                                :probe-col-types left-col-types
+                                                                :probe-key-col-names left-key-col-names
+                                                                :store-full-build-rel? true})
                                 nil
-                                (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
+                                (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
                                 ::semi-join
                                 theta-selector
                                 params))})))
 
 (defmethod lp/emit-expr :anti-join [join-expr args]
   (emit-join-expr join-expr args
-    (fn [left-col-types _right-col-types]
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-selector]}]
       {:col-types left-col-types
-       :->cursor (fn [{:keys [allocator params]}, left-cursor left-key-cols left-cols, right-cursor right-key-cols right-cols, theta-selector]
-                   (JoinCursor. allocator
-                                right-cursor right-key-cols right-cols
-                                left-cursor left-key-cols left-cols
-                                (emap/->relation-map allocator {:build-key-col-names right-key-cols
-                                                                :probe-key-col-names left-key-cols
-                                                                :store-col-names right-cols})
+       :->cursor (fn [{:keys [allocator params]} left-cursor right-cursor]
+                   (JoinCursor. allocator right-cursor left-cursor
+                                (emap/->relation-map allocator {:build-col-types right-col-types
+                                                                :build-key-col-names right-key-col-names
+                                                                :probe-col-types left-col-types
+                                                                :probe-key-col-names left-key-col-names
+                                                                :store-full-build-rel? true})
                                 nil
-                                (vec (repeatedly (count right-key-cols) #(MutableRoaringBitmap.)))
+                                (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
                                 ::anti-semi-join
                                 theta-selector
                                 params))})))

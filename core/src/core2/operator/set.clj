@@ -148,7 +148,8 @@
         {:col-types col-types
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (IntersectionCursor. left-cursor right-cursor
-                                          (emap/->relation-map allocator {:key-col-names (set (keys col-types))})
+                                          (emap/->relation-map allocator {:build-col-types left-col-types
+                                                                          :key-col-names (set (keys col-types))})
                                           false))}))))
 
 (defmethod lp/emit-expr :difference [{:keys [left right]} args]
@@ -158,7 +159,8 @@
         {:col-types col-types
          :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                      (IntersectionCursor. left-cursor right-cursor
-                                          (emap/->relation-map allocator {:key-col-names (set (keys col-types))})
+                                          (emap/->relation-map allocator {:build-col-types left-col-types
+                                                                          :key-col-names (set (keys col-types))})
                                           true))}))))
 
 (deftype DistinctCursor [^ICursor in-cursor
@@ -194,7 +196,8 @@
     (fn [inner-col-types]
       {:col-types inner-col-types
        :->cursor (fn [{:keys [allocator]} in-cursor]
-                   (DistinctCursor. in-cursor (emap/->relation-map allocator {:key-col-names (set (keys inner-col-types))
+                   (DistinctCursor. in-cursor (emap/->relation-map allocator {:build-col-types inner-col-types
+                                                                              :key-col-names (set (keys inner-col-types))
                                                                               :nil-keys-equal? true})))})))
 
 (definterface ICursorFactory
@@ -310,7 +313,8 @@
                             (binding [*relation-variable->cursor-factory* (-> *relation-variable->cursor-factory*
                                                                               (assoc mu-variable cursor-factory))]
                               (->recursive-cursor opts))))
-                        (emap/->relation-map allocator {:key-col-names (set (keys col-types))})
+                        (emap/->relation-map allocator {:build-col-types col-types
+                                                        :key-col-names (set (keys col-types))})
                         (boolean incremental?)
                         #_new-idxs nil
                         #_recursive-cursor nil
