@@ -71,9 +71,10 @@
     (let [inner-copier (.rowCopier inner-writer src-col)]
       (reify IRowCopier
         (copyRow [_this src-idx]
-          (.startValue this-writer)
-          (.copyRow inner-copier src-idx)
-          (.endValue this-writer))))))
+          (let [pos (.startValue this-writer)]
+            (.copyRow inner-copier src-idx)
+            (.endValue this-writer)
+            pos))))))
 
 (defn- duv->duv-copier ^core2.vector.IRowCopier [^DenseUnionVector src-vec, ^IDenseUnionWriter dest-col]
   (let [src-field (.getField src-vec)
@@ -91,9 +92,9 @@
     (reify IRowCopier
       (copyRow [_ src-idx]
         (let [type-id (.getTypeId src-vec src-idx)]
-          (when-not (neg? type-id)
-            (-> ^IRowCopier (aget copier-mapping type-id)
-                (.copyRow (.getOffset src-vec src-idx)))))))))
+          (assert (not (neg? type-id)))
+          (-> ^IRowCopier (aget copier-mapping type-id)
+              (.copyRow (.getOffset src-vec src-idx))))))))
 
 (defn- vec->duv-copier ^core2.vector.IRowCopier [^ValueVector src-vec, ^IDenseUnionWriter dest-col]
   (let [field (.getField src-vec)
@@ -218,7 +219,8 @@
       (reify IRowCopier
         (copyRow [_ src-idx]
           (doseq [^IRowCopier copier copiers]
-            (.copyRow copier src-idx))))))
+            (.copyRow copier src-idx))
+          pos))))
 
   IStructWriter
   (writerForName [_ col-name]
@@ -261,7 +263,8 @@
             (dotimes [el-idx (- (.getElementEndIndex src-vec src-idx) start-idx)]
               (.startValue data-writer)
               (.copyRow inner-copier (+ start-idx el-idx))
-              (.endValue data-writer)))))))
+              (.endValue data-writer)))
+          pos))))
 
   IListWriter
   (getDataWriter [_] data-writer))
@@ -293,7 +296,8 @@
             (dotimes [el-idx (- (.getElementEndIndex src-vec src-idx) start-idx)]
               (.startValue data-writer)
               (.copyRow inner-copier (+ start-idx el-idx))
-              (.endValue data-writer)))))))
+              (.endValue data-writer)))
+          pos))))
 
   IListWriter
   (getDataWriter [_] data-writer))
@@ -328,24 +332,25 @@
       (instance? NullVector dest-vec)
       ;; `NullVector/.copyFromSafe` throws UOE
       (reify IRowCopier
-        (copyRow [_ _src-idx]))
+        (copyRow [_ _src-idx] (.getPosition this-writer)))
 
       (instance? DenseUnionVector src-vec)
       (let [^DenseUnionVector src-vec src-vec]
         (reify IRowCopier
           (copyRow [_ src-idx]
-            (.copyFromSafe dest-vec
-                           (.getOffset src-vec src-idx)
-                           (.getPosition this-writer)
-                           (.getVectorByType src-vec (.getTypeId src-vec src-idx))))))
+            (let [pos (.getPosition this-writer)]
+              (.copyFromSafe dest-vec
+                             (.getOffset src-vec src-idx)
+                             pos
+                             (.getVectorByType src-vec (.getTypeId src-vec src-idx)))
+              pos))))
 
       :else
       (reify IRowCopier
         (copyRow [_ src-idx]
-          (.copyFromSafe dest-vec
-                         src-idx
-                         (.getPosition this-writer)
-                         src-vec))))))
+          (let [pos (.getPosition this-writer)]
+            (.copyFromSafe dest-vec src-idx pos src-vec)
+            pos))))))
 
 (defn vec->writer
   (^core2.vector.IVectorWriter
@@ -416,9 +421,10 @@
         row-copier (.rowCopier vec-writer in-vec)]
     (reify IRowCopier
       (copyRow [_ src-idx]
-        (.startValue vec-writer)
-        (.copyRow row-copier (.getIndex in-col src-idx))
-        (.endValue vec-writer)))))
+        (let [pos (.startValue vec-writer)]
+          (.copyRow row-copier (.getIndex in-col src-idx))
+          (.endValue vec-writer)
+          pos)))))
 
 (defn append-vec [^IVectorWriter vec-writer, ^IIndirectVector in-col]
   (let [row-copier (->row-copier vec-writer in-col)]

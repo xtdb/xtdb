@@ -5,11 +5,10 @@
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import (core2.vector IIndirectVector IIndirectRelation IRowCopier IVectorWriter)
+  (:import (core2.vector IIndirectVector IRowCopier IVectorWriter)
            io.netty.util.collection.IntObjectHashMap
            (java.lang AutoCloseable)
            (java.util HashMap List)
-           (java.util.function Function)
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher)
            org.apache.arrow.vector.NullVector

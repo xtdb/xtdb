@@ -16,9 +16,10 @@
 (defrecord NullIndirectVector []
   IIndirectVector
   (isPresent [_ _] false)
-  (rowCopier [_ _w]
+  (rowCopier [_ w]
     (reify IRowCopier
-      (copyRow [_ _]))))
+      (copyRow [_ _]
+        (.getPosition w)))))
 
 (defrecord StructReader [^ValueVector v]
   IStructReader
