@@ -811,6 +811,11 @@ block) will result in undefined behaviour.
 include::example$test/xtdb/docs/examples/query_test.clj[tags=streaming-query,indent=0]
 ----
 
+WARNING: Reiterating the above once more, if you transform or do side effects with the
+resulting sequence in a `with-open` block you must assure all work is realized inside
+the block (by using `doall`/`dorun`/`doseq` where appropriate). Failure to do so might
+even result in crashing the JVM.
+
 [#history-api]
 == History API
 
