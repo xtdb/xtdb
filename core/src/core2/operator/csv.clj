@@ -51,7 +51,7 @@
                                 (.endValue))))))
                       (.getFieldVectors root)))
 
-        (util/set-vector-schema-root-row-count root row-count)
+        (.setRowCount root row-count)
 
         (.accept c (iv/<-root root))
         true)

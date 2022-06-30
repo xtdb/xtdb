@@ -497,7 +497,7 @@
                   out-root (VectorSchemaRoot/create (->temporal-root-schema col-name) allocator)
                   ^BigIntVector row-id-vec (.getVector out-root 0)
                   ^TimeStampMicroTZVector temporal-vec (.getVector out-root 1)]
-              (util/set-vector-schema-root-row-count out-root value-count)
+              (.setRowCount out-root value-count)
               (dotimes [n value-count]
                 (let [^longs coordinate (aget coordinates n)
                       row-id (aget coordinate row-id-idx)]

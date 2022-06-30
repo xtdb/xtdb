@@ -259,34 +259,6 @@
 (defn root-field-count ^long [^VectorSchemaRoot root]
   (.size (.getFields (.getSchema root))))
 
-;; TODO: can maybe tweak in DenseUnionVector, but that doesn't
-;; solve the VSR calling this.
-(defn set-value-count [^ValueVector v ^long value-count]
-  (let [value-count (int value-count)]
-    (cond
-      (instance? DenseUnionVector v)
-      (DenseUnionUtil/setValueCount v value-count)
-
-      (and (instance? NonNullableStructVector v)
-           (zero? (.getNullCount v)))
-      (let [^NonNullableStructVector v v]
-        (doseq [v (.getChildrenFromFields v)]
-          (set-value-count v value-count))
-        (set! (.valueCount v) value-count))
-
-      :else
-      (.setValueCount v value-count))))
-
-(def ^:private ^java.lang.reflect.Field vector-schema-root-row-count-field
-  (doto (.getDeclaredField VectorSchemaRoot "rowCount")
-    (.setAccessible true)))
-
-(defn set-vector-schema-root-row-count [^VectorSchemaRoot root ^long row-count]
-  (let [row-count (int row-count)]
-    (.set vector-schema-root-row-count-field root row-count)
-    (dotimes [n (root-field-count root)]
-      (set-value-count (.getVector root n) row-count))))
-
 (defn slice-root
   (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root]
    (slice-root root 0))

@@ -57,8 +57,8 @@
       (.setTypeId parent-duv parent-pos type-id)
       (.setOffset parent-duv parent-pos pos)
 
-      (util/set-value-count parent-duv (inc parent-pos))
-      (util/set-value-count (.getVector this) (inc pos))
+      ;; TODO (#252) do we still need this here?
+      (.setValueCount parent-duv (inc parent-pos))
 
       (.startValue inner-writer)
 
@@ -342,7 +342,8 @@
       (reify IRowCopier
         (copyRow [_ _src-idx]
           (let [pos (.getPosition this-writer)]
-            (util/set-value-count dest-vec (inc pos))
+            ;; TODO (#252) do we still need this here?
+            (.setValueCount dest-vec (inc pos))
             pos)))
 
       (instance? DenseUnionVector src-vec)

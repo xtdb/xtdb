@@ -278,7 +278,7 @@
                              (.copyRow row-copier src-idx)
                              (.endValue vec-writer)
 
-                             (util/set-vector-schema-root-row-count live-root (inc (.getRowCount live-root)))
+                             (.setRowCount live-root (inc (.getRowCount live-root)))
                              (.syncSchema live-root))))))]
 
     (dotimes [op-idx (.getValueCount tx-ops-vec)]

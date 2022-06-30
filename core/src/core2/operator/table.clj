@@ -52,8 +52,11 @@
                                     (.createVector allocator))
                         duv? (instance? DenseUnionVector out-vec)
                         out-writer (vw/vec->writer out-vec)]]
+
+            (.setInitialCapacity out-vec row-count)
+            (.allocateNew out-vec)
             (.add out-cols (iv/->direct-vec out-vec))
-            (util/set-value-count out-vec row-count)
+
             (dotimes [idx row-count]
               (let [row (nth rows idx)
                     v (-> (get row col-kw) (->v opts))]
@@ -64,7 +67,10 @@
                     (->> (types/write-value! v))
                     (.endValue))
                   (types/write-value! v out-writer))
-                (.endValue out-writer))))
+                (.endValue out-writer)))
+
+            (.setValueCount out-vec row-count))
+
           (iv/->indirect-rel out-cols row-count)
           (catch Throwable e
             (run! util/try-close out-cols)

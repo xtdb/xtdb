@@ -155,7 +155,7 @@
 
         (.endValue ops-list-writer)
 
-        (util/set-vector-schema-root-row-count root 1)
+        (.setRowCount root 1)
         (.syncSchema root)
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))

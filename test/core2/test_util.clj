@@ -131,8 +131,7 @@
     (doseq [^FieldVector field-vec field-vecs]
       (write-vec! field-vec (map (keyword (.getName (.getField field-vec))) rows)))
 
-    (util/set-vector-schema-root-row-count root row-count)
-
+    (.setRowCount root row-count)
     root))
 
 (defn ->cursor
