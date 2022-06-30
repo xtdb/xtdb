@@ -29,8 +29,9 @@
     (iterator->key i))
 
   (next [_]
-    (.next i)
-    (iterator->key i))
+    (when (.isValid i)
+      (.next i)
+      (iterator->key i)))
 
   (prev [_]
     (.prev i)
