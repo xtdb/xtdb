@@ -643,7 +643,9 @@ consecutive identical result tuples (e.g. using `clojure.core/dedupe` or
 similar).
 
 `:limit` may be used in isolation, without `:order-by`, and will also return a
-bag of results that can contain duplicates.
+bag of results that can contain duplicates. This will process exactly the
+required number of results from the underlying streaming query to satisfy the
+limit, which can be useful for minimizing unnecessary processing.
 
 To use `:order-by` with an aggregate, simply restate the aggregate element exactly as it is written in your `:find` vector.
 
@@ -794,17 +796,21 @@ Note that because XTDB is schemaless there is no need to have elsewhere declared
 [#streaming-queries]
 == Streaming Queries
 
-Query results can also be streamed, particularly for queries whose results may
-not fit into memory. For these, we use `xtdb.api/open-q`, which returns a
-`Closeable` sequence. Note that results are returned as bags, not sets, so you
-may wish to deduplicate consecutive identical result tuples (e.g. using
-`clojure.core/dedupe` or similar).
+Query results can also be streamed, which is particularly useful for advanced
+scenarios where complete results may not fit into memory.
+`xtdb.api/open-q` returns a `Closeable` sequence. Note that
+results are returned as bags, not sets, so you may wish to deduplicate
+consecutive identical result tuples (e.g. using `clojure.core/dedupe` or
+similar).
 
-We'd recommend using `with-open` to ensure that the sequence is closed properly.
-Additionally, ensure that the sequence (as much of it as you need) is eagerly
-consumed within the `with-open` block - attempting to use it outside (either
-explicitly, or by accidentally returning a lazy sequence from the `with-open`
-block) will result in undefined behaviour.
+We recommend using `with-open` to ensure that the sequence is closed properly.
+
+WARNING: Ensure that the sequence is eagerly consumed (as much of it as you
+need) within the `with-open` block - attempting to consume the sequence from
+outside the block (either explicitly, or by accidentally returning a lazy
+sequence from the `with-open` block) will result in undefined behaviour (e.g. a
+JVM segfault crash when using RocksDB). Lazy work can be realized (and therefore avoided) using
+`doall`/`dorun`/`doseq` or similar.
 
 [source,clj,indent=0]
 ----

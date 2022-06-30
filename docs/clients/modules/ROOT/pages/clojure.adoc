@@ -270,8 +270,9 @@ Represents the database as of a specific valid and transaction time.
        (doseq [row (iterator-seq res)]
          ...))
 
-     Once the sequence is closed, attempting to iterate it is undefined.
-     Therefore, be cautious with lazy evaluation.")
+     Once the sequence is closed, attempting to consume it is undefined (e.g.
+     may cause a JVM segfault crash when using RocksDB). Therefore, be
+     cautious with lazy evaluation.")
 ----
 
 === pull
@@ -346,7 +347,9 @@ Represents the database as of a specific valid and transaction time.
     [db eid sort-order opts]
     "Lazily retrieves entity history for the given entity.
     Don't forget to close the cursor when you've consumed enough history!
-    See `entity-history` for all the options")
+    Consuming after the cursor is closed is undefined (e.g. may cause a JVM
+    segfault crash when using RocksDB). Therefore, be cautious with lazy
+    evaluation. See `entity-history` for all the options")
 ----
 
 === db-basis

@@ -220,6 +220,9 @@
     ^xtdb.api.ICursor [db eid sort-order opts]
     "Lazily retrieves entity history for the given entity.
   Don't forget to close the cursor when you've consumed enough history!
+  Consuming after the cursor is closed is undefined (e.g. may cause a JVM
+  segfault crash when using RocksDB). Therefore, be cautious with lazy
+  evaluation.
   See `entity-history` for all the options")
 
   (valid-time [db]
@@ -387,8 +390,9 @@
     (doseq [row (iterator-seq res)]
       ...))
 
-  Once the sequence is closed, attempting to iterate it is undefined.
-  Therefore, be cautious with lazy evaluation."
+  Once the sequence is closed, attempting to consume it is undefined (e.g. may
+  cause a JVM segfault crash when using RocksDB). Therefore, be cautious with
+  lazy evaluation."
   ^xtdb.api.ICursor [db q & args]
   (open-q* db q (object-array args)))
 
