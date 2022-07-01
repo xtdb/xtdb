@@ -68,8 +68,7 @@
 
 (defprotocol InFlightTx
   (index-tx-docs [in-flight-tx docs])
-  (index-tx-events [in-flight-tx tx-events]
-    "prefetched-docs :: docs from the batch of transactions")
+  (index-tx-events [in-flight-tx tx-events])
   (commit [in-flight-tx])
   (abort [in-flight-tx]))
 

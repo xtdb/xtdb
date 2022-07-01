@@ -72,7 +72,7 @@
              (xt/q db2 all-names-query)))
 
     (t/is (= [#:xtdb.api{:tx-id 0, :doc {:name "Ivna", :xt/id :ivan}}
-	      #:xtdb.api{:tx-id 1, :doc {:name "Ivan", :xt/id :ivan}}]
+              #:xtdb.api{:tx-id 1, :doc {:name "Ivan", :xt/id :ivan}}]
              (->> (xt/entity-history db2
                                      :ivan
                                      :asc

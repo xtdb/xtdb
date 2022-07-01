@@ -385,7 +385,7 @@
           document-store-tx (fork/begin-document-store-tx document-store)]
       (->InFlightTx tx
                     (atom :open)
-                    (atom {:tx-events [] :av-count 0 :bytes-indexed 0 :doc-ids #{}})
+                    (atom {:tx-events [], :av-count 0, :bytes-indexed 0, :doc-ids #{}})
                     (atom {})
                     index-store-tx
                     document-store-tx

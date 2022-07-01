@@ -484,7 +484,6 @@
                          (reduce-kv (fn [acc k v]
                                       (let [k-buf (get attr-key-bufs k)
                                             stats-buf (or (get acc k-buf)
-                                        ;(kv/get-value transient-kv-snapshot k-buf)
                                                           (cache/compute-if-absent stats-kvs-cache k-buf mem/copy-to-unpooled-buffer
                                                                                    (fn [_k-buf]
                                                                                      (or (some-> (get-persistent-value k-buf) mem/copy-buffer)
@@ -1107,23 +1106,21 @@
       ;; we still put the ECAV KVs in so that we can keep track of what we need to evict later
       ;; the bitemp indices will ensure these are never returned in queries
 
-      (->> (for [[content-hash doc] docs
-                 :let [id (:crux.db/id doc)
-                       eid-value-buffer (c/->value-buffer id)
-                       content-hash (c/->id-buffer content-hash)]
+      (kv/store kv-store
+                (into [[(encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer]
+                       [(encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer]]
+                      (for [[content-hash doc] docs
+                            :let [id (:crux.db/id doc)
+                                  eid-value-buffer (c/->value-buffer id)
+                                  content-hash (c/->id-buffer content-hash)]
 
-                 [a v] doc
-                 :let [a (get attr-bufs a)]
+                            [a v] doc
+                            :let [a (get attr-bufs a)]
 
-                 [v idxs] (val-idxs v)
-                 :let [value-buffer (c/->value-buffer v)]
-                 :when (pos? (.capacity value-buffer))]
-             [(encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer) (encode-ecav-value idxs)])
-
-           (into [[(encode-failed-tx-id-key-to nil tx-id) mem/empty-buffer]
-                  [(encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer]])
-
-           (kv/store kv-store))))
+                            [v idxs] (val-idxs v)
+                            :let [value-buffer (c/->value-buffer v)]
+                            :when (pos? (.capacity value-buffer))]
+                        [(encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer) (encode-ecav-value idxs)])))))
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]

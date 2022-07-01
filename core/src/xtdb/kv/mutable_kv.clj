@@ -42,19 +42,19 @@
   Closeable
   (close [_]))
 
-(deftype MutableKvTx [^TreeMap db, ^NavigableMap db2]
+(deftype MutableKvTx [^TreeMap db, ^NavigableMap fork-db]
   kv/KvStoreTx
 
   (new-tx-snapshot [_]
-    (->MutableKvSnapshot db2))
+    (->MutableKvSnapshot fork-db))
 
   (put-kv [_ k v]
-    (.put db2
+    (.put fork-db
           (-> k mem/as-buffer mem/copy-to-unpooled-buffer)
           (some-> v mem/as-buffer mem/copy-to-unpooled-buffer)))
 
   (commit-kv-tx [_]
-    (.putAll db db2))
+    (.putAll db fork-db))
 
   (abort-kv-tx [_])
 
