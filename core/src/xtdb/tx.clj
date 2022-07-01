@@ -352,11 +352,11 @@
     (log/debug "Transaction committed:" (pr-str tx))
 
     (let [{:keys [tx-events]} @!tx]
-      (bus/send bus (merge {::xt/event-type ::indexed-tx,
-                            :submitted-tx tx,
-                            :committed? true
-                            ::txe/tx-events tx-events}
-                           (select-keys @!tx [:doc-ids :av-count :bytes-indexed])))))
+      (bus/send bus (into {::xt/event-type ::indexed-tx,
+                           :submitted-tx tx,
+                           :committed? true
+                           ::txe/tx-events tx-events}
+                          (select-keys @!tx [:doc-ids :av-count :bytes-indexed])))))
 
   (abort [_]
     (swap! !tx-state (fn [tx-state]
