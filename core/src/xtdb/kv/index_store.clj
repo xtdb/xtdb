@@ -170,9 +170,9 @@
   (^org.agrona.MutableDirectBuffer [b entity content-hash attr]
    (encode-ecav-key-to b entity content-hash attr mem/empty-buffer))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^DirectBuffer content-hash ^DirectBuffer attr ^DirectBuffer v]
-   (assert (or (zero? (.capacity attr)) (<= c/id-size (.capacity attr)))
+   (assert (or (zero? (.capacity attr)) (= c/id-size (.capacity attr)))
            (mem/buffer->hex attr))
-   (assert (or (zero? (.capacity content-hash)) (<= c/id-size (.capacity content-hash)))
+   (assert (or (zero? (.capacity content-hash)) (= c/id-size (.capacity content-hash)))
            (mem/buffer->hex content-hash))
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity entity) (.capacity content-hash) (.capacity attr) (.capacity v))))]
      (-> (doto b
@@ -991,6 +991,7 @@
 (def ^:private ^ThreadLocal value-buffer-tl (buffer-tl))
 (def ^:private ^ThreadLocal nippy-buffer-tl (buffer-tl))
 (def ^:private ^ThreadLocal hash-key-buffer-tl (buffer-tl))
+(def ^:private ^ThreadLocal content-hash-buffer-tl (buffer-tl))
 
 (defrecord KvIndexStoreTx [kv-store kv-tx tx thread-mgr cav-cache canonical-buffer-cache]
   db/IndexStoreTx
@@ -1008,7 +1009,7 @@
       (doseq [[content-hash doc] docs
               :let [id (:crux.db/id doc)
                     eid-value-buffer (c/value->buffer id (.get eid-buffer-tl))
-                    content-hash (c/->id-buffer content-hash)]]
+                    content-hash (c/id->buffer content-hash (.get content-hash-buffer-tl))]]
 
         (store (encode-hash-cache-key-to (.get hash-key-buffer-tl) (c/id->buffer id (.get content-buffer-tl)) eid-value-buffer)
                (mem/nippy->buffer id (.get nippy-buffer-tl)))
