@@ -310,58 +310,6 @@
              (op/query-ra '[:max-1-row [:table #{a b} ?x]]
                           '{?x []})))))
 
-(t/deftest test-apply-operator
-  (letfn [(q [mode]
-            (op/query-ra [:apply mode '{c-id ?c-id}
-                          [::tu/blocks
-                           [[{:c-id "c1", :c-name "Alan"}
-                             {:c-id "c2", :c-name "Bob"}
-                             {:c-id "c3", :c-name "Charlie"}]]]
-                          [:select '(= o-customer-id ?c-id)
-                           [::tu/blocks
-                            [[{:o-customer-id "c1", :o-value 12.34}
-                              {:o-customer-id "c1", :o-value 14.80}
-                              {:o-customer-id "c2", :o-value 91.46}
-                              {:o-customer-id "c4", :o-value 55.32}]]]]]
-                         {}))]
-
-    (t/is (= [{:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 12.34}
-              {:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 14.80}
-              {:c-id "c2", :c-name "Bob", :o-customer-id "c2", :o-value 91.46}]
-
-             (q :cross-join)))
-
-    (t/is (= [{:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 12.34}
-              {:c-id "c1", :c-name "Alan", :o-customer-id "c1", :o-value 14.80}
-              {:c-id "c2", :c-name "Bob", :o-customer-id "c2", :o-value 91.46}
-              {:c-id "c3", :c-name "Charlie", :o-customer-id nil, :o-value nil}]
-
-             (q :left-outer-join)))
-
-    (t/is (= [{:c-id "c1", :c-name "Alan"}, {:c-id "c2", :c-name "Bob"}]
-             (q :semi-join)))
-
-    (t/is (= [{:c-id "c3", :c-name "Charlie"}]
-             (q :anti-join)))))
-
-(t/deftest test-apply-empty-rel-bug-237
-  (t/is (= {:res [{:x3 nil}], :col-types '{x3 [:union #{:null :bool}]}}
-           (-> (op/query-ra
-                '[:group-by [{x3 (any x2)}]
-                  [:apply :cross-join {}
-                   [:table [{x1 15}]]
-                   [:select false
-                    [:table [{x2 20}]]]]])
-               (tu/raising-col-types))))
-
-  (t/is (= {:res [], :col-types '{x1 :i64, x2 :i64}}
-           (-> (op/query-ra '[:project [x1 x2]
-                              [:apply :cross-join {}
-                               [:table [{x1 15}]]
-                               [:select false
-                                [:table [{x2 20}]]]]])
-               (tu/raising-col-types)))))
-
 (t/deftest test-project-row-number
   (t/is (= [{:a 12, :$row-num 1}, {:a 0, :$row-num 2}, {:a 100, :$row-num 3}]
            (op/query-ra '[:project [a {$row-num (row-number)}]
