@@ -146,7 +146,7 @@
 
      {:sql "ARRAY ['2022-01-02']"
       :json-type JsonNodeType/ARRAY
-      :json ["[\"2022-01-02\"]"]
+      :json "[\"2022-01-02\"]"
       :clj ["2022-01-02"]}
 
      ;; issue #245
@@ -169,11 +169,13 @@
               (is (= "json" (.getType ^PGobject (.getObject rs 1)))))
 
             (testing (str "json parses to " (str json-type))
-              (try
-                (let [obj-mapper (ObjectMapper.)
-                      ^JsonNode read-value (.readValue obj-mapper (str (.getObject rs 1)) ^Class JsonNode)]
-                  ;; use strings to get a better report
-                  (is (= (str json-type) (str (.getNodeType read-value)))))))
+              (let [obj-mapper (ObjectMapper.)
+                    json-str (str (.getObject rs 1))
+                    ^JsonNode read-value (.readValue obj-mapper json-str ^Class JsonNode)]
+                ;; use strings to get a better report
+                (is (= (str json-type) (str (.getNodeType read-value))))
+                (when json
+                  (is (= json json-str) "json string should be = to :json"))))
 
             (testing "json parses to expected clj value"
               (let [clj-value (json/read-str (str (.getObject rs 1)))]
