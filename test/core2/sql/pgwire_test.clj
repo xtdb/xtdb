@@ -4,9 +4,10 @@
             [core2.local-node :as node]
             [core2.test-util :as tu]
             [clojure.data.json :as json]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [clojure.string :as str])
   (:import (java.sql Connection)
-           (org.postgresql.util PGobject)
+           (org.postgresql.util PGobject PSQLException)
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (com.fasterxml.jackson.databind ObjectMapper JsonNode)))
 
@@ -15,22 +16,72 @@
 (defn- each-fixture [f]
   (binding [*port* (tu/free-port)]
     (with-open [node (node/start-node {})
-                _ (pgwire/->pg-wire-server node {:server-parameters {"server_version" "14"
-                                                                     "server_encoding" "UTF8"
-                                                                     "client_encoding" "UTF8"
-                                                                     "TimeZone" "UTC"}
-                                                 :port *port*
-                                                 :num-threads 1})]
+                ;; as Object to avoid .close cast crash on redef due to inconsistent type hint (macros!)
+                ^Object _
+                (->> {:server-parameters {"server_version" "14"
+                                          "server_encoding" "UTF8"
+                                          "client_encoding" "UTF8"
+                                          "TimeZone" "UTC"}
+                      :port *port*
+                      ;; very important we use 1 thread
+                      ;; it allows us to test server conn close
+                      ;; behaviour
+                      :num-threads 1}
+                     (pgwire/->pg-wire-server node))]
       (f))))
 
-(t/use-fixtures :each each-fixture)
+(t/use-fixtures :each #'each-fixture)
 
-(deftest connect-test
-  (with-open [_ (jdbc/get-connection (format "jdbc:postgresql://:%s/xtdb" *port*))]))
+(defn- jdbc-url [& params]
+  (assert *port* "*port* must be bound")
+  (let [param-str (when (seq params) (str "?" (str/join "&" (for [[k v] (partition 2 params)] (str k "=" v)))))]
+    (format "jdbc:postgresql://:%s/xtdb%s" *port* param-str)))
+
+(deftest connect-with-next-jdbc-test
+  (with-open [_ (jdbc/get-connection (jdbc-url))])
+  ;; connect a second time to make sure we are releasing server resources properly!
+  (with-open [_ (jdbc/get-connection (jdbc-url))]))
+
+(defn- try-sslmode [sslmode]
+  (try
+    (with-open [_ (jdbc/get-connection (jdbc-url "sslmode" sslmode))])
+    :ok
+    (catch PSQLException e
+      (if (= "The server does not support SSL." (.getMessage e))
+        :unsupported
+        (throw e)))))
+
+(deftest ssl-test
+  (t/are [sslmode expect]
+    (= expect (try-sslmode sslmode))
+
+    "disable" :ok
+    "allow" :ok
+    "prefer" :ok
+
+    "require" :unsupported
+    "verify-ca" :unsupported
+    "verify-full" :unsupported))
+
+(defn- try-gssencmode [gssencmode]
+  (try
+    (with-open [_ (jdbc/get-connection (jdbc-url "gssEncMode" gssencmode))])
+    :ok
+    (catch PSQLException e
+      (if (= "The server does not support GSS Encoding." (.getMessage e))
+        :unsupported
+        (throw e)))))
+
+(deftest gssenc-test
+  (t/are [gssencmode expect]
+    (= expect (try-gssencmode gssencmode))
+
+    "disable" :ok
+    "prefer" :ok
+    "require" :unsupported))
 
 (defn- jdbc-conn ^Connection []
-  (assert *port* "*port* must be bound")
-  (jdbc/get-connection (format "jdbc:postgresql://:%s/xtdb" *port*)))
+  (jdbc/get-connection (jdbc-url)))
 
 (deftest query-test
   (with-open [conn (jdbc-conn)]

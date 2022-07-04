@@ -10,12 +10,14 @@
             [clojure.data.json :as json]
             [core2.api :as api])
   (:import java.nio.charset.StandardCharsets
-           [java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException]
+           [java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException ByteArrayInputStream]
            [java.net Socket ServerSocket]
            [java.util.concurrent Executors ExecutorService]
            [java.util HashMap]
            [org.apache.arrow.vector PeriodDuration]
-           [java.time LocalDate]))
+           [java.time LocalDate]
+           (java.nio ByteBuffer)
+           (com.fasterxml.jackson.databind.util ByteBufferBackedInputStream)))
 
 (set! *warn-on-reflection* true)
 
@@ -384,7 +386,7 @@
   (-write [ld out options]
     (json/-write (str ld) out options)))
 
-(defn- json-str [obj]
+(defn- json-str ^String [obj]
   (json/write-str obj))
 
 (defmethod handle-message :pgwire/execute [session message out]
@@ -497,7 +499,7 @@
                      (send-ready-for-query out :idle)
                      session)))))))
 
-(defn- parse-startup-message [^DataInputStream in]
+(defn- read-startup-parameters [^DataInputStream in]
   (loop [in (PushbackInputStream. in)
          acc {}]
     (let [x (.read in)]
@@ -506,34 +508,117 @@
         (do (.unread in (byte x))
             (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
 
-(def ^:private ssl-request 80877103)
-(def ^:private gssenc-request 80877104)
-(def ^:private startup-message 196608)
+(def version-messages
+  {196608 :30
+   80877102 :cancel
+   80877103 :ssl
+   80877104 :gssenc})
 
-(defn- pg-establish-connection [{:keys [parameters] :as session} ^DataInputStream in ^DataOutputStream out]
-  (loop []
-    (let [size (- (.readInt in) (* 2 Integer/BYTES))
-          handshake (.readInt in)]
-      (cond
-        (or (= ssl-request handshake)
-            (= gssenc-request handshake))
-        (do (.writeByte out (byte \N))
+(def ssl-responses
+  {:unsupported (byte \N)
+   ;; for docs, xtdb does not support SSL
+   :supported (byte \S)})
+
+(defn- read-untyped-msg [^DataInputStream in]
+  (let [size (- (.readInt in) 4)
+        barr (byte-array size)
+        _ (.readFully in barr)]
+    {:msg-in (DataInputStream. (ByteArrayInputStream. barr))
+     :msg-len size}))
+
+(defn- read-version [^DataInputStream in]
+  (let [{:keys [^DataInputStream msg-in] :as msg} (read-untyped-msg in)
+        version (.readInt msg-in)]
+    (assoc msg :version (version-messages version))))
+
+(defn- err-protocol-violation [msg]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "08P01"
+   :message msg})
+
+(defn- buggy-client-not-closed-after-ssl-unsupported-msg?
+  "There appears to be a bug in the JDBC driver which causes it to leave its conn hanging
+  if ssl is required and the server does not support it.
+
+  For now, we timeout after 1 second if we do not receive a follup to the ssl msg."
+  [^DataInputStream in]
+  (let [wait-until (+ (System/currentTimeMillis) 1000)]
+    (try
+      (loop []
+        (cond
+          ;; at least 4 bytes available
+          (<= 4 (.available in))
+          (do
+            false)
+
+          ;; time left
+          (< (System/currentTimeMillis) wait-until)
+          (do
+            ;; one nice thing about sleep is if we are interrupted
+            ;; (as we've been asked to close)
+            ;; we get an exception here
+            (Thread/sleep 1)
             (recur))
 
-        (= startup-message handshake)
-        (let [startup-message (parse-startup-message in)]
-          #_(prn startup-message)
-          (send-authentication-ok out)
+          ;; timed out
+          :else true)))))
 
-          (doseq [[k v] parameters]
-            (send-parameter-status out k v))
+(defn- negotiate-version [in ^DataOutputStream out]
+  (let [{:keys [version] :as msg} (read-version in)
 
-          (send-ready-for-query out :idle)
+        err
+        (case version
+          :cancel (err-protocol-violation "Cancellation is not supported")
+          :gssenc (err-protocol-violation "GSSAPI is not supported")
+          nil)
 
-          (update session :parameters merge (:pgwire.startup-message/parameters startup-message)))
+        ;; tell the client ssl is unsupported if requested
+        {:keys [err, version] :as msg}
+        (cond
+          err (assoc msg :err err)
 
-        :else
-        (throw (IllegalArgumentException. (str "unknown handshake: " handshake)))))))
+          (= :ssl version)
+          (do (.writeByte out (ssl-responses :unsupported))
+              ;; buggy jdbc driver fix
+              (if (buggy-client-not-closed-after-ssl-unsupported-msg? in)
+                (assoc msg :err (err-protocol-violation "Took too long respond after SSL request"))
+                ;; re-read version
+                (read-version in)))
+
+          :else msg)
+
+        err
+        (cond
+          err err
+          (= :gssenc version) (err-protocol-violation "GSSAPI is not supported")
+          (not= :30 version) (err-protocol-violation "Unknown protocol version"))]
+
+    (assoc msg :err err)))
+
+(defn- pg-establish-connection [{:keys [parameters] :as session} ^DataInputStream in ^DataOutputStream out]
+  (let [{version-err :err
+         msg-in :msg-in}
+        (negotiate-version in out)
+
+        err version-err
+
+        startup-msg
+        (when-not err
+          (read-startup-parameters msg-in))
+
+        err
+        (when-not startup-msg
+          (or err (err-protocol-violation "Did not receive parameters")))]
+
+    (when-not err
+      (send-authentication-ok out)
+      (doseq [[k v] parameters]
+        (send-parameter-status out k v))
+      (send-ready-for-query out :idle))
+
+    {:err err
+     :session (update session :parameters merge (:pgwire.startup-message/parameters startup-msg))}))
 
 (defn- pg-conn [server ^Socket socket]
   (try
@@ -544,8 +629,11 @@
                        :prepared-statements {}
                        :portals {}}
                       {:node (:node server)})
-            session (pg-establish-connection session in out)]
-        (pg-message-exchange session socket in out)))
+            {:keys [session err]} (pg-establish-connection session in out)]
+        (if err
+          (do (send-error-response out err)
+              (util/try-close socket))
+          (pg-message-exchange session socket in out))))
     (catch Throwable t
       #_(prn t)
       (throw t))))
