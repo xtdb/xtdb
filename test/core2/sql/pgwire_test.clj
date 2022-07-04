@@ -4,13 +4,11 @@
             [core2.local-node :as node]
             [core2.test-util :as tu]
             [clojure.data.json :as json]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [clojure.tools.logging :as log])
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
   (:import (java.sql Connection)
            (org.postgresql.util PGobject)
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (com.fasterxml.jackson.databind ObjectMapper JsonNode)))
-
 
 (def ^:dynamic ^:private *port*)
 
@@ -27,12 +25,12 @@
 
 (t/use-fixtures :each each-fixture)
 
+(deftest connect-test
+  (with-open [_ (jdbc/get-connection (format "jdbc:postgresql://:%s/xtdb" *port*))]))
+
 (defn- jdbc-conn ^Connection []
   (assert *port* "*port* must be bound")
-  (jdbc/get-connection (format "jdbc:postgresql://:%s/test?user=test&password=test" *port*)))
-
-(deftest connect-test
-  (with-open [_ (jdbc/get-connection (format "jdbc:postgresql://:%s/test?user=test&password=test" *port*))]))
+  (jdbc/get-connection (format "jdbc:postgresql://:%s/xtdb" *port*)))
 
 (deftest query-test
   (with-open [conn (jdbc-conn)]
