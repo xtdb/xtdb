@@ -379,6 +379,9 @@
     (json/-write (str pd) out options))
   LocalDate
   (-write [ld out options]
+    (json/-write (str ld) out options))
+  org.apache.arrow.vector.util.Text
+  (-write [ld out options]
     (json/-write (str ld) out options)))
 
 (defn- json-str [obj]
