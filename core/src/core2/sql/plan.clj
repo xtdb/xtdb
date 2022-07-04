@@ -1701,38 +1701,6 @@
        (nil-predicate? (nth predicate 2))
        (nil-predicate? (nth predicate 3))))
 
-(defn- not-predicate? [predicate]
-  (and (sequential? predicate)
-       (= 2 (count predicate))
-       (= 'not (first predicate))))
-
-(defn- not-nil-predicate? [predicate]
-  (and (sequential? predicate)
-       (= 2 (count predicate))
-       (= 'not (first predicate))
-       (nil-predicate? (second predicate))))
-
-(defn- some-predicate? [predicate]
-  (and (sequential? predicate)
-       (= 4 (count predicate))
-       (= 'and (first predicate))
-       (not-nil-predicate? (nth predicate 2))
-       (not-nil-predicate? (nth predicate 3))))
-
-
-(defn- build-join-map [predicate lhs rhs]
-  (when (equals-predicate? predicate)
-    (let [[_ x y] predicate
-          [lhs-v rhs-v] (for [side [lhs rhs]
-                              :let [projection (set (relation-columns side))]]
-                          (cond
-                            (contains? projection x)
-                            x
-                            (contains? projection y)
-                            y))]
-      (when (and lhs-v rhs-v)
-        {lhs-v rhs-v}))))
-
 (defn all-columns-in-relation?
   "Returns true if all columns referenced by the expression are present in the given relation.
 
@@ -2192,7 +2160,7 @@
            :join
            mode)
          [(w/postwalk-replace (set/map-invert columns)
-                              (if (or (all-predicate? predicate) (some-predicate? predicate))
+                              (if (all-predicate? predicate)
                                 (second predicate)
                                 predicate))]
          independent-relation dependent-relation]))))
@@ -2204,7 +2172,7 @@
     [:apply :cross-join columns independent-relation [:select predicate dependent-relation]]
     ;;=>
     (when (seq (expr-correlated-symbols predicate)) ;; select predicate is correlated
-      [:select (w/postwalk-replace (set/map-invert columns) (if (or (all-predicate? predicate) (some-predicate? predicate))
+      [:select (w/postwalk-replace (set/map-invert columns) (if (all-predicate? predicate)
                                                               (second predicate)
                                                               predicate))
        (let [columns (remove-unused-correlated-columns columns dependent-relation)]
