@@ -41,9 +41,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:const column-family-defs [c/entity+vt+tt+tx-id->content-hash-index-id
-                                 c/entity+z+tx-id->content-hash-index-id])
-
 (defn- iterator->key [^RocksIterator i]
   (when (.isValid i)
     (mem/as-buffer (.key i))))
@@ -217,8 +214,11 @@
                                            :spec #(instance? Options %)}
                               :disable-wal? {:doc "Disable Write Ahead Log"
                                              :default false
-                                             :spec ::sys/boolean}}}
-  [{:keys [^Path db-dir sync? disable-wal? metrics checkpointer ^Options db-options block-cache] :as options}]
+                                             :spec ::sys/boolean}
+                              :column-family-defs {:doc "Rocks Column Family Key Prefixes"
+                                                   :default [7, 9]
+                                                   :spec ::sys/pos-int-list}}}
+  [{:keys [^Path db-dir sync? disable-wal? metrics checkpointer ^Options db-options block-cache column-family-defs] :as options}]
 
   (RocksDB/loadLibrary)
 
