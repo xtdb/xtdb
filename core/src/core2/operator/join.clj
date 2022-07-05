@@ -15,10 +15,10 @@
            (core2.operator IProjectionSpec IRelationSelector)
            (core2.vector IIndirectRelation)
            (java.util ArrayList Iterator List)
-           (java.util.function Consumer)
+           (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
-           (org.roaringbitmap IntConsumer RoaringBitmap)
+           org.roaringbitmap.RoaringBitmap
            (org.roaringbitmap.buffer MutableRoaringBitmap)))
 
 (defmethod lp/ra-expr :cross-join [_]
@@ -164,12 +164,11 @@
         matching-probe-idxs (IntStream/builder)]
 
     (dotimes [probe-idx (.rowCount probe-rel)]
-      (when-let [build-idxs (.getAll rel-map-prober probe-idx)]
-        (.forEach build-idxs
-                  (reify IntConsumer
-                    (accept [_ build-idx]
-                      (.add matching-build-idxs build-idx)
-                      (.add matching-probe-idxs probe-idx))))))
+      (.forEachMatch rel-map-prober probe-idx
+                     (reify IntConsumer
+                       (accept [_ build-idx]
+                         (.add matching-build-idxs build-idx)
+                         (.add matching-probe-idxs probe-idx)))))
 
     [(.toArray (.build matching-probe-idxs)) (.toArray (.build matching-build-idxs))]))
 

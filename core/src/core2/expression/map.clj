@@ -8,7 +8,7 @@
   (:import (core2.vector IIndirectVector IVectorWriter)
            io.netty.util.collection.IntObjectHashMap
            (java.lang AutoCloseable)
-           (java.util HashMap List)
+           java.util.List
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher)
            (org.apache.arrow.vector NullVector)
@@ -46,7 +46,7 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IRelationMapProber
   (^int indexOf [^int inIdx])
-  (^org.roaringbitmap.RoaringBitmap getAll [^int inIdx]))
+  (^void forEachMatch [^int inIdx, ^java.util.function.IntConsumer c]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IRelationMap
@@ -217,15 +217,12 @@
                   (-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
                       (find-in-hash-bitmap comparator idx)))
 
-                (getAll [_ idx]
-                  (let [res (RoaringBitmap.)]
-                    (some-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
-                            (.forEach (reify IntConsumer
-                                        (accept [_ out-idx]
-                                          (when (.test comparator idx out-idx)
-                                            (.add res out-idx))))))
-                    (when-not (.isEmpty res)
-                      res))))))
+                (forEachMatch [_ idx c]
+                  (some-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
+                          (.forEach (reify IntConsumer
+                                      (accept [_ out-idx]
+                                        (when (.test comparator idx out-idx)
+                                          (.accept c out-idx))))))))))
 
           (getBuiltRelation [_]
             (let [pos (.getPosition (.writerPosition rel-writer))]
