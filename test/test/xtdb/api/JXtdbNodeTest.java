@@ -124,13 +124,11 @@ public class JXtdbNodeTest {
 
     @Test(expected = TimeoutException.class)
     public void awaitTxTimeThrowsTest() {
-        for (int i=0; i<100; i++) {
-            put();
-        }
         TransactionInstant tx = put();
 
         Date txTime = tx.getTime();
-        node.awaitTxTime(txTime, Duration.ZERO);
+        Date future = Date.from(txTime.toInstant().plusMillis(100));
+        node.awaitTxTime(future, Duration.ZERO);
     }
 
     @Test
@@ -244,7 +242,7 @@ public class JXtdbNodeTest {
         put();
         sync();
         query();
-        sleep(10);
+        sleep(20);
         List<IQueryState> slowest = node.slowestQueries();
         assertEquals(1, slowest.size());
     }
