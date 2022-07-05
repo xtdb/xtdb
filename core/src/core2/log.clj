@@ -59,6 +59,7 @@
                         (catch InterruptedException _))))
     (.start)))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface INotifyingSubscriberHandler
   (notifyTx [^core2.api.TransactionInstant tx])
   (subscribe [^core2.log.Log log, ^Long after-tx-id, ^core2.log.LogSubscriber subscriber]))

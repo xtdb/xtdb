@@ -12,6 +12,7 @@
            [java.nio.channels Channels ClosedByInterruptException FileChannel]
            [java.nio.file Path StandardOpenOption]
            [java.time Clock Duration]
+           java.time.temporal.ChronoUnit
            java.util.ArrayList
            [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future]))
 
@@ -103,7 +104,7 @@
                        offset previous-offset]
                   (when-not (= n (.size elements))
                     (let [[f ^ByteBuffer record] (.get elements n)
-                          tx-time (.instant clock)
+                          tx-time (-> (.instant clock) (.truncatedTo ChronoUnit/MICROS))
                           size (.remaining record)
                           written-record (.duplicate record)]
                       (.write log-out ^byte record-separator)
