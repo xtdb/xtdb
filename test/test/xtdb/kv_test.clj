@@ -9,7 +9,8 @@
             [xtdb.fixtures.kv :as fkv]
             [xtdb.io :as xio]
             [xtdb.kv :as kv]
-            [xtdb.memory :as mem])
+            [xtdb.memory :as mem]
+            [xtdb.rocksdb])
   (:import java.nio.ByteOrder
            org.agrona.concurrent.UnsafeBuffer))
 
@@ -323,8 +324,16 @@
                              (= v (kv/get-value snapshot k)))
                            (every? true?)))))))
 
+(defn keys-not-temporal?
+  "To exclude generated keys that match temporal column families, in the case of Rocks."
+  [v]
+  (not (#{7, 9} (-> v c/->value-buffer xtdb.rocksdb/->cf-id))))
+
 (tcct/defspec test-generative-kv-store-commands 20
-  (prop/for-all [commands (gen/let [ks (gen/not-empty (gen/vector gen/simple-type-printable))]
+  (prop/for-all [commands (gen/let [ks (gen/not-empty
+                                        (gen/vector
+                                         (gen/such-that keys-not-temporal?
+                                                        gen/simple-type-printable)))]
                             (gen/not-empty (gen/vector
                                             (gen/one-of
                                              [(gen/tuple
@@ -413,8 +422,8 @@
                                 :fsync (kv/fsync kv-store)
                                 :delete (store kv-store [[(c/->value-buffer k) nil]])
                                 :store (store kv-store
-                                                 [[(c/->value-buffer k)
-                                                   (c/->value-buffer v)]]))))
+                                              [[(c/->value-buffer k)
+                                                (c/->value-buffer v)]]))))
                          (every? true?))))))
 
 (t/deftest test-performance-off-heap

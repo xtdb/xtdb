@@ -92,6 +92,12 @@
     (t/testing "returns nil on failed match"
       (t/is (nil? (xt/with-tx db [[::xt/match :nope {:xt/id :nope}]]))))))
 
+(t/deftest test-history-ascending-sanity-check
+  (let [tx1 (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :name "Ivna"}]])]
+    (t/is (not-empty (xt/entity-history (xt/db *api* tx1) :ivan :asc
+                                        {:with-docs? true
+                                         :with-corrections? true})))))
+
 (t/deftest test-history
   (fix/submit+await-tx [[::xt/put {:xt/id :ivan, :name "Ivna"}]])
 

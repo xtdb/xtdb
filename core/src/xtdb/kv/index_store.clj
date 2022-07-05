@@ -80,10 +80,18 @@
                                           (mem/copy-to-unpooled-buffer (kv/value i)))
                          (mem/copy-to-unpooled-buffer k))
                        (step (if reverse? (kv/prev i) (kv/next i)))))))]
-      (step (if reverse?
-              (when (kv/seek i (-> seek-k (mem/copy-buffer) (mem/inc-unsigned-buffer!)))
-                (kv/prev i))
-              (kv/seek i seek-k)))))))
+      (step
+       (if reverse?
+         (if (kv/seek i (-> seek-k (mem/copy-buffer) (mem/inc-unsigned-buffer!)))
+           (kv/prev i)
+           (letfn [(step [k]
+                     (when k
+                       (let [next-k (kv/next i)]
+                         (if (and next-k (mem/buffers=? seek-k next-k prefix-length))
+                           (step next-k)
+                           (kv/seek i k)))))]
+             (step (kv/seek i seek-k))))
+         (kv/seek i seek-k)))))))
 
 (defn- buffer-or-value-buffer ^org.agrona.DirectBuffer [v]
   (cond
