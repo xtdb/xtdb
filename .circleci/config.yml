@@ -63,7 +63,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -X:test'
+      - run: 'clojure -Srepro -X:core2:test'
 
       - slack/notify:
           branch_pattern: master
@@ -79,7 +79,7 @@ jobs:
           at: ~/
 
       # TODO should test the other modules too
-      - run: 'clojure -Srepro -X:integration-test'
+      - run: 'clojure -Srepro -X:core2:integration-test'
 
       - slack/notify:
           branch_pattern: master
@@ -95,7 +95,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -M:slt-test'
+      - run: 'clojure -Srepro -M:core2:slt-test'
 
   slt-test-2:
     executor: clojure
@@ -105,7 +105,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -M:slt-test-2'
+      - run: 'clojure -Srepro -M:core2:slt-test-2'
 
 workflows:
   build:

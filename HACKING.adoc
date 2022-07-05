@@ -200,7 +200,7 @@ Linting:
 
 === Testing
 
-* Test all with `clj -X:test`; `clj -X:integration-test` for longer tests
+* Test all with `clj -X:core2:test`; `clj -X:core2:integration-test` for longer tests
 * Some tests have external dependencies which require `docker-compose`:
   * `docker-compose up` (`docker-compose up <postgres|kafka>` etc for individual containers),
   * `clojure -X:jdbc-test` / `clojure -X:kafka-test`
