@@ -413,14 +413,17 @@
 
   ValueVector
   (->poly-reader [arrow-vec ordered-col-types]
-    (let [mono-reader (->mono-reader arrow-vec)]
-      (if (.isNullable (.getField arrow-vec))
+    (let [field (.getField arrow-vec)
+          mono-reader (->mono-reader arrow-vec)]
+      (if (.isNullable field)
         (let [null-type-id (.indexOf ^List ordered-col-types :null)
               nn-type-id (case null-type-id 0 1, 1 0)]
           (->NullableVectorReader arrow-vec mono-reader
                                   null-type-id nn-type-id
                                   0 0))
-        (->MonoToPolyReader mono-reader 0 0))))
+        (->MonoToPolyReader mono-reader
+                            (.indexOf ^List ordered-col-types (types/field->col-type field))
+                            0))))
 
   (->poly-writer [arrow-vec _ordered-col-types]
     (->NullableVectorWriter (->mono-writer arrow-vec))))
