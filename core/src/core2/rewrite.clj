@@ -98,7 +98,7 @@
      (when-let [^Zip parent# (zup z#)]
        (let [idx# (unchecked-dec-int (.idx z#))
              ^IPersistentVector level# (.node parent#)]
-         (when-let [child-node# (.nth level# idx# nil)]
+         (when-some [child-node# (.nth level# idx# nil)]
            (Zip. child-node# idx# parent# 0 (.depth z#)))))))
 
 (defmacro zleft-no-edit [z]
@@ -106,7 +106,7 @@
      (when-let [^Zip parent# (.parent z#)]
        (let [idx# (unchecked-dec-int (.idx z#))
              ^IPersistentVector level# (.node parent#)]
-         (when-let [child-node# (.nth level# idx# nil)]
+         (when-some [child-node# (.nth level# idx# nil)]
            (Zip. child-node# idx# parent# 0 (.depth z#)))))))
 
 (defmacro zright [z]
@@ -122,7 +122,7 @@
      (when-let [^Zip parent# (.parent z#)]
        (let [idx# (unchecked-inc-int (.idx z#))
              ^IPersistentVector level# (.node parent#)]
-         (when-let [child-node# (.nth level# idx# nil)]
+         (when-some [child-node# (.nth level# idx# nil)]
            (Zip. child-node# idx# parent# 0 (.depth z#)))))))
 
 (defmacro znth [z idx]
@@ -132,14 +132,14 @@
        (let [idx# (if (neg? ~idx)
                     (unchecked-add-int (.count node#) ~idx)
                     ~idx)]
-         (when-let [child-node# (.nth node# idx# nil)]
+         (when-some [child-node# (.nth node# idx# nil)]
            (Zip. child-node# idx# z# 0 (unchecked-inc-int (.depth z#))))))))
 
 (defmacro zdown [z]
   `(let [^Zip z# ~z
          ^IPersistentVector node# (.node z#)]
      (when (instance? IPersistentVector node#)
-       (when-let [child-node# (.nth node# 0 nil)]
+       (when-some [child-node# (.nth node# 0 nil)]
          (Zip. child-node# 0 z# 0 (unchecked-inc-int (.depth z#)))))))
 
 (defmacro zups [z depth]
@@ -509,7 +509,7 @@
 
 (defn choice-tp [x y]
   (fn [z]
-    (if-let [z (x z)]
+    (if-some [z (x z)]
       z
       (y z))))
 
