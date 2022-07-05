@@ -68,8 +68,6 @@
               left-col-sym (gensym 'left-col)
               right-col-sym (gensym 'right-col)
 
-              return-boxes (HashMap.)
-
               {cont :continue, :as emitted-expr}
               (expr/codegen-expr {:op :call,
                                   :f (case null-ordering
@@ -79,7 +77,6 @@
                                          {:op :variable, :variable right-col-sym, :idx right-idx-sym}]}
 
                                  {:var->col-type {left-col-sym left-col-type, right-col-sym right-col-type}
-                                  :return-boxes return-boxes
                                   :extract-vecs-from-rel? false})]
 
           (-> `(fn [~(-> left-col-sym (expr/with-tag IIndirectVector))

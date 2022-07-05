@@ -82,8 +82,6 @@
               right-idx (gensym 'right-idx)
               eq-fn (if nil-equal :null-eq :=)
 
-              return-boxes (HashMap.)
-
               {:keys [continue], :as emitted-expr}
               (expr/codegen-expr {:op :call, :f :boolean
                                   :args [{:op :call, :f eq-fn
@@ -91,7 +89,6 @@
                                                  {:op :variable, :variable right-vec, :idx right-idx}]}]}
                                  {:var->col-type {left-vec left-col-type
                                                   right-vec right-col-type}
-                                  :return-boxes return-boxes
                                   :extract-vecs-from-rel? false})]
 
           (-> `(fn [~(expr/with-tag left-vec IIndirectVector)
