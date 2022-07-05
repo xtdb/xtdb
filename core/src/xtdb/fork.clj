@@ -3,8 +3,12 @@
             [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.db :as db]
+            [xtdb.status :as status]
             [xtdb.io :as xio]
-            [xtdb.memory :as mem])
+            [xtdb.memory :as mem]
+            [xtdb.kv.mutable-kv :as mut-kv]
+            [xtdb.kv :as kv]
+            [xtdb.cache])
   (:import xtdb.codec.EntityTx
            org.agrona.DirectBuffer
            java.util.Date))
@@ -223,3 +227,33 @@
 
 (defn begin-document-store-tx [doc-store]
   (->ForkedDocumentStore doc-store (atom {})))
+
+(defrecord ForkedKvIndexStoreTx [base-index-store, transient-kv, valid-time, tx-id, !evicted-eids, index-store-tx abort-index-tx]
+  db/IndexStoreTx
+  (index-docs [_ docs]
+    (db/index-docs index-store-tx docs))
+
+  (unindex-eids [_ _ eids]
+    (when (seq eids)
+      (swap! !evicted-eids into eids))
+
+    (with-open [base-kv-snapshot (kv/new-snapshot (:kv-store base-index-store))]
+      (db/unindex-eids index-store-tx base-kv-snapshot eids)))
+
+  (index-entity-txs [_ entity-txs]
+    (db/index-entity-txs index-store-tx entity-txs))
+
+  (commit-index-tx [_]
+    (with-open [snapshot (kv/new-tx-snapshot (:kv-tx index-store-tx))]
+      (kv/store (:kv-store base-index-store) (seq snapshot))))
+
+  (abort-index-tx [_ docs]
+    (when abort-index-tx
+      (db/abort-index-tx abort-index-tx docs)))
+
+  db/IndexSnapshotFactory
+  (open-index-snapshot [_]
+    (->MergedIndexSnapshot (-> (db/open-index-snapshot base-index-store)
+                               (->CappedIndexSnapshot valid-time tx-id))
+                           (db/open-index-snapshot index-store-tx)
+                           @!evicted-eids)))

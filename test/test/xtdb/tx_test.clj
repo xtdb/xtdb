@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [clojure.test :as t]
             [clojure.tools.logging.impl :as log-impl]
+            [xtdb.fixtures.kv :as fkv]
             [xtdb.api :as xt]
             [xtdb.bus :as bus]
             [xtdb.codec :as c]
@@ -17,7 +18,7 @@
            java.time.Duration
            [java.util Collections Date HashMap HashSet UUID]))
 
-(t/use-fixtures :each fix/with-node fix/with-silent-test-check
+(t/use-fixtures :each fkv/with-each-kv-store* fkv/with-kv-store-opts* fix/with-node fix/with-silent-test-check
   (fn [f]
     (f)
     (#'tx/reset-tx-fn-error)))
@@ -259,9 +260,12 @@
           (t/is (empty? history)))))))
 
 (defn index-tx [tx tx-events docs]
-  (let [{:keys [xtdb/tx-indexer]} @(:!system *api*)
-        in-flight-tx (db/begin-tx tx-indexer tx nil)]
-    (db/index-tx-events in-flight-tx tx-events docs)
+  (let [{:keys [xtdb/tx-indexer xtdb/index-store]} @(:!system *api*)
+        in-flight-tx (db/begin-tx tx-indexer tx)]
+
+    (db/index-tx-docs in-flight-tx docs)
+    (db/index-tx-events in-flight-tx tx-events)
+
     (db/commit in-flight-tx)))
 
 (t/deftest test-handles-legacy-evict-events

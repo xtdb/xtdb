@@ -14,7 +14,7 @@
            java.nio.file.attribute.FileAttribute
            (org.rocksdb BlockBasedTableConfig Checkpoint CompressionType FlushOptions LRUCache
                         Options ReadOptions RocksDB RocksIterator
-                        WriteBatch WriteOptions Statistics StatsLevel)))
+                        WriteBatchWithIndex WriteBatch WriteOptions Statistics StatsLevel)))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -24,31 +24,45 @@
 
 (defrecord RocksKvIterator [^RocksIterator i]
   kv/KvIterator
-  (seek [this k]
+  (seek [_ k]
     (.seek i (mem/direct-byte-buffer k))
     (iterator->key i))
 
-  (next [this]
-    (.next i)
-    (iterator->key i))
+  (next [_]
+    (when (.isValid i)
+      (.next i)
+      (iterator->key i)))
 
-  (prev [this]
+  (prev [_]
     (.prev i)
     (iterator->key i))
 
-  (value [this]
+  (value [_]
     (mem/as-buffer (.value i)))
 
   Closeable
-  (close [this]
+  (close [_]
     (.close i)))
+
+(defrecord RocksKvTxSnapshot [^RocksDB db ^ReadOptions read-options, snapshot, ^WriteBatchWithIndex wb]
+  kv/KvSnapshot
+  (new-iterator [_]
+    (->RocksKvIterator (.newIteratorWithBase wb (.newIterator db read-options) read-options)))
+
+  (get-value [_ k]
+    (some-> (.getFromBatchAndDB wb db read-options (mem/->on-heap k)) (mem/as-buffer)))
+
+  Closeable
+  (close [_]
+    (.close read-options)
+    (.releaseSnapshot db snapshot)))
 
 (defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
   kv/KvSnapshot
-  (new-iterator [this]
+  (new-iterator [_]
     (->RocksKvIterator (.newIterator db read-options)))
 
-  (get-value [this k]
+  (get-value [_ k]
     (some-> (.get db read-options (mem/->on-heap k))
             (mem/as-buffer)))
 
@@ -57,7 +71,37 @@
     (.close read-options)
     (.releaseSnapshot db snapshot)))
 
+(defrecord RocksKvTx [^RocksDB db, ^WriteOptions write-options, ^WriteBatchWithIndex wb]
+  kv/KvStoreTx
+  (new-tx-snapshot [_]
+    (let [snapshot (.getSnapshot db)]
+      (->RocksKvTxSnapshot db
+                           (doto (ReadOptions.)
+                             (.setSnapshot snapshot))
+                           snapshot
+                           wb)))
+
+  (put-kv [_ k v]
+    (if v
+      (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
+      (.delete wb (mem/direct-byte-buffer k))))
+
+  (commit-kv-tx [this]
+    (.write db write-options wb)
+    (.close this))
+
+  (abort-kv-tx [this]
+    (.close this))
+
+  Closeable
+  (close [_]
+    (.close wb)))
+
 (defrecord RocksKv [^RocksDB db, ^WriteOptions write-options, ^Options options, ^Closeable metrics, ^Closeable cp-job, db-dir]
+  kv/KvStoreWithReadTransaction
+  (begin-kv-tx [_]
+    (->RocksKvTx db write-options (WriteBatchWithIndex.)))
+
   kv/KvStore
   (new-snapshot [_]
     (let [snapshot (.getSnapshot db)]

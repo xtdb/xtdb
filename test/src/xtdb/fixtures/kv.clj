@@ -25,7 +25,6 @@
 
 (defn with-each-kv-store* [f]
   (doseq [kv-opts [memkv-dep
-                   mutablekv-dep
                    rocks-dep
                    lmdb-dep]]
     (binding [*kv-opts* (merge *kv-opts* kv-opts)]
@@ -35,16 +34,19 @@
 (defmacro with-each-kv-store [& body]
   `(with-each-kv-store* (fn [] ~@body)))
 
-(defn with-kv-store-opts* [kv-opts f]
-  (fix/with-tmp-dirs #{db-dir}
-    (letfn [(->kv-opts [module]
-              (merge (when-let [db-dir-suffix (:db-dir-suffix kv-opts)]
-                       {:db-dir (io/file db-dir db-dir-suffix module)})
-                     kv-opts))]
-      (fix/with-opts {:xtdb/tx-log {:kv-store (->kv-opts "tx-log")}
-                      :xtdb/document-store {:kv-store (->kv-opts "doc-store")}
-                      :xtdb/index-store {:kv-store (->kv-opts "index-store")}}
-        f))))
+(defn with-kv-store-opts*
+  ([f]
+   (with-kv-store-opts* *kv-opts* f))
+  ([kv-opts f]
+   (fix/with-tmp-dirs #{db-dir}
+     (letfn [(->kv-opts [module]
+               (merge (when-let [db-dir-suffix (:db-dir-suffix kv-opts)]
+                        {:db-dir (io/file db-dir db-dir-suffix module)})
+                      kv-opts))]
+       (fix/with-opts {:xtdb/tx-log {:kv-store (->kv-opts "tx-log")}
+                       :xtdb/document-store {:kv-store (->kv-opts "doc-store")}
+                       :xtdb/index-store {:kv-store (->kv-opts "index-store")}}
+         f)))))
 
 (defmacro with-kv-store-opts [kv-dep & body]
   `(with-kv-store-opts* ~kv-dep (fn [] ~@body)))

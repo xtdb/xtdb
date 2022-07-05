@@ -217,10 +217,6 @@
 
 (defrecord LMDBKv [db-dir env env-flags dbi ^StampedLock mapsize-lock sync? cp-job]
   kv/KvStore
-  (new-snapshot [_]
-    (let [tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]
-      (->LMDBKvSnapshot env dbi tx)))
-
   (store [this kvs]
     (try
       (cursor-put mapsize-lock env dbi kvs)
@@ -232,6 +228,10 @@
             (increase-mapsize mapsize-lock env *mapsize-increase-factor*)
             (kv/store this kvs))
           (throw e)))))
+
+  (new-snapshot [_]
+    (let [tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]
+      (->LMDBKvSnapshot env dbi tx)))
 
   (compact [_])
 

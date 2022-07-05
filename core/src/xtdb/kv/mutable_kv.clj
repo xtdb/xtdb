@@ -7,16 +7,16 @@
 
 (deftype MutableKvIterator [^NavigableMap db, !tail-seq]
   kv/KvIterator
-  (seek [this k]
+  (seek [_ k]
     (some-> (reset! !tail-seq (->> (.tailMap db (mem/as-buffer k) true)
                                    (filter val)))
             first
             key))
 
-  (next [this]
+  (next [_]
     (some-> (swap! !tail-seq rest) first key))
 
-  (prev [this]
+  (prev [_]
     (loop []
       (when-let [[[k _] :as tail-seq] (seq @!tail-seq)]
         (when-let [[k v :as lower-entry] (.lowerEntry db k)]
@@ -25,7 +25,7 @@
             k
             (recur))))))
 
-  (value [this]
+  (value [_]
     (some-> (first @!tail-seq) val))
 
   Closeable
@@ -42,19 +42,42 @@
   Closeable
   (close [_]))
 
-(deftype MutableKvStore [^NavigableMap db]
+(deftype MutableKvTx [^TreeMap db, ^NavigableMap fork-db]
+  kv/KvStoreTx
+
+  (new-tx-snapshot [_]
+    (->MutableKvSnapshot fork-db))
+
+  (put-kv [_ k v]
+    (.put fork-db
+          (-> k mem/as-buffer mem/copy-to-unpooled-buffer)
+          (some-> v mem/as-buffer mem/copy-to-unpooled-buffer)))
+
+  (commit-kv-tx [_]
+    (.putAll db fork-db))
+
+  (abort-kv-tx [_])
+
+  Closeable
+  (close [_]))
+
+(deftype MutableKvStore [^TreeMap db]
+  kv/KvStoreWithReadTransaction
+  (begin-kv-tx [_]
+    (->MutableKvTx db (.clone db)))
+
   kv/KvStore
   (new-snapshot ^java.io.Closeable [this]
     (->MutableKvSnapshot db))
 
-  (store [this kvs]
+  (store [_ kvs]
     (doseq [[k v] kvs]
       (.put db (mem/as-buffer k) (some-> v mem/as-buffer))))
 
-  (fsync [this])
-  (compact [this])
-  (count-keys [this] (count db))
-  (db-dir [this])
+  (fsync [_])
+  (compact [_])
+  (count-keys [_] (count db))
+  (db-dir [_])
   (kv-name [this] (str (class this))))
 
 (defn ->mutable-kv-store

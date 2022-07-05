@@ -15,6 +15,12 @@
   (new-iterator ^java.io.Closeable [this])
   (get-value [this k]))
 
+(defprotocol KvStoreTx
+  (new-tx-snapshot ^java.io.Closeable [this])
+  (abort-kv-tx [this])
+  (commit-kv-tx [this])
+  (put-kv [this k v]))
+
 ;; tag::KvStore[]
 (defprotocol KvStore
   (new-snapshot ^java.io.Closeable [this])
@@ -25,6 +31,9 @@
   (db-dir [this])
   (kv-name [this]))
 ;; end::KvStore[]
+
+(defprotocol KvStoreWithReadTransaction
+  (begin-kv-tx ^java.io.Closeable [this]))
 
 (def args
   {:db-dir {:doc "Directory to store K/V files"
