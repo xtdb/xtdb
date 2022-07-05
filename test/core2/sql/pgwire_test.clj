@@ -11,6 +11,9 @@
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (com.fasterxml.jackson.databind ObjectMapper JsonNode)))
 
+(set! *warn-on-reflection* false)
+(set! *unchecked-math* false)
+
 (def ^:dynamic ^:private *port*)
 
 (defn- each-fixture [f]

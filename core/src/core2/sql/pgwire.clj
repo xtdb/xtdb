@@ -19,7 +19,8 @@
            (java.nio ByteBuffer)
            (com.fasterxml.jackson.databind.util ByteBufferBackedInputStream)))
 
-(set! *warn-on-reflection* true)
+(set! *warn-on-reflection* false)
+(set! *unchecked-math* false)
 
 (defn- read-c-string ^String [^InputStream in]
   (loop [baos (ByteArrayOutputStream.)
