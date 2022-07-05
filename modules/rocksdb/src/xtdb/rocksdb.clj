@@ -156,8 +156,8 @@
               :let [kbb (mem/direct-byte-buffer k)
                     cfh ^ColumnFamilyHandle (->column-family-handle (->cf-id kbb))]]
         (if v
-          (.put wb cfh (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
-          (.delete wb cfh (mem/direct-byte-buffer k))))
+          (.put wb cfh kbb (mem/direct-byte-buffer v))
+          (.delete wb cfh kbb)))
       (.write db write-options wb)))
 
   (compact [_]
