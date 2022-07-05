@@ -9,7 +9,7 @@
     [:map
      [{$row_number$ (row-number)}]
      [:anti-join
-      [{x3 x5}]
+      [(or (= x3 x5) (nil? x3) (nil? x5))]
       [:rename
        {name x1, custno x2, country x3}
        [:scan [name custno country]]]

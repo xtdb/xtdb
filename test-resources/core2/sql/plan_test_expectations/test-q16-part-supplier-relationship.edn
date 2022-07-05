@@ -10,7 +10,7 @@
    [:join
     [{x2 x7}]
     [:anti-join
-     [{x1 x12}]
+     [(or (= x1 x12) (nil? x1) (nil? x12))]
      [:rename
       {ps_suppkey x1, ps_partkey x2}
       [:scan [ps_suppkey ps_partkey]]]

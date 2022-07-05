@@ -3,6 +3,6 @@
  [:project
   [x1]
   [:anti-join
-   [{x2 x4}]
+   [(or (= x2 x4) (nil? x2) (nil? x4))]
    [:rename {y x1, z x2} [:scan [y z]]]
    [:rename {z x4} [:scan [z]]]]]]
