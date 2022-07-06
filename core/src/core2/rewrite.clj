@@ -114,7 +114,7 @@
      (when-let [^Zip parent# (zup z#)]
        (let [idx# (unchecked-inc-int (.idx z#))
              ^IPersistentVector level# (.node parent#)]
-         (when-let [child-node# (.nth level# idx# nil)]
+         (when-some [child-node# (.nth level# idx# nil)]
            (Zip. child-node# idx# parent# 0 (.depth z#)))))))
 
 (defmacro zright-no-edit [z]
