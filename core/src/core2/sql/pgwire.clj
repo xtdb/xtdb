@@ -1,4 +1,8 @@
 (ns core2.sql.pgwire
+  "Defines a postgres wire protocol (pgwire) server for xtdb.
+
+  Start with (serve node)
+  Stop with (.close server) or (stop-all)"
   (:require [core2.api :as c2]
             [core2.sql.plan :as plan]
             [core2.sql.analyze :as sem]
@@ -8,21 +12,106 @@
             [core2.util :as util]
             [clojure.string :as str]
             [clojure.data.json :as json]
-            [core2.api :as api])
-  (:import java.nio.charset.StandardCharsets
-           [java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException ByteArrayInputStream]
-           [java.net Socket ServerSocket]
-           [java.util.concurrent Executors ExecutorService]
-           [java.util HashMap]
-           [org.apache.arrow.vector PeriodDuration]
-           [java.time LocalDate]
+            [core2.api :as api]
+            [clojure.tools.logging :as log])
+  (:import (java.nio.charset StandardCharsets)
+           (java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException ByteArrayInputStream)
+           (java.net Socket ServerSocket SocketTimeoutException SocketException)
+           (java.util.concurrent Executors ExecutorService ConcurrentHashMap RejectedExecutionException TimeUnit)
+           (java.util HashMap)
+           (org.apache.arrow.vector PeriodDuration)
+           (java.time LocalDate)
            (java.nio ByteBuffer)
-           (com.fasterxml.jackson.databind.util ByteBufferBackedInputStream)))
+           (com.fasterxml.jackson.databind.util ByteBufferBackedInputStream)
+           (java.util.function Function BiFunction)
+           (java.lang Thread$State)
+           (clojure.lang PersistentQueue)))
 
+;; references
+;; https://www.postgresql.org/docs/current/protocol-flow.html
+;; https://www.postgresql.org/docs/current/protocol-message-formats.html
+
+;; important to not worry until we've measured!
 (set! *warn-on-reflection* false)
+
+;; unchecked math is unnecessary (and perhaps dangerous) for this ns
 (set! *unchecked-math* false)
 
-(defn- read-c-string ^String [^InputStream in]
+;; Server
+;
+;; Represents a single postgres server on a particular port
+;; the server currently is a blocking IO server (no nio / netty)
+;; the server does not own the lifecycle of its associated node
+
+;; Server lifecycle
+;
+;; new -> starting        -> running -> draining -> cleaning-up -> cleaned-up
+;;     -> error-on-start  -> error                              -> error-on-cleanup
+;;
+;; lifecycle changes are mediated through the :server-status field, which holds an atom that
+;; can be used to control state transitions from any thread.
+;; The :draining status is used to stop connections when they have finished their current query
+
+(declare stop-server stop-connection)
+
+(defrecord Server
+  [port
+   node
+
+   ;; (delay) server socket and thread for accepting connections
+   accept-socket
+   ^Thread accept-thread
+
+   ;; a thread pool for handing off connections (currently using blocking io)
+   ^ExecutorService thread-pool
+
+   ;; atom to mediate lifecycle transitions (see Server lifecycle comment)
+   server-status
+
+   ;; atom to hold server state, such as current connections, and the connection :cid counter.
+   server-state]
+  Closeable
+  (close [this] (stop-server this)))
+
+;; Connection
+;
+;; Represents a single client connection to the server
+;; identified by an integer 'cid'
+;; each connection holds some state under :conn-state (such as prepared statements, session params and such)
+;; and is registered under the :connections map under the servers :server-state.
+
+;; Connection lifecycle
+;
+;; new -> running        -> closing -> cleaning-up -> cleaned-up
+;;     -> error-on-start
+;;
+;; Like the server, we use an atom :conn-status to mediate life-cycle state changes to control for concurrency
+;; unlike the server, a connections lifetime is entirely bounded by a blocking (connect) call - so shutdowns should be more predictable.
+
+(defrecord Connection
+  [^Server server
+   socket
+
+   ;; a positive integer that identifies the connection on this server
+   ;; we will use this as the pg Process ID for messages that require it (such as cancellation)
+   cid
+   ;; atom to mediate lifecycle transitions (see Connection lifecycle comment)
+   conn-status
+   ;; atom to hold a map of session / connection state, such as :prepared-statements and :session-parameters
+   conn-state
+   ;; io
+   ^DataInputStream in
+   ^DataOutputStream out]
+  Closeable
+  (close [this] (stop-connection this)))
+
+;; best the server/conn records are opaque when printed as they contain mutual references
+(defmethod print-method Server [wtr o] ((get-method print-method Object) wtr o))
+(defmethod print-method Connection [wtr o] ((get-method print-method Object) wtr o))
+
+(defn- read-c-string
+  "Postgres strings are null terminated, reads a null terminated utf-8 string from in."
+  ^String [^InputStream in]
   (loop [baos (ByteArrayOutputStream.)
          x (.read in)]
     (if (zero? x)
@@ -31,237 +120,149 @@
                (.write x))
              (.read in)))))
 
-(defn- write-c-string [^OutputStream out ^String s]
+(defn- write-c-string
+  "Postgres strings are null terminated, writes a null terminated utf8 string to out."
+  [^OutputStream out ^String s]
   (.write out (.getBytes s StandardCharsets/UTF_8))
   (.write out 0))
 
-(defn- send-message-with-body [^DataOutputStream out ^long message-type build-message-fn]
-  (let [baos (ByteArrayOutputStream.)
-        _ (build-message-fn (DataOutputStream. baos))
-        message (.toByteArray baos)]
-    (doto out
-      (.writeByte (byte message-type))
-      (.writeInt (+ Integer/BYTES (alength message)))
-      (.write message))))
+(defn- utf8
+  "Returns the utf8 byte-array for the given string"
+  ^bytes [s]
+  (.getBytes (str s) StandardCharsets/UTF_8))
 
-(defn- send-authentication-ok [^DataOutputStream out]
-  (doto out
-    (.writeByte (byte \R))
-    (.writeInt 8)
-    (.writeInt 0)))
+(def ^:private oids
+  "A map of postgres type (that we may support to some extent) to numeric oid.
+  Mapping to oid is useful for result descriptions, as well as to determine the semantics of received parameters."
+  {:int2 21
+   :int2-array 1005
 
-(def ^:private backend-status->indicator-code {:idle \I
-                                               :transaction \T
-                                               :failed-transaction \E})
+   :int4 23
+   :int4-array 1007
 
-(defn- send-ready-for-query [^DataOutputStream out status]
-  (doto out
-    (.writeByte (byte \Z))
-    (.writeInt 5)
-    (.writeByte (byte (get backend-status->indicator-code status)))))
+   :int8 20
+   :int8-array 1016
 
-(defn- send-message-without-body [^DataOutputStream out ^long message-type]
-  (doto out
-    (.writeByte (byte message-type))
-    (.writeInt 4)))
+   :text 25
+   :text-array 1009
 
-(defn- send-empty-query-response [^DataOutputStream out]
-  (send-message-without-body out (byte \I)))
+   :numeric 1700
+   :numeric-array 1231
 
-(defn- send-no-data [^DataOutputStream out]
-  (send-message-without-body out (byte \n)))
+   :float4 700
+   :float4-array 1021
 
-(defn- send-parse-complete [^DataOutputStream out]
-  (send-message-without-body out (byte \1)))
+   :float8 701
+   :float8-array 1022
 
-(defn- send-bind-complete [^DataOutputStream out]
-  (send-message-without-body out (byte \2)))
+   :bool 16
+   :bool-array 1000
 
-(defn- send-close-complete [^DataOutputStream out]
-  (send-message-without-body out (byte \3)))
+   :date 1082
+   :date-array 1182
 
-(defn- send-portal-suspended [^DataOutputStream out]
-  (send-message-without-body out (byte \s)))
+   :time 1083
+   :time-array 1183
 
-(defn- send-data-row [^DataOutputStream out row]
-  (send-message-with-body out
-                          (byte \D)
-                          (fn [^DataOutputStream out]
-                            (.writeShort out (count row))
-                            (doseq [^bytes column row]
-                              (if column
-                                (do (.writeInt out (alength column))
-                                    (.write out column))
-                                (.writeInt out -1))))))
+   :timetz 1266
+   :timetz-array 1270
 
-(defn- send-parameter-description [^DataOutputStream out parameter-oids]
-  (send-message-with-body out
-                          (byte \t)
-                          (fn [^DataOutputStream out]
-                            (.writeShort out (count parameter-oids))
-                            (doseq [^long oid parameter-oids]
-                              (.writeInt out oid)))))
+   :timestamp 1114
+   :timestamp-array 1115
 
-(defn- send-parameter-status [^DataOutputStream out ^String k ^String v]
-  (send-message-with-body out
-                          (byte \S)
-                          (fn [out]
-                            (doto out
-                              (write-c-string k)
-                              (write-c-string v)))))
+   :timestamptz 1184
+   :timestamptz-array 1185
 
-(defn- send-command-complete [^DataOutputStream out ^String command]
-  (send-message-with-body out
-                          (byte \C)
-                          (fn [out]
-                            (write-c-string out command))))
+   :bytea 17
+   :bytea-array 1001
 
-(def ^:private field-type->field-code {:localized-severity \S
-                                       :severity \V
-                                       :sql-state \C
-                                       :message \M
-                                       :detail \D
-                                       :position \P
-                                       :where \W})
+   :varchar 1043
+   :varchar-array 1015
 
-(defn- send-error-response [^DataOutputStream out field-type->field-value]
-  (send-message-with-body out
-                          (byte \E)
-                          (fn [^DataOutputStream out]
-                            (doseq [[k v] field-type->field-value]
-                              (.writeByte out (byte (get field-type->field-code k)))
-                              (write-c-string out v))
-                            (.writeByte out 0))))
+   :bit 1560
+   :bit-array 1561
 
-(def ^:private ^:const ^long varchar-oid 1043)
-(def ^:private ^:const ^long json-oid 114)
+   :interval 1186
+   :interval-array 1187
 
-(def ^:private ^:const ^long typlen-varlena -1)
-(def ^:private ^:const ^long typmod-none -1)
+   :char 18
+   :char-array 1002
 
-(def ^:private ^:const ^long text-format-code 0)
+   :jsonb 3802
+   :jsonb-array 3807
+   :json 114
+   :json-array 199})
 
-(defn- col-desc [col]
-  (if (string? col)
-    {:column-name col
-     :table-oid 0
-     :column-attribute-number 0
-     :oid json-oid
-     :data-type-size typlen-varlena
-     :type-modifier typmod-none
-     :format-code text-format-code}
-    {:column-name (:column-name col)
-     :table-oid 0
-     :column-attribute-number 0
-     :oid (:oid col json-oid)
-     :data-type-size typlen-varlena
-     :type-modifier typmod-none
-     :format-code text-format-code}))
+(def ^:private oid-varchar (oids :varchar))
+(def ^:private oid-json (oids :json))
 
-(defn- send-row-description [^DataOutputStream out columns]
-  (send-message-with-body out
-                          (byte \T)
-                          (fn [^DataOutputStream out]
-                            (.writeShort out (count columns))
-                            (doseq [{:keys [column-name
-                                            table-oid
-                                            column-attribute-number
-                                            oid
-                                            data-type-size
-                                            type-modifier
-                                            format-code]}
-                                    (map col-desc columns)]
-                              (doto out
-                                (write-c-string column-name)
-                                (.writeInt table-oid)
-                                (.writeShort column-attribute-number)
-                                (.writeInt oid)
-                                (.writeShort data-type-size)
-                                (.writeInt type-modifier)
-                                (.writeShort format-code))))))
+;; all postgres client IO arrives as either an untyped (startup) or typed message
+(defn- read-untyped-msg [^DataInputStream in]
+  (let [size (- (.readInt in) 4)
+        barr (byte-array size)
+        _ (.readFully in barr)]
+    {:msg-in (DataInputStream. (ByteArrayInputStream. barr))
+     :msg-len size}))
 
-(def ^:private message-code->type '{\P :pgwire/parse
-                                    \B :pgwire/bind
-                                    \Q :pgwire/query
-                                    \H :pgwire/flush
-                                    \S :pgwire/sync
-                                    \X :pgwire/terminate
-                                    \D :pgwire/describe
-                                    \E :pgwire/execute})
+(defn- read-typed-msg [^DataInputStream in]
+  (let [type-byte (.readUnsignedByte in)]
+    (assoc (read-untyped-msg in)
+      :msg-char8 (char type-byte))))
 
-(defmulti ^:private parse-message (fn [message-type in] message-type))
+;; errors
+;
 
-(defmethod parse-message :pgwire/parse [_ ^DataInputStream in]
-  {:pgwire.parse/prepared-statement (read-c-string in)
-   :pgwire.parse/query-string (read-c-string in)
-   :pgwire.parse/parameter-oids (vec (repeatedly (.readShort in) #(.readInt in)))})
+(defn- err-protocol-violation [msg]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "08P01"
+   :message msg})
 
-(defmethod parse-message :pgwire/bind [_ ^DataInputStream in]
-  {:pgwire.bind/portal (read-c-string in)
-   :pgwire.bind/prepared-statement (read-c-string in)
-   :pgwire.bind/parameter-format-codes (vec (repeatedly (.readShort in) #(.readInt in)))
-   :pgwire.bind/parameters (vec (repeatedly (.readShort in)
-                                            #(let [size (.readInt in)]
-                                               (when-not (= -1 size)
-                                                 (let [body (byte-array size)]
-                                                   (.readFully in body)
-                                                   body)))))
-   :pgwire.bind/result-format-codes (vec (repeatedly (.readShort in) #(.readShort in)))})
+(defn- err-parse [parse-failure]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "42601"
+   :message (first (str/split-lines (pr-str parse-failure)))
+   :detail (parser/failure->str parse-failure)
+   :position (str (inc (:idx parse-failure)))})
 
-(defmethod parse-message :pgwire/query [_ ^DataInputStream in]
-  {:pgwire.query/query-string (read-c-string in)})
+(defn- err-internal [ex]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "XX000"
+   ;; todo I don't think we want to do this unless we are in debug mode or something
+   :message (first (str/split-lines (or (.getMessage ex) "")))
+   :detail (str ex)
+   :where (with-out-str
+            (binding [*err* *out*]
+              (.printStackTrace ex)))})
 
-(defmethod parse-message :pgwire/execute [_ ^DataInputStream in]
-  {:pgwire.execute/portal (read-c-string in)
-   :pgwire.execute/max-rows (.readInt in)})
+;; sql processing
+;
+;; because we are talking to postgres clients, we cannot simply fling sql at xt (shame!)
+;; so these functions provide some utility on top of xt to figure out where we can 'fake it til we make it' as a pg server.
 
-(defmethod parse-message :pgwire/describe [_ ^DataInputStream in]
-  (case (char (.readByte in))
-    \P {:pgwire.describe/portal (read-c-string in)}
-    \S {:pgwire.describe/statement (read-c-string in)}))
-
-(defmethod parse-message :default [_ _]
-  {})
-
-(defn- statement-command [parse-message]
-  (first (str/split (:pgwire.parse/query-string parse-message) #"\s+")))
-
-(defn- empty-query? [parse-message]
-  (str/blank? (:pgwire.parse/query-string parse-message)))
-
-;; TODO: should really just use direct_sql_statement rule, but that
-;; requires some hacks.
-(defn- strip-query-semi-colon [sql]
-  (str/replace sql #";\s*$" ""))
-
-(defmulti handle-message (fn [session message out]
-                           (:pgwire/type message)))
-
-(def ^:private sql-state-syntax-error "42601")
-
-(defn utf8 [s] (.getBytes (str s) StandardCharsets/UTF_8))
-
-(def canned-responses
+(def ^:private canned-responses
   "Some pre-baked responses to common queries issued as setup by Postgres drivers, e.g SQLAlchemy"
   [{:q ";"
     :cols []
     :rows []}
    {:q "select pg_catalog.version()"
-    :cols [{:column-name "version" :oid varchar-oid}]
+    :cols [{:column-name "version" :column-oid oid-varchar}]
     :rows [["PostgreSQL 14.2"]]}
    {:q "show standard_conforming_strings"
-    :cols [{:column-name "standard_conforming_strings" :oid varchar-oid}]
+    :cols [{:column-name "standard_conforming_strings" :column-oid oid-varchar}]
     :rows [["on"]]}
    {:q "select current_schema"
-    :cols [{:column-name "current_schema" :oid varchar-oid}]
+    :cols [{:column-name "current_schema" :column-oid oid-varchar}]
     :rows [["public"]]}
    {:q "show transaction isolation level"
-    :cols [{:column-name "transaction_isolation" :oid varchar-oid}]
+    :cols [{:column-name "transaction_isolation" :column-oid oid-varchar}]
     :rows [["read committed"]]}
 
    ;; ODBC issues this query by default, you may be able to disable with an option
    {:q "select oid, typbasetype from pg_type where typname = 'lo'"
-    :cols [{:column-name "oid", :oid varchar-oid} {:column-name "typebasetype", :oid varchar-oid}]
+    :cols [{:column-name "oid", :column-oid oid-varchar} {:column-name "typebasetype", :column-oid oid-varchar}]
     :rows []}
 
    ;; jdbc meta getKeywords (hibernate)
@@ -269,112 +270,94 @@
    ;; because our query protocol impl is broken, or partially implemented.
    ;; java.lang.IllegalStateException: Received resultset tuples, but no field structure for them
    {:q "select string_agg(word, ',') from pg_catalog.pg_get_keywords()"
-    :cols [{:column-name "col1" :oid varchar-oid}]
+    :cols [{:column-name "col1" :column-oid oid-varchar}]
     :rows [["xtdb"]]}])
+
+;; this is hopefully temporary
+;; I would like to use some custom parse rules for this (and actually canned responses too)
+(defn- transform-query
+  "Pre-processes a sql string to remove semi-colons and replaces the parameter convention to
+  that which XT supports."
+  [s]
+  (-> s
+      (str/replace #"\$\d+" "?")
+      (str/replace #";\s*$" "")))
 
 ;; yagni, is everything upper'd anyway by drivers / server?
 (defn- probably-same-query? [s substr]
   ;; todo I bet this may cause some amusement. Not sure what to do about non-parsed query matching, it'll do for now.
   (str/starts-with? (str/lower-case s) (str/lower-case substr)))
 
-(defn get-canned-response [sql-str]
+(defn get-canned-response
+  "If the sql string is a canned response, returns the entry from the canned-responses that matches."
+  [sql-str]
   (when sql-str (first (filter #(probably-same-query? sql-str (:q %)) canned-responses))))
 
-(def ignore-parse-bind-strings
-  (-> ["set"
-       "begin"
-       "commit"
-       "rollback"]
-      (concat (map :q canned-responses))
-      set))
+(defn- statement-head [s]
+  (-> s (str/split #"\s+") first str/upper-case))
 
-(defn- ignore-parse-bind? [message]
-  (boolean (or (empty-query? message)
-               (some (partial probably-same-query? (:pgwire.parse/query-string message)) ignore-parse-bind-strings))))
+(defn- interpret-sql
+  "Takes a sql string and returns a map of data about it.
 
-(defmethod handle-message :pgwire/parse [session message out]
-  (let [message (if (ignore-parse-bind? message)
-                  message
-                  (with-meta message {:tree (parser/parse (strip-query-semi-colon (:pgwire.parse/query-string message)))}))]
-    (if-let [parse-failure (when (parser/failure? (:tree (meta message))) (:tree (meta message)))]
-      (do (send-error-response out {:severity "ERROR"
-                                    :localized-severity "ERROR"
-                                    :sql-state sql-state-syntax-error
-                                    :message (first (str/split-lines (pr-str parse-failure)))
-                                    :detail (parser/failure->str parse-failure)
-                                    :position (str (inc (:idx parse-failure)))})
-          session)
-      (do (send-parse-complete out)
-          (assoc-in session
-                    [:prepared-statements (get message :pgwire.parse/prepared-statement)]
-                    message)))))
+  :statement-type (:canned-response, :set-session-parameter, :ignore, :empty-query or :query)
 
-(defmethod handle-message :pgwire/bind [session message out]
-  (let [parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement message)])
-        message (if (ignore-parse-bind? parse-message)
-                  message
-                  (with-meta message (plan/plan-query (:tree (meta parse-message)))))]
-    (if-let [error (first (:errs (meta message)))]
-      (do (send-error-response out {:severity "ERROR"
-                                    :localized-severity "ERROR"
-                                    :sql-state sql-state-syntax-error
-                                    :message (first (str/split-lines error))
-                                    :detail error})
-          session)
-      (do (send-bind-complete out)
-          (assoc-in session
-                    [:portals (get message :pgwire.bind/portal)]
-                    message)))))
+  if :canned-response
+  :canned-response (the map from the canned-responses)
 
-(defmethod handle-message :pgwire/flush [session message ^DataOutputStream out]
-  (.flush out)
-  session)
+  if :set-session-parameter
+  :parameter (the param name)
+  :value (the value)
 
-(defmethod handle-message :pgwire/sync [session message ^DataOutputStream out]
-  (send-ready-for-query out :idle)
-  session)
+  if :ignore
+  :ignore the kind of statement to ignore (useful to emit the correct msg-command-complete)
 
-(defmethod handle-message :pgwire/terminate [session message out]
-  (util/try-close out)
-  session)
+  if :empty-query (nothing more to say!)
 
-(defn- query-projection [tree]
+  if :query
+  :query (the original sql string)
+  :transformed-query (the pre-processed for xt sql string)
+  :num-placeholders (the number of parameter placeholders in the query)
+  :ast (the result of parse, possibly a parse failure)
+  :err (if there was a parse failure, the pgwire error to send)"
+  [sql]
+  (cond
+    (get-canned-response sql)
+    {:statement-type :canned-response
+     :canned-response (get-canned-response sql)}
+
+    (= "SET" (statement-head sql))
+    (let [[_ k v] (re-find #"SET\s+(\w+)\s*=\s*'?(.*)'?" sql)]
+      {:statement-type :set-session-parameter
+       :parameter k
+       :value v})
+
+    (#{"BEGIN" "COMMIT" "ROLLBACK"} (statement-head sql))
+    {:statement-type :ignore
+     :ignore (statement-head sql)}
+
+    (str/blank? sql)
+    {:statement-type :empty-query}
+
+    :else
+    (let [transformed-query (transform-query sql)
+          num-placeholders (count (re-seq #"\?" transformed-query))
+          parse-result (parser/parse transformed-query)]
+      {:statement-type :query
+       :query sql
+       :transformed-query transformed-query
+       :ast parse-result
+       :err (when (parser/failure? parse-result) (err-parse parse-result))
+       :num-placeholders num-placeholders})))
+
+(defn- query-projection
+  "Returns a vec of column names returned by the query (ast)."
+  [ast]
   (binding [r/*memo* (HashMap.)]
-    (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))
+    (->> (sem/projected-columns (r/$ (r/vector-zip ast) 1))
          (first)
          (mapv (comp name plan/unqualified-projection-symbol)))))
 
-(defmethod handle-message :pgwire/describe [session message out]
-
-  (cond
-    (:pgwire.describe/portal message)
-    (let [bind-message (get-in session [:portals (:pgwire.describe/portal message)])
-          parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement bind-message)])]
-      (cond
-        (get-canned-response (:pgwire.parse/query-string parse-message))
-        (let [{:keys [cols]} (get-canned-response (:pgwire.parse/query-string parse-message))]
-          (send-row-description out cols))
-
-        (= "SELECT" (str/upper-case (statement-command parse-message)))
-        (send-row-description out (query-projection (:tree (meta parse-message))))
-
-        :else (send-no-data out))
-      session)
-
-    (:pgwire.describe/statement message)
-    (let [parse-message (get-in session [:prepared-statements (:pgwire.describe/statement message)])]
-      (send-parameter-description out (:pgwire.parse/parameter-oids parse-message))
-      (cond
-
-        (get-canned-response (:pgwire.parse/query-string parse-message))
-        (let [{:keys [cols]} (get-canned-response (:pgwire.parse/query-string parse-message))]
-          (send-row-description out cols))
-
-        (= "SELECT" (str/upper-case (statement-command parse-message)))
-        (send-row-description out (query-projection (:tree (meta parse-message))))
-
-        :else (send-no-data out))
-      session)))
+;; json printing for xt data types
 
 (extend-protocol json/JSONWriter
   PeriodDuration
@@ -390,159 +373,46 @@
 (defn- json-str ^String [obj]
   (json/write-str obj))
 
-(defmethod handle-message :pgwire/execute [session message out]
-  (let [bind-message (get-in session [:portals (:pgwire.execute/portal message)])
-        parse-message (get-in session [:prepared-statements (:pgwire.bind/prepared-statement bind-message)])
-        canned-response (get-canned-response (:pgwire.parse/query-string parse-message))]
-    (cond
-      (empty-query? parse-message)
-      (do (send-empty-query-response out)
-          session)
-
-      canned-response
-      (let [{:keys [rows]} canned-response]
-        (doseq [row rows]
-          (send-data-row out (mapv (fn [v] (if (bytes? v) v (utf8 v))) row)))
-        (send-command-complete out (str (statement-command parse-message) " " (count rows)))
-        session)
-
-      (= "SET" (statement-command parse-message))
-      (let [[_ k v] (re-find #"SET\s+(\w+)\s*=\s*'?(.*)'?" (strip-query-semi-colon (:pgwire.parse/query-string parse-message)))]
-        (send-command-complete out (statement-command parse-message))
-        (assoc-in session [:parameters k] v))
-
-      (#{"BEGIN" "COMMIT" "ROLLBACK"} (statement-command parse-message))
-      (do (send-command-complete out (statement-command parse-message))
-          session)
-
-      :else
-      (let [node (:node (meta session))
-            projection (mapv keyword (query-projection (:tree (meta parse-message))))
-            result (c2/sql-query node (strip-query-semi-colon (:pgwire.parse/query-string parse-message)) {})]
-        (doseq [row result]
-          (send-data-row out (for [column (mapv row projection)]
-                               (.getBytes (json-str column) StandardCharsets/UTF_8))))
-        (send-command-complete out (str (statement-command parse-message) " " (count result)))
-        session))))
-
-(defn- error-message-buffer? [^bytes message]
-  (and (pos? (alength message))
-       (= \E (char (aget message 0)))))
-
-(defmethod handle-message :pgwire/query [session message ^DataOutputStream out]
-  (let [query-string (:pgwire.query/query-string message)
-        baos (ByteArrayOutputStream.)
-        null-out (DataOutputStream. baos)
-        parse-message {:pgwire/type :pgwire/parse
-                       :pgwire.parse/query-string query-string
-                       :pgwire.parse/prepared-statement ""
-                       :pgwire.parse/parameters []}
-        session (handle-message session parse-message null-out)]
-    (if (error-message-buffer? (.toByteArray baos))
-      (do (.write out (.toByteArray baos))
-          (send-ready-for-query out :idle)
-          session)
-      (let [baos (ByteArrayOutputStream.)
-            null-out (DataOutputStream. baos)
-            bind-message {:pgwire/type :pgwire/bind
-                          :pgwire.bind/portal ""
-                          :pgwire.bind/prepared-statement ""}
-            session (handle-message session bind-message null-out)]
-        (if (error-message-buffer? (.toByteArray baos))
-          (do (.write out (.toByteArray baos))
-              (send-ready-for-query out :idle)
-              session)
-          (let [session (cond->
-                          session
-
-                          (#{"SELECT" "SHOW"} (str/upper-case (statement-command parse-message)))
-                          (handle-message
-                            {:pgwire/type :pgwire/describe, :pgwire.describe/portal ""}
-                            out)
-
-                          true
-                          (handle-message
-                            {:pgwire/type :pgwire/execute, :pgwire.execute/portal ""}
-                            out))]
-            (send-ready-for-query out :idle)
-            session))))))
-
-(defmethod handle-message :default [session message _]
-  session)
-
-(def ^:private sql-state-internal-error "XX000")
-
-(defn- pg-message-exchange [session ^Socket socket ^DataInputStream in ^DataOutputStream out]
-  (loop [session session]
-    (if (.isClosed socket)
-      session
-      (do
-          (recur (try
-                   (let [message-code (char (.readByte in))]
-                     (if-let [message-type (get message-code->type message-code)]
-                       (let [size (- (.readInt in) Integer/BYTES)
-                             message (assoc (parse-message message-type in) :pgwire/type message-type)]
-                         #_(prn message)
-                         (handle-message session message out))
-                       (throw (IllegalArgumentException. (str "unknown message code: " message-code)))))
-                   (catch EOFException e
-                     (send-ready-for-query out :idle)
-                     session)
-                   (catch Exception e
-                     (send-error-response out {:severity "ERROR"
-                                               :localized-severity "ERROR"
-                                               :sql-state sql-state-internal-error
-                                               :message (first (str/split-lines (or (.getMessage e) "")))
-                                               :detail (str e)
-                                               :where (with-out-str
-                                                        (binding [*err* *out*]
-                                                          (.printStackTrace e)))})
-                     (send-ready-for-query out :idle)
-                     session)))))))
-
 (defn- read-startup-parameters [^DataInputStream in]
   (loop [in (PushbackInputStream. in)
          acc {}]
     (let [x (.read in)]
       (if (zero? x)
-        {:pgwire.startup-message/parameters acc}
+        {:startup-parameters acc}
         (do (.unread in (byte x))
             (recur in (assoc acc (read-c-string in) (read-c-string in))))))))
 
-(def version-messages
-  {196608 :30
+
+;; startup negotiation utilities (see cmd-startup)
+
+(def ^:private version-messages
+  "Integer codes sent by the client to identify a startup msg"
+  {
+   ;; this is the normal 'hey I'm a postgres client' if ssl is not requested
+   196608 :30
+   ;; cancellation messages come in as special startup sequences (pgwire does not handle them yet!)
    80877102 :cancel
+   ;; ssl messages are used when the client either requires, prefers, or allows ssl connections.
+   ;; xt does not yet support ssl
    80877103 :ssl
+   ;; gssapi encoding is not supported by xt, and we tell the client that
    80877104 :gssenc})
 
-(def ssl-responses
+(def ^:private ssl-responses
   {:unsupported (byte \N)
-   ;; for docs, xtdb does not support SSL
+   ;; for docs, xtdb does not yet support ssl
    :supported (byte \S)})
-
-(defn- read-untyped-msg [^DataInputStream in]
-  (let [size (- (.readInt in) 4)
-        barr (byte-array size)
-        _ (.readFully in barr)]
-    {:msg-in (DataInputStream. (ByteArrayInputStream. barr))
-     :msg-len size}))
 
 (defn- read-version [^DataInputStream in]
   (let [{:keys [^DataInputStream msg-in] :as msg} (read-untyped-msg in)
         version (.readInt msg-in)]
     (assoc msg :version (version-messages version))))
 
-(defn- err-protocol-violation [msg]
-  {:severity "ERROR"
-   :localized-severity "ERROR"
-   :sql-state "08P01"
-   :message msg})
-
 (defn- buggy-client-not-closed-after-ssl-unsupported-msg?
   "There appears to be a bug in the JDBC driver which causes it to leave its conn hanging
   if ssl is required and the server does not support it.
 
-  For now, we timeout after 1 second if we do not receive a follup to the ssl msg."
+  For now, we timeout after 1 second if we do not receive a follow up to the ssl msg."
   [^DataInputStream in]
   (let [wait-until (+ (System/currentTimeMillis) 1000)]
     (try
@@ -559,14 +429,528 @@
             ;; one nice thing about sleep is if we are interrupted
             ;; (as we've been asked to close)
             ;; we get an exception here
-            (Thread/sleep 1)
-            (recur))
+            (if (try (Thread/sleep 1) true (catch InterruptedException _ false))
+              (recur)
+              true))
 
           ;; timed out
           :else true)))))
 
-(defn- negotiate-version [in ^DataOutputStream out]
-  (let [{:keys [version] :as msg} (read-version in)
+;; server impl
+;
+
+(defn- cleanup-server-resources [server]
+  (let [{:keys [port
+                accept-socket
+                ^Thread accept-thread
+                ^ExecutorService thread-pool
+                server-state
+                server-status]} server]
+
+    ;; todo revisit these transitions
+    (or (compare-and-set! server-status :draining :cleaning-up)
+        (compare-and-set! server-status :running :cleaning-up)
+        (compare-and-set! server-status :error :cleaning-up))
+
+    (when (realized? accept-socket)
+      (let [^ServerSocket socket @accept-socket]
+        (when-not (.isClosed socket)
+          (log/debug "Closing accept socket" port)
+          (.close socket))))
+
+    (when-not (#{Thread$State/NEW, Thread$State/TERMINATED} (.getState accept-thread))
+      (.interrupt accept-thread)
+      (.join accept-thread (* 5 1000))
+      (when-not (= Thread$State/TERMINATED (.getState accept-thread))
+        (log/error "Could not shut down accept-thread gracefully" {:port port, :thread (.getName accept-thread)})
+        (compare-and-set! server-status :cleaning-up :error-on-cleanup)
+        (swap! server-state assoc :accept-thread-misbehaving true)))
+
+    (when-not (.isShutdown thread-pool)
+      (.shutdownNow thread-pool)
+      (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
+        (log/error "Could not shutdown thread pool gracefully" {:port port})
+        (compare-and-set! server-status :cleaning-up :error-on-cleanup)
+        (swap! server-state assoc :thread-pool-misbehaving true)))
+
+    (compare-and-set! server-status :cleaning-up :cleaned-up)))
+
+;; we keep the servers in a global
+;; sockets, thread pools and so on are global resources, no point pretending.
+;; we want to be able to address sockets, threads, and such
+;; from the repl, and possibly from telemetry and monitoring code
+(defonce ^{:doc "Server instances by port"
+           :private true
+           :tag ConcurrentHashMap}
+  servers
+  (ConcurrentHashMap.))
+
+(defn- deregister-server
+  "If the server obj is currently registered as the server for its port (this is usually the case), then remove it."
+  [server]
+  (let [port (:port server)]
+    (->> (reify BiFunction
+           (apply [_ _ v]
+             (if (identical? v server)
+               nil
+               v)))
+         (.compute servers port))))
+
+(defn- start-server [server]
+  (let [{:keys [server-status, accept-thread, accept-socket, port]} server]
+
+    ;; sanity check its a new server
+    (when-not (compare-and-set! server-status :new :starting)
+      (throw (Exception. (format "Server must be :new to start" port))))
+
+    (try
+
+      ;; try and bind the socket (this throws if we cannot get the port)
+      @accept-socket
+
+      ;; lets register ourselves now we have acquired a global resource (port).
+      (->> (reify BiFunction
+             (apply [_ _ v]
+               ;; if we have a value, something has gone wrong
+               ;; we've bound the port, but we think we have already got a server
+               ;; listening at port
+               (when v
+                 (log/error "Server was already registered at port" port)
+                 (reset! server-status :error-on-start))
+
+               (or v server)))
+           (.compute servers port))
+
+      ;; start the accept thread, which will listen for connections
+      (let [is-running (promise)]
+
+        ;; wait for the :idle state
+        (->> (fn [_ _ _ ns]
+               (when (= :running ns)
+                 (deliver is-running true)))
+             (add-watch server-status [:accept-watch port]))
+
+        (.start accept-thread)
+
+        ;; wait for a small amount of time for a :running state
+        (when (= :timeout (deref is-running (* 5 1000) :timeout))
+          (log/error "Server accept thread did not start properly" port)
+          (reset! server-status :error-on-start))
+
+        (remove-watch server-status [:accept-watch port]))
+
+      (catch Throwable e
+        (log/error e "Exception caught on server start" port)
+        (reset! server-status :error-on-start)))
+
+    ;; run clean up if we didn't start for any reason
+    (when (not= :running @server-status)
+      (cleanup-server-resources server))
+
+    ;; we will have only cleaned up if there was some problem
+    (compare-and-set! server-status :cleaned-up :error-on-start)
+
+    ;; check if we could not clean up due to a clean up error
+    (if (compare-and-set! server-status :error-on-cleanup :error-on-start)
+      (log/fatal "Server resources could not be freed, please restart xtdb" port)
+      ;; if we have no dangling resources, unregister
+      ;; (if we have dangling, we might be able to fix our repl session still!)
+      (deregister-server server)))
+
+  nil)
+
+(defn stop-server [server]
+  (let [{:keys [server-status, port]} server]
+    (when (compare-and-set! server-status :running :draining)
+      ;; todo wait for conns?
+      (cleanup-server-resources server)
+      (if (= :cleaned-up @server-status)
+        (deregister-server server)
+        (log/fatal "Server resources could not be freed, please restart xtdb" port)))))
+
+(defn- set-session-parameter [conn parameter value]
+  (swap! (:conn-state conn) assoc-in [:session-parameters parameter] value))
+
+(defn- cleanup-connection-resources [conn]
+  (let [{:keys [cid, server, in, out, ^Socket socket, conn-status]} conn
+        {:keys [port]} server
+        ^DataInputStream in @in
+        ^DataOutputStream out @out]
+    (reset! conn-status :cleaning-up)
+
+    (try
+      (.close out)
+      (catch Throwable e
+        (log/error e "Exception caught closing socket out" {:port port, :cid cid})))
+
+    (try
+      (.close in)
+      (catch Throwable e
+        (log/error e "Exception caught closing socket in" {:port port, :cid cid})))
+
+    (when-not (.isClosed socket)
+      (try
+        (.close socket)
+        (catch Throwable e
+          (log/error e "Exception caught closing conn socket"))))
+
+    (compare-and-set! conn-status :cleaning-up :cleaned-up)))
+
+(defn- stop-connection [conn]
+  (let [{:keys [conn-status, server]} conn]
+    (reset! conn-status :closing)
+    ;; todo wait for close?
+    (cleanup-connection-resources server)))
+
+;; pg i/o shared data types
+;
+;; our io maps just capture a paired :read fn (data-in)
+;; and :write fn (data-out, val)
+;; the goal is to describe the data layout of various pg messages, so they can be read and written from in/out streams
+;; by generalizing a bit here, we gain a terser language for describing wire data types, and leverage
+;; (e.g later we might decide to compile unboxed reader/writers using these)
+
+(def ^:private no-read (fn [in] (throw (UnsupportedOperationException.))))
+(def ^:private no-write (fn [out _] (throw (UnsupportedOperationException.))))
+
+(def ^:private io-char8
+  "A single byte character"
+  {:read #(char (.readUnsignedByte %))
+   :write #(.writeByte %1 (byte %2))})
+
+(def ^:private io-uint16
+  "An unsigned short integer"
+  {:read #(.readUnsignedShort %)
+   :write #(.writeShort %1 (short %2))})
+
+(def ^:private io-uint32
+  "An unsigned 32bit integer"
+  {:read #(.readInt %)
+   :write #(.writeInt %1 (int %2))})
+
+(def ^:private io-string
+  "A postgres null-terminated utf8 string"
+  {:read read-c-string
+   :write write-c-string})
+
+(defn- io-list
+  "Returns an io data type for a dynamic list, takes an io def for the length (e.g io-uint16) and each element.
+
+  e.g a list of strings (io-list io-uint32 io-string)"
+  [io-len, io-el]
+  (let [len-rdr (:read io-len)
+        len-wtr (:write io-len)
+        el-rdr (:read io-el)
+        el-wtr (:write io-el)]
+    {:read (fn [in] (vec (repeatedly (len-rdr in) #(el-rdr in))))
+     :write (fn [out coll] (len-wtr out (count coll)) (run! #(el-wtr out %) coll))}))
+
+(defn ^:private io-bytes
+  "Returns an io data type for a pg byte array, whose len is given by the io-len, e.g a byte array whose size
+  is bounded to max(uint16) bytes - (io-bytes io-uint16)"
+  [io-len]
+  (let [len-rdr (:read io-len)]
+    {:read (fn [in]
+             (let [arr (byte-array (len-rdr in))]
+               (.readFully in arr)
+               arr))
+     :write no-write}))
+
+(def ^:private io-format-code
+  "Postgres format codes are integers, whose value is either
+
+  0 (:text)
+  1 (:binary)
+
+  On read returns a keyword :text or :binary, write of these keywords will be transformed into the correct integer."
+  {:read (fn [in] ({0 :text, 1 :binary} (.readUnsignedShort in)))
+   :write (fn [out v] (.writeShort out ({:text 0, :binary 1} v)))})
+
+(def ^:private io-format-codes
+  "A list of format codes of max len len(uint16). This is the format used by the msg-bind."
+  (io-list io-uint16 io-format-code))
+
+(defn- io-record
+  "Returns an io data type for a record containing named fields. Useful for definining typed message contents.
+
+  e.g
+
+  (io-record
+    :foo io-uint32
+    :bar io-string)
+
+  would define a record of two fields (:foo and :bar) to be read/written in the order defined. "
+  [& fields]
+  (let [pairs (partition 2 fields)
+        ks (mapv first pairs)
+        ios (mapv second pairs)
+        rdrs (mapv :read ios)
+        wtrs (mapv :write ios)]
+    {:read (fn read-record [in]
+             (loop [acc {}
+                    i 0]
+               (if (< i (count ks))
+                 (let [k (nth ks i)
+                       rdr (rdrs i)]
+                   (recur (assoc acc k (rdr in))
+                          (unchecked-inc-int i)))
+                 acc)))
+     :write (fn write-record [out m]
+              (dotimes [i (count ks)]
+                (let [k (nth ks i)
+                      wtr (wtrs i)]
+                  (wtr out (k m)))))}))
+
+(defn- io-null-terminated-list
+  "An io data type for a null terminated list of elements given by io-el."
+  [io-el]
+  (let [el-wtr (:write io-el)]
+    {:read no-read
+     :write (fn write-null-terminated-list [^DataOutputStream out coll]
+              (run! (partial el-wtr out) coll)
+              (.writeByte out 0))}))
+
+(def ^:private io-bytes-or-null
+  "An io data type for a byte array (or null), in postgres you can write the bytes of say a column as either
+  len (uint32) followed by the bytes OR in the case of null, a len whose value is -1. This is how row values are conveyed
+  to the client."
+  {:read no-read
+   :write (fn write-bytes-or-null [^DataOutputStream out ^bytes arr]
+            (if arr
+              (do (.writeInt out (alength arr))
+                  (.write out arr))
+              (.writeInt out -1)))})
+
+(def ^:private io-error-field
+  "An io-data type that writes a (vector/map-entry pair) k and v as an error field."
+  {:read no-read
+   :write (fn write-error-field [^DataOutputStream out [k v]]
+            (let [field-char8 ({:localized-severity \S
+                                :severity \V
+                                :sql-state \C
+                                :message \M
+                                :detail \D
+                                :position \P
+                                :where \W} k)]
+              (when field-char8
+                (.writeByte out (byte field-char8))
+                (write-c-string out (str v)))))})
+
+(def ^:private io-portal-or-stmt
+  "An io data type that returns a keyword :portal or :prepared-statement given the next char8 in the buffer.
+  This is useful for describe/close who name either a portal or statement."
+  {:read (comp {\P :portal, \S :prepared-stmt} (:read io-char8)),
+   :write no-write})
+
+;; msg definition
+
+;
+(def ^:private ^:redef client-msgs {})
+(def ^:private ^:redef server-msgs {})
+
+(defmacro ^:private def-msg
+  "Defs a typed-message with the given kind (:client or :server) and fields.
+
+  Installs the message var in the either client-msgs or server-msgs map for later retrieval by code."
+  [sym kind char8 & fields]
+  `(let [fields# [~@fields]
+         kind# ~kind
+         char8# ~char8
+         {read# :read
+          write# :write}
+         (apply io-record fields#)]
+
+     (def ~sym
+       {:name ~(name sym)
+        :kind kind#
+        :char8 char8#
+        :fields fields#
+        :read read#
+        :write write#})
+
+     (if (= kind# :client)
+       (alter-var-root #'client-msgs assoc char8# (var ~sym))
+       (alter-var-root #'server-msgs assoc char8# (var ~sym)))
+
+     ~sym))
+
+;; client messages
+
+(def-msg msg-bind :client \B
+  :portal-name io-string
+  :stmt-name io-string
+  :param-format io-format-codes
+  :params (io-list io-uint16 (io-bytes io-uint32))
+  :result-format io-format-codes)
+
+(def-msg msg-close :client \C
+  :close-type io-portal-or-stmt
+  :close-name io-string)
+
+(def-msg msg-copy-data :client \d)
+(def-msg msg-copy-done :client \c)
+(def-msg msg-copy-fail :client \f)
+
+(def-msg msg-describe :client \D
+  :describe-type io-portal-or-stmt
+  :describe-name io-string)
+
+(def-msg msg-execute :client \E
+  :portal-name io-string
+  :limit io-uint32)
+
+(def-msg msg-flush :client \H)
+
+(def-msg msg-parse :client \P
+  :stmt-name io-string
+  :query io-string
+  :arg-types (io-list io-uint16 io-uint32))
+
+(def-msg msg-password :client \p)
+
+(def-msg msg-simple-query :client \Q
+  :query io-string)
+
+(def-msg msg-sync :client \S)
+
+(def-msg msg-terminate :client \X)
+
+;; server messages
+;
+
+(def-msg msg-error-response :server \E
+  :error-fields (io-null-terminated-list io-error-field))
+
+(def-msg msg-bind-complete :server \2
+  :result {:read no-read
+           :write (fn [out _] (.writeInt out 4))})
+
+(def-msg msg-close-complete :server \3)
+
+(def-msg msg-command-complete :server \C
+  :command io-string)
+
+(def-msg msg-parameter-description :server \t
+  :parameter-oids (io-list io-uint16 io-uint32))
+
+(def-msg msg-parameter-status :server \S
+  :parameter io-string
+  :value io-string)
+
+(def-msg msg-data-row :server \D
+  :vals (io-list io-uint16 io-bytes-or-null))
+
+(def-msg msg-portal-suspended :server \s)
+
+(def-msg msg-parse-complete :server \1)
+
+(def-msg msg-no-data :server \n)
+
+(def-msg msg-empty-query :server \I)
+
+(def-msg msg-notice-response :server \N)
+
+(def-msg msg-auth :server \R
+  :result io-uint32)
+
+(def-msg msg-backend-key-data :server \K)
+
+(def-msg msg-copy-in-response :server \G)
+
+(def-msg msg-ready :server \Z
+  :status {:read no-read
+           :write (fn [out status]
+                    (.writeByte out (byte ({:idle \I
+                                            :transaction \T
+                                            :failed-transaction \E}
+                                           status))))})
+
+(def-msg msg-row-description :server \T
+  :columns (->> (io-record
+                  :column-name io-string
+                  :table-oid io-uint32
+                  :column-attribute-number io-uint16
+                  :column-oid io-uint32
+                  :data-type-size io-uint16
+                  :type-modifier io-uint32
+                  :format-code io-format-code)
+                (io-list io-uint16)))
+
+;; server commands
+;
+;; the commands represent actions the connection may take in response to some message
+;; they are simple functions that can call each other directly, though they can also be enqueued
+;; through the connections :cmd-buf queue (in :conn-state) this will later be useful
+;; for shared concerns (e.g 'what is a connection doing') and to allow for termination mid query
+;; in certain scenarios
+
+(defn- cmd-write-msg
+  "Writes out a single message given a definition (msg-def) and optional data record."
+  ([conn msg-def]
+   (log/debug "Writing server message" (select-keys msg-def [:char8 :name]))
+   (.writeByte @(:out conn) (byte (:char8 msg-def)))
+   (.writeInt @(:out conn) 4))
+  ([conn msg-def data]
+   (log/debug "Writing server message (with body)" (select-keys msg-def [:char8 :name]))
+   (.writeByte @(:out conn) (byte (:char8 msg-def)))
+   (let [bytes-out (ByteArrayOutputStream.)
+         msg-out (DataOutputStream. bytes-out)
+         _ ((:write msg-def) msg-out data)
+         arr (.toByteArray bytes-out)]
+     (.writeInt @(:out conn) (+ 4 (alength arr)))
+     (.write @(:out conn) arr))))
+
+(defn cmd-send-ready
+  "Sends a msg-ready with the given status - eg (cmd-send-ready conn :ok)"
+  [conn status]
+  (cmd-write-msg conn msg-ready {:status status}))
+
+(defn cmd-send-error
+  "Sends an error back to the client (e.g (cmd-send-error conn (err-protocol \"oops!\")).
+
+  If the connection is operating in the :extended protocol mode, any error causes the connection to skip
+  messages until a msg-sync is received."
+  [{:keys [conn-state] :as conn} err]
+
+  ;; error seen while in :extended mode, start skipping messages until sync received
+  (when (= :extended (:protocol @conn-state))
+    (swap! conn-state assoc :skip-until-sync true))
+
+  (cmd-write-msg conn msg-error-response {:error-fields err})
+  ;; todo double check this is right to send in every case
+  (cmd-send-ready conn :idle))
+
+(defn cmd-write-canned-response [conn canned-response]
+  (let [{:keys [query, rows]} canned-response]
+    (doseq [row rows]
+      (cmd-write-msg conn msg-data-row (mapv (fn [v] (if (bytes? v) v (utf8 v))) row)))
+    (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " (count rows))})))
+
+(defn cmd-close
+  "Closes a prepared statement or portal that was opened with bind / parse."
+  [{:keys [conn-state] :as conn} {:keys [close-type, close-name]}]
+  (let [coll-k (case close-type
+                 :portal :portals
+                 :prepared-stmt :prepared-statements
+                 (Object.))]
+    ;; todo if removing a portal, do I need also remove the prepared statement, or vice versa?
+    (swap! conn-state [coll-k] dissoc close-name)
+    (cmd-write-msg conn msg-close-complete)))
+
+(defn cmd-terminate
+  "Causes the connection to start closing."
+  [{:keys [conn-status]}]
+  (compare-and-set! conn-status :running :closing))
+
+(defn cmd-startup
+  "A command that negotiates startup with the client, including ssl negotiation, and sending the state of the servers
+  :server-parameters."
+  [conn]
+  (let [in @(:in conn)
+        out @(:out conn)
+        server-state (:server-state (:server conn))
+
+        {:keys [version] :as msg} (read-version in)
 
         err
         (case version
@@ -575,7 +959,7 @@
           nil)
 
         ;; tell the client ssl is unsupported if requested
-        {:keys [err, version] :as msg}
+        {:keys [err, version, msg-in]}
         (cond
           err (assoc msg :err err)
 
@@ -583,7 +967,9 @@
           (do (.writeByte out (ssl-responses :unsupported))
               ;; buggy jdbc driver fix
               (if (buggy-client-not-closed-after-ssl-unsupported-msg? in)
-                (assoc msg :err (err-protocol-violation "Took too long respond after SSL request"))
+                (do
+                  (cmd-terminate conn)
+                  (assoc msg :err (err-protocol-violation "Took too long respond after SSL request")))
                 ;; re-read version
                 (read-version in)))
 
@@ -595,113 +981,466 @@
           (= :gssenc version) (err-protocol-violation "GSSAPI is not supported")
           (not= :30 version) (err-protocol-violation "Unknown protocol version"))]
 
-    (assoc msg :err err)))
-
-(defn- pg-establish-connection [{:keys [parameters] :as session} ^DataInputStream in ^DataOutputStream out]
-  (let [{version-err :err
-         msg-in :msg-in}
-        (negotiate-version in out)
-
-        err version-err
-
-        startup-msg
-        (when-not err
-          (read-startup-parameters msg-in))
-
-        err
-        (when-not startup-msg
-          (or err (err-protocol-violation "Did not receive parameters")))]
 
     (when-not err
-      (send-authentication-ok out)
-      (doseq [[k v] parameters]
-        (send-parameter-status out k v))
-      (send-ready-for-query out :idle))
+      (cmd-write-msg conn msg-auth {:result 0})
+      (doseq [[k v] (:parameters @server-state)]
+        (cmd-write-msg conn msg-parameter-status {:parameter k, :value v}))
+      (cmd-send-ready conn :idle)
 
-    {:err err
-     :session (update session :parameters merge (:pgwire.startup-message/parameters startup-msg))}))
+      (let [{:keys [startup-parameters]} (read-startup-parameters msg-in)]
+        (doseq [[k v] startup-parameters]
+          (set-session-parameter conn k v))))
 
-(defn- pg-conn [server ^Socket socket]
-  (try
-    (with-open [in (DataInputStream. (.getInputStream socket))
-                out (DataOutputStream. (.getOutputStream socket))]
-      (let [session (with-meta
-                      {:parameters (:parameters server)
-                       :prepared-statements {}
-                       :portals {}}
-                      {:node (:node server)})
-            {:keys [session err]} (pg-establish-connection session in out)]
-        (if err
-          (do (send-error-response out err)
-              (util/try-close socket))
-          (pg-message-exchange session socket in out))))
-    (catch Throwable t
-      #_(prn t)
-      (throw t))))
+    (when err
+      (cmd-send-error conn err)
+      (cmd-terminate conn))))
 
-(defn- pg-accept [{:keys [^ServerSocket server-socket ^ExecutorService pool] :as server}]
-  (while (not (.isClosed server-socket))
-    (try
-      (let [socket (.accept server-socket)]
+(defn cmd-exec-query
+  "Given a statement of type :query will execute it against the servers :node and send the results."
+  [{:keys [server] :as conn}
+   {:keys [ast
+           query
+           transformed-query
+           arg-types
+           params
+           param-format
+           _result-format]}]
+  (let [node (:node server)
+
+        xtify-param
+        (fn [param-idx param]
+          (let [_param-oid (nth arg-types param-idx nil)
+                param-format (nth param-format param-idx nil)
+                param-format (or param-format (nth param-format param-idx :text))
+
+                parsed (case param-format
+                         :text (String. ^bytes param StandardCharsets/UTF_8)
+                         (throw (Exception. "Binary encoded parameters not implemented yet")))]
+            parsed))
+
+        xt-params (vec (map-indexed xtify-param params))
+
+        projection (mapv keyword (query-projection ast))
+
+        ;; todo result format
+
+        jsonfn (comp utf8 json-str)
+        tuplefn (if (seq projection) (apply juxt (map (partial comp jsonfn) projection)) (constantly []))
+        [err rows]
         (try
-          (.setTcpNoDelay socket true)
-          (.submit pool ^Runnable #(pg-conn server socket))
-          (catch Throwable t
-            (util/try-close socket)
-            (throw t))))
-      (catch IOException e
-        (when-not (.isClosed server-socket)
-          (throw e))))))
+          [nil (c2/sql-query node transformed-query (if (seq xt-params) {:? xt-params} {}))]
+          (catch Throwable e
+            [(err-internal e)]))]
+    (if err
+      (cmd-send-error conn err)
+      (do
+        (doseq [row rows]
+          (cmd-write-msg conn msg-data-row {:vals (tuplefn row)}))
+        (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " (count rows))})))))
 
-(defrecord PgWireServer [node ^ServerSocket server-socket ^ExecutorService pool parameters]
-  Closeable
-  (close [_]
-    (util/shutdown-pool pool)
-    (util/try-close server-socket)))
+(defn- cmd-send-row-description [conn cols]
+  (let [defaults {:column-name ""
+                  :table-oid 0
+                  :column-attribute-number 0
+                  :column-oid oid-json
+                  :data-type-size -1
+                  :type-modifier -1
+                  :format-code :text}
+        apply-defaults
+        (fn [col]
+          (if (map? col)
+            (merge defaults col)
+            (assoc defaults :column-name col)))
+        data {:columns (mapv apply-defaults cols)}]
+    (cmd-write-msg conn msg-row-description data)))
 
-(defn ->pg-wire-server ^core2.sql.pgwire.PgWireServer [node {:keys [server-parameters ^long port ^long num-threads]}]
-  (let [server-socket (ServerSocket. port)
-        pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
-        server (->PgWireServer node server-socket pool server-parameters)]
-    (doto (Thread. #(pg-accept server))
-      (.start))
-    server))
+(defn cmd-describe-canned-response [conn canned-response]
+  (let [{:keys [cols]} canned-response]
+    (cmd-send-row-description conn cols)))
+
+(defn cmd-describe-query [conn ast]
+  (cmd-send-row-description conn (query-projection ast)))
+
+(defn cmd-describe
+  "Sends description messages (e.g msg-row-description) to the client for a prepared statement or portal."
+  [{:keys [conn-state] :as conn} {:keys [describe-type, describe-name] :as msg}]
+  (let [coll-k (case describe-type
+                 :portal :portals
+                 :prepared-stmt :prepared-statements
+                 (Object.))
+        {:keys [statement-type
+                ast
+                canned-response] :as stmt}
+        (get-in @conn-state [coll-k describe-name])]
+
+    (when (= :prepared-statements describe-type)
+      ;; todo send param desc
+      )
+
+    (case statement-type
+      :empty-query (cmd-write-msg conn msg-no-data)
+      :canned-response (cmd-describe-canned-response conn canned-response)
+      :set-session-parameter (cmd-write-msg conn msg-no-data)
+      :ignore (cmd-write-msg conn msg-no-data)
+      :query (cmd-describe-query conn ast)
+      (cmd-send-error conn (err-protocol-violation "no such description possible")))))
+
+(defn cmd-exec-stmt
+  "Given some kind of statement (from interpret-sql) will execute it. For some statements, this does not mean
+  the xt node gets hit - e.g SET some_session_parameter = 42"
+  [{:keys [conn-state] :as conn}
+   {:keys [query
+           ast
+           statement-type
+           canned-response
+           parameter
+           value]
+    :as stmt}]
+
+  (when (= :simple (:protocol conn-state))
+    (case statement-type
+      :canned-response (cmd-describe-canned-response conn canned-response)
+      :query (cmd-describe-query conn ast)
+      nil))
+
+  (case statement-type
+    :empty-query (cmd-write-msg conn msg-empty-query)
+    :canned-response (cmd-write-canned-response conn canned-response)
+    :set-session-parameter (set-session-parameter conn parameter value)
+    :ignore (cmd-write-msg conn msg-command-complete {:command (statement-head query)})
+    :query (cmd-exec-query conn stmt)))
+
+(defn cmd-simple-query [conn {:keys [query conn-state]}]
+  (let [{:keys [err] :as stmt} (interpret-sql query)]
+    (swap! conn-state assoc :protocol :simple)
+    (if err
+      (cmd-send-error conn err)
+      (cmd-exec-stmt conn stmt))))
+
+(defn cmd-sync
+  "Sync commands are sent by the client to commit transactions (we do not do anything here yet),
+  and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)"
+  [{:keys [conn-state] :as conn}]
+  (swap! conn-state dissoc :skip-until-sync)
+  (cmd-send-ready conn :idle))
+
+(defn cmd-flush
+  "Flushes any pending output to the client."
+  [conn]
+  (.flush @(:out conn)))
+
+(defn cmd-enqueue-cmd
+  "Enqueues another command for execution later (puts it at the back of the :cmd-buf queue)."
+  [{:keys [conn-state]} & cmds]
+  (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
+
+(defn cmd-parse
+  "Responds to a msg-parse message that creates a prepared-statement."
+  [{:keys [conn-state
+           cid
+           server] :as conn}
+   {:keys [stmt-name
+           query
+           arg-types]}]
+  (log/debug "Parsing" {:stmt-name stmt-name,
+                        :query query
+                        :port (:port server)
+                        :cid cid})
+  (let [{:keys [err] :as stmt} (interpret-sql query)
+        stmt (assoc stmt :arg-types arg-types)
+        _ (when err (cmd-send-error conn err))
+        _ (when-not err (swap! conn-state assoc-in [:prepared-statements stmt-name] stmt))
+        _ (when-not err (cmd-write-msg conn msg-parse-complete))]))
+
+(defn cmd-bind [{:keys [conn-state] :as conn}
+                {:keys [portal-name
+                        stmt-name
+                        param-format
+                        params
+                        result-format]}]
+  (let [stmt (get-in @conn-state [:prepared-statements stmt-name])
+        _ (when-not stmt (cmd-send-error conn (err-protocol-violation "no prepared statement")))
+        _ (when stmt (swap! conn-state assoc-in [:portals portal-name]
+                            (assoc stmt :param-format param-format
+                                        :params params
+                                        :result-format result-format)))
+        _ (when stmt (cmd-write-msg conn msg-bind-complete))]))
+
+(defn cmd-execute
+  "Handles a msg-execute to run a previously bound portal (via msg-bind)."
+  [{:keys [conn-state] :as conn}
+   {:keys [portal-name
+           limit]}]
+  (if-some [stmt (get-in @conn-state [:portals portal-name])]
+    (cmd-exec-stmt conn (assoc stmt :limit limit))
+    (cmd-send-error conn (err-protocol-violation "no such portal"))))
+
+
+;; connection loop
+;; we run a blocking io server so a connection is simple a loop sitting on some thread
+
+(defn- conn-loop [conn]
+  (let [{:keys [cid, server, ^Socket socket, in, conn-status, conn-state]} conn
+        {:keys [port, server-status]} server]
+
+    (when-not (compare-and-set! conn-status :new :running)
+      (log/error "Connect loop requires a newly initialised connection" {:cid cid, :port port}))
+
+    (cmd-enqueue-cmd conn [#'cmd-startup])
+
+    (loop []
+      (cond
+        ;; the connection is closing right now
+        ;; let it close.
+        (not= :running @conn-status)
+        (->> {:port port
+              :cid cid}
+             (log/debug "Connection loop exiting (closing)"))
+
+        ;; if the server is draining, we may later allow connections to finish their queries
+        (= :draining @server-status)
+        (do (->> {:port port
+                  :cid cid}
+                 (log/debug "Connection loop exiting (draining)"))
+            (compare-and-set! conn-status :running :closing))
+
+        ;; well, it won't have been us, as we would drain first
+        (.isClosed socket)
+        (do (log/debug "Connection closed unexpectedly" {:port port, :cid cid})
+            (compare-and-set! conn-status :running :closing))
+
+        ;; we have queued a command to be processed
+        ;; a command represents something we want the server to do for the client
+        ;; such as error, or send data.
+        (seq (:cmd-buf @conn-state))
+        (let [cmd-buf (:cmd-buf @conn-state)
+              [cmd-fn & cmd-args] (peek cmd-buf)]
+          (if (seq cmd-buf)
+            (swap! conn-state assoc :cmd-buf (pop cmd-buf))
+            (swap! conn-state dissoc :cmd-buf))
+
+          (when cmd-fn
+            (->> {:port port
+                  :cid cid
+                  :cmd cmd-fn}
+                 (log/debug "Executing buffered command"))
+            (apply cmd-fn conn cmd-args))
+
+          (recur))
+
+        ;; go idle until we receive another msg from the client
+        :else
+        (let [{:keys [msg-char8, msg-in]} (read-typed-msg @in)
+              msg-var (client-msgs msg-char8)
+
+              _
+              (->> {:port port,
+                    :cid cid,
+                    :msg (or msg-var msg-char8)
+                    :char8 msg-char8}
+                   (log/debug "Read client msg"))]
+
+          ;; assume each msg is in the extended protocol
+          (swap! conn-state assoc :protocol :extended)
+
+          (when (:skip-until-sync @conn-state)
+            (if (= msg-var #'msg-sync)
+              (cmd-enqueue-cmd conn [#'cmd-sync])
+              (->> {:port port,
+                    :cid cid,
+                    :msg (or msg-var msg-char8)
+                    :char8 msg-char8}
+                   (log/warn "Skipping msg until next sync due to error in extended protocol"))))
+
+          (when-not msg-var
+            (cmd-send-error conn (err-protocol-violation "unknown client message")))
+
+          (when (and msg-var (not (:skip-until-sync @conn-state)))
+            (let [msg-data ((:read @msg-var) msg-in)]
+              (condp = msg-var
+                #'msg-simple-query (cmd-simple-query conn msg-data)
+                #'msg-terminate (cmd-terminate conn)
+                #'msg-close (cmd-close conn msg-data)
+                #'msg-parse (cmd-parse conn msg-data)
+                #'msg-bind (cmd-bind conn msg-data)
+                #'msg-sync (cmd-sync conn)
+                #'msg-execute (cmd-execute conn msg-data)
+                #'msg-describe (cmd-describe conn msg-data)
+                #'msg-flush (cmd-flush conn)
+
+                ;; ignored by xt
+                #'msg-password nil
+
+                (cmd-send-error conn (err-protocol-violation "unknown client message")))))
+
+          (recur))))))
+
+(defn- connect
+  "Starts and runs a connection on the current thread until it closes.
+
+  The connection exiting for any reason (either because the connection, received a close signal, or the server is draining, or unexpected error) should result in connection resources being
+  freed at the end of this function. So the connections lifecycle should be totally enclosed over the lifetime of a connect call.
+
+  See comment 'Connection lifecycle'."
+  [server conn-socket]
+  (let [{:keys [node, server-state, port]} server
+        cid (:next-cid (swap! server-state update :next-cid (fnil inc 0)))
+        in (delay (DataInputStream. (.getInputStream conn-socket)))
+        out (delay (DataOutputStream. (.getOutputStream conn-socket)))
+        conn-status (atom :new)
+        conn-state (atom {})
+        conn
+        (map->Connection
+          {:server server,
+           :node node,
+           :socket conn-socket,
+           :cid cid,
+           :conn-status conn-status
+           :conn-state conn-state
+           :in in
+           :out out})]
+
+    ;; first try and initialise the connection
+    (try
+      ;; try make in/out
+      @in
+      @out
+
+      ;; registering the connection in allows us to address it from the server
+      ;; important for shutdowns.
+      (let [conn-in-map (-> (swap! server-state update-in [:connections cid] (fn [e] (or e conn)))
+                            (get-in [:connections cid]))]
+        (when-not (identical? conn-in-map conn)
+          (compare-and-set! conn-status :new :error-on-start)))
+
+      (catch Throwable e
+        (compare-and-set! conn-status :new :error-on-start)
+        (log/error e "An exception was caught on connection start" {:port port, :cid cid})))
+
+    ;; if we succeeded, start the conn loop
+    (when (= :new @conn-status)
+      (try
+        (log/debug "Starting connection loop" {:port port, :cid cid})
+        (conn-loop conn)
+        (catch EOFException _
+          (log/debug "Connection closed by client" {:port port, :cid cid}))
+        (catch Throwable e
+          (log/error e "An exception was caught during connection" {:port port, :cid cid}))))
+
+    ;; right now we'll deregister and cleanup regardless, but later we may
+    ;; want to leave conns around for a bit, so you can look at their state and debug
+    (cleanup-connection-resources conn)
+    (->> (fn [conns]
+           (if (identical? conn (get conns cid))
+             (dissoc conns cid)
+             conns))
+         (swap! server-state update-in [:connections]))
+
+    (log/debug "Connection ended" {:cid cid, :port port})))
+
+(defn- accept-loop
+  "Runs an accept loop on the current thread (intended to be the Server's :accept-thread).
+
+  While the server is running, tries to .accept connections on its :accept-socket. Once accepted,
+  a connection is created on the servers :thread-pool via the (connect) function."
+  [server]
+  (let [{:keys [^ServerSocket accept-socket,
+                server-status,
+                ^ExecutorService thread-pool,
+                port]} server]
+    (when-not (compare-and-set! server-status :starting :running)
+      (throw (Exception. "Accept loop requires a newly initialised server")))
+
+    (log/debug "Pgwire server listening on" port)
+
+    (try
+      (loop []
+        (cond
+          (.isClosed @accept-socket) nil
+
+          (= :running @server-status)
+          (do
+            (try
+              (let [conn-socket (.accept @accept-socket)]
+                (.setTcpNoDelay conn-socket true)
+                (if (= :running @server-status)
+                  ;; todo fix buffer on tp? q gonna be infinite right now
+                  (.submit thread-pool ^Runnable (fn [] (connect server conn-socket)))
+                  (.close conn-socket)))
+              (catch SocketException e
+                (when (not= "Socket closed" (.getMessage e))
+                  (log/warn e "Accept socket exception" {:port port})))
+              (catch IOException e
+                (log/warn e "Accept IO exception" {:port port}))
+              (catch SocketTimeoutException e
+                (log/warn e "Accept timeout" {:port port})))
+            (recur))
+
+          :else nil))
+      ;; should already be stopping
+      (catch InterruptedException _)
+      ;; for the unknowns, do not stop - leave in an error state
+      ;; so it can be inspected.
+      (catch Throwable e
+        (compare-and-set! server-status :running :error)
+        (log/error e "Exception caught on accept thread" {:port port})))))
+
+(defn- create-server [{:keys [node, port, num-threads]}]
+  (assert node ":node is required")
+  (let [self (atom nil)]
+    (->> (map->Server
+           {:port port
+            :node node
+            :accept-socket (delay (ServerSocket. port))
+            :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self)) (str "pgwire-server-accept-" port))
+            :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
+            :server-status (atom :new)
+            :server-state (atom {:parameters {"server_version" "14"
+                                              "server_encoding" "UTF8"
+                                              "client_encoding" "UTF8"
+                                              "TimeZone" "UTC"}})})
+         (reset! self))))
+
+(defn serve
+  "Creates and starts a pgwire server.
+
+  Options:
+
+  :port (default 5432)
+  :num-threads (bounds the number of client connections, default 42)
+
+  Returns the opaque server object.
+
+  Stop with .close (its Closeable)
+
+  It will be addressable in an emergency by port with (get @#'pgwire/servers port).
+  OR nuke everything with (stop-all)."
+  [node & {:as opts}]
+  (let [defaults {:port 5432
+                  :num-threads 42}
+        cfg (assoc (merge defaults opts) :node node)]
+    (doto (create-server cfg)
+      start-server)))
+
+(defn stop-all
+  "Stops all running pgwire servers (from orbit, its the only way to be sure)."
+  []
+  (run! stop-server (vec (.values servers))))
 
 (comment
 
   ;; pre-req
   (do
     (require '[juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
+    (require 'dev)
 
-    (defonce server nil)
+    (dev/go)
 
-    (defn stop-server []
-      (when server
-        (run! util/try-close ((juxt :server :node) server))
-        (println "Server stopped")
-        (alter-var-root #'server (constantly nil))))
-
-    (defn start-server
-      ([] (start-server 5432))
-      ([port]
-       (stop-server)
-       (let [node (node/start-node {})
-             server (->pg-wire-server node
-                                      {:server-parameters {"server_version" "14"
-                                                           "server_encoding" "UTF8"
-                                                           "client_encoding" "UTF8"
-                                                           "TimeZone" "UTC"}
-                                       :port port
-                                       :num-threads 16})
-             srv {:port port
-                  :node node
-                  :server server}]
-         (println "Listening on" port)
-         (alter-var-root #'server (constantly srv))
-         srv)))
+    (def server (or (.get servers 5432) (serve dev/node {:port 5432})))
 
     (defn i [& rows]
-      (assert (:node server) "No running pgwire, try (start-server)!")
+      (assert (:node server) "No running pgwire!")
       (->> (for [row rows
                  :let [auto-id (str "pgwire-" (random-uuid))]]
              [:put (merge {:_id auto-id} row)])
@@ -713,18 +1452,21 @@
         (json/read-str (str o))
         o))
 
-    (defn q [s]
+    (defn try-connect []
       (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
-        (mapv #(update-vals % read-xtdb) (jdbc/execute! c [s]))))
-    )
+        :ok))
 
+    (defn q [sql]
+      (with-open [c (jdbc/get-connection "jdbc:postgresql://:5432/test?user=test&password=test")]
+        (mapv #(update-vals % read-xtdb) (jdbc/execute! c (if (vector? sql) sql [sql])))))
+    )
   ;; eval for setup ^
 
   server
 
-  (start-server 5432)
+  (.close server)
 
-  (stop-server)
+  (def server (serve dev/node {:port 5432}))
 
   ;; insert something, be aware as we haven't set an :_id, it will keep creating rows each time it is evaluated!
   (i {:user "wot", :bio "Hello, world", :age 34})

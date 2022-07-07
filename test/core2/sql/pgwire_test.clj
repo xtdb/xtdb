@@ -20,17 +20,7 @@
   (binding [*port* (tu/free-port)]
     (with-open [node (node/start-node {})
                 ;; as Object to avoid .close cast crash on redef due to inconsistent type hint (macros!)
-                ^Object _
-                (->> {:server-parameters {"server_version" "14"
-                                          "server_encoding" "UTF8"
-                                          "client_encoding" "UTF8"
-                                          "TimeZone" "UTC"}
-                      :port *port*
-                      ;; very important we use 1 thread
-                      ;; it allows us to test server conn close
-                      ;; behaviour
-                      :num-threads 1}
-                     (pgwire/->pg-wire-server node))]
+                ^Object _ (pgwire/serve node {:port *port*, :num-threads 1})]
       (f))))
 
 (t/use-fixtures :each #'each-fixture)
@@ -96,6 +86,14 @@
 (deftest prepared-query-test
   (with-open [conn (jdbc-conn)]
     (with-open [stmt (.prepareStatement conn "SELECT a.a FROM (VALUES ('hello, world')) a (a)")
+                rs (.executeQuery stmt)]
+      (is (= true (.next rs)))
+      (is (= false (.next rs))))))
+
+(deftest parameterized-query-test
+  (with-open [conn (jdbc-conn)]
+    (with-open [stmt (doto (.prepareStatement conn "SELECT a.a FROM (VALUES (?)) a (a)")
+                       (.setObject 1 "hello, world"))
                 rs (.executeQuery stmt)]
       (is (= true (.next rs)))
       (is (= false (.next rs))))))
