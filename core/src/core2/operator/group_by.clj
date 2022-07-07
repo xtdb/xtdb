@@ -85,7 +85,7 @@
     (if-let [group-col-names (not-empty (set (keys group-col-types)))]
       (GroupMapper. group-col-names
                     (emap/->relation-map allocator {:build-col-types group-col-types
-                                                    :build-key-col-names group-col-names
+                                                    :build-key-col-names (vec group-col-names)
                                                     :nil-keys-equal? true})
                     gm-vec)
       (NullGroupMapper. gm-vec))))
@@ -429,8 +429,8 @@
               (dotimes [idx (.getValueCount in-vec)]
                 (let [group-idx (.get group-mapping idx)]
                   (while (<= (.size rel-maps) group-idx)
-                    (.add rel-maps (emap/->relation-map al {:build-col-types {from-name from-type}
-                                                            :build-key-col-names #{from-name}})))
+                    (.add rel-maps (emap/->relation-map al {:build-col-types [from-name from-type]
+                                                            :build-key-col-names [from-name]})))
                   (let [^IRelationMap rel-map (nth rel-maps group-idx)]
                     (while (<= (.size builders) group-idx)
                       (.add builders nil))

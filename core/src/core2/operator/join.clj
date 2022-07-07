@@ -149,7 +149,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^core2.vector.IIndirectRelation probe-phase
-  (fn [join-type allocator probe-rel rel-map matched-build-idxs theta-selector params]
+  (fn [join-type probe-rel rel-map matched-build-idxs]
     join-type))
 
 (defn- probe-inner-join-select
@@ -158,7 +158,7 @@
   The selections represent matched rows in both underlying relations.
 
   The selections will have the same size."
-  [^IIndirectRelation probe-rel ^IRelationMap rel-map ]
+  [^IIndirectRelation probe-rel ^IRelationMap rel-map]
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
         matching-build-idxs (IntStream/builder)
         matching-probe-idxs (IntStream/builder)]
@@ -181,70 +181,37 @@
     (iv/->indirect-rel (concat (iv/select built-rel build-sel)
                                (iv/select probe-rel probe-sel)))))
 
-(defn- distinct-selection [^ints sel]
-  (.toArray (RoaringBitmap/bitmapOf sel)))
-
 (defn- probe-semi-join-select
   "Returns a single selection of the probe relation, that represents matches for a semi-join."
-  ^ints [^IIndirectRelation probe-rel
-         ^IRelationMap rel-map
-         ^BufferAllocator allocator
-         ^IRelationSelector theta-selector
-         params]
+  ^ints [^IIndirectRelation probe-rel, ^IRelationMap rel-map]
   (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
-        probe-semi-sel (let [matching-probe-idxs (IntStream/builder)]
-                         (dotimes [probe-idx (.rowCount probe-rel)]
-                           (when-not (neg? (.indexOf rel-map-prober probe-idx))
-                             (.add matching-probe-idxs probe-idx)))
-                         (.toArray (.build matching-probe-idxs)))]
-    (if (nil? theta-selector)
-      probe-semi-sel
-
-      (let [probe-filtered-rel (iv/select probe-rel probe-semi-sel)
-            [probe-join-sel _build-join-sel :as sel-pair] (probe-inner-join-select probe-filtered-rel rel-map)
-
-            theta-base-rel (join-rels probe-filtered-rel rel-map sel-pair)
-            theta-sel (.select theta-selector allocator theta-base-rel params)]
-        (-> (reduce iv/compose-selection [probe-semi-sel probe-join-sel theta-sel])
-            (distinct-selection))))))
+        matching-probe-idxs (IntStream/builder)]
+    (dotimes [probe-idx (.rowCount probe-rel)]
+      (when-not (neg? (.indexOf rel-map-prober probe-idx))
+        (.add matching-probe-idxs probe-idx)))
+    (.toArray (.build matching-probe-idxs))))
 
 (defmethod probe-phase ::inner-join
   [_join-type
-   ^BufferAllocator allocator
    ^IIndirectRelation probe-rel
    ^IRelationMap rel-map
-   _matched-build-idxs
-   ^IRelationSelector theta-selector
-   params]
-  (let [joined-rel (join-rels probe-rel rel-map (probe-inner-join-select probe-rel rel-map))
-        theta-sel (when theta-selector (.select theta-selector allocator joined-rel params))]
-    (cond-> joined-rel theta-sel (iv/select theta-sel))))
+   _matched-build-idxs]
+  (join-rels probe-rel rel-map (probe-inner-join-select probe-rel rel-map)))
 
 (defmethod probe-phase ::semi-join
   [_join-type
-   ^BufferAllocator allocator
    ^IIndirectRelation probe-rel
    ^IRelationMap rel-map
-   _matched-build-idxs
-   ^IRelationSelector theta-selector
-   params]
-  (iv/select probe-rel (probe-semi-join-select probe-rel rel-map allocator theta-selector params)))
+   _matched-build-idxs]
+  (iv/select probe-rel (probe-semi-join-select probe-rel rel-map)))
 
 (defmethod probe-phase ::anti-semi-join
-  [_join-type
-   ^BufferAllocator allocator
-   ^IIndirectRelation probe-rel
-   ^IRelationMap rel-map
-   _matched-build-idxs
-   ^IRelationSelector theta-selector
-   params]
-  (let [anti-stream (IntStream/builder)
-        semi-bitmap (doto (MutableRoaringBitmap.) (.add (probe-semi-join-select probe-rel rel-map allocator theta-selector params)))
-        anti-sel (do (dotimes [idx (.rowCount ^IIndirectRelation probe-rel)]
-                       (when-not (.contains semi-bitmap idx)
-                         (.add anti-stream idx)))
-                     (.toArray (.build anti-stream)))]
-    (iv/select probe-rel anti-sel)))
+  [_join-type, ^IIndirectRelation probe-rel, ^IRelationMap rel-map, _matched-build-idxs]
+  (iv/select probe-rel
+             (-> (doto (MutableRoaringBitmap.)
+                   (.add (probe-semi-join-select probe-rel rel-map))
+                   (.flip (int 0) (.rowCount ^IIndirectRelation probe-rel)))
+                 (.toArray))))
 
 (defn- int-array-concat
   ^ints [^ints arr1 ^ints arr2]
@@ -253,21 +220,12 @@
     (System/arraycopy arr2 0 ret-arr (alength arr1) (alength arr2))
     ret-arr))
 
-(defn- probe-outer-join-select [^IIndirectRelation probe-rel, rel-map
-                                ^BufferAllocator allocator
-                                ^RoaringBitmap matched-build-idxs
-                                ^IRelationSelector theta-selector
-                                params]
-  (let [[probe-sel build-sel :as selection-pair] (probe-inner-join-select probe-rel rel-map)
-        inner-join-rel (join-rels probe-rel rel-map selection-pair)
+(defn- probe-outer-join-select [^IIndirectRelation probe-rel, rel-map, ^RoaringBitmap matched-build-idxs]
+  (let [[probe-sel build-sel] (probe-inner-join-select probe-rel rel-map)
 
-        theta-sel (when theta-selector (.select theta-selector allocator inner-join-rel params))
-        ^ints theta-probe-sel (cond-> probe-sel theta-sel (iv/compose-selection theta-sel))
-        ^ints theta-build-sel (cond-> build-sel theta-sel (iv/compose-selection theta-sel))
+        _ (when matched-build-idxs (.add matched-build-idxs ^ints build-sel))
 
-        _ (when matched-build-idxs (.add matched-build-idxs ^ints theta-build-sel))
-
-        probe-bm (RoaringBitmap/bitmapOf theta-probe-sel)
+        probe-bm (RoaringBitmap/bitmapOf probe-sel)
         probe-int-stream (IntStream/builder)
         build-int-stream (IntStream/builder)
 
@@ -279,8 +237,8 @@
         extra-probe-sel (.toArray (.build probe-int-stream))
         extra-build-sel (.toArray (.build build-int-stream))
 
-        full-probe-sel (int-array-concat theta-probe-sel extra-probe-sel)
-        full-build-sel (int-array-concat theta-build-sel extra-build-sel)]
+        full-probe-sel (int-array-concat probe-sel extra-probe-sel)
+        full-build-sel (int-array-concat build-sel extra-build-sel)]
 
     [full-probe-sel full-build-sel]))
 
@@ -289,22 +247,17 @@
 
 (defmethod probe-phase ::outer-join
   [_join-type
-   ^BufferAllocator allocator
    ^IIndirectRelation probe-rel
    ^IRelationMap rel-map
-   ^RoaringBitmap matched-build-idxs
-   ^IRelationSelector theta-selector
-   params]
-  (->> (probe-outer-join-select probe-rel rel-map allocator matched-build-idxs theta-selector params)
+   ^RoaringBitmap matched-build-idxs]
+  (->> (probe-outer-join-select probe-rel rel-map matched-build-idxs)
        (join-rels probe-rel rel-map)))
 
 (deftype JoinCursor [^BufferAllocator allocator, ^ICursor build-cursor, ^ICursor probe-cursor
                      ^IRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
                      pushdown-blooms
-                     join-type
-                     ^IRelationSelector theta-selector
-                     params]
+                     join-type]
   ICursor
   (tryAdvance [_ c]
     (.forEachRemaining build-cursor
@@ -322,7 +275,7 @@
                                          (reify Consumer
                                            (accept [_ probe-rel]
                                              (when (pos? (.rowCount ^IIndirectRelation probe-rel))
-                                               (with-open [out-rel (-> (probe-phase join-type allocator probe-rel rel-map matched-build-idxs theta-selector params)
+                                               (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs)
                                                                        (iv/copy allocator))]
                                                  (when (pos? (.rowCount out-rel))
                                                    (aset advanced? 0 true)
@@ -379,10 +332,8 @@
 
             {equis :equi-condition, thetas :pred-expr} (group-by first condition)
 
-            theta-selector (when-let [theta-exprs (seq (map second thetas))]
-                             (let [col-types (merge-with types/merge-col-types left-col-types right-col-types)]
-                               (expr/->expression-relation-selector (list* 'and theta-exprs)
-                                                                    {:col-types col-types, :param-types param-types})))
+            theta-expr (when-let [theta-exprs (seq (map second thetas))]
+                         (list* 'and theta-exprs))
 
             equi-specs (->> (vals equis)
                             (into [] (map-indexed (fn [idx condition]
@@ -400,7 +351,7 @@
                                              :left-key-col-names (mapv (comp :key-col-name :left) equi-specs)
                                              :right-col-types (projection-specs->col-types right-projections)
                                              :right-key-col-names (mapv (comp :key-col-name :right) equi-specs)
-                                             :theta-selector theta-selector})
+                                             :theta-expr theta-expr})
 
             project-away-specs (->> (set/intersection (set (keys col-types)) original-col-names)
                                     (mapv #(project/->identity-projection-spec % (get col-types %))))]
@@ -414,9 +365,9 @@
 
                        (project/->project-cursor opts join-cursor project-away-specs)))}))))
 
-(defmethod lp/emit-expr :join [join-expr args]
+(defmethod lp/emit-expr :join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
-    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-selector]}]
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
       {:col-types (merge-with types/merge-col-types left-col-types right-col-types)
        :->cursor (fn [{:keys [allocator params]} left-cursor right-cursor]
                    (JoinCursor. allocator left-cursor right-cursor
@@ -424,20 +375,21 @@
                                                                 :build-key-col-names left-key-col-names
                                                                 :probe-col-types right-col-types
                                                                 :probe-key-col-names right-key-col-names
-                                                                :store-full-build-rel? true})
+                                                                :store-full-build-rel? true
+                                                                :theta-expr theta-expr
+                                                                :param-types param-types
+                                                                :params params})
                                 nil
                                 (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
-                                ::inner-join
-                                theta-selector
-                                params))})))
+                                ::inner-join))})))
 
 (defn- with-nullable-cols [col-types]
   (->> col-types
        (into {} (map (juxt key (comp #(types/merge-col-types % :null) val))))))
 
-(defmethod lp/emit-expr :left-outer-join [join-expr args]
+(defmethod lp/emit-expr :left-outer-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
-    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-selector]}]
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
       {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
                    (JoinCursor. allocator right-cursor left-cursor
@@ -446,16 +398,17 @@
                                                                 :probe-col-types left-col-types
                                                                 :probe-key-col-names left-key-col-names
                                                                 :store-full-build-rel? true
-                                                                :with-nil-row? true})
+                                                                :with-nil-row? true
+                                                                :theta-expr theta-expr
+                                                                :param-types param-types
+                                                                :params params})
                                 nil
                                 (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
-                                ::left-outer-join
-                                theta-selector
-                                params))})))
+                                ::left-outer-join))})))
 
-(defmethod lp/emit-expr :full-outer-join [join-expr args]
+(defmethod lp/emit-expr :full-outer-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
-    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-selector]}]
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
       {:col-types (merge-with types/merge-col-types (-> left-col-types with-nullable-cols) (-> right-col-types with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
                    (JoinCursor. allocator left-cursor right-cursor
@@ -464,16 +417,17 @@
                                                                 :probe-col-types right-col-types
                                                                 :probe-key-col-names right-key-col-names
                                                                 :store-full-build-rel? true
-                                                                :with-nil-row? true})
+                                                                :with-nil-row? true
+                                                                :theta-expr theta-expr
+                                                                :param-types param-types
+                                                                :params params})
                                 (RoaringBitmap.)
                                 (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
-                                ::full-outer-join
-                                theta-selector
-                                params))})))
+                                ::full-outer-join))})))
 
-(defmethod lp/emit-expr :semi-join [join-expr args]
+(defmethod lp/emit-expr :semi-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
-    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-selector]}]
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
       {:col-types left-col-types
        :->cursor (fn [{:keys [allocator params]} left-cursor right-cursor]
                    (JoinCursor. allocator right-cursor left-cursor
@@ -481,16 +435,17 @@
                                                                 :build-key-col-names right-key-col-names
                                                                 :probe-col-types left-col-types
                                                                 :probe-key-col-names left-key-col-names
-                                                                :store-full-build-rel? true})
+                                                                :store-full-build-rel? true
+                                                                :theta-expr theta-expr
+                                                                :param-types param-types
+                                                                :params params})
                                 nil
                                 (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
-                                ::semi-join
-                                theta-selector
-                                params))})))
+                                ::semi-join))})))
 
-(defmethod lp/emit-expr :anti-join [join-expr args]
+(defmethod lp/emit-expr :anti-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
-    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-selector]}]
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
       {:col-types left-col-types
        :->cursor (fn [{:keys [allocator params]} left-cursor right-cursor]
                    (JoinCursor. allocator right-cursor left-cursor
@@ -498,9 +453,10 @@
                                                                 :build-key-col-names right-key-col-names
                                                                 :probe-col-types left-col-types
                                                                 :probe-key-col-names left-key-col-names
-                                                                :store-full-build-rel? true})
+                                                                :store-full-build-rel? true
+                                                                :theta-expr theta-expr
+                                                                :param-types param-types
+                                                                :params params})
                                 nil
                                 (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
-                                ::anti-semi-join
-                                theta-selector
-                                params))})))
+                                ::anti-semi-join))})))

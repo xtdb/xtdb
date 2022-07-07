@@ -161,7 +161,7 @@
 
   (t/is (= [{:a 1, :n 0}, {:a 2, :n 1}]
            (op/query-ra '[:group-by [a {n (count b)}]
-                          [::tu/blocks {a :i64, b [:union #{:null :i64}]}
+                          [::tu/blocks
                            [[{:a 1, :b nil}
                              {:a 2, :b 1}
                              {:a 2, :b nil}]]]])))

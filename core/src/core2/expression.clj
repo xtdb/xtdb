@@ -310,8 +310,8 @@
 
     emitted-expr))
 
-(defmethod codegen-expr :variable [{:keys [variable idx extract-vec-from-rel?],
-                                    :or {idx idx-sym, extract-vec-from-rel? true}}
+(defmethod codegen-expr :variable [{:keys [variable rel idx extract-vec-from-rel?],
+                                    :or {rel rel-sym, idx idx-sym, extract-vec-from-rel? true}}
                                    {:keys [var->col-type extract-vecs-from-rel?]
                                     :or {extract-vecs-from-rel? true}}]
   ;; NOTE we now get the widest var-type in the expr itself, but don't use it here (yet? at all?)
@@ -325,7 +325,7 @@
       (let [ordered-col-types (vec inner-types)]
         {:return-type col-type
          :batch-bindings (if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                           [[variable `(.polyReader (.vectorForName ~rel-sym ~(name variable))
+                           [[variable `(.polyReader (.vectorForName ~rel ~(name variable))
                                                     ~ordered-col-types)]]
                            [[variable `(some-> ~variable (.polyReader ~ordered-col-types))]])
          :continue (fn [f]
@@ -338,7 +338,7 @@
 
       {:return-type col-type
        :batch-bindings (if (and extract-vecs-from-rel? extract-vec-from-rel?)
-                         [[variable `(.monoReader (.vectorForName ~rel-sym ~(name variable)))]]
+                         [[variable `(.monoReader (.vectorForName ~rel ~(name variable)))]]
                          [[variable `(some-> ~variable (.monoReader))]])
        :continue (fn [f]
                    (f col-type (read-value-code col-type variable idx)))})))

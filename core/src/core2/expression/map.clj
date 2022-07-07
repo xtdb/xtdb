@@ -1,11 +1,12 @@
 (ns core2.expression.map
   (:require [core2.expression :as expr]
+            [core2.expression.walk :as ewalk]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector :as vec]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw])
-  (:import (core2.vector IIndirectVector IVectorWriter)
+  (:import (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            io.netty.util.collection.IntObjectHashMap
            (java.lang AutoCloseable)
            java.util.List
@@ -74,25 +75,22 @@
        (and (.test p1 l r)
             (.test p2 l r))))))
 
+(def ^:private left-rel (gensym 'left-rel))
+(def ^:private left-vec (gensym 'left-vec))
+(def ^:private left-idx (gensym 'left-idx))
+
+(def ^:private right-rel (gensym 'right-rel))
+(def ^:private right-vec (gensym 'right-vec))
+(def ^:private right-idx (gensym 'right-idx))
+
 (def build-comparator
-  (-> (fn [left-col-type right-col-type nil-equal]
-        (let [left-vec (gensym 'left-vec)
-              left-idx (gensym 'left-idx)
-              right-vec (gensym 'right-vec)
-              right-idx (gensym 'right-idx)
-              eq-fn (if nil-equal :null-eq :=)
+  (-> (fn [expr input-opts]
+        (let [{:keys [continue], :as emitted-expr}
+              (expr/codegen-expr expr input-opts)]
 
-              {:keys [continue], :as emitted-expr}
-              (expr/codegen-expr {:op :call, :f :boolean
-                                  :args [{:op :call, :f eq-fn
-                                          :args [{:op :variable, :variable left-vec, :idx left-idx}
-                                                 {:op :variable, :variable right-vec, :idx right-idx}]}]}
-                                 {:var->col-type {left-vec left-col-type
-                                                  right-vec right-col-type}
-                                  :extract-vecs-from-rel? false})]
-
-          (-> `(fn [~(expr/with-tag left-vec IIndirectVector)
-                    ~(expr/with-tag right-vec IIndirectVector)]
+          (-> `(fn [~(expr/with-tag left-rel IIndirectRelation)
+                    ~(expr/with-tag right-rel IIndirectRelation)
+                    ~expr/params-sym]
                  (let [~@(expr/batch-bindings emitted-expr)]
                    (reify IntIntPredicate
                      (~'test [_# ~left-idx ~right-idx]
@@ -102,15 +100,33 @@
               (eval))))
       (util/lru-memoize)))
 
-(defn- ->comparator ^core2.expression.map.IntIntPredicate [left-cols right-cols nil-equal]
-  (->> (map (fn [^IIndirectVector left-col, ^IIndirectVector right-col]
-              (let [left-col-type (types/field->col-type (.getField (.getVector left-col)))
-                    right-col-type (types/field->col-type (.getField (.getVector right-col)))
-                    f (build-comparator left-col-type right-col-type nil-equal)]
-                (f left-col right-col)))
-            left-cols
-            right-cols)
-       (reduce andIIP)))
+(defn- ->equi-comparator [^IIndirectVector left-col, ^IIndirectVector right-col, params
+                          {:keys [nil-keys-equal? param-types]}]
+  (let [f (build-comparator {:op :call, :f :boolean
+                             :args [{:op :call, :f (if nil-keys-equal? :null-eq :=)
+                                     :args [{:op :variable, :variable left-vec, :rel left-rel, :idx left-idx}
+                                            {:op :variable, :variable right-vec, :rel right-rel, :idx right-idx}]}]}
+                            {:var->col-type {left-vec (types/field->col-type (.getField (.getVector left-col)))
+                                             right-vec (types/field->col-type (.getField (.getVector right-col)))}
+                             :param-types param-types})]
+    (f (iv/->indirect-rel [(.withName left-col (name left-vec))])
+       (iv/->indirect-rel [(.withName right-col (name right-vec))])
+       params)))
+
+(defn- ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-col-types probe-col-types param-types]}]
+  (let [col-types (merge build-col-types probe-col-types)
+        f (build-comparator {:op :call, :f :boolean
+                             :args [(->> (expr/form->expr theta-expr {:col-types col-types, :param-types param-types})
+                                         (expr/prepare-expr)
+                                         (ewalk/postwalk-expr (fn [{:keys [op] :as expr}]
+                                                                (cond-> expr
+                                                                  (= op :variable)
+                                                                  (into (let [{:keys [variable]} expr]
+                                                                          (if (contains? probe-col-types variable)
+                                                                            {:rel left-rel, :idx left-idx}
+                                                                            {:rel right-rel, :idx right-idx})))))))]}
+                            {:var->col-type col-types, :param-types param-types})]
+    (f probe-rel build-rel params)))
 
 (defn- find-in-hash-bitmap ^long [^RoaringBitmap hash-bitmap, ^IntIntPredicate comparator, ^long idx]
   (if-not hash-bitmap
@@ -143,13 +159,14 @@
 (defn ->relation-map ^core2.expression.map.IRelationMap
   [^BufferAllocator allocator,
    {:keys [key-col-names store-full-build-rel?
-           build-col-types build-key-col-names
-           probe-col-types probe-key-col-names
-           with-nil-row? nil-keys-equal?]
-    :or {build-key-col-names key-col-names
-         probe-key-col-names key-col-names}}]
+           build-col-types probe-col-types
+           with-nil-row? nil-keys-equal?
+           theta-expr param-types params]
+    :as opts}]
+  (let [build-key-col-names (get opts :build-key-col-names key-col-names)
+        probe-key-col-names (get opts :probe-key-col-names key-col-names)
 
-  (let [hash->bitmap (IntObjectHashMap.)
+        hash->bitmap (IntObjectHashMap.)
         rel-writer (vw/->rel-writer allocator)]
 
     (doseq [[col-name col-type] (cond-> build-col-types
@@ -186,10 +203,23 @@
                            (->> (set build-key-col-names)
                                 (mapv #(.vectorForName in-rel (name %)))
                                 iv/->indirect-rel))
-                  in-key-cols (mapv #(.vectorForName in-rel (name %)) build-key-col-names)
-                  row-copier (.rowCopier rel-writer in-rel)
-                  comparator (->comparator in-key-cols build-key-cols nil-keys-equal?)
-                  hasher (->hasher in-key-cols)]
+
+                  in-key-cols (mapv #(.vectorForName in-rel (name %))
+                                    build-key-col-names)
+
+                  ;; NOTE: we might not need to compute `comparator` if the caller never requires `addIfNotPresent` (e.g. joins)
+                  !comparator (delay
+                                (->> (map (fn [build-col in-col]
+                                            (->equi-comparator in-col build-col params
+                                                               {:nil-keys-equal? nil-keys-equal?,
+                                                                :param-types param-types}))
+                                          build-key-cols
+                                          in-key-cols)
+                                     (reduce andIIP)))
+
+                  hasher (->hasher in-key-cols)
+
+                  row-copier (.rowCopier rel-writer in-rel)]
 
               (letfn [(add ^long [^RoaringBitmap hash-bitmap, ^long idx]
                         (let [out-idx (.copyRow row-copier idx)]
@@ -202,15 +232,34 @@
 
                   (addIfNotPresent [_ idx]
                     (let [^RoaringBitmap hash-bitmap (compute-hash-bitmap (.hashCode hasher idx))
-                          out-idx (find-in-hash-bitmap hash-bitmap comparator idx)]
+                          out-idx (find-in-hash-bitmap hash-bitmap @!comparator idx)]
                       (if-not (neg? out-idx)
                         out-idx
                         (add hash-bitmap idx))))))))
 
-          (probeFromRelation [_ probe-rel]
-            (let [in-key-cols (mapv #(.vectorForName probe-rel (name %)) probe-key-col-names)
-                  comparator (->comparator in-key-cols build-key-cols nil-keys-equal?)
-                  hasher (->hasher in-key-cols)]
+          (probeFromRelation [this probe-rel]
+            (let [build-rel (.getBuiltRelation this)
+                  probe-key-cols (mapv #(.vectorForName probe-rel (name %))
+                                       probe-key-col-names)
+
+                  ^IntIntPredicate
+                  comparator (->> (cond-> (map (fn [build-col probe-col]
+                                                 (->equi-comparator probe-col build-col params
+                                                                    {:nil-keys-equal? nil-keys-equal?
+                                                                     :left-col-types probe-col-types
+                                                                     :right-col-types build-col-types
+                                                                     :param-types param-types}))
+                                               build-key-cols
+                                               probe-key-cols)
+
+                                    (some? theta-expr)
+                                    (conj (->theta-comparator probe-rel build-rel theta-expr params
+                                                              {:build-col-types build-col-types
+                                                               :probe-col-types probe-col-types
+                                                               :param-types param-types})))
+                                 (reduce andIIP))
+
+                  hasher (->hasher probe-key-cols)]
 
               (reify IRelationMapProber
                 (indexOf [_ idx]
