@@ -198,6 +198,74 @@
                 :res
                 (mapv frequencies)))))
 
+(t/deftest test-mark-equi-join
+  (t/is (= {:res [{{:a 12, :m true} 2, {:a 0, :m false} 1} {{:a 100, :m true} 1}]
+            :col-types '{a :i64, m [:union #{:null :bool}]}}
+           (-> (run-ra [:mark-join '{m [{a b}]}
+                        [::tu/blocks
+                         [[{:a 12}, {:a 12}, {:a 0}]
+                          [{:a 100}]]]
+                        [::tu/blocks
+                         [[{:b 12}, {:b 2}]
+                          [{:b 100}]]]])
+               (update :res (partial mapv frequencies)))))
+
+  (t/testing "empty input"
+    (t/is (= [[{:a 12, :m false}, {:a 0, :m false}]
+              [{:a 100, :m false}, {:a nil, :m false}]]
+             (:res (run-ra [:mark-join '{m [{a b}]}
+                            [::tu/blocks
+                             [[{:a 12}, {:a 0}]
+                              [{:a 100}, {:a nil}]]]
+                            [::tu/blocks '{b :i64} []]]))))
+
+    (t/is (empty? (:res (run-ra [:mark-join '{m [{a b}]}
+                                 [::tu/blocks '{a :i64} []]
+                                 [::tu/blocks
+                                  [[{:b 12}, {:b 2}]
+                                   [{:b 100} {:b 0}]]]])))))
+
+  (t/is (= [[{:a 12, :m false}, {:a 0, :m false}]
+            [{:a 100, :m false}]]
+           (:res (run-ra [:mark-join '{m [{a b}]}
+                          [::tu/blocks
+                           [[{:a 12}, {:a 0}]
+                            [{:a 100}]]]
+                          [::tu/blocks
+                           [[{:b 10 :c 1}, {:b 15 :c 2}]
+                            [{:b 83 :c 3}]]]])))
+        "no matches"))
+
+(t/deftest test-mark-join-nils
+  (t/is (= [{:a 12, :m true}, {:a 14, :m false}, {:a nil, :m nil}]
+           (op/query-ra [:mark-join '{m [{a b}]}
+                         [::tu/blocks
+                          [[{:a 12}, {:a 14}, {:a nil}]]]
+                         [::tu/blocks
+                          [[{:b 12}]]]])))
+
+  (t/is (= [{:a 12, :m true}, {:a 14, :m nil} {:a nil, :m nil}]
+           (op/query-ra [:mark-join '{m [{a b}]}
+                         [::tu/blocks
+                          [[{:a 12}, {:a 14}, {:a nil}]]]
+                         [::tu/blocks
+                          [[{:b 12}, {:b nil}]]]]))))
+
+(t/deftest test-mark-join-theta
+  (t/is (= [{:a 12, :m true}, {:a 14, :m true}, {:a nil, :m nil}]
+           (op/query-ra [:mark-join '{m [(>= a b)]}
+                         [::tu/blocks
+                          [[{:a 12}, {:a 14}, {:a nil}]]]
+                         [::tu/blocks
+                          [[{:b 12}]]]])))
+
+  (t/is (= [{:a 12, :m nil}, {:a 14, :m true} {:a nil, :m nil}]
+           (op/query-ra [:mark-join '{m [(> a b)]}
+                         [::tu/blocks
+                          [[{:a 12}, {:a 14}, {:a nil}]]]
+                         [::tu/blocks
+                          [[{:b 12}, {:b nil}]]]]))))
+
 (t/deftest test-left-equi-join
   (t/is (= {:res [{{:a 12, :b 12, :c 2} 1, {:a 12, :b 12, :c 0} 1, {:a 0, :b nil, :c nil} 1}
                   {{:a 12, :b 12, :c 2} 1, {:a 100, :b 100, :c 3} 1, {:a 12, :b 12, :c 0} 1}]

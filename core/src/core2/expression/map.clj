@@ -10,6 +10,7 @@
            io.netty.util.collection.IntObjectHashMap
            (java.lang AutoCloseable)
            java.util.List
+           java.util.function.IntBinaryOperator
            (org.apache.arrow.memory BufferAllocator)
            (org.apache.arrow.memory.util.hash MurmurHasher)
            (org.apache.arrow.vector NullVector)
@@ -47,7 +48,8 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IRelationMapProber
   (^int indexOf [^int inIdx])
-  (^void forEachMatch [^int inIdx, ^java.util.function.IntConsumer c]))
+  (^void forEachMatch [^int inIdx, ^java.util.function.IntConsumer c])
+  (^int matches [^int inIdx]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IRelationMap
@@ -60,20 +62,19 @@
   (^core2.expression.map.IRelationMapProber probeFromRelation [^core2.vector.IIndirectRelation inRelation])
   (^core2.vector.IIndirectRelation getBuiltRelation []))
 
-(definterface IntIntPredicate
-  (^boolean test [^int l, ^int r]))
-
-(defn- andIIP
+(defn- andIBO
   ([]
-   (reify IntIntPredicate
-     (test [_ _l _r]
-       true)))
+   (reify IntBinaryOperator
+     (applyAsInt [_ _l _r]
+       1)))
 
-  ([^IntIntPredicate p1, ^IntIntPredicate p2]
-   (reify IntIntPredicate
-     (test [_ l r]
-       (and (.test p1 l r)
-            (.test p2 l r))))))
+  ([^IntBinaryOperator p1, ^IntBinaryOperator p2]
+   (reify IntBinaryOperator
+     (applyAsInt [_ l r]
+       (let [l-res (.applyAsInt p1 l r)]
+         (if (= -1 l-res)
+           -1
+           (Math/min l-res (.applyAsInt p2 l r))))))))
 
 (def ^:private left-rel (gensym 'left-rel))
 (def ^:private left-vec (gensym 'left-vec))
@@ -92,9 +93,12 @@
                     ~(expr/with-tag right-rel IIndirectRelation)
                     ~expr/params-sym]
                  (let [~@(expr/batch-bindings emitted-expr)]
-                   (reify IntIntPredicate
-                     (~'test [_# ~left-idx ~right-idx]
-                      ~(continue (fn [_ code] code))))))
+                   (reify IntBinaryOperator
+                     (~'applyAsInt [_# ~left-idx ~right-idx]
+                      ~(continue (fn [res-type code]
+                                   (case res-type
+                                     :null 0
+                                     :bool `(if ~code 1 -1))))))))
 
               #_(doto clojure.pprint/pprint)
               (eval))))
@@ -102,10 +106,9 @@
 
 (defn- ->equi-comparator [^IIndirectVector left-col, ^IIndirectVector right-col, params
                           {:keys [nil-keys-equal? param-types]}]
-  (let [f (build-comparator {:op :call, :f :boolean
-                             :args [{:op :call, :f (if nil-keys-equal? :null-eq :=)
-                                     :args [{:op :variable, :variable left-vec, :rel left-rel, :idx left-idx}
-                                            {:op :variable, :variable right-vec, :rel right-rel, :idx right-idx}]}]}
+  (let [f (build-comparator {:op :call, :f (if nil-keys-equal? :null-eq :=)
+                             :args [{:op :variable, :variable left-vec, :rel left-rel, :idx left-idx}
+                                    {:op :variable, :variable right-vec, :rel right-rel, :idx right-idx}]}
                             {:var->col-type {left-vec (types/field->col-type (.getField (.getVector left-col)))
                                              right-vec (types/field->col-type (.getField (.getVector right-col)))}
                              :param-types param-types})]
@@ -115,20 +118,19 @@
 
 (defn- ->theta-comparator [probe-rel build-rel theta-expr params {:keys [build-col-types probe-col-types param-types]}]
   (let [col-types (merge build-col-types probe-col-types)
-        f (build-comparator {:op :call, :f :boolean
-                             :args [(->> (expr/form->expr theta-expr {:col-types col-types, :param-types param-types})
-                                         (expr/prepare-expr)
-                                         (ewalk/postwalk-expr (fn [{:keys [op] :as expr}]
-                                                                (cond-> expr
-                                                                  (= op :variable)
-                                                                  (into (let [{:keys [variable]} expr]
-                                                                          (if (contains? probe-col-types variable)
-                                                                            {:rel left-rel, :idx left-idx}
-                                                                            {:rel right-rel, :idx right-idx})))))))]}
+        f (build-comparator (->> (expr/form->expr theta-expr {:col-types col-types, :param-types param-types})
+                                 (expr/prepare-expr)
+                                 (ewalk/postwalk-expr (fn [{:keys [op] :as expr}]
+                                                        (cond-> expr
+                                                          (= op :variable)
+                                                          (into (let [{:keys [variable]} expr]
+                                                                  (if (contains? probe-col-types variable)
+                                                                    {:rel left-rel, :idx left-idx}
+                                                                    {:rel right-rel, :idx right-idx})))))))
                             {:var->col-type col-types, :param-types param-types})]
     (f probe-rel build-rel params)))
 
-(defn- find-in-hash-bitmap ^long [^RoaringBitmap hash-bitmap, ^IntIntPredicate comparator, ^long idx]
+(defn- find-in-hash-bitmap ^long [^RoaringBitmap hash-bitmap, ^IntBinaryOperator comparator, ^long idx]
   (if-not hash-bitmap
     -1
     (let [it (.getIntIterator hash-bitmap)]
@@ -136,7 +138,7 @@
         (if-not (.hasNext it)
           -1
           (let [test-idx (.next it)]
-            (if (.test comparator idx test-idx)
+            (if (= 1 (.applyAsInt comparator idx test-idx))
               test-idx
               (recur))))))))
 
@@ -215,7 +217,7 @@
                                                                 :param-types param-types}))
                                           build-key-cols
                                           in-key-cols)
-                                     (reduce andIIP)))
+                                     (reduce andIBO)))
 
                   hasher (->hasher in-key-cols)
 
@@ -242,7 +244,7 @@
                   probe-key-cols (mapv #(.vectorForName probe-rel (name %))
                                        probe-key-col-names)
 
-                  ^IntIntPredicate
+                  ^IntBinaryOperator
                   comparator (->> (cond-> (map (fn [build-col probe-col]
                                                  (->equi-comparator probe-col build-col params
                                                                     {:nil-keys-equal? nil-keys-equal?
@@ -257,7 +259,7 @@
                                                               {:build-col-types build-col-types
                                                                :probe-col-types probe-col-types
                                                                :param-types param-types})))
-                                 (reduce andIIP))
+                                 (reduce andIBO))
 
                   hasher (->hasher probe-key-cols)]
 
@@ -270,8 +272,22 @@
                   (some-> ^RoaringBitmap (.get hash->bitmap (.hashCode hasher idx))
                           (.forEach (reify IntConsumer
                                       (accept [_ out-idx]
-                                        (when (.test comparator idx out-idx)
-                                          (.accept c out-idx))))))))))
+                                        (when (= 1 (.applyAsInt comparator idx out-idx))
+                                          (.accept c out-idx)))))))
+
+
+                (matches [_ probe-idx]
+                  ;; TODO: this doesn't use the hashmaps, still a nested loop join
+                  (let [acc (int-array [-1])]
+                    (loop [build-idx 0]
+                      (if (= build-idx (.rowCount build-rel))
+                        (aget acc 0)
+                        (let [res (.applyAsInt comparator probe-idx build-idx)]
+                          (if (= 1 res)
+                            1
+                            (do
+                              (aset acc 0 (Math/max (aget acc 0) res))
+                              (recur (inc build-idx))))))))))))
 
           (getBuiltRelation [_]
             (let [pos (.getPosition (.writerPosition rel-writer))]
