@@ -1,7 +1,8 @@
 (ns core2.operator.apply
-  (:require [clojure.set :as set]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
+            [core2.expression :as expr]
             [core2.logical-plan :as lp]
+            [core2.rewrite :refer [zmatch]]
             [core2.types :as types]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
@@ -12,11 +13,12 @@
            (java.util.function Consumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
-           (org.apache.arrow.vector NullVector)))
+           (org.apache.arrow.vector BitVector NullVector)))
 
 (defmethod lp/ra-expr :apply [_]
   (s/cat :op #{:apply}
-         :mode #{:cross-join, :left-outer-join, :semi-join, :anti-join}
+         :mode (s/or :mark-join (s/map-of #{:mark-join} ::lp/column-expression, :count 1, :conform-keys true)
+                     :otherwise #{:cross-join, :left-outer-join, :semi-join, :anti-join})
          :columns (s/map-of ::lp/column ::lp/column, :conform-keys true)
          :independent-relation ::lp/ra-expression
          :dependent-relation ::lp/ra-expression))
@@ -30,74 +32,101 @@
                  ^java.util.stream.IntStream$Builder idxs
                  ^int inIdx]))
 
-(defn ->mode-strategy [mode dependent-col-names]
-  (case mode
-    :cross-join
-    (reify ModeStrategy
-      (accept [_ dep-cursor dep-out-writer idxs in-idx]
-        (doseq [col-name dependent-col-names]
-          (.writerForName dep-out-writer (name col-name)))
+(defn ->mode-strategy [mode dependent-col-types]
+  (zmatch mode
+    [:mark-join mark-spec]
+    (let [[col-name _expr] (first (:mark-join mark-spec))]
+      (reify ModeStrategy
+        (accept [_ dep-cursor dep-out-writer idxs in-idx]
+          (let [out-writer (.writerForName dep-out-writer (name col-name) [:union #{:null :bool}])
+                ^BitVector out-vec (.getVector out-writer)]
+            (.add idxs in-idx)
+            (let [!match (int-array [-1])]
+              (while (and (not (== 1 (aget !match 0)))
+                          (.tryAdvance dep-cursor
+                                       (reify Consumer
+                                         (accept [_ dep-rel]
+                                           (let [match-vec (.vectorForName ^IIndirectRelation dep-rel "_expr")
+                                                 match-rdr (.polyReader match-vec [:null :bool])]
+                                             (dotimes [idx (.getValueCount match-vec)]
+                                               (case (.read match-rdr idx)
+                                                 0 (aset !match 0 (max (aget !match 0) 0))
+                                                 1 (aset !match 0 (max (aget !match 0) (if (.readBoolean match-rdr) 1 -1)))))))))))
+              (let [match (aget !match 0)]
+                (.startValue out-writer)
+                (if (zero? match)
+                  (.setNull out-vec in-idx)
+                  (.setSafe out-vec in-idx (case match 1 1, -1 0)))
+                (.endValue out-writer)))))))
 
-        (.forEachRemaining dep-cursor
-                           (reify Consumer
-                             (accept [_ dep-rel]
-                               (let [^IIndirectRelation dep-rel dep-rel]
-                                 (vw/append-rel dep-out-writer dep-rel)
+    [:otherwise simple-mode]
+    (case simple-mode
+      :cross-join
+      (reify ModeStrategy
+        (accept [_ dep-cursor dep-out-writer idxs in-idx]
+          (doseq [[col-name col-type] dependent-col-types]
+            (.writerForName dep-out-writer (name col-name) col-type))
 
-                                 (dotimes [_ (.rowCount dep-rel)]
-                                   (.add idxs in-idx))))))))
-
-    :left-outer-join
-    (reify ModeStrategy
-      (accept [_ dep-cursor dep-out-writer idxs in-idx]
-        (doseq [col-name dependent-col-names]
-          (.writerForName dep-out-writer (name col-name)))
-
-        (let [match? (boolean-array [false])]
           (.forEachRemaining dep-cursor
                              (reify Consumer
                                (accept [_ dep-rel]
                                  (let [^IIndirectRelation dep-rel dep-rel]
-                                   (when (pos? (.rowCount dep-rel))
-                                     (aset match? 0 true)
-                                     (vw/append-rel dep-out-writer dep-rel)
+                                   (vw/append-rel dep-out-writer dep-rel)
 
-                                     (dotimes [_ (.rowCount dep-rel)]
-                                       (.add idxs in-idx)))))))
+                                   (dotimes [_ (.rowCount dep-rel)]
+                                     (.add idxs in-idx))))))))
 
-          (when-not (aget match? 0)
-            (.add idxs in-idx)
-            (doseq [^String col-name (map name dependent-col-names)]
-              (vw/append-vec (.writerForName dep-out-writer col-name)
-                             (iv/->direct-vec (doto (NullVector. col-name)
-                                                (.setValueCount 1)))))))))
+      :left-outer-join
+      (reify ModeStrategy
+        (accept [_ dep-cursor dep-out-writer idxs in-idx]
+          (doseq [[col-name col-type] dependent-col-types]
+            (.writerForName dep-out-writer (name col-name) col-type))
 
-    :semi-join
-    (reify ModeStrategy
-      (accept [_ dep-cursor _dep-out-writer idxs in-idx]
-        (let [match? (boolean-array [false])]
-          (while (and (not (aget match? 0))
-                      (.tryAdvance dep-cursor
-                                   (reify Consumer
-                                     (accept [_ dep-rel]
-                                       (let [^IIndirectRelation dep-rel dep-rel]
-                                         (when (pos? (.rowCount dep-rel))
-                                           (aset match? 0 true)
-                                           (.add idxs in-idx)))))))))))
+          (let [match? (boolean-array [false])]
+            (.forEachRemaining dep-cursor
+                               (reify Consumer
+                                 (accept [_ dep-rel]
+                                   (let [^IIndirectRelation dep-rel dep-rel]
+                                     (when (pos? (.rowCount dep-rel))
+                                       (aset match? 0 true)
+                                       (vw/append-rel dep-out-writer dep-rel)
 
-    :anti-join
-    (reify ModeStrategy
-      (accept [_ dep-cursor _dep-out-writer idxs in-idx]
-        (let [match? (boolean-array [false])]
-          (while (and (not (aget match? 0))
-                      (.tryAdvance dep-cursor
-                                   (reify Consumer
-                                     (accept [_ dep-rel]
-                                       (let [^IIndirectRelation dep-rel dep-rel]
-                                         (when (pos? (.rowCount dep-rel))
-                                           (aset match? 0 true))))))))
-          (when-not (aget match? 0)
-            (.add idxs in-idx)))))))
+                                       (dotimes [_ (.rowCount dep-rel)]
+                                         (.add idxs in-idx)))))))
+
+            (when-not (aget match? 0)
+              (.add idxs in-idx)
+              (doseq [[col-name col-type] dependent-col-types]
+                (vw/append-vec (.writerForName dep-out-writer (name col-name) col-type)
+                               (iv/->direct-vec (doto (NullVector. (name col-name))
+                                                  (.setValueCount 1)))))))))
+
+      :semi-join
+      (reify ModeStrategy
+        (accept [_ dep-cursor _dep-out-writer idxs in-idx]
+          (let [match? (boolean-array [false])]
+            (while (and (not (aget match? 0))
+                        (.tryAdvance dep-cursor
+                                     (reify Consumer
+                                       (accept [_ dep-rel]
+                                         (let [^IIndirectRelation dep-rel dep-rel]
+                                           (when (pos? (.rowCount dep-rel))
+                                             (aset match? 0 true)
+                                             (.add idxs in-idx)))))))))))
+
+      :anti-join
+      (reify ModeStrategy
+        (accept [_ dep-cursor _dep-out-writer idxs in-idx]
+          (let [match? (boolean-array [false])]
+            (while (and (not (aget match? 0))
+                        (.tryAdvance dep-cursor
+                                     (reify Consumer
+                                       (accept [_ dep-rel]
+                                         (let [^IIndirectRelation dep-rel dep-rel]
+                                           (when (pos? (.rowCount dep-rel))
+                                             (aset match? 0 true))))))))
+            (when-not (aget match? 0)
+              (.add idxs in-idx))))))))
 
 (deftype ApplyCursor [^BufferAllocator allocator
                       ^ModeStrategy mode-strategy
@@ -116,11 +145,15 @@
                                                                         in-rel in-idx)]
                              (.accept mode-strategy dep-cursor dep-out-writer idxs in-idx)))
 
-                         (let [idxs (.toArray (.build idxs))]
+                         (let [idxs (.toArray (.build idxs))
+                               out-row-count (alength idxs)]
+
                            (.accept c (iv/->indirect-rel (concat (for [^IIndirectVector col in-rel]
                                                                    (.select col idxs))
                                                                  (for [^IVectorWriter vec-writer dep-out-writer]
-                                                                   (iv/->direct-vec (.getVector vec-writer)))))))))))))
+                                                                   (-> (.getVector vec-writer)
+                                                                       (doto (.setValueCount out-row-count))
+                                                                       iv/->direct-vec))))))))))))
 
   (close [_]
     (util/try-close independent-cursor)))
@@ -130,27 +163,53 @@
 
   (lp/unary-expr independent-relation args
     (fn [independent-col-types]
-      (let [dependent-args (-> args
-                               (update :param-types
-                                       (fnil into {})
-                                       (map (fn [[ik dk]]
-                                              [dk (get independent-col-types ik)]))
-                                       columns))
+      (let [{:keys [param-types] :as dependent-args} (-> args
+                                                         (update :param-types
+                                                                 (fnil into {})
+                                                                 (map (fn [[ik dk]]
+                                                                        [dk (get independent-col-types ik)]))
+                                                                 columns))
             {dependent-col-types :col-types, ->dependent-cursor :->cursor} (lp/emit-expr dependent-relation dependent-args)]
 
-        {:col-types (case mode
-                      (:cross-join :left-outer-join) (merge-with types/merge-col-types independent-col-types dependent-col-types)
-                      (:semi-join :anti-join) independent-col-types)
-         :->cursor (fn [{:keys [allocator] :as query-opts} independent-cursor]
-                     (let [dependent-cursor-factory
-                           (reify IDependentCursorFactory
-                             (openDependentCursor [_ in-rel idx]
-                               (let [query-opts (-> query-opts
-                                                    (update :params
-                                                            (fnil into {})
-                                                            (for [[ik dk] columns]
-                                                              (let [iv (.vectorForName in-rel (name ik))]
-                                                                (MapEntry/create dk (types/get-object (.getVector iv) (.getIndex iv idx)))))))]
-                                 (->dependent-cursor query-opts))))]
+        {:col-types (zmatch mode
+                      [:mark-join mark-spec]
+                      (let [[col-name _expr] (first (:mark-join mark-spec))]
+                        (assoc independent-col-types col-name [:union #{:null :bool}]))
 
-                       (ApplyCursor. allocator (->mode-strategy mode (set (keys dependent-col-types))) independent-cursor dependent-cursor-factory)))}))))
+                      [:otherwise simple-mode]
+                      (case simple-mode
+                        (:cross-join :left-outer-join) (merge-with types/merge-col-types independent-col-types dependent-col-types)
+                        (:semi-join :anti-join) independent-col-types))
+
+         :->cursor (let [mode-strat (->mode-strategy mode dependent-col-types)
+
+                         open-dependent-cursor
+                         (zmatch mode
+                           [:mark-join mark-spec]
+                           (let [[_col-name expr] (first (:mark-join mark-spec))
+                                 projection-spec (expr/->expression-projection-spec "_expr" expr
+                                                                                    {:col-types dependent-col-types
+                                                                                     :param-types param-types})]
+                             (fn [{:keys [allocator params] :as query-opts}]
+                               (let [^ICursor dep-cursor (->dependent-cursor query-opts)]
+                                 (reify ICursor
+                                   (tryAdvance [_ c]
+                                     (.tryAdvance dep-cursor (reify Consumer
+                                                               (accept [_ in-rel]
+                                                                 (with-open [match-vec (.project projection-spec allocator in-rel params)]
+                                                                   (.accept c (iv/->indirect-rel [match-vec])))))))
+
+                                   (close [_] (.close dep-cursor))))))
+
+                           [:otherwise _] ->dependent-cursor)]
+
+                     (fn [{:keys [allocator] :as query-opts} independent-cursor]
+                       (ApplyCursor. allocator mode-strat independent-cursor
+                                     (reify IDependentCursorFactory
+                                       (openDependentCursor [_this in-rel idx]
+                                         (open-dependent-cursor (-> query-opts
+                                                                    (update :params
+                                                                            (fnil into {})
+                                                                            (for [[ik dk] columns]
+                                                                              (let [iv (.vectorForName in-rel (name ik))]
+                                                                                (MapEntry/create dk (types/get-object (.getVector iv) (.getIndex iv idx)))))))))))))}))))

@@ -630,13 +630,6 @@
      relation]
     [:table [{exists-column false}]]]])
 
-(defn- wrap-with-group-by-aggr [{:keys [quantifier plan sym predicate]}]
-  (let [predicate-result-sym (symbol (str sym "_predicate_result$"))]
-    [:group-by
-     [{sym (list (symbol (if (= :some quantifier) :any quantifier)) predicate-result-sym)}]
-     [:project [{predicate-result-sym predicate}]
-      plan]]))
-
 (defn- flip-comparison [co]
   (case co
     < '>=
@@ -735,19 +728,19 @@
 
       [:in_predicate ^:z rvp ^:z ipp2]
       (let [[qe co] (r/zmatch ipp2
-                 [:in_predicate_part_2 _ [:in_predicate_value [:subquery ^:z qe]]]
-                 [qe '=]
+                      [:in_predicate_part_2 _ [:in_predicate_value [:subquery ^:z qe]]]
+                      [qe '=]
 
-                 [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]
-                 [qe '<>]
+                      [:in_predicate_part_2 "NOT" _ [:in_predicate_value [:subquery ^:z qe]]]
+                      [qe '<>]
 
-                 [:in_predicate_part_2 _ [:in_predicate_value ^:z ivl]]
-                 [ivl '=]
+                      [:in_predicate_part_2 _ [:in_predicate_value ^:z ivl]]
+                      [ivl '=]
 
-                 [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]
-                 [ivl '<>]
+                      [:in_predicate_part_2 "NOT" _ [:in_predicate_value ^:z ivl]]
+                      [ivl '<>]
 
-                 (throw (IllegalArgumentException. "unknown in type")))
+                      (throw (IllegalArgumentException. "unknown in type")))
             exists-symbol (exists-symbol qe)
             predicate (list co (expr rvp) (first (subquery-projection-symbols qe)))
             in-value-list-plan (plan qe)
@@ -799,10 +792,28 @@
 
    See (interpret-subquery) for 'subquery info'."
   [relation subquery-info]
-  (let [{:keys [type plan column->param sym predicate]} subquery-info]
+  (let [{:keys [type plan column->param sym predicate quantifier]} subquery-info]
     (case type
-      :quantified-comparison (build-apply :cross-join column->param relation (wrap-with-group-by-aggr subquery-info))
+      :quantified-comparison (if (= quantifier :some)
+                               (build-apply
+                                 (w/postwalk-replace column->param {:mark-join {sym predicate}})
+                                 column->param
+                                 relation plan)
+
+                               (let [comparator-result-sym (symbol (str sym "_comp_result$"))]
+                                 [:map
+                                  [{sym (list 'not comparator-result-sym)}]
+                                  (build-apply
+                                    (w/postwalk-replace
+                                      column->param
+                                      {:mark-join
+                                       (let [[co x y] predicate]
+                                         {comparator-result-sym `(~(flip-comparison co) ~x ~y)})})
+                                    column->param
+                                    relation plan)]))
+
       :exists (build-apply :cross-join column->param relation (wrap-with-exists sym plan))
+
       (build-apply :cross-join column->param relation plan))))
 
 (defn- apply-predicative-subquery
@@ -1355,6 +1366,11 @@
     [:anti-join _ lhs _]
     (relation-columns lhs)
 
+    [:mark-join projection lhs _]
+    (conj
+      (relation-columns lhs)
+      (->projected-column projection))
+
     [:rename prefix-or-columns relation]
     (if (symbol? prefix-or-columns)
       (vec (for [c (relation-columns relation)]
@@ -1403,9 +1419,12 @@
 
     [:apply mode _ independent-relation dependent-relation]
     (-> (relation-columns independent-relation)
-        (concat (case mode
-                  (:cross-join :left-outer-join) (relation-columns dependent-relation)
-                  []))
+        (concat
+          (when-let [mark-join-projection (:mark-join mode)]
+            [(->projected-column mark-join-projection)])
+          (case mode
+            (:cross-join :left-outer-join) (relation-columns dependent-relation)
+            []))
         (vec))
 
     [:max-1-row relation]
@@ -1530,6 +1549,13 @@
         (with-smap [:anti-join (w/postwalk-replace smap join-map) lhs rhs]
           (->smap lhs)))
 
+      [:mark-join projection lhs rhs]
+      (let [mark-join-projection-smap (let [[column _expr] projection]
+                                        {column (next-name)})
+            smap (merge (->smap lhs) (->smap rhs))]
+        (with-smap [:mark-join (w/postwalk-replace smap projection) lhs rhs]
+          (merge (->smap lhs) mark-join-projection-smap)))
+
       [:rename prefix-or-columns relation]
       (let [smap (->smap relation)]
         (with-smap relation
@@ -1588,23 +1614,28 @@
       (let [smap (merge (->smap independent-relation) (->smap dependent-relation))
             params (->> columns
                         (vals)
-                         (filter #(str/starts-with? (name %) "?"))
-                         (map (fn [param]
-                                {param (get
-                                         smap
-                                         param
-                                         (with-meta
-                                           (symbol (str "?" (next-name)))
-                                           {:correlated-column? true}))}))
-                         (into {}))
-            new-smap (merge smap params)]
-        (with-smap [:apply mode
+                        (filter #(str/starts-with? (name %) "?"))
+                        (map (fn [param]
+                               {param (get
+                                        smap
+                                        param
+                                        (with-meta
+                                          (symbol (str "?" (next-name)))
+                                          {:correlated-column? true}))}))
+                        (into {}))
+            mark-join-mode-projection-smap (when-let [[column _expr] (first (:mark-join mode))]
+                                             {column (next-name)})
+            new-smap (merge smap params mark-join-mode-projection-smap)]
+        (with-smap [:apply
+                    (w/postwalk-replace new-smap mode)
                     (w/postwalk-replace new-smap columns)
                     independent-relation
                     (rename-walk new-smap dependent-relation)]
-          (case mode
-           (:cross-join :left-outer-join) new-smap
-           (:semi-join :anti-join) (merge (->smap independent-relation) params))))
+          (if mark-join-mode-projection-smap
+            (merge (->smap independent-relation) mark-join-mode-projection-smap params)
+            (case mode
+              (:cross-join :left-outer-join) new-smap
+              (:semi-join :anti-join) (merge (->smap independent-relation) params)))))
 
       [:unwind columns opts relation]
       (let [smap (->smap relation)
@@ -1688,18 +1719,6 @@
   (and (sequential? predicate)
        (= 3 (count predicate))
        (= '= (first predicate))))
-
-(defn- nil-predicate? [predicate]
-  (and (sequential? predicate)
-       (= 2 (count predicate))
-       (= 'nil? (first predicate))))
-
-(defn- all-predicate? [predicate]
-  (and (sequential? predicate)
-       (= 4 (count predicate))
-       (= 'or (first predicate))
-       (nil-predicate? (nth predicate 2))
-       (nil-predicate? (nth predicate 3))))
 
 (defn all-columns-in-relation?
   "Returns true if all columns referenced by the expression are present in the given relation.
@@ -2140,8 +2159,25 @@
 
     [:apply mode columns independent-relation dependent-relation]
     ;;=>
-    (when-not (parameters-referenced-in-relation? dependent-relation (vals columns))
+    (when-not (or (:mark-join mode)
+                  (parameters-referenced-in-relation? dependent-relation (vals columns)))
       [mode [] independent-relation dependent-relation])))
+
+(defn- apply-mark-join->mark-join
+  "If the only references to apply parameters are within the mark-join expression it should be
+   valid to convert the apply mark-join to a mark-join"
+  [z]
+  (r/zmatch
+    z
+    [:apply mode columns independent-relation dependent-relation]
+    ;;=>
+    (when (and (:mark-join mode)
+               (not (parameters-referenced-in-relation? dependent-relation (vals columns))))
+      [:mark-join
+       (w/postwalk-replace (set/map-invert columns) (update-vals (:mark-join mode) vector))
+       independent-relation
+       dependent-relation])))
+
 
 (defn- decorrelate-apply-rule-2
   "R A⊗(σp E) = R ⊗p E
@@ -2152,18 +2188,16 @@
     [:apply mode columns independent-relation
      [:select predicate dependent-relation]]
     ;;=>
-    (when (seq (expr-correlated-symbols predicate))
-      (when-not (parameters-referenced-in-relation?
-                  dependent-relation
-                  (vals columns))
-        [(if (= :cross-join mode)
-           :join
-           mode)
-         [(w/postwalk-replace (set/map-invert columns)
-                              (if (all-predicate? predicate)
-                                (second predicate)
-                                predicate))]
-         independent-relation dependent-relation]))))
+    (when-not (:mark-join mode)
+      (when (seq (expr-correlated-symbols predicate))
+        (when-not (parameters-referenced-in-relation?
+                    dependent-relation
+                    (vals columns))
+          [(if (= :cross-join mode)
+             :join
+             mode)
+           [(w/postwalk-replace (set/map-invert columns) predicate)]
+           independent-relation dependent-relation])))))
 
 (defn- decorrelate-apply-rule-3
   "R A× (σp E) = σp (R A× E)"
@@ -2172,9 +2206,7 @@
     [:apply :cross-join columns independent-relation [:select predicate dependent-relation]]
     ;;=>
     (when (seq (expr-correlated-symbols predicate)) ;; select predicate is correlated
-      [:select (w/postwalk-replace (set/map-invert columns) (if (all-predicate? predicate)
-                                                              (second predicate)
-                                                              predicate))
+      [:select (w/postwalk-replace (set/map-invert columns) predicate)
        (let [columns (remove-unused-correlated-columns columns dependent-relation)]
          [:apply :cross-join columns independent-relation dependent-relation])])))
 
@@ -2438,6 +2470,7 @@
                                    #'push-decorrelated-selections-with-fewer-variables-down
                                    #'squash-correlated-selects
                                    #'decorrelate-apply-rule-1
+                                   #'apply-mark-join->mark-join
                                    #'decorrelate-apply-rule-2
                                    #'decorrelate-apply-rule-3
                                    #'decorrelate-apply-rule-4

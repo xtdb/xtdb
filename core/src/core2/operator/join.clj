@@ -12,12 +12,13 @@
             [core2.vector.indirect :as iv])
   (:import (core2 ICursor)
            (core2.expression.map IRelationMap)
-           (core2.operator IProjectionSpec IRelationSelector)
+           (core2.operator IProjectionSpec)
            (core2.vector IIndirectRelation)
            (java.util ArrayList Iterator List)
            (java.util.function Consumer IntConsumer)
            (java.util.stream IntStream)
            (org.apache.arrow.memory BufferAllocator)
+           org.apache.arrow.vector.BitVector
            org.roaringbitmap.RoaringBitmap
            (org.roaringbitmap.buffer MutableRoaringBitmap)))
 
@@ -62,6 +63,12 @@
 (defmethod lp/ra-expr :anti-join [_]
   (s/cat :op #{:▷ :anti-join}
          :condition ::join-condition
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
+
+(defmethod lp/ra-expr :mark-join [_]
+  (s/cat :op #{:mark-join}
+         :mark-spec (s/map-of ::lp/column ::join-condition, :count 1, :conform-keys true)
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
@@ -131,21 +138,23 @@
        :->cursor (fn [{:keys [allocator]} left-cursor right-cursor]
                    (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil nil))})))
 
-(defn- build-phase [^IIndirectRelation build-rel
-                    ^IRelationMap rel-map
-                    pushdown-blooms]
-  (let [rel-map-builder (.buildFromRelation rel-map build-rel)
-        build-key-col-names (vec (.buildKeyColumnNames rel-map))]
-    (dotimes [build-idx (.rowCount build-rel)]
-      (.add rel-map-builder build-idx))
+(defn- build-phase [^ICursor build-cursor, ^IRelationMap rel-map, pushdown-blooms]
+  (.forEachRemaining build-cursor
+                     (reify Consumer
+                       (accept [_ build-rel]
+                         (let [^IIndirectRelation build-rel build-rel rel-map-builder (.buildFromRelation rel-map build-rel)
+                               build-key-col-names (vec (.buildKeyColumnNames rel-map))]
+                           (dotimes [build-idx (.rowCount build-rel)]
+                             (.add rel-map-builder build-idx))
 
-    (dotimes [col-idx (count build-key-col-names)]
-      (let [build-col-name (nth build-key-col-names col-idx)
-            build-col (.vectorForName build-rel (name build-col-name))
-            internal-vec (.getVector build-col)
-            ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
-        (dotimes [build-idx (.rowCount build-rel)]
-          (.add pushdown-bloom ^ints (bloom/bloom-hashes internal-vec (.getIndex build-col build-idx))))))))
+                           (when pushdown-blooms
+                             (dotimes [col-idx (count build-key-col-names)]
+                               (let [build-col-name (nth build-key-col-names col-idx)
+                                     build-col (.vectorForName build-rel (name build-col-name))
+                                     internal-vec (.getVector build-col)
+                                     ^MutableRoaringBitmap pushdown-bloom (nth pushdown-blooms col-idx)]
+                                 (dotimes [build-idx (.rowCount build-rel)]
+                                   (.add pushdown-bloom ^ints (bloom/bloom-hashes internal-vec (.getIndex build-col build-idx))))))))))))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (defmulti ^core2.vector.IIndirectRelation probe-phase
@@ -213,6 +222,13 @@
                    (.flip (int 0) (.rowCount ^IIndirectRelation probe-rel)))
                  (.toArray))))
 
+(defmethod probe-phase ::mark-join
+  [_join-type
+   ^IIndirectRelation probe-rel
+   ^IRelationMap rel-map
+   _matched-build-idxs]
+  (iv/select probe-rel (probe-semi-join-select probe-rel rel-map)))
+
 (defn- int-array-concat
   ^ints [^ints arr1 ^ints arr2]
   (let [ret-arr (int-array (+ (alength arr1) (alength arr2)))]
@@ -260,43 +276,39 @@
                      join-type]
   ICursor
   (tryAdvance [_ c]
-    (.forEachRemaining build-cursor
-                       (reify Consumer
-                         (accept [_ build-rel]
-                           (build-phase build-rel rel-map pushdown-blooms))))
+    (build-phase build-cursor rel-map pushdown-blooms)
 
-    (let [yield-missing? (contains? #{::anti-semi-join ::left-outer-join ::full-outer-join} join-type)]
-      (boolean
-        (or (let [advanced? (boolean-array 1)]
-              (binding [scan/*column->pushdown-bloom* (cond-> scan/*column->pushdown-bloom*
-                                                        (not yield-missing?) (conj (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms)))]
-                (while (and (not (aget advanced? 0))
-                            (.tryAdvance probe-cursor
-                                         (reify Consumer
-                                           (accept [_ probe-rel]
-                                             (when (pos? (.rowCount ^IIndirectRelation probe-rel))
-                                               (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs)
-                                                                       (iv/copy allocator))]
-                                                 (when (pos? (.rowCount out-rel))
-                                                   (aset advanced? 0 true)
-                                                   (.accept c out-rel))))))))))
-              (aget advanced? 0))
+    (boolean
+     (or (let [advanced? (boolean-array 1)]
+           (binding [scan/*column->pushdown-bloom* (cond-> scan/*column->pushdown-bloom*
+                                                     (some? pushdown-blooms) (conj (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms)))]
+             (while (and (not (aget advanced? 0))
+                         (.tryAdvance probe-cursor
+                                      (reify Consumer
+                                        (accept [_ probe-rel]
+                                          (when (pos? (.rowCount ^IIndirectRelation probe-rel))
+                                            (with-open [out-rel (-> (probe-phase join-type probe-rel rel-map matched-build-idxs)
+                                                                    (iv/copy allocator))]
+                                              (when (pos? (.rowCount out-rel))
+                                                (aset advanced? 0 true)
+                                                (.accept c out-rel))))))))))
+           (aget advanced? 0))
 
-            (when (= ::full-outer-join join-type)
-              (let [build-rel (.getBuiltRelation rel-map)
-                    build-row-count (long (.rowCount build-rel))
-                    unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
-                (.remove unmatched-build-idxs emap/nil-row-idx)
+         (when (= ::full-outer-join join-type)
+           (let [build-rel (.getBuiltRelation rel-map)
+                 build-row-count (long (.rowCount build-rel))
+                 unmatched-build-idxs (RoaringBitmap/flip matched-build-idxs 0 build-row-count)]
+             (.remove unmatched-build-idxs emap/nil-row-idx)
 
-                (when-not (.isEmpty unmatched-build-idxs)
-                  ;; this means .isEmpty will be true on the next iteration (we flip the bitmap)
-                  (.add matched-build-idxs 0 build-row-count)
+             (when-not (.isEmpty unmatched-build-idxs)
+               ;; this means .isEmpty will be true on the next iteration (we flip the bitmap)
+               (.add matched-build-idxs 0 build-row-count)
 
-                  (let [nil-rel (emap/->nil-rel (set (keys (.probeColumnTypes rel-map))))
-                        build-sel (.toArray unmatched-build-idxs)
-                        probe-sel (int-array (alength build-sel))]
-                    (.accept c (join-rels nil-rel rel-map [probe-sel build-sel]))
-                    true))))))))
+               (let [nil-rel (emap/->nil-rel (set (keys (.probeColumnTypes rel-map))))
+                     build-sel (.toArray unmatched-build-idxs)
+                     probe-sel (int-array (alength build-sel))]
+                 (.accept c (join-rels nil-rel rel-map [probe-sel build-sel]))
+                 true)))))))
 
   (close [_]
     (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
@@ -327,10 +339,7 @@
 (defn- emit-join-expr {:style/indent 2} [{:keys [condition left right]} {:keys [param-types] :as args} f]
   (lp/binary-expr left right args
     (fn [left-col-types right-col-types]
-      (let [original-col-names (set/union (set (keys left-col-types))
-                                          (set (keys right-col-types)))
-
-            {equis :equi-condition, thetas :pred-expr} (group-by first condition)
+      (let [{equis :equi-condition, thetas :pred-expr} (group-by first condition)
 
             theta-expr (when-let [theta-exprs (seq (map second thetas))]
                          (list* 'and theta-exprs))
@@ -353,7 +362,11 @@
                                              :right-key-col-names (mapv (comp :key-col-name :right) equi-specs)
                                              :theta-expr theta-expr})
 
-            project-away-specs (->> (set/intersection (set (keys col-types)) original-col-names)
+            project-away-specs (->> (set/difference (set (keys col-types))
+                                                    (->> equi-specs
+                                                         (into #{} (comp (mapcat (juxt :left :right))
+                                                                         (filter :projection)
+                                                                         (map :key-col-name)))))
                                     (mapv #(project/->identity-projection-spec % (get col-types %))))]
 
         {:col-types (projection-specs->col-types project-away-specs)
@@ -364,6 +377,9 @@
                            join-cursor (->cursor opts left-project-cursor right-project-cursor)]
 
                        (project/->project-cursor opts join-cursor project-away-specs)))}))))
+
+(defn- ->pushdown-blooms [key-col-names]
+  (vec (repeatedly (count key-col-names) #(MutableRoaringBitmap.))))
 
 (defmethod lp/emit-expr :join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
@@ -379,9 +395,7 @@
                                                                 :theta-expr theta-expr
                                                                 :param-types param-types
                                                                 :params params})
-                                nil
-                                (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
-                                ::inner-join))})))
+                                nil (->pushdown-blooms right-key-col-names) ::inner-join))})))
 
 (defn- with-nullable-cols [col-types]
   (->> col-types
@@ -402,9 +416,7 @@
                                                                 :theta-expr theta-expr
                                                                 :param-types param-types
                                                                 :params params})
-                                nil
-                                (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
-                                ::left-outer-join))})))
+                                nil nil ::left-outer-join))})))
 
 (defmethod lp/emit-expr :full-outer-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
@@ -421,9 +433,7 @@
                                                                 :theta-expr theta-expr
                                                                 :param-types param-types
                                                                 :params params})
-                                (RoaringBitmap.)
-                                (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
-                                ::full-outer-join))})))
+                                (RoaringBitmap.) nil ::full-outer-join))})))
 
 (defmethod lp/emit-expr :semi-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
@@ -439,9 +449,7 @@
                                                                 :theta-expr theta-expr
                                                                 :param-types param-types
                                                                 :params params})
-                                nil
-                                (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
-                                ::semi-join))})))
+                                nil (->pushdown-blooms right-key-col-names) ::semi-join))})))
 
 (defmethod lp/emit-expr :anti-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
@@ -457,6 +465,61 @@
                                                                 :theta-expr theta-expr
                                                                 :param-types param-types
                                                                 :params params})
-                                nil
-                                (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))
-                                ::anti-semi-join))})))
+                                nil nil ::anti-semi-join))})))
+
+(defn- mark-join-probe-phase [^IRelationMap rel-map, ^IIndirectRelation probe-rel, ^BitVector mark-col]
+  (let [rel-prober (.probeFromRelation rel-map probe-rel)]
+    (dotimes [idx (.rowCount probe-rel)]
+      (let [match-res (.matches rel-prober idx)]
+        (if (zero? match-res)
+          (.setNull mark-col idx)
+          (.set mark-col idx (case match-res 1 1, -1 0)))))))
+
+(defmethod lp/emit-expr :mark-join [{:keys [mark-spec] :as join-expr} {:keys [param-types] :as args}]
+  (let [[mark-col-name mark-condition] (first mark-spec)]
+    (emit-join-expr (assoc join-expr :condition mark-condition) args
+      (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
+        {:col-types (assoc left-col-types mark-col-name [:union #{:bool :null}])
+
+         :->cursor
+         (fn [{:keys [^BufferAllocator allocator params]} ^ICursor probe-cursor build-cursor]
+           (let [rel-map (emap/->relation-map allocator {:build-col-types right-col-types
+                                                         :build-key-col-names right-key-col-names
+                                                         :probe-col-types left-col-types
+                                                         :probe-key-col-names left-key-col-names
+                                                         :store-full-build-rel? true
+                                                         :theta-expr theta-expr
+                                                         :param-types param-types
+                                                         :params params})
+                 pushdown-blooms (vec (repeatedly (count right-key-col-names) #(MutableRoaringBitmap.)))]
+
+             (reify ICursor
+               (tryAdvance [_ c]
+                 (build-phase build-cursor rel-map pushdown-blooms)
+
+                 (boolean
+                  (let [advanced? (boolean-array 1)]
+                    (binding [scan/*column->pushdown-bloom* (conj scan/*column->pushdown-bloom*
+                                                                  (zipmap (.probeKeyColumnNames rel-map) pushdown-blooms))]
+                      (while (and (not (aget advanced? 0))
+                                  (.tryAdvance probe-cursor
+                                               (reify Consumer
+                                                 (accept [_ probe-rel]
+                                                   (let [row-count (.rowCount ^IIndirectRelation probe-rel)]
+                                                     (when (pos? row-count)
+                                                       (aset advanced? 0 true)
+
+                                                       (with-open [probe-rel (iv/copy probe-rel allocator)
+                                                                   mark-col (doto (BitVector. (name mark-col-name) allocator)
+                                                                              (.allocateNew row-count)
+                                                                              (.setValueCount row-count))]
+                                                         (mark-join-probe-phase rel-map probe-rel mark-col)
+                                                         (let [out-cols (conj (seq probe-rel) (iv/->direct-vec mark-col))]
+                                                           (.accept c (iv/->indirect-rel out-cols row-count))))))))))))
+                    (aget advanced? 0))))
+
+               (close [_]
+                 (run! #(.clear ^MutableRoaringBitmap %) pushdown-blooms)
+                 (util/try-close rel-map)
+                 (util/try-close build-cursor)
+                 (util/try-close probe-cursor)))))}))))

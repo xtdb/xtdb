@@ -58,9 +58,12 @@ query I rowsort
 SELECT tab0.col0 FROM tab0 WHERE ( NULL ) NOT IN (1, 2, 3)
 ----
 
-
 query I rowsort
 SELECT tab0.col0 FROM tab0 WHERE NOT ( NULL ) IN (1, 2, 3)
+----
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE ( 4 ) IN (1, 2, 3)
 ----
 
 query I rowsort
@@ -72,6 +75,35 @@ query I rowsort
 SELECT tab0.col0 FROM tab0 WHERE ( 4 ) NOT IN (1, 2, 3)
 ----
 97
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE NOT ( 4 ) NOT IN (1, 2, 3)
+----
+
+query I rowsort
+SELECT tab0.col0 FROM tab0 WHERE NOT (NOT ( 4 ) NOT IN (1, 2, 3))
+----
+97
+
+query T rowsort
+SELECT ( 4 ) IN (1, 2, 3)
+----
+false
+
+query T rowsort
+SELECT ( 4 ) NOT IN (1, 2, 3)
+----
+true
+
+query T rowsort
+SELECT NOT ( 4 ) NOT IN (1, 2, 3)
+----
+false
+
+query T rowsort
+SELECT NOT (NOT ( 4 ) NOT IN (1, 2, 3))
+----
+true
 
 query I rowsort
 SELECT tab0.col0 FROM tab0 WHERE ( 3 ) IN (1, 2, 3)
@@ -99,17 +131,17 @@ SELECT tab0.col0 FROM tab0 WHERE 4 IN (1, 2, 3, NULL)
 ----
 
 query T rowsort
-SELECT ( NULL ) IN (SELECT 1 FROM tab0 WHERE FALSE) FROM tab0
+SELECT ( NULL ) IN (SELECT 1 FROM tab0 WHERE FALSE = TRUE) FROM tab0
 ----
 false
 
 query T rowsort
-SELECT ( NULL ) NOT IN (SELECT 1 FROM tab0 WHERE FALSE) FROM tab0
+SELECT ( NULL ) NOT IN (SELECT 1 FROM tab0 WHERE FALSE = TRUE) FROM tab0
 ----
 true
 
 query T rowsort
-SELECT NOT ( NULL ) IN (SELECT 1 FROM tab0 WHERE FALSE) FROM tab0
+SELECT NOT ( NULL ) IN (SELECT 1 FROM tab0 WHERE FALSE = TRUE) FROM tab0
 ----
 true
 
@@ -127,3 +159,44 @@ query IT rowsort
 SELECT bar.x FROM (VALUES (0), (1)) AS bar (x) WHERE bar.x IN (SELECT 4 FROM (VALUES (0)) AS foo WHERE FALSE=TRUE)
 ----
 
+query T rowsort
+SELECT EXISTS (SELECT foo.bar FROM (VALUES (1)) AS foo(bar)) FROM (VALUES (0)) AS no_from
+----
+true
+
+query T rowsort
+SELECT NOT EXISTS (SELECT foo.bar FROM (VALUES (1)) AS foo(bar)) FROM (VALUES (0)) AS no_from
+----
+false
+
+query T rowsort
+SELECT EXISTS (SELECT foo.bar FROM (VALUES (1)) AS foo(bar) WHERE FALSE = TRUE) FROM (VALUES (0)) AS no_from
+----
+false
+
+query T rowsort
+SELECT NOT EXISTS (SELECT foo.bar FROM (VALUES (1)) AS foo(bar) WHERE FALSE = TRUE) FROM (VALUES (0)) AS no_from
+----
+true
+
+query I rowsort
+SELECT 5 FROM (VALUES (0)) AS no_from WHERE EXISTS (SELECT foo.bar FROM (VALUES (1)) AS foo(bar))
+----
+5
+
+query I rowsort
+SELECT 5 FROM (VALUES (0)) AS no_from WHERE NOT EXISTS (SELECT foo.bar FROM (VALUES (1)) AS foo(bar))
+----
+
+query I rowsort
+SELECT 5 FROM (VALUES (0)) AS no_from WHERE EXISTS (SELECT foo.bar FROM (VALUES (1)) AS foo(bar) WHERE FALSE = TRUE)
+----
+
+query I rowsort
+SELECT 5 FROM (VALUES (0)) AS no_from WHERE NOT EXISTS (SELECT foo.bar FROM (VALUES (1)) AS foo(bar) WHERE FALSE = TRUE)
+----
+5
+
+query I rowsort label-9586
+SELECT 1 FROM tab0 WHERE col2 NOT IN ( NULL )
+----

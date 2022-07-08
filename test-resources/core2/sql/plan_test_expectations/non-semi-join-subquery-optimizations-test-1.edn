@@ -4,12 +4,7 @@
   [x1]
   [:select
    (or x7 (= x2 42))
-   [:group-by
-    [x1 x2 $row_number$ {x7 (any x6)}]
-    [:project
-     [x1 x2 $row_number$ {x6 (= x1 x4)}]
-     [:cross-join
-      [:map
-       [{$row_number$ (row-number)}]
-       [:rename {a x1, b x2} [:scan [a b]]]]
-      [:table [{x4 1} {x4 2}]]]]]]]]
+   [:mark-join
+    {x7 [(= x1 x4)]}
+    [:rename {a x1, b x2} [:scan [a b]]]
+    [:table [{x4 1} {x4 2}]]]]]]
