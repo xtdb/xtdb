@@ -755,3 +755,7 @@
 
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
   (col-type->field "_row-id" :i64))
+
+(defn with-nullable-cols [col-types]
+  (->> col-types
+       (into {} (map (juxt key (comp #(merge-col-types % :null) val))))))

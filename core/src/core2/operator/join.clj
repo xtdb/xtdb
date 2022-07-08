@@ -397,14 +397,10 @@
                                                                 :params params})
                                 nil (->pushdown-blooms right-key-col-names) ::inner-join))})))
 
-(defn- with-nullable-cols [col-types]
-  (->> col-types
-       (into {} (map (juxt key (comp #(types/merge-col-types % :null) val))))))
-
 (defmethod lp/emit-expr :left-outer-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
     (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
-      {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types with-nullable-cols))
+      {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types types/with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
                    (JoinCursor. allocator right-cursor left-cursor
                                 (emap/->relation-map allocator {:build-col-types right-col-types
@@ -421,7 +417,7 @@
 (defmethod lp/emit-expr :full-outer-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
     (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
-      {:col-types (merge-with types/merge-col-types (-> left-col-types with-nullable-cols) (-> right-col-types with-nullable-cols))
+      {:col-types (merge-with types/merge-col-types (-> left-col-types types/with-nullable-cols) (-> right-col-types types/with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
                    (JoinCursor. allocator left-cursor right-cursor
                                 (emap/->relation-map allocator {:build-col-types left-col-types
