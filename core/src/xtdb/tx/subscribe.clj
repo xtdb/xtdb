@@ -68,7 +68,7 @@
 
 (defprotocol PNotifyingSubscriberHandler
   (notify-tx! [_ tx])
-  (handle-notifying-subscriber [_ tx-log after-tx-id f]))
+  (handle-notifying-subscriber [_ tx-log after-tx-id f completed-promise]))
 
 (defrecord NotifyingSubscriberHandler [!state]
   PNotifyingSubscriberHandler
@@ -77,7 +77,7 @@
       (doseq [^Semaphore semaphore semaphores]
         (.release semaphore))))
 
-  (handle-notifying-subscriber [_ tx-log after-tx-id f]
+  (handle-notifying-subscriber [_ tx-log after-tx-id f completed-promise]
     (let [semaphore (Semaphore. 0)
           {:keys [latest-submitted-tx-id]} (swap! !state update :semaphores conj semaphore)]
 
@@ -117,6 +117,7 @@
                    :else (recur last-tx-id)))))
 
            (finally
+             (deliver completed-promise true)
              (swap! !state update :semaphores disj semaphore))))))))
 
 (defn ->notifying-subscriber-handler [latest-submitted-tx]

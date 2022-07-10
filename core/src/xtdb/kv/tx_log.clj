@@ -104,8 +104,8 @@
                              (tx-log (::xt/tx-id (last txs))))))))]
         (xio/->cursor (fn []) (tx-log after-tx-id)))))
 
-  (subscribe [this after-tx-id f]
-    (tx-sub/handle-notifying-subscriber subscriber-handler this after-tx-id f))
+  (subscribe [this after-tx-id f completed-promise]
+    (tx-sub/handle-notifying-subscriber subscriber-handler this after-tx-id f completed-promise))
 
   Closeable
   (close [_]

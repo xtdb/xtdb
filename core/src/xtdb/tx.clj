@@ -418,7 +418,7 @@
 (defn ->secondary-indices [_]
   (->SecondaryIndices (atom #{})))
 
-(defrecord TxIngester [index-store !error ^Future job]
+(defrecord TxIngester [index-store !error ^Future job completed-promise]
   db/TxIngester
   (ingester-error [_] @!error)
 
@@ -427,7 +427,8 @@
 
   Closeable
   (close [_]
-    (.cancel job true)
+    (future-cancel job)
+    (deref completed-promise)
     (log/info "Shut down tx-ingester")))
 
 (def ^ThreadFactory docs-fetcher-thread-factory
@@ -511,6 +512,7 @@
             txs-index-executor (xio/bounded-thread-pool 1 5 txs-processor-thread-factory)
             stats-executor (xio/bounded-thread-pool 1 1 stats-processor-thread-factory)
 
+            completed-promise (promise)
             job (db/subscribe tx-log
                               latest-xtdb-tx-id
                               (fn [^CompletableFuture fut txs]
@@ -572,7 +574,8 @@
 
                                     (catch Throwable t
                                       (set-ingester-error! t)
-                                      (throw t))))))]
+                                      (throw t)))))
+                              completed-promise)]
 
         (.whenComplete job (reify BiConsumer
                              (accept [_ _v e]
@@ -581,4 +584,4 @@
                                (.shutdown ^ExecutorService  stats-executor)
                                (.awaitTermination ^ExecutorService stats-executor 60, java.util.concurrent.TimeUnit/SECONDS))))
 
-        (->TxIngester index-store !error job)))))
+        (->TxIngester index-store !error job completed-promise)))))
