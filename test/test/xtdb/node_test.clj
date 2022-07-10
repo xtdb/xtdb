@@ -15,6 +15,7 @@
             [xtdb.db :as db])
   (:import [xtdb.api IXtdb XtdbDocument]
            [xtdb.api.tx Transaction]
+           [xtdb.node XtdbNode]
            java.time.Duration
            [java.util Date HashMap Map]
            java.util.concurrent.TimeoutException))
@@ -196,3 +197,26 @@
 
       (with-latest-tx nil
         (t/is (thrown? InterruptedException (await-tx tx1 nil)))))))
+
+;; Drop with Clojure 1.11
+(defn- random-uuid [] (java.util.UUID/randomUUID))
+
+(defn- transactions
+  "Creates a sequence of `n` put transactions."
+  [n]
+  (->> (range n)
+       (map (fn [i] {:xt/id i :some/data (str (random-uuid))}))
+       (map #(vector ::xt/put %))))
+
+(t/deftest submit-tx-and-close
+  (f/with-tmp-dirs #{db-dir}
+    (let [start-node #(xt/start-node
+                       {:xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file db-dir "tx-log")}}
+                        :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file db-dir "doc-store")}}
+                        :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}})
+          ^XtdbNode n (start-node)]
+      (xt/submit-tx n (transactions 10000))
+      (.close n)
+      (let [new-n (start-node)]
+        (t/is new-n)))))
+
