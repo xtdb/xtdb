@@ -79,6 +79,8 @@
 (defn submit-docs!
   ([node]
    (submit-docs! node default-scale-factor default-batch-size))
+  ([node sf]
+   (submit-docs! node sf default-batch-size))
   ([node sf batch-size]
    (println "Transacting TPC-H tables...")
    (->> (for [^TpchTable t (TpchTable/getTables)]
