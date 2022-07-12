@@ -107,6 +107,19 @@ jobs:
 
       - run: 'clojure -Srepro -M:core2:slt-test-2'
 
+  slt-test-dirs:
+    executor: clojure
+    resource_class: medium
+    parameters:
+      dirs:
+        type: string
+
+    steps:
+      - attach_workspace:
+          at: ~/
+
+      - run: 'clojure -Srepro -M:core2:slt-test-dirs << parameters.dirs >>'
+
 workflows:
   build:
     jobs:
@@ -126,3 +139,21 @@ workflows:
       - slt-test-2:
           requires:
             - setup
+      - slt-test-dirs:
+          requires:
+            - setup
+          matrix:
+            parameters:
+              dirs:
+                # - "test/core2/sql/logic_test/sqlite_test/random/expr/"
+                - "test/core2/sql/logic_test/sqlite_test/random/aggregates/"
+                  # - "test/core2/sql/logic_test/sqlite_test/random/groupby/"
+                  # - "test/core2/sql/logic_test/sqlite_test/random/select/"
+                  #  - "test/core2/sql/logic_test/sqlite_test/index/between/"
+                  #  - "test/core2/sql/logic_test/sqlite_test/index/commute/"
+                  #  - "test/core2/sql/logic_test/sqlite_test/index/orderby/"
+                  #  - "test/core2/sql/logic_test/sqlite_test/index/orderby_nosort/"
+                  # - "test/core2/sql/logic_test/sqlite_test/index/in/"
+                  #  - "test/core2/sql/logic_test/sqlite_test/index/random/"
+                  #         - "test/core2/sql/logic_test/sqlite_test/index/delete/"
+                  #  - "test/core2/sql/logic_test/sqlite_test/index/view/"

@@ -85,6 +85,17 @@
                          "test/core2/sql/logic_test/sqlite_test/index/orderby_nosort/10/slt_good_0.test"
                          "test/core2/sql/logic_test/sqlite_test/index/random/10/slt_good_0.test"]}
 
+           :slt-test-dirs {:jvm-opts ["-Xmx1536m"
+                                      "-XX:MaxDirectMemorySize=2g"
+                                      "-XX:MaxMetaspaceSize=256m"]
+                           :main-opts
+                           ["-m" "core2.sql.logic-test.runner"
+                            "--verify"
+                            "--dirs"
+                            "--db" "xtdb"
+                            "--max-failures" "0"
+                            "--max-errors" "0"]}
+
            :s3-test {:exec-fn cognitect.test-runner.api/test
                      :exec-args {:includes [:s3]}}
 

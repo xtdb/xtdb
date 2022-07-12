@@ -1879,20 +1879,21 @@
     ;;=>
     (when (or push-correlated? (no-correlated-columns? predicate))
       (cond
-        (columns-in-predicate-present-in-relation? rhs predicate)
-        [join-op join-map lhs [:select predicate rhs]]
         (columns-in-predicate-present-in-relation? lhs predicate)
-        [join-op join-map [:select predicate lhs] rhs]))
+        [join-op join-map [:select predicate lhs] rhs]
+        (and (contains? #{:join :left-outer-join} join-op)
+             (columns-in-predicate-present-in-relation? rhs predicate))
+        [join-op join-map lhs [:select predicate rhs]]))
 
     [:select predicate
      [:cross-join lhs rhs]]
     ;;=>
     (when (or push-correlated? (no-correlated-columns? predicate))
       (cond
-        (columns-in-predicate-present-in-relation? rhs predicate)
-        [:cross-join lhs [:select predicate rhs]]
         (columns-in-predicate-present-in-relation? lhs predicate)
-        [:cross-join [:select predicate lhs] rhs]))))
+        [:cross-join [:select predicate lhs] rhs]
+        (columns-in-predicate-present-in-relation? rhs predicate)
+        [:cross-join lhs [:select predicate rhs]]))))
 
 (defn- push-selections-with-fewer-variables-down [push-correlated? z]
   (r/zmatch z

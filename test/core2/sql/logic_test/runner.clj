@@ -303,6 +303,7 @@
 
 (def cli-options
   [[nil "--verify"]
+   [nil "--dirs"]
    [nil "--limit LIMIT" :parse-fn #(Long/parseLong %)]
    [nil "--max-errors COUNT" :parse-fn #(Long/parseLong %)]
    [nil "--max-failures COUNT" :parse-fn #(Long/parseLong %)]
@@ -311,7 +312,7 @@
                                                    (str/starts-with? x "jdbc:"))) "Unknown db."]]])
 (defn -main [& args]
   (let [{:keys [options arguments errors]} (cli/parse-opts args cli-options)
-        {:keys [verify db max-failures max-errors]} options
+        {:keys [verify db max-failures max-errors dirs]} options
         results (atom {})]
     (if (seq errors)
       (binding [*out* *err*]
@@ -323,7 +324,13 @@
                                        :completion)
                         :query-limit (:limit options)}
                 plan/*include-table-column-in-scan?* true]
-        (doseq [script-name arguments
+        (doseq [script-name (if dirs
+                              (->> arguments
+                                   (mapcat #(file-seq (clojure.java.io/file %)))
+                                   (filter #(.isFile %))
+                                   (map str)
+                                   (sort))
+                              arguments)
                 :let [f #(swap!
                            results
                            assoc
@@ -360,7 +367,7 @@
   (sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
 
 
-  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/index/random/10/slt_good_0.test"))
+  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/xtdb.test"))
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
