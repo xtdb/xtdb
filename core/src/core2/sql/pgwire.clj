@@ -1111,7 +1111,7 @@
     :ignore (cmd-write-msg conn msg-command-complete {:command (statement-head query)})
     :query (cmd-exec-query conn stmt)))
 
-(defn cmd-simple-query [conn {:keys [query conn-state]}]
+(defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (let [{:keys [err] :as stmt} (interpret-sql query)]
     (swap! conn-state assoc :protocol :simple)
     (if err
