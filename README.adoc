@@ -1,28 +1,64 @@
-= XTDB "Core 2"
+= XTDB "Core2" Research
 
-== WARNING!
+Welcome to the XTDB research repository.
 
-This is **not production code.**
-Do not run anything in this repository expecting it to work.
-The modules in this repository are _experiments_ which may or may not be used in future releases of XTDB.
+XTDB Core2 is an experimental, SQL-first, immutable database concept.
 
-If you are looking for the stable, production-quality XTDB source code, you will always find it here: https://github.com/xtdb/xtdb
-
-==  What is this?
-
-XTDB is an immutable, (optionally) bitemporal, HTAP document database.
-(Stable XTDB releases found here: https://docs.xtdb.com/administration/installing/)
-This repository represents a number of _experiments_ intended to explore and expand on the original design of XTDB.
-
-We are not yet certain how these experiments will be used in XTDB.
-Some may be used verbatim, as they appear in this repository.
-Some may be used in parts.
-Some may be limited to providing inspiration.
 
 == Vision
 
-The XTDB vision is explained in the https://xtdb.com/pdfs/vision-doc.pdf[Vision Document] (PDF).
+The technical aim is to layer on temporal query capability on top of a immutable, columnar data storage.
 
-== Developers
+Core2 will support the SQL:2011 specification whilst aiming for a schemaless document model,
+and will embrace a separate-storage-from-compute architecture.
+Core2 uses Apache Arrow as the data-format, and the engine allows for querying across nested document data.
 
-See https://github.com/xtdb/core2/blob/master/HACKING.adoc[HACKING].
+Read more about Core2 in our https://xtdb.com/pdfs/vision-doc.pdf[Vision Document] (PDF).
+
+
+== Warning
+
+This is an experimental project.
+
+If you are looking for an existing immutable document database with bitemporal query, we will continue to develop
+and support XTDB 1.x here: https://github.com/xtdb/xtdb
+
+Stable XTDB releases found here: https://docs.xtdb.com/administration/installing/
+
+
+== Hows does this differ from XTDB 1.x?
+
+XTDB 1.x is a mature product offering, used in production, with on-going development focusing on continued hardening and performance.
+XTDB 1.x is a Datalog-first, in-process embeddable database, offering advanced 'peer-like' functionality such as transaction-functions,
+speculative transactions, programmatic Datalog rules, and more.
+
+XTDB Core2 has a different goal of bringing immutability, schemaless documents, and temporal query to a mainstream SQL audience.
+
+[cols=3*]
+|===
+| | XTDB 1.x Series | XTDB "Core2" Research Series
+| Status | Stable | Experimental (pre-alpha)
+| Initial Stable Release | 2019 | 2023* (planned)
+| Primary Interface | Java + 'edn Datalog' | SQL (JDBC, native drivers, etc.)
+| Secondary Interface | OpenAPI, Calcite SQL (read-only) | Datalog* (planned)
+| Execution Model | Tuple-at-a-Time Sort-Merge Joins | Vectorized Relational Algebra
+| Storage & Compute | Coupled (nodes are full replicas) | Separated (cost-effective scale out)
+| Primary Storage Format | Custom Key-Value encodings | Columnar Apache Arrow
+| Bitemporal Querying | Timeslice only ('as-of') | Full SQL:2011
+| Relational Decorrelation | No | Yes
+| Analytical Querying | No | Yes
+| Single-partition Transaction Log | Infinite Retention | Ephemeral
+| Index Upgrades | Full log replay | Online
+| - | - | -
+| Immutable Semantics | Yes | Yes
+| Online Transactions (ACID, linearizable consistency) | Yes | Yes
+| Always-On Bitemporality | Yes | Yes
+| Dynamism (graph joins, union typing, schemaless, etc.) | Yes | Yes
+|===
+
+
+== License and Copyright
+
+The Affero GNU Public License, Version 3.
+
+Copyright © 2018-2022 JUXT Ltd.
