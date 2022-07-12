@@ -2,6 +2,7 @@
   (:require [clojure.math :as math]
             [clojure.pprint :as pprint]
             [clojure.test :as t]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
@@ -271,12 +272,19 @@
                                 (update-in
                                   [(ex-message t) :lines]
                                   #(conj % (:line record))))))
-                      (log/error t "Error Executing Record" record)
-                      (-> ctx
-                          (update-in [:results :error] (fnil inc 0))
-                          (update :queries-run + (if (= :query (:type record))
-                                                       1
-                                                       0)))
+                      (if (and (str/starts-with? (or (ex-message t) "") "Column reference is not a grouping column")
+                               (contains? (set (:skipif record)) "postgresql"))
+                        ;; Reporting here commented out as its still quite noisy.
+                        (do #_(log/warn "Ignored <Column reference is not a grouping column> Error as XTDB doesn't support" record)
+                              (update ctx :queries-run + (if (= :query (:type record))
+                                                           1
+                                                           0)))
+                        (do (log/error t "Error Executing Record" record)
+                            (-> ctx
+                                (update-in [:results :error] (fnil inc 0))
+                                (update :queries-run + (if (= :query (:type record))
+                                                         1
+                                                         0)))))
                       #_(throw t))))))
             ctx))))
 
@@ -326,8 +334,8 @@
                 plan/*include-table-column-in-scan?* true]
         (doseq [script-name (if dirs
                               (->> arguments
-                                   (mapcat #(file-seq (clojure.java.io/file %)))
-                                   (filter #(.isFile %))
+                                   (mapcat #(file-seq (io/file %)))
+                                   (filter #(.isFile ^java.io.File %))
                                    (map str)
                                    (sort))
                               arguments)
@@ -367,7 +375,7 @@
   (sort-by val (update-vals (group-by #(subs % 0 20) (map key @error-counts-by-message)) count))
 
 
-  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/xtdb.test"))
+  (time (-main  "--verify" "--db" "xtdb" "test/core2/sql/logic_test/sqlite_test/random/groupby/slt_good_1.test"))
 
   (time (-main "--verify" "--db" "sqlite" "test/core2/sql/logic_test/sqlite_test/select4.test"))
 
