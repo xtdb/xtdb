@@ -524,7 +524,7 @@
       ;; start the accept thread, which will listen for connections
       (let [is-running (promise)]
 
-        ;; wait for the :idle state
+        ;; wait for the :running state
         (->> (fn [_ _ _ ns]
                (when (= :running ns)
                  (deliver is-running true)))
@@ -1087,8 +1087,8 @@
       (cmd-send-error conn (err-protocol-violation "no such description possible")))))
 
 (defn cmd-exec-stmt
-  "Given some kind of statement (from interpret-sql) will execute it. For some statements, this does not mean
-  the xt node gets hit - e.g SET some_session_parameter = 42"
+  "Given some kind of statement (from interpret-sql), will execute it. For some statements, this does not mean
+  the xt node gets hit - e.g SET some_session_parameter = 42 modifies the connection, not the database."
   [{:keys [conn-state] :as conn}
    {:keys [query
            ast
@@ -1131,7 +1131,9 @@
   (.flush @(:out conn)))
 
 (defn cmd-enqueue-cmd
-  "Enqueues another command for execution later (puts it at the back of the :cmd-buf queue)."
+  "Enqueues another command for execution later (puts it at the back of the :cmd-buf queue).
+
+  Commands can be queued with (non-conn) args using vectors like so (enqueue-cmd conn [#'cmd-simple-query {:query some-sql}])"
   [{:keys [conn-state]} & cmds]
   (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
 
@@ -1475,4 +1477,6 @@
   (q "SELECT u.user, u.bio, u.age FROM users u where u.user = 'wot'")
 
   ;; you can use values for inline SQL tables
-  (q "SELECT * FROM (VALUES (1 YEAR, true), (3.14, 'foo')) AS x (a, b)"))
+  (q "SELECT * FROM (VALUES (1 YEAR, true), (3.14, 'foo')) AS x (a, b)")
+
+  )
