@@ -5,13 +5,13 @@
             [core2.test-util :as tu]
             [clojure.data.json :as json]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [clojure.string :as str]
-            [core2.util :as util])
+            [clojure.string :as str])
   (:import (java.sql Connection)
            (org.postgresql.util PGobject PSQLException)
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (com.fasterxml.jackson.databind ObjectMapper JsonNode)
-           (java.lang Thread$State)))
+           (java.lang Thread$State)
+           (java.net SocketException)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -21,13 +21,20 @@
 (def ^:dynamic ^:private *server*)
 
 (defn require-node []
-  (set! *node* (node/start-node {})))
+  (when-not *node*
+    (set! *node* (node/start-node {}))))
 
-(defn require-server []
-  (require-node)
-  (when-not *port*
-    (set! *port* (tu/free-port))
-    (set! *server* (pgwire/serve *node* {:port *port*, :num-threads 1}))))
+(defn require-server
+  ([] (require-server {}))
+  ([opts]
+   (require-node)
+   (when-not *port*
+     (set! *port* (tu/free-port))
+     (->> (merge {:num-threads 1}
+                 opts
+                 {:port *port*})
+          (pgwire/serve *node*)
+          (set! *server*)))))
 
 (defn- each-fixture [f]
   (binding [*port* nil
@@ -36,8 +43,8 @@
     (try
       (f)
       (finally
-        (some-> *server* util/try-close)
-        (some-> *node* util/try-close)))))
+        (some-> *node* .close)
+        (some-> *server* .close)))))
 
 (t/use-fixtures :each #'each-fixture)
 
@@ -258,25 +265,31 @@
   (require-server)
   (is (registered? *server*)))
 
+(defn check-server-resources-freed
+  ([]
+   (require-server)
+   (check-server-resources-freed *server*))
+  ([server]
+   (testing "unregistered"
+     (is (not (registered? server))))
+
+   (testing "accept socket"
+     (is (.isClosed @(:accept-socket server))))
+
+   (testing "accept thread"
+     (is (= Thread$State/TERMINATED (.getState (:accept-thread server)))))
+
+   (testing "thread pool shutdown"
+     (is (.isShutdown (:thread-pool server)))
+     (is (.isTerminated (:thread-pool server))))))
+
 (deftest server-resources-freed-on-close-test
   (require-node)
   (doseq [close-method [#(.close %)
                          pgwire/stop-server]]
     (with-open [server (pgwire/serve *node* {:port (tu/free-port)})]
       (close-method server)
-
-      (testing "unregistered"
-        (is (not (registered? server))))
-
-      (testing "accept socket"
-        (is (.isClosed @(:accept-socket server))))
-
-      (testing "accept thread"
-        (is (= Thread$State/TERMINATED (.getState (:accept-thread server)))))
-
-      (testing "thread pool shutdown"
-        (is (.isShutdown (:thread-pool server)))
-        (is (.isTerminated (:thread-pool server)))))))
+      (check-server-resources-freed server))))
 
 (deftest server-resources-freed-if-exc-on-start-test
   (require-node)
@@ -284,16 +297,96 @@
                                            :unsafe-init-state
                                            {:silent-start true
                                             :injected-start-exc (Exception. "boom!")}})]
+    (check-server-resources-freed server)))
 
-    (testing "unregistered"
-      (is (not (registered? server))))
+(deftest accept-thread-and-socket-closed-on-uncaught-accept-exc-test
+  (require-server)
 
-    (testing "accept socket"
-      (is (.isClosed @(:accept-socket server))))
+  (swap! (:server-state *server*) assoc
+         :injected-accept-exc (Exception. "boom")
+         :silent-accept true)
 
-    (testing "accept thread"
-      (is (= Thread$State/TERMINATED (.getState (:accept-thread server)))))
+  (is (thrown? Throwable (with-open [_ (jdbc-conn)])))
 
-    (testing "thread pool shutdown"
-      (is (.isShutdown (:thread-pool server)))
-      (is (.isTerminated (:thread-pool server))))))
+  (testing "registered"
+    (is (registered? *server*)))
+
+  (testing "accept socket"
+    (is (.isClosed @(:accept-socket *server*))))
+
+  (testing "accept thread"
+    (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*))))))
+
+(defn q [conn sql]
+  (->> (jdbc/execute! conn sql)
+       (mapv (fn [row] (update-vals row (comp json/read-str str))))))
+
+(defn ping [conn]
+  (-> (q conn ["select a.ping from (values ('pong')) a (ping)"])
+      first
+      :ping))
+
+(defn- inject-accept-exc
+  ([]
+   (inject-accept-exc (Exception. "")))
+  ([ex]
+   (require-server)
+   (swap! (:server-state *server*)
+          assoc :injected-accept-exc ex, :silent-accept true)
+   nil))
+
+(defn- connect-and-throwaway []
+  (try (jdbc-conn) (catch Throwable _)))
+
+(deftest accept-uncaught-exception-allows-free-test
+  (inject-accept-exc)
+  (connect-and-throwaway)
+  (.close *server*)
+  (check-server-resources-freed))
+
+(deftest accept-thread-stoppage-sets-error-status
+  (inject-accept-exc)
+  (connect-and-throwaway)
+  (is (= :error @(:server-status *server*))))
+
+(deftest accept-thread-stoppage-allows-other-conns-to-continue-test
+  (with-open [conn1 (jdbc-conn)]
+    (inject-accept-exc)
+    (connect-and-throwaway)
+    (is (= "pong" (ping conn1)))))
+
+(deftest accept-thread-socket-closed-exc-does-not-stop-later-accepts-test
+  (inject-accept-exc (SocketException. "Socket closed"))
+  (connect-and-throwaway)
+  (is (with-open [conn (jdbc-conn)] true)))
+
+(deftest accept-thread-interrupt-closes-thread-test
+  (require-server {:accept-so-timeout 10})
+
+  (.interrupt (:accept-thread *server*))
+  (.join (:accept-thread *server*) 1000)
+
+  (is (:accept-interrupted @(:server-state *server*)))
+  (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*)))))
+
+(deftest accept-thread-interrupt-allows-server-shutdown-test
+  (require-server {:accept-so-timeout 10})
+
+  (.interrupt (:accept-thread *server*))
+  (.join (:accept-thread *server*) 1000)
+
+  (.close *server*)
+  (check-server-resources-freed))
+
+(deftest accept-thread-socket-close-stops-thread-test
+  (require-server)
+  (.close @(:accept-socket *server*))
+  (.join (:accept-thread *server*) 1000)
+  (is (= Thread$State/TERMINATED (.getState (:accept-thread *server*)))))
+
+(deftest accept-thread-socket-close-allows-cleanup-test
+  (require-server)
+  (.close @(:accept-socket *server*))
+  (.join (:accept-thread *server*) 1000)
+  (.close *server*)
+  (check-server-resources-freed))

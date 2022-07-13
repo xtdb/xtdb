@@ -460,6 +460,7 @@
           (.close socket))))
 
     (when-not (#{Thread$State/NEW, Thread$State/TERMINATED} (.getState accept-thread))
+      (log/debug "Closing accept thread")
       (.interrupt accept-thread)
       (.join accept-thread (* 5 1000))
       (when-not (= Thread$State/TERMINATED (.getState accept-thread))
@@ -468,6 +469,7 @@
         (swap! server-state assoc :accept-thread-misbehaving true)))
 
     (when-not (.isShutdown thread-pool)
+      (log/debug "Closing thread pool")
       (.shutdownNow thread-pool)
       (when-not (.awaitTermination thread-pool 5 TimeUnit/SECONDS)
         (log/error "Could not shutdown thread pool gracefully" {:port port})
@@ -497,7 +499,7 @@
                v)))
          (.compute servers port))))
 
-(defn- start-server [server]
+(defn- start-server [server {:keys [accept-so-timeout]}]
   (let [{:keys [server-status, server-state, accept-thread, accept-socket, port]} server
         {:keys [injected-start-exc, silent-start]} @server-state
         start-exc (atom nil)]
@@ -510,6 +512,10 @@
 
       ;; try and bind the socket (this throws if we cannot get the port)
       @accept-socket
+
+      ;; set a socket timeout so we can interrupt the accept-thread
+      (when accept-so-timeout
+        (.setSoTimeout @accept-socket accept-so-timeout))
 
       ;; lets register ourselves now we have acquired a global resource (port).
       (->> (reify BiFunction
@@ -573,12 +579,10 @@
 
 (defn stop-server [server]
   (let [{:keys [server-status, port]} server]
-    (when (compare-and-set! server-status :running :draining)
-      ;; todo wait for conns?
-      (cleanup-server-resources server)
-      (if (= :cleaned-up @server-status)
-        (deregister-server server)
-        (log/fatal "Server resources could not be freed, please restart xtdb" port)))))
+    (cleanup-server-resources server)
+    (if (= :cleaned-up @server-status)
+      (deregister-server server)
+      (log/fatal "Server resources could not be freed, please restart xtdb" port))))
 
 (defn- set-session-parameter [conn parameter value]
   (swap! (:conn-state conn) assoc-in [:session-parameters parameter] value))
@@ -1361,6 +1365,7 @@
   [server]
   (let [{:keys [^ServerSocket accept-socket,
                 server-status,
+                server-state
                 ^ExecutorService thread-pool,
                 port]} server]
     (when-not (compare-and-set! server-status :starting :running)
@@ -1370,13 +1375,23 @@
 
     (try
       (loop []
+
         (cond
-          (.isClosed @accept-socket) nil
+          (.isInterrupted (Thread/currentThread)) nil
+
+          (.isClosed @accept-socket)
+          (log/debug "Accept socket closed, exiting accept loop")
 
           (= :running @server-status)
           (do
             (try
               (let [conn-socket (.accept @accept-socket)]
+
+                (when-some [exc (:injected-accept-exc @server-state)]
+                  (swap! server-state dissoc :injected-accept-exc)
+                  (.close conn-socket)
+                  (throw exc))
+
                 (.setTcpNoDelay conn-socket true)
                 (if (= :running @server-status)
                   ;; todo fix buffer on tp? q gonna be infinite right now
@@ -1385,36 +1400,44 @@
               (catch SocketException e
                 (when (not= "Socket closed" (.getMessage e))
                   (log/warn e "Accept socket exception" {:port port})))
+              (catch java.net.SocketTimeoutException e
+                (when (not= "Accept timed out" (.getMessage e))
+                  (log/warn e "Accept time out" {:port port})))
               (catch IOException e
-                (log/warn e "Accept IO exception" {:port port}))
-              (catch SocketTimeoutException e
-                (log/warn e "Accept timeout" {:port port})))
+                (log/warn e "Accept IO exception" {:port port})))
             (recur))
 
           :else nil))
-      ;; should already be stopping
-      (catch InterruptedException _)
+      ;; should already be stopping if interrupted
+      (catch InterruptedException _ (.interrupt (Thread/currentThread)))
       ;; for the unknowns, do not stop - leave in an error state
       ;; so it can be inspected.
       (catch Throwable e
         (compare-and-set! server-status :running :error)
-        (log/error e "Exception caught on accept thread" {:port port})))))
+        (util/try-close @accept-socket)
+        (when-not (:silent-accept @server-state)
+          (log/error e "Exception caught on accept thread" {:port port}))))
+
+    (when (.isInterrupted (Thread/currentThread))
+      (swap! server-state assoc :accept-interrupted true)
+      (log/debug "Accept loop interrupted, exiting accept loop"))))
 
 (defn- create-server [{:keys [node, port, num-threads, unsafe-init-state]}]
   (assert node ":node is required")
-  (let [self (atom nil)]
-    (->> (map->Server
-           {:port port
-            :node node
-            :accept-socket (delay (ServerSocket. port))
-            :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self)) (str "pgwire-server-accept-" port))
-            :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
-            :server-status (atom :new)
-            :server-state (atom (merge unsafe-init-state {:parameters {"server_version" "14"
-                                                                       "server_encoding" "UTF8"
-                                                                       "client_encoding" "UTF8"
-                                                                       "TimeZone" "UTC"}}))})
-         (reset! self))))
+  (let [self (atom nil)
+        srvr (map->Server
+               {:port port
+                :node node
+                :accept-socket (delay (ServerSocket. port))
+                :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self)) (str "pgwire-server-accept-" port))
+                :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
+                :server-status (atom :new)
+                :server-state (atom (merge unsafe-init-state {:parameters {"server_version" "14"
+                                                                           "server_encoding" "UTF8"
+                                                                           "client_encoding" "UTF8"
+                                                                           "TimeZone" "UTC"}}))})]
+    (reset! self srvr)
+    srvr))
 
 (defn serve
   "Creates and starts a pgwire server.
@@ -1436,7 +1459,7 @@
                    :num-threads 42}
          cfg (assoc (merge defaults opts) :node node)]
      (doto (create-server cfg)
-       start-server))))
+       (start-server cfg)))))
 
 (defn stop-all
   "Stops all running pgwire servers (from orbit, its the only way to be sure)."
