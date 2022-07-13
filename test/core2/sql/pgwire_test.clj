@@ -444,11 +444,8 @@
 (defn- get-last-conn []
   (last (sort-by :cid (get-connections))))
 
-(defn- close-and-wait [client-conn server-conn ms]
-  (let [p (promise)]
-    (swap! (:conn-state server-conn) assoc :close-promise p)
-    (.close client-conn)
-    (deref p ms false)))
+(defn- wait-for-close [server-conn ms]
+  (deref (:close-promise @(:conn-state server-conn)) ms false))
 
 (deftest conn-deregistered-on-close-test
   (require-server {:num-threads 2})
@@ -456,10 +453,12 @@
               srv-conn1 (get-last-conn)
               conn2 (jdbc-conn)
               srv-conn2 (get-last-conn)]
-    (is (close-and-wait conn1 srv-conn1 500))
+    (.close conn1)
+    (is (wait-for-close srv-conn1 500))
     (is (= 1 (count (get-connections))))
 
-    (is (close-and-wait conn2 srv-conn2 500))
+    (.close conn2)
+    (is (wait-for-close srv-conn2 500))
     (is (= 0 (count (get-connections))))))
 
 (defn check-conn-resources-freed [server-conn]
@@ -479,5 +478,14 @@
   (require-server)
   (with-open [client-conn (jdbc-conn)
               server-conn (get-last-conn)]
-    (is (close-and-wait client-conn server-conn 500))
+    (.close client-conn)
+    (is (wait-for-close server-conn 500))
+    (check-conn-resources-freed server-conn)))
+
+(deftest server-close-closes-idle-conns-test
+  (require-server)
+  (with-open [_client-conn (jdbc-conn)
+              server-conn (get-last-conn)]
+    (.close *server*)
+    (is (wait-for-close server-conn 500))
     (check-conn-resources-freed server-conn)))

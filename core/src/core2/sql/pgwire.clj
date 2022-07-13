@@ -468,6 +468,10 @@
         (compare-and-set! server-status :cleaning-up :error-on-cleanup)
         (swap! server-state assoc :accept-thread-misbehaving true)))
 
+    ;; force stopping conns
+    (doseq [conn (vals (:connections @server-state))]
+      (stop-connection conn))
+
     (when-not (.isShutdown thread-pool)
       (log/debug "Closing thread pool")
       (.shutdownNow thread-pool)
@@ -1316,7 +1320,7 @@
         in (delay (DataInputStream. (.getInputStream conn-socket)))
         out (delay (DataOutputStream. (.getOutputStream conn-socket)))
         conn-status (atom :new)
-        conn-state (atom {})
+        conn-state (atom {:close-promise (promise)})
         conn
         (map->Connection
           {:server server,
