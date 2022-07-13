@@ -24,13 +24,27 @@
 
 (defn- meta-fallback-expr [{:keys [op] :as expr}]
   (case op
-    (:literal :param :let) nil
+    (:literal :param :local) expr
     :variable {:op :metadata-field-present, :field (:variable expr)}
+
     :if (let [{:keys [pred then else]} expr]
-          {:op :if,
-           :pred (meta-fallback-expr pred)
-           :then (meta-fallback-expr then)
-           :else (meta-fallback-expr else)})
+          {:op :call, :f :and
+           :args [(meta-fallback-expr pred)
+                  {:op :call, :f :or
+                   :args [(meta-fallback-expr then)
+                          (meta-fallback-expr else)]}]})
+
+    :if-some (let [{:keys [local expr then else]} expr]
+               (recur {:op :let, :local local, :expr expr,
+                       :body {:op :if, :pred {:op :call, :f :nil?
+                                              :args [{:op :local, :local local}]}
+                              :then else
+                              :else then}}))
+
+    :let (let [{:keys [local expr body]} expr]
+           {:op :let, :local local, :expr (meta-fallback-expr expr)
+            :body (meta-fallback-expr body)})
+
     :call (let [{:keys [f args]} expr]
             (-> {:op :call
                  :f (if (= f :or) :or :and)
