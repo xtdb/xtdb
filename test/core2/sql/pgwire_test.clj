@@ -277,3 +277,23 @@
       (testing "thread pool shutdown"
         (is (.isShutdown (:thread-pool server)))
         (is (.isTerminated (:thread-pool server)))))))
+
+(deftest server-resources-freed-if-exc-on-start-test
+  (require-node)
+  (with-open [server (pgwire/serve *node* {:port (tu/free-port)
+                                           :unsafe-init-state
+                                           {:silent-start true
+                                            :injected-start-exc (Exception. "boom!")}})]
+
+    (testing "unregistered"
+      (is (not (registered? server))))
+
+    (testing "accept socket"
+      (is (.isClosed @(:accept-socket server))))
+
+    (testing "accept thread"
+      (is (= Thread$State/TERMINATED (.getState (:accept-thread server)))))
+
+    (testing "thread pool shutdown"
+      (is (.isShutdown (:thread-pool server)))
+      (is (.isTerminated (:thread-pool server))))))

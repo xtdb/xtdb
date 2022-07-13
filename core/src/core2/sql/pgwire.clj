@@ -450,7 +450,8 @@
     ;; todo revisit these transitions
     (or (compare-and-set! server-status :draining :cleaning-up)
         (compare-and-set! server-status :running :cleaning-up)
-        (compare-and-set! server-status :error :cleaning-up))
+        (compare-and-set! server-status :error :cleaning-up)
+        (compare-and-set! server-status :error-on-start :cleaning-up))
 
     (when (realized? accept-socket)
       (let [^ServerSocket socket @accept-socket]
@@ -497,7 +498,9 @@
          (.compute servers port))))
 
 (defn- start-server [server]
-  (let [{:keys [server-status, accept-thread, accept-socket, port]} server]
+  (let [{:keys [server-status, server-state, accept-thread, accept-socket, port]} server
+        {:keys [injected-start-exc, silent-start]} @server-state
+        start-exc (atom nil)]
 
     ;; sanity check its a new server
     (when-not (compare-and-set! server-status :new :starting)
@@ -539,9 +542,14 @@
 
         (remove-watch server-status [:accept-watch port]))
 
+      ;; if we have injected an exception, throw it now (e.g for tests)
+      (some-> injected-start-exc throw)
+
       (catch Throwable e
-        (log/error e "Exception caught on server start" port)
-        (reset! server-status :error-on-start)))
+        (when-not silent-start
+          (log/error e "Exception caught on server start" port))
+        (reset! server-status :error-on-start)
+        (reset! start-exc e)))
 
     ;; run clean up if we didn't start for any reason
     (when (not= :running @server-status)
@@ -555,7 +563,11 @@
     (when (compare-and-set! server-status :cleaned-up :error-on-start)
       ;; if we have no dangling resources, unregister
       ;; (if we have dangling, we might be able to fix our repl session still!)
-      (deregister-server server)))
+      (deregister-server server))
+
+    (when-not silent-start
+      (when-some [exc @start-exc]
+        (throw exc))))
 
   nil)
 
@@ -1388,7 +1400,7 @@
         (compare-and-set! server-status :running :error)
         (log/error e "Exception caught on accept thread" {:port port})))))
 
-(defn- create-server [{:keys [node, port, num-threads]}]
+(defn- create-server [{:keys [node, port, num-threads, unsafe-init-state]}]
   (assert node ":node is required")
   (let [self (atom nil)]
     (->> (map->Server
@@ -1398,10 +1410,10 @@
             :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self)) (str "pgwire-server-accept-" port))
             :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
             :server-status (atom :new)
-            :server-state (atom {:parameters {"server_version" "14"
-                                              "server_encoding" "UTF8"
-                                              "client_encoding" "UTF8"
-                                              "TimeZone" "UTC"}})})
+            :server-state (atom (merge unsafe-init-state {:parameters {"server_version" "14"
+                                                                       "server_encoding" "UTF8"
+                                                                       "client_encoding" "UTF8"
+                                                                       "TimeZone" "UTC"}}))})
          (reset! self))))
 
 (defn serve
