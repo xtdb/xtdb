@@ -2114,13 +2114,12 @@
                       {::xt/tx-time (Date.)
                        ::xt/tx-id 0}))
 
-          transient-kv (mut-kv/->mutable-kv-store)
-          delta-index-store (index-store/->kv-index-store {:kv-store transient-kv
+          delta-index-store (index-store/->kv-index-store {:kv-store (mut-kv/->mutable-kv-store)
                                                            :cav-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
                                                            :canonical-buffer-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
                                                            :stats-kvs-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})})
           delta-index-store-tx (db/begin-index-tx delta-index-store tx)
-          forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store, transient-kv, valid-time, tx-id, (atom #{}), delta-index-store-tx, nil)
+          forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store, valid-time, tx-id, (atom #{}), delta-index-store-tx, nil)
 
           in-flight-tx (-> (db/begin-tx (assoc tx-indexer :bus (reify xtdb.bus/EventSink
                                                                  (send [_ _])))

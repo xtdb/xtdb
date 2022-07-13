@@ -228,7 +228,7 @@
 (defn begin-document-store-tx [doc-store]
   (->ForkedDocumentStore doc-store (atom {})))
 
-(defrecord ForkedKvIndexStoreTx [base-index-store, transient-kv, valid-time, tx-id, !evicted-eids, index-store-tx abort-index-tx]
+(defrecord ForkedKvIndexStoreTx [base-index-store, valid-time, tx-id, !evicted-eids, index-store-tx abort-index-tx]
   db/IndexStoreTx
   (index-docs [_ docs]
     (db/index-docs index-store-tx docs))

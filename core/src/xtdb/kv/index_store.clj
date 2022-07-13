@@ -1140,7 +1140,7 @@
         transient-kv (mut-kv/->mutable-kv-store)
         transient-kv-tx (kv/begin-kv-tx transient-kv)
         transient-tx (->KvIndexStoreTx transient-kv transient-kv-tx tx thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))
-        forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store transient-kv nil (::xt/tx-id tx) (atom #{}) transient-tx abort-index-tx)]
+        forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store nil (::xt/tx-id tx) (atom #{}) transient-tx abort-index-tx)]
     [forked-index-store-tx transient-kv-tx]))
 
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
