@@ -547,12 +547,12 @@
     (when (not= :running @server-status)
       (cleanup-server-resources server))
 
-    ;; we will have only cleaned up if there was some problem
-    (compare-and-set! server-status :cleaned-up :error-on-start)
-
     ;; check if we could not clean up due to a clean up error
-    (if (compare-and-set! server-status :error-on-cleanup :error-on-start)
-      (log/fatal "Server resources could not be freed, please restart xtdb" port)
+    (when (compare-and-set! server-status :error-on-cleanup :error-on-start)
+      (log/fatal "Server resources could not be freed, please restart xtdb" port))
+
+    ;; we will have only cleaned up if there was some problem
+    (when (compare-and-set! server-status :cleaned-up :error-on-start)
       ;; if we have no dangling resources, unregister
       ;; (if we have dangling, we might be able to fix our repl session still!)
       (deregister-server server)))
@@ -596,7 +596,7 @@
 
     (compare-and-set! conn-status :cleaning-up :cleaned-up)))
 
-(defn- stop-connection [conn]
+(defn stop-connection [conn]
   (let [{:keys [conn-status, server]} conn]
     (reset! conn-status :closing)
     ;; todo wait for close?
@@ -1418,12 +1418,13 @@
 
   It will be addressable in an emergency by port with (get @#'pgwire/servers port).
   OR nuke everything with (stop-all)."
-  [node & {:as opts}]
-  (let [defaults {:port 5432
-                  :num-threads 42}
-        cfg (assoc (merge defaults opts) :node node)]
-    (doto (create-server cfg)
-      start-server)))
+  ([node] (serve node {}))
+  ([node opts]
+   (let [defaults {:port 5432
+                   :num-threads 42}
+         cfg (assoc (merge defaults opts) :node node)]
+     (doto (create-server cfg)
+       start-server))))
 
 (defn stop-all
   "Stops all running pgwire servers (from orbit, its the only way to be sure)."
