@@ -4,6 +4,7 @@
             [clojure.test :as t]
             [clojure.tools.logging.impl :as log-impl]
             [xtdb.fixtures.kv :as fkv]
+            [xtdb.tx.event :as xte]
             [xtdb.api :as xt]
             [xtdb.bus :as bus]
             [xtdb.codec :as c]
@@ -260,12 +261,11 @@
           (t/is (empty? history)))))))
 
 (defn index-tx [tx tx-events docs]
-  (let [{:keys [xtdb/tx-indexer xtdb/index-store]} @(:!system *api*)
-        in-flight-tx (db/begin-tx tx-indexer tx)]
+  (let [{:keys [xtdb/tx-indexer]} @(:!system *api*)
+        in-flight-tx (db/begin-tx tx-indexer)]
 
     (db/index-tx-docs in-flight-tx docs)
-    (db/index-tx-events in-flight-tx tx-events)
-
+    (db/index-tx-events in-flight-tx (assoc tx ::xte/tx-events tx-events))
     (db/commit in-flight-tx)))
 
 (t/deftest test-handles-legacy-evict-events
