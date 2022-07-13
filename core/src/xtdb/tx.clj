@@ -296,7 +296,7 @@
 
   (index-tx-events [this tx]
     (log/debug "Indexing tx-id:" (::xt/tx-id tx))
-    (bus/send bus {::xt/event-type ::indexing-tx, :submitted-tx tx})
+    (bus/send bus {::xt/event-type ::indexing-tx, :submitted-tx (select-keys tx [::xt/tx-id ::xt/tx-time ::xt/tx-ops])})
 
     (db/index-tx index-store-tx tx)
 
@@ -357,12 +357,11 @@
 
     (log/debug "Transaction committed:" (pr-str @!tx))
 
-    (let [{:keys [tx-events]} @!tx]
-      (bus/send bus (into {::xt/event-type ::indexed-tx,
-                           :submitted-tx @!tx,
-                           :committed? true
-                           ::txe/tx-events tx-events}
-                          (select-keys @!tx [:doc-ids :av-count :bytes-indexed])))))
+    (bus/send bus (into {::xt/event-type ::indexed-tx,
+                         :submitted-tx (select-keys @!tx [::xt/tx-id ::xt/tx-time ::xt/tx-ops]),
+                         :committed? true
+                         ::txe/tx-events (:tx-events @!tx)}
+                        (select-keys @!tx [:doc-ids :av-count :bytes-indexed]))))
 
   (abort [_]
     (swap! !tx-state (fn [tx-state]
@@ -376,7 +375,7 @@
     (log/debug "Transaction aborted:" (pr-str @!tx))
 
     (bus/send bus {::xt/event-type ::indexed-tx,
-                   :submitted-tx @!tx,
+                   :submitted-tx (select-keys @!tx [::xt/tx-id ::xt/tx-time]),,
                    :committed? false
                    ::txe/tx-events (:tx-events @!tx)})))
 
