@@ -37,6 +37,7 @@
  :aliases {:core2 {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED" ; needed on JDK16 to allow Netty/Arrow access DirectBuffer internals
                               "-Dio.netty.tryReflectionSetAccessible=true"]}
 
+           ;; deprecated: look to :debug and 4gb aliases for similar options
            :dev {:jvm-opts ["-Xmx2G"
                             "-XX:MaxDirectMemorySize=2G"
                             #_"-Darrow.enable_null_check_for_get=false"
@@ -45,6 +46,19 @@
                             #_"--add-modules=ALL-SYSTEM" ;; enables all incubator modules instead
                             #_"-Darrow.memory.debug.allocator=true"
                             #_"-Darrow.enable_unsafe_memory_access=true"]}
+
+           :debug {:jvm-opts
+                   [#_"-Darrow.enable_null_check_for_get=false"
+                    #_"-Dclojure.spec.check-asserts=false" ;; default is true
+                    #_"--add-modules=jdk.incubator.vector" ;; doesn't work if it doesn't exist, like on JDK11.
+                    #_"--add-modules=ALL-SYSTEM" ;; enables all incubator modules instead
+                    #_"-Darrow.memory.debug.allocator=true"
+                    #_"-Darrow.enable_unsafe_memory_access=true"]}
+
+           :4gb {:jvm-opts ["-Xmx1280m"
+                            "-Xms1280m"
+                            "-XX:MaxDirectMemorySize=2g"
+                            "-XX:MaxMetaspaceSize=512m"]}
 
            :test {:exec-fn cognitect.test-runner.api/test
                   :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt]}}
@@ -85,10 +99,7 @@
                          "test/core2/sql/logic_test/sqlite_test/index/orderby_nosort/10/slt_good_0.test"
                          "test/core2/sql/logic_test/sqlite_test/index/random/10/slt_good_0.test"]}
 
-           :slt-test-dirs {:jvm-opts ["-Xmx1536m"
-                                      "-XX:MaxDirectMemorySize=2g"
-                                      "-XX:MaxMetaspaceSize=256m"]
-                           :main-opts
+           :slt-test-dirs {:main-opts
                            ["-m" "core2.sql.logic-test.runner"
                             "--verify"
                             "--dirs"

@@ -63,7 +63,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -X:core2:test'
+      - run: 'clojure -Srepro -X:core2:4gb:test'
 
       - slack/notify:
           branch_pattern: master
@@ -79,7 +79,7 @@ jobs:
           at: ~/
 
       # TODO should test the other modules too
-      - run: 'clojure -Srepro -X:core2:integration-test'
+      - run: 'clojure -Srepro -X:core2:4gb:integration-test'
 
       - slack/notify:
           branch_pattern: master
@@ -95,7 +95,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -M:core2:slt-test'
+      - run: 'clojure -Srepro -M:core2:4gb:slt-test'
 
   slt-test-2:
     executor: clojure
@@ -105,7 +105,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -M:core2:slt-test-2'
+      - run: 'clojure -Srepro -M:core2:4gb:slt-test-2'
 
   slt-test-dirs:
     executor: clojure
@@ -118,7 +118,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
-      - run: 'clojure -Srepro -M:core2:slt-test-dirs << parameters.dirs >>'
+      - run: 'clojure -Srepro -M:core2:4gb:slt-test-dirs << parameters.dirs >>'
 
 workflows:
   build:
@@ -146,14 +146,14 @@ workflows:
             parameters:
               dirs:
                 # - "test/core2/sql/logic_test/sqlite_test/random/expr/"
-                - "test/core2/sql/logic_test/sqlite_test/random/aggregates/"
+                # - "test/core2/sql/logic_test/sqlite_test/random/aggregates/"
                   # - "test/core2/sql/logic_test/sqlite_test/random/groupby/"
                   # - "test/core2/sql/logic_test/sqlite_test/random/select/"
                   #  - "test/core2/sql/logic_test/sqlite_test/index/between/"
                   #  - "test/core2/sql/logic_test/sqlite_test/index/commute/"
                   #  - "test/core2/sql/logic_test/sqlite_test/index/orderby/"
                   #  - "test/core2/sql/logic_test/sqlite_test/index/orderby_nosort/"
-                  # - "test/core2/sql/logic_test/sqlite_test/index/in/"
+                  #  - "test/core2/sql/logic_test/sqlite_test/index/in/"
                   #  - "test/core2/sql/logic_test/sqlite_test/index/random/"
-                  #         - "test/core2/sql/logic_test/sqlite_test/index/delete/"
+                  #  - "test/core2/sql/logic_test/sqlite_test/index/delete/"
                   #  - "test/core2/sql/logic_test/sqlite_test/index/view/"
