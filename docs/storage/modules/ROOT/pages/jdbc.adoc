@@ -48,6 +48,8 @@ Each of these also require an additional dependency to pull in the relevant JDBC
 The connection pool also requires a `db-spec` - a map containing either a full `jdbcUrl` or its component parts, including `dbtype` (provided by the dialect by default), `host`, `port`, `dbname`.
 Any other attributes supplied (`user`, `password`, say) are appended to the URL as query parameters - see your individual JDBC driver for full details.
 
+Please note that you are responsible for the URL encoding of the values you provide in `db-spec`. JDBC drivers handle URL encoding differently and XTDB will *not* URL encode the values you provide. Hence in case you provide a full `jdbcUrl`, make sure it is consistent with the requirements of your JDBC driver; alternatively if you chose to provide individual attributes (`dbname`, `user`, `password`, ...), make sure their corresponding values are correctly URL encoded according to your driver's requirements.
+
 [#pool-opts]
 XTDB uses https://github.com/brettwooldridge/HikariCP[HikariCP] to provide connection pools.
 You can pass options directly to https://javadoc.io/static/com.zaxxer/HikariCP/3.2.0/com/zaxxer/hikari/HikariConfig.html[`HikariConfig`] via `pool-opts` - for example, to `setMaximumPoolSize`, add `maximumPoolSize` to your configuration.
