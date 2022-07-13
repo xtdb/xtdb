@@ -5,7 +5,8 @@
             [core2.test-util :as tu]
             [clojure.data.json :as json]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [clojure.tools.logging :as log])
   (:import (java.sql Connection)
            (org.postgresql.util PGobject PSQLException)
            (com.fasterxml.jackson.databind.node JsonNodeType)
@@ -47,6 +48,25 @@
         (some-> *server* .close)))))
 
 (t/use-fixtures :each #'each-fixture)
+
+(defn- once-fixture [f]
+  (let [check-if-no-pgwire-threads (zero? (count @#'pgwire/servers))]
+    (try
+      (f)
+      (finally
+        (when check-if-no-pgwire-threads
+          ;; warn if it looks like threads are stick around (for CI logs)
+          (when-not (zero? (->> (Thread/getAllStackTraces)
+                                keys
+                                (map #(.getName %))
+                                (filter #(str/starts-with? % "pgwire"))
+                                count))
+            (log/warn "dangling pgwire resources discovered after tests!"))
+
+          ;; stop all just in case we can clean up anyway
+          (pgwire/stop-all))))))
+
+(t/use-fixtures :once #'once-fixture)
 
 (defn- jdbc-url [& params]
   (require-server)
@@ -390,3 +410,15 @@
   (.join (:accept-thread *server*) 1000)
   (.close *server*)
   (check-server-resources-freed))
+
+(deftest stop-all-test
+  (when-not (= 0 (count @#'pgwire/servers))
+    (log/warn "skipping stop-all-test because servers already exist"))
+
+  (when (= 0 (count @#'pgwire/servers))
+    (require-node)
+    (let [server1 (pgwire/serve *node* {:port (tu/free-port)})
+          server2 (pgwire/serve *node* {:port (tu/free-port)})]
+      (pgwire/stop-all)
+      (check-server-resources-freed server1)
+      (check-server-resources-freed server2))))

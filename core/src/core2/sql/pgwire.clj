@@ -1398,7 +1398,8 @@
                   (.submit thread-pool ^Runnable (fn [] (connect server conn-socket)))
                   (.close conn-socket)))
               (catch SocketException e
-                (when (not= "Socket closed" (.getMessage e))
+                (when (and (not (.isClosed @accept-socket))
+                           (not= "Socket closed" (.getMessage e)))
                   (log/warn e "Accept socket exception" {:port port})))
               (catch java.net.SocketTimeoutException e
                 (when (not= "Accept timed out" (.getMessage e))
