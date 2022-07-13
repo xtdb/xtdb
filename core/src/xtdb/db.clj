@@ -10,16 +10,17 @@
   (max-depth [this]))
 
 (defprotocol IndexStoreTx
+  (index-tx [this tx])
   (index-docs [this docs])
   (unindex-eids [this base-snapshot eids])
   (index-entity-txs [this entity-txs])
   (commit-index-tx [this])
-  (abort-index-tx [this docs]))
+  (abort-index-tx [this tx docs]))
 
 (defprotocol IndexStore
   (store-index-meta [this k v])
   (tx-failed? [this tx-id])
-  (begin-index-tx [index-store tx])
+  (begin-index-tx [this])
   (index-stats [this docs]))
 
 (defprotocol LatestCompletedTx
@@ -68,12 +69,12 @@
 
 (defprotocol InFlightTx
   (index-tx-docs [in-flight-tx docs])
-  (index-tx-events [in-flight-tx tx-events])
+  (index-tx-events [in-flight-tx tx])
   (commit [in-flight-tx])
   (abort [in-flight-tx]))
 
 (defprotocol TxIndexer
-  (begin-tx [tx-indexer tx]))
+  (begin-tx [tx-indexer]))
 
 (defprotocol TxIngester
   (ingester-error [tx-ingester]))

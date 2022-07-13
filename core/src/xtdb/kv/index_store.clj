@@ -1001,8 +1001,12 @@
 (def ^:private ^ThreadLocal hash-key-buffer-tl (buffer-tl))
 (def ^:private ^ThreadLocal content-hash-buffer-tl (buffer-tl))
 
-(defrecord KvIndexStoreTx [kv-store kv-tx tx thread-mgr cav-cache canonical-buffer-cache]
+(defrecord KvIndexStoreTx [kv-store kv-tx thread-mgr cav-cache canonical-buffer-cache]
   db/IndexStoreTx
+  (index-tx [_ tx]
+    (let [{::xt/keys [tx-id tx-time]} tx]
+      (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)))
+
   (index-docs [_ docs]
     (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
                          (into {} (map (juxt identity c/->id-buffer))))
@@ -1105,7 +1109,7 @@
   (commit-index-tx [_]
     (kv/commit-kv-tx kv-tx))
 
-  (abort-index-tx [_ docs]
+  (abort-index-tx [_ tx docs]
     (when kv-tx
       (kv/abort-kv-tx kv-tx))
     (let [{::xt/keys [tx-id tx-time]} tx
@@ -1135,25 +1139,19 @@
   (open-index-snapshot [_]
     (new-kv-index-snapshot (kv/new-tx-snapshot kv-tx) true thread-mgr cav-cache canonical-buffer-cache)))
 
-(defn- forked-index-tx [{:keys [thread-mgr kv-store] :as index-store} tx]
-  (let [abort-index-tx (->KvIndexStoreTx kv-store nil tx thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))
+(defn- forked-index-tx [{:keys [thread-mgr kv-store] :as index-store}]
+  (let [abort-index-tx (->KvIndexStoreTx kv-store nil thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))
         transient-kv (mut-kv/->mutable-kv-store)
         transient-kv-tx (kv/begin-kv-tx transient-kv)
-        transient-tx (->KvIndexStoreTx transient-kv transient-kv-tx tx thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))
-        forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store nil (::xt/tx-id tx) (atom #{}) transient-tx abort-index-tx)]
-    [forked-index-store-tx transient-kv-tx]))
+        transient-tx (->KvIndexStoreTx transient-kv transient-kv-tx thread-mgr (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}))]
+    (fork/->ForkedKvIndexStoreTx index-store (atom #{}) transient-tx abort-index-tx)))
 
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache stats-kvs-cache]
   db/IndexStore
-  (begin-index-tx [this tx]
-    (let [{::xt/keys [tx-id tx-time]} tx
-          [index-store-tx kv-tx]
-          (if (satisfies? kv/KvStoreWithReadTransaction kv-store)
-            (let [index-store-tx (->KvIndexStoreTx kv-store (kv/begin-kv-tx kv-store) tx thread-mgr cav-cache canonical-buffer-cache)]
-              [index-store-tx (:kv-tx index-store-tx)])
-            (forked-index-tx this tx))]
-      (kv/put-kv kv-tx (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)
-      index-store-tx))
+  (begin-index-tx [this]
+    (if (satisfies? kv/KvStoreWithReadTransaction kv-store)
+      (->KvIndexStoreTx kv-store (kv/begin-kv-tx kv-store) thread-mgr cav-cache canonical-buffer-cache)
+      (forked-index-tx this)))
 
   (store-index-meta [_ k v]
     (store-meta kv-store k v))

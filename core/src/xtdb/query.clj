@@ -20,10 +20,7 @@
             [xtdb.pull :as pull]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
-            [xtdb.tx.conform :as txc]
-            [xtdb.fork :as fork]
-            [xtdb.kv.index-store :as index-store]
-            [xtdb.kv.mutable-kv :as mut-kv])
+            [xtdb.with-tx :as with-tx])
   (:import (clojure.lang Box ExceptionInfo MapEntry)
            (java.io Closeable Writer)
            (java.util Collection Comparator Date HashMap List Map UUID)
@@ -2104,39 +2101,8 @@
      ::xt/tx {::xt/tx-time tx-time,
               ::xt/tx-id tx-id}})
 
-  (with-tx [_ tx-ops]
-    (let [valid-time valid-time
-          tx (merge {::xt/valid-time valid-time}
-                    (if-let [latest-completed-tx (db/latest-completed-tx index-store)]
-                      {::xt/tx-id (inc (long (::xt/tx-id latest-completed-tx)))
-                       ::xt/tx-time (Date. (max (System/currentTimeMillis)
-                                                (inc (.getTime ^Date (::xt/tx-time latest-completed-tx)))))}
-                      {::xt/tx-time (Date.)
-                       ::xt/tx-id 0}))
-
-          delta-index-store (index-store/->kv-index-store {:kv-store (mut-kv/->mutable-kv-store)
-                                                           :cav-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
-                                                           :canonical-buffer-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})
-                                                           :stats-kvs-cache (xtdb.cache/->cache {:cache-size (* 128 1024)})})
-          delta-index-store-tx (db/begin-index-tx delta-index-store tx)
-          forked-index-store-tx (fork/->ForkedKvIndexStoreTx index-store, valid-time, tx-id, (atom #{}), delta-index-store-tx, nil)
-
-          in-flight-tx (-> (db/begin-tx (assoc tx-indexer :bus (reify xtdb.bus/EventSink
-                                                                 (send [_ _])))
-                                        tx)
-                           (assoc :index-store-tx forked-index-store-tx)
-                           (update :db-provider merge {:index-store forked-index-store-tx}))
-
-          conformed-tx-ops (map txc/conform-tx-op tx-ops)
-          docs (->> conformed-tx-ops
-                    (into {} (comp (mapcat :docs)
-                                   (xio/map-vals c/xt->crux))))]
-
-      (db/submit-docs in-flight-tx docs)
-      (let [tx-events (map txc/->tx-event conformed-tx-ops)]
-        (db/index-tx-docs in-flight-tx docs)
-        (when (db/index-tx-events in-flight-tx tx-events)
-          (xt/db in-flight-tx valid-time))))))
+  (with-tx [this tx-ops]
+    (with-tx/->db this tx-ops)))
 
 (defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
   (.write w (format "#<XtdbDB %s>" (xio/pr-edn-str {::xt/valid-time valid-time, ::xt/tx-id tx-id}))))
