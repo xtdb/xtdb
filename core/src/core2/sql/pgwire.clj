@@ -591,7 +591,7 @@
 
 (defn- cleanup-connection-resources [conn]
   (let [{:keys [cid, server, in, out, ^Socket socket, conn-status]} conn
-        {:keys [port]} server]
+        {:keys [port server-state]} server]
 
     (reset! conn-status :cleaning-up)
 
@@ -613,7 +613,13 @@
         (catch Throwable e
           (log/error e "Exception caught closing conn socket"))))
 
-    (compare-and-set! conn-status :cleaning-up :cleaned-up)))
+
+    (when (compare-and-set! conn-status :cleaning-up :cleaned-up)
+      (->> (fn [conns]
+             (if (identical? conn (get conns cid))
+               (dissoc conns cid)
+               conns))
+           (swap! server-state update :connections)))))
 
 (defn stop-connection [conn]
   (let [{:keys [conn-status]} conn]
@@ -1344,6 +1350,9 @@
       (try
         (log/debug "Starting connection loop" {:port port, :cid cid})
         (conn-loop conn)
+        (catch SocketException e
+          (when-not (.isClosed conn-socket)
+            (log/error e "An exception was caught during connection" {:port port, :cid cid})))
         (catch EOFException _
           (log/debug "Connection closed by client" {:port port, :cid cid}))
         (catch Throwable e
@@ -1352,12 +1361,6 @@
     ;; right now we'll deregister and cleanup regardless, but later we may
     ;; want to leave conns around for a bit, so you can look at their state and debug
     (cleanup-connection-resources conn)
-
-    (->> (fn [conns]
-           (if (identical? conn (get conns cid))
-             (dissoc conns cid)
-             conns))
-         (swap! server-state update :connections))
 
     (log/debug "Connection ended" {:cid cid, :port port})
 

@@ -461,3 +461,23 @@
 
     (is (close-and-wait conn2 srv-conn2 500))
     (is (= 0 (count (get-connections))))))
+
+(defn check-conn-resources-freed [server-conn]
+  (let [{:keys [cid, socket, server]} server-conn
+        {:keys [server-state]} server]
+    (is (.isClosed socket))
+    (is (not (contains? (:connections @server-state) cid)))))
+
+(deftest conn-force-closed-by-server-frees-resources-test
+  (require-server)
+  (with-open [_ (jdbc-conn)]
+    (let [srv-conn (get-last-conn)]
+      (.close srv-conn)
+      (check-conn-resources-freed srv-conn))))
+
+(deftest conn-closed-by-client-frees-resources-test
+  (require-server)
+  (with-open [client-conn (jdbc-conn)
+              server-conn (get-last-conn)]
+    (is (close-and-wait client-conn server-conn 500))
+    (check-conn-resources-freed server-conn)))
