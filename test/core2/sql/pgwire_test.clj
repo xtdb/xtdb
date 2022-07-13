@@ -5,27 +5,44 @@
             [core2.test-util :as tu]
             [clojure.data.json :as json]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [core2.util :as util])
   (:import (java.sql Connection)
            (org.postgresql.util PGobject PSQLException)
            (com.fasterxml.jackson.databind.node JsonNodeType)
-           (com.fasterxml.jackson.databind ObjectMapper JsonNode)))
+           (com.fasterxml.jackson.databind ObjectMapper JsonNode)
+           (java.lang Thread$State)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
 
 (def ^:dynamic ^:private *port*)
+(def ^:dynamic ^:private *node*)
+(def ^:dynamic ^:private *server*)
+
+(defn require-node []
+  (set! *node* (node/start-node {})))
+
+(defn require-server []
+  (require-node)
+  (when-not *port*
+    (set! *port* (tu/free-port))
+    (set! *server* (pgwire/serve *node* {:port *port*, :num-threads 1}))))
 
 (defn- each-fixture [f]
-  (binding [*port* (tu/free-port)]
-    (with-open [node (node/start-node {})
-                ;; as Object to avoid .close cast crash on redef due to inconsistent type hint (macros!)
-                ^Object _ (pgwire/serve node {:port *port*, :num-threads 1})]
-      (f))))
+  (binding [*port* nil
+            *server* nil
+            *node* nil]
+    (try
+      (f)
+      (finally
+        (some-> *server* util/try-close)
+        (some-> *node* util/try-close)))))
 
 (t/use-fixtures :each #'each-fixture)
 
 (defn- jdbc-url [& params]
+  (require-server)
   (assert *port* "*port* must be bound")
   (let [param-str (when (seq params) (str "?" (str/join "&" (for [[k v] (partition 2 params)] (str k "=" v)))))]
     (format "jdbc:postgresql://:%s/xtdb%s" *port* param-str)))
@@ -233,3 +250,30 @@
                   (is (= clj clj-value) "parsed value should = :clj"))
                 (when clj-pred
                   (is (clj-pred clj-value) "parsed value should pass :clj-pred"))))))))))
+
+(defn- registered? [server]
+  (= server (get @#'pgwire/servers (:port server))))
+
+(deftest server-registered-on-start-test
+  (require-server)
+  (is (registered? *server*)))
+
+(deftest server-resources-freed-on-close-test
+  (require-node)
+  (doseq [close-method [#(.close %)
+                         pgwire/stop-server]]
+    (with-open [server (pgwire/serve *node* {:port (tu/free-port)})]
+      (close-method server)
+
+      (testing "unregistered"
+        (is (not (registered? server))))
+
+      (testing "accept socket"
+        (is (.isClosed @(:accept-socket server))))
+
+      (testing "accept thread"
+        (is (= Thread$State/TERMINATED (.getState (:accept-thread server)))))
+
+      (testing "thread pool shutdown"
+        (is (.isShutdown (:thread-pool server)))
+        (is (.isTerminated (:thread-pool server)))))))
