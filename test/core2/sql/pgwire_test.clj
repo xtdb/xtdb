@@ -430,3 +430,34 @@
       (pgwire/stop-all)
       (check-server-resources-freed server1)
       (check-server-resources-freed server2))))
+
+(deftest conn-registered-on-start-test
+  (require-server {:num-threads 2})
+  (with-open [_ (jdbc-conn)]
+    (is (= 1 (count (:connections @(:server-state *server*)))))
+    (with-open [_ (jdbc-conn)]
+      (is (= 2 (count (:connections @(:server-state *server*))))))))
+
+(defn- get-connections []
+  (vals (:connections @(:server-state *server*))))
+
+(defn- get-last-conn []
+  (last (sort-by :cid (get-connections))))
+
+(defn- close-and-wait [client-conn server-conn ms]
+  (let [p (promise)]
+    (swap! (:conn-state server-conn) assoc :close-promise p)
+    (.close client-conn)
+    (deref p ms false)))
+
+(deftest conn-deregistered-on-close-test
+  (require-server {:num-threads 2})
+  (with-open [conn1 (jdbc-conn)
+              srv-conn1 (get-last-conn)
+              conn2 (jdbc-conn)
+              srv-conn2 (get-last-conn)]
+    (is (close-and-wait conn1 srv-conn1 500))
+    (is (= 1 (count (get-connections))))
+
+    (is (close-and-wait conn2 srv-conn2 500))
+    (is (= 0 (count (get-connections))))))

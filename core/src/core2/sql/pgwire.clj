@@ -591,20 +591,21 @@
 
 (defn- cleanup-connection-resources [conn]
   (let [{:keys [cid, server, in, out, ^Socket socket, conn-status]} conn
-        {:keys [port]} server
-        ^DataInputStream in @in
-        ^DataOutputStream out @out]
+        {:keys [port]} server]
+
     (reset! conn-status :cleaning-up)
 
-    (try
-      (.close out)
-      (catch Throwable e
-        (log/error e "Exception caught closing socket out" {:port port, :cid cid})))
+    (when (realized? out)
+      (try
+        (.close @out)
+        (catch Throwable e
+          (log/error e "Exception caught closing socket out" {:port port, :cid cid}))))
 
-    (try
-      (.close in)
-      (catch Throwable e
-        (log/error e "Exception caught closing socket in" {:port port, :cid cid})))
+    (when (realized? in)
+      (try
+        (.close @in)
+        (catch Throwable e
+          (log/error e "Exception caught closing socket in" {:port port, :cid cid}))))
 
     (when-not (.isClosed socket)
       (try
@@ -615,10 +616,10 @@
     (compare-and-set! conn-status :cleaning-up :cleaned-up)))
 
 (defn stop-connection [conn]
-  (let [{:keys [conn-status, server]} conn]
+  (let [{:keys [conn-status]} conn]
     (reset! conn-status :closing)
     ;; todo wait for close?
-    (cleanup-connection-resources server)))
+    (cleanup-connection-resources conn)))
 
 ;; pg i/o shared data types
 ;
@@ -1351,13 +1352,19 @@
     ;; right now we'll deregister and cleanup regardless, but later we may
     ;; want to leave conns around for a bit, so you can look at their state and debug
     (cleanup-connection-resources conn)
+
     (->> (fn [conns]
            (if (identical? conn (get conns cid))
              (dissoc conns cid)
              conns))
-         (swap! server-state update-in [:connections]))
+         (swap! server-state update :connections))
 
-    (log/debug "Connection ended" {:cid cid, :port port})))
+    (log/debug "Connection ended" {:cid cid, :port port})
+
+    ;; can be used to co-ordinate waiting for close
+    (when-some [close-promise (:close-promise @conn-state)]
+      (when-not (realized? close-promise)
+        (deliver close-promise true)))))
 
 (defn- accept-loop
   "Runs an accept loop on the current thread (intended to be the Server's :accept-thread).
