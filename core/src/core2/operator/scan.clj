@@ -334,13 +334,13 @@
                        metadata-mgr (.metadata-mgr snapshot)
                        buffer-pool (.buffer-pool snapshot)
                        temporal-mgr (.temporal-mgr snapshot)
-                       watermark (.getWatermark indexer)
-                       metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
-                       [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
-                                                                 (apply-default-valid-time! default-valid-time col-preds)
-                                                                 (apply-snapshot-tx! snapshot col-preds))]
+                       watermark (.getWatermark indexer)]
                    (try
-                     (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr watermark metadata-pred) []))]
+                     (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
+                           [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
+                                                                     (apply-default-valid-time! default-valid-time col-preds)
+                                                                     (apply-snapshot-tx! snapshot col-preds))
+                           matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr watermark metadata-pred) []))]
                        (-> (ScanCursor. allocator buffer-pool temporal-mgr metadata-mgr watermark
                                         matching-chunks (mapv name col-names) col-preds
                                         temporal-min-range temporal-max-range params
