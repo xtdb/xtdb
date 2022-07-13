@@ -743,3 +743,27 @@
     (t/testing "either side can be a plain column ref"
       (t/is (= [{:a 42, :b 43}] (test-equi-join '[{a (- b 1)}] [{:a 42}] [{:b 43} {:b 44}])))
       (t/is (= [{:a 42, :b 43}] (test-equi-join '[{(+ a 1) b}] [{:a 42}] [{:b 43} {:b 44}]))))))
+
+(t/deftest test-single-join
+  (t/is (= [{:x 0, :y 0, :z 0} {:x 0, :y 1, :z 0} {:x 1, :y 2, :z 1}]
+           (op/query-ra '[:single-join [{x z}]
+                          [::tu/blocks [[{:x 0, :y 0}, {:x 0, :y 1}, {:x 1, :y 2}]]]
+                          [::tu/blocks [[{:z 0}, {:z 1}]]]])))
+
+  (t/is (thrown-with-msg? RuntimeException
+                          #"cardinality violation"
+                          (op/query-ra '[:single-join [{x y}]
+                                         [::tu/blocks [[{:x 0}, {:x 0}, {:x 1}, {:x 2}]]]
+                                         [::tu/blocks [[{:y 0}, {:y 1}, {:y 1}]]]]))
+        "throws on cardinality > 1")
+
+  (t/testing "empty input"
+    (t/is (= []
+             (op/query-ra '[:single-join [{x y}]
+                            [::tu/blocks {x :i64} []]
+                            [::tu/blocks [[{:y 0}, {:y 1}, {:y 1}]]]])))
+
+    (t/is (= [{:x 0, :y nil}]
+             (op/query-ra '[:single-join [{x y}]
+                            [::tu/blocks [[{:x 0}]]]
+                            [::tu/blocks {y :i64} []]])))))

@@ -70,6 +70,34 @@
                             [:table [{:y 0}, {:y 1}]]]]]))
         "NULL IN {}"))
 
+(t/deftest test-apply-single
+  (t/is (= [{:y 0, :a 1, :b 2}]
+           (op/query-ra '[:apply :single-join {}
+                          [:table [{:y 0}]]
+                          [:table ?x]]
+                        '{?x [{:a 1, :b 2}]})))
+
+  (t/is (thrown-with-msg? RuntimeException
+                          #"cardinality violation"
+                          (op/query-ra '[:apply :single-join {}
+                                         [:table [{:y 0}]]
+                                         [:table ?x]]
+                                       '{?x [{:a 1, :b 2} {:a 3, :b 4}]}))
+        "throws on cardinality > 1")
+
+  (t/testing "returns null on empty"
+    (t/is (= [{:y 0}]
+             (op/query-ra '[:apply :single-join {}
+                            [:table [{:y 0}]]
+                            [:table ?x]]
+                          '{?x []})))
+
+    (t/is (= [{:y 0, :a nil, :b nil}]
+             (op/query-ra '[:apply :single-join {}
+                            [:table [{:y 0}]]
+                            [:table #{a b} ?x]]
+                          '{?x []})))))
+
 (t/deftest test-apply-empty-rel-bug-237
   (t/is (= {:res [{:x3 nil}], :col-types '{x3 [:union #{:null :bool}]}}
            (-> (op/query-ra

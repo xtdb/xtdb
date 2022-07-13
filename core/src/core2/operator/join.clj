@@ -72,6 +72,12 @@
          :left ::lp/ra-expression
          :right ::lp/ra-expression))
 
+(defmethod lp/ra-expr :single-join [_]
+  (s/cat :op #{:single-join}
+         :condition ::join-condition
+         :left ::lp/ra-expression
+         :right ::lp/ra-expression))
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- cross-product ^core2.vector.IIndirectRelation [^IIndirectRelation left-rel, ^IIndirectRelation right-rel]
@@ -269,6 +275,34 @@
   (->> (probe-outer-join-select probe-rel rel-map matched-build-idxs)
        (join-rels probe-rel rel-map)))
 
+(defmethod probe-phase ::single-join
+  [_join-type
+   ^IIndirectRelation probe-rel
+   ^IRelationMap rel-map
+   _matched-build-idxs]
+
+  (let [rel-map-prober (.probeFromRelation rel-map probe-rel)
+        matching-build-idxs (IntStream/builder)
+        matching-probe-idxs (IntStream/builder)]
+
+    (dotimes [probe-idx (.rowCount probe-rel)]
+      (let [!matched (boolean-array 1)]
+        (.forEachMatch rel-map-prober probe-idx
+                       (reify IntConsumer
+                         (accept [_ build-idx]
+                           (if-not (aget !matched 0)
+                             (do
+                               (aset !matched 0 true)
+                               (.add matching-build-idxs build-idx)
+                               (.add matching-probe-idxs probe-idx))
+                             (throw (RuntimeException. "cardinality violation"))))))
+        (when-not (aget !matched 0)
+          (.add matching-probe-idxs probe-idx)
+          (.add matching-build-idxs emap/nil-row-idx))))
+
+    (->> [(.toArray (.build matching-probe-idxs)) (.toArray (.build matching-build-idxs))]
+         (join-rels probe-rel rel-map))))
+
 (deftype JoinCursor [^BufferAllocator allocator, ^ICursor build-cursor, ^ICursor probe-cursor
                      ^IRelationMap rel-map
                      ^RoaringBitmap matched-build-idxs
@@ -397,14 +431,10 @@
                                                                 :params params})
                                 nil (->pushdown-blooms right-key-col-names) ::inner-join))})))
 
-(defn- with-nullable-cols [col-types]
-  (->> col-types
-       (into {} (map (juxt key (comp #(types/merge-col-types % :null) val))))))
-
 (defmethod lp/emit-expr :left-outer-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
     (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
-      {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types with-nullable-cols))
+      {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types types/with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
                    (JoinCursor. allocator right-cursor left-cursor
                                 (emap/->relation-map allocator {:build-col-types right-col-types
@@ -421,7 +451,7 @@
 (defmethod lp/emit-expr :full-outer-join [join-expr {:keys [param-types] :as args}]
   (emit-join-expr join-expr args
     (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
-      {:col-types (merge-with types/merge-col-types (-> left-col-types with-nullable-cols) (-> right-col-types with-nullable-cols))
+      {:col-types (merge-with types/merge-col-types (-> left-col-types types/with-nullable-cols) (-> right-col-types types/with-nullable-cols))
        :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
                    (JoinCursor. allocator left-cursor right-cursor
                                 (emap/->relation-map allocator {:build-col-types left-col-types
@@ -523,3 +553,21 @@
                  (util/try-close rel-map)
                  (util/try-close build-cursor)
                  (util/try-close probe-cursor)))))}))))
+
+(defmethod lp/emit-expr :single-join [join-expr {:keys [param-types] :as args}]
+  (emit-join-expr join-expr args
+    (fn [{:keys [left-col-types right-col-types left-key-col-names right-key-col-names theta-expr]}]
+      {:col-types (merge-with types/merge-col-types left-col-types (-> right-col-types types/with-nullable-cols))
+
+       :->cursor (fn [{:keys [allocator params]}, left-cursor right-cursor]
+                   (JoinCursor. allocator right-cursor left-cursor
+                                (emap/->relation-map allocator {:build-col-types right-col-types
+                                                                :build-key-col-names right-key-col-names
+                                                                :probe-col-types left-col-types
+                                                                :probe-key-col-names left-key-col-names
+                                                                :store-full-build-rel? true
+                                                                :with-nil-row? true
+                                                                :theta-expr theta-expr
+                                                                :param-types param-types
+                                                                :params params})
+                                nil nil ::single-join))})))

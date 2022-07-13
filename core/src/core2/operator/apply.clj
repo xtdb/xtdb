@@ -18,7 +18,7 @@
 (defmethod lp/ra-expr :apply [_]
   (s/cat :op #{:apply}
          :mode (s/or :mark-join (s/map-of #{:mark-join} ::lp/column-expression, :count 1, :conform-keys true)
-                     :otherwise #{:cross-join, :left-outer-join, :semi-join, :anti-join})
+                     :otherwise #{:cross-join, :left-outer-join, :semi-join, :anti-join, :single-join})
          :columns (s/map-of ::lp/column ::lp/column, :conform-keys true)
          :independent-relation ::lp/ra-expression
          :dependent-relation ::lp/ra-expression))
@@ -126,7 +126,38 @@
                                            (when (pos? (.rowCount dep-rel))
                                              (aset match? 0 true))))))))
             (when-not (aget match? 0)
-              (.add idxs in-idx))))))))
+              (.add idxs in-idx)))))
+
+      :single-join
+      (reify ModeStrategy
+        (accept [_ dep-cursor dep-out-writer idxs in-idx]
+          (doseq [[col-name col-type] dependent-col-types]
+            (.writerForName dep-out-writer (name col-name) col-type))
+
+          (let [match? (boolean-array [false])]
+            (.forEachRemaining dep-cursor
+                               (reify Consumer
+                                 (accept [_ dep-rel]
+                                   (let [^IIndirectRelation dep-rel dep-rel
+                                         row-count (.rowCount dep-rel)]
+                                     (cond
+                                       (zero? row-count) nil
+
+                                       (> (+ row-count (if (aget match? 0) 1 0)) 1)
+                                       (throw (RuntimeException. "cardinality violation"))
+
+                                       :else
+                                       (do
+                                         (aset match? 0 true)
+                                         (vw/append-rel dep-out-writer dep-rel)
+                                         (.add idxs 0)))))))
+
+            (when-not (aget match? 0)
+              (.add idxs in-idx)
+              (doseq [[col-name col-type] dependent-col-types]
+                (vw/append-vec (.writerForName dep-out-writer (name col-name) col-type)
+                               (iv/->direct-vec (doto (NullVector. (name col-name))
+                                                  (.setValueCount 1))))))))))))
 
 (deftype ApplyCursor [^BufferAllocator allocator
                       ^ModeStrategy mode-strategy
@@ -178,7 +209,11 @@
 
                       [:otherwise simple-mode]
                       (case simple-mode
-                        (:cross-join :left-outer-join) (merge-with types/merge-col-types independent-col-types dependent-col-types)
+                        :cross-join (merge-with types/merge-col-types independent-col-types dependent-col-types)
+
+                        (:left-outer-join :single-join)
+                        (merge-with types/merge-col-types independent-col-types (-> dependent-col-types types/with-nullable-cols))
+
                         (:semi-join :anti-join) independent-col-types))
 
          :->cursor (let [mode-strat (->mode-strategy mode dependent-col-types)
