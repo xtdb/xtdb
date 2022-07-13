@@ -34,14 +34,13 @@
          "core/dev"
          "modules/datasets/data"]
 
- :aliases {:core2 {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
+ :aliases {:core2 {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED" ; needed on JDK16 to allow Netty/Arrow access DirectBuffer internals
                               "-Dio.netty.tryReflectionSetAccessible=true"]}
 
            :dev {:jvm-opts ["-Xmx2G"
                             "-XX:MaxDirectMemorySize=2G"
                             #_"-Darrow.enable_null_check_for_get=false"
                             "-Dclojure.spec.check-asserts=true"
-                            "--illegal-access=warn" ;; needed on JDK16 to allow Netty/Arrow access DirectBuffer internals
                             #_"--add-modules=jdk.incubator.vector" ;; doesn't work if it doesn't exist, like on JDK11.
                             #_"--add-modules=ALL-SYSTEM" ;; enables all incubator modules instead
                             #_"-Darrow.memory.debug.allocator=true"
