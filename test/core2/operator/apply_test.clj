@@ -99,9 +99,9 @@
                           '{?x []})))))
 
 (t/deftest test-apply-empty-rel-bug-237
-  (t/is (= {:res [{:x3 nil}], :col-types '{x3 [:union #{:null :bool}]}}
+  (t/is (= {:res [{:x3 nil}], :col-types '{x3 [:union #{:null :i64}]}}
            (-> (op/query-ra
-                '[:group-by [{x3 (any x2)}]
+                '[:group-by [{x3 (sum x2)}]
                   [:apply :cross-join {}
                    [:table [{x1 15}]]
                    [:select false
