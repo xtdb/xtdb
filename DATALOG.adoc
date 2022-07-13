@@ -1,0 +1,155 @@
+= Datalog Support
+
+==  Usage - differences to XTDB 1.x
+
+=== Architecture
+
+Where XTDB 1.x has a transaction log, document store and query indices, Core2 has a transaction log and an object store.
+
+* XTDB 1.x transactions are split up into 'tx-events' and documents, with the former going on the tx-log and the latter to the doc-store.
+  In Core2, the transaction log doesn't need to have infinite retention, so we no longer need this split - transactions go straight on to the log, and the document store is obsolete.
+* Rather than each node having its own query indices, Core2 shares these between nodes in a cluster via the object store.
+  The object store is hence _the_ golden store, thanks to the transience of the transaction log.
+* The files stored in the object store are in https://arrow.apache.org/[Apache Arrow] format, the structure of which Core2 takes responsibility for maintaining - we no longer require a KV store.
+
+[cols="1,2*^"]
+|===
+| | Transaction Log | Object Store
+| AWS S3 | | ✓
+| Azure Blobs | | (soon)
+| Google Cloud Storage | | (soon)
+| FileSystem | ✓ | ✓
+| Kafka | ✓ | ✗
+| JDBC | (soon) | ✓
+| In-memory | ✓ | ✓
+| LMDB (KV) | ✗ | ✗
+| RocksDB (KV) | ✗ | ✗
+|===
+
+
+=== Setup
+
+Main require: `[core2.api :as c2]`
+
+Configuration uses https://github.com/weavejester/integrant[Integrant].
+
+You can still start a completely in-memory node using `(core2.local-node/start-node {})`.
+For a Kafka/JDBC node:
+
+[source,clojure]
+----
+(with-open [node (node/start-node {:core2.kafka/log {:bootstrap-servers "localhost:9092"}
+
+                                   :core2.jdbc.postgres/dialect {}
+                                   :core2.jdbc/default-pool {:db-spec {:user "postgres"
+                                                                       :password "postgres"
+                                                                       :database "core2test"}}
+                                   :core2.jdbc/object-store {}})]
+  ;; ...
+  )
+----
+
+The CLI parameters, and EDN/JSON configuration file formats are the same as XTDB 1.x.
+
+=== Transactions
+
+Transactions are slightly different to XTDB 1.x:
+
+- `[:xtdb.api/put <doc>]` -> `[:put <doc>]`. Put and delete supported thus far.
+- `:xt/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
+- `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
+
+=== Datalog Queries
+In a similar manner to `next.jdbc`[https://github.com/seancorfield/next-jdbc], execute Datalog queries in Core2 using `c2/plan-datalog-query`.
+This returns a reducible sequence that you can pass to (say) `reduce`, `into` or `run!`.
+When finalised (by `reduce`) this will ensure the query results are adequately closed.
+
+[source,clojure]
+----
+(with-open [node (node/start-node {})]
+  (->> (c2/plan-datalog-query node
+                              '{:find [?e ?name]
+                                :where [[?e :name ?name]]})
+       (into [])))
+----
+
+These queries currently return a vector of maps `[{:e ..., :name ...}, {...}]`, although this is only because it's what was closest to what we had available at the time.
+
+=== SQL queries
+
+Same as Datalog, but use `plan-sql-query` instead.
+
+[source,clojure]
+----
+(with-open [node (node/start-node {})]
+  (->> (c2/plan-sql-query node "SELECT u.name FROM users u")
+       (into [])))
+----
+
+
+=== Bases
+
+Core2 doesn't have the concept of DBs - instead, we pass the node and (optionally) a 'basis' to queries.
+In Core2, the upper bound for the tx-time is applied per-source; the default upper bound for VT is applied at the query level - this is because each data source has their own tx-time timeline, but VT is assumed to be a single timeline, consistent across data sources.
+
+[source,clojure]
+----
+;; simple case - use the latest tx the node has available:
+(->> (c2/plan-datalog-query node '{...})
+     (into []))
+
+;; or, to read your own writes (timeout optional):
+;; `plan-datalog-query` will await the transaction
+(->> (c2/plan-datalog-query node
+                            (-> '{:find ..., :where ...}
+                                (assoc :basis {:tx tx}
+                                       :basis-timeout (Duration/ofSeconds 1))))
+     (into []))
+----
+
+The `plan-datalog-query` functions take the node, the query, and then a variable number of params.
+
+[source,clojure]
+----
+(->> (c2/plan-datalog-query tu/*node*
+                            (-> '{:find [?e]
+                                  :in [?first-name ?last-name]
+                                  :where [[?e :first-name ?first-name]
+                                          [?e :last-name ?last-name]]}
+                                (assoc :basis {:tx tx}))
+                            "Ivan" "Ivanov")
+     (into #{}))
+----
+
+Unlike Datomic, `$` shouldn't be included in `:in` - if/when we reinstate multiple sources to Datalog queries, I propose we include them as a named map in the basis-opts:
+
+[source,clojure]
+----
+;; something like this, anyway.
+(->> (c2/plan-datalog-query node
+                            (-> '{:find [...]
+                                  :where [[$db1 ...], [$db2 ...]]}
+                                (assoc :basis {'$db1 {:tx tx}
+                                               '$db2 {:tx tx}}
+                                       :basis-timeout (Duration/ofSeconds 1))))
+     (into []))
+----
+
+`plan-datalog-query-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the query plan.
+(In fact, `plan-datalog-query` just calls `plan-datalog-query-async` and deref's it.)
+
+The basis map can also contain a `:default-valid-time` option, which applies to any entities that don't specify other valid-time constraints.
+This is for repeatable queries - it defaults to 'now' if not provided.
+
+[source,clojure]
+----
+(->> (c2/plan-datalog-query node
+                            (-> '{:find [?e ?name]
+                                  :where [[?e :name ?name]]}
+                                (assoc :basis {:default-valid-time #inst "..."})))
+     (into []))
+----
+
+There is also `op/query-ra` which accepts a lower-level relational algebra query - have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
+
+SQL queries do not currently support bases.
