@@ -24,7 +24,7 @@
 
 (defn- meta-fallback-expr [{:keys [op] :as expr}]
   (case op
-    (:literal :param :local) expr
+    (:literal :param :local) nil
     :variable {:op :metadata-field-present, :field (:variable expr)}
 
     :if (let [{:keys [pred then else]} expr]
