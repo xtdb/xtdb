@@ -41,9 +41,11 @@
                               :then else
                               :else then}}))
 
-    :let (let [{:keys [local expr body]} expr]
-           {:op :let, :local local, :expr (meta-fallback-expr expr)
-            :body (meta-fallback-expr body)})
+    :let (let [{:keys [expr body]} expr]
+           (-> {:op :call, :f :and
+                :args [(meta-fallback-expr expr)
+                       (meta-fallback-expr body)]}
+               simplify-and-or-expr))
 
     :call (let [{:keys [f args]} expr]
             (-> {:op :call
