@@ -499,7 +499,8 @@
                v)))
          (.compute servers port))))
 
-(defn- start-server [server {:keys [accept-so-timeout]}]
+(defn- start-server [server {:keys [accept-so-timeout]
+                             :or {accept-so-timeout 5000}}]
   (let [{:keys [server-status, server-state, accept-thread, accept-socket, port]} server
         {:keys [injected-start-exc, silent-start]} @server-state
         start-exc (atom nil)]
@@ -514,6 +515,7 @@
       @accept-socket
 
       ;; set a socket timeout so we can interrupt the accept-thread
+      ;; can be set to nil as an option if you want to allow no timeout
       (when accept-so-timeout
         (.setSoTimeout @accept-socket accept-so-timeout))
 

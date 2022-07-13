@@ -411,6 +411,14 @@
   (.close *server*)
   (check-server-resources-freed))
 
+(deftest accept-socket-timeout-set-by-default-test
+  (require-server)
+  (is (pos? (.getSoTimeout @(:accept-socket *server*)))))
+
+(deftest accept-socket-timeout-can-be-unset-test
+  (require-server {:accept-so-timeout nil})
+  (is (= 0 (.getSoTimeout @(:accept-socket *server*)))))
+
 (deftest stop-all-test
   (when-not (= 0 (count @#'pgwire/servers))
     (log/warn "skipping stop-all-test because servers already exist"))
