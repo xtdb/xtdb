@@ -270,7 +270,7 @@
 (defmethod index-tx-event :default [[op & _] _tx _in-flight-tx]
   (throw (err/illegal-arg :unknown-tx-op {:op op})))
 
-(defrecord InFlightTx [!tx-state !tx !docs
+(defrecord InFlightTx [!tx-state !tx !tx-stats !docs
                        index-store-tx document-store-tx
                        db-provider bus]
   db/DocumentStore
@@ -291,7 +291,7 @@
   db/InFlightTx
   (index-tx-docs [_ docs]
     (let [stats (db/index-docs index-store-tx docs)]
-      (swap! !tx update-tx-stats stats)
+      (swap! !tx-stats update-tx-stats stats)
       (swap! !docs merge docs)))
 
   (index-tx-events [this tx]
@@ -305,7 +305,7 @@
         (when (not= tx-state :open)
           (throw (IllegalStateException. (format "Transaction marked as '%s'" (name tx-state))))))
 
-      (swap! !tx merge tx)
+      (reset! !tx tx)
 
       (with-open [index-snapshot (db/open-index-snapshot index-store-tx)]
         (let [deps (assoc this :index-snapshot index-snapshot)
@@ -348,20 +348,20 @@
         (reset! !tx-state :abort-only)
         (throw e))))
 
-  (commit [_]
+  (commit [_ tx]
     (when-not (compare-and-set! !tx-state :open :committed)
       (throw (IllegalStateException. (str "Transaction marked as " (name @!tx-state)))))
 
     (fork/commit-doc-store-tx document-store-tx)
     (db/commit-index-tx index-store-tx)
 
-    (log/debug "Transaction committed:" (pr-str @!tx))
+    (log/debug "Transaction committed:" (pr-str tx))
 
     (bus/send bus (into {::xt/event-type ::indexed-tx,
-                         :submitted-tx (select-keys @!tx [::xt/tx-id ::xt/tx-time ::xt/tx-ops]),
+                         :submitted-tx (select-keys tx [::xt/tx-id ::xt/tx-time ::xt/tx-ops]),
                          :committed? true
-                         ::txe/tx-events (::txe/tx-events @!tx)}
-                        (select-keys @!tx [:doc-ids :av-count :bytes-indexed]))))
+                         ::txe/tx-events (::txe/tx-events tx)}
+                        (select-keys @!tx-stats [:doc-ids :av-count :bytes-indexed]))))
 
   (abort [_ tx]
     (swap! !tx-state (fn [tx-state]
@@ -385,7 +385,8 @@
     (let [index-store-tx (db/begin-index-tx index-store)
           document-store-tx (fork/begin-document-store-tx document-store)]
       (->InFlightTx (atom :open)
-                    (atom {:tx-events [], :av-count 0, :bytes-indexed 0, :doc-ids #{}})
+                    (atom nil)
+                    (atom {:av-count 0, :bytes-indexed 0, :doc-ids #{}})
                     (atom {})
                     index-store-tx
                     document-store-tx
@@ -541,7 +542,7 @@
 
                                             (if committing?
                                               (do
-                                                (db/commit in-flight-tx)
+                                                (db/commit in-flight-tx tx)
                                                 (submit-job! stats-executor stats-fn docs))
                                               (db/abort in-flight-tx tx))))
 

@@ -70,7 +70,7 @@
 (defprotocol InFlightTx
   (index-tx-docs [in-flight-tx docs])
   (index-tx-events [in-flight-tx tx])
-  (commit [in-flight-tx])
+  (commit [in-flight-tx tx])
   (abort [in-flight-tx tx]))
 
 (defprotocol TxIndexer

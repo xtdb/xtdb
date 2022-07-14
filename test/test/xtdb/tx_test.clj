@@ -262,11 +262,12 @@
 
 (defn index-tx [tx tx-events docs]
   (let [{:keys [xtdb/tx-indexer]} @(:!system *api*)
-        in-flight-tx (db/begin-tx tx-indexer)]
+        in-flight-tx (db/begin-tx tx-indexer)
+        tx (assoc tx ::xte/tx-events tx-events)]
 
     (db/index-tx-docs in-flight-tx docs)
-    (db/index-tx-events in-flight-tx (assoc tx ::xte/tx-events tx-events))
-    (db/commit in-flight-tx)))
+    (db/index-tx-events in-flight-tx tx)
+    (db/commit in-flight-tx tx)))
 
 (t/deftest test-handles-legacy-evict-events
   (let [{put-tx-time ::xt/tx-time, put-tx-id ::xt/tx-id} (fix/submit+await-tx [[::xt/put picasso #inst "2018-05-21"]])
