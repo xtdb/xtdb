@@ -71,7 +71,7 @@
   (index-tx-docs [in-flight-tx docs])
   (index-tx-events [in-flight-tx tx])
   (commit [in-flight-tx])
-  (abort [in-flight-tx]))
+  (abort [in-flight-tx tx]))
 
 (defprotocol TxIndexer
   (begin-tx [tx-indexer]))

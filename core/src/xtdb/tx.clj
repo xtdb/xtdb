@@ -360,24 +360,24 @@
     (bus/send bus (into {::xt/event-type ::indexed-tx,
                          :submitted-tx (select-keys @!tx [::xt/tx-id ::xt/tx-time ::xt/tx-ops]),
                          :committed? true
-                         ::txe/tx-events (:tx-events @!tx)}
+                         ::txe/tx-events (::txe/tx-events @!tx)}
                         (select-keys @!tx [:doc-ids :av-count :bytes-indexed]))))
 
-  (abort [_]
+  (abort [_ tx]
     (swap! !tx-state (fn [tx-state]
                        (if-not (contains? #{:open :abort-only} tx-state)
                          (throw (IllegalStateException. "Transaction marked as " tx-state))
                          :aborted)))
 
     (fork/abort-doc-store-tx document-store-tx)
-    (db/abort-index-tx index-store-tx @!tx @!docs)
+    (db/abort-index-tx index-store-tx tx @!docs)
 
-    (log/debug "Transaction aborted:" (pr-str @!tx))
+    (log/debug "Transaction aborted:" (pr-str tx))
 
     (bus/send bus {::xt/event-type ::indexed-tx,
-                   :submitted-tx (select-keys @!tx [::xt/tx-id ::xt/tx-time]),,
+                   :submitted-tx (select-keys tx [::xt/tx-id ::xt/tx-time])
                    :committed? false
-                   ::txe/tx-events (:tx-events @!tx)})))
+                   ::txe/tx-events (::txe/tx-events tx)})))
 
 (defrecord TxIndexer [index-store document-store bus query-engine]
   db/TxIndexer
@@ -528,17 +528,14 @@
                                           (db/index-stats index-store docs))
 
                                         (txs-index-fn [{:keys [tx docs in-flight-tx]}]
-                                          (let [{:keys [abort?]} tx
-                                                committing? (and (not abort?)
-                                                                 ;; consider moving the below INTO inflight-tx
-                                                                 (let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])
-                                                                       tx (if tx-time-override
-                                                                            (if (validate-tx-time-override! @latest-tx! tx tx-time-override)
-                                                                              (assoc tx ::xt/tx-time tx-time-override)
-                                                                              (assoc tx :abort? true))
-                                                                            tx)
-                                                                       _ (reset! latest-tx! tx)]
-                                                                   (db/index-tx-events in-flight-tx tx)))]
+                                          (let [tx-time-override (get-in tx [::xt/submit-tx-opts ::xt/tx-time])
+                                                [tx abort?] (if tx-time-override
+                                                              (if (validate-tx-time-override! @latest-tx! tx tx-time-override)
+                                                                [(assoc tx ::xt/tx-time tx-time-override) false]
+                                                                [tx true])
+                                                              [tx false])
+                                                _ (reset! latest-tx! tx)
+                                                committing? (and (not abort?) (db/index-tx-events in-flight-tx tx))]
 
                                             (process-tx-f in-flight-tx (assoc tx :committing? committing?))
 
@@ -546,7 +543,7 @@
                                               (do
                                                 (db/commit in-flight-tx)
                                                 (submit-job! stats-executor stats-fn docs))
-                                              (db/abort in-flight-tx))))
+                                              (db/abort in-flight-tx tx))))
 
                                         (txs-doc-encoder-fn [txs]
                                           (doseq [{:keys [docs tx] :as m} txs]
