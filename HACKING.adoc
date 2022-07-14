@@ -25,7 +25,13 @@ explained under _Running_.
 
 [source,clojure,title='deps.edn']
 ----
-{:deps
+{:aliases
+ {:run {:exec-fn xtexample/run
+        ;; needed on JDK16+ to allow Netty/Arrow access DirectBuffer internals:
+        :jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
+                   "-Dio.netty.tryReflectionSetAccessible=true"]}}
+
+ :deps
  {com.xtdb.labs/core2-core
   {:git/url "ssh://git@github.com/xtdb/core2"
    ;; update this to the latest SHA:
@@ -75,7 +81,7 @@ wire protocol endpoint, and adds a few sample records for you to query.
 
 [source,sh]
 ----
-clj -X xtexample/run
+clj -X:run
 ----
 
 
