@@ -313,7 +313,7 @@
               abort? (loop [[tx-event & more-tx-events] tx-events]
                        (when tx-event
                          (let [{:keys [docs abort? evict-eids etxs], new-tx-events :tx-events}
-                               (index-tx-event tx-event tx deps)
+                               (index-tx-event tx-event (select-keys tx [::xt/id ::xt/tx-id ::xt/tx-time]) deps)
                                docs (->> docs (xio/map-vals c/xt->crux))]
                            (if abort?
                              (do
