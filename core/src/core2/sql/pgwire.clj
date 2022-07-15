@@ -237,6 +237,18 @@
             (binding [*err* *out*]
               (.printStackTrace ex)))})
 
+(defn- err-admin-shutdown [msg]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "57P01"
+   :message msg})
+
+(defn- err-cannot-connect-now [msg]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "57P03"
+   :message msg})
+
 ;; sql processing
 ;
 ;; because we are talking to postgres clients, we cannot simply fling sql at xt (shame!)
@@ -584,8 +596,32 @@
   nil)
 
 (defn stop-server [server]
-  (let [{:keys [server-status, port]} server]
+  (let [{:keys [server-status, server-state, port]} server
+        drain-wait (:drain-wait @server-state 5000)
+        interrupted (.isInterrupted (Thread/currentThread))
+        drain (not (or interrupted (contains? #{0, nil} drain-wait)))]
+
+    (when (and drain (compare-and-set! server-status :running :draining))
+      (log/debug "server draining connections")
+      (loop [wait-until (+ (System/currentTimeMillis) drain-wait)]
+        (cond
+          ;; connections all closed, proceed
+          (empty? (:connections @server-state)) nil
+
+          ;; timeout
+          (< wait-until (System/currentTimeMillis))
+          (do (log/warn "could not drain connections in time, force closing")
+              (swap! server-state assoc :force-close true))
+
+          ;; we are interrupted, hurry up!
+          (.isInterrupted (Thread/currentThread))
+          (do (log/warn "interupted during drain, force closing")
+              (swap! server-state assoc :force-close true))
+
+          :else (do (Thread/sleep 10) (recur wait-until)))))
+
     (cleanup-server-resources server)
+
     (if (= :cleaned-up @server-status)
       (deregister-server server)
       (log/fatal "Server resources could not be freed, please restart xtdb" port))))
@@ -939,15 +975,16 @@
 
   If the connection is operating in the :extended protocol mode, any error causes the connection to skip
   messages until a msg-sync is received."
-  [{:keys [conn-state] :as conn} err]
+  [{:keys [conn-status, conn-state] :as conn} err]
 
   ;; error seen while in :extended mode, start skipping messages until sync received
   (when (= :extended (:protocol @conn-state))
     (swap! conn-state assoc :skip-until-sync true))
 
   (cmd-write-msg conn msg-error-response {:error-fields err})
-  ;; todo double check this is right to send in every case
-  (cmd-send-ready conn :idle))
+
+  (when (= :running @conn-status)
+    (cmd-send-ready conn :idle)))
 
 (defn cmd-write-canned-response [conn canned-response]
   (let [{:keys [q, rows]} canned-response]
@@ -1151,7 +1188,7 @@
   "Sync commands are sent by the client to commit transactions (we do not do anything here yet),
   and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)"
   [{:keys [conn-state] :as conn}]
-  (swap! conn-state dissoc :skip-until-sync)
+  (swap! conn-state dissoc :skip-until-sync, :protocol)
   (cmd-send-ready conn :idle))
 
 (defn cmd-flush
@@ -1174,6 +1211,10 @@
    {:keys [stmt-name
            query
            arg-types]}]
+
+  ;; put the conn in the extend protocol
+  (swap! conn-state assoc :protocol :extended)
+
   (log/debug "Parsing" {:stmt-name stmt-name,
                         :query query
                         :port (:port server)
@@ -1230,10 +1271,13 @@
              (log/debug "Connection loop exiting (closing)"))
 
         ;; if the server is draining, we may later allow connections to finish their queries
-        (= :draining @server-status)
+        ;; (consider policy - server has a drain limit but maybe better to be explicit here as well)
+        (and (= :draining @server-status) (not= :extended (:protocol @conn-state)))
         (do (->> {:port port
                   :cid cid}
                  (log/debug "Connection loop exiting (draining)"))
+            ;; TODO I think I should send an error, but if I do it causes a crash on the client?
+            #_(cmd-send-error conn (err-admin-shutdown "draining connections"))
             (compare-and-set! conn-status :running :closing))
 
         ;; well, it won't have been us, as we would drain first
@@ -1271,9 +1315,6 @@
                     :msg (or msg-var msg-char8)
                     :char8 msg-char8}
                    (log/debug "Read client msg"))]
-
-          ;; assume each msg is in the extended protocol
-          (swap! conn-state assoc :protocol :extended)
 
           (when (:skip-until-sync @conn-state)
             (if (= msg-var #'msg-sync)
@@ -1355,6 +1396,10 @@
         (log/debug "Starting connection loop" {:port port, :cid cid})
         (conn-loop conn)
         (catch SocketException e
+          (when (= "Broken pipe (Write failed)" (.getMessage e))
+            (log/debug "Client closed socket while we were writing" {:port port, :cid cid})
+            (.close conn-socket))
+          ;; socket being closed is normal, otherwise log.
           (when-not (.isClosed conn-socket)
             (log/error e "An exception was caught during connection" {:port port, :cid cid})))
         (catch EOFException _
@@ -1398,8 +1443,13 @@
           (.isClosed @accept-socket)
           (log/debug "Accept socket closed, exiting accept loop")
 
-          (= :running @server-status)
+          (#{:draining :running} @server-status)
           (do
+
+            ;; set a low timeout to leave accept early if needed
+            (when (= :draining @server-status)
+              (.setSoTimeout @accept-socket 10))
+
             (try
               (let [conn-socket (.accept @accept-socket)]
 
@@ -1412,7 +1462,9 @@
                 (if (= :running @server-status)
                   ;; todo fix buffer on tp? q gonna be infinite right now
                   (.submit thread-pool ^Runnable (fn [] (connect server conn-socket)))
-                  (.close conn-socket)))
+                  (do
+                    (err-cannot-connect-now "server shutting down")
+                    (.close conn-socket))))
               (catch SocketException e
                 (when (and (not (.isClosed @accept-socket))
                            (not= "Socket closed" (.getMessage e)))
@@ -1439,7 +1491,11 @@
       (swap! server-state assoc :accept-interrupted true)
       (log/debug "Accept loop interrupted, exiting accept loop"))))
 
-(defn- create-server [{:keys [node, port, num-threads, unsafe-init-state]}]
+(defn- create-server [{:keys [node,
+                              port,
+                              num-threads,
+                              drain-wait
+                              unsafe-init-state]}]
   (assert node ":node is required")
   (let [self (atom nil)
         srvr (map->Server
@@ -1449,7 +1505,8 @@
                 :accept-thread (Thread. ^Runnable (fn [] (accept-loop @self)) (str "pgwire-server-accept-" port))
                 :thread-pool (Executors/newFixedThreadPool num-threads (util/->prefix-thread-factory "pgwire-connection-"))
                 :server-status (atom :new)
-                :server-state (atom (merge unsafe-init-state {:parameters {"server_version" "14"
+                :server-state (atom (merge unsafe-init-state {:drain-wait drain-wait
+                                                              :parameters {"server_version" "14"
                                                                            "server_encoding" "UTF8"
                                                                            "client_encoding" "UTF8"
                                                                            "TimeZone" "UTC"}}))})]
@@ -1473,7 +1530,9 @@
   ([node] (serve node {}))
   ([node opts]
    (let [defaults {:port 5432
-                   :num-threads 42}
+                   :num-threads 42
+                   ;; 5 seconds of draining
+                   :drain-wait 5000}
          cfg (assoc (merge defaults opts) :node node)]
      (doto (create-server cfg)
        (start-server cfg)))))

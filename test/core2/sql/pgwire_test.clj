@@ -12,7 +12,8 @@
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (com.fasterxml.jackson.databind ObjectMapper JsonNode)
            (java.lang Thread$State)
-           (java.net SocketException)))
+           (java.net SocketException)
+           (java.util.concurrent CountDownLatch TimeUnit)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -117,8 +118,8 @@
     "prefer" :ok
     "require" :unsupported))
 
-(defn- jdbc-conn ^Connection []
-  (jdbc/get-connection (jdbc-url)))
+(defn- jdbc-conn ^Connection [& params]
+  (jdbc/get-connection (apply jdbc-url params)))
 
 (deftest query-test
   (with-open [conn (jdbc-conn)]
@@ -483,7 +484,7 @@
     (check-conn-resources-freed server-conn)))
 
 (deftest server-close-closes-idle-conns-test
-  (require-server)
+  (require-server {:drain-wait 0})
   (with-open [_client-conn (jdbc-conn)
               server-conn (get-last-conn)]
     (.close *server*)
@@ -499,3 +500,79 @@
                                           :rows [["\"hey!\""]]}]]
     (with-open [conn (jdbc-conn)]
       (is (= [{:greet "hey!"}] (q conn ["hello!"]))))))
+
+(deftest concurrent-conns-test
+  (require-server {:num-threads 2})
+  (let [results (atom [])
+        spawn (fn spawn []
+                (future
+                  (with-open [conn (jdbc-conn)]
+                    (swap! results conj (ping conn)))))
+        futs (vec (repeatedly 10 spawn))]
+
+    (is (every? #(not= :timeout (deref % 500 :timeout)) futs))
+    (is (= 10 (count @results)))
+
+    (.close *server*)
+    (check-server-resources-freed)))
+
+(deftest concurrent-conns-close-midway-test
+  (require-server {:num-threads 2
+                   :accept-so-timeout 10})
+  (let [spawn (fn spawn [i]
+                (future
+                  (try
+                    (with-open [conn (jdbc-conn "loginTimeout" "1"
+                                                "socketTimeout" "1")]
+                      (loop [query-til (+ (System/currentTimeMillis)
+                                          (* i 1000))]
+                        (ping conn)
+                        (when (< (System/currentTimeMillis) query-til)
+                          (recur query-til))))
+                    ;; we expect an ex here, whether or not draining
+                    (catch PSQLException e
+                      ))))
+
+        futs (mapv spawn (range 10))]
+
+    (is (some #(not= :timeout (deref % 1000 :timeout)) futs))
+
+    (.close *server*)
+
+    (is (every? #(not= :timeout (deref % 1000 :timeout)) futs))
+
+    (check-server-resources-freed)))
+
+;; the goal of this test is to cause a bunch of ping queries to block on parse
+;; until the server is draining
+;; and observe that connection continue until the multi-message extended interaction is done
+;; (when we introduce read transactions I will probably extend this to short-lived transactions)
+(deftest close-drains-active-extended-queries-before-stopping-test
+  (require-server {:num-threads 10
+                   :accept-so-timeout 10})
+  (let [cmd-parse @#'pgwire/cmd-parse
+        server-status (:server-status *server*)
+        latch (CountDownLatch. 10)]
+    ;; redefine parse to block when we ping
+    (with-redefs [pgwire/cmd-parse
+                  (fn [conn {:keys [query] :as cmd}]
+                    (if-not (str/starts-with? query "select a.ping")
+                      (cmd-parse conn cmd)
+                      (do
+                        (.countDown latch)
+                        ;; delay until we see a draining state
+                        (loop [wait-until (+ (System/currentTimeMillis) 5000)]
+                          (when (and (< (System/currentTimeMillis) wait-until)
+                                     (not= :draining @server-status))
+                            (recur wait-until)))
+                        (cmd-parse conn cmd))))]
+      (let [spawn (fn spawn [] (future (with-open [conn (jdbc-conn)] (ping conn))))
+            futs (vec (repeatedly 10 spawn))]
+
+        (is (.await latch 1 TimeUnit/SECONDS))
+
+        (.close *server*)
+
+        (is (every? #(= "pong" (deref % 1000 :timeout)) futs))
+
+        (check-server-resources-freed)))))
