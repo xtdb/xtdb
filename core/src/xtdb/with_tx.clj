@@ -92,10 +92,7 @@
 
   (unindex-eids [_ _ eids]
     (when (seq eids)
-      (swap! !evicted-eids into eids))
-
-    (with-open [base-kv-snapshot (kv/new-snapshot (:kv-store base-index-store))]
-      (db/unindex-eids index-store-tx base-kv-snapshot eids)))
+      (swap! !evicted-eids into eids)))
 
   (index-entity-txs [_ entity-txs]
     (db/index-entity-txs index-store-tx entity-txs))
