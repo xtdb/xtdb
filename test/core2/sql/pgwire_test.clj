@@ -489,3 +489,13 @@
     (.close *server*)
     (is (wait-for-close server-conn 500))
     (check-conn-resources-freed server-conn)))
+
+(deftest canned-response-test
+  (require-server)
+  ;; quick test for now to confirm canned response mechanism at least doesn't crash!
+  ;; this may later be replaced by client driver tests (e.g test sqlalchemy connect & query)
+  (with-redefs [pgwire/canned-responses [{:q "hello!"
+                                          :cols [{:column-name "greet", :column-oid @#'pgwire/oid-json}]
+                                          :rows [["\"hey!\""]]}]]
+    (with-open [conn (jdbc-conn)]
+      (is (= [{:greet "hey!"}] (q conn ["hello!"]))))))

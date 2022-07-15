@@ -950,10 +950,10 @@
   (cmd-send-ready conn :idle))
 
 (defn cmd-write-canned-response [conn canned-response]
-  (let [{:keys [query, rows]} canned-response]
+  (let [{:keys [q, rows]} canned-response]
     (doseq [row rows]
-      (cmd-write-msg conn msg-data-row (mapv (fn [v] (if (bytes? v) v (utf8 v))) row)))
-    (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " (count rows))})))
+      (cmd-write-msg conn msg-data-row {:vals (mapv (fn [v] (if (bytes? v) v (utf8 v))) row)}))
+    (cmd-write-msg conn msg-command-complete {:command (str (statement-head q) " " (count rows))})))
 
 (defn cmd-close
   "Closes a prepared statement or portal that was opened with bind / parse."
