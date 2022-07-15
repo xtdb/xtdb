@@ -194,7 +194,7 @@
   (open-db [_ valid-time-or-basis] (xt/open-db db-provider valid-time-or-basis))
 
   xt/TransactionFnContext
-  (indexing-tx [_] indexing-tx))
+  (indexing-tx [_] (select-keys indexing-tx [::xt/tx-time ::xt/tx-id])))
 
 (defmethod index-tx-event :crux.tx/fn [[_op k args-content-hash] tx {:keys [document-store-tx] :as in-flight-tx}]
   (let [fn-id (c/new-id k)
