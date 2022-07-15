@@ -64,7 +64,8 @@
 (defn- write-etxs [etxs]
   (doseq [[^long tx-id etxs] (->> (group-by :tx-id etxs)
                                   (sort-by key))]
-    (doto (db/begin-index-tx *index-store* {::xt/tx-id tx-id, ::xt/tx-time (Date. tx-id)})
+    (doto (db/begin-index-tx *index-store*)
+      (db/index-tx {::xt/tx-id tx-id, ::xt/tx-time (Date. tx-id)})
       (db/index-entity-txs etxs)
       (db/commit-index-tx))))
 
@@ -195,10 +196,12 @@
 
     (let [tx0 {::xt/tx-time #inst "2020", ::xt/tx-id 0}
           tx1 {::xt/tx-time #inst "2022", ::xt/tx-id 1}]
-      (doto (db/begin-index-tx *index-store* tx0)
+      (doto (db/begin-index-tx *index-store*)
+        (db/index-tx tx0)
         (db/index-entity-txs [])
         (db/commit-index-tx))
-      (doto (db/begin-index-tx *index-store* tx1)
+      (doto (db/begin-index-tx *index-store*)
+        (db/index-tx tx1)
         (db/index-entity-txs [])
         (db/commit-index-tx))
 
@@ -241,18 +244,20 @@
       (let [ivan {:crux.db/id :ivan, :name "Ivan", :interests #{:clojure :databases}}
             ivan2 {:crux.db/id :ivan, :name "Ivan2", :interests #{:clojure :databases :bitemporality}}
             petr {:crux.db/id :petr, :name "Petr"}]
-        (let [index-store-tx (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0})]
-
+        (let [index-store-tx (db/begin-index-tx *index-store*)]
+          (db/index-tx index-store-tx #::xt{:tx-time #inst "2021", :tx-id 0})
           (index-docs index-store-tx {(c/new-id ivan) ivan})
           (t/is (= {:doc-count 1, :doc-value-count 1, :values 1, :eids 1} (:name (->stats *index-store*))))
           (t/is (= {:doc-count 1, :doc-value-count 2, :values 2, :eids 1} (:interests (->stats *index-store*)))))
 
-        (let [index-store-tx (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021-01", :tx-id 1})]
-                    (index-docs index-store-tx {(c/new-id petr) petr})
+        (let [index-store-tx (db/begin-index-tx *index-store*)]
+          (db/index-tx index-store-tx #::xt{:tx-time #inst "2021-01", :tx-id 1})
+          (index-docs index-store-tx {(c/new-id petr) petr})
           (t/is (= {:doc-count 2, :doc-value-count 2, :values 2, :eids 2} (:name (->stats *index-store*)))))
 
         (t/testing "updated"
-          (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1})
+          (doto (db/begin-index-tx *index-store*)
+            (db/index-tx #::xt{:tx-time #inst "2022", :tx-id 1})
             (index-docs {(c/new-id ivan2) ivan2}))
 
           (t/is (= {:doc-count 3, :doc-value-count 3, :values 3, :eids 2} (:name (->stats *index-store*))))
@@ -261,7 +266,8 @@
         (t/testing "duplicate docs are reflected twice in the doc-count"
           ;; this isn't ideal, but stats won't ever be 100% accurate
 
-          (let [index-store-tx (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1})]
+          (let [index-store-tx (db/begin-index-tx *index-store* )]
+            (db/index-tx index-store-tx #::xt{:tx-time #inst "2022", :tx-id 1})
             (index-docs index-store-tx {(c/new-id petr) petr})
             (t/is (= {:doc-count 4, :doc-value-count 4, :values 3, :eids 2}
                      (:name (->stats *index-store*))))))))
@@ -274,13 +280,16 @@
                     (let [doc {:crux.db/id (.next id-iterator)
                                :sub-idx sub-idx}]
                       (MapEntry/create (c/new-id doc) doc))))]
-          (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0})
+          (doto (db/begin-index-tx *index-store*)
+            (db/index-tx #::xt{:tx-time #inst "2021", :tx-id 0})
             (index-docs (mk-docs 50)))
 
-          (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021-01", :tx-id 1})
+          (doto (db/begin-index-tx *index-store*)
+            (db/index-tx #::xt{:tx-time #inst "2021-01", :tx-id 1})
             (index-docs (mk-docs 50)))
 
-          (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 2})
+          (doto (db/begin-index-tx *index-store*)
+            (db/index-tx #::xt{:tx-time #inst "2022", :tx-id 2})
             (index-docs (mk-docs 50)))))
 
       (t/is (= {:crux.db/id {:doc-count 3675, :doc-value-count 3675, :values 3554, :eids 3554}
@@ -294,7 +303,8 @@
                :set-val #{1 3 2 5}
                :vec-val [1 4 6 2 6 1]}
           doc-id (c/new-id doc)]
-      (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0})
+      (doto (db/begin-index-tx *index-store*)
+        (db/index-tx #::xt{:tx-time #inst "2021", :tx-id 0})
         (index-docs {doc-id doc}))
 
       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
