@@ -138,10 +138,12 @@
         delta-index-store-tx (db/begin-index-tx delta-index-store)
         forked-index-store-tx (->SpeculativeKvIndexStoreTx index-store delta-index-store-tx valid-time tx-id (atom #{}))
 
-        in-flight-tx (-> (db/begin-tx (assoc tx-indexer :bus (reify xtdb.bus/EventSink
-                                                               (send [_ _]))))
-                         (assoc :index-store-tx forked-index-store-tx)
-                         (update :db-provider merge {:index-store forked-index-store-tx}))]
+        in-flight-tx (db/begin-tx (assoc tx-indexer
+                                         :bus (reify xtdb.bus/EventSink
+                                                (send [_ _]))
+                                         :index-store (reify xtdb.db/IndexStore
+                                                        (begin-index-tx [_]
+                                                          forked-index-store-tx))))]
 
     (db/submit-docs in-flight-tx docs)
     (db/index-tx-docs in-flight-tx docs)

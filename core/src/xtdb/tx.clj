@@ -296,7 +296,8 @@
 
   (index-tx-events [this tx]
     (log/debug "Indexing tx-id:" (::xt/tx-id tx))
-    (bus/send bus {::xt/event-type ::indexing-tx, :submitted-tx (select-keys tx [::xt/tx-id ::xt/tx-time ::xt/tx-ops])})
+    (bus/send bus {::xt/event-type ::indexing-tx,
+                   :submitted-tx (select-keys tx [::xt/tx-id ::xt/tx-time ::xt/tx-ops])})
 
     (db/index-tx index-store-tx tx)
 
