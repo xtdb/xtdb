@@ -969,7 +969,7 @@
   "Sends a msg-ready with the given status - eg (cmd-send-ready conn :idle)."
   [conn status]
   (when (not= status (:ready @(:conn-state conn)))
-    (swap! (:conn-state conn) assoc :ready :idle)
+    (swap! (:conn-state conn) assoc :ready status)
     (cmd-write-msg conn msg-ready {:status status})))
 
 (defn cmd-send-error
