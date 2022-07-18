@@ -966,9 +966,11 @@
      (.write @(:out conn) arr))))
 
 (defn cmd-send-ready
-  "Sends a msg-ready with the given status - eg (cmd-send-ready conn :ok)"
+  "Sends a msg-ready with the given status - eg (cmd-send-ready conn :idle)."
   [conn status]
-  (cmd-write-msg conn msg-ready {:status status}))
+  (when (not= status (:ready @(:conn-state conn)))
+    (swap! (:conn-state conn) assoc :ready :idle)
+    (cmd-write-msg conn msg-ready {:status status})))
 
 (defn cmd-send-error
   "Sends an error back to the client (e.g (cmd-send-error conn (err-protocol \"oops!\")).
@@ -1331,6 +1333,8 @@
 
           (when-not msg-var
             (cmd-send-error conn (err-protocol-violation "unknown client message")))
+
+          (swap! conn-state dissoc :ready)
 
           (when (and msg-var (not (:skip-until-sync @conn-state)))
             (let [msg-data ((:read @msg-var) msg-in)]
