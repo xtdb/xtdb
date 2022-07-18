@@ -1407,6 +1407,11 @@
           (when (= "Broken pipe (Write failed)" (.getMessage e))
             (log/debug "Client closed socket while we were writing" {:port port, :cid cid})
             (.close conn-socket))
+
+          (when (= "Connection reset by peer" (.getMessage e))
+            (log/debug "Client closed socket while we were writing" {:port port, :cid cid})
+            (.close conn-socket))
+
           ;; socket being closed is normal, otherwise log.
           (when-not (.isClosed conn-socket)
             (log/error e "An exception was caught during connection" {:port port, :cid cid})))
