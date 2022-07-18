@@ -6,12 +6,13 @@
             [clojure.data.json :as json]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [clojure.string :as str]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [clojure.java.shell :as sh])
   (:import (java.sql Connection)
            (org.postgresql.util PGobject PSQLException)
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (com.fasterxml.jackson.databind ObjectMapper JsonNode)
-           (java.lang Thread$State)
+           (java.lang Thread$State ProcessBuilder$Redirect)
            (java.net SocketException)
            (java.util.concurrent CountDownLatch TimeUnit)))
 
@@ -583,3 +584,75 @@
         (is (every? #(= "pong" (deref % 1000 :timeout)) futs))
 
         (check-server-resources-freed)))))
+
+(defn psql-available?
+  "Returns true if psql is available in $PATH"
+  []
+  (try (= 0 (:exit (sh/sh "command" "-v" "psql"))) (catch Throwable _ false)))
+
+;; define psql tests if psql is available on path
+;; (will probably move to a selector)
+(when (psql-available?)
+
+  (deftest psql-connect-test
+    (require-server)
+    (let [{:keys [exit, out]} (sh/sh "psql" "-h" "localhost" "-p" (str *port*) "-c" "select ping")]
+      (is (= 0 exit))
+      (is (str/includes? out " pong\n(1 row)"))))
+
+  (deftest psql-interactive-test
+    (require-server)
+    (let [pb (doto (ProcessBuilder. ["psql" "-h" "localhost" "-p" (str *port*)])
+               (.redirectError ProcessBuilder$Redirect/INHERIT))
+          p (.start pb)
+          in (delay (.getInputStream p))
+          out (delay (.getOutputStream p))
+
+
+          send
+          (fn [s]
+            (.write @out (.getBytes s "utf-8"))
+            (.flush @out))
+
+          read
+          (fn []
+            (loop [wait-until (+ (System/currentTimeMillis) 1000)]
+              (cond
+                (pos? (.available @in))
+                (let [barr (byte-array (.available @in))]
+                  (.read @in barr)
+                  (String. barr))
+                (< wait-until (System/currentTimeMillis)) :timeout
+                :else (recur wait-until))))]
+
+      (try
+
+        (send "select ping;\n")
+        (let [s (read)]
+          (is (str/includes? s "pong"))
+          (is (str/includes? s "(1 row)")))
+
+        (send "select a.a from (values (42)) a (a);\n")
+        (is (str/includes? (read) "42"))
+
+        (send "select a.flibble from (values (42)) a (flibble);\n")
+        (is (str/includes? (read) "flibble"))
+
+        (send "select a.a from (values (42), ('hello!'), (array [1,2,3])) a (a);\n")
+        (let [s (read)]
+          (is (str/includes? s "42"))
+          (is (str/includes? s "\"hello!\""))
+          (is (str/includes? s "[1,2,3]"))
+          (is (str/includes? s "(3 rows)")))
+
+        (finally
+
+          (when (.isAlive p)
+            (.destroy p))
+
+          (is (.waitFor p 1000 TimeUnit/MILLISECONDS))
+
+          (is (#{143, 0} (.exitValue p)))
+
+          (when (realized? in) (.close @in))
+          (when (realized? out) (.close @out)))))))
