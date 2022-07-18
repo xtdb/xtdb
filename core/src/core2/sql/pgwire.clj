@@ -283,7 +283,12 @@
    ;; java.lang.IllegalStateException: Received resultset tuples, but no field structure for them
    {:q "select string_agg(word, ',') from pg_catalog.pg_get_keywords()"
     :cols [{:column-name "col1" :column-oid oid-varchar}]
-    :rows [["xtdb"]]}])
+    :rows [["xtdb"]]}
+
+   ;; while testing this stops me typing so much
+   {:q "select ping"
+    :cols [{:column-name "ping", :column-oid oid-varchar}]
+    :rows [["pong"]]}])
 
 ;; this is hopefully temporary
 ;; I would like to use some custom parse rules for this (and actually canned responses too)
@@ -1164,7 +1169,7 @@
            value]
     :as stmt}]
 
-  (when (= :simple (:protocol conn-state))
+  (when (= :simple (:protocol @conn-state))
     (case statement-type
       :canned-response (cmd-describe-canned-response conn canned-response)
       :query (cmd-describe-query conn ast)
@@ -1175,7 +1180,10 @@
     :canned-response (cmd-write-canned-response conn canned-response)
     :set-session-parameter (set-session-parameter conn parameter value)
     :ignore (cmd-write-msg conn msg-command-complete {:command (statement-head query)})
-    :query (cmd-exec-query conn stmt)))
+    :query (cmd-exec-query conn stmt))
+
+  (when (= :simple (:protocol @conn-state))
+    (cmd-send-ready conn :idle)))
 
 (defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
   (let [{:keys [err] :as stmt} (interpret-sql query)]

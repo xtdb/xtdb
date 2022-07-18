@@ -128,6 +128,13 @@
       (is (= true (.next rs)))
       (is (= false (.next rs))))))
 
+(deftest simple-query-test
+  (with-open [conn (jdbc-conn "preferQueryMode" "simple")]
+    (with-open [stmt (.createStatement conn)
+                rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
+      (is (= true (.next rs)))
+      (is (= false (.next rs))))))
+
 (deftest prepared-query-test
   (with-open [conn (jdbc-conn)]
     (with-open [stmt (.prepareStatement conn "SELECT a.a FROM (VALUES ('hello, world')) a (a)")
