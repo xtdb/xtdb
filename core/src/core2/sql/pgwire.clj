@@ -226,16 +226,11 @@
    :detail (parser/failure->str parse-failure)
    :position (str (inc (:idx parse-failure)))})
 
-(defn- err-internal [ex]
+(defn- err-internal [msg]
   {:severity "ERROR"
    :localized-severity "ERROR"
    :sql-state "XX000"
-   ;; todo I don't think we want to do this unless we are in debug mode or something
-   :message (first (str/split-lines (or (.getMessage ex) "")))
-   :detail (str ex)
-   :where (with-out-str
-            (binding [*err* *out*]
-              (.printStackTrace ex)))})
+   :message msg})
 
 (defn- err-admin-shutdown [msg]
   {:severity "ERROR"
@@ -1102,7 +1097,8 @@
         (try
           [nil (c2/sql-query node transformed-query (if (seq xt-params) {:? xt-params} {}))]
           (catch Throwable e
-            [(err-internal e)]))]
+            (log/debug e "Error during query execution")
+            [(err-internal "unexpected server error during query execution")]))]
     (if err
       (cmd-send-error conn err)
       (do
