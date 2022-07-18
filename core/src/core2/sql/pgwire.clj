@@ -1459,13 +1459,14 @@
           (#{:draining :running} @server-status)
           (do
 
-            ;; set a low timeout to leave accept early if needed
-            (when (= :draining @server-status)
-              (.setSoTimeout @accept-socket 10))
-
             (try
-              (let [conn-socket (.accept @accept-socket)]
 
+              ;; set a low timeout to leave accept early if needed
+              (when (= :draining @server-status)
+                (.setSoTimeout @accept-socket 10))
+
+              ;; accept next connection (blocks until interrupt (with so-timeout) or close)
+              (let [conn-socket (.accept @accept-socket)]
                 (when-some [exc (:injected-accept-exc @server-state)]
                   (swap! server-state dissoc :injected-accept-exc)
                   (.close conn-socket)
