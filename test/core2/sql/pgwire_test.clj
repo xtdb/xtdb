@@ -7,12 +7,14 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [clojure.java.shell :as sh])
+            [clojure.java.shell :as sh]
+            [core2.util :as util]
+            [core2.api :as c2])
   (:import (java.sql Connection)
            (org.postgresql.util PGobject PSQLException)
            (com.fasterxml.jackson.databind.node JsonNodeType)
            (com.fasterxml.jackson.databind ObjectMapper JsonNode)
-           (java.lang Thread$State ProcessBuilder$Redirect)
+           (java.lang Thread$State)
            (java.net SocketException)
            (java.util.concurrent CountDownLatch TimeUnit)))
 
@@ -602,12 +604,11 @@
 
   (deftest psql-interactive-test
     (require-server)
-    (let [pb (doto (ProcessBuilder. ["psql" "-h" "localhost" "-p" (str *port*)])
-               (.redirectError ProcessBuilder$Redirect/INHERIT))
+    (let [pb (ProcessBuilder. ["psql" "-h" "localhost" "-p" (str *port*)])
           p (.start pb)
           in (delay (.getInputStream p))
+          err (delay (.getErrorStream p))
           out (delay (.getOutputStream p))
-
 
           send
           (fn [s]
@@ -615,35 +616,60 @@
             (.flush @out))
 
           read
-          (fn []
-            (loop [wait-until (+ (System/currentTimeMillis) 1000)]
-              (cond
-                (pos? (.available @in))
-                (let [barr (byte-array (.available @in))]
-                  (.read @in barr)
-                  (String. barr))
-                (< wait-until (System/currentTimeMillis)) :timeout
-                :else (recur wait-until))))]
+          (fn read
+            ([] (read @in))
+            ([stream]
+             (loop [wait-until (+ (System/currentTimeMillis) 1000)]
+               (cond
+                 (pos? (.available stream))
+                 (let [barr (byte-array (.available stream))]
+                   (.read stream barr)
+                   (String. barr))
+
+                 (< wait-until (System/currentTimeMillis)) :timeout
+                 :else (recur wait-until)))))]
 
       (try
 
-        (send "select ping;\n")
-        (let [s (read)]
-          (is (str/includes? s "pong"))
-          (is (str/includes? s "(1 row)")))
+        (testing "ping"
+          (send "select ping;\n")
+          (let [s (read)]
+            (is (str/includes? s "pong"))
+            (is (str/includes? s "(1 row)"))))
 
-        (send "select a.a from (values (42)) a (a);\n")
-        (is (str/includes? (read) "42"))
+        (testing "numeric printing"
+          (send "select a.a from (values (42)) a (a);\n")
+          (is (str/includes? (read) "42")))
 
-        (send "select a.flibble from (values (42)) a (flibble);\n")
-        (is (str/includes? (read) "flibble"))
+        (testing "expecting column name"
+          (send "select a.flibble from (values (42)) a (flibble);\n")
+          (is (str/includes? (read) "flibble")))
 
-        (send "select a.a from (values (42), ('hello!'), (array [1,2,3])) a (a);\n")
-        (let [s (read)]
-          (is (str/includes? s "42"))
-          (is (str/includes? s "\"hello!\""))
-          (is (str/includes? s "[1,2,3]"))
-          (is (str/includes? s "(3 rows)")))
+        (testing "mixed type col"
+          (send "select a.a from (values (42), ('hello!'), (array [1,2,3])) a (a);\n")
+          (let [s (read)]
+            (is (str/includes? s "42"))
+            (is (str/includes? s "\"hello!\""))
+            (is (str/includes? s "[1,2,3]"))
+            (is (str/includes? s "(3 rows)"))))
+
+        (testing "parse error"
+          (send "not really sql;\n")
+          (is (str/includes? (read @err) "ERROR"))
+
+          (testing "parse error allows session to continue"
+            (send "select ping;\n")
+            (is (str/includes? (read) "pong"))))
+
+        (testing "query crash"
+          (with-redefs [clojure.tools.logging/logf (constantly nil)
+                        c2/sql-query (fn [& _] (throw (Throwable. "oops")))]
+            (send "select a.a from (values (42)) a (a);\n")
+            (is (str/includes? (read @err) "unexpected server error during query execution")))
+
+          (testing "internal query error allows session to continue"
+            (send "select ping;\n")
+            (is (str/includes? (read) "pong"))))
 
         (finally
 
@@ -651,8 +677,8 @@
             (.destroy p))
 
           (is (.waitFor p 1000 TimeUnit/MILLISECONDS))
-
           (is (#{143, 0} (.exitValue p)))
 
-          (when (realized? in) (.close @in))
-          (when (realized? out) (.close @out)))))))
+          (when (realized? in) (util/try-close @in))
+          (when (realized? out) (util/try-close @out))
+          (when (realized? err) (util/try-close @err)))))))
