@@ -5,6 +5,7 @@
             [core2.temporal.kd-tree :as kd]
             [core2.types :as t]
             [core2.util :as util]
+            core2.watermark
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
            core2.metadata.IMetadataManager
@@ -121,7 +122,7 @@
   (^Object getTemporalWatermark [])
   (^void registerNewChunk [^long chunk-idx])
   (^core2.temporal.ITemporalTxIndexer startTx [^core2.api.TransactionInstant tx-key])
-  (^core2.temporal.TemporalRoots createTemporalRoots [^core2.tx.Watermark watermark
+  (^core2.temporal.TemporalRoots createTemporalRoots [^core2.watermark.Watermark watermark
                                                       ^java.util.List columns
                                                       ^longs temporal-min-range
                                                       ^longs temporal-max-range

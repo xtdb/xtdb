@@ -7,20 +7,18 @@
             [core2.metadata :as meta]
             core2.object-store
             [core2.temporal :as temporal]
-            [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
+            [core2.watermark :as wm]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import clojure.lang.MapEntry
-           core2.api.TransactionInstant
-           core2.buffer_pool.BufferPool
+  (:import core2.buffer_pool.BufferPool
            core2.ICursor
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.ITemporalManager
-           core2.tx.Watermark
+           core2.watermark.Watermark
            core2.vector.IVectorWriter
            java.io.Closeable
            java.lang.AutoCloseable
@@ -40,7 +38,7 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface TransactionIndexer
   (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName])
-  (^core2.tx.Watermark getWatermark [])
+  (^core2.watermark.Watermark getWatermark [])
   (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx
                                           ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
   (^core2.api.TransactionInstant latestCompletedTx []))
@@ -54,20 +52,6 @@
 
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->field field-name t/dense-union-type false)]) allocator))
-
-(defn ->live-slices [^Watermark watermark, col-names]
-  (into {}
-        (keep (fn [col-name]
-                (when-let [root (-> (.column->root watermark)
-                                    (get col-name))]
-                  (let [row-counts (blocks/row-id-aligned-blocks root
-                                                                 (.chunk-idx watermark)
-                                                                 (.max-rows-per-block watermark))]
-                    (MapEntry/create col-name (blocks/->slices root row-counts))))))
-        col-names))
-
-(defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-key temporal-watermark ^long max-rows-per-block]
-  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-key temporal-watermark (AtomicInteger. 1) max-rows-per-block (ConcurrentHashMap.)))
 
 (defn- snapshot-roots [^Map live-roots]
   (Collections/unmodifiableSortedMap
@@ -339,7 +323,7 @@
             new-chunk-row-count (+ row-count number-of-new-rows)]
         (with-open [_old-watermark watermark]
           (set! (.watermark this)
-                (tx/->Watermark chunk-idx
+                (wm/->Watermark chunk-idx
                                 new-chunk-row-count
                                 (snapshot-roots live-roots)
                                 tx-key
@@ -438,8 +422,8 @@
           (.registerNewChunk metadata-mgr live-roots chunk-idx max-rows-per-block)
 
           (with-open [old-watermark watermark]
-            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-key old-watermark)
-                                                       (.getTemporalWatermark temporal-mgr) max-rows-per-block)))
+            (set! (.watermark this) (wm/->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-key old-watermark)
+                                                          (.getTemporalWatermark temporal-mgr) max-rows-per-block)))
           (let [stamp (.writeLock open-watermarks-lock)]
             (try
               (remove-closed-watermarks open-watermarks)
@@ -509,7 +493,7 @@
               (->log-indexer allocator max-rows-per-block)
               (util/->identity-set)
               (StampedLock.)
-              (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block))))
+              (wm/->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block))))
 
 (defmethod ig/halt-key! ::indexer [_ ^AutoCloseable indexer]
   (.close indexer))

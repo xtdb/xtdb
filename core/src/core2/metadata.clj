@@ -4,14 +4,14 @@
             core2.buffer-pool
             [core2.expression.comparator :as expr.comp]
             core2.object-store
-            core2.tx
+            core2.watermark
             [core2.types :as t]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
-           core2.tx.Watermark
+           core2.watermark.Watermark
            core2.ICursor
            java.io.Closeable
            (java.util HashMap List SortedSet)

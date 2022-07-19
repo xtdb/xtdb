@@ -25,7 +25,7 @@
            core2.operator.IRelationSelector
            core2.snapshot.Snapshot
            [core2.temporal ITemporalManager TemporalRoots]
-           core2.tx.Watermark
+           core2.watermark.Watermark
            [java.util HashMap LinkedList List Map Queue]
            [java.util.function BiFunction Consumer Function]
            org.apache.arrow.memory.BufferAllocator
@@ -237,7 +237,7 @@
                       false))))
 
               (live-chunk []
-                (let [chunks (idx/->live-slices watermark real-col-names)]
+                (let [chunks (.liveSlices watermark real-col-names)]
                   (set! (.chunks this) chunks)
                   (next-block chunks)))
 

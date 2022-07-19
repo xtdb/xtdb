@@ -1,19 +1,24 @@
-(ns core2.tx
+(ns core2.watermark
   (:require [clojure.tools.logging :as log]
             core2.api
+            [core2.blocks :as blocks]
             [core2.types :as types]
             [core2.util :as util])
-  (:import core2.api.TransactionInstant
+  (:import clojure.lang.MapEntry
+           core2.api.TransactionInstant
            java.io.Closeable
-           [java.util Map SortedMap]
+           [java.util Collections Map]
+           java.util.concurrent.ConcurrentHashMap
            java.util.concurrent.atomic.AtomicInteger
            java.util.function.IntUnaryOperator
            org.apache.arrow.vector.VectorSchemaRoot))
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IWatermark
-  (columnType [^String columnName]))
+  (columnType [^String columnName])
+  (liveSlices [^Iterable columnNames]))
 
-(defrecord Watermark [^long chunk-idx ^long row-count ^SortedMap column->root ^TransactionInstant tx-key
+(defrecord Watermark [^long chunk-idx ^long row-count ^Map column->root ^TransactionInstant tx-key
                       ^Object temporal-watermark ^AtomicInteger ref-count ^int max-rows-per-block ^Map thread->count]
   IWatermark
   (columnType [_ col-name]
@@ -21,6 +26,14 @@
       (-> (.getVector root col-name)
           (.getField)
           (types/field->col-type))))
+
+  (liveSlices [_ col-names]
+    (into {}
+          (keep (fn [col-name]
+                  (when-let [root (.get column->root col-name)]
+                    (let [row-counts (blocks/row-id-aligned-blocks root chunk-idx max-rows-per-block)]
+                      (MapEntry/create col-name (blocks/->slices root row-counts))))))
+          col-names))
 
   Closeable
   (close [_]
@@ -44,3 +57,6 @@
           (do (util/try-close temporal-watermark)
               (doseq [root (vals column->root)]
                 (util/try-close root))))))))
+
+(defn ->empty-watermark ^core2.watermark.Watermark [^long chunk-idx ^TransactionInstant tx-key temporal-watermark ^long max-rows-per-block]
+  (->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-key temporal-watermark (AtomicInteger. 1) max-rows-per-block (ConcurrentHashMap.)))
