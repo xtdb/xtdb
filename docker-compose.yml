@@ -19,6 +19,13 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: my-secret-pw
 
+  mariadb:
+    image: mariadb:10.7.4
+    ports:
+      - "3306:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: my-secret-pw
+
   mssql:
     image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
     ports:
