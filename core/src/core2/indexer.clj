@@ -10,9 +10,9 @@
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
+            [core2.vector.indirect :as iv]
             [core2.vector.writer :as vw]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [core2.vector.indirect :as iv])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            core2.api.TransactionInstant
            core2.buffer_pool.BufferPool
@@ -32,7 +32,6 @@
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMicroTZVector TimeStampVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema]
            org.apache.arrow.vector.types.UnionMode))
 
@@ -44,7 +43,8 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface TransactionIndexer
-  (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx ^java.nio.ByteBuffer txBytes])
+  (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx
+                                          ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
   (^core2.api.TransactionInstant latestCompletedTx []))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -330,50 +330,30 @@
             (recur))))))
 
   TransactionIndexer
-  (indexTx [this tx-key tx-bytes]
-    (with-open [tx-ops-ch (util/->seekable-byte-channel tx-bytes)
-                sr (ArrowStreamReader. tx-ops-ch allocator)
-                tx-root (.getVectorSchemaRoot sr)]
-      (.loadNextBatch sr)
+  (indexTx [this tx-key tx-root]
+    (let [tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
+                         (.getDataVector))
+          chunk-idx (.chunk-idx watermark)
+          row-count (.row-count watermark)
+          next-row-id (+ chunk-idx row-count)]
+      (.indexTx this tx-key tx-root next-row-id)
 
-      (let [^TimeStampMicroTZVector tx-time-vec (.getVector tx-root "tx-time")
-            ^TransactionInstant tx-key (cond-> tx-key
-                                         (not (.isNull tx-time-vec 0))
-                                         (assoc :tx-time (-> (.get tx-time-vec 0) (util/micros->instant))))
-            latest-completed-tx (.latestCompletedTx this)]
+      (let [number-of-new-rows (.getValueCount tx-ops-vec)
+            new-chunk-row-count (+ row-count number-of-new-rows)]
+        (with-open [_old-watermark watermark]
+          (set! (.watermark this)
+                (tx/->Watermark chunk-idx
+                                new-chunk-row-count
+                                (snapshot-roots live-roots)
+                                tx-key
+                                (.getTemporalWatermark temporal-mgr)
+                                (AtomicInteger. 1)
+                                max-rows-per-block
+                                (ConcurrentHashMap.))))
+        (when (>= new-chunk-row-count max-rows-per-chunk)
+          (.finishChunk this))
 
-        (if (and (not (nil? latest-completed-tx))
-                 (neg? (compare (.tx-time tx-key)
-                                (.tx-time latest-completed-tx))))
-          ;; TODO: we don't yet have the concept of an aborted tx
-          ;; so anyone awaiting this tx will have a bad time.
-          (log/warnf "specified tx-time '%s' older than current tx '%s'"
-                     (pr-str tx-key)
-                     (pr-str latest-completed-tx))
-
-          (let [tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
-                               (.getDataVector))
-                chunk-idx (.chunk-idx watermark)
-                row-count (.row-count watermark)
-                next-row-id (+ chunk-idx row-count)]
-            (.indexTx this tx-key tx-root next-row-id)
-
-            (let [number-of-new-rows (.getValueCount tx-ops-vec)
-                  new-chunk-row-count (+ row-count number-of-new-rows)]
-              (with-open [_old-watermark watermark]
-                (set! (.watermark this)
-                      (tx/->Watermark chunk-idx
-                                      new-chunk-row-count
-                                      (snapshot-roots live-roots)
-                                      tx-key
-                                      (.getTemporalWatermark temporal-mgr)
-                                      (AtomicInteger. 1)
-                                      max-rows-per-block
-                                      (ConcurrentHashMap.))))
-              (when (>= new-chunk-row-count max-rows-per-chunk)
-                (.finishChunk this))
-
-              tx-key))))))
+        tx-key)))
 
   (latestCompletedTx [_]
     (some-> watermark .tx-key))
