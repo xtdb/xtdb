@@ -5,13 +5,13 @@
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.api.TransactionInstant
-           [core2.indexer IChunkManager TransactionIndexer]
+           [core2.indexer TransactionIndexer]
            core2.ingester.Ingester
            java.time.Duration
            [java.util.concurrent CompletableFuture TimeUnit]))
 
 (deftype Snapshot [metadata-mgr temporal-mgr buffer-pool
-                   ^IChunkManager indexer
+                   ^TransactionIndexer indexer
                    ^TransactionInstant tx])
 
 (definterface ISnapshotFactory

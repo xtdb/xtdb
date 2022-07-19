@@ -37,12 +37,10 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(definterface IChunkManager
-  (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName])
-  (^core2.tx.Watermark getWatermark []))
-
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface TransactionIndexer
+  (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName])
+  (^core2.tx.Watermark getWatermark [])
   (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx
                                           ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
   (^core2.api.TransactionInstant latestCompletedTx []))
@@ -252,7 +250,7 @@
 (definterface DocRowCopier
   (^void copyDocRow [^long rowId, ^int srcIdx]))
 
-(defn- copy-docs [^IChunkManager chunk-manager, ^DenseUnionVector tx-ops-vec, ^long base-row-id]
+(defn- copy-docs [^TransactionIndexer chunk-manager, ^DenseUnionVector tx-ops-vec, ^long base-row-id]
   (let [doc-rdr (-> (.getStruct tx-ops-vec 0)
                     (.getChild "document")
                     (iv/->direct-vec)
@@ -298,7 +296,7 @@
                   ^StampedLock open-watermarks-lock
                   ^:volatile-mutable ^Watermark watermark]
 
-  IChunkManager
+  TransactionIndexer
   (getLiveRoot [_ field-name]
     (.computeIfAbsent live-roots field-name
                       (util/->jfn
@@ -329,7 +327,6 @@
                   (.unlock open-watermarks-lock stamp))))
             (recur))))))
 
-  TransactionIndexer
   (indexTx [this tx-key tx-root]
     (let [tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                          (.getDataVector))

@@ -19,7 +19,7 @@
             [core2.util :as util])
   (:import core2.api.TransactionInstant
            [core2.buffer_pool BufferPool IBufferPool]
-           core2.indexer.IChunkManager
+           core2.indexer.TransactionIndexer
            core2.local_node.Node
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
@@ -85,7 +85,7 @@
             ^ObjectStore os (::os/file-system-object-store system)
             ^IBufferPool bp (::bp/buffer-pool system)
             ^TemporalManager tm (::temporal/temporal-manager system)
-            ^IChunkManager idx (::idx/indexer system)]
+            ^TransactionIndexer idx (::idx/indexer system)]
 
         (t/is (nil? (idx/latest-tx {:object-store os, :buffer-pool bp})))
 

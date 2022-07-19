@@ -20,7 +20,7 @@
            core2.api.TransactionInstant
            core2.buffer_pool.IBufferPool
            core2.ICursor
-           core2.indexer.IChunkManager
+           core2.indexer.TransactionIndexer
            core2.metadata.IMetadataManager
            core2.operator.IRelationSelector
            core2.snapshot.Snapshot
@@ -61,7 +61,7 @@
                                                                                        :src-keys (keys srcs)})))]
 
                                         {:mm (.metadata-mgr src)
-                                         :wm (.getWatermark ^IChunkManager (.indexer src))})))))
+                                         :wm (.getWatermark ^TransactionIndexer (.indexer src))})))))
 
               (->col-type [[src-key col-name]]
                 (let [{:keys [^IMetadataManager mm, ^Watermark wm]} (->mm+wm src-key)]
@@ -330,7 +330,7 @@
     {:col-types col-types
      :->cursor (fn [{:keys [allocator srcs params default-valid-time]}]
                  (let [^Snapshot snapshot (get srcs src-key)
-                       ^IChunkManager indexer (.indexer snapshot)
+                       ^TransactionIndexer indexer (.indexer snapshot)
                        metadata-mgr (.metadata-mgr snapshot)
                        buffer-pool (.buffer-pool snapshot)
                        temporal-mgr (.temporal-mgr snapshot)

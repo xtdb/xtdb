@@ -8,7 +8,7 @@
             [core2.operator :as op]
             [core2.snapshot :as snap]
             [core2.test-util :as tu])
-  (:import (core2.indexer IChunkManager)
+  (:import (core2.indexer TransactionIndexer)
            (core2.metadata IMetadataManager)
            (core2.snapshot ISnapshotFactory)
            (java.time LocalTime)
@@ -31,7 +31,7 @@
     (tu/finish-chunk node)
 
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^IChunkManager indexer (tu/component node ::idx/indexer)
+          ^TransactionIndexer indexer (tu/component node ::idx/indexer)
           ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
@@ -83,7 +83,7 @@
 
     (tu/finish-chunk node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^IChunkManager indexer (tu/component node ::idx/indexer)
+          ^TransactionIndexer indexer (tu/component node ::idx/indexer)
           ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)
           db (snap/snapshot snapshot-factory)]
       (with-open [watermark (.getWatermark indexer)]
