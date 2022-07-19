@@ -750,11 +750,6 @@
   :parsers
   ({:tag :nt, :keyword :left_paren, :hide true}
    {:tag :nt, :keyword :right_paren, :hide true})},
- :overlaps_predicate_part_2
- {:tag :cat,
-  :parsers
-  ({:tag :string, :string "OVERLAPS"}
-   {:tag :nt, :keyword :row_value_predicand_2})},
  :general_logarithm_base
  {:tag :nt,
   :keyword :numeric_value_expression,
@@ -830,7 +825,7 @@
  :period_predicand
  {:tag :alt,
   :parsers
-  ({:tag :nt, :keyword :period_reference}
+  ({:tag :nt, :keyword :column_reference}
    {:tag :cat,
     :parsers
     ({:tag :string, :string "PERIOD"}
@@ -884,8 +879,7 @@
    {:tag :nt, :keyword :octet_like_predicate_part_2}
    {:tag :nt, :keyword :regex_like_predicate_part_2}
    {:tag :nt, :keyword :null_predicate_part_2}
-   {:tag :nt, :keyword :quantified_comparison_predicate_part_2}
-   {:tag :nt, :keyword :overlaps_predicate_part_2}),
+   {:tag :nt, :keyword :quantified_comparison_predicate_part_2}),
   :red {:reduction-type :raw}},
  :basic_identifier_chain
  {:tag :nt, :keyword :identifier_chain, :red {:reduction-type :raw}},
@@ -1152,10 +1146,6 @@
  {:tag :nt,
   :keyword :character_value_expression,
   :red {:reduction-type :raw}},
- :row_value_predicand_2
- {:tag :nt,
-  :keyword :row_value_predicand,
-  :red {:reduction-type :raw}},
  :column_reference {:tag :nt, :keyword :basic_identifier_chain},
  :trim_array_function
  {:tag :cat,
@@ -1281,10 +1271,6 @@
    {:tag :nt, :keyword :direct_select_statement__multiple_rows}
    {:tag :nt, :keyword :insert_statement}
    {:tag :nt, :keyword :update_statement__searched}),
-  :red {:reduction-type :raw}},
- :overlaps_predicate_part_1
- {:tag :nt,
-  :keyword :row_value_predicand_1,
   :red {:reduction-type :raw}},
  :array_primary
  {:tag :alt,
@@ -1584,10 +1570,6 @@
  :binary_factor
  {:tag :nt, :keyword :binary_primary, :red {:reduction-type :raw}},
  :greater_than_or_equals_operator {:tag :string, :string ">="},
- :row_value_predicand_1
- {:tag :nt,
-  :keyword :row_value_predicand,
-  :red {:reduction-type :raw}},
  :interval_fractional_seconds_precision
  {:tag :nt, :keyword :unsigned_integer, :red {:reduction-type :raw}},
  :all {:tag :string, :string "ALL"},
@@ -1985,11 +1967,7 @@
  {:tag :nt, :keyword :datetime_value, :red {:reduction-type :raw}},
  :seconds_fraction
  {:tag :nt, :keyword :unsigned_integer, :red {:reduction-type :raw}},
- :case_operand
- {:tag :alt,
-  :parsers
-  ({:tag :nt, :keyword :row_value_predicand}
-   {:tag :nt, :keyword :overlaps_predicate_part_1})},
+ :case_operand {:tag :nt, :keyword :row_value_predicand},
  :join_condition
  {:tag :cat,
   :parsers
@@ -2776,7 +2754,6 @@
    {:tag :nt, :keyword :null_predicate}
    {:tag :nt, :keyword :quantified_comparison_predicate}
    {:tag :nt, :keyword :exists_predicate}
-   {:tag :nt, :keyword :overlaps_predicate}
    {:tag :nt, :keyword :period_predicate}),
   :red {:reduction-type :raw}},
  :escape_octet
@@ -2933,11 +2910,6 @@
   :red {:reduction-type :raw}},
  :left_bracket_trigraph
  {:tag :string, :string "??(", :red {:reduction-type :raw}},
- :overlaps_predicate
- {:tag :cat,
-  :parsers
-  ({:tag :nt, :keyword :overlaps_predicate_part_1}
-   {:tag :nt, :keyword :overlaps_predicate_part_2})},
  :boolean_value_expression
  {:tag :alt,
   :parsers

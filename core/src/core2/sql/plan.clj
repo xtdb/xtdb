@@ -11,7 +11,7 @@
             [core2.sql.parser :as p]
             [core2.types :as types])
   (:import (clojure.lang IObj Var)
-           (java.time LocalDate Period Duration)
+           (java.time LocalDate Period Duration Instant)
            java.util.HashMap
            (org.apache.arrow.vector PeriodDuration)))
 
@@ -326,6 +326,42 @@
      ;;=>
      (subs lexeme 1 (dec (count lexeme)))
 
+     [:timestamp_literal _
+      [:timestamp_string
+       [:unquoted_timestamp_string
+        [:date_value
+          [:unsigned_integer year]
+          [:minus_sign "-"]
+          [:unsigned_integer month]
+          [:minus_sign "-"]
+          [:unsigned_integer day]]
+        [:unquoted_time_string
+         [:time_value
+          [:unsigned_integer hours]
+          [:unsigned_integer minutes]
+          [:seconds_value [:unsigned_integer seconds]]]]]]]
+     ;;=>
+     (Instant/parse (str year "-" month "-" day "T" hours ":" minutes ":" seconds "Z"))
+
+     [:timestamp_literal _
+      [:timestamp_string
+       [:unquoted_timestamp_string
+        [:date_value
+          [:unsigned_integer year]
+          [:minus_sign "-"]
+          [:unsigned_integer month]
+          [:minus_sign "-"]
+          [:unsigned_integer day]]
+        [:unquoted_time_string
+         [:time_value
+          [:unsigned_integer hours]
+          [:unsigned_integer minutes]
+          [:seconds_value
+           [:unsigned_integer seconds]
+           [:unsigned_integer ms]]]]]]]
+     ;;=>
+     (Instant/parse (str year "-" month "-" day "T" hours ":" minutes ":" seconds "." ms "Z"))
+
      [:date_literal _
       [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]
      ;;=
@@ -598,6 +634,28 @@
      [:dynamic_parameter_specification _]
      ;;=>
      (symbol (str "?_" (sem/dynamic-param-idx z)))
+
+     [:period_succeeds_predicate ^:z p1_predicand [:period_succeeds_predicate_part_2 "SUCCEEDS" ^:z p2_predicand]]
+     ;;=>
+     (let [p1 (expr p1_predicand)
+           p2 (expr p2_predicand)]
+       (list '>= (:start p1) (:end p2)))
+
+     [:period_overlaps_predicate ^:z p1_predicand [:period_overlaps_predicate_part_2 "OVERLAPS" ^:z p2_predicand]]
+     ;;=>
+     (let [p1 (expr p1_predicand)
+           p2 (expr p2_predicand)]
+       (list 'and (list '< (:start p1) (:end p2)) (list '> (:end p1) (:start p2))))
+
+     [:period_predicand ^:z col]
+     ;;=>
+     (let [app-time-symbol (str (expr col))]
+       {:start (symbol (str/replace app-time-symbol "APP_TIME" "_valid-time-start"))
+        :end (symbol (str/replace app-time-symbol "APP_TIME" "_valid-time-end"))})
+
+     [:period_predicand "PERIOD" start end]
+     ;;=>
+     {:start (expr start) :end (expr end)}
 
      (expr-varargs z))))
 
@@ -1066,9 +1124,24 @@
        ordinality-column (assoc :ordinality-column ordinality-column))
      [:map [{unwind-symbol (expr cve)}] nil]]))
 
+(defn- find-system-time-predicates [tp]
+  (r/collect-stop
+    (fn [tp]
+      (r/zmatch
+        tp
+        [:query_system_time_period_specification
+         "FOR"
+         "SYSTEM_TIME"
+         "AS"
+         "OF"
+         timestamp]
+        [{'_tx-time-start (list '<= '_tx-time-start (expr timestamp))}]))
+    tp))
+
 (defn- build-table-primary [tp]
   (let [{:keys [id correlation-name table-or-query-name] :as table} (sem/table tp)
-        projection (first (sem/projected-columns tp))]
+        projection (first (sem/projected-columns tp))
+        system-time-predicates (find-system-time-predicates tp)]
     [:rename (table-reference-symbol correlation-name id)
      (if-let [subquery-ref (:subquery-ref (meta table))]
        (if-let [derived-columns (sem/derived-columns tp)]
@@ -1076,13 +1149,23 @@
                           (map symbol derived-columns))
           (plan subquery-ref)]
          (plan subquery-ref))
-       [:scan (let [columns (vec (for [{:keys [identifier]} projection]
-                                   (symbol identifier)))]
+       [:scan (let [columns (for [{:keys [identifier]} projection]
+                                   (symbol identifier))
+                    columns-with-system-time-predicates
+                    (if system-time-predicates
+                      (concat
+                        system-time-predicates
+                        (remove #(contains? (set (mapcat keys system-time-predicates)) %) columns))
+                      columns)
+                    columns-with-temporal-cols
+                    (vec (mapcat #(if (= % 'APP_TIME)
+                                    ['_valid-time-start '_valid-time-end]
+                                    [%]) columns-with-system-time-predicates))]
                 (if *include-table-column-in-scan?*
                   (conj
-                    columns
+                    columns-with-temporal-cols
                     {'_table (list '=  '_table table-or-query-name)})
-                  columns))])]))
+                  columns-with-temporal-cols))])]))
 
 (defn- build-lateral-derived-table [tp qe]
   (let [scope-id (sem/id (sem/scope-element tp))
