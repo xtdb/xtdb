@@ -4,6 +4,7 @@
             [core2.datalog :as d]
             [core2.error :as err]
             [core2.indexer :as idx]
+            core2.ingester
             [core2.operator :as op]
             [core2.snapshot :as snap]
             [core2.sql.parser :as p]
@@ -12,6 +13,7 @@
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import (core2.indexer TransactionIndexer)
+           core2.ingester.Ingester
            (core2.snapshot ISnapshotFactory)
            (core2.tx_producer ITxProducer)
            (java.io Closeable Writer)
@@ -28,6 +30,7 @@
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [node tx]))
 
 (defrecord Node [^TransactionIndexer indexer
+                 ^Ingester ingester
                  ^ISnapshotFactory snapshot-factory
                  ^ITxProducer tx-producer
                  !system
@@ -70,7 +73,7 @@
           (CompletableFuture/completedFuture tx)
           tx)
         (util/then-compose (fn [tx]
-                             (.awaitTxAsync indexer tx)))))
+                             (.awaitTxAsync ingester tx)))))
 
   api/PStatus
   (status [_] {:latest-completed-tx (.latestCompletedTx indexer)})
@@ -92,6 +95,7 @@
 
 (defmethod ig/prep-key ::node [_ opts]
   (merge {:indexer (ig/ref ::idx/indexer)
+          :ingester (ig/ref :core2/ingester)
           :snapshot-factory (ig/ref ::snap/snapshot-factory)
           :tx-producer (ig/ref ::txp/tx-producer)}
          opts))

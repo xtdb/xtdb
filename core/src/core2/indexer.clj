@@ -1,7 +1,6 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
             [core2.api :as c2]
-            [core2.await :as await]
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             [core2.buffer-pool :as bp]
@@ -26,7 +25,7 @@
            java.io.Closeable
            java.lang.AutoCloseable
            [java.util Collections Map Map$Entry Set TreeMap]
-           [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap PriorityBlockingQueue]
+           [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap]
            java.util.concurrent.atomic.AtomicInteger
            java.util.concurrent.locks.StampedLock
            [java.util.function Consumer Function]
@@ -46,8 +45,7 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface TransactionIndexer
   (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx ^java.nio.ByteBuffer txBytes])
-  (^core2.api.TransactionInstant latestCompletedTx [])
-  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^core2.api.TransactionInstant tx]))
+  (^core2.api.TransactionInstant latestCompletedTx []))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IndexerPrivate
@@ -298,9 +296,7 @@
                   ^ILogIndexer log-indexer
                   ^Set open-watermarks
                   ^StampedLock open-watermarks-lock
-                  ^:volatile-mutable ^Watermark watermark
-                  ^PriorityBlockingQueue awaiters
-                  ^:volatile-mutable ^Throwable ingester-error]
+                  ^:volatile-mutable ^Watermark watermark]
 
   IChunkManager
   (getLiveRoot [_ field-name]
@@ -335,65 +331,52 @@
 
   TransactionIndexer
   (indexTx [this tx-key tx-bytes]
-    (try
-      (with-open [tx-ops-ch (util/->seekable-byte-channel tx-bytes)
-                  sr (ArrowStreamReader. tx-ops-ch allocator)
-                  tx-root (.getVectorSchemaRoot sr)]
-        (.loadNextBatch sr)
+    (with-open [tx-ops-ch (util/->seekable-byte-channel tx-bytes)
+                sr (ArrowStreamReader. tx-ops-ch allocator)
+                tx-root (.getVectorSchemaRoot sr)]
+      (.loadNextBatch sr)
 
-        (let [^TimeStampMicroTZVector tx-time-vec (.getVector tx-root "tx-time")
-              ^TransactionInstant tx-key (cond-> tx-key
-                                           (not (.isNull tx-time-vec 0))
-                                           (assoc :tx-time (-> (.get tx-time-vec 0) (util/micros->instant))))
-              latest-completed-tx (.latestCompletedTx this)]
+      (let [^TimeStampMicroTZVector tx-time-vec (.getVector tx-root "tx-time")
+            ^TransactionInstant tx-key (cond-> tx-key
+                                         (not (.isNull tx-time-vec 0))
+                                         (assoc :tx-time (-> (.get tx-time-vec 0) (util/micros->instant))))
+            latest-completed-tx (.latestCompletedTx this)]
 
-          (if (and (not (nil? latest-completed-tx))
-                   (neg? (compare (.tx-time tx-key)
-                                  (.tx-time latest-completed-tx))))
-            ;; TODO: we don't yet have the concept of an aborted tx
-            ;; so anyone awaiting this tx will have a bad time.
-            (log/warnf "specified tx-time '%s' older than current tx '%s'"
-                       (pr-str tx-key)
-                       (pr-str latest-completed-tx))
+        (if (and (not (nil? latest-completed-tx))
+                 (neg? (compare (.tx-time tx-key)
+                                (.tx-time latest-completed-tx))))
+          ;; TODO: we don't yet have the concept of an aborted tx
+          ;; so anyone awaiting this tx will have a bad time.
+          (log/warnf "specified tx-time '%s' older than current tx '%s'"
+                     (pr-str tx-key)
+                     (pr-str latest-completed-tx))
 
-            (let [tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
-                                 (.getDataVector))
-                  chunk-idx (.chunk-idx watermark)
-                  row-count (.row-count watermark)
-                  next-row-id (+ chunk-idx row-count)]
-              (.indexTx this tx-key tx-root next-row-id)
+          (let [tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
+                               (.getDataVector))
+                chunk-idx (.chunk-idx watermark)
+                row-count (.row-count watermark)
+                next-row-id (+ chunk-idx row-count)]
+            (.indexTx this tx-key tx-root next-row-id)
 
-              (let [number-of-new-rows (.getValueCount tx-ops-vec)
-                    new-chunk-row-count (+ row-count number-of-new-rows)]
-                (with-open [_old-watermark watermark]
-                  (set! (.watermark this)
-                        (tx/->Watermark chunk-idx
-                                        new-chunk-row-count
-                                        (snapshot-roots live-roots)
-                                        tx-key
-                                        (.getTemporalWatermark temporal-mgr)
-                                        (AtomicInteger. 1)
-                                        max-rows-per-block
-                                        (ConcurrentHashMap.))))
-                (when (>= new-chunk-row-count max-rows-per-chunk)
-                  (.finishChunk this))
+            (let [number-of-new-rows (.getValueCount tx-ops-vec)
+                  new-chunk-row-count (+ row-count number-of-new-rows)]
+              (with-open [_old-watermark watermark]
+                (set! (.watermark this)
+                      (tx/->Watermark chunk-idx
+                                      new-chunk-row-count
+                                      (snapshot-roots live-roots)
+                                      tx-key
+                                      (.getTemporalWatermark temporal-mgr)
+                                      (AtomicInteger. 1)
+                                      max-rows-per-block
+                                      (ConcurrentHashMap.))))
+              (when (>= new-chunk-row-count max-rows-per-chunk)
+                (.finishChunk this))
 
-                (await/notify-tx tx-key awaiters)
-
-                tx-key)))))
-      (catch Throwable e
-        (set! (.ingester-error this) e)
-        (await/notify-ex e awaiters)
-        (throw e))))
+              tx-key))))))
 
   (latestCompletedTx [_]
     (some-> watermark .tx-key))
-
-  (awaitTxAsync [this tx]
-    (await/await-tx-async tx
-                          #(or (some-> ingester-error throw)
-                               (.latestCompletedTx this))
-                          awaiters))
 
   IndexerPrivate
   (indexTx [this tx-key tx-root next-row-id]
@@ -549,9 +532,7 @@
               (->log-indexer allocator max-rows-per-block)
               (util/->identity-set)
               (StampedLock.)
-              (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block)
-              (PriorityBlockingQueue.)
-              nil)))
+              (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block))))
 
 (defmethod ig/halt-key! ::indexer [_ ^AutoCloseable indexer]
   (.close indexer))
