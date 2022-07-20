@@ -1182,7 +1182,8 @@
 
 (defn cmd-await-query-result
   "This command allows us to pre-empt running queries and cancel them."
-  [{:keys [conn-state] :as conn}
+  [{:keys [conn-state
+           conn-status] :as conn}
    {:keys [^CompletableFuture fut,
            query,
            ast
@@ -1212,10 +1213,13 @@
         (log/debug "query cancelled during execution" {:cid (:cid conn), :port (:port (:server conn))})
         (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
 
-      ;; todo consider :closing policy
+      ;; if interrupted exit now, this will happen if conn threadpool needs to be shutdown immediately
+      interrupted
+      (log/debug "query interrupted by server (forced shutdown)")
 
-      ;; if interrupted exit now
-      interrupted nil
+      ;; close happens if conns do not drain in time so we should exit
+      (= :closing @conn-status)
+      (log/debug "query result stream stopping (conn closing)")
 
       ;; very important done is the first cond state otherwise this cond might race
       ;; with the futs completion state
