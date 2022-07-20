@@ -609,7 +609,7 @@
         drain (not (or interrupted (contains? #{0, nil} drain-wait)))]
 
     (when (and drain (compare-and-set! server-status :running :draining))
-      (log/debug "server draining connections")
+      (log/debug "Server draining connections")
       (loop [wait-until (+ (System/currentTimeMillis) drain-wait)]
         (cond
           ;; connections all closed, proceed
@@ -617,12 +617,12 @@
 
           ;; timeout
           (< wait-until (System/currentTimeMillis))
-          (do (log/warn "could not drain connections in time, force closing")
+          (do (log/warn "Could not drain connections in time, force closing")
               (swap! server-state assoc :force-close true))
 
           ;; we are interrupted, hurry up!
           (.isInterrupted (Thread/currentThread))
-          (do (log/warn "interupted during drain, force closing")
+          (do (log/warn "Interupted during drain, force closing")
               (swap! server-state assoc :force-close true))
 
           :else (do (Thread/sleep 10) (recur wait-until)))))
