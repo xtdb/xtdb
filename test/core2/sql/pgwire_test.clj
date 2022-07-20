@@ -16,7 +16,8 @@
            (com.fasterxml.jackson.databind ObjectMapper JsonNode)
            (java.lang Thread$State)
            (java.net SocketException)
-           (java.util.concurrent CountDownLatch TimeUnit)))
+           (java.util.concurrent CountDownLatch TimeUnit CompletableFuture)
+           (core2 IResultSet)))
 
 (set! *warn-on-reflection* false)
 (set! *unchecked-math* false)
@@ -587,6 +588,27 @@
 
         (check-server-resources-freed)))))
 
+(deftest jdbc-query-cancellation-test
+  (require-server {:num-threads 2})
+  (let [stmt-promise (promise)
+
+        start-conn1
+        (fn []
+          (with-open [conn (jdbc-conn)]
+            (with-open [stmt (.prepareStatement conn "select a.a from a")]
+              (try
+                (with-redefs [c2/open-sql-async (fn [& _] (deliver stmt-promise stmt) (CompletableFuture.))]
+                  (with-open [rs (.executeQuery stmt)]
+                    :not-cancelled))
+                (catch PSQLException e
+                  (.getMessage e))))))
+
+        fut (future (start-conn1))]
+
+    (is (not= :timeout (deref stmt-promise 1000 :timeout)))
+    (when (realized? stmt-promise) (.cancel @stmt-promise))
+    (is (= "ERROR: query cancelled during execution" (deref fut 1000 :timeout)))))
+
 (defn psql-available?
   "Returns true if psql is available in $PATH"
   []
@@ -661,15 +683,31 @@
             (send "select ping;\n")
             (is (str/includes? (read) "pong"))))
 
-        (testing "query crash"
+        (testing "query crash during plan"
           (with-redefs [clojure.tools.logging/logf (constantly nil)
-                        c2/sql-query (fn [& _] (throw (Throwable. "oops")))]
+                        c2/open-sql-async (fn [& _] (CompletableFuture/failedFuture (Throwable. "oops")))]
             (send "select a.a from (values (42)) a (a);\n")
             (is (str/includes? (read @err) "unexpected server error during query execution")))
 
           (testing "internal query error allows session to continue"
             (send "select ping;\n")
             (is (str/includes? (read) "pong"))))
+
+        (testing "query crash during result set iteration"
+          (with-redefs [clojure.tools.logging/logf (constantly nil)
+                        c2/open-sql-async (fn [& _] (CompletableFuture/completedFuture
+                                                      (reify IResultSet
+                                                        (hasNext [_] true)
+                                                        (next [_] (throw (Throwable. "oops")))
+                                                        (close [_]))))]
+            (send "select a.a from (values (42)) a (a);\n")
+            (is (str/includes? (read @err) "unexpected server error during query execution")))
+
+          (testing "internal query error allows session to continue"
+            (send "select ping;\n")
+            (is (str/includes? (read) "pong"))))
+
+        ;; I would like to test cancellation in psql, but I cannot without a pseudo terminal (pty), not going do that now
 
         (finally
 

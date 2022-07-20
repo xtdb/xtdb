@@ -17,15 +17,16 @@
   (:import (java.nio.charset StandardCharsets)
            (java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException ByteArrayInputStream)
            (java.net Socket ServerSocket SocketTimeoutException SocketException)
-           (java.util.concurrent Executors ExecutorService ConcurrentHashMap RejectedExecutionException TimeUnit)
+           (java.util.concurrent Executors ExecutorService ConcurrentHashMap RejectedExecutionException TimeUnit CompletableFuture Future)
            (java.util HashMap)
            (org.apache.arrow.vector PeriodDuration)
            (java.time LocalDate)
            (java.nio ByteBuffer)
            (com.fasterxml.jackson.databind.util ByteBufferBackedInputStream)
-           (java.util.function Function BiFunction)
+           (java.util.function Function BiFunction BiConsumer)
            (java.lang Thread$State)
-           (clojure.lang PersistentQueue)))
+           (clojure.lang PersistentQueue)
+           (core2 IResultSet)))
 
 ;; references
 ;; https://www.postgresql.org/docs/current/protocol-flow.html
@@ -242,6 +243,12 @@
   {:severity "ERROR"
    :localized-severity "ERROR"
    :sql-state "57P03"
+   :message msg})
+
+(defn- err-query-cancelled [msg]
+  {:severity "ERROR"
+   :localized-severity "ERROR"
+   :sql-state "57014"
    :message msg})
 
 ;; sql processing
@@ -807,6 +814,10 @@
   {:read (comp {\P :portal, \S :prepared-stmt} (:read io-char8)),
    :write no-write})
 
+(def io-cancel-request
+  (io-record :process-id io-uint32
+             :secret-key io-uint32))
+
 ;; msg definition
 
 ;
@@ -918,7 +929,9 @@
 (def-msg msg-auth :server \R
   :result io-uint32)
 
-(def-msg msg-backend-key-data :server \K)
+(def-msg msg-backend-key-data :server \K
+  :process-id io-uint32
+  :secret-key io-uint32)
 
 (def-msg msg-copy-in-response :server \G)
 
@@ -1010,19 +1023,59 @@
   [{:keys [conn-status]}]
   (compare-and-set! conn-status :running :closing))
 
+(defn cmd-startup-pg30 [conn msg-in]
+  (let [{:keys [server]} conn
+        {:keys [server-state]} server]
+    ;; send server parameters
+    (cmd-write-msg conn msg-auth {:result 0})
+    (doseq [[k v] (:parameters @server-state)]
+      (cmd-write-msg conn msg-parameter-status {:parameter k, :value v}))
+    ;; set initial session parameters specified by client
+    (let [{:keys [startup-parameters]} (read-startup-parameters msg-in)]
+      (doseq [[k v] startup-parameters]
+        (set-session-parameter conn k v)))
+
+    ;; backend key data (used to identify conn for cancellation)
+    (cmd-write-msg conn msg-backend-key-data {:process-id (:cid conn), :secret-key 0})
+
+    ;; ready for query
+    (cmd-send-ready conn :idle)))
+
+(defn cmd-cancel
+  "Tells the connection to stop doing what its doing and return to idle"
+  [conn]
+  ;; we might this want to be conditional on a 'working state' to avoid races (if you fire loads of cancels randomly), not sure whether
+  ;; to use status instead
+  (swap! (:conn-state conn) assoc :cancel true)
+  nil)
+
+(defn cmd-startup-cancel [conn msg-in]
+  (let [{:keys [process-id]} ((:read io-cancel-request) msg-in)
+        {:keys [server]} conn
+        {:keys [server-state]} server
+        {:keys [connections]} @server-state
+
+        cancel-target (get connections process-id)]
+
+    (when cancel-target (cmd-cancel cancel-target))
+
+    (cmd-terminate conn)))
+
+(defn cmd-startup-err [conn err]
+  (cmd-send-error conn err)
+  (cmd-terminate conn))
+
 (defn cmd-startup
   "A command that negotiates startup with the client, including ssl negotiation, and sending the state of the servers
   :server-parameters."
   [conn]
   (let [in @(:in conn)
         out @(:out conn)
-        server-state (:server-state (:server conn))
 
         {:keys [version] :as msg} (read-version in)
 
         err
         (case version
-          :cancel (err-protocol-violation "Cancellation is not supported")
           :gssenc (err-protocol-violation "GSSAPI is not supported")
           nil)
 
@@ -1043,30 +1096,151 @@
 
           :else msg)
 
-        err
-        (cond
-          err err
-          (= :gssenc version) (err-protocol-violation "GSSAPI is not supported")
-          (not= :30 version) (err-protocol-violation "Unknown protocol version"))]
+        gsenc-err (when (= :gssenc version) (err-protocol-violation "GSSAPI is not supported"))
+        err (or err gsenc-err)]
 
+    (if err
+      (cmd-startup-err conn err)
+      (case version
+        :cancel (cmd-startup-cancel conn msg-in)
+        :30 (cmd-startup-pg30 conn msg-in)
+        (cmd-startup-err conn (err-protocol-violation "Unknown protocol version"))))))
 
-    (when-not err
-      (cmd-write-msg conn msg-auth {:result 0})
-      (doseq [[k v] (:parameters @server-state)]
-        (cmd-write-msg conn msg-parameter-status {:parameter k, :value v}))
-      (cmd-send-ready conn :idle)
+(defn cmd-enqueue-cmd
+  "Enqueues another command for execution later (puts it at the back of the :cmd-buf queue).
 
-      (let [{:keys [startup-parameters]} (read-startup-parameters msg-in)]
-        (doseq [[k v] startup-parameters]
-          (set-session-parameter conn k v))))
+  Commands can be queued with (non-conn) args using vectors like so (enqueue-cmd conn [#'cmd-simple-query {:query some-sql}])"
+  [{:keys [conn-state]} & cmds]
+  (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
 
-    (when err
-      (cmd-send-error conn err)
-      (cmd-terminate conn))))
+(defn cmd-send-query-result
+  [{:keys [conn-status, conn-state] :as conn} {:keys [query, ast, ^IResultSet result-set]}]
+  (let [projection (mapv keyword (query-projection ast))
+        ;; todo result format
+        jsonfn (comp utf8 json-str)
+        tuplefn (if (seq projection) (apply juxt (map (partial comp jsonfn) projection)) (constantly []))
+
+        ;; this query has been cancelled!
+        cancelled-by-client? #(:cancel @conn-state)
+        ;; please die as soon as possible (not the same as draining, which leaves conns :running for a time)
+        closing? #(= :closing @conn-status)
+        ;; really you need to stop ASAP (force conn tp termination)
+        interrupted? #(.isInterrupted (Thread/currentThread))]
+    (loop [n-rows-out 0]
+      (cond
+        (cancelled-by-client?)
+        (do (log/debug "Query cancelled by client")
+            (swap! conn-state dissoc :cancel)
+            (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
+
+        (interrupted?)
+        (log/debug "query interrupted by server (forced shutdown)")
+
+        (closing?)
+        (log/debug "query result stream stopping (conn closing)")
+
+        (.hasNext result-set)
+        (let [continue
+              (try
+                (cmd-write-msg conn msg-data-row {:vals (tuplefn (.next result-set))})
+                :continue
+                ;; allow interrupts - this can happen if we are blocking during the row reduce and our conn is forced to close.
+                (catch InterruptedException e
+                  (log/debug e "Interrupt thrown sending query results")
+                  ;; make sure interrupt flag hasn't been cleared - conn-loop will terminate if interrupted.
+                  (.interrupt (Thread/currentThread)))
+
+                ;; rethrow socket ex without logs (this is expected during any msg transfer
+                ;; might later need to be more specific for storage
+                ;; no point sending an error msg, the conn is probably dead.
+                (catch SocketException e (throw e))
+
+                ;; consider io error msg from storage (e.g AWS policy limit reached?)
+                ;; not worried now, long term may sit elsewhere, but maybe not.
+
+                ;; (ideally) unexpected (e.g bug in operator)
+                (catch Throwable e
+                  (log/debug e "An exception was caught during query result set iteration")
+                  (cmd-send-error conn (err-internal "unexpected server error during query execution"))))]
+          (when continue
+            (recur (inc n-rows-out))))
+
+        :else
+        (do (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " n-rows-out)})
+            (when (= :simple (:protocol @conn-state))
+              (cmd-send-ready conn :idle)))))))
+
+(defn- close-result-set [{:keys [conn-state] :as conn} fut ^IResultSet rs]
+  (try
+    (.close rs)
+    ;; cleaned up, remove the fut from the :executing set
+    ;; if we fail to close - we keep the fut, if we can address it - somebody else might be able to clean it up.
+    (swap! conn-state update :executing disj fut)
+    (catch Throwable e
+      (log/fatal e "Exception caught closing result set, resources may have been leaked - please restart XTDB")
+      (.close conn))))
+
+(defn cmd-await-query-result
+  "This command allows us to pre-empt running queries and cancel them."
+  [{:keys [conn-state] :as conn}
+   {:keys [^CompletableFuture fut,
+           query,
+           ast
+           iteration]
+    :as cmd}]
+  (let [cancelled (:cancel @conn-state)
+        ;; how many times have we awaited
+        iteration (or iteration 0)
+        ;; how long should we sleep for (if not interrupted / done)
+        sleep-time (min 10 (long (* (double iteration) 0.01)))
+
+        interrupted (.isInterrupted (Thread/currentThread))
+
+        ;; do not sleep if interrupted (or not enough iterations)
+        no-sleep (and (pos? sleep-time) interrupted)]
+
+    (when cancelled (swap! conn-state dissoc :cancel))
+
+    ;; naive bounded wait a very short amount only after a few iterations (some queries return quickly!)
+    (when-not (or cancelled (.isDone fut) no-sleep)
+      (Thread/sleep sleep-time))
+
+    (cond
+      ;; queries / operators cannot actually be interrupted right now, so just leave it dangling.
+      cancelled
+      (do
+        (log/debug "query cancelled during execution" {:cid (:cid conn), :port (:port (:server conn))})
+        (cmd-send-error conn (err-query-cancelled "query cancelled during execution")))
+
+      ;; todo consider :closing policy
+
+      ;; if interrupted exit now
+      interrupted nil
+
+      ;; very important done is the first cond state otherwise this cond might race
+      ;; with the futs completion state
+      (and (.isDone fut) (not (.isCompletedExceptionally fut)))
+      (let [rs @fut]
+        (try
+          (cmd-send-query-result conn {:query query, :ast ast, :result-set rs})
+          (catch Throwable e
+            (log/error e "Unexpected exception sending query results, please report as a bug - you may need reconnect or restart XTDB"))
+          (finally
+            ;; try and close the result set (to warn on leak!)
+            (close-result-set conn fut rs))))
+
+      ;; we log the ex on the completion handler of the fut, sending the message
+      ;; needs to be done serially as part of the cmd queue so we do it here.
+      (.isCompletedExceptionally fut)
+      (cmd-send-error conn (err-internal "unexpected server error during query execution"))
+
+      ;; otherwise, come back around and wait again
+      ;; by using the buffer we check socket state / draining etc as normal.
+      :else (cmd-enqueue-cmd conn [#'cmd-await-query-result (assoc cmd :iteration (inc iteration))]))))
 
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
-  [{:keys [server] :as conn}
+  [{:keys [server, conn-state] :as conn}
    {:keys [ast
            query
            transformed-query
@@ -1089,24 +1263,26 @@
 
         xt-params (vec (map-indexed xtify-param params))
 
-        projection (mapv keyword (query-projection ast))
+        ;; execute the query asynchronously (to enable cancellation mid query)
+        ;; we do not use the async api as it does not currently allow cancellation, and .interrupt is
+        ;; better than nothing.
+        query-fut (c2/open-sql-async node transformed-query (if (seq xt-params) {:? xt-params} {}))
 
-        ;; todo result format
+        ;; keep the fut around in case of interrupt exc (for cleanup)
+        _ (swap! conn-state update :executing (fnil conj #{}) query-fut)
 
-        jsonfn (comp utf8 json-str)
-        tuplefn (if (seq projection) (apply juxt (map (partial comp jsonfn) projection)) (constantly []))
-        [err rows]
-        (try
-          [nil (c2/sql-query node transformed-query (if (seq xt-params) {:? xt-params} {}))]
-          (catch Throwable e
-            (log/debug e "Error during query execution")
-            [(err-internal "unexpected server error during query execution")]))]
-    (if err
-      (cmd-send-error conn err)
-      (do
-        (doseq [row rows]
-          (cmd-write-msg conn msg-data-row {:vals (tuplefn row)}))
-        (cmd-write-msg conn msg-command-complete {:command (str (statement-head query) " " (count rows))})))))
+        ;; log and de-reg when done (however that happens)
+        _
+        (.whenComplete
+          query-fut
+          (reify BiConsumer
+            (accept [_ _ ex]
+              (when ex (log/debug ex "error during query open-sql-async"))
+              (swap! conn-state update :executing disj query-fut)
+              nil)))]
+
+    ;; start waiting for result
+    (cmd-await-query-result conn {:ast ast, :query query, :iteration 0, :fut query-fut})))
 
 (defn- cmd-send-row-description [conn cols]
   (let [defaults {:column-name ""
@@ -1180,7 +1356,8 @@
     :ignore (cmd-write-msg conn msg-command-complete {:command (statement-head query)})
     :query (cmd-exec-query conn stmt))
 
-  (when (= :simple (:protocol @conn-state))
+  (when (and (= :simple (:protocol @conn-state))
+             (not= :query statement-type))
     (cmd-send-ready conn :idle)))
 
 (defn cmd-simple-query [{:keys [conn-state] :as conn} {:keys [query]}]
@@ -1201,13 +1378,6 @@
   "Flushes any pending output to the client."
   [conn]
   (.flush @(:out conn)))
-
-(defn cmd-enqueue-cmd
-  "Enqueues another command for execution later (puts it at the back of the :cmd-buf queue).
-
-  Commands can be queued with (non-conn) args using vectors like so (enqueue-cmd conn [#'cmd-simple-query {:query some-sql}])"
-  [{:keys [conn-state]} & cmds]
-  (swap! conn-state update :cmd-buf (fnil into PersistentQueue/EMPTY) cmds))
 
 (defn cmd-parse
   "Responds to a msg-parse message that creates a prepared-statement."
@@ -1265,7 +1435,7 @@
     (when-not (compare-and-set! conn-status :new :running)
       (log/error "Connect loop requires a newly initialised connection" {:cid cid, :port port}))
 
-    (cmd-enqueue-cmd conn [#'cmd-startup])
+    (cmd-startup conn)
 
     (loop []
       (cond
@@ -1278,7 +1448,12 @@
 
         ;; if the server is draining, we may later allow connections to finish their queries
         ;; (consider policy - server has a drain limit but maybe better to be explicit here as well)
-        (and (= :draining @server-status) (not= :extended (:protocol @conn-state)))
+        (and (= :draining @server-status)
+             (not= :extended (:protocol @conn-state))
+             ;; for now we allow buffered commands to be run
+             ;; before closing - there probably needs to be limits to this
+             ;; (for huge queries / result sets)
+             (empty? (:cmd-buf @conn-state)))
         (do (->> {:port port
                   :cid cid}
                  (log/debug "Connection loop exiting (draining)"))
@@ -1301,12 +1476,7 @@
             (swap! conn-state assoc :cmd-buf (pop cmd-buf))
             (swap! conn-state dissoc :cmd-buf))
 
-          (when cmd-fn
-            (->> {:port port
-                  :cid cid
-                  :cmd cmd-fn}
-                 (log/debug "Executing buffered command"))
-            (apply cmd-fn conn cmd-args))
+          (when cmd-fn (apply cmd-fn conn cmd-args))
 
           (recur))
 
