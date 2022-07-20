@@ -126,33 +126,33 @@
   (jdbc/get-connection (apply jdbc-url params)))
 
 (deftest query-test
-  (with-open [conn (jdbc-conn)]
-    (with-open [stmt (.createStatement conn)
-                rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
-      (is (= true (.next rs)))
-      (is (= false (.next rs))))))
+  (with-open [conn (jdbc-conn)
+              stmt (.createStatement conn)
+              rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
+    (is (= true (.next rs)))
+    (is (= false (.next rs)))))
 
 (deftest simple-query-test
-  (with-open [conn (jdbc-conn "preferQueryMode" "simple")]
-    (with-open [stmt (.createStatement conn)
-                rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
-      (is (= true (.next rs)))
-      (is (= false (.next rs))))))
+  (with-open [conn (jdbc-conn "preferQueryMode" "simple")
+              stmt (.createStatement conn)
+              rs (.executeQuery stmt "SELECT a.a FROM (VALUES ('hello, world')) a (a)")]
+    (is (= true (.next rs)))
+    (is (= false (.next rs)))))
 
 (deftest prepared-query-test
-  (with-open [conn (jdbc-conn)]
-    (with-open [stmt (.prepareStatement conn "SELECT a.a FROM (VALUES ('hello, world')) a (a)")
-                rs (.executeQuery stmt)]
-      (is (= true (.next rs)))
-      (is (= false (.next rs))))))
+  (with-open [conn (jdbc-conn)
+              stmt (.prepareStatement conn "SELECT a.a FROM (VALUES ('hello, world')) a (a)")
+              rs (.executeQuery stmt)]
+    (is (= true (.next rs)))
+    (is (= false (.next rs)))))
 
 (deftest parameterized-query-test
-  (with-open [conn (jdbc-conn)]
-    (with-open [stmt (doto (.prepareStatement conn "SELECT a.a FROM (VALUES (?)) a (a)")
-                       (.setObject 1 "hello, world"))
-                rs (.executeQuery stmt)]
-      (is (= true (.next rs)))
-      (is (= false (.next rs))))))
+  (with-open [conn (jdbc-conn)
+              stmt (doto (.prepareStatement conn "SELECT a.a FROM (VALUES (?)) a (a)")
+                     (.setObject 1 "hello, world"))
+              rs (.executeQuery stmt)]
+    (is (= true (.next rs)))
+    (is (= false (.next rs)))))
 
 (def json-representation-examples
   "A map of entries describing sql value domains
