@@ -116,6 +116,7 @@
 (defn start-node ^core2.local_node.Node [opts]
   (let [system (-> (into {::node {}
                           :core2/allocator {}
+                          :core2/row-counts {}
                           ::idx/indexer {}
                           :core2/ingester {}
                           :core2.metadata/metadata-manager {}

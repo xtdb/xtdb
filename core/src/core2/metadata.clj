@@ -29,7 +29,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IMetadataManager
-  (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx, ^long max-rows-per-block])
+  (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx])
   (^java.util.SortedSet knownChunks [])
   (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^java.util.function.BiFunction f])
   (columnType [^String colName]))
@@ -411,10 +411,11 @@
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
+                          ^long max-rows-per-block
                           ^SortedSet known-chunks
                           ^:unsynchronized-mutable column-types]
   IMetadataManager
-  (registerNewChunk [this live-roots chunk-idx max-rows-per-block]
+  (registerNewChunk [this live-roots chunk-idx]
     (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create metadata-schema allocator)]
                          (write-meta metadata-root live-roots chunk-idx max-rows-per-block)
                          (set! (.column-types this) (merge-column-types column-types (->column-types metadata-root)))
@@ -447,13 +448,15 @@
 (defmethod ig/prep-key ::metadata-manager [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
           :object-store (ig/ref :core2/object-store)
-          :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)}
+          :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)
+          :row-counts (ig/ref :core2/row-counts)}
          opts))
 
-(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator ^ObjectStore object-store buffer-pool]}]
+(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator ^ObjectStore object-store buffer-pool]
+                                              {:keys [max-rows-per-block]} :row-counts}]
   (let [known-chunks (ConcurrentSkipListSet. ^List (keep obj-key->chunk-idx (.listObjects object-store "metadata-")))
         column-types (load-column-types buffer-pool known-chunks)]
-    (MetadataManager. allocator object-store buffer-pool known-chunks column-types)))
+    (MetadataManager. allocator object-store buffer-pool max-rows-per-block known-chunks column-types)))
 
 (defmethod ig/halt-key! ::metadata-manager [_ ^MetadataManager mgr]
   (.close mgr))

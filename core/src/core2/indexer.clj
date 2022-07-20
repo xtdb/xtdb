@@ -35,6 +35,21 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defmethod ig/prep-key :core2/row-counts [_ opts]
+  (merge {:max-rows-per-block 1000
+          :max-rows-per-chunk 100000}
+         opts))
+
+(defmethod ig/init-key :core2/row-counts [_ {:keys [max-rows-per-chunk] :as opts}]
+  (let [bloom-false-positive-probability (bloom/bloom-false-positive-probability? max-rows-per-chunk)]
+    (when (> bloom-false-positive-probability 0.05)
+      (log/warn "Bloom should be sized for large chunks:" max-rows-per-chunk
+                "false positive probability:" bloom-false-positive-probability
+                "bits:" bloom/bloom-bits
+                "can be set via system property core2.bloom.bits")))
+
+  opts)
+
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface TransactionIndexer
   (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName])
@@ -415,7 +430,7 @@
                                             (.putObject object-store (meta/->chunk-obj-key chunk-idx col-name) (.writeColumn this live-root))))
                                          (into-array CompletableFuture)))
           (.registerNewChunk temporal-mgr chunk-idx)
-          (.registerNewChunk metadata-mgr live-roots chunk-idx max-rows-per-block)
+          (.registerNewChunk metadata-mgr live-roots chunk-idx)
 
           (with-open [old-watermark watermark]
             (set! (.watermark this) (wm/->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-key old-watermark)
@@ -455,30 +470,23 @@
     (set! (.watermark this) nil)))
 
 (defmethod ig/prep-key ::indexer [_ opts]
-  (merge {:max-rows-per-block 1000
-          :max-rows-per-chunk 100000
-          :allocator (ig/ref :core2/allocator)
+  (merge {:allocator (ig/ref :core2/allocator)
           :object-store (ig/ref :core2/object-store)
           :metadata-mgr (ig/ref ::meta/metadata-manager)
           :temporal-mgr (ig/ref ::temporal/temporal-manager)
-          :buffer-pool (ig/ref ::bp/buffer-pool)}
+          :buffer-pool (ig/ref ::bp/buffer-pool)
+          :row-counts (ig/ref :core2/row-counts)}
          opts))
 
 (defmethod ig/init-key ::indexer
-  [_ {:keys [allocator object-store metadata-mgr ^ITemporalManager temporal-mgr
-             max-rows-per-chunk max-rows-per-block]
+  [_ {:keys [allocator object-store metadata-mgr ^ITemporalManager temporal-mgr]
+      {:keys [max-rows-per-chunk max-rows-per-block]} :row-counts
       :as deps}]
 
   (let [{:keys [latest-row-id latest-tx]} (latest-tx deps)
         chunk-idx (if latest-row-id
                     (inc (long latest-row-id))
-                    0)
-        bloom-false-positive-probability (bloom/bloom-false-positive-probability? max-rows-per-chunk)]
-    (when (> bloom-false-positive-probability 0.05)
-      (log/warn "Bloom should be sized for large chunks:" max-rows-per-chunk
-                "false positive probability:" bloom-false-positive-probability
-                "bits:" bloom/bloom-bits
-                "can be set via system property core2.bloom.bits"))
+                    0)]
     (Indexer. allocator
               object-store
               metadata-mgr

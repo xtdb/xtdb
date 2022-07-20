@@ -15,7 +15,7 @@
            (org.roaringbitmap RoaringBitmap)))
 
 (t/deftest test-find-gt-ivan
-  (with-open [node (node/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
+  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
     (-> (c2/submit-tx node [[:put {:name "Håkan", :_id :hak}]])
         (tu/then-await-tx node))
 
@@ -69,7 +69,7 @@
                            db))))))
 
 (t/deftest test-find-eq-ivan
-  (with-open [node (node/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
+  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
     (-> (c2/submit-tx node [[:put {:name "Håkan", :_id :hak}]
                             [:put {:name "James", :_id :jms}]
                             [:put {:name "Ivan", :_id :iva}]])
