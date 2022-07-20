@@ -7,7 +7,7 @@
             [core2.vector.writer :as vw]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import [core2.log Log LogRecord]
-           java.time.Instant
+           (java.time Clock Instant)
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampMicroTZVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo ArrowType$Union Schema]
@@ -57,10 +57,10 @@
     parsed-tx-ops))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-start-field
-  (types/col-type->field "_valid-time-start" [:union #{:null [:timestamp-tz :micro "UTC"]}]))
+  (types/col-type->field "_valid-time-start" [:timestamp-tz :micro "UTC"]))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-end-field
-  (types/col-type->field "_valid-time-end" [:union #{:null [:timestamp-tz :micro "UTC"]}]))
+  (types/col-type->field "_valid-time-end" [:timestamp-tz :micro "UTC"]))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Schema tx-schema
   (Schema. [(types/->field "tx-ops" types/list-type false
@@ -77,7 +77,7 @@
                                                          (types/->field "_id" types/dense-union-type false))))
             (types/col-type->field "tx-time" [:union #{:null [:timestamp-tz :micro "UTC"]}])]))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops {:keys [^Instant tx-time]} ^BufferAllocator allocator]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant tx-time, ^Instant default-valid-time]}]
   (let [tx-ops (conform-tx-ops tx-ops)
         op-count (count tx-ops)]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
@@ -115,13 +115,15 @@
                          (->> (types/write-value! doc))
                          (.endValue)))
 
-                     (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
+                     (let [^Instant vt-start (or (some-> (:_valid-time-start vt-opts) util/->instant)
+                                                 default-valid-time)]
                        (.set ^TimeStampMicroTZVector (.getVector put-vt-start-writer)
-                             put-idx (util/instant->micros (util/->instant vt-start))))
+                             put-idx (util/instant->micros vt-start)))
 
-                     (when-let [^Instant vt-end (:_valid-time-end vt-opts)]
+                     (let [^Instant vt-end (or (some-> (:_valid-time-end vt-opts) util/->instant)
+                                               util/end-of-time)]
                        (.set ^TimeStampMicroTZVector (.getVector put-vt-end-writer)
-                             put-idx (util/instant->micros (util/->instant vt-end))))
+                             put-idx (util/instant->micros vt-end)))
 
                      (.endValue put-writer))
 
@@ -133,13 +135,15 @@
                             (->> (types/write-value! id))
                             (.endValue)))
 
-                        (when-let [^Instant vt-start (:_valid-time-start vt-opts)]
+                        (let [^Instant vt-start (or (some-> (:_valid-time-start vt-opts) util/->instant)
+                                                    default-valid-time)]
                           (.set ^TimeStampMicroTZVector (.getVector delete-vt-start-writer)
-                                delete-idx (util/instant->micros (util/->instant vt-start))))
+                                delete-idx (util/instant->micros vt-start)))
 
-                        (when-let [^Instant vt-end (:_valid-time-end vt-opts)]
+                        (let [^Instant vt-end (or (some-> (:_valid-time-end vt-opts) util/->instant)
+                                                  util/end-of-time)]
                           (.set ^TimeStampMicroTZVector (.getVector delete-vt-end-writer)
-                                delete-idx (util/instant->micros (util/->instant vt-end)))))
+                                delete-idx (util/instant->micros vt-end))))
 
               :evict (do
                        (.startValue evict-writer)
@@ -160,23 +164,26 @@
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))
 
-(deftype TxProducer [^Log log, ^BufferAllocator allocator]
+(deftype TxProducer [^BufferAllocator allocator, ^Log log, ^Clock clock]
   ITxProducer
   (submitTx [this tx-ops]
     (.submitTx this tx-ops {}))
 
   (submitTx [_ tx-ops opts]
-    (let [{:keys [tx-time] :as opts} (some-> opts (update :tx-time util/->instant))]
-      (-> (.appendRecord log (serialize-tx-ops tx-ops opts allocator))
+    (let [{:keys [tx-time] :as opts} (-> opts
+                                         (assoc :default-valid-time (.instant clock))
+                                         (some-> (update :tx-time util/->instant)))]
+      (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))
           (util/then-apply
             (fn [^LogRecord result]
               (cond-> (.tx result)
                 tx-time (assoc :tx-time tx-time))))))))
 
 (defmethod ig/prep-key ::tx-producer [_ opts]
-  (merge {:log (ig/ref :core2/log)
+  (merge {:clock (ig/ref :core2/clock)
+          :log (ig/ref :core2/log)
           :allocator (ig/ref :core2/allocator)}
          opts))
 
-(defmethod ig/init-key ::tx-producer [_ {:keys [log allocator]}]
-  (TxProducer. log allocator))
+(defmethod ig/init-key ::tx-producer [_ {:keys [clock log allocator]}]
+  (TxProducer. allocator log clock))

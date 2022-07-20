@@ -20,7 +20,7 @@
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            [java.time Clock Duration Instant Period ZoneId]
-           [java.util LinkedList]
+           [java.util ArrayList LinkedList List]
            java.util.concurrent.TimeUnit
            java.util.function.Consumer
            (org.apache.arrow.memory BufferAllocator RootAllocator)
@@ -72,8 +72,6 @@
   (^java.time.Clock [^Iterable insts]
    (let [times-iterator (.iterator insts)]
      (proxy [Clock] []
-       (getZone []
-         (ZoneId/of "UTC"))
        (instant []
          (if (.hasNext times-iterator)
            ^Instant (.next times-iterator)
@@ -220,19 +218,32 @@
       (check-json-file (.resolve expected-path (.getFileName path)) path))))
 
 (defn ->local-node ^core2.local_node.Node [{:keys [^Path node-dir
-                                             clock max-rows-per-block max-rows-per-chunk buffers-dir]
-                                      :or {buffers-dir "buffers"}}]
-  (node/start-node {:core2.log/local-directory-log (cond-> {:root-path (.resolve node-dir "log")}
-                                                     clock (assoc :clock clock))
-                    :core2.buffer-pool/buffer-pool {:cache-path (.resolve node-dir ^String buffers-dir)}
+                                                   clock max-rows-per-block max-rows-per-chunk ^String buffers-dir]
+                                            :or {buffers-dir "buffers"}}]
+  (node/start-node {:core2/clock {:clock clock}
+                    :core2.log/local-directory-log {:root-path (.resolve node-dir "log")}
+                    :core2.buffer-pool/buffer-pool {:cache-path (.resolve node-dir buffers-dir)}
                     :core2.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
                     :core2/row-counts (->> {:max-rows-per-block max-rows-per-block
                                             :max-rows-per-chunk max-rows-per-chunk}
                                            (into {} (filter val)))}))
 
 (defn ->local-submit-node ^core2.local_node.SubmitNode [{:keys [^Path node-dir clock]}]
-  (node/start-submit-node {:core2.log/local-directory-log (cond-> {:root-path (.resolve node-dir "log")}
-                                                            clock (assoc :clock clock))}))
+  (node/start-submit-node {:core2/clock {:clock clock}
+                           :core2.log/local-directory-log {:root-path (.resolve node-dir "log")}}))
+
+(def ^:dynamic ^List *clock-insts*)
+
+(defn with-recording-clock [f]
+  (binding [*clock-insts* (ArrayList.)]
+    (with-opts {:core2/clock (let [clock (-> (Clock/systemUTC)
+                                             (Clock/tick (Duration/ofNanos 1000)))]
+                               {:clock (proxy [Clock] []
+                                         (instant []
+                                           (let [i (.instant clock)]
+                                             (.add *clock-insts* i)
+                                             i)))})}
+      f)))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

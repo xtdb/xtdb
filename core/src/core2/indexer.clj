@@ -86,12 +86,12 @@
                                   (t/col-type->field "_row-id" :i64)
                                   (t/->field "op" (ArrowType$Union. UnionMode/Dense (int-array [0 1 2])) false
                                              (t/col-type->field "put"
-                                                                '[:struct {_valid-time-start [:union #{:null [:timestamp-tz :micro "UTC"]}]
-                                                                           _valid-time-end [:union #{:null [:timestamp-tz :micro "UTC"]}]}])
+                                                                '[:struct {_valid-time-start [:timestamp-tz :micro "UTC"]
+                                                                           _valid-time-end [:timestamp-tz :micro "UTC"]}])
                                              (t/->field "delete" t/struct-type false
                                                         (t/->field "_id" t/dense-union-type false)
-                                                        (t/col-type->field "_valid-time-start" [:union #{:null [:timestamp-tz :micro "UTC"]}])
-                                                        (t/col-type->field "_valid-time-end" [:union #{:null [:timestamp-tz :micro "UTC"]}]))
+                                                        (t/col-type->field "_valid-time-start" [:timestamp-tz :micro "UTC"])
+                                                        (t/col-type->field "_valid-time-end" [:timestamp-tz :micro "UTC"]))
                                              (t/->field "evict" t/struct-type false))))]))
 
 #_{:clj-kondo/ignore [:unused-binding]}

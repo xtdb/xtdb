@@ -81,12 +81,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^java.time.Instant end-of-time
-  (Instant/parse "9999-12-31T23:59:59.999999Z"))
-
-(def ^{:tag 'long} end-of-time-μs
-  (util/instant->micros end-of-time))
-
 (def ^:const ^int k 6)
 
 (defn ->min-range ^longs []
@@ -243,7 +237,7 @@
                                        (aset valid-time-start-idx valid-time-start-μs)
                                        (aset valid-time-end-idx valid-time-end-μs)
                                        (aset tx-time-start-idx tx-time-start-μs)
-                                       (aset tx-time-end-idx end-of-time-μs))))]
+                                       (aset tx-time-end-idx util/end-of-time-μs))))]
     (reduce
      (fn [kd-tree ^longs coord]
        (cond-> (kd/kd-tree-insert kd-tree allocator (doto (->copy-range coord)
@@ -429,13 +423,9 @@
                                        idx tombstone?]
                 (TemporalCoordinates. row-id eid
                                       tx-time-μs
-                                      end-of-time-μs
-                                      (if-not (.isNull vt-start-vec idx)
-                                        (.get vt-start-vec idx)
-                                        tx-time-μs)
-                                      (if-not (.isNull vt-end-vec idx)
-                                        (.get vt-end-vec idx)
-                                        end-of-time-μs)
+                                      util/end-of-time-μs
+                                      (.get vt-start-vec idx)
+                                      (.get vt-end-vec idx)
                                       tombstone?))]
         (reify ITemporalTxIndexer
           (indexPut [_ eid row-id vt-start-vec vt-end-vec idx]

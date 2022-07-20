@@ -93,6 +93,12 @@
 (defn micros->instant ^java.time.Instant [^long μs]
   (.plus Instant/EPOCH μs ChronoUnit/MICROS))
 
+(def ^java.time.Instant end-of-time
+  (Instant/parse "9999-12-31T23:59:59.999999Z"))
+
+(def ^{:tag 'long} end-of-time-μs
+  (instant->micros end-of-time))
+
 (defn component
   ([node k] (get @(:!system node) k)))
 

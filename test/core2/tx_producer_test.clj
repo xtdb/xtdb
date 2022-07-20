@@ -14,6 +14,7 @@
   (with-open [a (RootAllocator.)]
     (t/is (= (json/parse-string (slurp expected-file))
              (-> (txp/serialize-tx-ops
+                  a
                   [[:put {:_id "device-info-demo000000",
                           :api-version "23",
                           :manufacturer "iobeam",
@@ -32,8 +33,8 @@
                           :cpu-avg-1min 24.81,
                           :mem-free 4.10011078E8,
                           :mem-used 5.89988922E8}]]
-                  {:tx-time (util/->instant #inst "2021")}
-                  a)
+                  {:tx-time (util/->instant #inst "2021")
+                   :default-valid-time (util/->instant #inst "2021")})
                  (c2-json/arrow-streaming->json)
                  #_(doto (->> (spit expected-file)))
                  (json/parse-string))))))

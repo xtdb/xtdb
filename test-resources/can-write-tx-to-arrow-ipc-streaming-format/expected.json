@@ -343,7 +343,7 @@
             }]
           },{
             "name" : "_valid-time-start",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "timestamp",
               "unit" : "MICROSECOND",
@@ -352,7 +352,7 @@
             "children" : [ ]
           },{
             "name" : "_valid-time-end",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "timestamp",
               "unit" : "MICROSECOND",
@@ -377,7 +377,7 @@
             "children" : [ ]
           },{
             "name" : "_valid-time-start",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "timestamp",
               "unit" : "MICROSECOND",
@@ -386,7 +386,7 @@
             "children" : [ ]
           },{
             "name" : "_valid-time-end",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "timestamp",
               "unit" : "MICROSECOND",
@@ -665,13 +665,13 @@
           },{
             "name" : "_valid-time-start",
             "count" : 2,
-            "VALIDITY" : [0,0],
-            "DATA" : [0,0]
+            "VALIDITY" : [1,1],
+            "DATA" : [1609459200000000,1609459200000000]
           },{
             "name" : "_valid-time-end",
             "count" : 2,
-            "VALIDITY" : [0,0],
-            "DATA" : [0,0]
+            "VALIDITY" : [1,1],
+            "DATA" : [253402300799999999,253402300799999999]
           }]
         },{
           "name" : "delete",

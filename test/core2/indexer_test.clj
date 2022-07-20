@@ -73,7 +73,7 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (c2/map->TransactionInstant {:tx-id 7117, :tx-time (util/->instant #inst "2020-01-02")})
+        last-tx-key (c2/map->TransactionInstant {:tx-id 7117, :tx-time (util/->instant #inst "2020-01-04")})
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -316,7 +316,7 @@
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
         mock-clock (tu/->mock-clock)
-        last-tx-key (c2/map->TransactionInstant {:tx-id 7117, :tx-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (c2/map->TransactionInstant {:tx-id 7117, :tx-time (util/->instant #inst "2020-01-04")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]

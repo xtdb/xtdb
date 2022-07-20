@@ -31,7 +31,7 @@
 (derive :core2.log/memory-log :core2/log)
 
 (defmethod ig/prep-key :core2.log/memory-log [_ opts]
-  (merge {:clock (Clock/systemUTC)} opts))
+  (merge {:clock (ig/ref :core2/clock)} opts))
 
 (defmethod ig/init-key :core2.log/memory-log [_ {:keys [clock]}]
   (InMemoryLog. (atom []) (log/->notifying-subscriber-handler nil) clock))

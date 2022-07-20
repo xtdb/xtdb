@@ -18,7 +18,7 @@
            (core2.tx_producer ITxProducer)
            (java.io Closeable Writer)
            (java.lang AutoCloseable)
-           (java.time Duration Instant)
+           (java.time Clock Duration Instant)
            (java.util.concurrent CompletableFuture TimeUnit)
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
@@ -109,12 +109,19 @@
 (defmethod ig/init-key :core2/allocator [_ _] (RootAllocator.))
 (defmethod ig/halt-key! :core2/allocator [_ ^BufferAllocator a] (.close a))
 
+(defmethod ig/prep-key :core2/clock [_ {:keys [clock]}]
+  {:clock (or clock (Clock/systemUTC))})
+
+(defmethod ig/init-key :core2/clock [_ {:keys [clock]}]
+  clock)
+
 (defn- with-default-impl [opts parent-k impl-k]
   (cond-> opts
     (not (ig/find-derived opts parent-k)) (assoc impl-k {})))
 
 (defn start-node ^core2.local_node.Node [opts]
   (let [system (-> (into {::node {}
+                          :core2/clock {}
                           :core2/allocator {}
                           :core2/row-counts {}
                           ::idx/indexer {}
@@ -166,6 +173,7 @@
 
 (defn start-submit-node ^core2.local_node.SubmitNode [opts]
   (let [system (-> (into {::submit-node {}
+                          :core2/clock {}
                           :core2.tx-producer/tx-producer {}
                           :core2/allocator {}}
                          opts)

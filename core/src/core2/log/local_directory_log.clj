@@ -148,7 +148,7 @@
 
 (defmethod ig/prep-key :core2.log/local-directory-log [_ opts]
   (-> (merge {:buffer-size 4096
-              :clock (Clock/systemUTC)
+              :clock (ig/ref :core2/clock)
               :poll-sleep-duration "PT0.1S"}
              opts)
       (util/maybe-update :root-path util/->path)

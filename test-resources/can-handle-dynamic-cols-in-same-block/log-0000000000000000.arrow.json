@@ -55,7 +55,7 @@
             },
             "children" : [{
               "name" : "_valid-time-start",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "timestamp",
                 "unit" : "MICROSECOND",
@@ -64,7 +64,7 @@
               "children" : [ ]
             },{
               "name" : "_valid-time-end",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "timestamp",
                 "unit" : "MICROSECOND",
@@ -89,7 +89,7 @@
               "children" : [ ]
             },{
               "name" : "_valid-time-start",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "timestamp",
                 "unit" : "MICROSECOND",
@@ -98,7 +98,7 @@
               "children" : [ ]
             },{
               "name" : "_valid-time-end",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "timestamp",
                 "unit" : "MICROSECOND",
@@ -129,7 +129,7 @@
       "name" : "_tx-time",
       "count" : 1,
       "VALIDITY" : [1],
-      "DATA" : [1577836800000000]
+      "DATA" : [1577923200000000]
     },{
       "name" : "ops",
       "count" : 1,
@@ -156,13 +156,13 @@
             "children" : [{
               "name" : "_valid-time-start",
               "count" : 6,
-              "VALIDITY" : [0,0,0,0,0,0],
-              "DATA" : [0,0,0,0,0,0]
+              "VALIDITY" : [1,1,1,1,1,1],
+              "DATA" : [1577836800000000,1577836800000000,1577836800000000,1577836800000000,1577836800000000,1577836800000000]
             },{
               "name" : "_valid-time-end",
               "count" : 6,
-              "VALIDITY" : [0,0,0,0,0,0],
-              "DATA" : [0,0,0,0,0,0]
+              "VALIDITY" : [1,1,1,1,1,1],
+              "DATA" : [253402300799999999,253402300799999999,253402300799999999,253402300799999999,253402300799999999,253402300799999999]
             }]
           },{
             "name" : "delete",

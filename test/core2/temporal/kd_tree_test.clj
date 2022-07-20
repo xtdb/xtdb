@@ -38,10 +38,10 @@
   (TemporalCoordinates. row-id id
                         (util/instant->micros (.toInstant tx-time-start))
                         (util/instant->micros (or (some-> tx-time-end .toInstant)
-                                                  temporal/end-of-time))
+                                                  util/end-of-time))
                         (util/instant->micros (.toInstant (or valid-time-start tx-time-start)))
                         (util/instant->micros (or (some-> valid-time-end .toInstant)
-                                                  temporal/end-of-time))
+                                                  util/end-of-time))
                         (boolean tombstone?)))
 
 (t/deftest bitemporal-tx-time-split-test

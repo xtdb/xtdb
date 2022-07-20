@@ -3,13 +3,12 @@
             [core2.api :as c2]
             [core2.operator :as op]
             [core2.snapshot :as snap]
-            [core2.temporal :as temporal]
             [core2.test-util :as tu]
             [core2.util :as util]))
 
-(t/use-fixtures :each tu/with-node)
+(t/use-fixtures :each tu/with-recording-clock tu/with-node)
 
-(def end-of-time-zdt (util/->zdt temporal/end-of-time))
+(def end-of-time-zdt (util/->zdt util/end-of-time))
 
 (t/deftest test-as-of-tx
   (let [snapshot-factory (tu/component ::snap/snapshot-factory)
@@ -57,10 +56,12 @@
                                                              {:_valid-time-start #inst "2021"}]])
         tx-time (util/->zdt tx-time)
 
+        start-vt (util/->zdt (first tu/*clock-insts*))
+
         db (snap/snapshot snapshot-factory tx1)]
 
     (t/is (= {:doc {:_id :doc,
-                    :_valid-time-start tx-time
+                    :_valid-time-start start-vt
                     :_valid-time-end end-of-time-zdt
                     :_tx-time-start tx-time
                     :_tx-time-end end-of-time-zdt}
@@ -78,22 +79,22 @@
 (t/deftest test-tx-time
   (let [snapshot-factory (tu/component ::snap/snapshot-factory)
 
-        {tt1 :tx-time} @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 0}]])
+        _ @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 0}]])
         _ (Thread/sleep 10) ; prevent same-ms transactions
-        {tt2 :tx-time, :as tx2} @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]])
-        tt1 (util/->zdt tt1)
-        tt2 (util/->zdt tt2)
+        tx2 @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]])
 
         db (snap/snapshot snapshot-factory tx2)
 
+        [vt1 _tt1 vt2 tt2] (map util/->zdt tu/*clock-insts*)
+
         replaced-v0-doc {:_id :doc, :version 0
-                         :_valid-time-start tt1
-                         :_valid-time-end tt2
+                         :_valid-time-start vt1
+                         :_valid-time-end vt2
                          :_tx-time-start tt2
                          :_tx-time-end end-of-time-zdt}
 
         v1-doc {:_id :doc, :version 1
-                :_valid-time-start tt2
+                :_valid-time-start vt2
                 :_valid-time-end end-of-time-zdt
                 :_tx-time-start tt2
                 :_tx-time-end end-of-time-zdt}]
@@ -109,7 +110,7 @@
              (op/query-ra '[:scan [_id version
                                    _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
                                    _tx-time-start _tx-time-end]]
-                          {'$ db, '?eot temporal/end-of-time}))
+                          {'$ db, '?eot util/end-of-time}))
           "all vt")
 
     #_ ; FIXME
@@ -117,7 +118,7 @@
              (op/query-ra '[:scan [_id version
                                    _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
                                    _tx-time-start {_tx-time-end (<= _tx-time-end ?eot)}]]
-                          {'$ db, '?eot temporal/end-of-time}))
+                          {'$ db, '?eot util/end-of-time}))
           "all vt, all tt")))
 
 (t/deftest test-evict
@@ -126,7 +127,7 @@
               (->> (op/query-ra '[:scan [_id
                                          _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
                                          _tx-time-start {_tx-time-end (<= _tx-time-end ?eot)}]]
-                                {'$ db, '?eot temporal/end-of-time})
+                                {'$ db, '?eot util/end-of-time})
                    (map :_id)
                    frequencies))]
 
