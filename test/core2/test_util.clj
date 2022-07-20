@@ -226,9 +226,9 @@
                                                      clock (assoc :clock clock))
                     :core2.buffer-pool/buffer-pool {:cache-path (.resolve node-dir ^String buffers-dir)}
                     :core2.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
-                    :core2.indexer/indexer (->> {:max-rows-per-block max-rows-per-block
-                                                 :max-rows-per-chunk max-rows-per-chunk}
-                                                (into {} (filter val)))}))
+                    :core2/row-counts (->> {:max-rows-per-block max-rows-per-block
+                                            :max-rows-per-chunk max-rows-per-chunk}
+                                           (into {} (filter val)))}))
 
 (defn ->local-submit-node ^core2.local_node.SubmitNode [{:keys [^Path node-dir clock]}]
   (node/start-submit-node {:core2.log/local-directory-log (cond-> {:root-path (.resolve node-dir "log")}

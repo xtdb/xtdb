@@ -7,15 +7,17 @@
             [core2.metadata :as meta]
             [core2.operator :as op]
             [core2.snapshot :as snap]
-            [core2.test-util :as tu])
-  (:import (core2.indexer IChunkManager)
+            [core2.test-util :as tu]
+            [core2.watermark :as wm])
+  (:import (core2.indexer TransactionIndexer)
            (core2.metadata IMetadataManager)
            (core2.snapshot ISnapshotFactory)
+           (core2.watermark IWatermarkManager Watermark)
            (java.time LocalTime)
            (org.roaringbitmap RoaringBitmap)))
 
 (t/deftest test-find-gt-ivan
-  (with-open [node (node/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
+  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
     (-> (c2/submit-tx node [[:put {:name "Håkan", :_id :hak}]])
         (tu/then-await-tx node))
 
@@ -31,7 +33,7 @@
     (tu/finish-chunk node)
 
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^IChunkManager indexer (tu/component node ::idx/indexer)
+          ^IWatermarkManager wm-mgr (tu/component node ::wm/watermark-manager)
           ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
@@ -43,7 +45,7 @@
 
         (let [db (snap/snapshot snapshot-factory)]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
-          (with-open [watermark (.getWatermark indexer)]
+          (with-open [^Watermark watermark (.getWatermark wm-mgr)]
             (let [expected-match [(meta/map->ChunkMatch
                                    {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]]
               (t/is (= expected-match
@@ -69,7 +71,7 @@
                            db))))))
 
 (t/deftest test-find-eq-ivan
-  (with-open [node (node/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
+  (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
     (-> (c2/submit-tx node [[:put {:name "Håkan", :_id :hak}]
                             [:put {:name "James", :_id :jms}]
                             [:put {:name "Ivan", :_id :iva}]])
@@ -83,10 +85,10 @@
 
     (tu/finish-chunk node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^IChunkManager indexer (tu/component node ::idx/indexer)
+          ^IWatermarkManager wm-mgr (tu/component node ::wm/watermark-manager)
           ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)
           db (snap/snapshot snapshot-factory)]
-      (with-open [watermark (.getWatermark indexer)]
+      (with-open [^Watermark watermark (.getWatermark wm-mgr)]
         (t/is (= #{0 3} (.knownChunks metadata-mgr)))
         (let [expected-match [(meta/map->ChunkMatch
                                {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
