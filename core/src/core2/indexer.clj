@@ -45,7 +45,6 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IndexerPrivate
-  (^void indexTx [^core2.api.TransactionInstant tx-key, ^org.apache.arrow.vector.VectorSchemaRoot txRoot, ^long nextRowId])
   (^java.nio.ByteBuffer writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root])
   (^void closeCols [])
   (^void finishChunk []))
@@ -312,37 +311,12 @@
             (recur))))))
 
   (indexTx [this tx-key tx-root]
-    (let [tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
-                         (.getDataVector))
-          chunk-idx (.chunk-idx watermark)
-          row-count (.row-count watermark)
-          next-row-id (+ chunk-idx row-count)]
-      (.indexTx this tx-key tx-root next-row-id)
-
-      (let [number-of-new-rows (.getValueCount tx-ops-vec)
-            new-chunk-row-count (+ row-count number-of-new-rows)]
-        (with-open [_old-watermark watermark]
-          (set! (.watermark this)
-                (wm/->Watermark chunk-idx
-                                new-chunk-row-count
-                                (snapshot-roots live-roots)
-                                tx-key
-                                (.getTemporalWatermark temporal-mgr)
-                                (AtomicInteger. 1)
-                                max-rows-per-block
-                                (ConcurrentHashMap.))))
-        (when (>= new-chunk-row-count max-rows-per-chunk)
-          (.finishChunk this))
-
-        tx-key)))
-
-  (latestCompletedTx [_]
-    (some-> watermark .tx-key))
-
-  IndexerPrivate
-  (indexTx [this tx-key tx-root next-row-id]
     (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                            (.getDataVector))
+          chunk-idx (.chunk-idx watermark)
+          row-count (.row-count watermark)
+          next-row-id (+ chunk-idx row-count)
+
           op-type-ids (object-array (mapv (fn [^Field field]
                                             (keyword (.getName field)))
                                           (.getChildren (.getField tx-ops-vec))))
@@ -380,12 +354,34 @@
       (copy-docs this tx-ops-vec next-row-id)
 
       (.endTx log-op-idxer)
+
       (let [evicted-row-ids (.endTx temporal-idxer)]
         #_{:clj-kondo/ignore [:missing-body-in-when]}
         (when-not (.isEmpty evicted-row-ids)
           ;; TODO create work item
-          ))))
+          ))
 
+      (let [number-of-new-rows (.getValueCount tx-ops-vec)
+            new-chunk-row-count (+ row-count number-of-new-rows)]
+        (with-open [_old-watermark watermark]
+          (set! (.watermark this)
+                (wm/->Watermark chunk-idx
+                                new-chunk-row-count
+                                (snapshot-roots live-roots)
+                                tx-key
+                                (.getTemporalWatermark temporal-mgr)
+                                (AtomicInteger. 1)
+                                max-rows-per-block
+                                (ConcurrentHashMap.))))
+        (when (>= new-chunk-row-count max-rows-per-chunk)
+          (.finishChunk this))
+
+        tx-key)))
+
+  (latestCompletedTx [_]
+    (some-> watermark .tx-key))
+
+  IndexerPrivate
   (writeColumn [_this live-root]
     (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
       (let [loader (VectorLoader. write-root)
