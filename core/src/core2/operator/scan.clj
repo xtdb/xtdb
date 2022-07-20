@@ -7,7 +7,6 @@
             [core2.expression :as expr]
             [core2.expression.metadata :as expr.meta]
             [core2.expression.temporal :as expr.temp]
-            [core2.indexer :as idx]
             [core2.logical-plan :as lp]
             [core2.metadata :as meta]
             [core2.rewrite :refer [zmatch]]
@@ -20,12 +19,11 @@
            core2.api.TransactionInstant
            core2.buffer_pool.IBufferPool
            core2.ICursor
-           core2.indexer.TransactionIndexer
            core2.metadata.IMetadataManager
            core2.operator.IRelationSelector
            core2.snapshot.Snapshot
            [core2.temporal ITemporalManager TemporalRoots]
-           core2.watermark.Watermark
+           (core2.watermark IWatermark IWatermarkManager)
            [java.util HashMap LinkedList List Map Queue]
            [java.util.function BiFunction Consumer Function]
            org.apache.arrow.memory.BufferAllocator
@@ -61,10 +59,10 @@
                                                                                        :src-keys (keys srcs)})))]
 
                                         {:mm (.metadata-mgr src)
-                                         :wm (.getWatermark ^TransactionIndexer (.indexer src))})))))
+                                         :wm (.getWatermark ^IWatermarkManager (.watermark-mgr src))})))))
 
               (->col-type [[src-key col-name]]
-                (let [{:keys [^IMetadataManager mm, ^Watermark wm]} (->mm+wm src-key)]
+                (let [{:keys [^IMetadataManager mm, ^IWatermark wm]} (->mm+wm src-key)]
                   (if (temporal/temporal-column? col-name)
                     [:timestamp-tz :micro "UTC"]
                     (t/merge-col-types (.columnType mm (name col-name))
@@ -145,7 +143,7 @@
                                          1)))))))
         res))))
 
-(defn- ->temporal-roots ^core2.temporal.TemporalRoots [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
+(defn- ->temporal-roots ^core2.temporal.TemporalRoots [^ITemporalManager temporal-manager ^IWatermark watermark ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
   (let [temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range atemporal-row-id-bitmap)
         temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range atemporal-row-id-bitmap)]
     (.createTemporalRoots temporal-manager watermark (filterv temporal/temporal-column? col-names)
@@ -200,7 +198,7 @@
                      ^IBufferPool buffer-pool
                      ^ITemporalManager temporal-manager
                      ^IMetadataManager metadata-manager
-                     ^Watermark watermark
+                     ^IWatermark watermark
                      ^Queue #_<ChunkMatch> matching-chunks
                      ^List col-names
                      ^Map col-preds
@@ -330,11 +328,11 @@
     {:col-types col-types
      :->cursor (fn [{:keys [allocator srcs params default-valid-time]}]
                  (let [^Snapshot snapshot (get srcs src-key)
-                       ^TransactionIndexer indexer (.indexer snapshot)
+                       ^IWatermarkManager wm-mgr (.watermark-mgr snapshot)
                        metadata-mgr (.metadata-mgr snapshot)
                        buffer-pool (.buffer-pool snapshot)
                        temporal-mgr (.temporal-mgr snapshot)
-                       watermark (.getWatermark indexer)]
+                       watermark (.getWatermark wm-mgr)]
                    (try
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                            [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)

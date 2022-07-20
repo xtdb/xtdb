@@ -122,6 +122,7 @@
                           :core2.metadata/metadata-manager {}
                           :core2.temporal/temporal-manager {}
                           :core2.buffer-pool/buffer-pool {}
+                          :core2.watermark/watermark-manager {}
                           ::snap/snapshot-factory {}
                           ::txp/tx-producer {}}
                          opts)
