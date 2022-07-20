@@ -1009,14 +1009,35 @@
 
 (defn cmd-close
   "Closes a prepared statement or portal that was opened with bind / parse."
-  [{:keys [conn-state] :as conn} {:keys [close-type, close-name]}]
-  (let [coll-k (case close-type
-                 :portal :portals
-                 :prepared-stmt :prepared-statements
-                 (Object.))]
-    ;; todo if removing a portal, do I need also remove the prepared statement, or vice versa?
-    (swap! conn-state [coll-k] dissoc close-name)
-    (cmd-write-msg conn msg-close-complete)))
+  [{:keys [conn-state, cid] :as conn} {:keys [close-type, close-name]}]
+
+    (case close-type
+      :prepared-stmt
+      (do
+        (log/debug "Closing prepared statement" {:cid cid, :stmt close-name})
+        (when-some [stmt (get-in @conn-state [:prepared-statements close-name])]
+
+          ;; dissoc associated portals from root (they are addressed there by execute)
+          (doseq [portal (:portals stmt)]
+            (swap! conn-state update :portals dissoc portal))
+
+          ;; remove from root
+          (swap! conn-state update :prepared-statements dissoc close-name)))
+
+      :portal
+      (do
+        (log/debug "Closing portal" {:cid cid, :portal close-name})
+        (when-some [portal (get-in @conn-state [:portals close-name])]
+
+          ;; remove portal from stmt
+          (swap! conn-state update-in [:prepared-statements (:stmt-name portal) :portals] disj close-name)
+
+          ;; remove from root
+          (swap! conn-state update :portals dissoc close-name)))
+
+      nil)
+
+    (cmd-write-msg conn msg-close-complete))
 
 (defn cmd-terminate
   "Causes the connection to start closing."
@@ -1337,10 +1358,10 @@
   "Given some kind of statement (from interpret-sql), will execute it. For some statements, this does not mean
   the xt node gets hit - e.g SET some_session_parameter = 42 modifies the connection, not the database."
   [{:keys [conn-state] :as conn}
-   {:keys [query
-           ast
+   {:keys [ast
            statement-type
            canned-response
+           ignore
            parameter
            value]
     :as stmt}]
@@ -1355,7 +1376,7 @@
     :empty-query (cmd-write-msg conn msg-empty-query)
     :canned-response (cmd-write-canned-response conn canned-response)
     :set-session-parameter (set-session-parameter conn parameter value)
-    :ignore (cmd-write-msg conn msg-command-complete {:command (statement-head query)})
+    :ignore (cmd-write-msg conn msg-command-complete {:command (statement-head ignore)})
     :query (cmd-exec-query conn stmt))
 
   (when (and (= :simple (:protocol @conn-state))
@@ -1411,10 +1432,25 @@
                         result-format]}]
   (let [stmt (get-in @conn-state [:prepared-statements stmt-name])
         _ (when-not stmt (cmd-send-error conn (err-protocol-violation "no prepared statement")))
-        _ (when stmt (swap! conn-state assoc-in [:portals portal-name]
-                            (assoc stmt :param-format param-format
-                                        :params params
-                                        :result-format result-format)))
+
+        portal
+        (when stmt
+          (assoc stmt :param-format param-format
+                      :stmt-name stmt-name
+                      :params params
+                      :result-format result-format))
+
+        ;; add the portal
+        _
+        (when portal
+          (swap! conn-state assoc-in [:portals portal-name] portal))
+
+        ;; track the portal name to the prepared stmt (for close)
+        _
+        (when portal
+          (swap! conn-state update-in [:prepared-statements stmt-name :portals] (fnil conj #{}) portal-name))
+
+
         _ (when stmt (cmd-write-msg conn msg-bind-complete))]))
 
 (defn cmd-execute

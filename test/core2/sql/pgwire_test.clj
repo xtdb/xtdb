@@ -140,11 +140,31 @@
     (is (= false (.next rs)))))
 
 (deftest prepared-query-test
-  (with-open [conn (jdbc-conn)
+  (with-open [conn (jdbc-conn "prepareThreshold" "1")
               stmt (.prepareStatement conn "SELECT a.a FROM (VALUES ('hello, world')) a (a)")
-              rs (.executeQuery stmt)]
-    (is (= true (.next rs)))
-    (is (= false (.next rs)))))
+              stmt2 (.prepareStatement conn "SELECT a.a FROM (VALUES ('hello, world2')) a (a)")]
+
+    (with-open [rs (.executeQuery stmt)]
+      (is (= true (.next rs)))
+      (is (= false (.next rs))))
+
+    (with-open [rs (.executeQuery stmt)]
+      (is (= true (.next rs)))
+      (is (= false (.next rs))))
+
+    ;; exec queries a few times to trigger .execute prepared statements in jdbc
+
+    (dotimes [_ 5]
+      (with-open [rs (.executeQuery stmt2)]
+        (is (= true (.next rs)))
+        (is (= "\"hello, world2\"" (str (.getObject rs 1))))
+        (is (= false (.next rs)))))
+
+    (dotimes [_ 5]
+      (with-open [rs (.executeQuery stmt)]
+        (is (= true (.next rs)))
+        (is (= "\"hello, world\"" (str (.getObject rs 1))))
+        (is (= false (.next rs)))))))
 
 (deftest parameterized-query-test
   (with-open [conn (jdbc-conn)
@@ -608,6 +628,22 @@
     (is (not= :timeout (deref stmt-promise 1000 :timeout)))
     (when (realized? stmt-promise) (.cancel @stmt-promise))
     (is (= "ERROR: query cancelled during execution" (deref fut 1000 :timeout)))))
+
+(deftest jdbc-prepared-query-close-test
+  (with-open [conn (jdbc-conn "prepareThreshold" "1"
+                              "preparedStatementCacheQueries" 0
+                              "preparedStatementCacheMiB" 0)]
+    (dotimes [i 3]
+      ;; do not use parameters as to trigger close it needs to be a different query every time
+      (with-open [stmt (.prepareStatement conn (format "SELECT a.a FROM (VALUES (%s)) a (a)" i))]
+        (.close (.executeQuery stmt))))
+
+    (testing "only empty portal should remain"
+      (is (= [""] (keys (:portals @(:conn-state (get-last-conn)))))))
+
+    (testing "even at cache policy 0, pg jdbc caches - but we should only see the last stmt + empty"
+      ;; S_3 because i == 3
+      (is (= #{"", "S_3"} (set (keys (:prepared-statements @(:conn-state (get-last-conn))))))))))
 
 (defn psql-available?
   "Returns true if psql is available in $PATH"
