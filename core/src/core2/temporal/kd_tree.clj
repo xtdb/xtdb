@@ -1,24 +1,23 @@
 (ns core2.temporal.kd-tree
   (:require [core2.types :as t]
-            [core2.util :as util]
-            [clojure.tools.logging :as log])
+            [core2.util :as util])
   (:import core2.BitUtil
            [java.io Closeable]
            java.lang.ref.Cleaner
-           java.nio.file.Path
            [java.util ArrayDeque List Queue]
-           [java.util.function Consumer LongConsumer LongFunction LongPredicate LongBinaryOperator LongUnaryOperator]
-           java.util.stream.LongStream
            java.util.concurrent.LinkedBlockingQueue
+           [java.util.function LongBinaryOperator LongConsumer LongFunction LongPredicate LongUnaryOperator]
+           java.util.stream.LongStream
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.BigIntVector
            org.apache.arrow.vector.complex.FixedSizeListVector
-           [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field]
            [org.apache.arrow.vector.types Types$MinorType]
+           [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field]
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
+#_{:clj-kondo/ignore [:unused-binding]}
 (definterface IKdTreePointAccess
   (^java.util.List getPoint [^long idx])
   (^longs getArrayPoint [^long idx])
@@ -88,7 +87,7 @@
         (kd-tree-delete allocator point)))
   (kd-tree-range-search [_ _ _]
     (LongStream/empty))
-  (kd-tree-points [_ deletes?]
+  (kd-tree-points [_ _deletes?]
     (LongStream/empty))
   (kd-tree-height [_] -1)
   (kd-tree-retain [_ _])
@@ -112,7 +111,7 @@
     (throw (UnsupportedOperationException.)))
   (isDeleted [_ _]
     false)
-  (isInRange [this idx min-range max-range axis]
+  (isInRange [this idx min-range max-range _axis]
     (let [point (.getArrayPoint this idx)
           len (alength point)]
       (loop [n (int 0)]
@@ -126,9 +125,9 @@
 
 (extend-protocol KdTree
   List
-  (kd-tree-insert [_ allocator point]
+  (kd-tree-insert [_ _allocator _point]
     (throw (UnsupportedOperationException.)))
-  (kd-tree-delete [_ allocator point]
+  (kd-tree-delete [_ _allocator _point]
     (throw (UnsupportedOperationException.)))
   (kd-tree-range-search [this min-range max-range]
     (let [min-range (->longs min-range)
@@ -138,7 +137,7 @@
                (reify LongPredicate
                  (test [_ x]
                    (.isInRange access x min-range max-range -1))))))
-  (kd-tree-points [this deletes?]
+  (kd-tree-points [this _deletes?]
     (LongStream/range 0 (.size this)))
   (kd-tree-height [_] 0)
   (kd-tree-retain [this _]
@@ -157,8 +156,8 @@
       (.setCoordinate access idx n (long (nth point n))))))
 
 (defn write-point ^long [^FixedSizeListVector point-vec ^IKdTreePointAccess access point]
-  (let [idx (.getValueCount point-vec)
-        list-idx (.startNewValue point-vec idx)]
+  (let [idx (.getValueCount point-vec)]
+    (.startNewValue point-vec idx)
     (write-coordinates access idx point)
     (.setValueCount point-vec (inc idx))
     idx))
@@ -264,7 +263,7 @@
   (kd-tree-delete [kd-tree allocator point]
     (leaf-node-edit kd-tree allocator point true))
 
-  (kd-tree-range-search [kd-tree min-range max-range]
+  (kd-tree-range-search [_ min-range max-range]
     (let [^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec (.getListSize point-vec))
           min-range (->longs min-range)
           max-range (->longs max-range)
@@ -278,7 +277,7 @@
             (.add acc x))))
       (.build acc)))
 
-  (kd-tree-points [kd-tree deletes?]
+  (kd-tree-points [_ deletes?]
     (let [^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec (.getListSize point-vec))]
       (cond-> (LongStream/range 0 size)
         (pos? superseded) (.filter (reify LongPredicate
@@ -291,9 +290,9 @@
                                              (test [_ x]
                                                (BitUtil/bitNot (.isDeleted access x))))))))
 
-  (kd-tree-height [kd-tree] 0)
+  (kd-tree-height [_] 0)
 
-  (kd-tree-retain [kd-tree allocator]
+  (kd-tree-retain [_ allocator]
     (LeafNode. (.getTo (doto (.getTransferPair point-vec allocator)
                          (.splitAndTransfer 0 (.getValueCount point-vec))))
                leaf-pool
@@ -304,16 +303,16 @@
                root?
                pool-token))
 
-  (kd-tree-point-access [kd-tree]
+  (kd-tree-point-access [_]
     (KdTreeVectorPointAccess. point-vec (.getListSize point-vec)))
 
   (kd-tree-size [kd-tree]
     (.count ^LongStream (kd-tree-points kd-tree false)))
 
-  (kd-tree-value-count [kd-tree]
+  (kd-tree-value-count [_]
     (.getValueCount point-vec))
 
-  (kd-tree-dimensions [kd-tree]
+  (kd-tree-dimensions [_]
     (.getListSize point-vec))
 
   Closeable
@@ -323,13 +322,13 @@
 
 (deftype InnerNode [^FixedSizeListVector point-vec ^Queue leaf-pool ^long axis-value ^int axis left right ^boolean root?]
   KdTree
-  (kd-tree-insert [kd-tree allocator point]
+  (kd-tree-insert [_ allocator point]
     (let [point (->longs point)]
       (if (< (aget point axis) axis-value)
         (InnerNode. point-vec leaf-pool axis-value axis (kd-tree-insert left allocator point) right root?)
         (InnerNode. point-vec leaf-pool axis-value axis left (kd-tree-insert right allocator point) root?))))
 
-  (kd-tree-delete [kd-tree allocator point]
+  (kd-tree-delete [_ allocator point]
     (let [point (->longs point)]
       (if (< (aget point axis) axis-value)
         (InnerNode. point-vec leaf-pool axis-value axis (kd-tree-delete left allocator point) right root?)
@@ -380,14 +379,14 @@
           :else
           (.build acc)))))
 
-  (kd-tree-points [kd-tree deletes?]
+  (kd-tree-points [_ deletes?]
     (LongStream/concat (kd-tree-points left deletes?) (kd-tree-points right deletes?)))
 
-  (kd-tree-height [kd-tree]
+  (kd-tree-height [_]
     (max (inc (long (kd-tree-height left)))
          (inc (long (kd-tree-height right)))))
 
-  (kd-tree-retain [kd-tree allocator]
+  (kd-tree-retain [_ allocator]
     (InnerNode. (.getTo (doto (.getTransferPair point-vec allocator)
                           (.splitAndTransfer 0 (.getValueCount point-vec))))
                 leaf-pool
@@ -397,17 +396,17 @@
                 right
                 root?))
 
-  (kd-tree-point-access [kd-tree]
+  (kd-tree-point-access [_]
     (KdTreeVectorPointAccess. point-vec (.getListSize point-vec)))
 
-  (kd-tree-size [kd-tree]
+  (kd-tree-size [_]
     (+ (long (kd-tree-size left))
        (long (kd-tree-size right))))
 
-  (kd-tree-value-count [kd-tree]
+  (kd-tree-value-count [_]
     (.getValueCount point-vec))
 
-  (kd-tree-dimensions [kd-tree]
+  (kd-tree-dimensions [_]
     (.getListSize point-vec))
 
   Closeable
@@ -488,8 +487,7 @@
     (->leaf-node point-vec leaf-pool 0 true)))
 
 (defn merge-kd-trees ^java.io.Closeable [^BufferAllocator allocator kd-tree-to kd-tree-from]
-  (let [^long n (kd-tree-value-count kd-tree-from)
-        ^IKdTreePointAccess from-access (kd-tree-point-access kd-tree-from)
+  (let [^IKdTreePointAccess from-access (kd-tree-point-access kd-tree-from)
         it (.iterator ^LongStream (kd-tree-points kd-tree-from true))]
     (loop [acc kd-tree-to]
       (if (.hasNext it)
@@ -579,21 +577,21 @@
     (max (long (kd-tree-height static-kd-tree))
          (long (kd-tree-height dynamic-kd-tree))))
 
-  (kd-tree-retain [kd-tree allocator]
+  (kd-tree-retain [_ allocator]
     (MergedKdTree. (kd-tree-retain static-kd-tree allocator)
                    (kd-tree-retain dynamic-kd-tree allocator)
                    (.clone ^Roaring64Bitmap static-delete-bitmap)
                    static-size
                    static-value-count))
 
-  (kd-tree-point-access [kd-tree]
+  (kd-tree-point-access [_]
     (MergedKdTreePointAccess. (kd-tree-point-access static-kd-tree) (kd-tree-point-access dynamic-kd-tree) static-value-count))
 
-  (kd-tree-size [kd-tree]
+  (kd-tree-size [_]
     (+ (- static-size (.getLongCardinality static-delete-bitmap))
        (long (kd-tree-size dynamic-kd-tree))))
 
-  (kd-tree-value-count [kd-tree]
+  (kd-tree-value-count [_]
     (+ (long (kd-tree-value-count static-kd-tree))
        (long (kd-tree-value-count dynamic-kd-tree))))
 
