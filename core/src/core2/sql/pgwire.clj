@@ -1263,9 +1263,7 @@
 
         xt-params (vec (map-indexed xtify-param params))
 
-        ;; execute the query asynchronously (to enable cancellation mid query)
-        ;; we do not use the async api as it does not currently allow cancellation, and .interrupt is
-        ;; better than nothing.
+        ;; execute the query asynchronously (to enable later enable cancellation mid query)
         query-fut (c2/open-sql-async node transformed-query (if (seq xt-params) {:? xt-params} {}))
 
         ;; keep the fut around in case of interrupt exc (for cleanup)
