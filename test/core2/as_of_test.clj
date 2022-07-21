@@ -17,23 +17,15 @@
         _ (Thread/sleep 10) ; prevent same-ms transactions
         !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last-updated "tx2"}]])]
 
-    (t/is (= #{{:last-updated "tx2"}}
+    (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (op/query-ra '[:scan [last-updated]]
                                (snap/snapshot snapshot-factory !tx2)))))
 
-    (t/is (= #{{:last-updated "tx2"}}
+    (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (->> (c2/plan-datalog tu/*node*
                                    (-> '{:find [?last-updated]
                                          :where [[?e :last-updated ?last-updated]]}
                                        (assoc :basis {:tx !tx2})))
-                  (into #{}))))
-
-    (t/is (= #{{:last-updated "tx1"}}
-             (->> (c2/plan-datalog tu/*node*
-                                   (-> '{:find [?last-updated]
-                                         :where [[?e :last-updated ?last-updated]]}
-
-                                       (assoc :basis {:default-valid-time (:tx-time @!tx1), :tx !tx2})))
                   (into #{}))))
 
     (t/testing "at tx1"
@@ -99,24 +91,17 @@
                 :_tx-time-start tt2
                 :_tx-time-end end-of-time-zdt}]
 
-    (t/is (= [v1-doc]
+    (t/is (= [replaced-v0-doc v1-doc]
              (op/query-ra '[:scan [_id version
                                    _valid-time-start _valid-time-end
                                    _tx-time-start _tx-time-end]]
                           db))
-          "point in time")
-
-    (t/is (= [replaced-v0-doc v1-doc]
-             (op/query-ra '[:scan [_id version
-                                   _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
-                                   _tx-time-start _tx-time-end]]
-                          {'$ db, '?eot util/end-of-time}))
           "all vt")
 
     #_ ; FIXME
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
              (op/query-ra '[:scan [_id version
-                                   _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
+                                   _valid-time-start _valid-time-end
                                    _tx-time-start {_tx-time-end (<= _tx-time-end ?eot)}]]
                           {'$ db, '?eot util/end-of-time}))
           "all vt, all tt")))

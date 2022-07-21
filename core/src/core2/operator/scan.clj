@@ -277,14 +277,6 @@
     (doseq [^ICursor chunk (vals chunks)]
       (util/try-close chunk))))
 
-(defn- apply-default-valid-time! [[^longs temporal-min-range, ^longs temporal-max-range] default-valid-time col-preds]
-  (when-not (or (contains? col-preds "_valid-time-start")
-                (contains? col-preds "_valid-time-end"))
-    (expr.temp/apply-constraint temporal-min-range temporal-max-range
-                                :<= "_valid-time-start" default-valid-time)
-    (expr.temp/apply-constraint temporal-min-range temporal-max-range
-                                :> "_valid-time-end" default-valid-time)))
-
 (defn- apply-snapshot-tx! [[^longs temporal-min-range, ^longs temporal-max-range], ^Snapshot snapshot, col-preds]
   (when-let [tx-time (some-> ^TransactionInstant (.tx snapshot) (.tx_time))]
     (expr.temp/apply-constraint temporal-min-range temporal-max-range
@@ -336,7 +328,6 @@
                    (try
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                            [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
-                                                                     (apply-default-valid-time! default-valid-time col-preds)
                                                                      (apply-snapshot-tx! snapshot col-preds))
                            matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr watermark metadata-pred) []))]
                        (-> (ScanCursor. allocator buffer-pool temporal-mgr metadata-mgr watermark

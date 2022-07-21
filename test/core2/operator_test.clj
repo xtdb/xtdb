@@ -120,7 +120,7 @@
                                                temporal-constraints)]
                                   {'$ db, '?tt1 tt1, '?tt2 tt2})
                      (into #{} (map :last-updated))))]
-        (t/is (= #{"tx2"}
+        (t/is (= #{"tx1" "tx2"}
                  (q)))
 
         (t/is (= #{"tx1"}
@@ -132,7 +132,7 @@
         (t/is (= #{"tx1" "tx2"}
                  (q '{_tx-time-start (<= _tx-time-start ?tt2)})))
 
-        (t/is (= #{"tx2"}
+        (t/is (= #{"tx1" "tx2"}
                  (q '{_tx-time-start (> _tx-time-start ?tt1)})))
 
         (t/is (= #{}
@@ -141,7 +141,7 @@
         (t/is (= #{"tx1"}
                  (q '{_tx-time-end (<= _tx-time-end ?tt2)})))
 
-        (t/is (= #{"tx2"}
+        (t/is (= #{"tx1" "tx2"}
                  (q '{_tx-time-end (> _tx-time-end ?tt2)})))
 
         (t/is (= #{"tx1" "tx2"}
@@ -156,11 +156,11 @@
                    (q '{_tx-time-start (and (<= _tx-time-start ?tt2)
                                             (<= _tx-time-start ?tt1))})))
 
-          (t/is (= #{"tx2"}
+          (t/is (= #{"tx1" "tx2"}
                    (q '{_tx-time-end (and (> _tx-time-end ?tt2)
                                           (> _tx-time-end ?tt1))})))
 
-          (t/is (= #{"tx2"}
+          (t/is (= #{"tx1" "tx2"}
                    (q '{_tx-time-end (and (> _tx-time-end ?tt1)
                                           (> _tx-time-end ?tt2))}))))
 
@@ -177,7 +177,7 @@
                     '{_tx-time-end (> _tx-time-end ?tt1)}))
               "as of tt1")
 
-        (t/is (= #{"tx2"}
+        (t/is (= #{"tx1" "tx2"}
                  (q '{_tx-time-start (<= _tx-time-start ?tt2)}
                     '{_tx-time-end (> _tx-time-end ?tt2)}))
               "as of tt2")))))
