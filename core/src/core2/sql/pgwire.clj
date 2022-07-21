@@ -13,7 +13,8 @@
             [clojure.string :as str]
             [clojure.data.json :as json]
             [core2.api :as api]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [clojure.set :as set])
   (:import (java.nio.charset StandardCharsets)
            (java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException ByteArrayInputStream)
            (java.net Socket ServerSocket SocketTimeoutException SocketException)
@@ -135,7 +136,9 @@
 (def ^:private oids
   "A map of postgres type (that we may support to some extent) to numeric oid.
   Mapping to oid is useful for result descriptions, as well as to determine the semantics of received parameters."
-  {:int2 21
+  {:undefined 0
+
+   :int2 21
    :int2-array 1005
 
    :int4 23
@@ -194,8 +197,57 @@
    :json 114
    :json-array 199})
 
+(def oid->kw (set/map-invert oids))
+
 (def ^:private oid-varchar (oids :varchar))
 (def ^:private oid-json (oids :json))
+
+(defn- read-utf8 [^bytes barr] (String. barr StandardCharsets/UTF_8))
+(defn- read-ascii [^bytes barr] (String. barr StandardCharsets/US_ASCII))
+
+(def type-mappings
+  "Defines how we map from one type to another (pg, java/arrow) where possible."
+  [{:pg :undefined
+    :pg-read-binary (fn [x] (some-> x read-utf8))
+    :pg-read-text (fn [x] (some-> x read-utf8))}
+
+   {:pg :bool
+    :pg-read-binary (fn [barr] (= 1 (nth barr 0 0)))
+    :pg-read-text (fn [barr] (Boolean/parseBoolean (read-utf8 barr)))}
+
+   ;; ints
+   ;
+   ;; not sure if bit should be mapped to bool?
+   {:pg :bit
+    :pg-read-binary (fn [barr] (-> barr ByteBuffer/wrap .get))
+    :pg-read-text (fn [barr] (-> barr read-ascii Byte/parseByte))}
+   {:pg :int2
+    :pg-read-binary (fn [barr] (-> barr ByteBuffer/wrap .getShort))
+    :pg-read-text (fn [barr] (-> barr read-ascii Short/parseShort))}
+   {:pg :int4
+    :pg-read-binary (fn [barr] (-> barr ByteBuffer/wrap .getInt))
+    :pg-read-text (fn [barr] (-> barr read-ascii Integer/parseInt))}
+   {:pg :int8
+    :pg-read-binary (fn [barr] (-> barr ByteBuffer/wrap .getLong))
+    :pg-read-text (fn [barr] (-> barr read-ascii Long/parseLong))}
+
+   ;; floats
+   ;
+   {:pg :float4
+    :pg-read-binary (fn [barr] (-> barr ByteBuffer/wrap .getFloat))
+    :pg-read-text (fn [barr] (-> barr read-ascii Float/parseFloat))}
+   {:pg :float8
+    :pg-read-binary (fn [barr] (-> barr ByteBuffer/wrap .getDouble))
+    :pg-read-text (fn [barr] (-> barr read-ascii Double/parseDouble))}
+
+   ;; strings
+   ;
+   {:pg :varchar
+    :pg-read-binary read-utf8
+    :pg-read-text read-utf8}
+   {:pg :text
+    :pg-read-binary read-utf8
+    :pg-read-text read-utf8}])
 
 ;; all postgres client IO arrives as either an untyped (startup) or typed message
 (defn- read-untyped-msg [^DataInputStream in]
@@ -717,17 +769,6 @@
     {:read (fn [in] (vec (repeatedly (len-rdr in) #(el-rdr in))))
      :write (fn [out coll] (len-wtr out (count coll)) (run! #(el-wtr out %) coll))}))
 
-(defn ^:private io-bytes
-  "Returns an io data type for a pg byte array, whose len is given by the io-len, e.g a byte array whose size
-  is bounded to max(uint16) bytes - (io-bytes io-uint16)"
-  [io-len]
-  (let [len-rdr (:read io-len)]
-    {:read (fn [in]
-             (let [arr (byte-array (len-rdr in))]
-               (.readFully in arr)
-               arr))
-     :write no-write}))
-
 (def ^:private io-format-code
   "Postgres format codes are integers, whose value is either
 
@@ -782,16 +823,23 @@
               (run! (partial el-wtr out) coll)
               (.writeByte out 0))}))
 
-(def ^:private io-bytes-or-null
+(defn- io-bytes-or-null
   "An io data type for a byte array (or null), in postgres you can write the bytes of say a column as either
   len (uint32) followed by the bytes OR in the case of null, a len whose value is -1. This is how row values are conveyed
   to the client."
-  {:read no-read
-   :write (fn write-bytes-or-null [^DataOutputStream out ^bytes arr]
-            (if arr
-              (do (.writeInt out (alength arr))
-                  (.write out arr))
-              (.writeInt out -1)))})
+  [io-len]
+  (let [len-rdr (:read io-len)]
+    {:read (fn read-bytes-or-null [in]
+             (let [len (len-rdr in)]
+               (when (not= -1 len)
+                 (let [arr (byte-array len)]
+                   (.readFully in arr)
+                   arr))))
+     :write (fn write-bytes-or-null [^DataOutputStream out ^bytes arr]
+              (if arr
+                (do (.writeInt out (alength arr))
+                    (.write out arr))
+                (.writeInt out -1)))}))
 
 (def ^:private io-error-field
   "An io-data type that writes a (vector/map-entry pair) k and v as an error field."
@@ -856,7 +904,7 @@
   :portal-name io-string
   :stmt-name io-string
   :param-format io-format-codes
-  :params (io-list io-uint16 (io-bytes io-uint32))
+  :params (io-list io-uint16 (io-bytes-or-null io-uint32))
   :result-format io-format-codes)
 
 (def-msg msg-close :client \C
@@ -914,7 +962,7 @@
   :value io-string)
 
 (def-msg msg-data-row :server \D
-  :vals (io-list io-uint16 io-bytes-or-null))
+  :vals (io-list io-uint16 (io-bytes-or-null io-uint32)))
 
 (def-msg msg-portal-suspended :server \s)
 
@@ -1263,6 +1311,9 @@
       ;; by using the buffer we check socket state / draining etc as normal.
       :else (cmd-enqueue-cmd conn [#'cmd-await-query-result (assoc cmd :iteration (inc iteration))]))))
 
+(def supported-param-oids
+  (set (map (comp oids :pg) type-mappings)))
+
 (defn cmd-exec-query
   "Given a statement of type :query will execute it against the servers :node and send the results."
   [{:keys [server, conn-state] :as conn}
@@ -1276,15 +1327,17 @@
   (let [node (:node server)
 
         xtify-param
-        (fn [param-idx param]
-          (let [_param-oid (nth arg-types param-idx nil)
+        (fn xtify-param [param-idx param]
+          (let [param-oid (nth arg-types param-idx nil)
                 param-format (nth param-format param-idx nil)
                 param-format (or param-format (nth param-format param-idx :text))
-
-                parsed (case param-format
-                         :text (String. ^bytes param StandardCharsets/UTF_8)
-                         (throw (Exception. "Binary encoded parameters not implemented yet")))]
-            parsed))
+                pg-type (oid->kw param-oid)
+                mapping (some #(when (= pg-type (:pg %)) %) type-mappings)
+                _ (when-not mapping  (throw (Exception. "Unsupported param type provided for read")))
+                {:keys [pg-read-binary, pg-read-text]} mapping]
+            (if (= :binary param-format)
+              (pg-read-binary param)
+              (pg-read-text param))))
 
         xt-params (vec (map-indexed xtify-param params))
 
@@ -1418,8 +1471,12 @@
                         :query query
                         :port (:port server)
                         :cid cid})
+
   (let [{:keys [err] :as stmt} (interpret-sql query)
-        stmt (assoc stmt :arg-types arg-types)
+        unsupported-arg-types (remove supported-param-oids arg-types)
+        stmt (when-not err (assoc stmt :arg-types arg-types))
+        err (or err (when-some [oid (first unsupported-arg-types)]
+                      (err-protocol-violation (format "parameter type (%s) currently unsupported by xt" (name (oid->kw oid (str oid)))))))
         _ (when err (cmd-send-error conn err))
         _ (when-not err (swap! conn-state assoc-in [:prepared-statements stmt-name] stmt))
         _ (when-not err (cmd-write-msg conn msg-parse-complete))]))

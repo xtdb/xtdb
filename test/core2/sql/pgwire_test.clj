@@ -756,3 +756,85 @@
           (when (realized? in) (util/try-close @in))
           (when (realized? out) (util/try-close @out))
           (when (realized? err) (util/try-close @err)))))))
+
+(def pg-param-representation-examples
+  "A library of examples to test pg parameter oid handling.
+
+  e.g set this object as a param, round trip it - does it match the json result?
+
+  :param (the java object, e.g (int 42))
+  :json the expected (parsed via data.json) json representation
+  :json-cast (a function to apply to the json, useful for downcast for floats)"
+  [{:param nil
+    :json nil}
+
+   {:param true
+    :json true}
+
+   {:param false
+    :json false}
+
+   {:param (byte 42)
+    :json 42}
+
+   {:param (byte -42)
+    :json -42}
+
+   {:param (short 257)
+    :json 257}
+
+   {:param (short -257)
+    :json -257}
+
+   {:param (int 92767)
+    :json 92767}
+
+   {:param (int -92767)
+    :json -92767}
+
+   {:param (long 4147483647)
+    :json 4147483647}
+
+   {:param (long -4147483647)
+    :json -4147483647}
+
+   {:param (float Math/PI)
+    :json (float Math/PI)
+    :json-cast float}
+
+   {:param (+ 1.0 (double Float/MAX_VALUE))
+    :json (+ 1.0 (double Float/MAX_VALUE))}
+
+   {:param ""
+    :json ""}
+
+   {:param "hello, world!"
+    :json "hello, world!"}
+
+   {:param "😎"
+    :json "😎"}])
+
+(deftest pg-param-representation-test
+  (with-open [conn (jdbc-conn)
+              stmt (.prepareStatement conn "select a.a from (values (?)) a (a)")]
+    (doseq [{:keys [param, json, json-cast]
+             :or {json-cast identity}}
+            pg-param-representation-examples]
+      (testing (format "param %s (%s)" param (class param))
+
+        (.clearParameters stmt)
+
+        (condp instance? param
+          Byte (.setByte stmt 1 param)
+          Short (.setShort stmt 1 param)
+          Integer (.setInt stmt 1 param)
+          Long (.setLong stmt 1 param)
+          Float (.setFloat stmt 1 param)
+          Double (.setDouble stmt 1 param)
+          String (.setString stmt 1 param)
+          (.setObject stmt 1 param))
+
+        (with-open [rs (.executeQuery stmt)]
+          (is (.next rs))
+          ;; may want more fine-grained json assertions than this, it depends on data.json behaviour
+          (is (= json (json-cast (json/read-str (str (.getObject rs 1)))))))))))
