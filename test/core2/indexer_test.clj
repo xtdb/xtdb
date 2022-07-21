@@ -11,7 +11,6 @@
             [core2.local-node :as node]
             [core2.metadata :as meta]
             [core2.object-store :as os]
-            [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd]
             [core2.test-util :as tu]
             [core2.ts-devices :as ts]
@@ -23,7 +22,7 @@
            core2.local_node.Node
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
-           core2.temporal.TemporalManager
+           core2.indexer.InternalIdManager
            (core2.watermark IWatermarkManager Watermark)
            java.nio.file.Files
            java.time.Duration
@@ -85,7 +84,7 @@
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (::os/file-system-object-store system)
             ^IBufferPool bp (::bp/buffer-pool system)
-            ^TemporalManager tm (::temporal/temporal-manager system)
+            ^InternalIdManager iid-mgr (::idx/internal-id-manager system)
             ^IWatermarkManager wm-mgr (::wm/watermark-manager system)]
 
         (t/is (nil? (idx/latest-tx {:object-store os, :buffer-pool bp})))
@@ -114,7 +113,7 @@
                     "reading-demo000000" 72057594037927936
                     "device-info-demo000001" 144115188075855872
                     "reading-demo000001" 216172782113783808}
-                   (.id->internal-id tm)))
+                   (.id->internal-id iid-mgr)))
           (with-open [^Watermark watermark (.getWatermark wm-mgr)]
             (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
 
@@ -486,7 +485,7 @@
             (let [system @(:!system node)
                   ^ObjectStore os (::os/file-system-object-store system)
                   ^BufferPool bp (::bp/buffer-pool system)
-                  ^TemporalManager tm (::temporal/temporal-manager system)
+                  ^InternalIdManager iid-mgr (::idx/internal-id-manager system)
                   ^IMetadataManager mm (::meta/metadata-manager system)]
               (t/is (= first-half-tx-key
                        (-> first-half-tx-key
@@ -504,7 +503,7 @@
                   (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
                   (t/is (= 5 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))
 
-                (t/is (= 2000 (count (.id->internal-id tm)))))
+                (t/is (= 2000 (count (.id->internal-id iid-mgr)))))
 
               (t/is (= :utf8 (.columnType mm "_id")))
 
@@ -521,15 +520,14 @@
 
                 (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "buffers-2"))]
                   (doseq [^Node node [new-node node]
-                          :let [^TemporalManager tm (tu/component node ::temporal/temporal-manager)
-                                ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
+                          :let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
                     (t/is (<= (:tx-id first-half-tx-key)
                               (:tx-id (-> first-half-tx-key
                                          (tu/then-await-tx node (Duration/ofSeconds 10))))
                               (:tx-id second-half-tx-key)))
 
-                    (t/is (>= (count (.id->internal-id tm)) 2000))
+                    (t/is (>= (count (.id->internal-id iid-mgr)) 2000))
 
                     (t/is (= :utf8 (.columnType mm "_id"))))
 
@@ -543,7 +541,6 @@
 
                   (doseq [^Node node [new-node node]
                           :let [^ObjectStore os (::os/file-system-object-store @(:!system node))
-                                ^TemporalManager tm (::temporal/temporal-manager @(:!system node))
                                 ^IMetadataManager mm (tu/component node ::meta/metadata-manager)]]
 
                     (let [objs (.listObjects os)]
@@ -555,7 +552,7 @@
 
                     (t/is (= :utf8 (.columnType mm "_id")))
 
-                    (t/is (= 2000 (count (.id->internal-id tm))))))))))))))
+                    (t/is (= 2000 (count (.id->internal-id iid-mgr))))))))))))))
 
 (t/deftest merges-column-fields-on-restart
   (let [node-dir (util/->path "target/merges-column-fields")

@@ -125,6 +125,7 @@
                           :core2/allocator {}
                           :core2/row-counts {}
                           ::idx/indexer {}
+                          ::idx/internal-id-manager {}
                           :core2/ingester {}
                           :core2.metadata/metadata-manager {}
                           :core2.temporal/temporal-manager {}

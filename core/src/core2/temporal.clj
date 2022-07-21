@@ -98,15 +98,9 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface ITemporalTxIndexer
-  (^void indexPut [^Object eid, ^long row-id
-                   ^org.apache.arrow.vector.TimeStampVector vt-start-vec
-                   ^org.apache.arrow.vector.TimeStampVector vt-end-vec
-                   ^int idx])
-  (^void indexDelete [^Object eid, ^long row-id
-                      ^org.apache.arrow.vector.TimeStampVector vt-start-vec
-                      ^org.apache.arrow.vector.TimeStampVector vt-end-vec
-                      ^int idx])
-  (^void indexEvict [^Object eid, ^long row-id])
+  (^void indexPut [^long iid, ^long rowId, ^long startValidTime, ^long endValidTime, ^boolean newEntity])
+  (^void indexDelete [^long iid, ^long rowId, ^long startValidTime, ^long endValidTime, ^boolean newEntity])
+  (^void indexEvict [^long iid, ^long rowId])
   (^org.roaringbitmap.longlong.Roaring64Bitmap endTx []))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -121,11 +115,6 @@
                                                       ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
-(definterface IInternalIdManager
-  (^long getOrCreateInternalId [^Object id ^long row-id])
-  (^boolean isKnownId [^Object id]))
-
-#_{:clj-kondo/ignore [:unused-binding]}
 (definterface TemporalManagerPrivate
   (^void populateKnownChunks [])
   (^Long latestTemporalSnapshotIndex [^int chunk-idx])
@@ -134,10 +123,10 @@
   (^void buildTemporalSnapshot [^int chunk-idx ^Long snapshot-idx])
   (^java.io.Closeable buildStaticTree [^Object base-kd-tree ^int chunk-idx ^Long snapshot-idx]))
 
-(deftype TemporalCoordinates [^long rowId, ^Object id,
+(deftype TemporalCoordinates [^long rowId, ^long iid,
                               ^long txTimeStart, ^long txTimeEnd
                               ^long validTimeStart, ^long validTimeEnd
-                              ^boolean tombstone])
+                              ^boolean newEntity, ^boolean tombstone])
 
 (def temporal-col-type [:timestamp-tz :micro "UTC"])
 
@@ -167,12 +156,12 @@
 (defn ->temporal-column-idx ^long [col-name]
   (long (get column->idx (name col-name))))
 
-(defn evict-id [kd-tree, ^BufferAllocator allocator, ^long internal-id, ^Roaring64Bitmap evicted-row-ids]
+(defn evict-id [kd-tree, ^BufferAllocator allocator, ^long iid, ^Roaring64Bitmap evicted-row-ids]
   (let [min-range (doto (->min-range)
-                    (aset id-idx internal-id))
+                    (aset id-idx iid))
 
         max-range (doto (->max-range)
-                    (aset id-idx internal-id))
+                    (aset id-idx iid))
 
         ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
 
@@ -191,28 +180,28 @@
             kd-tree
             overlap)))
 
-(defn insert-coordinates [kd-tree ^BufferAllocator allocator ^IInternalIdManager id-manager ^TemporalCoordinates coordinates]
-  (let [new-id? (not (.isKnownId id-manager (.id coordinates)))
+(defn insert-coordinates [kd-tree, ^BufferAllocator allocator, ^TemporalCoordinates coordinates]
+  (let [new-entity? (.newEntity coordinates)
         row-id (.rowId coordinates)
-        id (.getOrCreateInternalId id-manager (.id coordinates) row-id)
+        iid (.iid coordinates)
         tx-time-start-μs (.txTimeStart coordinates)
         tx-time-end-μs (.txTimeEnd coordinates)
         valid-time-start-μs (.validTimeStart coordinates)
         valid-time-end-μs (.validTimeEnd coordinates)
 
         min-range (doto (->min-range)
-                    (aset id-idx id)
+                    (aset id-idx iid)
                     (aset valid-time-end-idx (inc valid-time-start-μs))
                     (aset tx-time-end-idx tx-time-start-μs))
 
         max-range (doto (->max-range)
-                    (aset id-idx id)
+                    (aset id-idx iid)
                     (aset valid-time-start-idx (dec valid-time-end-μs))
                     (aset tx-time-end-idx tx-time-end-μs))
 
         ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
 
-        overlap (when-not new-id?
+        overlap (when-not new-entity?
                   (-> ^LongStream (kd/kd-tree-range-search
                                    kd-tree
                                    min-range
@@ -230,7 +219,7 @@
                   (not (.tombstone coordinates))
                   (kd/kd-tree-insert allocator
                                      (doto (long-array k)
-                                       (aset id-idx id)
+                                       (aset id-idx iid)
                                        (aset row-id-idx row-id)
                                        (aset valid-time-start-idx valid-time-start-μs)
                                        (aset valid-time-end-idx valid-time-end-μs)
@@ -261,19 +250,10 @@
 (defn- temporal-snapshot-obj-key->chunk-idx ^long [obj-key]
   (Long/parseLong (second (re-find #"temporal-snapshot-(\p{XDigit}{16})\.arrow" obj-key)) 16))
 
-(defn- normalize-id [id]
-  (if (bytes? id)
-    (ByteBuffer/wrap id)
-    id))
-
-(defn- ->big-endian-internal-id ^long [^long row-id]
-  (Long/reverseBytes row-id))
-
 (deftype TemporalManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
                           ^IMetadataManager metadata-manager
-                          ^Map id->internal-id
                           ^ExecutorService snapshot-pool
                           ^:unsynchronized-mutable snapshot-future
                           ^:unsynchronized-mutable kd-tree-snapshot-idx
@@ -325,24 +305,8 @@
                                     (kd/->merged-kd-tree nil)))))
 
   (populateKnownChunks [this]
-    (let [known-chunks (.knownChunks metadata-manager)
-          futs (for [chunk-idx known-chunks]
-                 (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
-                     (util/then-apply util/try-close)))]
-      @(CompletableFuture/allOf (into-array CompletableFuture futs))
-      (doseq [chunk-idx known-chunks]
-        (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
-                    id-chunks (util/->chunks id-buffer)]
-          (.forEachRemaining id-chunks
-                             (reify Consumer
-                               (accept [_ id-root]
-                                 (let [^VectorSchemaRoot id-root id-root
-                                       ^BigIntVector row-id-vec (.getVector id-root 0)
-                                       id-vec (.getVector id-root 1)]
-                                   (dotimes [n (.getRowCount id-root)]
-                                     (.getOrCreateInternalId this (t/get-object id-vec n) (.get row-id-vec n)))))))))
-      (when-let [temporal-chunk-idx (last known-chunks)]
-        (.reloadTemporalIndex this temporal-chunk-idx (.latestTemporalSnapshotIndex this temporal-chunk-idx)))))
+    (when-let [temporal-chunk-idx (last (.knownChunks metadata-manager))]
+      (.reloadTemporalIndex this temporal-chunk-idx (.latestTemporalSnapshotIndex this temporal-chunk-idx))))
 
   (awaitSnapshotBuild [_]
     (some-> snapshot-future (deref)))
@@ -367,17 +331,6 @@
                 @(.putObject object-store new-snapshot-obj-key temporal-buf)))))
         (finally
           (util/delete-file path)))))
-
-  IInternalIdManager
-  (getOrCreateInternalId [_ id row-id]
-    (.computeIfAbsent id->internal-id
-                      (normalize-id id)
-                      (reify Function
-                        (apply [_ _]
-                          (->big-endian-internal-id row-id)))))
-
-  (isKnownId [_ id]
-    (.containsKey id->internal-id (normalize-id id)))
 
   ITemporalManager
   (getTemporalWatermark [_]
@@ -414,43 +367,37 @@
     (let [tx-time-μs (util/instant->micros (.tx-time tx-key))
           row-id->operations (TreeMap.)
           evicted-row-ids (Roaring64Bitmap.)]
-      (letfn [(->temporal-coordinates [row-id eid
-                                       ^TimeStampVector vt-start-vec
-                                       ^TimeStampVector vt-end-vec
-                                       idx tombstone?]
-                (TemporalCoordinates. row-id eid
-                                      tx-time-μs
-                                      util/end-of-time-μs
-                                      (.get vt-start-vec idx)
-                                      (.get vt-end-vec idx)
-                                      tombstone?))]
-        (reify ITemporalTxIndexer
-          (indexPut [_ eid row-id vt-start-vec vt-end-vec idx]
-            (.put row-id->operations row-id
-                  (fn [kd-tree]
-                    (insert-coordinates kd-tree allocator this
-                                        (->temporal-coordinates row-id eid vt-start-vec vt-end-vec idx false)))))
+      (reify ITemporalTxIndexer
+        (indexPut [_ iid row-id start-vt end-vt new-entity?]
+          (.put row-id->operations row-id
+                (fn [kd-tree]
+                  (insert-coordinates kd-tree allocator
+                                      (TemporalCoordinates. row-id iid
+                                                            tx-time-μs util/end-of-time-μs
+                                                            start-vt end-vt
+                                                            new-entity? false)))))
 
-          (indexDelete [_ eid row-id vt-start-vec vt-end-vec idx]
-            (.put row-id->operations row-id
-                  (fn [kd-tree]
-                    (insert-coordinates kd-tree allocator this
-                                        (->temporal-coordinates row-id eid vt-start-vec vt-end-vec idx true)))))
+        (indexDelete [_ iid row-id start-vt end-vt new-entity?]
+          (.put row-id->operations row-id
+                (fn [kd-tree]
+                  (insert-coordinates kd-tree allocator
+                                      (TemporalCoordinates. row-id iid
+                                                            tx-time-μs util/end-of-time-μs
+                                                            start-vt end-vt
+                                                            new-entity? true)))))
 
-          (indexEvict [_ eid row-id]
-            (.put row-id->operations row-id
-                  (fn [kd-tree]
-                    (evict-id kd-tree allocator
-                              (.getOrCreateInternalId this eid row-id)
-                              evicted-row-ids))))
+        (indexEvict [_ iid row-id]
+          (.put row-id->operations row-id
+                (fn [kd-tree]
+                  (evict-id kd-tree allocator iid evicted-row-ids))))
 
-          (endTx [_]
-            (set! (.kd-tree this)
-                  (reduce (fn [kd-tree op]
-                            (op kd-tree))
-                          (.kd-tree this)
-                          (.values row-id->operations)))
-            evicted-row-ids)))))
+        (endTx [_]
+          (set! (.kd-tree this)
+                (reduce (fn [kd-tree op]
+                          (op kd-tree))
+                        (.kd-tree this)
+                        (.values row-id->operations)))
+          evicted-row-ids))))
 
   (createTemporalRoots [_ watermark columns temporal-min-range temporal-max-range row-id-bitmap]
     (let [kd-tree (.temporal-watermark watermark)
@@ -502,14 +449,13 @@
     (util/shutdown-pool snapshot-pool)
     (set! (.snapshot-future this) nil)
     (util/try-close kd-tree)
-    (set! (.kd-tree this) nil)
-    (.clear id->internal-id)))
+    (set! (.kd-tree this) nil)))
 
 (defmethod ig/prep-key ::temporal-manager [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
           :object-store (ig/ref :core2/object-store)
           :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)
-          :metadata-manager (ig/ref :core2.metadata/metadata-manager)
+          :metadata-mgr (ig/ref :core2.metadata/metadata-manager)
           :async-snapshot? true}
          opts))
 
@@ -517,12 +463,12 @@
   [_ {:keys [^BufferAllocator allocator
              ^ObjectStore object-store
              ^IBufferPool buffer-pool
-             ^IMetadataManager metadata-manager
+             ^IMetadataManager metadata-mgr
              async-snapshot?]}]
 
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "temporal-snapshot-"))]
-    (doto (TemporalManager. allocator object-store buffer-pool metadata-manager
-                            (ConcurrentHashMap.) pool nil nil nil async-snapshot?)
+    (doto (TemporalManager. allocator object-store buffer-pool metadata-mgr
+                            pool nil nil nil async-snapshot?)
       (.populateKnownChunks))))
 
 (defmethod ig/halt-key! ::temporal-manager [_ ^TemporalManager mgr]

@@ -3,7 +3,7 @@
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd]
             [core2.util :as util])
-  (:import [core2.temporal IInternalIdManager TemporalCoordinates]
+  (:import core2.temporal.TemporalCoordinates
            java.io.Closeable
            [java.util Date HashMap List]
            org.apache.arrow.memory.RootAllocator))
@@ -34,7 +34,7 @@
                                                                  ^Date tx-time-end
                                                                  ^Date valid-time-start
                                                                  ^Date valid-time-end
-                                                                 tombstone?]}]
+                                                                 new-entity? tombstone?]}]
   (TemporalCoordinates. row-id id
                         (util/instant->micros (.toInstant tx-time-start))
                         (util/instant->micros (or (some-> tx-time-end .toInstant)
@@ -42,17 +42,10 @@
                         (util/instant->micros (.toInstant (or valid-time-start tx-time-start)))
                         (util/instant->micros (or (some-> valid-time-end .toInstant)
                                                   util/end-of-time))
-                        (boolean tombstone?)))
+                        new-entity? (boolean tombstone?)))
 
 (t/deftest bitemporal-tx-time-split-test
   (let [kd-tree nil
-        id->internal-id-map (doto (HashMap.)
-                              (.put 7797 7797))
-        id-manager (reify IInternalIdManager
-                     (getOrCreateInternalId [_ id _]
-                       (.get id->internal-id-map id))
-                     (isKnownId [_ id]
-                       (.containsKey id->internal-id-map id)))
         row-id->row (HashMap.)]
     ;; Current Insert
     ;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
@@ -60,10 +53,10 @@
     (with-open [allocator (RootAllocator.)
                 ^Closeable kd-tree (temporal/insert-coordinates kd-tree
                                                                 allocator
-                                                                id-manager
                                                                 (->coordinates {:id 7797
                                                                                 :row-id 1
-                                                                                :tx-time-start #inst "1998-01-10"}))]
+                                                                                :tx-time-start #inst "1998-01-10"
+                                                                                :new-entity? true}))]
       (.put row-id->row 1 {:customer-number 145})
       (t/is (= [{:id 7797,
                  :customer-number 145,
@@ -78,10 +71,10 @@
       ;; Peter Olsen buys the flat on January 15, 1998.
       (let [kd-tree (temporal/insert-coordinates kd-tree
                                                  allocator
-                                                 id-manager
                                                  (->coordinates {:id 7797
                                                                  :row-id 2
-                                                                 :tx-time-start #inst "1998-01-15"}))]
+                                                                 :tx-time-start #inst "1998-01-15"
+                                                                 :new-entity? false}))]
         (.put row-id->row 2 {:customer-number 827})
         (t/is (= [{:id 7797,
                    :row-id 1,
@@ -110,10 +103,10 @@
         ;; Peter Olsen sells the flat on January 20, 1998.
         (let [kd-tree (temporal/insert-coordinates kd-tree
                                                    allocator
-                                                   id-manager
                                                    (->coordinates {:id 7797
                                                                    :row-id 3
                                                                    :tx-time-start #inst "1998-01-20"
+                                                                   :new-entity? false
                                                                    :tombstone? true}))]
           (.put row-id->row 3 {:customer-number 827})
           (t/is (= [{:id 7797,
@@ -150,12 +143,12 @@
           ;; Eva actually purchased the flat on January 3, performed on January 23.
           (let [kd-tree (temporal/insert-coordinates kd-tree
                                                      allocator
-                                                     id-manager
                                                      (->coordinates {:id 7797
                                                                      :row-id 4
                                                                      :tx-time-start #inst "1998-01-23"
                                                                      :valid-time-start #inst "1998-01-03"
-                                                                     :valid-time-end #inst "1998-01-15"}))]
+                                                                     :valid-time-end #inst "1998-01-15"
+                                                                     :new-entity? false}))]
             (.put row-id->row 4 {:customer-number 145})
             (t/is (= [{:id 7797,
                        :customer-number 145,
@@ -199,12 +192,12 @@
             ;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
             (let [kd-tree (temporal/insert-coordinates kd-tree
                                                        allocator
-                                                       id-manager
                                                        (->coordinates {:id 7797
                                                                        :row-id 5
                                                                        :tx-time-start #inst "1998-01-26"
                                                                        :valid-time-start #inst "1998-01-02"
                                                                        :valid-time-end #inst "1998-01-05"
+                                                                       :new-entity? false
                                                                        :tombstone? true}))]
               (.put row-id->row 5 {:customer-number 145})
               (t/is (= [{:id 7797,
@@ -256,12 +249,12 @@
               ;; A sequenced update performed on January 28: Peter actually purchased the flat on January 12.
               (let [kd-tree (temporal/insert-coordinates kd-tree
                                                          allocator
-                                                         id-manager
                                                          (->coordinates {:id 7797
                                                                          :row-id 6
                                                                          :tx-time-start #inst "1998-01-28"
                                                                          :valid-time-start #inst "1998-01-12"
-                                                                         :valid-time-end #inst "1998-01-15"}))]
+                                                                         :valid-time-end #inst "1998-01-15"
+                                                                         :new-entity? false}))]
                 (.put row-id->row 6 {:customer-number 827})
                 (t/is (= [{:id 7797,
                            :customer-number 145,
@@ -366,7 +359,7 @@
       (t/testing "merge"
         (with-open [new-tree-with-tombstone (kd/build-node-kd-tree allocator [[4 7] [8 1] [2 3]])]
           (let [node-to-delete [2 1]
-                ^Node new-tree-with-tombstone (kd/kd-tree-delete new-tree-with-tombstone allocator node-to-delete)]
+                new-tree-with-tombstone (kd/kd-tree-delete new-tree-with-tombstone allocator node-to-delete)]
             (t/is (= 3 (kd/kd-tree-size new-tree-with-tombstone)))
             (t/is (= Long/SIZE (kd/kd-tree-value-count new-tree-with-tombstone)))
             (with-open [old-tree-with-node-to-be-deleted (kd/build-node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
