@@ -31,6 +31,15 @@
           "name" : "struct"
         },
         "children" : [{
+          "name" : "_iid",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
           "name" : "_row-id",
           "nullable" : false,
           "type" : {
@@ -79,22 +88,6 @@
               "name" : "struct"
             },
             "children" : [{
-              "name" : "_id",
-              "nullable" : false,
-              "type" : {
-                "name" : "union",
-                "mode" : "Dense",
-                "typeIds" : [0]
-              },
-              "children" : [{
-                "name" : "utf8",
-                "nullable" : false,
-                "type" : {
-                  "name" : "utf8"
-                },
-                "children" : [ ]
-              }]
-            },{
               "name" : "_valid-time-start",
               "nullable" : false,
               "type" : {
@@ -147,6 +140,11 @@
         "count" : 4,
         "VALIDITY" : [1,1,1,1],
         "children" : [{
+          "name" : "_iid",
+          "count" : 4,
+          "VALIDITY" : [1,1,1,1],
+          "DATA" : ["0","72057594037927936","0","72057594037927936"]
+        },{
           "name" : "_row-id",
           "count" : 4,
           "VALIDITY" : [1,1,1,1],
@@ -176,18 +174,6 @@
             "count" : 1,
             "VALIDITY" : [1],
             "children" : [{
-              "name" : "_id",
-              "count" : 1,
-              "TYPE_ID" : [0],
-              "OFFSET" : [0],
-              "children" : [{
-                "name" : "utf8",
-                "count" : 1,
-                "VALIDITY" : [1],
-                "OFFSET" : [0,3],
-                "DATA" : ["foo"]
-              }]
-            },{
               "name" : "_valid-time-start",
               "count" : 1,
               "VALIDITY" : [1],

@@ -135,22 +135,22 @@
             (t/col-type->field "_tx-time" [:timestamp-tz :micro "UTC"])
             (t/->field "ops" t/list-type true
                        (t/->field "ops" t/struct-type false
+                                  (t/col-type->field "_iid" :i64)
                                   (t/col-type->field "_row-id" :i64)
                                   (t/->field "op" (ArrowType$Union. UnionMode/Dense (int-array [0 1 2])) false
                                              (t/col-type->field "put"
                                                                 '[:struct {_valid-time-start [:timestamp-tz :micro "UTC"]
                                                                            _valid-time-end [:timestamp-tz :micro "UTC"]}])
-                                             (t/->field "delete" t/struct-type false
-                                                        (t/->field "_id" t/dense-union-type false)
-                                                        (t/col-type->field "_valid-time-start" [:timestamp-tz :micro "UTC"])
-                                                        (t/col-type->field "_valid-time-end" [:timestamp-tz :micro "UTC"]))
-                                             (t/->field "evict" t/struct-type false))))]))
+                                             (t/col-type->field "delete"
+                                                                '[:struct {_valid-time-start [:timestamp-tz :micro "UTC"]
+                                                                           _valid-time-end [:timestamp-tz :micro "UTC"]}])
+                                             (t/col-type->field "evict" '[:struct {}]))))]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface ILogOpIndexer
-  (^void logPut [^long rowId, ^long txOpIdx])
-  (^void logDelete [^long rowId, ^long txOpIdx])
-  (^void logEvict [^long rowId, ^long txOpIdx])
+  (^void logPut [^long iid, ^long rowId, ^long txOpIdx])
+  (^void logDelete [^long iid, ^long rowId, ^long txOpIdx])
+  (^void logEvict [^long iid, ^long rowId, ^long txOpIdx])
   (^void endTx []))
 
 (definterface ILogIndexer
@@ -170,6 +170,8 @@
         ops-data-writer (.asStruct (.getDataWriter ops-writer))
         row-id-writer (.writerForName ops-data-writer "_row-id")
         ^BigIntVector row-id-vec (.getVector row-id-writer)
+        iid-writer (.writerForName ops-data-writer "_iid")
+        ^BigIntVector iid-vec (.getVector iid-writer)
         op-writer (.asDenseUnion (.writerForName ops-data-writer "op"))
 
         put-writer (.asStruct (.writerForTypeId op-writer 0))
@@ -179,7 +181,6 @@
         ^TimeStampMicroTZVector put-vt-end-vec (.getVector put-vt-end-writer)
 
         delete-writer (.asStruct (.writerForTypeId op-writer 1))
-        delete-id-writer (.writerForName delete-writer "_id")
         delete-vt-start-writer (.writerForName delete-writer "_valid-time-start")
         ^TimeStampMicroTZVector delete-vt-start-vec (.getVector delete-vt-start-writer)
         delete-vt-end-writer (.writerForName delete-writer "_valid-time-end")
@@ -201,15 +202,14 @@
                 tx-put-vt-end-vec (.getChild tx-put-vec "_valid-time-end")
 
                 tx-delete-vec (.getStruct tx-ops-vec 1)
-                tx-delete-id-vec (.getChild tx-delete-vec "_id")
                 tx-delete-vt-start-vec (.getChild tx-delete-vec "_valid-time-start")
-                tx-delete-vt-end-vec (.getChild tx-delete-vec "_valid-time-end")
-                delete-id-row-copier (.rowCopier delete-id-writer tx-delete-id-vec)]
+                tx-delete-vt-end-vec (.getChild tx-delete-vec "_valid-time-end")]
 
             (reify ILogOpIndexer
-              (logPut [_ row-id tx-op-idx]
+              (logPut [_ iid row-id tx-op-idx]
                 (let [op-idx (.startValue ops-data-writer)]
-                  (.setSafe row-id-vec op-idx row-id))
+                  (.setSafe row-id-vec op-idx row-id)
+                  (.setSafe iid-vec op-idx iid))
 
                 (let [src-offset (.getOffset tx-ops-vec tx-op-idx)
                       dest-offset (.startValue put-writer)]
@@ -219,22 +219,23 @@
 
                 (.endValue ops-data-writer))
 
-              (logDelete [_ row-id tx-op-idx]
+              (logDelete [_ iid row-id tx-op-idx]
                 (let [op-idx (.startValue ops-data-writer)]
-                  (.setSafe row-id-vec op-idx row-id))
+                  (.setSafe row-id-vec op-idx row-id)
+                  (.setSafe iid-vec op-idx iid))
 
                 (let [src-offset (.getOffset tx-ops-vec tx-op-idx)
                       dest-offset (.startValue delete-writer)]
                   (.copyFromSafe delete-vt-start-vec src-offset dest-offset tx-delete-vt-start-vec)
                   (.copyFromSafe delete-vt-end-vec src-offset dest-offset tx-delete-vt-end-vec)
-                  (.copyRow delete-id-row-copier src-offset)
                   (.endValue delete-writer))
 
                 (.endValue ops-data-writer))
 
-              (logEvict [_ row-id _tx-op-idx]
+              (logEvict [_ iid row-id _tx-op-idx]
                 (let [op-idx (.startValue ops-data-writer)]
-                  (.setSafe row-id-vec op-idx row-id))
+                  (.setSafe row-id-vec op-idx row-id)
+                  (.setSafe iid-vec op-idx iid))
 
                 (doto evict-writer (.startValue) (.endValue)))
 
@@ -375,25 +376,28 @@
                        id-vec (-> ^StructVector (.getVectorByType doc-duv leg-type-id)
                                   (.getChild "_id"))
                        eid (t/get-object id-vec leg-offset)
-                       new-entity? (not (.isKnownId iid-mgr eid))]
-                   (.logPut log-op-idxer row-id tx-op-idx)
-                   (.indexPut temporal-idxer (.getOrCreateInternalId iid-mgr eid row-id) row-id
+                       new-entity? (not (.isKnownId iid-mgr eid))
+                       iid (.getOrCreateInternalId iid-mgr eid row-id)]
+                   (.logPut log-op-idxer iid row-id tx-op-idx)
+                   (.indexPut temporal-idxer iid row-id
                               (.get valid-time-start-vec per-op-offset)
                               (.get valid-time-end-vec per-op-offset)
                               new-entity?))
 
             :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)
                           eid (t/get-object id-vec per-op-offset)
-                          new-entity? (not (.isKnownId iid-mgr eid))]
-                      (.logDelete log-op-idxer row-id tx-op-idx)
-                      (.indexDelete temporal-idxer (.getOrCreateInternalId iid-mgr eid row-id) row-id
+                          new-entity? (not (.isKnownId iid-mgr eid))
+                          iid (.getOrCreateInternalId iid-mgr eid row-id)]
+                      (.logDelete log-op-idxer iid row-id tx-op-idx)
+                      (.indexDelete temporal-idxer iid row-id
                                     (.get valid-time-start-vec per-op-offset)
                                     (.get valid-time-end-vec per-op-offset)
                                     new-entity?))
 
-            :evict (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
-                     (.logEvict log-op-idxer row-id tx-op-idx)
-                     (.indexEvict temporal-idxer (.getOrCreateInternalId iid-mgr (t/get-object id-vec per-op-offset) row-id) row-id)))))
+            :evict (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)
+                         iid (.getOrCreateInternalId iid-mgr (t/get-object id-vec per-op-offset) row-id)]
+                     (.logEvict log-op-idxer iid row-id tx-op-idx)
+                     (.indexEvict temporal-idxer iid row-id)))))
 
       (copy-docs this tx-ops-vec next-row-id)
 
