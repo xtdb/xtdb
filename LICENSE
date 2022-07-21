@@ -662,24 +662,74 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 
 Additional permissions under GNU AGPL version 3 section 7
 
-If you modify this Program, or any covered work, by linking or combining it
-with org.clojure/clojure (or a modified version of that library), containing
-parts covered by the terms of Eclipse Public License 1.0, the licensors of this
-Program grant you additional permission to convey the resulting work.
+If you modify this Program, or any covered work, by linking or combining it with
+org.clojure/data.csv (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
 
-If you modify this Program, or any covered work, by linking or combining it
-with org.clojure/data.csv (or a modified version of that library), containing
-parts covered by the terms of Eclipse Public License 1.0, the licensors of this
-Program grant you additional permission to convey the resulting work.
+If you modify this Program, or any covered work, by linking or combining it with
+weavejester/dependency (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
 
-If you modify this Program, or any covered work, by linking or combining it
-with org.clojure/tools.namespace (or a modified version of that library),
-containing parts covered by the terms of Eclipse Public License 1.0, the
-licensors of this Program grant you additional permission to convey the
-resulting work.
+If you modify this Program, or any covered work, by linking or combining it with
+tigris/tigris (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
 
-If you modify this Program, or any covered work, by linking or combining it
-with io.github.cognitect-labs/test-runner (or a modified version of that
-library), containing parts covered by the terms of Eclipse Public License 2.0,
-the licensors of this Program grant you additional permission to convey the
-resulting work.
+If you modify this Program, or any covered work, by linking or combining it with
+org.clojure/tools.reader (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
+
+If you modify this Program, or any covered work, by linking or combining it with
+org.clojure/test.check (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
+
+If you modify this Program, or any covered work, by linking or combining it with
+org.clojure/tools.namespace (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
+
+If you modify this Program, or any covered work, by linking or combining it with
+org.clojure/java.classpath (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
+
+If you modify this Program, or any covered work, by linking or combining it with
+net.cgrand/macrovich (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
+
+If you modify this Program, or any covered work, by linking or combining it with
+org.clojure/spec.alpha (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
+
+If you modify this Program, or any covered work, by linking or combining it with
+org.clojure/clojure (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
+
+If you modify this Program, or any covered work, by linking or combining it with
+com.clojure-goes-fast/clj-async-profiler (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.
+
+If you modify this Program, or any covered work, by linking or combining it with
+org.clojure/core.specs.alpha (or a modified version of that library),
+containing parts covered by the terms of the Eclipse Public License 1.0
+or Eclipse Public License 2.0, the licensors of this Program grant you
+additional permission to convey the resulting work.

@@ -19,3 +19,5 @@ build
 .idea/
 .cpcache/
 .lsp/.cache/
+/_manifest
+
