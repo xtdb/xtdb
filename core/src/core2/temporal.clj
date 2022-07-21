@@ -13,10 +13,8 @@
            [core2.temporal.kd_tree IKdTreePointAccess MergedKdTree]
            java.io.Closeable
            java.nio.ByteBuffer
-           java.time.Instant
            [java.util Arrays Collections Comparator HashMap Map TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap ExecutorService Executors]
-           java.util.concurrent.atomic.AtomicLong
            [java.util.function Consumer Function LongConsumer LongFunction Predicate ToLongFunction]
            java.util.stream.LongStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
@@ -275,7 +273,6 @@
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
                           ^IMetadataManager metadata-manager
-                          ^AtomicLong id-counter
                           ^Map id->internal-id
                           ^ExecutorService snapshot-pool
                           ^:unsynchronized-mutable snapshot-future
@@ -525,8 +522,7 @@
 
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "temporal-snapshot-"))]
     (doto (TemporalManager. allocator object-store buffer-pool metadata-manager
-                            (AtomicLong.) (ConcurrentHashMap.)
-                            pool nil nil nil async-snapshot?)
+                            (ConcurrentHashMap.) pool nil nil nil async-snapshot?)
       (.populateKnownChunks))))
 
 (defmethod ig/halt-key! ::temporal-manager [_ ^TemporalManager mgr]
