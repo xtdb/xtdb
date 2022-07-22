@@ -4,14 +4,16 @@ Welcome to the XTDB research repository!
 
 XTDB '`Core2`' is an experimental, SQL-first, immutable database concept.
 
+
 == Vision
 
 The technical aim is to implement https://en.wikipedia.org/wiki/SQL:2011#New_features[SQL:2011 temporal query capabilities] on top of immutable, columnar data storage.
 
-Core2 implements a dynamic schema model (i.e. no explicit https://en.wikipedia.org/wiki/Data_manipulation_language[DML] is required) and allows for relational querying across nested, document-shaped data.
+Core2 implements a dynamic schema model (i.e. no explicit https://en.wikipedia.org/wiki/Data_definition_language[DDL] is required) and allows for relational querying across nested, document-shaped data.
 Core2 embraces a https://xtdb.com/blog/dev-diary-may-22/#_pillar_1_sosac[separated-storage-and-compute] architecture, using https://arrow.apache.org/[Apache Arrow] as the underlying columnar data format.
 
 Read more about Core2 in our https://xtdb.com/pdfs/vision-doc.pdf[Vision Document] (PDF).
+
 
 == SQL:2011
 
@@ -29,11 +31,13 @@ FROM employee, contractor
 WHERE employee.application_time OVERLAPS contractor.application_time
 ----
 
+
 == Warning
 
 This is experimental software.
 
 If you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x here: https://github.com/xtdb/xtdb
+
 
 == Hows does this differ from XTDB 1.x?
 
@@ -64,13 +68,16 @@ Core2's initial objective is to take the key principles embodied in XTDB 1.x -- 
 | Dynamism (ad-hoc graph joins, union typing, schemaless, etc.) | Yes | Yes
 |===
 
+
 == Documentation
 
 There is currently no official documentation for Core2 outside of the tests and source code in this repository. Please do not open issues on this repository with documentation-related questions at this stage.
 
+
 == Questions, Thoughts & Feedback
 
 We would love to hear from you: hello@xtdb.com
+
 
 == License and Copyright
 
