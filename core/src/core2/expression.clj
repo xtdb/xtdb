@@ -233,6 +233,7 @@
 (defmethod emit-value ::default [_ code] code)
 (defmethod emit-value Date [_ code] `(Math/multiplyExact (.getTime ~code) 1000))
 (defmethod emit-value Instant [_ code] `(util/instant->micros ~code))
+(defmethod emit-value ZonedDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
 (defmethod emit-value Duration [_ code] `(quot (.toNanos ~code) 1000))
 
 ;; consider whether a bound hash map for literal parameters would be better

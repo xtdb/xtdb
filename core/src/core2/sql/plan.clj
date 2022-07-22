@@ -11,7 +11,7 @@
             [core2.sql.parser :as p]
             [core2.types :as types])
   (:import (clojure.lang IObj Var)
-           (java.time LocalDate Period Duration Instant)
+           (java.time LocalDate Period Duration ZonedDateTime ZoneId)
            java.util.HashMap
            (org.apache.arrow.vector PeriodDuration)))
 
@@ -339,9 +339,13 @@
          [:time_value
           [:unsigned_integer hours]
           [:unsigned_integer minutes]
-          [:seconds_value [:unsigned_integer seconds]]]]]]]
+          [:seconds_value
+           [:unsigned_integer seconds]]]]]]]
      ;;=>
-     (Instant/parse (str year "-" month "-" day "T" hours ":" minutes ":" seconds "Z"))
+     (ZonedDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
+                       (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
+                       0
+                       (ZoneId/of "Z")) ;; TODO TIMESTAMP without TZ should be modelled as LocalDateTime see #280
 
      [:timestamp_literal _
       [:timestamp_string
@@ -358,9 +362,13 @@
           [:unsigned_integer minutes]
           [:seconds_value
            [:unsigned_integer seconds]
-           [:unsigned_integer ms]]]]]]]
+           [:unsigned_integer seconds-fraction]]]]]]]
      ;;=>
-     (Instant/parse (str year "-" month "-" day "T" hours ":" minutes ":" seconds "." ms "Z"))
+     (ZonedDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
+                       (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
+                       (* (* (Long/parseLong seconds-fraction) (Math/pow 10 (- (count seconds-fraction))))
+                          (Math/pow 10 9))
+                       (ZoneId/of "Z")) ;; TODO TIMESTAMP without TZ should be modelled as LocalDateTime see #280
 
      [:date_literal _
       [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]

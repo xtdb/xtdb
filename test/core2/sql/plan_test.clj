@@ -751,3 +751,13 @@
               AND
               z.baz = y.biz
               )"))))
+
+(deftest test-timestamp-literal
+  (t/are
+    [sql expected]
+    (= expected (plan-expr sql))
+    "TIMESTAMP '3000-03-15 20:40:31'" #time/zoned-date-time "3000-03-15T20:40:31Z"
+    "TIMESTAMP '3000-03-15 20:40:31.11'" #time/zoned-date-time "3000-03-15T20:40:31.110Z"
+    "TIMESTAMP '3000-03-15 20:40:31.2222'" #time/zoned-date-time "3000-03-15T20:40:31.222200Z"
+    "TIMESTAMP '3000-03-15 20:40:31.333333'" #time/zoned-date-time "3000-03-15T20:40:31.333333Z"
+    "TIMESTAMP '3000-03-15 20:40:31.44444444'" #time/zoned-date-time "3000-03-15T20:40:31.444444440Z"))
