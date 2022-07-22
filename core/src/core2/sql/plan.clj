@@ -11,7 +11,7 @@
             [core2.sql.parser :as p]
             [core2.types :as types])
   (:import (clojure.lang IObj Var)
-           (java.time LocalDate Period Duration ZonedDateTime ZoneId)
+           (java.time LocalDate Period Duration OffsetDateTime ZoneOffset)
            java.util.HashMap
            (org.apache.arrow.vector PeriodDuration)))
 
@@ -228,6 +228,14 @@
 
     (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (r/node z)))))))
 
+(defn create-offset-date-time
+  [year month day hours minutes seconds seconds-fraction offset-hours offset-minutes]
+  (OffsetDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
+                     (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
+                     (* (* (Long/parseLong seconds-fraction) (Math/pow 10 (- (count seconds-fraction))))
+                        (Math/pow 10 9))
+                     (ZoneOffset/ofHoursMinutes (Long/parseLong offset-hours) (Long/parseLong offset-minutes))))
+
 (defn expr [z]
   (maybe-add-ref
    z
@@ -342,10 +350,8 @@
           [:seconds_value
            [:unsigned_integer seconds]]]]]]]
      ;;=>
-     (ZonedDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
-                       (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
-                       0
-                       (ZoneId/of "Z")) ;; TODO TIMESTAMP without TZ should be modelled as LocalDateTime see #280
+     ;; TODO TIMESTAMP without TZ should be modelled as LocalDateTime see #280
+     (create-offset-date-time year month day hours minutes seconds "0" "0" "0")
 
      [:timestamp_literal _
       [:timestamp_string
@@ -364,11 +370,55 @@
            [:unsigned_integer seconds]
            [:unsigned_integer seconds-fraction]]]]]]]
      ;;=>
-     (ZonedDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
-                       (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
-                       (* (* (Long/parseLong seconds-fraction) (Math/pow 10 (- (count seconds-fraction))))
-                          (Math/pow 10 9))
-                       (ZoneId/of "Z")) ;; TODO TIMESTAMP without TZ should be modelled as LocalDateTime see #280
+     ;; TODO TIMESTAMP without TZ should be modelled as LocalDateTime see #280
+     (create-offset-date-time year month day hours minutes seconds seconds-fraction "0" "0")
+
+     [:timestamp_literal _
+      [:timestamp_string
+       [:unquoted_timestamp_string
+        [:date_value
+         [:unsigned_integer year]
+         [:minus_sign "-"]
+         [:unsigned_integer month]
+         [:minus_sign "-"]
+         [:unsigned_integer day]]
+        [:unquoted_time_string
+         [:time_value
+          [:unsigned_integer hours]
+          [:unsigned_integer minutes]
+          [:seconds_value
+           [:unsigned_integer seconds]]]
+         [:time_zone_interval
+          [_ sign]
+          [:unsigned_integer offset-hours]
+          [:unsigned_integer offset-minutes]]]]]]
+     ;;=>
+     (create-offset-date-time
+       year month day hours minutes seconds "0" (str sign offset-hours) (str sign offset-minutes))
+
+     [:timestamp_literal _
+      [:timestamp_string
+       [:unquoted_timestamp_string
+        [:date_value
+         [:unsigned_integer year]
+         [:minus_sign "-"]
+         [:unsigned_integer month]
+         [:minus_sign "-"]
+         [:unsigned_integer day]]
+        [:unquoted_time_string
+         [:time_value
+          [:unsigned_integer hours]
+          [:unsigned_integer minutes]
+          [:seconds_value
+           [:unsigned_integer seconds]
+           [:unsigned_integer seconds-fraction]]]
+         [:time_zone_interval
+          [_ sign]
+          [:unsigned_integer offset-hours]
+          [:unsigned_integer offset-minutes]]]]]]
+     ;;=>
+     (create-offset-date-time
+       year month day hours minutes seconds seconds-fraction (str sign offset-hours) (str sign offset-minutes))
 
      [:date_literal _
       [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]

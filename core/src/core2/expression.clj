@@ -16,7 +16,7 @@
            core2.vector.PolyValueBox
            (java.nio ByteBuffer)
            (java.nio.charset StandardCharsets)
-           (java.time Clock Duration Instant LocalDate Period ZoneId ZoneOffset ZonedDateTime)
+           (java.time Clock Duration Instant LocalDate Period ZoneId ZoneOffset ZonedDateTime OffsetDateTime)
            (java.time.temporal ChronoField ChronoUnit)
            (java.util Arrays Date HashMap LinkedList)
            (java.util.function IntUnaryOperator)
@@ -234,6 +234,7 @@
 (defmethod emit-value Date [_ code] `(Math/multiplyExact (.getTime ~code) 1000))
 (defmethod emit-value Instant [_ code] `(util/instant->micros ~code))
 (defmethod emit-value ZonedDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
+(defmethod emit-value OffsetDateTime [_ code] `(util/instant->micros (util/->instant ~code)))
 (defmethod emit-value Duration [_ code] `(quot (.toNanos ~code) 1000))
 
 ;; consider whether a bound hash map for literal parameters would be better

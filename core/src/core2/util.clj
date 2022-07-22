@@ -12,7 +12,7 @@
            java.nio.charset.StandardCharsets
            [java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.time Duration Instant ZoneId ZonedDateTime]
+           [java.time Duration Instant ZoneId ZonedDateTime OffsetDateTime]
            java.time.temporal.ChronoUnit
            [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
            [java.util.concurrent CompletableFuture ExecutorService Executors ThreadFactory TimeUnit]
@@ -84,7 +84,10 @@
 
   ZonedDateTime
   (->instant [zdt] (.toInstant zdt))
-  (->zdt [zdt] zdt))
+  (->zdt [zdt] zdt)
+
+  OffsetDateTime
+  (->instant [odt] (.toInstant odt)))
 
 (defn instant->micros ^long [^Instant inst]
   (-> (Math/multiplyExact (.getEpochSecond inst) 1000000)
