@@ -1,26 +1,23 @@
-= XTDB "Core2" Research
+= XTDB '`Core2`' Research 🧪
 
-Welcome to the XTDB research repository.
+Welcome to the XTDB research repository!
 
-XTDB Core2 is an experimental, SQL-first, immutable database concept.
-
+XTDB '`Core2`' is an experimental, SQL-first, immutable database concept.
 
 == Vision
 
-The technical aim is to layer on temporal query capability on top of a immutable, columnar data storage.
+The technical aim is to implement https://en.wikipedia.org/wiki/SQL:2011#New_features[SQL:2011 temporal query capabilities] on top of immutable, columnar data storage.
 
-Core2 will support the SQL:2011 specification whilst aiming for a schemaless document model,
-and will embrace a separate-storage-from-compute architecture.
-Core2 uses Apache Arrow as the data-format, and the engine allows for querying across nested document data.
+Core2 implements a dynamic schema model (i.e. no explicit https://en.wikipedia.org/wiki/Data_manipulation_language[DML] is required) and allows for relational querying across nested, document-shaped data.
+Core2 embraces a https://xtdb.com/blog/dev-diary-may-22/#_pillar_1_sosac[separated-storage-and-compute] architecture, using https://arrow.apache.org/[Apache Arrow] as the underlying columnar data format.
 
 Read more about Core2 in our https://xtdb.com/pdfs/vision-doc.pdf[Vision Document] (PDF).
 
-
 == SQL:2011
 
-XTDB not only supports the SQL:2011 standard, it makes SQL:2011 accessible.
-All data is bitemporal.
-Document records remove the need for awkward bitemporal schema migrations.
+All data in XTDB is https://en.wikipedia.org/wiki/Bitemporal_modeling[bitemporal data].
+Core2 not only implements SQL:2011's bitemporal features, but makes those features much more practical and accessible to regular users.
+Traditional concerns about awkward bitemporal schema migrations are avoided thanks to pervasive support for dynamic querying across polymorphic records.
 
 SQL:2011 queries enable querying _across_ time.
 For example, the following query asks "Which employees and contractors worked for the company at the same time?"
@@ -32,36 +29,30 @@ FROM employee, contractor
 WHERE employee.application_time OVERLAPS contractor.application_time
 ----
 
-
 == Warning
 
-This is an experimental project.
+This is experimental software.
 
-If you are looking for an existing immutable document database with bitemporal query, we will continue to develop
-and support XTDB 1.x here: https://github.com/xtdb/xtdb
-
-Stable XTDB releases found here: https://docs.xtdb.com/administration/installing/
-
+If you are looking for a stable release of an immutable document database with bitemporal query capabilities, we are continuing to develop and support XTDB 1.x here: https://github.com/xtdb/xtdb
 
 == Hows does this differ from XTDB 1.x?
 
-XTDB 1.x is a mature product offering, used in production, with on-going development focusing on continued hardening and performance.
-XTDB 1.x is a Datalog-first, in-process embeddable database, offering advanced 'peer-like' functionality such as transaction-functions,
-speculative transactions, programmatic Datalog rules, and more.
+XTDB 1.x is a mature product offering that is used in production by many organizations, and its ongoing development is focused on hardening and performance.
+XTDB 1.x is a https://en.wikipedia.org/wiki/Datalog[Datalog-first], embeddable database that emphasizes in-process JVM usage to enable advanced functionality like user-defined transaction functions, speculative transactions, programmatic Datalog rules, and more.
 
-XTDB Core2 has a different goal of bringing immutability, schemaless documents, and temporal query to a mainstream SQL audience.
+Core2's initial objective is to take the key principles embodied in XTDB 1.x -- immutability, schemaless records, and temporal querying -- to a mainstream SQL audience.
 
 [cols=3*]
 |===
-| | XTDB 1.x Series | XTDB "Core2" Research Series
+| | XTDB 1.x | '`Core2`' Research Concept
 | Status | Stable | Experimental (pre-alpha)
-| Initial Stable Release | 2019 | 2023* (planned)
-| Primary Interface | Java + 'edn Datalog' | SQL (JDBC, native drivers, etc.)
-| Secondary Interface | OpenAPI, Calcite SQL (read-only) | Datalog* (planned)
+| Initial Stable Release | 2019 | TBD
+| Primary Interface | Java + 'https://github.com/edn-format/edn[edn] Datalog' | SQL (https://github.com/xtdb/core2/blob/2d8791c653f58a3eb24c650967e781204dd22975/doc/adr/0038-pgwire.adoc[Postgres] native drivers, JDBC, https://github.com/xtdb/core2/blob/859baec8289289545aca842d320a5adc17f3c67b/doc/adr/0008-sql-support.adoc#protocols[etc.])
+| Secondary Interface | OpenAPI, Calcite SQL (read-only) | 'edn Datalog' (https://github.com/xtdb/core2/blob/master/test/core2/datalog/datalog_test.clj[planned] once SQL is ~complete)
 | Execution Model | Tuple-at-a-Time Sort-Merge Joins | Vectorized Relational Algebra
 | Storage & Compute | Coupled (nodes are full replicas) | Separated (cost-effective scale out)
 | Primary Storage Format | Custom Key-Value encodings | Columnar Apache Arrow
-| Bitemporal Querying | Timeslice only ('as-of') | Full SQL:2011
+| Bitemporal Querying | Timeslice only ('as-of') | SQL:2011 and beyond
 | Relational Decorrelation | No | Yes
 | Analytical Querying | No | Yes
 | Single-partition Transaction Log | Infinite Retention | Ephemeral
@@ -70,9 +61,16 @@ XTDB Core2 has a different goal of bringing immutability, schemaless documents, 
 | Immutable Semantics | Yes | Yes
 | Online Transactions (ACID, linearizable consistency) | Yes | Yes
 | Always-On Bitemporality | Yes | Yes
-| Dynamism (graph joins, union typing, schemaless, etc.) | Yes | Yes
+| Dynamism (ad-hoc graph joins, union typing, schemaless, etc.) | Yes | Yes
 |===
 
+== Documentation
+
+There is currently no official documentation for Core2 outside of the tests and source code in this repository. Please do not open issues on this repository with documentation-related questions at this stage.
+
+== Questions, Thoughts & Feedback
+
+We would love to hear from you: hello@xtdb.com
 
 == License and Copyright
 
