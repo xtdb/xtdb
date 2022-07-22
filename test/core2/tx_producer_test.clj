@@ -8,7 +8,7 @@
   (:import org.apache.arrow.memory.RootAllocator))
 
 (def ^:private expected-file
-  (io/as-file (io/resource "can-write-tx-to-arrow-ipc-streaming-format/expected.json")))
+  (io/as-file (io/resource "can-write-tx-to-arrow-ipc-streaming-format.json")))
 
 (t/deftest can-write-tx-to-arrow-ipc-streaming-format
   (with-open [a (RootAllocator.)]
@@ -32,9 +32,13 @@
                           :battery-temperature 89.5,
                           :cpu-avg-1min 24.81,
                           :mem-free 4.10011078E8,
-                          :mem-used 5.89988922E8}]]
+                          :mem-used 5.89988922E8}]
+                   [:sql '[:insert
+                           [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]
+                    [{:foo 1, :bar nil, :baz 3.3}
+                     {:foo 2, :bar "hello", :baz 12}]]]
                   {:tx-time (util/->instant #inst "2021")
-                   :default-valid-time (util/->instant #inst "2021")})
+                   :current-time (util/->instant #inst "2021")})
                  (c2-json/arrow-streaming->json)
                  #_(doto (->> (spit expected-file)))
                  (json/parse-string))))))

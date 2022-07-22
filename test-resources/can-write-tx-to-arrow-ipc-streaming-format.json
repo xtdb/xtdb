@@ -12,7 +12,7 @@
         "type" : {
           "name" : "union",
           "mode" : "Dense",
-          "typeIds" : [0,1,2]
+          "typeIds" : [0,1,2,3]
         },
         "children" : [{
           "name" : "put",
@@ -410,8 +410,121 @@
             },
             "children" : [ ]
           }]
+        },{
+          "name" : "sql",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "query",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "param-rows",
+            "nullable" : true,
+            "type" : {
+              "name" : "list"
+            },
+            "children" : [{
+              "name" : "$data$",
+              "nullable" : false,
+              "type" : {
+                "name" : "union",
+                "mode" : "Dense",
+                "typeIds" : [0]
+              },
+              "children" : [{
+                "name" : "struct0",
+                "nullable" : false,
+                "type" : {
+                  "name" : "struct"
+                },
+                "children" : [{
+                  "name" : "foo",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [0]
+                  },
+                  "children" : [{
+                    "name" : "i64",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "int",
+                      "bitWidth" : 64,
+                      "isSigned" : true
+                    },
+                    "children" : [ ]
+                  }]
+                },{
+                  "name" : "bar",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [0,1]
+                  },
+                  "children" : [{
+                    "name" : "null",
+                    "nullable" : true,
+                    "type" : {
+                      "name" : "null"
+                    },
+                    "children" : [ ]
+                  },{
+                    "name" : "utf8",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "utf8"
+                    },
+                    "children" : [ ]
+                  }]
+                },{
+                  "name" : "baz",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "union",
+                    "mode" : "Dense",
+                    "typeIds" : [0,1]
+                  },
+                  "children" : [{
+                    "name" : "f64",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "floatingpoint",
+                      "precision" : "DOUBLE"
+                    },
+                    "children" : [ ]
+                  },{
+                    "name" : "i64",
+                    "nullable" : false,
+                    "type" : {
+                      "name" : "int",
+                      "bitWidth" : 64,
+                      "isSigned" : true
+                    },
+                    "children" : [ ]
+                  }]
+                }]
+              }]
+            }]
+          }]
         }]
       }]
+    },{
+      "name" : "current-time",
+      "nullable" : false,
+      "type" : {
+        "name" : "timestamp",
+        "unit" : "MICROSECOND",
+        "timezone" : "UTC"
+      },
+      "children" : [ ]
     },{
       "name" : "tx-time",
       "nullable" : true,
@@ -429,12 +542,12 @@
       "name" : "tx-ops",
       "count" : 1,
       "VALIDITY" : [1],
-      "OFFSET" : [0,2],
+      "OFFSET" : [0,3],
       "children" : [{
         "name" : "$data$",
-        "count" : 2,
-        "TYPE_ID" : [0,0],
-        "OFFSET" : [0,1],
+        "count" : 3,
+        "TYPE_ID" : [0,0,3],
+        "OFFSET" : [0,1,0],
         "children" : [{
           "name" : "put",
           "count" : 2,
@@ -703,8 +816,83 @@
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]
           }]
+        },{
+          "name" : "sql",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "children" : [{
+            "name" : "query",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "OFFSET" : [0,54],
+            "DATA" : ["[:insert [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]"]
+          },{
+            "name" : "param-rows",
+            "count" : 1,
+            "VALIDITY" : [1],
+            "OFFSET" : [0,2],
+            "children" : [{
+              "name" : "$data$",
+              "count" : 2,
+              "TYPE_ID" : [0,0],
+              "OFFSET" : [0,1],
+              "children" : [{
+                "name" : "struct0",
+                "count" : 2,
+                "VALIDITY" : [1,1],
+                "children" : [{
+                  "name" : "foo",
+                  "count" : 2,
+                  "TYPE_ID" : [0,0],
+                  "OFFSET" : [0,1],
+                  "children" : [{
+                    "name" : "i64",
+                    "count" : 2,
+                    "VALIDITY" : [1,1],
+                    "DATA" : ["1","2"]
+                  }]
+                },{
+                  "name" : "bar",
+                  "count" : 2,
+                  "TYPE_ID" : [0,1],
+                  "OFFSET" : [0,0],
+                  "children" : [{
+                    "name" : "null",
+                    "count" : 1
+                  },{
+                    "name" : "utf8",
+                    "count" : 1,
+                    "VALIDITY" : [1],
+                    "OFFSET" : [0,5],
+                    "DATA" : ["hello"]
+                  }]
+                },{
+                  "name" : "baz",
+                  "count" : 2,
+                  "TYPE_ID" : [0,1],
+                  "OFFSET" : [0,0],
+                  "children" : [{
+                    "name" : "f64",
+                    "count" : 1,
+                    "VALIDITY" : [1],
+                    "DATA" : [3.3]
+                  },{
+                    "name" : "i64",
+                    "count" : 1,
+                    "VALIDITY" : [1],
+                    "DATA" : ["12"]
+                  }]
+                }]
+              }]
+            }]
+          }]
         }]
       }]
+    },{
+      "name" : "current-time",
+      "count" : 1,
+      "VALIDITY" : [1],
+      "DATA" : [1609459200000000]
     },{
       "name" : "tx-time",
       "count" : 1,
