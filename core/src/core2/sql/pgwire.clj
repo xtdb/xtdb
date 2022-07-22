@@ -11,15 +11,15 @@
             [core2.local-node :as node]
             [core2.util :as util]
             [clojure.string :as str]
-            [clojure.data.json :as json]
             [core2.api :as api]
             [clojure.tools.logging :as log]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [clojure.data.json :as json])
   (:import (java.nio.charset StandardCharsets)
            (java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException ByteArrayInputStream)
            (java.net Socket ServerSocket SocketTimeoutException SocketException)
            (java.util.concurrent Executors ExecutorService ConcurrentHashMap RejectedExecutionException TimeUnit CompletableFuture Future)
-           (java.util HashMap)
+           (java.util HashMap List)
            (org.apache.arrow.vector PeriodDuration)
            (java.time LocalDate)
            (java.nio ByteBuffer)
@@ -428,21 +428,62 @@
          (first)
          (mapv (comp name plan/unqualified-projection-symbol)))))
 
-;; json printing for xt data types
+(defn- json-clj
+  "This function is temporary, the long term goal will be to walk arrow directly to generate the json (and later monomorphic
+  results).
 
-(extend-protocol json/JSONWriter
-  PeriodDuration
-  (-write [pd out options]
-    (json/-write (str pd) out options))
-  LocalDate
-  (-write [ld out options]
-    (json/-write (str ld) out options))
-  org.apache.arrow.vector.util.Text
-  (-write [ld out options]
-    (json/-write (str ld) out options)))
+  Returns a clojure representation of the value, which - when printed as json will present itself as the desired json type string."
+  [obj]
 
-(defn- json-str ^String [obj]
-  (json/write-str obj))
+  ;; we do not extend any jackson/data.json/whatever because we want intentional printing of supported types and
+  ;; text representation (e.g consistent scientific notation, dates and times, etc).
+
+  ;; we can reduce the cost of this walk later by working directly on typed arrow vectors rather than dynamic clojure maps!
+  ;; we lean on data.json for now for encoding, quote/escape, json compat floats etc
+
+  (cond
+    ;; no ambiguity, as-is!
+    (nil? obj) nil
+    (boolean? obj) obj
+    (int? obj) obj
+
+    ;; I am allowing string pass through for now but be aware data.json escapes unicode and that may not be
+    ;; what we want at some point (e.g pass plain utf8 unless prompted as a param).
+    (string? obj) obj
+
+    ;; bigdec cast gets us consistent exponent notation E with a sign for doubles, floats and bigdecs.
+    (float? obj) (bigdec obj)
+
+    ;; localdate toString is already iso8601
+    (instance? LocalDate obj) (str obj)
+
+    ;; represent period duration as an iso8601 duration string (includes period components)
+    (instance? PeriodDuration obj)
+    (let [period (.getPeriod obj)
+          duration (.getDuration obj)]
+      (cond
+        ;; if either component is zero (likely in sql), we can just print the objects
+        ;; not normalizing the period here, should we be?
+        (.isZero period) (str duration)
+        (.isZero duration) (str period)
+
+        :else
+        ;; otherwise the duration needs to be append to the period, with a T on front.
+        ;; e.g P1DT3S - unfortunately, durations are printed with the ISO8601 PT header
+        ;; Right now doesn't matter - so just string munging.
+        (let [pstr (str period)
+              dstr (str duration)]
+          (str pstr (subs dstr 1)))))
+
+    ;; returned to handle big utf8 bufs, right now we do not handle this well, later we will be writing json with less
+    ;; copies and we may encode the quoted json string straight out of the buffer
+    (instance? org.apache.arrow.vector.util.Text obj) (str obj)
+
+    ;; java list, e.g arrow JsonStringArrayList, Vectors etc, walk its members (its a json array).
+    (instance? List obj) (mapv json-clj obj)
+
+    :else
+    (throw (Exception. (format "Unexpected type encountered by pgwire (%s)" (class obj))))))
 
 (defn- read-startup-parameters [^DataInputStream in]
   (loop [in (PushbackInputStream. in)
@@ -1185,9 +1226,9 @@
 (defn cmd-send-query-result
   [{:keys [conn-status, conn-state] :as conn} {:keys [query, ast, ^IResultSet result-set]}]
   (let [projection (mapv keyword (query-projection ast))
+        json-bytes (comp utf8 json/json-str json-clj)
         ;; todo result format
-        jsonfn (comp utf8 json-str)
-        tuplefn (if (seq projection) (apply juxt (map (partial comp jsonfn) projection)) (constantly []))
+        tuplefn (if (seq projection) (apply juxt (map (partial comp json-bytes) projection)) (constantly []))
 
         ;; this query has been cancelled!
         cancelled-by-client? #(:cancel @conn-state)

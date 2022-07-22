@@ -192,11 +192,13 @@
             {:sql (str i)
              :json-type JsonNodeType/NUMBER
              :clj-pred #(= (bigint %) (bigint i))})
-          (decimal [n]
-            {:sql (.toPlainString (bigdec n))
-             :json-type JsonNodeType/NUMBER
-             :json (.toPlainString (bigdec n))
-             :clj-pred #(= (bigdec %) (bigdec n))})]
+          (decimal [n & {:keys [add-zero]}]
+            (let [d1 (bigdec n)
+                  d2 (if add-zero (.setScale d1 1) d1)]
+              {:sql (.toPlainString d2)
+               :json-type JsonNodeType/NUMBER
+               :json (str d1)
+               :clj-pred #(= (bigdec %) (bigdec n))}))]
 
     [{:sql "null"
       :json-type JsonNodeType/NULL
@@ -231,8 +233,8 @@
      (decimal 42.0)
 
      ;; does not work no exact decimal support currently
-     #_(decimal Double/MIN_VALUE)
-     #_(decimal Double/MAX_VALUE)
+     (decimal Double/MIN_VALUE)
+     (decimal Double/MAX_VALUE :add-zero true)
 
      ;; dates / times
      ;
