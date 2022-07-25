@@ -217,33 +217,22 @@
             :when (.endsWith (str path) ".json")]
       (check-json-file (.resolve expected-path (.getFileName path)) path))))
 
-(defn ->local-node ^core2.local_node.Node [{:keys [^Path node-dir
-                                                   clock max-rows-per-block max-rows-per-chunk ^String buffers-dir]
+(defn ->local-node ^core2.local_node.Node [{:keys [^Path node-dir ^String buffers-dir
+                                                   max-rows-per-block max-rows-per-chunk]
                                             :or {buffers-dir "buffers"}}]
-  (node/start-node {:core2/clock {:clock clock}
-                    :core2.log/local-directory-log {:root-path (.resolve node-dir "log")}
+  (node/start-node {:core2.log/local-directory-log {:root-path (.resolve node-dir "log")
+                                                    :clock (->mock-clock)}
+                    :core2.tx-producer/tx-producer {:clock (->mock-clock)}
                     :core2.buffer-pool/buffer-pool {:cache-path (.resolve node-dir buffers-dir)}
                     :core2.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
                     :core2/row-counts (->> {:max-rows-per-block max-rows-per-block
                                             :max-rows-per-chunk max-rows-per-chunk}
                                            (into {} (filter val)))}))
 
-(defn ->local-submit-node ^core2.local_node.SubmitNode [{:keys [^Path node-dir clock]}]
-  (node/start-submit-node {:core2/clock {:clock clock}
-                           :core2.log/local-directory-log {:root-path (.resolve node-dir "log")}}))
-
-(def ^:dynamic ^List *clock-insts*)
-
-(defn with-recording-clock [f]
-  (binding [*clock-insts* (ArrayList.)]
-    (with-opts {:core2/clock (let [clock (-> (Clock/systemUTC)
-                                             (Clock/tick (Duration/ofNanos 1000)))]
-                               {:clock (proxy [Clock] []
-                                         (instant []
-                                           (let [i (.instant clock)]
-                                             (.add *clock-insts* i)
-                                             i)))})}
-      f)))
+(defn ->local-submit-node ^core2.local_node.SubmitNode [{:keys [^Path node-dir]}]
+  (node/start-submit-node {:core2.tx-producer/tx-producer {:clock (->mock-clock)}
+                           :core2.log/local-directory-log {:root-path (.resolve node-dir "log")
+                                                           :clock (->mock-clock)}}))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

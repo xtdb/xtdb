@@ -180,7 +180,7 @@
                 tx-time (assoc :tx-time tx-time))))))))
 
 (defmethod ig/prep-key ::tx-producer [_ opts]
-  (merge {:clock (ig/ref :core2/clock)
+  (merge {:clock (Clock/systemDefaultZone)
           :log (ig/ref :core2/log)
           :allocator (ig/ref :core2/allocator)}
          opts))

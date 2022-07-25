@@ -129,7 +129,7 @@
       "name" : "_tx-time",
       "count" : 1,
       "VALIDITY" : [1],
-      "DATA" : [1577923200000000]
+      "DATA" : [1577836800000000]
     },{
       "name" : "ops",
       "count" : 1,

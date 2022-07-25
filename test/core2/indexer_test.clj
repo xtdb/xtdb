@@ -72,14 +72,13 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (c2/map->TransactionInstant {:tx-id 7117, :tx-time (util/->instant #inst "2020-01-04")})
+        last-tx-key (c2/map->TransactionInstant {:tx-id 7117, :tx-time (util/->instant #inst "2020-01-02")})
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir
-                                       :clock (tu/->mock-clock)})]
+    (with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [system @(:!system node)
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (::os/file-system-object-store system)
@@ -193,7 +192,6 @@
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
-        mock-clock (tu/->mock-clock)
         tx-ops [[:put {:_id "foo"
                        :list [12.0 "foo"]}]
                 [:put {:_id 24.0}]
@@ -206,7 +204,7 @@
                        :struct {:a true, :c "c"}}]]]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
+    (with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
 
         (-> (c2/submit-tx node tx-ops)
@@ -218,7 +216,6 @@
 
 (t/deftest test-multi-block-metadata
   (let [node-dir (util/->path "target/multi-block-metadata")
-        mock-clock (tu/->mock-clock)
         tx0 [[:put {:_id "foo"
                     :list [12.0 "foo"]}]
              [:put {:_id #inst "2021-01-01"
@@ -231,7 +228,7 @@
                     :struct {:a true, :b {:c "c", :d "d"}}}]]]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock, :max-rows-per-block 3})]
+    (with-open [node (tu/->local-node {:node-dir node-dir, :max-rows-per-block 3})]
       (let [^ObjectStore os (tu/component node ::os/file-system-object-store)]
 
         (-> (c2/submit-tx node tx0)
@@ -291,11 +288,10 @@
                                              :where [[?id :uuid ?uuid]]})))))))
 
 (t/deftest writes-log-file
-  (let [node-dir (util/->path "target/writes-log-file")
-        mock-clock (tu/->mock-clock)]
+  (let [node-dir (util/->path "target/writes-log-file")]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
+    (with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [^ObjectStore os (::os/file-system-object-store @(:!system node))]
 
         (-> (c2/submit-tx node [[:put {:_id "foo"}]
@@ -314,11 +310,10 @@
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        mock-clock (tu/->mock-clock)
-        last-tx-key (c2/map->TransactionInstant {:tx-id 7117, :tx-time (util/->instant #inst "2020-01-04")})]
+        last-tx-key (c2/map->TransactionInstant {:tx-id 7117, :tx-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
+    (with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [object-dir (.resolve node-dir "objects")]
 
         (t/is (= last-tx-key

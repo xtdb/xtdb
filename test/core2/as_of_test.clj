@@ -4,9 +4,26 @@
             [core2.operator :as op]
             [core2.snapshot :as snap]
             [core2.test-util :as tu]
-            [core2.util :as util]))
+            [core2.util :as util])
+  (:import (java.time Clock Duration)
+           (java.util List ArrayList)))
 
-(t/use-fixtures :each tu/with-recording-clock tu/with-node)
+(def ^:dynamic ^List *vts*)
+
+(t/use-fixtures :each
+  (fn with-recording-clock [f]
+    (binding [*vts* (ArrayList.)]
+      (let [clock (-> (Clock/systemUTC)
+                      (Clock/tick (Duration/ofNanos 1000)))
+            clock (proxy [Clock] []
+                    (instant []
+                      (let [i (.instant clock)]
+                        (.add *vts* i)
+                        i)))]
+        (tu/with-opts {:core2.tx-producer/tx-producer {:clock clock}}
+          f))))
+
+  tu/with-node)
 
 (def end-of-time-zdt (util/->zdt util/end-of-time))
 
@@ -48,7 +65,7 @@
                                                              {:_valid-time-start #inst "2021"}]])
         tx-time (util/->zdt tx-time)
 
-        start-vt (util/->zdt (first tu/*clock-insts*))
+        start-vt (util/->zdt (first *vts*))
 
         db (snap/snapshot snapshot-factory tx1)]
 
@@ -72,12 +89,15 @@
   (let [snapshot-factory (tu/component ::snap/snapshot-factory)
 
         _ @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 0}]])
+
         _ (Thread/sleep 10) ; prevent same-ms transactions
+
         tx2 @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]])
+        tt2 (util/->zdt (:tx-time tx2))
 
         db (snap/snapshot snapshot-factory tx2)
 
-        [vt1 _tt1 vt2 tt2] (map util/->zdt tu/*clock-insts*)
+        [vt1 vt2] (map util/->zdt *vts*)
 
         replaced-v0-doc {:_id :doc, :version 0
                          :_valid-time-start vt1

@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [core2.api :as c2]
             [core2.client :as client]
-            [core2.log :as log]
             [core2.test-util :as tu :refer [*node*]]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
@@ -10,8 +9,10 @@
   (:import java.time.Duration
            java.util.concurrent.ExecutionException))
 
-(defmethod ig/init-key ::clock [_ _]
-  (tu/->mock-clock))
+(defn- with-mock-clocks [f]
+  (tu/with-opts {:core2.log/memory-log {:clock (tu/->mock-clock)}
+                 :core2.tx-producer/tx-producer {:clock (tu/->mock-clock)}}
+    f))
 
 (defn- with-client [f]
   (let [port (tu/free-port)
@@ -26,8 +27,8 @@
         (ig/halt! sys)))))
 
 (def api-implementations
-  (-> {:in-memory tu/with-node
-       :remote (t/join-fixtures [tu/with-node with-client])}
+  (-> {:in-memory (t/join-fixtures [with-mock-clocks tu/with-node])
+       :remote (t/join-fixtures [with-mock-clocks tu/with-node with-client])}
 
       #_(select-keys [:in-memory])
       #_(select-keys [:remote])))
@@ -40,10 +41,7 @@
       (t/testing (str node-type)
         (run-tests f)))))
 
-(t/use-fixtures :each
-  (tu/with-opts {::clock {}
-                 ::log/memory-log {:clock (ig/ref ::clock)}})
-  with-each-api-implementation)
+(t/use-fixtures :each with-each-api-implementation)
 
 (t/deftest test-status
   (t/is (map? (c2/status *node*))))

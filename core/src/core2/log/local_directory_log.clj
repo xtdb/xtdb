@@ -142,13 +142,11 @@
           (finally
             (.clear elements)))))))
 
-(s/def ::root-path ::util/path)
-
 (derive :core2.log/local-directory-log :core2/log)
 
 (defmethod ig/prep-key :core2.log/local-directory-log [_ opts]
   (-> (merge {:buffer-size 4096
-              :clock (ig/ref :core2/clock)
+              :clock (Clock/systemDefaultZone)
               :poll-sleep-duration "PT0.1S"}
              opts)
       (util/maybe-update :root-path util/->path)
