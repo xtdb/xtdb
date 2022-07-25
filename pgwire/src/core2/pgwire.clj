@@ -1,4 +1,4 @@
-(ns core2.sql.pgwire
+(ns core2.pgwire
   "Defines a postgres wire protocol (pgwire) server for xtdb.
 
   Start with (serve node)
@@ -14,7 +14,8 @@
             [core2.api :as api]
             [clojure.tools.logging :as log]
             [clojure.set :as set]
-            [clojure.data.json :as json])
+            [clojure.data.json :as json]
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import (java.nio.charset StandardCharsets)
            (java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException ByteArrayInputStream)
            (java.net Socket ServerSocket SocketTimeoutException SocketException)
@@ -1864,6 +1865,25 @@
   "Stops all running pgwire servers (from orbit, its the only way to be sure)."
   []
   (run! stop-server (vec (.values servers))))
+
+;; integrant hooks to make pgwire an xtdb module
+; e.g (node/start-node {:core2/pgwire {:port 5432}})
+; will provide a pgwire server as part of node start.
+
+(defmethod ig/prep-key :core2/pgwire [_ opts]
+  (merge {:node (ig/ref ::node/node)
+          :port 5432
+          :num-threads 42}
+         opts))
+
+(defmethod ig/init-key :core2/pgwire [_ {:keys [node, port, num-threads]}]
+  (let [srv (serve node {:port port, :num-threads num-threads})]
+    (log/info "PGWire server started on port: " port)
+    srv))
+
+(defmethod ig/halt-key! :core2/pgwire [_ pgwire]
+  (.close pgwire)
+  (log/info "PGWire server stopped"))
 
 (comment
 

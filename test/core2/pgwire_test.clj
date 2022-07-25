@@ -1,5 +1,5 @@
-(ns core2.sql.pgwire-test
-  (:require [core2.sql.pgwire :as pgwire]
+(ns core2.pgwire-test
+  (:require [core2.pgwire :as pgwire]
             [clojure.test :refer [deftest is testing] :as t]
             [core2.local-node :as node]
             [core2.test-util :as tu]
@@ -848,3 +848,16 @@
         (tu/then-await-tx *node*))
     (let [rs (q conn ["select a.a from a a"])]
       (is (= [{:a {"b" 42}}] rs)))))
+
+(deftest start-stop-as-module-test
+  (let [port (tu/free-port)]
+    (with-open [node (node/start-node {:core2/pgwire {:port port
+                                                      :num-threads 3}})]
+      (let [srv (get @#'pgwire/servers port)]
+        (is (some? srv))
+        (is (identical? (::node/node @(:!system node)) (:node srv))))
+
+      (with-open [conn (jdbc-conn)]
+        (is (= "pong" (ping conn)))))
+
+    (is (not (contains? @#'pgwire/servers port)))))
