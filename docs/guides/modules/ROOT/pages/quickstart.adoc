@@ -49,7 +49,6 @@ All System Requirements
 * macOS: 10.14.3 (Mojave) or higher
 ** MacOS 10.14.3 is a RocksDB `libc` dependency for macOS users. (See https://github.com/facebook/rocksdb/issues/5064[rocksdb#5064].)
 ** JDK: You _may_ require AdoptOpenJDK on certain macOS versions. (See https://github.com/xtdb/xtdb/issues/894[xtdb#894].)
-** Native Arm64 RocksDB Java is currently unspported on Apple M1 processors, causing an `UnsatisfiedLinkError`. M1 users can still run an x86 JVM on Rosetta, however. (See https://github.com/facebook/rocksdb/issues/7720[rocksdb#7720].)
 * Linux: No known version constraints
 * Windows: No known version constraints
 
@@ -109,15 +108,15 @@ Without setting up logging, you will see a `SLF4J: Defaulting to no-operation (N
 
 To do this in Clojure:
 
-. https://github.com/deobald/crux-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/project.clj#L10[Add Logback, SLF4J, and `tools.logging` as dependencies]
-. Set the https://github.com/deobald/crux-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/project.clj#L20[`clojure.tools.logging.factory`] JVM option
-. Create a https://github.com/deobald/crux-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/resources/logback.xml[`crux-in-a-box/resources/logback.xml`] file
+. https://github.com/deobald/xtdb-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/project.clj#L10[Add Logback, SLF4J, and `tools.logging` as dependencies]
+. Set the https://github.com/deobald/xtdb-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/project.clj#L20[`clojure.tools.logging.factory`] JVM option
+. Create a https://github.com/deobald/xtdb-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/resources/logback.xml[`xtdb-in-a-box/resources/logback.xml`] file
 
 To do this in Java:
 
-. https://github.com/deobald/crux-in-a-box/blob/1ba9ed4d85bd15e90adec46b19523b262f8480ae/java/pom.xml#L25[Add Logback, SLF4J, and `tools.logging` as dependencies]
-. Set the https://github.com/deobald/crux-in-a-box/blob/1ba9ed4d85bd15e90adec46b19523b262f8480ae/java/Makefile#L8[`clojure.tools.logging.factory` JVM option]
-. Create a https://github.com/deobald/crux-in-a-box/blob/1ba9ed4d85bd15e90adec46b19523b262f8480ae/java/src/main/resources/logback.xml[`crux-in-a-box/src/main/resources/logback.xml`] file
+. https://github.com/deobald/xtdb-in-a-box/blob/1ba9ed4d85bd15e90adec46b19523b262f8480ae/java/pom.xml#L25[Add Logback, SLF4J, and `tools.logging` as dependencies]
+. Set the https://github.com/deobald/xtdb-in-a-box/blob/1ba9ed4d85bd15e90adec46b19523b262f8480ae/java/Makefile#L8[`clojure.tools.logging.factory` JVM option]
+. Create a https://github.com/deobald/xtdb-in-a-box/blob/1ba9ed4d85bd15e90adec46b19523b262f8480ae/java/src/main/resources/logback.xml[`xtdb-in-a-box/src/main/resources/logback.xml`] file
 +++ </div></details> +++
 
 === Configure XTDB
@@ -145,6 +144,8 @@ Clojure::
       :xtdb/index-store (kv-store "data/dev/index-store")})))
 
 (def xtdb-node (start-xtdb!))
+;; note that attempting to eval this expression more than once before first calling `stop-xtdb!` will throw a RocksDB locking error
+;; this is because a node that depends on native libraries must be `.close`'d explicitly
 
 (defn stop-xtdb! []
   (.close xtdb-node))
