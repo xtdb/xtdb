@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "_tx-id",
+      "name" : "tx-id",
       "nullable" : false,
       "type" : {
         "name" : "int",
@@ -10,7 +10,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "_tx-time",
+      "name" : "tx-time",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -20,7 +20,7 @@
       "children" : [ ]
     },{
       "name" : "ops",
-      "nullable" : true,
+      "nullable" : false,
       "type" : {
         "name" : "list"
       },
@@ -31,7 +31,7 @@
           "name" : "struct"
         },
         "children" : [{
-          "name" : "_iid",
+          "name" : "iid",
           "nullable" : false,
           "type" : {
             "name" : "int",
@@ -40,8 +40,8 @@
           },
           "children" : [ ]
         },{
-          "name" : "_row-id",
-          "nullable" : false,
+          "name" : "row-id",
+          "nullable" : true,
           "type" : {
             "name" : "int",
             "bitWidth" : 64,
@@ -49,71 +49,30 @@
           },
           "children" : [ ]
         },{
-          "name" : "op",
+          "name" : "valid-time-start",
+          "nullable" : true,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
+          },
+          "children" : [ ]
+        },{
+          "name" : "valid-time-end",
+          "nullable" : true,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MICROSECOND",
+            "timezone" : "UTC"
+          },
+          "children" : [ ]
+        },{
+          "name" : "evict?",
           "nullable" : false,
           "type" : {
-            "name" : "union",
-            "mode" : "Dense",
-            "typeIds" : [0,1,2]
+            "name" : "bool"
           },
-          "children" : [{
-            "name" : "put",
-            "nullable" : false,
-            "type" : {
-              "name" : "struct"
-            },
-            "children" : [{
-              "name" : "_valid-time-start",
-              "nullable" : false,
-              "type" : {
-                "name" : "timestamp",
-                "unit" : "MICROSECOND",
-                "timezone" : "UTC"
-              },
-              "children" : [ ]
-            },{
-              "name" : "_valid-time-end",
-              "nullable" : false,
-              "type" : {
-                "name" : "timestamp",
-                "unit" : "MICROSECOND",
-                "timezone" : "UTC"
-              },
-              "children" : [ ]
-            }]
-          },{
-            "name" : "delete",
-            "nullable" : false,
-            "type" : {
-              "name" : "struct"
-            },
-            "children" : [{
-              "name" : "_valid-time-start",
-              "nullable" : false,
-              "type" : {
-                "name" : "timestamp",
-                "unit" : "MICROSECOND",
-                "timezone" : "UTC"
-              },
-              "children" : [ ]
-            },{
-              "name" : "_valid-time-end",
-              "nullable" : false,
-              "type" : {
-                "name" : "timestamp",
-                "unit" : "MICROSECOND",
-                "timezone" : "UTC"
-              },
-              "children" : [ ]
-            }]
-          },{
-            "name" : "evict",
-            "nullable" : false,
-            "type" : {
-              "name" : "struct"
-            },
-            "children" : [ ]
-          }]
+          "children" : [ ]
         }]
       }]
     }]
@@ -121,12 +80,12 @@
   "batches" : [{
     "count" : 2,
     "columns" : [{
-      "name" : "_tx-id",
+      "name" : "tx-id",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : ["0","7669"]
     },{
-      "name" : "_tx-time",
+      "name" : "tx-time",
       "count" : 2,
       "VALIDITY" : [1,1],
       "DATA" : [1577836800000000,1577923200000000]
@@ -140,55 +99,30 @@
         "count" : 4,
         "VALIDITY" : [1,1,1,1],
         "children" : [{
-          "name" : "_iid",
+          "name" : "iid",
           "count" : 4,
           "VALIDITY" : [1,1,1,1],
           "DATA" : ["0","72057594037927936","144115188075855872","216172782113783808"]
         },{
-          "name" : "_row-id",
+          "name" : "row-id",
           "count" : 4,
           "VALIDITY" : [1,1,1,1],
           "DATA" : ["0","1","2","3"]
         },{
-          "name" : "op",
+          "name" : "valid-time-start",
           "count" : 4,
-          "TYPE_ID" : [0,0,0,0],
-          "OFFSET" : [0,1,2,3],
-          "children" : [{
-            "name" : "put",
-            "count" : 4,
-            "VALIDITY" : [1,1,1,1],
-            "children" : [{
-              "name" : "_valid-time-start",
-              "count" : 4,
-              "VALIDITY" : [1,1,1,1],
-              "DATA" : [1577836800000000,1577836800000000,1577923200000000,1577923200000000]
-            },{
-              "name" : "_valid-time-end",
-              "count" : 4,
-              "VALIDITY" : [1,1,1,1],
-              "DATA" : [253402300799999999,253402300799999999,253402300799999999,253402300799999999]
-            }]
-          },{
-            "name" : "delete",
-            "count" : 0,
-            "VALIDITY" : [ ],
-            "children" : [{
-              "name" : "_valid-time-start",
-              "count" : 0,
-              "VALIDITY" : [ ],
-              "DATA" : [ ]
-            },{
-              "name" : "_valid-time-end",
-              "count" : 0,
-              "VALIDITY" : [ ],
-              "DATA" : [ ]
-            }]
-          },{
-            "name" : "evict",
-            "count" : 0,
-            "VALIDITY" : [ ]
-          }]
+          "VALIDITY" : [1,1,1,1],
+          "DATA" : [1577836800000000,1577836800000000,1577923200000000,1577923200000000]
+        },{
+          "name" : "valid-time-end",
+          "count" : 4,
+          "VALIDITY" : [1,1,1,1],
+          "DATA" : [253402300799999999,253402300799999999,253402300799999999,253402300799999999]
+        },{
+          "name" : "evict?",
+          "count" : 4,
+          "VALIDITY" : [1,1,1,1],
+          "DATA" : [0,0,0,0]
         }]
       }]
     }]

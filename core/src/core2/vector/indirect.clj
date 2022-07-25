@@ -48,6 +48,8 @@
                 (let [^DenseUnionVector v v
                       vecs (mapv #(reader-for-key % col-name) (.getChildrenFromFields v))]
                   (reify IIndirectVector
+                    (getName [_] col-name)
+
                     (isPresent [_ idx]
                       ;; TODO `(.getOffset v idx)` rather than just `idx`?
                       ;; haven't made a test fail with it yet, either way.
