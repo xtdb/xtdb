@@ -9,7 +9,8 @@
 
 (use-fixtures :each tu/with-node)
 
-
+;; flaky test - known issue to @mat
+#_
 (deftest system-time-as-of
   (let [snapshot-factory (tu/component ::snap/snapshot-factory)
 
@@ -110,6 +111,3 @@
            (op/query-ra (pt/plan-sql "SELECT foo.name, bar.also_name
                                      FROM foo, bar
                                      WHERE foo.APP_TIME OVERLAPS bar.APP_TIME") db)))))
-
-
-
