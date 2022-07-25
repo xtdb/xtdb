@@ -11,7 +11,7 @@
             [core2.sql.parser :as p]
             [core2.types :as types])
   (:import (clojure.lang IObj Var)
-           (java.time LocalDate Period Duration OffsetDateTime ZoneOffset)
+           (java.time LocalDate Period Duration OffsetDateTime ZoneOffset OffsetTime)
            java.util.HashMap
            (org.apache.arrow.vector PeriodDuration)))
 
@@ -228,13 +228,24 @@
 
     (throw (IllegalArgumentException. (str "Cannot build expression for: "  (pr-str (r/node z)))))))
 
+(defn seconds-fraction->nanos [seconds-fraction]
+  (* (* (Long/parseLong seconds-fraction)
+        (Math/pow 10 (- (count seconds-fraction))))
+     (Math/pow 10 9)))
+
 (defn create-offset-date-time
   [year month day hours minutes seconds seconds-fraction offset-hours offset-minutes]
   (OffsetDateTime/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day)
                      (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
-                     (* (* (Long/parseLong seconds-fraction) (Math/pow 10 (- (count seconds-fraction))))
-                        (Math/pow 10 9))
+                     (seconds-fraction->nanos seconds-fraction)
                      (ZoneOffset/ofHoursMinutes (Long/parseLong offset-hours) (Long/parseLong offset-minutes))))
+
+(defn create-offset-time
+  [hours minutes seconds seconds-fraction offset-hours offset-minutes]
+  (OffsetTime/of
+    (Long/parseLong hours) (Long/parseLong minutes) (Long/parseLong seconds)
+    (seconds-fraction->nanos seconds-fraction)
+    (ZoneOffset/ofHoursMinutes (Long/parseLong offset-hours) (Long/parseLong offset-minutes))))
 
 (defn expr [z]
   (maybe-add-ref
@@ -422,8 +433,64 @@
 
      [:date_literal _
       [:date_string [:date_value [:unsigned_integer year] _ [:unsigned_integer month] _ [:unsigned_integer day]]]]
-     ;;=
+     ;;=>
      (LocalDate/of (Long/parseLong year) (Long/parseLong month) (Long/parseLong day))
+
+     [:time_literal _
+      [:time_string
+       [:unquoted_time_string
+        [:time_value
+         [:unsigned_integer hours]
+         [:unsigned_integer minutes]
+         [:seconds_value
+          [:unsigned_integer seconds]]]]]]
+     ;;=>
+     (create-offset-time hours minutes seconds "0" "0" "0")
+
+     [:time_literal _
+      [:time_string
+       [:unquoted_time_string
+        [:time_value
+         [:unsigned_integer hours]
+         [:unsigned_integer minutes]
+         [:seconds_value
+          [:unsigned_integer seconds]
+          [:unsigned_integer seconds-fraction]]]]]]
+     ;;=>
+     (create-offset-time hours minutes seconds seconds-fraction "0" "0")
+
+     [:time_literal _
+      [:time_string
+       [:unquoted_time_string
+        [:time_value
+         [:unsigned_integer hours]
+         [:unsigned_integer minutes]
+         [:seconds_value
+          [:unsigned_integer seconds]]]
+        [:time_zone_interval
+         [_ sign]
+         [:unsigned_integer offset-hours]
+         [:unsigned_integer offset-minutes]]]]]
+     ;;=>
+     (create-offset-time
+       hours minutes seconds "0" (str sign offset-hours) (str sign offset-minutes))
+
+     [:time_literal _
+      [:time_string
+       [:unquoted_time_string
+        [:time_value
+         [:unsigned_integer hours]
+         [:unsigned_integer minutes]
+         [:seconds_value
+          [:unsigned_integer seconds]
+          [:unsigned_integer seconds-fraction]]]
+        [:time_zone_interval
+         [_ sign]
+         [:unsigned_integer offset-hours]
+         [:unsigned_integer offset-minutes]]]]]
+     ;;=>
+     (create-offset-time
+       hours minutes seconds seconds-fraction (str sign offset-hours) (str sign offset-minutes))
 
      [:interval_literal _
       [:interval_string [:unquoted_interval_string s]] q]

@@ -765,3 +765,13 @@
     "TIMESTAMP '3000-03-15 20:40:31.12345678-14:00'" #time/offset-date-time "3000-03-15T20:40:31.123456780-14:00"
     "TIMESTAMP '3000-03-15 20:40:31.12345678+14:00'" #time/offset-date-time "3000-03-15T20:40:31.123456780+14:00"
     "TIMESTAMP '3000-03-15 20:40:31-11:44'" #time/offset-date-time "3000-03-15T20:40:31-11:44"))
+
+(deftest test-time-literal
+  (t/are
+    [sql expected]
+    (= expected (plan-expr sql))
+    "TIME '20:40:31'" #time/offset-time "20:40:31Z"
+    "TIME '20:40:31.467'" #time/offset-time "20:40:31.467Z"
+    "TIME '20:40:31-03:44'" #time/offset-time "20:40:31-03:44"
+    "TIME '20:40:31+03:44'" #time/offset-time "20:40:31+03:44"
+    "TIME '20:40:31.467+14:00'" #time/offset-time "20:40:31.467+14:00"))
