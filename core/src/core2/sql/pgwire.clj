@@ -19,7 +19,7 @@
            (java.io Closeable ByteArrayOutputStream DataInputStream DataOutputStream InputStream IOException OutputStream PushbackInputStream EOFException ByteArrayInputStream)
            (java.net Socket ServerSocket SocketTimeoutException SocketException)
            (java.util.concurrent Executors ExecutorService ConcurrentHashMap RejectedExecutionException TimeUnit CompletableFuture Future)
-           (java.util HashMap List)
+           (java.util HashMap List Map)
            (org.apache.arrow.vector PeriodDuration)
            (java.time LocalDate)
            (java.nio ByteBuffer)
@@ -481,6 +481,10 @@
 
     ;; java list, e.g arrow JsonStringArrayList, Vectors etc, walk its members (its a json array).
     (instance? List obj) (mapv json-clj obj)
+
+    ;; maps, cannot be created from SQL yet, but working playground requires them
+    ;; we are not dealing with the possibility of non kw/string keys, xt shouldn't return maps like that right now.
+    (instance? Map obj) (update-vals obj json-clj)
 
     :else
     (throw (Exception. (format "Unexpected type encountered by pgwire (%s)" (class obj))))))

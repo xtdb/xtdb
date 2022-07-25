@@ -840,3 +840,11 @@
           (is (.next rs))
           ;; may want more fine-grained json assertions than this, it depends on data.json behaviour
           (is (= json (json-cast (json/read-str (str (.getObject rs 1)))))))))))
+
+;; maps cannot be created from SQL yet, or used as parameters - but we can read them from XT.
+(deftest map-read-test
+  (with-open [conn (jdbc-conn)]
+    (-> (c2/submit-tx *node* [[:put {:_id "map-test", :a {:b 42}}]])
+        (tu/then-await-tx *node*))
+    (let [rs (q conn ["select a.a from a a"])]
+      (is (= [{:a {"b" 42}}] rs)))))
