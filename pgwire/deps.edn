@@ -1,0 +1,5 @@
+{:deps {com.xtdb.labs/core2-api {:local/root "../api"}
+        com.xtdb.labs/core2-core {:local/root "../core"}
+
+        org.clojure/data.json {:mvn/version "2.4.0"}
+        org.clojure/tools.logging {:mvn/version "1.2.4"}}}

@@ -3,6 +3,7 @@
         com.xtdb.labs/core2-core {:local/root "core"}
         com.xtdb.labs/core2-client {:local/root "client"}
         com.xtdb.labs/core2-server {:local/root "server"}
+        com.xtdb.labs/core2-pgwire {:local/root "pgwire"}
         com.xtdb.labs/core2-datasets {:local/root "modules/datasets"}
 
         com.xtdb.labs/core2-kafka {:local/root "modules/kafka"}
