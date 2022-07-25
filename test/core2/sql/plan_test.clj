@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             core2.edn ; Enables data literals
             [core2.sql.parser :as p]
+            [core2.rewrite :as r]
             [core2.sql.plan :as plan]))
 
 (defn plan-sql
@@ -775,3 +776,16 @@
     "TIME '20:40:31-03:44'" #time/offset-time "20:40:31-03:44"
     "TIME '20:40:31+03:44'" #time/offset-time "20:40:31+03:44"
     "TIME '20:40:31.467+14:00'" #time/offset-time "20:40:31.467+14:00"))
+
+(deftest test-find-system-time-predicates
+  (t/is
+    (= (plan/find-system-time-predicates
+         (r/vector-zip
+           [:query_system_time_period_specification
+            "FOR"
+            "SYSTEM_TIME"
+            "AS"
+            "OF"
+            [:boolean_literal "TRUE"]]))
+       [{'_tx-time-start (list '<= '_tx-time-start true)}
+        {'_tx-time-end (list '> '_tx-time-end true)}])))

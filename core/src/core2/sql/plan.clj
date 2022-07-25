@@ -1249,7 +1249,7 @@
        ordinality-column (assoc :ordinality-column ordinality-column))
      [:map [{unwind-symbol (expr cve)}] nil]]))
 
-(defn- find-system-time-predicates [tp]
+(defn find-system-time-predicates [tp]
   (r/collect-stop
     (fn [tp]
       (r/zmatch
@@ -1260,7 +1260,9 @@
          "AS"
          "OF"
          timestamp]
-        [{'_tx-time-start (list '<= '_tx-time-start (expr timestamp))}]))
+        ;;=>
+        [{'_tx-time-start (list '<= '_tx-time-start (expr timestamp))}
+         {'_tx-time-end (list '> '_tx-time-end (expr timestamp))}]))
     tp))
 
 (defn- build-table-primary [tp]

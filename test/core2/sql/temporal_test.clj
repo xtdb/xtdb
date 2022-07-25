@@ -17,17 +17,23 @@
 
 (deftest system-time-as-of
 
-  (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:tx-time #inst "3000"})
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:tx-time #inst "3000"})
+        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx2"}]] {:tx-time #inst "3001"})]
 
-  (is (= []
-         (c2/sql-query
-           tu/*node*
-           "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'" {})))
+    (is (= []
+           (query-at-tx
+             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00'"
+             !tx)))
 
-  (is (= [{:last_updated "tx1"}]
-         (c2/sql-query
-           tu/*node*
-           "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '3000-01-01 00:00:00'" {}))))
+    (is (= [{:last_updated "tx1"}]
+           (query-at-tx
+             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '3000-01-01 00:00:00'"
+             !tx)))
+
+    (is (= [{:last_updated "tx1"} {:last_updated "tx2"}]
+           (query-at-tx
+             "SELECT foo.last_updated FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '3002-01-01 00:00:00'"
+             !tx2)))))
 
 (deftest app-time-period-predicates
 
