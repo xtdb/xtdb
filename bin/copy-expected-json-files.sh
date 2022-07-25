@@ -4,6 +4,7 @@
     for x in writes-log-file \
              can-build-chunk-as-arrow-ipc-file-format \
              can-handle-dynamic-cols-in-same-block \
+             can-index-sql-insert \
              multi-block-metadata \
              ; do
 

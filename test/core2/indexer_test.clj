@@ -584,3 +584,29 @@
       (t/is (thrown-with-msg? Exception #"oh no!"
                               (-> (c2/submit-tx node [[:put {:_id "foo", :count 42}]])
                                   (tu/then-await-tx node (Duration/ofSeconds 1))))))))
+
+(t/deftest test-indexes-sql-insert
+  (let [node-dir (util/->path "target/can-index-sql-insert")]
+    (util/delete-dir node-dir)
+
+    (with-open [node (tu/->local-node {:node-dir node-dir
+                                       :clock (tu/->mock-clock)})]
+      (let [system @(:!system node)
+            ^ObjectStore os (::os/file-system-object-store system)
+            ^IBufferPool bp (::bp/buffer-pool system)]
+
+        (t/is (nil? (idx/latest-tx {:object-store os, :buffer-pool bp})))
+
+        (let [last-tx-key (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")})]
+          (t/is (= last-tx-key
+                   @(c2/submit-tx node [[:sql '[:insert
+                                                [:table [{:_id ?id, :foo ?foo, :bar ?bar, :baz ?baz}]]]
+                                         '[{:?id 0, :?foo 2, :?bar "hello", :?baz 12}
+                                           {:?id 1, :?foo 1, :?bar "world", :?baz 3.3}]]])))
+
+          (t/is (= last-tx-key
+                   (tu/then-await-tx last-tx-key node (Duration/ofSeconds 1)))))
+
+        (tu/finish-chunk node)
+
+        (tu/check-json (.toPath (io/as-file (io/resource "can-index-sql-insert"))) os)))))

@@ -145,3 +145,17 @@
 (t/deftest start-and-query-empty-node-re-231-test
   (with-open [n (node/start-node {})]
     (t/is (= [] (c2/sql-query n "select a.a from a a" {})))))
+
+(t/deftest test-sql-insert-dml
+  (let [!tx (c2/submit-tx *node* [[:sql '[:insert
+                                          [:table [{:_id ?id, :name ?name, :_valid-time-start ?start-date}]]]
+                                   [{:?id :hak, :?name "Håkan", :?start-date #inst "2013"}
+                                    {:?id :jms, :?name "James", :?start-date #inst "2019-11-11"}
+                                    {:?id :mat, :?name "Matt", :?start-date #inst "2022-02-28"}
+                                    {:?id :wot, :?name "Dan", :?start-date #inst "2022-03-22"}]]])]
+
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
+
+    (t/is (= [{:name "Håkan"} {:name "James"}]
+             (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2021-01-01 00:00:00', TIMESTAMP '2022-01-01 00:00:00')"
+                           {:basis {:tx !tx}})))))

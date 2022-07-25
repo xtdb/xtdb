@@ -6,7 +6,9 @@
             [core2.buffer-pool :as bp]
             [core2.metadata :as meta]
             core2.object-store
+            [core2.operator :as op]
             core2.operator.scan
+            [core2.rewrite :refer [zmatch]]
             [core2.temporal :as temporal]
             [core2.types :as t]
             [core2.util :as util]
@@ -21,16 +23,17 @@
            core2.object_store.ObjectStore
            core2.operator.scan.ScanSource
            (core2.temporal ITemporalManager ITemporalTxIndexer)
-           (core2.vector IIndirectVector IVectorWriter)
+           (core2.vector IIndirectRelation IIndirectVector IVectorWriter)
            (core2.watermark IWatermarkManager)
            java.io.Closeable
            java.lang.AutoCloseable
            java.nio.ByteBuffer
+           java.time.Instant
            [java.util Collections Map TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap]
            [java.util.function Consumer Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types.pojo Schema]))
 
@@ -359,6 +362,58 @@
           (.logEvict log-op-idxer iid)
           (.indexEvict temporal-idxer iid))))))
 
+(defn- ->sql-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
+                                               ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
+                                               ^DenseUnionVector tx-ops-vec, ^Instant current-time]
+  (let [sql-vec (.getStruct tx-ops-vec 3)
+        ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
+        ^ListVector param-rows-vec (.getChild sql-vec "param-rows" ListVector)
+        current-time-µs (util/instant->micros current-time)]
+    (reify OpIndexer
+      (indexOp [_ tx-op-idx]
+        (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)
+              query (read-string (t/get-object query-vec sql-offset))
+              param-rows (if-not (.isNull param-rows-vec sql-offset)
+                           (t/get-object param-rows-vec sql-offset)
+                           [{}])]
+          (zmatch query
+            [:insert inner-query]
+            (doseq [param-row param-rows
+                    :let [param-row (->> param-row
+                                         (into {} (map (juxt (comp symbol key) val))))]]
+              (with-open [res (op/open-ra inner-query param-row
+                                          {:default-valid-time current-time})]
+                (.forEachRemaining res
+                                   (reify Consumer
+                                     (accept [_ in-rel]
+                                       (let [^IIndirectRelation in-rel in-rel
+                                             row-count (.rowCount in-rel)
+                                             doc-row-copiers (vec
+                                                              (for [^IIndirectVector in-col in-rel
+                                                                    :when (not (temporal/temporal-column? (.getName in-col)))]
+                                                                (doc-row-copier indexer in-col)))
+                                             id-col (.vectorForName in-rel "_id")
+                                             vt-start-rdr (some-> (.vectorForName in-rel "_valid-time-start") (.monoReader))
+                                             vt-end-rdr (some-> (.vectorForName in-rel "_valid-time-end") (.monoReader))]
+                                         (dotimes [idx row-count]
+                                           (let [row-id (.nextRowId indexer)]
+                                             (doseq [^DocRowCopier doc-row-copier doc-row-copiers]
+                                               (.copyDocRow doc-row-copier row-id idx))
+
+                                             (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
+                                                   new-entity? (.isKnownId iid-mgr eid)
+                                                   iid (.getOrCreateInternalId iid-mgr eid row-id)
+                                                   start-vt (if vt-start-rdr
+                                                              (.readLong vt-start-rdr idx)
+                                                              current-time-µs)
+                                                   end-vt (if vt-end-rdr
+                                                            (.readLong vt-end-rdr idx)
+                                                            util/end-of-time-μs)]
+                                               (.logPut log-op-idxer iid row-id start-vt end-vt)
+                                               (.indexPut temporal-idxer iid row-id start-vt end-vt new-entity?))))))))))
+
+            (throw (UnsupportedOperationException. "sql query"))))))))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -389,17 +444,21 @@
   (indexTx [this tx-key tx-root]
     (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                            (.getDataVector))
+          current-time (-> (.get ^TimeStampMicroTZVector (.getVector tx-root "current-time") 0)
+                           (util/micros->instant))
           log-op-idxer (.startTx log-indexer tx-key)
           temporal-idxer (.startTx temporal-mgr tx-key)
           put-idxer (->put-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           delete-idxer (->delete-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
-          evict-idxer (->evict-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)]
+          evict-idxer (->evict-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
+          sql-idxer (->sql-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec current-time)]
 
       (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
         (case (.getTypeId tx-ops-vec tx-op-idx)
           0 (.indexOp put-idxer tx-op-idx)
           1 (.indexOp delete-idxer tx-op-idx)
-          2 (.indexOp evict-idxer tx-op-idx)))
+          2 (.indexOp evict-idxer tx-op-idx)
+          3 (.indexOp sql-idxer tx-op-idx)))
 
       (.endTx log-op-idxer)
 
