@@ -15,7 +15,7 @@
             [core2.operator.scan :as scan]
             core2.operator.select
             core2.operator.set
-            [core2.operator.table :as table]
+            core2.operator.table
             core2.operator.top
             core2.operator.unwind
             [core2.util :as util]

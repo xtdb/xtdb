@@ -3,8 +3,8 @@
             [clojure.string :as str]
             [core2.sql.plan-test :as pt]
             [core2.api :as c2]
+            [core2.ingester :as ingest]
             [core2.operator :as op]
-            [core2.snapshot :as snap]
             [core2.test-util :as tu]))
 
 (use-fixtures :each tu/with-node)

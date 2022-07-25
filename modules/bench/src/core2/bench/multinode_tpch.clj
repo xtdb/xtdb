@@ -1,11 +1,11 @@
 (ns core2.bench.multinode-tpch
   (:require [clojure.tools.logging :as log]
             [core2.bench :as bench]
+            [core2.ingester :as ingest]
             [core2.local-node :as node]
             [core2.tpch :as tpch]
             [core2.temporal :as temporal]
             [core2.operator :as op]
-            [core2.snapshot :as snap]
             [core2.util :as util])
   (:import java.nio.file.attribute.FileAttribute
            java.nio.file.Files
@@ -36,7 +36,7 @@
                     query tpch/tpch-q1-pricing-summary-report]
                 (letfn [(test-node [k ^core2.local_node.Node node]
                           (log/info "awaiting" k "node")
-                          (let [db (snap/snapshot (util/component node ::snap/snapshot-factory)
+                          (let [db (ingest/snapshot (util/component node :core2/ingester)
                                                   last-tx (Duration/ofHours 1))]
                             (log/info "rows:"
                                       (count (op/query-ra query (merge {'$ db} (::tpch/params (meta query))))))))]

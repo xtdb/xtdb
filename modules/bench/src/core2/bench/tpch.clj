@@ -1,10 +1,10 @@
 (ns core2.bench.tpch
   (:require [clojure.tools.logging :as log]
             [core2.bench :as bench]
+            [core2.ingester :as ingest]
             [core2.local-node :as node]
             [core2.tpch :as tpch]
             [core2.operator :as op]
-            [core2.snapshot :as snap]
             [core2.util :as util])
   (:import core2.local_node.Node
            java.util.concurrent.TimeUnit))
@@ -33,7 +33,7 @@
     (bench/with-timing :ingest
       (ingest-tpch node {:scale-factor 0.01}))
 
-    (let [db (snap/snapshot (util/component node ::snap/snapshot-factory))]
+    (let [db (ingest/snapshot (util/component node :core2/ingester))]
       (bench/with-timing :cold-queries
         (query-tpch db))
 
@@ -53,7 +53,7 @@
         (bench/with-timing :ingest
           (ingest-tpch node opts))
 
-        (let [db (snap/snapshot (util/component node ::snap/snapshot-factory))]
+        (let [db (ingest/snapshot (util/component node :core2/ingester))]
           (bench/with-timing :cold-queries
             (query-tpch db))
 

@@ -10,7 +10,6 @@
             [core2.logical-plan :as lp]
             [core2.metadata :as meta]
             [core2.rewrite :refer [zmatch]]
-            core2.snapshot
             [core2.temporal :as temporal]
             [core2.types :as t]
             [core2.util :as util]
@@ -21,7 +20,6 @@
            core2.ICursor
            core2.metadata.IMetadataManager
            core2.operator.IRelationSelector
-           core2.snapshot.Snapshot
            [core2.temporal ITemporalManager TemporalRoots]
            (core2.watermark IWatermark IWatermarkManager)
            [java.util HashMap LinkedList List Map Queue]
@@ -42,6 +40,9 @@
                              :min-count 1)))
 
 (set! *unchecked-math* :warn-on-boxed)
+
+(deftype Snapshot [metadata-mgr temporal-mgr watermark-mgr buffer-pool
+                   ^TransactionInstant tx])
 
 (def ^:dynamic *column->pushdown-bloom* {})
 

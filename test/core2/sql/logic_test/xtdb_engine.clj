@@ -1,8 +1,8 @@
 (ns core2.sql.logic-test.xtdb-engine
   (:require [clojure.string :as str]
             [core2.api :as c2]
+            [core2.ingester :as ingest]
             [core2.rewrite :as r]
-            [core2.snapshot :as snap]
             [core2.sql.parser :as p]
             [core2.sql.analyze :as sem]
             [core2.sql.plan :as plan]
@@ -152,8 +152,8 @@
     :create-view (create-view node record)))
 
 (defn execute-query-expression [this from-subquery]
-  (let [snapshot-factory (tu/component this ::snap/snapshot-factory)
-        db (snap/snapshot snapshot-factory)]
+  (let [ingester (tu/component this :core2/ingester)
+        db (ingest/snapshot ingester)]
     (binding [r/*memo* (HashMap.)]
       (let [tree (normalize-query (:tables this) from-subquery)
             projection (->> (sem/projected-columns (r/$ (r/vector-zip tree) 1))

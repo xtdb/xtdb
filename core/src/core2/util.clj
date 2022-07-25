@@ -1,7 +1,9 @@
 (ns core2.util
   (:require [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            core2.api)
   (:import clojure.lang.MapEntry
+           core2.api.TransactionInstant
            core2.ICursor
            [java.io ByteArrayOutputStream File]
            java.lang.AutoCloseable
@@ -12,7 +14,7 @@
            java.nio.charset.StandardCharsets
            [java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.time Duration Instant ZoneId ZonedDateTime OffsetDateTime]
+           [java.time Duration Instant OffsetDateTime ZoneId ZonedDateTime]
            java.time.temporal.ChronoUnit
            [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
            [java.util.concurrent CompletableFuture ExecutorService Executors ThreadFactory TimeUnit]

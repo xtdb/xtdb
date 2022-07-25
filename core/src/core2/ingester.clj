@@ -4,13 +4,16 @@
             [core2.await :as await]
             core2.indexer
             core2.log
+            core2.operator.scan
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.api.TransactionInstant
            core2.indexer.TransactionIndexer
+           core2.operator.scan.Snapshot
            [core2.log Log LogSubscriber]
            java.lang.AutoCloseable
-           java.util.concurrent.PriorityBlockingQueue
+           java.time.Duration
+           (java.util.concurrent CompletableFuture PriorityBlockingQueue TimeUnit)
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.TimeStampMicroTZVector
            org.apache.arrow.vector.ipc.ArrowStreamReader))
@@ -18,16 +21,22 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface Ingester
   (^core2.api.TransactionInstant latestCompletedTx [])
-  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^core2.api.TransactionInstant tx]))
+  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^core2.api.TransactionInstant tx])
+  (^java.util.concurrent.CompletableFuture #_<Snapshot> snapshot [^core2.api.TransactionInstant tx]))
 
 (defmethod ig/prep-key :core2/ingester [_ opts]
   (-> (merge {:allocator (ig/ref :core2/allocator)
               :log (ig/ref :core2/log)
-              :indexer (ig/ref :core2.indexer/indexer)}
+              :indexer (ig/ref :core2.indexer/indexer)
+              :metadata-mgr (ig/ref :core2.metadata/metadata-manager)
+              :temporal-mgr (ig/ref :core2.temporal/temporal-manager)
+              :watermark-mgr (ig/ref :core2.watermark/watermark-manager)
+              :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)}
              opts)
       (util/maybe-update :poll-sleep-duration util/->duration)))
 
-(defmethod ig/init-key :core2/ingester [_ {:keys [^BufferAllocator allocator, ^Log log, ^TransactionIndexer indexer]}]
+(defmethod ig/init-key :core2/ingester [_ {:keys [^BufferAllocator allocator, ^Log log, ^TransactionIndexer indexer
+                                                  metadata-mgr temporal-mgr watermark-mgr buffer-pool]}]
   (let [!cancel-hook (promise)
         awaiters (PriorityBlockingQueue.)
         !ingester-error (atom nil)]
@@ -81,9 +90,35 @@
                                    (.latestCompletedTx this))
                               awaiters))
 
+      (snapshot [this tx]
+        (-> (if tx
+              (.awaitTxAsync this tx)
+              (CompletableFuture/completedFuture (.latestCompletedTx this)))
+            (util/then-apply (fn [tx]
+                               (assert watermark-mgr)
+                               (Snapshot. metadata-mgr temporal-mgr watermark-mgr buffer-pool tx)))))
+
       AutoCloseable
       (close [_]
         (util/try-close @!cancel-hook)))))
 
 (defmethod ig/halt-key! :core2/ingester [_ ingester]
   (util/try-close ingester))
+
+(defn snapshot-async ^java.util.concurrent.CompletableFuture [^Ingester ingester, tx]
+  (-> (if-not (instance? CompletableFuture tx)
+        (CompletableFuture/completedFuture tx)
+        tx)
+      (util/then-compose (fn [tx]
+                           (.snapshot ingester tx)))))
+
+(defn snapshot
+  ([^Ingester ingester]
+   (snapshot ingester nil))
+
+  ([^Ingester ingester, tx]
+   (snapshot ingester tx nil))
+
+  ([^Ingester ingester, tx, ^Duration timeout]
+   @(-> (snapshot-async ingester tx)
+        (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS)))))
