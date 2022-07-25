@@ -23,7 +23,6 @@
            (org.apache.arrow.vector PeriodDuration)
            (java.time LocalDate)
            (java.nio ByteBuffer)
-           (com.fasterxml.jackson.databind.util ByteBufferBackedInputStream)
            (java.util.function Function BiFunction BiConsumer)
            (java.lang Thread$State)
            (clojure.lang PersistentQueue)
