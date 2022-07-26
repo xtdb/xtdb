@@ -3,7 +3,6 @@
             [core2.api :as api]
             [core2.datalog :as d]
             [core2.error :as err]
-            [core2.indexer :as idx]
             core2.ingester
             [core2.operator :as op]
             [core2.snapshot :as snap]
@@ -12,13 +11,12 @@
             [core2.tx-producer :as txp]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import (core2.indexer TransactionIndexer)
-           core2.ingester.Ingester
+  (:import core2.ingester.Ingester
            (core2.snapshot ISnapshotFactory)
            (core2.tx_producer ITxProducer)
            (java.io Closeable Writer)
            (java.lang AutoCloseable)
-           (java.time Clock Duration Instant)
+           (java.time Duration Instant)
            (java.util.concurrent CompletableFuture TimeUnit)
            (org.apache.arrow.memory BufferAllocator RootAllocator)))
 
@@ -29,8 +27,7 @@
   (await-tx-async
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [node tx]))
 
-(defrecord Node [^TransactionIndexer indexer
-                 ^Ingester ingester
+(defrecord Node [^Ingester ingester
                  ^ISnapshotFactory snapshot-factory
                  ^ITxProducer tx-producer
                  !system
@@ -76,7 +73,7 @@
                              (.awaitTxAsync ingester tx)))))
 
   api/PStatus
-  (status [_] {:latest-completed-tx (.latestCompletedTx indexer)})
+  (status [_] {:latest-completed-tx (.latestCompletedTx ingester)})
 
   api/PSubmitNode
   (submit-tx [_ tx-ops]
@@ -94,8 +91,7 @@
 (defmethod pp/simple-dispatch Node [it] (print-method it *out*))
 
 (defmethod ig/prep-key ::node [_ opts]
-  (merge {:indexer (ig/ref ::idx/indexer)
-          :ingester (ig/ref :core2/ingester)
+  (merge {:ingester (ig/ref :core2/ingester)
           :snapshot-factory (ig/ref ::snap/snapshot-factory)
           :tx-producer (ig/ref ::txp/tx-producer)}
          opts))
@@ -117,8 +113,8 @@
   (let [system (-> (into {::node {}
                           :core2/allocator {}
                           :core2/row-counts {}
-                          ::idx/indexer {}
-                          ::idx/internal-id-manager {}
+                          :core2.indexer/indexer {}
+                          :core2.indexer/internal-id-manager {}
                           :core2/ingester {}
                           :core2.metadata/metadata-manager {}
                           :core2.temporal/temporal-manager {}

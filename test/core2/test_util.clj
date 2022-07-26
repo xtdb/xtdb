@@ -81,7 +81,7 @@
   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system node))))
 
 (defn finish-chunk [^Node node]
-  (.finishChunk ^core2.indexer.Indexer (.indexer node))
+  (.finishChunk ^core2.indexer.Indexer (component node :core2.indexer/indexer))
   (await-temporal-snapshot-build node))
 
 (defn write-vec! [^ValueVector v, vs]
