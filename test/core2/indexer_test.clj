@@ -83,7 +83,6 @@
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (::os/file-system-object-store system)
             ^IBufferPool bp (::bp/buffer-pool system)
-            ^InternalIdManager iid-mgr (::idx/internal-id-manager system)
             ^IWatermarkManager wm-mgr (::wm/watermark-manager system)]
 
         (t/is (nil? (idx/latest-tx {:object-store os, :buffer-pool bp})))
@@ -106,15 +105,6 @@
                        [(key first-column) (.getRowCount ^VectorSchemaRoot (val first-column))]))
               (t/is (= ["time" 2]
                        [(key last-column) (.getRowCount ^VectorSchemaRoot (val last-column))])))))
-
-        (t/testing "temporal"
-          (t/is (= {"device-info-demo000000" 0
-                    "reading-demo000000" 72057594037927936
-                    "device-info-demo000001" 144115188075855872
-                    "reading-demo000001" 216172782113783808}
-                   (.id->internal-id iid-mgr)))
-          (with-open [^Watermark watermark (.getWatermark wm-mgr)]
-            (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
 
         (tu/finish-chunk node)
 

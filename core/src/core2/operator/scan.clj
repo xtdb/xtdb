@@ -13,14 +13,15 @@
             [core2.temporal :as temporal]
             [core2.types :as t]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            core2.watermark)
   (:import clojure.lang.MapEntry
            core2.api.TransactionInstant
            core2.buffer_pool.IBufferPool
            core2.ICursor
            core2.metadata.IMetadataManager
            core2.operator.IRelationSelector
-           [core2.temporal ITemporalManager TemporalRoots]
+           core2.temporal.TemporalRoots
            (core2.watermark IWatermark IWatermarkManager)
            [java.util HashMap LinkedList List Map Queue]
            [java.util.function BiFunction Consumer Function]
@@ -144,10 +145,10 @@
                                          1)))))))
         res))))
 
-(defn- ->temporal-roots ^core2.temporal.TemporalRoots [^ITemporalManager temporal-manager ^IWatermark watermark ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
+(defn- ->temporal-roots ^core2.temporal.TemporalRoots [^IWatermark watermark ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
   (let [temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range atemporal-row-id-bitmap)
         temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range atemporal-row-id-bitmap)]
-    (.createTemporalRoots temporal-manager watermark (filterv temporal/temporal-column? col-names)
+    (.createTemporalRoots watermark (filterv temporal/temporal-column? col-names)
                           temporal-min-range
                           temporal-max-range
                           atemporal-row-id-bitmap)))
@@ -197,7 +198,6 @@
 
 (deftype ScanCursor [^BufferAllocator allocator
                      ^IBufferPool buffer-pool
-                     ^ITemporalManager temporal-manager
                      ^IMetadataManager metadata-manager
                      ^IWatermark watermark
                      ^Queue #_<ChunkMatch> matching-chunks
@@ -215,7 +215,7 @@
                 (loop []
                   (if-let [in-roots (next-roots real-col-names chunks)]
                     (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-names col-preds in-roots params)
-                          temporal-roots (->temporal-roots temporal-manager watermark col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
+                          temporal-roots (->temporal-roots watermark col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
                       (or (try
                             (let [row-id-bitmap (->temporal-row-id-bitmap allocator col-names col-preds temporal-roots atemporal-row-id-bitmap params)
                                   read-rel (align-roots col-names in-roots temporal-roots row-id-bitmap)]
@@ -324,14 +324,13 @@
                        ^IWatermarkManager wm-mgr (.watermark-mgr snapshot)
                        metadata-mgr (.metadata-mgr snapshot)
                        buffer-pool (.buffer-pool snapshot)
-                       temporal-mgr (.temporal-mgr snapshot)
                        watermark (.getWatermark wm-mgr)]
                    (try
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                            [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
                                                                      (apply-snapshot-tx! snapshot col-preds))
                            matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr metadata-pred) []))]
-                       (-> (ScanCursor. allocator buffer-pool temporal-mgr metadata-mgr watermark
+                       (-> (ScanCursor. allocator buffer-pool metadata-mgr watermark
                                         matching-chunks (mapv name col-names) col-preds
                                         temporal-min-range temporal-max-range params
                                         #_chunks nil #_live-chunk-done? false)

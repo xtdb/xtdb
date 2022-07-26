@@ -2,11 +2,13 @@
   (:require [clojure.tools.logging :as log]
             core2.api
             [core2.blocks :as blocks]
+            core2.temporal
             [core2.types :as types]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            core2.api.TransactionInstant
+           core2.temporal.ITemporalRootsSource
            java.lang.AutoCloseable
            [java.util Collections Map Set]
            java.util.function.Function
@@ -19,15 +21,24 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IWatermark
   (columnType [^String columnName])
-  (liveSlices [^Iterable columnNames]))
+  (liveSlices [^Iterable columnNames])
+
+  ;; this is a lot of duplication - I guess we'd extend interfaces here if we were in Java
+  (^core2.temporal.TemporalRoots createTemporalRoots [^java.util.List columns
+                                                      ^longs temporal-min-range
+                                                      ^longs temporal-max-range
+                                                      ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IWatermarkManager
   (^core2.watermark.IWatermark getWatermark [])
-  (^void setWatermark [^long chunkIdx, ^core2.api.TransactionInstant txKey, ^java.util.Map liveRoots, temporalWatermark]))
+  (^void setWatermark [^long chunkIdx,
+                       ^core2.api.TransactionInstant txKey,
+                       ^java.util.Map liveRoots,
+                       ^core2.temporal.ITemporalRootsSource temporalWatermark]))
 
 (defrecord Watermark [^long chunk-idx, ^TransactionInstant tx-key, ^Map live-roots
-                      ^Object temporal-watermark ^AtomicInteger ref-count ^int max-rows-per-block ^Map thread->count]
+                      ^ITemporalRootsSource temporal-watermark ^AtomicInteger ref-count ^int max-rows-per-block ^Map thread->count]
   IWatermark
   (columnType [_ col-name]
     (when-let [^VectorSchemaRoot root (.get live-roots col-name)]
@@ -42,6 +53,11 @@
                     (let [row-counts (blocks/row-id-aligned-blocks root chunk-idx max-rows-per-block)]
                       (MapEntry/create col-name (blocks/->slices root row-counts))))))
           col-names))
+
+  (createTemporalRoots [_ columns temporal-min-range temporal-max-range row-id-bitmap]
+    (.createTemporalRoots temporal-watermark columns
+                          temporal-min-range temporal-max-range
+                          row-id-bitmap))
 
   AutoCloseable
   (close [_]
