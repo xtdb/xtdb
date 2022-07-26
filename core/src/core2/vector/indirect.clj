@@ -2,8 +2,7 @@
   (:require [core2.vector :as vec]
             [core2.types :as ty]
             [core2.util :as util])
-  (:import core2.DenseUnionUtil
-           [core2.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader]
+  (:import [core2.vector IIndirectRelation IIndirectVector IListElementCopier IListReader IRowCopier IStructReader]
            [java.util LinkedHashMap Map]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
@@ -202,9 +201,13 @@
         (dotimes [idx (alength idxs)]
           (let [src-idx (aget idxs idx)
                 type-id (.getTypeId from-duv src-idx)
-                dest-offset (DenseUnionUtil/writeTypeId to-duv idx type-id)
-                tp (.makeTransferPair (.getVectorByType from-duv type-id) (.getVectorByType to-duv type-id))]
-            (.copyValueSafe tp (.getOffset from-duv src-idx) dest-offset))))
+                dest-sub-vec (.getVectorByType to-duv type-id)
+                dest-offset (.getValueCount dest-sub-vec)
+                tp (.makeTransferPair (.getVectorByType from-duv type-id) dest-sub-vec)]
+            (.setTypeId to-duv idx type-id)
+            (.setOffset to-duv idx dest-offset)
+            (.copyValueSafe tp (.getOffset from-duv src-idx) dest-offset)
+            (.setValueCount to-duv (inc idx)))))
       (let [tp (.makeTransferPair v out-vec)]
         (dotimes [idx (alength idxs)]
           (.copyValueSafe tp (aget idxs idx) idx))))

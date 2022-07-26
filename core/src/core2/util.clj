@@ -2,7 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log])
   (:import clojure.lang.MapEntry
-           [core2 DenseUnionUtil ICursor]
+           core2.ICursor
            [java.io ByteArrayOutputStream File]
            java.lang.AutoCloseable
            java.lang.reflect.Method
@@ -22,8 +22,7 @@
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator]
            [org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil]
-           [org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
+           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
            org.roaringbitmap.RoaringBitmap))
