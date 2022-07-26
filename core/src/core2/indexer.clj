@@ -137,14 +137,13 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface ILogOpIndexer
-  (^void logPut [^long iid, ^long rowId, ^long txOpIdx])
-  (^void logDelete [^long iid, ^long txOpIdx])
+  (^void logPut [^long iid, ^long rowId, ^long vtStart, ^long vtEnd])
+  (^void logDelete [^long iid, ^long vtStart, ^long vtEnd])
   (^void logEvict [^long iid])
   (^void endTx []))
 
 (definterface ILogIndexer
-  (^core2.indexer.ILogOpIndexer startTx [^core2.api.TransactionInstant txKey,
-                                         ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
+  (^core2.indexer.ILogOpIndexer startTx [^core2.api.TransactionInstant txKey])
   (^java.nio.ByteBuffer writeLog [])
   (^void clear [])
   (^void close []))
@@ -172,58 +171,46 @@
         ^BitVector evict-vec (.getVector evict-writer)]
 
     (reify ILogIndexer
-      (startTx [_ tx-key tx-root]
+      (startTx [_ tx-key]
         (let [tx-idx (.getRowCount log-root)]
           (.startValue ops-writer)
           (.setSafe tx-id-vec tx-idx (.tx-id tx-key))
           (.setSafe tx-time-vec tx-idx (util/instant->micros (.tx-time tx-key)))
 
-          (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
-                                                 (.getDataVector))
-                tx-put-vec (.getStruct tx-ops-vec 0)
-                tx-put-vt-start-vec (.getChild tx-put-vec "_valid-time-start")
-                tx-put-vt-end-vec (.getChild tx-put-vec "_valid-time-end")
+          (reify ILogOpIndexer
+            (logPut [_ iid row-id vt-start vt-end]
+              (let [op-idx (.startValue ops-data-writer)]
+                (.setSafe row-id-vec op-idx row-id)
+                (.setSafe iid-vec op-idx iid)
+                (.setSafe vt-start-vec op-idx vt-start)
+                (.setSafe vt-end-vec op-idx vt-end)
+                (.setSafe evict-vec op-idx 0)
 
-                tx-delete-vec (.getStruct tx-ops-vec 1)
-                tx-delete-vt-start-vec (.getChild tx-delete-vec "_valid-time-start")
-                tx-delete-vt-end-vec (.getChild tx-delete-vec "_valid-time-end")]
+                (.endValue ops-data-writer)))
 
-            (reify ILogOpIndexer
-              (logPut [_ iid row-id tx-op-idx]
-                (let [op-idx (.startValue ops-data-writer)
-                      src-offset (.getOffset tx-ops-vec tx-op-idx)]
-                  (.setSafe row-id-vec op-idx row-id)
-                  (.setSafe iid-vec op-idx iid)
-                  (.copyFromSafe vt-start-vec src-offset op-idx tx-put-vt-start-vec)
-                  (.copyFromSafe vt-end-vec src-offset op-idx tx-put-vt-end-vec)
-                  (.setSafe evict-vec op-idx 0)
+            (logDelete [_ iid vt-start vt-end]
+              (let [op-idx (.startValue ops-data-writer)]
+                (.setSafe iid-vec op-idx iid)
+                (.setNull row-id-vec op-idx)
+                (.setSafe vt-start-vec op-idx vt-start)
+                (.setSafe vt-end-vec op-idx vt-end)
+                (.setSafe evict-vec op-idx 0)
 
-                  (.endValue ops-data-writer)))
+                (.endValue ops-data-writer)))
 
-              (logDelete [_ iid tx-op-idx]
-                (let [op-idx (.startValue ops-data-writer)
-                      src-offset (.getOffset tx-ops-vec tx-op-idx)]
-                  (.setSafe iid-vec op-idx iid)
-                  (.setNull row-id-vec op-idx)
-                  (.copyFromSafe vt-start-vec src-offset op-idx tx-delete-vt-start-vec)
-                  (.copyFromSafe vt-end-vec src-offset op-idx tx-delete-vt-end-vec)
-                  (.setSafe evict-vec op-idx 0)
+            (logEvict [_ iid]
+              (let [op-idx (.startValue ops-data-writer)]
+                (.setSafe iid-vec op-idx iid)
+                (.setNull row-id-vec op-idx)
+                (.setNull vt-start-vec op-idx)
+                (.setNull vt-end-vec op-idx)
+                (.setSafe evict-vec op-idx 1))
 
-                  (.endValue ops-data-writer)))
+              (.endValue ops-data-writer))
 
-              (logEvict [_ iid]
-                (let [op-idx (.startValue ops-data-writer)]
-                  (.setSafe iid-vec op-idx iid)
-                  (.setNull row-id-vec op-idx)
-                  (.setNull vt-start-vec op-idx)
-                  (.setNull vt-end-vec op-idx)
-                  (.setSafe evict-vec op-idx 1))
-
-                (.endValue ops-data-writer))
-
-              (endTx [_]
-                (.endValue ops-writer)
-                (.setRowCount log-root (inc tx-idx)))))))
+            (endTx [_]
+              (.endValue ops-writer)
+              (.setRowCount log-root (inc tx-idx))))))
 
       (writeLog [_]
         (.syncSchema log-root)
@@ -330,13 +317,12 @@
                          (.getChild "_id"))
               eid (t/get-object id-vec leg-offset)
               new-entity? (not (.isKnownId iid-mgr eid))
-              iid (.getOrCreateInternalId iid-mgr eid row-id)]
+              iid (.getOrCreateInternalId iid-mgr eid row-id)
+              start-vt (.get valid-time-start-vec put-offset)
+              end-vt (.get valid-time-end-vec put-offset)]
           (.copyDocRow doc-copier row-id put-offset)
-          (.logPut log-op-idxer iid row-id tx-op-idx)
-          (.indexPut temporal-idxer iid row-id
-                     (.get valid-time-start-vec put-offset)
-                     (.get valid-time-end-vec put-offset)
-                     new-entity?))))))
+          (.logPut log-op-idxer iid row-id start-vt end-vt)
+          (.indexPut temporal-idxer iid row-id start-vt end-vt new-entity?))))))
 
 (defn- ->delete-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
                                                   ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer,
@@ -351,12 +337,11 @@
               delete-offset (.getOffset tx-ops-vec tx-op-idx)
               eid (t/get-object id-vec delete-offset)
               new-entity? (not (.isKnownId iid-mgr eid))
-              iid (.getOrCreateInternalId iid-mgr eid row-id)]
-          (.logDelete log-op-idxer iid tx-op-idx)
-          (.indexDelete temporal-idxer iid row-id
-                        (.get valid-time-start-vec delete-offset)
-                        (.get valid-time-end-vec delete-offset)
-                        new-entity?))))))
+              iid (.getOrCreateInternalId iid-mgr eid row-id)
+              start-vt (.get valid-time-start-vec delete-offset)
+              end-vt (.get valid-time-end-vec delete-offset)]
+          (.logDelete log-op-idxer iid start-vt end-vt)
+          (.indexDelete temporal-idxer iid row-id start-vt end-vt new-entity?))))))
 
 (defn- ->evict-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
                                                  ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
@@ -400,7 +385,7 @@
   (indexTx [this tx-key tx-root]
     (let [^DenseUnionVector tx-ops-vec (-> ^ListVector (.getVector tx-root "tx-ops")
                                            (.getDataVector))
-          log-op-idxer (.startTx log-indexer tx-key tx-root)
+          log-op-idxer (.startTx log-indexer tx-key)
           temporal-idxer (.startTx temporal-mgr tx-key)
           put-idxer (->put-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           delete-idxer (->delete-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
