@@ -4,14 +4,12 @@
             core2.buffer-pool
             [core2.expression.comparator :as expr.comp]
             core2.object-store
-            core2.watermark
             [core2.types :as t]
             [core2.util :as util]
             [core2.vector.indirect :as iv]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
-           core2.watermark.Watermark
            core2.ICursor
            java.io.Closeable
            (java.util HashMap List SortedSet)
@@ -438,9 +436,8 @@
 (defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, f]
   (.withMetadata metadata-mgr chunk-idx (util/->jbifn f)))
 
-(defn matching-chunks [^IMetadataManager metadata-mgr, ^Watermark watermark, metadata-pred]
-  (->> (for [^long chunk-idx (.knownChunks metadata-mgr)
-             :while (or (nil? watermark) (< chunk-idx (.chunk-idx watermark)))]
+(defn matching-chunks [^IMetadataManager metadata-mgr, metadata-pred]
+  (->> (for [^long chunk-idx (.knownChunks metadata-mgr)]
          (with-metadata metadata-mgr chunk-idx metadata-pred))
        vec
        (into [] (keep deref))))

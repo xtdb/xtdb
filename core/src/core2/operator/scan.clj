@@ -318,7 +318,7 @@
                                    (vals selects)))]
 
     {:col-types col-types
-     :->cursor (fn [{:keys [allocator srcs params default-valid-time]}]
+     :->cursor (fn [{:keys [allocator srcs params]}]
                  (let [^Snapshot snapshot (get srcs src-key)
                        ^IWatermarkManager wm-mgr (.watermark-mgr snapshot)
                        metadata-mgr (.metadata-mgr snapshot)
@@ -329,7 +329,7 @@
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                            [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
                                                                      (apply-snapshot-tx! snapshot col-preds))
-                           matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr watermark metadata-pred) []))]
+                           matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr metadata-pred) []))]
                        (-> (ScanCursor. allocator buffer-pool temporal-mgr metadata-mgr watermark
                                         matching-chunks (mapv name col-names) col-preds
                                         temporal-min-range temporal-max-range params

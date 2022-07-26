@@ -33,7 +33,6 @@
     (tu/finish-chunk node)
 
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^IWatermarkManager wm-mgr (tu/component node ::wm/watermark-manager)
           ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
@@ -45,17 +44,17 @@
 
         (let [db (snap/snapshot snapshot-factory)]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
-          (with-open [^Watermark watermark (.getWatermark wm-mgr)]
-            (let [expected-match [(meta/map->ChunkMatch
-                                   {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]]
-              (t/is (= expected-match
-                       (meta/matching-chunks metadata-mgr watermark
-                                             (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})))
-                    "only needs to scan chunk 1, block 1")
-              (t/is (= expected-match
-                       (meta/matching-chunks metadata-mgr watermark
-                                             (expr.meta/->metadata-selector '(> name ?name) '#{name} {'?name "Ivan"})))
-                    "only needs to scan chunk 1, block 1")))
+
+          (let [expected-match [(meta/map->ChunkMatch
+                                 {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]]
+            (t/is (= expected-match
+                     (meta/matching-chunks metadata-mgr
+                                           (expr.meta/->metadata-selector '(> name "Ivan") '#{name} {})))
+                  "only needs to scan chunk 1, block 1")
+            (t/is (= expected-match
+                     (meta/matching-chunks metadata-mgr
+                                           (expr.meta/->metadata-selector '(> name ?name) '#{name} {'?name "Ivan"})))
+                  "only needs to scan chunk 1, block 1"))
 
           (-> (c2/submit-tx node [[:put {:name "Jeremy", :_id :jdt}]])
               (tu/then-await-tx node))
@@ -85,29 +84,27 @@
 
     (tu/finish-chunk node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^IWatermarkManager wm-mgr (tu/component node ::wm/watermark-manager)
           ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)
           db (snap/snapshot snapshot-factory)]
-      (with-open [^Watermark watermark (.getWatermark wm-mgr)]
-        (t/is (= #{0 3} (.knownChunks metadata-mgr)))
-        (let [expected-match [(meta/map->ChunkMatch
-                               {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
-          (t/is (= expected-match
-                   (meta/matching-chunks metadata-mgr watermark
-                                         (expr.meta/->metadata-selector '(= name "Ivan") '#{name} {})))
-                "only needs to scan chunk 0, block 0")
+      (t/is (= #{0 3} (.knownChunks metadata-mgr)))
+      (let [expected-match [(meta/map->ChunkMatch
+                             {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
+        (t/is (= expected-match
+                 (meta/matching-chunks metadata-mgr
+                                       (expr.meta/->metadata-selector '(= name "Ivan") '#{name} {})))
+              "only needs to scan chunk 0, block 0")
 
-          (t/is (= expected-match
-                   (meta/matching-chunks metadata-mgr watermark
-                                         (expr.meta/->metadata-selector '(= name ?name) '#{name} {'?name "Ivan"})))
-                "only needs to scan chunk 0, block 0"))
+        (t/is (= expected-match
+                 (meta/matching-chunks metadata-mgr
+                                       (expr.meta/->metadata-selector '(= name ?name) '#{name} {'?name "Ivan"})))
+              "only needs to scan chunk 0, block 0"))
 
-        (t/is (= #{{:name "Ivan"}}
-                 (set (op/query-ra '[:scan [{name (= name "Ivan")}]] db))))
+      (t/is (= #{{:name "Ivan"}}
+               (set (op/query-ra '[:scan [{name (= name "Ivan")}]] db))))
 
-        (t/is (= #{{:name "Ivan"}}
-                 (set (op/query-ra '[:scan [{name (= name ?name)}]]
-                                   {'$ db, '?name "Ivan"}))))))))
+      (t/is (= #{{:name "Ivan"}}
+               (set (op/query-ra '[:scan [{name (= name ?name)}]]
+                                 {'$ db, '?name "Ivan"})))))))
 
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
