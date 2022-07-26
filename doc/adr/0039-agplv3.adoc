@@ -1,0 +1,163 @@
+= 39. Affero GNU Public License, Version 3
+
+Date: 2022-07-26
+
+== Status
+
+Accepted.
+
+
+== Context
+
+XTDB 1.x is most often embedded within an application, similar to SQLite.
+In many ways, XTDB 1.x is more like a Clojure library than a database.
+Embedded library code like this requires a permissive license.
+XTDB 1.x is licensed under The MIT License and requires contributors to sign a CLA.
+
+Core2 operates on different underlying principles.
+Core2 intends to be remote-first and SQL-first.
+While it can still be embedded in applications, it's more likely to run as a separate service.
+
+XTDB is commercial open source.
+The goal of producing XTDB is that it will create self-sustaining revenue so that XTDB itself can continue to grow.
+Commercial open source often struggles to survive under permissive licenses, since competitors can (and do) create proprietary derivatives.
+
+In the interest of eliminating the possibility of proprietary derivatives, a stricter license than MIT is required.
+
+
+=== The MIT License or ISC or Apache License Version 2.0
+
+Pros:
+
+* Open Source (OSI/FSF/DFSG)
+* Broader reach
+* Uncomplicated
+
+Cons:
+
+* Easily relicensed
+* Easily turned into a competing SaaS product without reciprocal contributions
+* Affords XTDB users no copyleft protection
+* Affords XTDB developers no copyleft protection
+
+==== Decision
+
+Rejected.
+
+
+=== Business Source License 1.1 (Customized)
+
+Pros:
+
+* Option to forbid SaaS XTDB products, similar to https://github.com/MaterializeInc/materialize/blob/main/LICENSE[Materialize]
+* Opens into MIT or Apache after a few years
+
+Cons:
+
+* Not open source
+* Not Free Software
+* Affords no copyleft protections by default
+* Affords no SaaS protections by default
+* Very complicated
+* Non-standard license
+* Requires heavy customization from a lawyer
+* Does not retain benefits (broad reach, uncomplicated) of permissive licenses
+
+==== Decision
+
+Rejected.
+
+
+=== Server Side Public License 1.0
+
+Pros:
+
+* Copyleft
+* Prevents SaaS XTDB from competitors
+
+Cons:
+
+* Not open source
+* Not Free Software
+* Standardized, but uncommon/esoteric
+* Complicated license terms
+* Makes use of terms like "Service Source Code" which have no legal definition
+* SSPL-licensed SaaS services cannot run on Linux (GPL-incompatible) -- this restriction even applies to the copyright holder
+* License is aggressively copyleft to the point of being truly viral. So much so that it probably wouldn't hold up in court. It is paradoxically difficult to uphold, since "Offering the Program as a Service" is vague, with no legal definition, and Section 13 places onuses on the user (ex. releasing the source code of Windows or Linux under the SSPL) which are impossible to achieve.
+* Affords no network copyleft protections in non-SaaS environments
+
+==== Decision
+
+Rejected.
+
+
+=== Open Software License 3.0
+
+Pros:
+
+* Open Source (OSI/FSF only)
+* Copyleft protections for users
+* Copyleft protections for developers
+* SaaS XTDB competitors are permitted, but "external deployment" clause ensures reciprocal contributions
+* Simple license text
+
+Cons:
+
+* EPL-incompatible
+* GPL-incompatible
+* Not Free Software under the DFSG
+* DFSG-incompatible (Clause 10, "Termination for Patent Action")
+* Extremely esoteric license
+** OSI files under "Miscellaneous"
+** never been tested in court and is not widely used
+* Misconceptions/FUD likely equivalent to AGPL-3.0 if anyone were familiar with the OSL-3.0
+
+==== Decision
+
+Rejected.
+
+
+=== Affero GNU Public License, Version 3
+
+Pros:
+
+* Open Source (OSI/FSF/DFSG)
+* Copyleft protections for users
+* Copyleft protections for developers
+* SaaS XTDB competitors are permitted, but "affero copyleft" ensures reciprocal contributions
+* Standard license
+* Supported by the FSF
+* Google https://opensource.google/documentation/reference/using/agpl-policy[won't steal your work]
+* No customization required for additional permissions (Section 7)
+
+Cons:
+
+* Misconceptions/FUD surrounding AGPL-3.0
+* Requires additional permissions (Section 7), since EPL-incompatible by default
+* Complicated license terms
+
+==== Decision
+
+Accepted.
+
+
+== Consequences
+
+External contributors will still be required to sign a CLA.
+
+We are likely to receive some concerns from users for licensing Core2 under AGPL-3.0.
+As of this writing, it is the most aggressively copyleft open source license available.
+It will be important to reiterate why the AGPL-3.0 was chosen: first, to support the freedom of our users and downstream contributors and second, to support XTDB's continued development by preventing proprietary (Closed Source) derivatives.
+XTDB is commercial open source software.
+
+The FSF provides a standard AGPL-3.0 Section 7 "Additional Permissions" clause which does not modify the text of the license and ensures it is still recognized as the AGPL-3.0.
+Using Section 7, we are able to make our license fully EPL-compatible.
+
+Unlike the SSPL-1.0 and OSL-3.0, the AGPL-3.0 does not introduce any _technical_ impediments to Core2's distribution.
+It also does not place any unreasonable burden on downstream users or contributors, which will hopefully ease technical adoption.
+
+Unlike the BSL-1.1 and OSL-3.0, the AGPL-3.0 does not introduce any _legal_ impediments to Core2's distribution.
+It also does not place any unreasonable burden on downstream individuals, companies, governments, etc., which will hopefully ease bureaucratic adoption.
+
+Because the AGPL-3.0 is a common and standardized license, we (and our users) can be certain that its terms are very well understood, despite the complications of the text.
+The Preamble is very useful in this regard -- the intentions of the license are very clear.
