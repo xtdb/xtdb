@@ -145,6 +145,10 @@ Accepted.
 
 External contributors will still be required to sign a CLA.
 
+Users can still purchase a Commercial license, as with XTDB 1.x.
+
+Users can apply for a Non-Commercial license, if required.
+
 We are likely to receive some concerns from users for licensing Core2 under AGPL-3.0.
 As of this writing, it is the most aggressively copyleft open source license available.
 It will be important to reiterate why the AGPL-3.0 was chosen: first, to support the freedom of our users and downstream contributors and second, to support XTDB's continued development by preventing proprietary (Closed Source) derivatives.
