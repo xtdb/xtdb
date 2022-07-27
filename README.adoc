@@ -59,9 +59,11 @@ Core2's initial objective is to take the key principles embodied in XTDB 1.x -- 
 | Storage & Compute | Coupled (nodes are full replicas) | Separated (cost-effective scale out)
 | Primary Storage Format | Custom Key-Value encodings | Columnar Apache Arrow
 | Bitemporal Querying | Timeslice only ('as-of') | SQL:2011 and beyond
+| Temporal Granularity | Milliseconds | Microseconds
 | Relational Decorrelation | No | Yes
 | Analytical Querying | No | Yes
-| Single-partition Transaction Log | Infinite Retention | Ephemeral
+| Single-partition Transaction Log | Infinite Retention | Ephemeral WAL
+| Persistence Layer | Transaction Log + Document Store | Object Store
 | Index Upgrades | Full log replay | Online
 | - | - | -
 | Immutable Semantics | Yes | Yes
