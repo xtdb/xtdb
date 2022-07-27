@@ -364,7 +364,7 @@
 
 (defn- ->sql-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
-                                               ^DenseUnionVector tx-ops-vec, ^Instant current-time]
+                                               ^DenseUnionVector tx-ops-vec, ^Instant current-time, ^ScanSource scan-src]
   (let [sql-vec (.getStruct tx-ops-vec 3)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
         ^ListVector param-rows-vec (.getChild sql-vec "param-rows" ListVector)
@@ -381,7 +381,7 @@
             (doseq [param-row param-rows
                     :let [param-row (->> param-row
                                          (into {} (map (juxt (comp symbol key) val))))]]
-              (with-open [res (op/open-ra inner-query param-row
+              (with-open [res (op/open-ra inner-query (into {'$ scan-src} param-row)
                                           {:default-valid-time current-time})]
                 (.forEachRemaining res
                                    (reify Consumer
@@ -411,6 +411,32 @@
                                                             util/end-of-time-μs)]
                                                (.logPut log-op-idxer iid row-id start-vt end-vt)
                                                (.indexPut temporal-idxer iid row-id start-vt end-vt new-entity?))))))))))
+
+            [:delete vt-opts inner-query]
+            (let [^long delete-vt-from-µs (or (some-> (:_valid-time-start vt-opts) util/->instant util/instant->micros)
+                                              Long/MIN_VALUE)
+                  ^long delete-vt-to-µs (or (some-> (:_valid-time-end vt-opts) util/->instant util/instant->micros)
+                                            Long/MAX_VALUE)]
+              (doseq [param-row param-rows
+                      :let [param-row (->> param-row
+                                           (into {} (map (juxt (comp symbol key) val))))]]
+                (with-open [res (op/open-ra inner-query (into {'$ scan-src} param-row)
+                                            {:default-valid-time current-time})]
+                  (.forEachRemaining res
+                                     (reify Consumer
+                                       (accept [_ in-rel]
+                                         (let [^IIndirectRelation in-rel in-rel
+                                               row-count (.rowCount in-rel)
+                                               iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
+                                               vt-start-rdr (.monoReader (.vectorForName in-rel "_valid-time-start"))
+                                               vt-end-rdr (.monoReader (.vectorForName in-rel "_valid-time-end"))]
+                                           (dotimes [idx row-count]
+                                             (let [row-id (.nextRowId indexer)
+                                                   iid (.readLong iid-rdr idx)
+                                                   start-vt (Math/max (.readLong vt-start-rdr idx) delete-vt-from-µs)
+                                                   end-vt (Math/min (.readLong vt-end-rdr idx) delete-vt-to-µs)]
+                                               (.logDelete log-op-idxer iid start-vt end-vt)
+                                               (.indexDelete temporal-idxer iid row-id start-vt end-vt false))))))))))
 
             (throw (UnsupportedOperationException. "sql query"))))))))
 
@@ -451,7 +477,7 @@
           put-idxer (->put-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           delete-idxer (->delete-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           evict-idxer (->evict-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
-          sql-idxer (->sql-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec current-time)]
+          sql-idxer (->sql-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec current-time (.scanSource this tx-key))]
 
       (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
         (case (.getTypeId tx-ops-vec tx-op-idx)
