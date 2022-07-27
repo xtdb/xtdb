@@ -5,6 +5,7 @@
             [core2.temporal.kd-tree :as kd]
             [core2.types :as t]
             [core2.util :as util]
+            [core2.vector :as vec]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
            core2.metadata.IMetadataManager
@@ -16,7 +17,7 @@
            [java.util.function LongConsumer LongFunction Predicate ToLongFunction]
            java.util.stream.LongStream
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector TimeStampMicroTZVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            org.apache.arrow.vector.types.pojo.Schema
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
@@ -137,7 +138,7 @@
 (def temporal-fields
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
          [col-name (t/col-type->field col-name temporal-col-type)])
-       (into {})))
+       (into {"_iid" (t/col-type->field "_iid" :i64)})))
 
 (defn temporal-column? [col-name]
   (contains? temporal-fields (name col-name)))
@@ -152,7 +153,8 @@
 (def ^:const ^int valid-time-start-idx 4)
 (def ^:const ^int valid-time-end-idx 5)
 
-(def ^:private column->idx {"_valid-time-start" valid-time-start-idx
+(def ^:private column->idx {"_iid" id-idx
+                            "_valid-time-start" valid-time-start-idx
                             "_valid-time-end" valid-time-end-idx
                             "_tx-time-start" tx-time-start-idx
                             "_tx-time-end" tx-time-end-idx})
@@ -285,14 +287,15 @@
           (let [col-idx (->temporal-column-idx col-name)
                 out-root (VectorSchemaRoot/create (->temporal-root-schema col-name) allocator)
                 ^BigIntVector row-id-vec (.getVector out-root 0)
-                ^TimeStampMicroTZVector temporal-vec (.getVector out-root 1)]
+                temporal-vec (.getVector out-root 1)
+                temporal-vec-wtr (vec/->mono-writer temporal-vec)]
             (.setRowCount out-root value-count)
             (dotimes [n value-count]
               (let [^longs coordinate (aget coordinates n)
                     row-id (aget coordinate row-id-idx)]
                 (.addLong row-id-bitmap-out row-id)
                 (.set row-id-vec n row-id)
-                (.set temporal-vec n (aget coordinate col-idx))))
+                (.writeLong temporal-vec-wtr (aget coordinate col-idx))))
             (.put roots col-name out-root)))
         (->TemporalRoots (doto row-id-bitmap-out
                            (.and row-id-bitmap))
