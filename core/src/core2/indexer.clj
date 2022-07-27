@@ -6,6 +6,7 @@
             [core2.buffer-pool :as bp]
             [core2.metadata :as meta]
             core2.object-store
+            core2.operator.scan
             [core2.temporal :as temporal]
             [core2.types :as t]
             [core2.util :as util]
@@ -18,12 +19,13 @@
            core2.ICursor
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
-           (core2.temporal ITemporalTxIndexer ITemporalManager)
-           (core2.watermark IWatermarkManager)
+           core2.operator.scan.ScanSource
+           (core2.temporal ITemporalManager ITemporalTxIndexer)
            (core2.vector IIndirectVector IVectorWriter)
+           (core2.watermark IWatermarkManager)
            java.io.Closeable
-           java.nio.ByteBuffer
            java.lang.AutoCloseable
+           java.nio.ByteBuffer
            [java.util Collections Map TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap]
            [java.util.function Consumer Function]
@@ -112,6 +114,7 @@
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IndexerPrivate
+  (^core2.operator.scan.ScanSource scanSource [^core2.api.TransactionInstant tx])
   (^java.nio.ByteBuffer writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root])
   (^void closeCols [])
   (^void finishChunk []))
@@ -359,6 +362,7 @@
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
+                  ^IBufferPool buffer-pool
                   ^ITemporalManager temporal-mgr
                   ^IInternalIdManager iid-mgr
                   ^IWatermarkManager watermark-mgr
@@ -416,6 +420,15 @@
   (latestCompletedTx [_] latest-completed-tx)
 
   IndexerPrivate
+  (scanSource [_ tx]
+    (reify ScanSource
+      (metadataManager [_] metadata-mgr)
+      (bufferPool [_] buffer-pool)
+      (txBasis [_] tx)
+      (openWatermark [_]
+        (wm/->Watermark nil live-roots temporal-mgr
+                        chunk-idx max-rows-per-block))))
+
   (writeColumn [_this live-root]
     (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
       (let [loader (VectorLoader. write-root)
@@ -475,7 +488,7 @@
          opts))
 
 (defmethod ig/init-key ::indexer
-  [_ {:keys [allocator object-store metadata-mgr ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr]
+  [_ {:keys [allocator object-store metadata-mgr buffer-pool ^ITemporalManager temporal-mgr, ^IWatermarkManager watermark-mgr, internal-id-mgr]
       {:keys [max-rows-per-chunk max-rows-per-block]} :row-counts
       :as deps}]
 
@@ -485,7 +498,7 @@
                     0)]
     (.setWatermark watermark-mgr chunk-idx latest-tx nil (.getTemporalWatermark temporal-mgr))
 
-    (Indexer. allocator object-store metadata-mgr temporal-mgr internal-id-mgr watermark-mgr
+    (Indexer. allocator object-store metadata-mgr buffer-pool temporal-mgr internal-id-mgr watermark-mgr
               max-rows-per-chunk max-rows-per-block
               (ConcurrentSkipListMap.)
               (->log-indexer allocator max-rows-per-block)
