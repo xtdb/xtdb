@@ -12,6 +12,8 @@ The technical aim is to implement https://en.wikipedia.org/wiki/SQL:2011#New_fea
 Core2 implements a dynamic schema model (i.e. no explicit https://en.wikipedia.org/wiki/Data_definition_language[DDL] is required) and allows for relational querying across nested, document-shaped data.
 Core2 embraces a https://xtdb.com/blog/dev-diary-may-22/#_pillar_1_sosac[separated-storage-and-compute] architecture, using https://arrow.apache.org/[Apache Arrow] as the underlying columnar data format.
 
+image::doc/img/xtdb-core2-node-1.svg[Core2 Architecture Diagram, 1000, 460]
+
 Read more about Core2 in our https://xtdb.com/pdfs/vision-doc.pdf[Vision Document] (PDF).
 
 
