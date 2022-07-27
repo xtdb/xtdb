@@ -2,11 +2,13 @@
   (:require [clojure.tools.logging :as log]
             core2.api
             [core2.blocks :as blocks]
+            core2.temporal
             [core2.types :as types]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            core2.api.TransactionInstant
+           core2.temporal.ITemporalRootsSource
            java.lang.AutoCloseable
            [java.util Collections Map Set]
            java.util.function.Function
@@ -19,15 +21,24 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IWatermark
   (columnType [^String columnName])
-  (liveSlices [^Iterable columnNames]))
+  (liveSlices [^Iterable columnNames])
+
+  ;; this is a lot of duplication - I guess we'd extend interfaces here if we were in Java
+  (^core2.temporal.TemporalRoots createTemporalRoots [^java.util.List columns
+                                                      ^longs temporal-min-range
+                                                      ^longs temporal-max-range
+                                                      ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface IWatermarkManager
   (^core2.watermark.IWatermark getWatermark [])
-  (^void setWatermark [^long chunkIdx, ^core2.api.TransactionInstant txKey, ^java.util.Map liveRoots, temporalWatermark]))
+  (^void setWatermark [^long chunkIdx,
+                       ^core2.api.TransactionInstant txKey,
+                       ^java.util.Map liveRoots,
+                       ^core2.temporal.ITemporalRootsSource temporalWatermark]))
 
-(defrecord Watermark [^long chunk-idx, ^TransactionInstant tx-key, ^Map live-roots
-                      ^Object temporal-watermark ^AtomicInteger ref-count ^int max-rows-per-block ^Map thread->count]
+(defrecord Watermark [^TransactionInstant tx-key, ^Map live-roots, ^ITemporalRootsSource temporal-roots-src
+                      ^long chunk-idx, ^int max-rows-per-block]
   IWatermark
   (columnType [_ col-name]
     (when-let [^VectorSchemaRoot root (.get live-roots col-name)]
@@ -42,6 +53,19 @@
                     (let [row-counts (blocks/row-id-aligned-blocks root chunk-idx max-rows-per-block)]
                       (MapEntry/create col-name (blocks/->slices root row-counts))))))
           col-names))
+
+  (createTemporalRoots [_ columns temporal-min-range temporal-max-range row-id-bitmap]
+    (.createTemporalRoots temporal-roots-src columns
+                          temporal-min-range temporal-max-range
+                          row-id-bitmap)))
+
+(defrecord ReferenceCountingWatermark [^Watermark watermark, ^AtomicInteger ref-count, ^Map thread->count]
+  IWatermark
+  (columnType [_ col-name] (.columnType watermark col-name))
+  (liveSlices [_ col-names] (.liveSlices watermark col-names))
+
+  (createTemporalRoots [_ columns temporal-min-range temporal-max-range row-id-bitmap]
+    (.createTemporalRoots watermark columns temporal-min-range temporal-max-range row-id-bitmap))
 
   AutoCloseable
   (close [_]
@@ -62,8 +86,8 @@
               (log/warn "watermark ref count has gone negative:" new-ref-count))
 
           (zero? new-ref-count)
-          (do (util/try-close temporal-watermark)
-              (doseq [root (vals live-roots)]
+          (do (util/try-close (.temporal-roots-src watermark))
+              (doseq [root (vals (.live-roots watermark))]
                 (util/try-close root))))))))
 
 (defn- remove-closed-watermarks [^StampedLock open-watermarks-lock, ^Set open-watermarks]
@@ -71,7 +95,7 @@
     (try
       (let [i (.iterator open-watermarks)]
         (while (.hasNext i)
-          (let [^Watermark open-watermark (.next i)]
+          (let [^ReferenceCountingWatermark open-watermark (.next i)]
             (when (empty? (.thread->count open-watermark))
               (.remove i)))))
       (finally
@@ -80,7 +104,7 @@
 (deftype WatermarkManager [^long max-rows-per-block
                            ^Set open-watermarks
                            ^StampedLock open-watermarks-lock
-                           ^:volatile-mutable ^Watermark watermark]
+                           ^:volatile-mutable ^ReferenceCountingWatermark watermark]
   IWatermarkManager
   (getWatermark [_]
     (remove-closed-watermarks open-watermarks-lock open-watermarks)
@@ -106,7 +130,8 @@
   (setWatermark [this chunk-idx tx-key live-roots temporal-watermark]
     (let [old-wm watermark]
       (try
-        (let [wm (->Watermark chunk-idx tx-key (or live-roots (Collections/emptySortedMap)) temporal-watermark (AtomicInteger. 1) max-rows-per-block (ConcurrentHashMap.))]
+        (let [wm (-> (->Watermark tx-key (or live-roots (Collections/emptySortedMap)) temporal-watermark chunk-idx max-rows-per-block)
+                     (->ReferenceCountingWatermark (AtomicInteger. 1) (ConcurrentHashMap.)))]
           (remove-closed-watermarks open-watermarks-lock open-watermarks)
           (set! (.watermark this) wm)
           wm)
@@ -119,19 +144,17 @@
 
     (let [stamp (.writeLock open-watermarks-lock)]
       (try
-        (let [i (.iterator open-watermarks)]
-          (while (.hasNext i)
-            (let [^Watermark open-watermark (.next i)
-                  ^AtomicInteger watermark-ref-cnt (.ref-count open-watermark)]
-              (doseq [[^Thread thread ^AtomicInteger thread-ref-count] (.thread->count open-watermark)
-                      :let [rc (.get thread-ref-count)]
-                      :when (pos? rc)]
-                (log/warn "interrupting:" thread "on close, has outstanding watermarks:" rc)
-                (.interrupt thread))
-              (loop [rc (.get watermark-ref-cnt)]
-                (when (pos? rc)
-                  (util/try-close open-watermark)
-                  (recur (.get watermark-ref-cnt)))))))
+        (doseq [^ReferenceCountingWatermark open-watermark open-watermarks]
+          (let [^AtomicInteger watermark-ref-cnt (.ref-count open-watermark)]
+            (doseq [[^Thread thread ^AtomicInteger thread-ref-count] (.thread->count open-watermark)
+                    :let [rc (.get thread-ref-count)]
+                    :when (pos? rc)]
+              (log/warn "interrupting:" thread "on close, has outstanding watermarks:" rc)
+              (.interrupt thread))
+            (loop [rc (.get watermark-ref-cnt)]
+              (when (pos? rc)
+                (util/try-close open-watermark)
+                (recur (.get watermark-ref-cnt))))))
         (finally
           (.unlock open-watermarks-lock stamp))))
 

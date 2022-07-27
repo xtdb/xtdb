@@ -11,7 +11,6 @@
             [core2.local-node :as node]
             [core2.metadata :as meta]
             [core2.object-store :as os]
-            [core2.temporal.kd-tree :as kd]
             [core2.test-util :as tu]
             [core2.ts-devices :as ts]
             [core2.types :as ty]
@@ -24,6 +23,7 @@
            core2.object_store.ObjectStore
            core2.indexer.InternalIdManager
            (core2.watermark IWatermarkManager Watermark)
+           java.lang.AutoCloseable
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
@@ -83,7 +83,6 @@
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (::os/file-system-object-store system)
             ^IBufferPool bp (::bp/buffer-pool system)
-            ^InternalIdManager iid-mgr (::idx/internal-id-manager system)
             ^IWatermarkManager wm-mgr (::wm/watermark-manager system)]
 
         (t/is (nil? (idx/latest-tx {:object-store os, :buffer-pool bp})))
@@ -96,31 +95,22 @@
                  (tu/then-await-tx last-tx-key node (Duration/ofSeconds 2))))
 
         (t/testing "watermark"
-          (with-open [^Watermark watermark (.getWatermark wm-mgr)]
-            (let [live-roots (.live-roots watermark)
+          (with-open [^AutoCloseable rc-watermark (.getWatermark wm-mgr)]
+            (let [live-roots (:live-roots (:watermark rc-watermark))
                   first-column (first live-roots)
                   last-column (last live-roots)]
-              (t/is (zero? (.chunk-idx watermark)))
+              (t/is (zero? (:chunk-idx (:watermark rc-watermark))))
               (t/is (t/is 20 (count live-roots)))
               (t/is (= ["_id" 4]
                        [(key first-column) (.getRowCount ^VectorSchemaRoot (val first-column))]))
               (t/is (= ["time" 2]
                        [(key last-column) (.getRowCount ^VectorSchemaRoot (val last-column))])))))
 
-        (t/testing "temporal"
-          (t/is (= {"device-info-demo000000" 0
-                    "reading-demo000000" 72057594037927936
-                    "device-info-demo000001" 144115188075855872
-                    "reading-demo000001" 216172782113783808}
-                   (.id->internal-id iid-mgr)))
-          (with-open [^Watermark watermark (.getWatermark wm-mgr)]
-            (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
-
         (tu/finish-chunk node)
 
-        (with-open [^Watermark watermark (.getWatermark wm-mgr)]
-          (t/is (= 4 (.chunk-idx watermark)))
-          (t/is (empty? (.live-roots watermark))))
+        (with-open [^AutoCloseable rc-watermark (.getWatermark wm-mgr)]
+          (t/is (= 4 (:chunk-idx (:watermark rc-watermark))))
+          (t/is (empty? (:live-roots (:watermark rc-watermark)))))
 
         (t/is (= {:latest-tx last-tx-key
                   :latest-row-id (dec total-number-of-ops)}

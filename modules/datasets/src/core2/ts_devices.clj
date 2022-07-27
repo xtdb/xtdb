@@ -4,7 +4,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [core2.api :as c2]
-            [core2.snapshot :as snap]
+            [core2.ingester :as ingest]
             [core2.operator :as op])
   (:import java.util.zip.GZIPInputStream))
 
@@ -76,9 +76,6 @@
                        (c2/submit-tx tx-producer tx-ops))
                      nil))))))
 
-(comment
-  (submit-ts-devices dev/node :small))
-
 (def query-recent-battery-temperatures
   ;; SELECT time, device_id, battery_temperature
   ;; FROM readings
@@ -92,6 +89,7 @@
       [:scan [time device-id battery-temperature
               {battery-status (= battery-status "discharging")}]]]]])
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (def query-busiest-low-battery-devices
   ;; SELECT time, readings.device_id, cpu_avg_1min,
   ;;        battery_level, battery_status, device_info.model
@@ -110,6 +108,7 @@
               {battery-status (= battery-status "discharging")}]]
       [:scan [device-id model]]]]])
 
+#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (def query-min-max-battery-levels-per-hour
   ;; SELECT DATE_TRUNC('hour', time) "hour",
   ;;        MIN(battery_level) min_battery_level,
@@ -134,8 +133,10 @@
                                      (= model "focus"))}]]]]]]])
 
 (comment
-  (require '[core2.test-util :as tu])
+  (require 'dev '[core2.test-util :as tu])
+
+  (submit-ts-devices dev/node :small)
 
   (time
-   (let [db (snap/snapshot (tu/component dev/node ::snap/snapshot-factory))]
+   (let [db (ingest/snapshot (tu/component dev/node :core2/ingester))]
      (op/query-ra query-recent-battery-temperatures db))))

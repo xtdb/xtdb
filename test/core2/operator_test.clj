@@ -2,17 +2,12 @@
   (:require [clojure.test :as t]
             [core2.api :as c2]
             [core2.expression.metadata :as expr.meta]
-            [core2.indexer :as idx]
+            [core2.ingester :as ingest]
             [core2.local-node :as node]
             [core2.metadata :as meta]
             [core2.operator :as op]
-            [core2.snapshot :as snap]
-            [core2.test-util :as tu]
-            [core2.watermark :as wm])
-  (:import (core2.indexer TransactionIndexer)
-           (core2.metadata IMetadataManager)
-           (core2.snapshot ISnapshotFactory)
-           (core2.watermark IWatermarkManager Watermark)
+            [core2.test-util :as tu])
+  (:import (core2.metadata IMetadataManager)
            (java.time LocalTime)
            (org.roaringbitmap RoaringBitmap)))
 
@@ -33,7 +28,7 @@
     (tu/finish-chunk node)
 
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)]
+          ingester (tu/component node :core2/ingester)]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
                          (set (op/query-ra '[:scan [_id {name (> name "Ivan")}]] db))))
@@ -42,7 +37,7 @@
                          (set (op/query-ra '[:scan [_id {name (> name ?name)}]]
                                            {'$ db, '?name "Ivan"})))))]
 
-        (let [db (snap/snapshot snapshot-factory)]
+        (let [db (ingest/snapshot ingester)]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
 
           (let [expected-match [(meta/map->ChunkMatch
@@ -63,7 +58,7 @@
                              {:_id :jon, :name "Jon"}}
                            db))
 
-        (let [db (snap/snapshot snapshot-factory)]
+        (let [db (ingest/snapshot ingester)]
           (test-query-ivan #{{:_id :jms, :name "James"}
                              {:_id :jon, :name "Jon"}
                              {:_id :jdt, :name "Jeremy"}}
@@ -84,8 +79,8 @@
 
     (tu/finish-chunk node)
     (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
-          ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)
-          db (snap/snapshot snapshot-factory)]
+          ingester (tu/component node :core2/ingester)
+          db (ingest/snapshot ingester)]
       (t/is (= #{0 3} (.knownChunks metadata-mgr)))
       (let [expected-match [(meta/map->ChunkMatch
                              {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
@@ -111,7 +106,7 @@
     (let [{tt1 :tx-time} @(c2/submit-tx node [[:put {:_id :my-doc, :last-updated "tx1"}]])
           _ (Thread/sleep 10) ; to prevent same-ms transactions
           {tt2 :tx-time, :as tx2} @(c2/submit-tx node [[:put {:_id :my-doc, :last-updated "tx2"}]])
-          db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx2)]
+          db (ingest/snapshot (tu/component node :core2/ingester) tx2)]
       (letfn [(q [& temporal-constraints]
                 (->> (op/query-ra [:scan (into '[last-updated]
                                                temporal-constraints)]

@@ -10,20 +10,18 @@
             [core2.logical-plan :as lp]
             [core2.metadata :as meta]
             [core2.rewrite :refer [zmatch]]
-            core2.snapshot
             [core2.temporal :as temporal]
             [core2.types :as t]
             [core2.util :as util]
-            [core2.vector.indirect :as iv])
+            [core2.vector.indirect :as iv]
+            core2.watermark)
   (:import clojure.lang.MapEntry
-           core2.api.TransactionInstant
            core2.buffer_pool.IBufferPool
            core2.ICursor
            core2.metadata.IMetadataManager
            core2.operator.IRelationSelector
-           core2.snapshot.Snapshot
-           [core2.temporal ITemporalManager TemporalRoots]
-           (core2.watermark IWatermark IWatermarkManager)
+           core2.temporal.TemporalRoots
+           core2.watermark.IWatermark
            [java.util HashMap LinkedList List Map Queue]
            [java.util.function BiFunction Consumer Function]
            org.apache.arrow.memory.BufferAllocator
@@ -43,6 +41,12 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(definterface ScanSource
+  (^core2.metadata.IMetadataManager metadataManager [])
+  (^core2.buffer_pool.BufferPool bufferPool [])
+  (^core2.api.TransactionInstant txBasis [])
+  (^core2.watermark.IWatermark openWatermark []))
+
 (def ^:dynamic *column->pushdown-bloom* {})
 
 (defn ->scan-col-types [scan-exprs srcs]
@@ -52,20 +56,19 @@
                 (.computeIfAbsent mm+wms src-key
                                   (reify Function
                                     (apply [_ _src-key]
-                                      (let [^Snapshot src (or (get srcs src-key)
-                                                              (throw (err/illegal-arg :unknown-src
-                                                                                      {::err/message "Query refers to unknown source"
-                                                                                       :db src-key
-                                                                                       :src-keys (keys srcs)})))]
-
-                                        {:mm (.metadata-mgr src)
-                                         :wm (.getWatermark ^IWatermarkManager (.watermark-mgr src))})))))
+                                      (let [^ScanSource src (or (get srcs src-key)
+                                                            (throw (err/illegal-arg :unknown-src
+                                                                                    {::err/message "Query refers to unknown source"
+                                                                                     :db src-key
+                                                                                     :src-keys (keys srcs)})))]
+                                        {:src src
+                                         :wm (.openWatermark src)})))))
 
               (->col-type [[src-key col-name]]
-                (let [{:keys [^IMetadataManager mm, ^IWatermark wm]} (->mm+wm src-key)]
+                (let [{:keys [^ScanSource src, ^IWatermark wm]} (->mm+wm src-key)]
                   (if (temporal/temporal-column? col-name)
                     [:timestamp-tz :micro "UTC"]
-                    (t/merge-col-types (.columnType mm (name col-name))
+                    (t/merge-col-types (.columnType (.metadataManager src) (name col-name))
                                        (.columnType wm (name col-name))))))]
 
         (->> scan-exprs
@@ -143,10 +146,10 @@
                                          1)))))))
         res))))
 
-(defn- ->temporal-roots ^core2.temporal.TemporalRoots [^ITemporalManager temporal-manager ^IWatermark watermark ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
+(defn- ->temporal-roots ^core2.temporal.TemporalRoots [^IWatermark watermark ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
   (let [temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range atemporal-row-id-bitmap)
         temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range atemporal-row-id-bitmap)]
-    (.createTemporalRoots temporal-manager watermark (filterv temporal/temporal-column? col-names)
+    (.createTemporalRoots watermark (filterv temporal/temporal-column? col-names)
                           temporal-min-range
                           temporal-max-range
                           atemporal-row-id-bitmap)))
@@ -196,7 +199,6 @@
 
 (deftype ScanCursor [^BufferAllocator allocator
                      ^IBufferPool buffer-pool
-                     ^ITemporalManager temporal-manager
                      ^IMetadataManager metadata-manager
                      ^IWatermark watermark
                      ^Queue #_<ChunkMatch> matching-chunks
@@ -214,7 +216,7 @@
                 (loop []
                   (if-let [in-roots (next-roots real-col-names chunks)]
                     (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap allocator col-names col-preds in-roots params)
-                          temporal-roots (->temporal-roots temporal-manager watermark col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
+                          temporal-roots (->temporal-roots watermark col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
                       (or (try
                             (let [row-id-bitmap (->temporal-row-id-bitmap allocator col-names col-preds temporal-roots atemporal-row-id-bitmap params)
                                   read-rel (align-roots col-names in-roots temporal-roots row-id-bitmap)]
@@ -277,8 +279,8 @@
     (doseq [^ICursor chunk (vals chunks)]
       (util/try-close chunk))))
 
-(defn- apply-snapshot-tx! [[^longs temporal-min-range, ^longs temporal-max-range], ^Snapshot snapshot, col-preds]
-  (when-let [tx-time (some-> ^TransactionInstant (.tx snapshot) (.tx_time))]
+(defn- apply-src-tx! [[^longs temporal-min-range, ^longs temporal-max-range], ^ScanSource src, col-preds]
+  (when-let [tx-time (some-> (.txBasis src) (.tx_time))]
     (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                 :<= "_tx-time-start" tx-time)
 
@@ -319,18 +321,16 @@
 
     {:col-types col-types
      :->cursor (fn [{:keys [allocator srcs params]}]
-                 (let [^Snapshot snapshot (get srcs src-key)
-                       ^IWatermarkManager wm-mgr (.watermark-mgr snapshot)
-                       metadata-mgr (.metadata-mgr snapshot)
-                       buffer-pool (.buffer-pool snapshot)
-                       temporal-mgr (.temporal-mgr snapshot)
-                       watermark (.getWatermark wm-mgr)]
+                 (let [^ScanSource src (get srcs src-key)
+                       metadata-mgr (.metadataManager src)
+                       buffer-pool (.bufferPool src)
+                       watermark (.openWatermark src)]
                    (try
                      (let [metadata-pred (expr.meta/->metadata-selector (cons 'and metadata-args) (set col-names) params)
                            [temporal-min-range temporal-max-range] (doto (expr.temp/->temporal-min-max-range selects params)
-                                                                     (apply-snapshot-tx! snapshot col-preds))
+                                                                     (apply-src-tx! src col-preds))
                            matching-chunks (LinkedList. (or (meta/matching-chunks metadata-mgr metadata-pred) []))]
-                       (-> (ScanCursor. allocator buffer-pool temporal-mgr metadata-mgr watermark
+                       (-> (ScanCursor. allocator buffer-pool metadata-mgr watermark
                                         matching-chunks (mapv name col-names) col-preds
                                         temporal-min-range temporal-max-range params
                                         #_chunks nil #_live-chunk-done? false)

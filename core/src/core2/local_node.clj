@@ -3,16 +3,14 @@
             [core2.api :as api]
             [core2.datalog :as d]
             [core2.error :as err]
-            core2.ingester
+            [core2.ingester :as ingest]
             [core2.operator :as op]
-            [core2.snapshot :as snap]
             [core2.sql.parser :as p]
             [core2.sql.plan :as sql.plan]
             [core2.tx-producer :as txp]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.ingester.Ingester
-           (core2.snapshot ISnapshotFactory)
            (core2.tx_producer ITxProducer)
            (java.io Closeable Writer)
            (java.lang AutoCloseable)
@@ -28,7 +26,6 @@
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [node tx]))
 
 (defrecord Node [^Ingester ingester
-                 ^ISnapshotFactory snapshot-factory
                  ^ITxProducer tx-producer
                  !system
                  close-fn]
@@ -36,7 +33,7 @@
   (-open-datalog-async [_ query args]
     (let [{:keys [basis ^Duration basis-timeout]} query
           {:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
-      (-> (snap/snapshot-async snapshot-factory tx)
+      (-> (ingest/snapshot-async ingester tx)
           (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
           (util/then-apply
             (fn [db]
@@ -47,7 +44,7 @@
 
   (-open-sql-async [_ query {:keys [basis ^Duration basis-timeout] :as query-opts}]
     (let [{:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
-      (-> (snap/snapshot-async snapshot-factory tx)
+      (-> (ingest/snapshot-async ingester tx)
           (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
           (util/then-apply
             (fn [db]
@@ -92,7 +89,6 @@
 
 (defmethod ig/prep-key ::node [_ opts]
   (merge {:ingester (ig/ref :core2/ingester)
-          :snapshot-factory (ig/ref ::snap/snapshot-factory)
           :tx-producer (ig/ref ::txp/tx-producer)}
          opts))
 
@@ -120,7 +116,6 @@
                           :core2.temporal/temporal-manager {}
                           :core2.buffer-pool/buffer-pool {}
                           :core2.watermark/watermark-manager {}
-                          ::snap/snapshot-factory {}
                           ::txp/tx-producer {}}
                          opts)
                    (doto ig/load-namespaces)

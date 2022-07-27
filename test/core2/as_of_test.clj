@@ -1,8 +1,8 @@
 (ns core2.as-of-test
   (:require [clojure.test :as t]
             [core2.api :as c2]
+            [core2.ingester :as ingest]
             [core2.operator :as op]
-            [core2.snapshot :as snap]
             [core2.test-util :as tu]
             [core2.util :as util])
   (:import (java.time Clock Duration)
@@ -28,7 +28,7 @@
 (def end-of-time-zdt (util/->zdt util/end-of-time))
 
 (t/deftest test-as-of-tx
-  (let [snapshot-factory (tu/component ::snap/snapshot-factory)
+  (let [ingester (tu/component :core2/ingester)
 
         !tx1 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last-updated "tx1"}]])
         _ (Thread/sleep 10) ; prevent same-ms transactions
@@ -36,7 +36,7 @@
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (set (op/query-ra '[:scan [last-updated]]
-                               (snap/snapshot snapshot-factory !tx2)))))
+                               (ingest/snapshot ingester !tx2)))))
 
     (t/is (= #{{:last-updated "tx1"} {:last-updated "tx2"}}
              (->> (c2/plan-datalog tu/*node*
@@ -48,7 +48,7 @@
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
                (set (op/query-ra '[:scan [last-updated]]
-                                 (snap/snapshot snapshot-factory !tx1)))))
+                                 (ingest/snapshot ingester !tx1)))))
 
       (t/is (= #{{:last-updated "tx1"}}
                (->> (c2/plan-datalog tu/*node*
@@ -58,7 +58,7 @@
                     (into #{})))))))
 
 (t/deftest test-valid-time
-  (let [snapshot-factory (tu/component ::snap/snapshot-factory)
+  (let [ingester (tu/component :core2/ingester)
 
         {:keys [tx-time] :as tx1} @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]
                                                             [:put {:_id :doc-with-vt}
@@ -67,7 +67,7 @@
 
         start-vt (util/->zdt (first *vts*))
 
-        db (snap/snapshot snapshot-factory tx1)]
+        db (ingest/snapshot ingester tx1)]
 
     (t/is (= {:doc {:_id :doc,
                     :_valid-time-start start-vt
@@ -86,7 +86,7 @@
                   (into {} (map (juxt :_id identity))))))))
 
 (t/deftest test-tx-time
-  (let [snapshot-factory (tu/component ::snap/snapshot-factory)
+  (let [ingester (tu/component :core2/ingester)
 
         _ @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 0}]])
 
@@ -95,7 +95,7 @@
         tx2 @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]])
         tt2 (util/->zdt (:tx-time tx2))
 
-        db (snap/snapshot snapshot-factory tx2)
+        db (ingest/snapshot ingester tx2)
 
         [vt1 vt2] (map util/->zdt *vts*)
 
@@ -127,7 +127,7 @@
           "all vt, all tt")))
 
 (t/deftest test-evict
-  (let [snapshot-factory (tu/component ::snap/snapshot-factory)]
+  (let [ingester (tu/component :core2/ingester)]
     (letfn [(all-time-docs [db]
               (->> (op/query-ra '[:scan [_id
                                          _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
@@ -141,9 +141,9 @@
             _ (Thread/sleep 10)         ; prevent same-ms transactions
             tx2 @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]])]
 
-        (t/is (= {:doc 3, :other-doc 1} (all-time-docs (snap/snapshot snapshot-factory tx2)))
+        (t/is (= {:doc 3, :other-doc 1} (all-time-docs (ingest/snapshot ingester tx2)))
               "documents present before evict"))
 
       (let [tx3 @(c2/submit-tx tu/*node* [[:evict :doc]])]
-        (t/is (= {:other-doc 1} (all-time-docs (snap/snapshot snapshot-factory tx3)))
+        (t/is (= {:other-doc 1} (all-time-docs (ingest/snapshot ingester tx3)))
               "documents removed after evict")))))

@@ -1,10 +1,10 @@
 (ns core2.ts-devices-small-test
   (:require [clojure.test :as t]
+            [core2.ingester :as ingest]
             [core2.test-util :as tu]
             [core2.ts-devices :as tsd]
             [core2.util :as util]
             [clojure.tools.logging :as log]
-            [core2.snapshot :as snap]
             [core2.operator :as op]
             [core2.indexer :as idx]
             [core2.object-store :as os]
@@ -36,7 +36,7 @@
           (f))))))
 
 (t/deftest ^:timescale test-recent-battery-temperatures
-  (let [db (snap/snapshot (tu/component ::snap/snapshot-factory))]
+  (let [db (ingest/snapshot (tu/component :core2/ingester))]
     (t/is (= [{:time #inst "2016-11-15T18:39:00.000-00:00",
                :device-id "demo000000",
                :battery-temperature 91.9}
@@ -70,13 +70,13 @@
              (op/query-ra tsd/query-recent-battery-temperatures db)))))
 
 (t/deftest ^:timescale test-busiest-low-battery-devices
-  (let [db (snap/snapshot (tu/component ::snap/snapshot-factory))]
+  (let [db (ingest/snapshot (tu/component :core2/ingester))]
     #_ ; TODO will fill these in once we've resolved issues in ts-devices ingest
     (t/is (= []
              (op/query-ra tsd/query-busiest-low-battery-devices db)))))
 
 (t/deftest ^:timescale test-min-max-battery-levels-per-hour
-  (let [db (snap/snapshot (tu/component ::snap/snapshot-factory))]
+  (let [db (ingest/snapshot (tu/component :core2/ingester))]
     #_ ; TODO will fill these in once we've resolved issues in ts-devices ingest
     (t/is (= []
              (op/query-ra tsd/query-min-max-battery-levels-per-hour db)))))
