@@ -11,8 +11,8 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.clojure/tools.logging "1.1.0"]
+  :dependencies [[org.clojure/clojure]
+                 [org.clojure/tools.logging]
                  [com.xtdb/xtdb-core]
                  [org.lmdbjava/lmdbjava "0.7.0"]
                  [org.lwjgl/lwjgl "3.2.3" :classifier "natives-linux" :native-prefix ""]

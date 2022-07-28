@@ -12,25 +12,25 @@
 
   :scm {:dir ".."}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.clojure/tools.logging "1.1.0"]
-                 [org.slf4j/slf4j-api "1.7.30"]
-                 [org.clojure/spec.alpha "0.2.194"]
+  :dependencies [[org.clojure/clojure]
+                 [org.clojure/tools.logging]
+                 [org.slf4j/slf4j-api]
+                 [org.clojure/spec.alpha]
                  [pro.juxt.clojars-mirrors.com.stuartsierra/dependency "1.0.0"]
                  [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1-2"]
-                 [org.clojure/tools.reader "1.3.5"]
-                 [org.clojure/data.json "2.3.1"]
-                 [org.clojure/tools.cli "1.0.206"]
-                 [org.agrona/agrona "1.11.0"]
-                 [com.github.jnr/jnr-ffi "2.2.4" :scope "provided"]
+                 [org.clojure/tools.reader]
+                 [org.clojure/data.json]
+                 [org.clojure/tools.cli]
+                 [org.agrona/agrona "1.16.0"]
+                 [com.github.jnr/jnr-ffi "2.2.12" :scope "provided"]
                  [pro.juxt.clojars-mirrors.edn-query-language/eql "2021.02.28"]]
 
   :profiles {:dev {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
-                   :dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
+                   :dependencies [[ch.qos.logback/logback-classic "1.2.11"]]}
              :cli-e2e-test {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
                             :dependencies [[com.xtdb/xtdb-http-server]]}
              :test {:dependencies [[com.xtdb/xtdb-test]
-                                   [clj-commons/fs "1.6.307"]]}}
+                                   [clj-commons/fs "1.6.310"]]}}
 
   :aot [xtdb.main]
 

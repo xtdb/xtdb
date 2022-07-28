@@ -11,14 +11,14 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
+  :dependencies [[org.clojure/clojure]
                  [com.xtdb/xtdb-core]
 
-                 [org.apache.lucene/lucene-core "8.9.0"]
-                 [org.apache.lucene/lucene-queryparser "8.9.0"]
-                 [org.apache.lucene/lucene-analyzers-common "8.9.0" :scope "test"]]
+                 [org.apache.lucene/lucene-core "8.11.2"]
+                 [org.apache.lucene/lucene-queryparser "8.11.2"]
+                 [org.apache.lucene/lucene-analyzers-common "8.11.2" :scope "test"]]
 
-  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic]
                                   [com.xtdb/xtdb-test]
                                   [com.xtdb/xtdb-rocksdb]]}}
 

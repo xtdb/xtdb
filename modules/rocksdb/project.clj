@@ -11,7 +11,7 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
+  :dependencies [[org.clojure/clojure]
                  [com.xtdb/xtdb-core]
                  [com.xtdb/xtdb-metrics :scope "provided"]
                  [org.rocksdb/rocksdbjni "7.3.1"]])

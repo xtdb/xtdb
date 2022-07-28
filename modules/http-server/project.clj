@@ -12,12 +12,12 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.clojure/data.csv "1.0.0"]
+  :dependencies [[org.clojure/clojure]
+                 [org.clojure/data.csv]
                  [com.xtdb/xtdb-core]
-                 [com.cognitect/transit-clj "1.0.324"]
+                 [com.cognitect/transit-clj]
 
-                 [com.nimbusds/nimbus-jose-jwt "9.7"]
+                 [com.nimbusds/nimbus-jose-jwt]
 
                  [pro.juxt.clojars-mirrors.hiccup/hiccup "2.0.0-alpha2"]
                  [pro.juxt.clojars-mirrors.xtdb/xtdb-http-server-deps "0.0.2"]
@@ -26,27 +26,22 @@
   :clean-targets ^{:protect false} ["target"]
   :profiles {:dev
              {:jvm-opts ["-Dlogback.configurationFile=../../resources/logback-test.xml"]
-              :dependencies [[metosin/reitit-dev "0.5.12"]
+              :dependencies [[metosin/reitit-dev "0.5.18"]
 
-                             [org.clojure/clojurescript "1.10.844"]
-                             [ch.qos.logback/logback-classic "1.2.3"]
+                             [org.clojure/clojurescript "1.11.60"]
+                             [ch.qos.logback/logback-classic "1.2.11"]
                              [cljsjs/codemirror "5.44.0-1"]
-                             [com.bhauman/figwheel-main "0.2.12"
+                             [com.bhauman/figwheel-main "0.2.18"
                               :exclusions [com.google.errorprone/error_prone_annotations]]
                              [com.bhauman/rebel-readline-cljs "0.1.4"]
-                             [reagent "0.10.0"]
-                             [re-frame "0.12.0"]
-                             [metosin/reitit-frontend "0.5.12"]
-                             [metosin/reitit-spec "0.5.12"]
+                             [reagent "1.1.1"]
+                             [re-frame "1.2.0"]
+                             [metosin/reitit-frontend "0.5.18"]
+                             [metosin/reitit-spec "0.5.18"]
                              [fork "1.2.5"]
-                             [day8.re-frame/http-fx "v0.2.0"]
+                             [day8.re-frame/http-fx "0.2.4"]
                              [tick "0.4.32"]
-                             [cljsjs/react-datetime "2.16.2-0"]
-
-                             ;; dependency resolution
-                             [com.bhauman/spell-spec "0.1.2"]
-                             [ring/ring-devel "1.8.1"]
-                             [expound "0.8.7"]]}
+                             [cljsjs/react-datetime "2.16.2-0"]]}
 
              :test {:dependencies [[pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
                                    [com.xtdb/xtdb-test]]}}

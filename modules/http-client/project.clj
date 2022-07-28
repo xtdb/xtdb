@@ -11,15 +11,12 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
+  :dependencies [[org.clojure/clojure]
                  [com.xtdb/xtdb-core]
                  [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
-                 [com.nimbusds/nimbus-jose-jwt "9.7"]]
+                 [com.nimbusds/nimbus-jose-jwt]]
 
-  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic]]
                    :jvm-opts ["-Dlogback.configurationFile=../../resources/logback-test.xml"]}
              :test {:dependencies [[com.xtdb/xtdb-test]
-                                   [com.xtdb/xtdb-http-server]
-
-                                   ;; dependency conflicts
-                                   [commons-codec "1.15"]]}})
+                                   [com.xtdb/xtdb-http-server]]}})

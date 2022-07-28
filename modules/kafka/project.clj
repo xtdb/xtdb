@@ -12,14 +12,14 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.clojure/tools.logging "1.1.0"]
+  :dependencies [[org.clojure/clojure]
+                 [org.clojure/tools.logging]
                  [com.xtdb/xtdb-core]
                  [org.apache.kafka/kafka-clients "2.6.1" :exclusions [org.lz4/lz4-java]]
-                 [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
-                 [com.cognitect/transit-clj "1.0.324" :exclusions [org.msgpack/msgpack]]]
+                 [pro.juxt.clojars-mirrors.cheshire/cheshire]
+                 [com.cognitect/transit-clj nil :exclusions [org.msgpack/msgpack]]]
 
-  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic]]}}
 
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"

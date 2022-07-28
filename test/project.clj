@@ -12,7 +12,7 @@
 
   :scm {:dir ".."}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
+  :dependencies [[org.clojure/clojure]
                  [com.xtdb/xtdb-core]
                  [com.xtdb/xtdb-jdbc]
                  [com.xtdb/xtdb-http-server]
@@ -32,13 +32,8 @@
                  ;; General:
                  [org.clojure/test.check "1.1.0"]
 
-                 [junit/junit "4.12"] ; for `lein junit`
-
-                 ;; dependency conflict resolution
-                 [commons-codec "1.15"]
-                 [org.tukaani/xz "1.8"]
-                 [com.google.protobuf/protobuf-java "3.13.0"]
-                 [com.google.guava/guava "30.1.1-jre"]]
+                 [junit/junit "4.12"]   ; for `lein junit`
+                 ]
 
   :java-source-paths ["test"
                       "../docs/reference/modules/ROOT/examples/test"]
@@ -74,7 +69,7 @@
                                    ;; [com.oracle/ojdbc "19.3.0.0"]
 
                                    ;; General:
-                                   [ch.qos.logback/logback-classic "1.2.3"]
+                                   [ch.qos.logback/logback-classic]
                                    [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
 
                                    ;; Outer tests:
@@ -85,7 +80,7 @@
                                    [junit/junit "4.12"]
 
                                    ;; Authenticated HTTP Server/Client Tests
-                                   [com.nimbusds/nimbus-jose-jwt "9.7"]
+                                   [com.nimbusds/nimbus-jose-jwt]
 
                                    ;; Kafka connect tests
                                    [org.apache.kafka/connect-api "2.6.0"]]}}

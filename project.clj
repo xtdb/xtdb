@@ -6,7 +6,16 @@
             :url "http://opensource.org/licenses/MIT"}
 
   :managed-dependencies
-  [[com.xtdb/xtdb-core ~xt-version]
+  [[org.clojure/clojure "1.11.1"]
+   [org.clojure/data.csv "1.0.1"]
+   [org.clojure/data.json "2.4.0"]
+   [org.clojure/java.data "1.0.86"]
+   [org.clojure/spec.alpha "0.3.218"]
+   [org.clojure/tools.cli "1.0.206"]
+   [org.clojure/tools.reader "1.3.6"]
+   [org.clojure/tools.logging "1.2.4"]
+
+   [com.xtdb/xtdb-core ~xt-version]
    [com.xtdb/xtdb-rocksdb ~xt-version]
    [com.xtdb/xtdb-lmdb ~xt-version]
    [com.xtdb/xtdb-kafka ~xt-version]
@@ -22,10 +31,65 @@
    [com.xtdb/xtdb-google-cloud-storage ~xt-version]
    [com.xtdb/xtdb-lucene ~xt-version]
    [com.xtdb/xtdb-test ~xt-version]
-   [com.xtdb/xtdb-bench ~xt-version]]
+   [com.xtdb/xtdb-bench ~xt-version]
+
+   [ch.qos.logback/logback-classic "1.2.11"]
+   [ch.qos.logback/logback-core "1.2.11"]
+   [cljsjs/react "17.0.1-0"]
+   [cljsjs/react-dom "17.0.1-0"]
+   [com.bhauman/spell-spec "0.1.2"]
+   [com.cognitect/transit-clj "1.0.329"]
+   [com.fasterxml.jackson.core/jackson-core "2.13.3"]
+   [com.fasterxml.jackson.core/jackson-annotations "2.13.3"]
+   [com.fasterxml.jackson.core/jackson-databind "2.13.3"]
+   [com.fasterxml.jackson.dataformat/jackson-dataformat-yaml "2.13.3"]
+   [com.fasterxml.jackson.datatype/jackson-datatype-jdk8 "2.13.3"]
+   [com.google.api-client/google-api-client "1.34.1"]
+   [com.google.guava/guava "30.1.1-jre" :exclusions [org.checkerframework/checker-qual]]
+   [com.google.protobuf/protobuf-java "3.21.4"]
+   [com.nimbusds/nimbus-jose-jwt "9.23"]
+   [commons-codec "1.15"]
+   [commons-io "2.11.0"]
+   [commons-logging "1.2"]
+   [crypto-random "1.2.1"]
+   [expound "0.9.0"]
+   [io.netty/netty-all "4.1.77.Final"]
+   [io.netty/netty-buffer "4.1.77.Final"]
+   [io.netty/netty-codec "4.1.77.Final"]
+   [io.netty/netty-codec-http "4.1.77.Final"]
+   [io.netty/netty-handler "4.1.77.Final"]
+   [io.netty/netty-resolver "4.1.77.Final"]
+   [io.netty/netty-transport-native-epoll "4.1.77.Final"]
+   [javax.servlet/javax.servlet-api "4.0.1"]
+   [joda-time "2.10.14"]
+   [org.apache.commons/commons-lang3 "3.12.0"]
+   [org.apache.httpcomponents/httpclient "4.5.13"]
+   [org.apache.httpcomponents/httpcore "4.4.14"]
+   [org.eclipse.jetty/jetty-alpn-server "9.4.48.v20220622"]
+   [org.eclipse.jetty/jetty-alpn-openjdk8-server "9.4.48.v20220622"]
+   [org.eclipse.jetty/jetty-http "9.4.48.v20220622"]
+   [org.eclipse.jetty/jetty-io "9.4.48.v20220622"]
+   [org.eclipse.jetty/jetty-security "9.4.48.v20220622"]
+   [org.eclipse.jetty/jetty-server "9.4.48.v20220622"]
+   [org.eclipse.jetty/jetty-servlet "9.4.48.v20220622"]
+   [org.eclipse.jetty/jetty-util "9.4.48.v20220622"]
+   [org.eclipse.jetty.http2/http2-server "9.4.48.v20220622"]
+   [org.eclipse.jetty.websocket/websocket-server "9.4.48.v20220622"]
+   [org.eclipse.jetty.websocket/websocket-servlet "9.4.48.v20220622"]
+   [org.eclipse.jetty/jetty-server "9.4.48.v20220622"]
+   [org.reactivestreams/reactive-streams "1.0.4"]
+   [org.tukaani/xz "1.8"]
+   [org.slf4j/slf4j-api "1.7.36"]
+   [org.slf4j/slf4j-simple "1.7.36"]
+   [org.slf4j/jcl-over-slf4j "1.7.36"]
+   [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
+   [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1-2"]
+   [ring/ring-devel "1.9.5"]
+   [software.amazon.awssdk/cloudwatch "2.17.241"]
+   [software.amazon.awssdk/s3 "2.17.241"]]
 
   :dependencies
-  [[org.clojure/clojure "1.10.3"]
+  [[org.clojure/clojure]
    [com.xtdb/xtdb-core]
    [com.xtdb/xtdb-rocksdb]
    [com.xtdb/xtdb-lmdb]
@@ -48,37 +112,31 @@
    [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
 
    [integrant "0.8.0"]
-   [integrant/repl "0.3.1"]
+   [integrant/repl "0.3.2"]
 
    ;; metrics dependencies
    ;; JMX Deps
-   [io.dropwizard.metrics/metrics-jmx "4.1.2"]
+   [io.dropwizard.metrics/metrics-jmx "4.2.10"]
 
    ;; Cloudwatch Deps
-   [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.3"]
-   [software.amazon.awssdk/cloudwatch "2.16.32"]
+   [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.8"]
+   [software.amazon.awssdk/cloudwatch]
 
    ;; Prometheus Deps
-   [org.dhatim/dropwizard-prometheus "2.2.0"]
-   [io.prometheus/simpleclient_pushgateway "0.8.1"]
-   [io.prometheus/simpleclient_dropwizard "0.8.1"]
-   [io.prometheus/simpleclient_hotspot "0.8.1"]
-   [clj-commons/iapetos "0.1.9"]
+   [org.dhatim/dropwizard-prometheus "3.1.4"]
+   [io.prometheus/simpleclient_pushgateway "0.16.0"]
+   [io.prometheus/simpleclient_dropwizard "0.16.0"]
+   [io.prometheus/simpleclient_hotspot "0.16.0"]
+   [clj-commons/iapetos "0.1.12"]
 
    ;; lucene test dep
-   [org.apache.lucene/lucene-analyzers-common "8.9.0"]
+   [org.apache.lucene/lucene-analyzers-common "8.11.2"]
 
    ;; test test dep
-   [criterium "0.4.5"]
+   [criterium "0.4.6"]
 
-   ;; crux-core test dep
-   [clj-commons/fs "1.6.307"]
-
-   ;; dependency conflict resolution
-   [org.apache.commons/commons-lang3 "3.9"]
-   [commons-io "2.8.0"]
-   [com.google.protobuf/protobuf-java "3.13.0"]
-   [joda-time "2.9.9"]]
+   ;; xtdb-core test dep
+   [clj-commons/fs "1.6.310"]]
 
   :source-paths ["dev"]
 
@@ -95,7 +153,7 @@
                                                  "-Dxtdb.azure.blobs.test-container=crux-azure-blobs-test-container"]}
              :with-google-cloud-storage-test {:jvm-opts ["-Dxtdb.google.cloud-storage-test.bucket=crux-gcs-test"]}
              :with-chm-add-opens {:jvm-opts ["--add-opens" "java.base/java.util.concurrent=ALL-UNNAMED"]}
-             :nvd {:dependencies [[lein-nvd "1.5.0"]]
+             :nvd {:dependencies [[lein-nvd "2.0.0"]]
                    :plugins [[lein-nvd "1.5.0"]]}}
   :nvd {:fail-threshold 11}
   :pedantic? :warn

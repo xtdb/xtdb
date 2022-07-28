@@ -11,13 +11,10 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.clojure/tools.logging "1.1.0"]
+  :dependencies [[org.clojure/clojure]
+                 [org.clojure/tools.logging]
                  [com.xtdb/xtdb-core]
-                 [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
-
-                 ;; dependency resolution
-                 [commons-codec "1.15"]]
+                 [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]]
 
   :profiles {:test {:dependencies [[com.xtdb/xtdb-test]]}}
 

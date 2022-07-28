@@ -7,8 +7,8 @@
                              :pedantic? :global-vars
                              :license :url :pom-addition]}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.clojure/data.json "1.0.0"]
+  :dependencies [[org.clojure/clojure]
+                 [org.clojure/data.json]
                  [com.xtdb/xtdb-core]
                  [com.xtdb/xtdb-kafka]
                  [com.xtdb/xtdb-rocksdb]
@@ -27,7 +27,7 @@
                  [integrant "0.8.0"]
                  [integrant/repl "0.3.1"]
 
-                 [org.slf4j/slf4j-simple "1.7.26"]
+                 [org.slf4j/slf4j-simple]
 
                  ;; deps res
                  [org.eclipse.jetty/jetty-util "9.4.36.v20210114"]
