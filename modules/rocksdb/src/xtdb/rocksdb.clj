@@ -224,7 +224,7 @@
 
   (when (and (nil? @xio/malloc-arena-max)
              (xio/glibc?))
-    #_{:clj-kondo/ignore [:inline-def]}
+    #_{:clj-kondo/ignore [:inline-def :clojure-lsp/unused-public-var]}
     (defonce warn-once-on-malloc-arena-max
       (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for XTDB is 2")))
 
