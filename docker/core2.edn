@@ -1,1 +1,2 @@
-{:core2/server {}}
+{:core2/server {:port 3000}
+ :core2/pgwire {:port 5432}}

@@ -1,0 +1,18 @@
+<configuration>
+    <appender name="info" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss} | %msg%n</pattern>
+        </encoder>
+    </appender>
+    <appender name="warn" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss} | %-5level %logger{36} %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="WARN">
+        <appender-ref ref="warn" />
+    </root>
+    <logger name="core2.pgwire" level="INFO" additivity="false">
+        <appender-ref ref="info"/>
+    </logger>
+</configuration>
