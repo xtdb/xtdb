@@ -16,8 +16,7 @@
            java.io.Closeable
            [java.util.concurrent CompletableFuture]
            [java.util.concurrent ExecutorService ThreadFactory]
-           [java.util.concurrent Future]
-           java.util.function.BiConsumer
+           java.util.function.BiFunction
            xtdb.codec.EntityTx))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -420,7 +419,7 @@
 (defn ->secondary-indices [_]
   (->SecondaryIndices (atom #{})))
 
-(defrecord TxIngester [index-store !error ^Future job]
+(defrecord TxIngester [index-store !error ^Closeable job]
   db/TxIngester
   (ingester-error [_] @!error)
 
@@ -429,7 +428,7 @@
 
   Closeable
   (close [_]
-    (.cancel job true)
+    (.close job)
     (log/info "Shut down tx-ingester")))
 
 (def ^ThreadFactory docs-fetcher-thread-factory
@@ -483,6 +482,7 @@
                          with-tx-ops? (assoc ::xt/tx-ops (txc/tx-events->tx-ops document-store tx-events)))]
                 (doseq [{:keys [after-tx-id process-tx-f]} secondary-indices
                         :when (or (nil? after-tx-id) (< ^long after-tx-id ^long tx-id))]
+                  #_{:clj-kondo/ignore [:invalid-arity]}
                   (process-tx-f tx))))
 
             (set-ingester-error! [t]
@@ -575,11 +575,16 @@
                                       (set-ingester-error! t)
                                       (throw t))))))]
 
-        (.whenComplete job (reify BiConsumer
-                             (accept [_ _v e]
-                               (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor]]
-                                 (.shutdownNow executor))
-                               (.shutdown ^ExecutorService  stats-executor)
-                               (.awaitTermination ^ExecutorService stats-executor 60, java.util.concurrent.TimeUnit/SECONDS))))
+        (->TxIngester index-store !error
+                      (reify Closeable
+                        (close [_]
+                          (.cancel job false)
+                          @(.handle job (reify BiFunction
+                                          (apply [_ _v _e]
+                                            (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor]]
+                                              (.shutdownNow executor))
+                                            (doseq [^ExecutorService executor [txs-docs-fetch-executor txs-docs-encode-executor txs-index-executor]]
+                                              (.awaitTermination executor 60, java.util.concurrent.TimeUnit/SECONDS))
 
-        (->TxIngester index-store !error job)))))
+                                            (.shutdown ^ExecutorService stats-executor)
+                                            (.awaitTermination ^ExecutorService stats-executor 60, java.util.concurrent.TimeUnit/SECONDS)))))))))))

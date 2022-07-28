@@ -15,8 +15,9 @@
             [xtdb.db :as db])
   (:import [xtdb.api IXtdb XtdbDocument]
            [xtdb.api.tx Transaction]
+           [xtdb.node XtdbNode]
            java.time.Duration
-           [java.util Date HashMap Map]
+           [java.util Date HashMap Map UUID]
            java.util.concurrent.TimeoutException))
 
 (t/deftest test-calling-shutdown-node-fails-gracefully
@@ -196,3 +197,17 @@
 
       (with-latest-tx nil
         (t/is (thrown? InterruptedException (await-tx tx1 nil)))))))
+
+(t/deftest submit-tx-and-close
+  (f/with-tmp-dirs #{db-dir}
+    (let [node-opts {:xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file db-dir "tx-log")}}
+                     :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file db-dir "doc-store")}}
+                     :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}}
+
+          submitted-tx (with-open [n (xt/start-node node-opts)]
+                         (xt/submit-tx n (for [i (range 10000)]
+                                           [::xt/put {:xt/id i, :some/data (str (UUID/randomUUID))}])))]
+
+      (with-open [new-n (xt/start-node node-opts)]
+        (xt/sync new-n)
+        (t/is (= submitted-tx (xt/latest-completed-tx new-n)))))))

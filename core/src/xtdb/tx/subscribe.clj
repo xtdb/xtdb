@@ -27,7 +27,10 @@
       (.whenComplete (reify BiConsumer
                        (accept [_ _v e]
                          (when-not (instance? InterruptedException e)
-                           (.interrupt thread))))))))
+                           (.interrupt thread)
+                           (.join thread 60000)
+                           (when (.isAlive thread)
+                             (log/warn "waited 60s for `completable-thread` to finish, no dice")))))))))
 
 (defn- tx-handler [f ^CompletableFuture fut]
   (fn [_last-tx-id txs]
