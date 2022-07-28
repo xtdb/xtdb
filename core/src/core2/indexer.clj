@@ -357,7 +357,7 @@
               evict-offset (.getOffset tx-ops-vec tx-op-idx)
               iid (.getOrCreateInternalId iid-mgr (t/get-object id-vec evict-offset) row-id)]
           (.logEvict log-op-idxer iid)
-          (.indexEvict temporal-idxer iid row-id))))))
+          (.indexEvict temporal-idxer iid))))))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store

@@ -106,7 +106,7 @@
 (definterface ITemporalTxIndexer
   (^void indexPut [^long iid, ^long rowId, ^long startValidTime, ^long endValidTime, ^boolean newEntity])
   (^void indexDelete [^long iid, ^long rowId, ^long startValidTime, ^long endValidTime, ^boolean newEntity])
-  (^void indexEvict [^long iid, ^long rowId])
+  (^void indexEvict [^long iid])
   (^org.roaringbitmap.longlong.Roaring64Bitmap endTx []))
 
 #_{:clj-kondo/ignore [:unused-binding]}
@@ -424,38 +424,29 @@
 
   (startTx [this-tm tx-key]
     (let [tx-time-μs (util/instant->micros (.tx-time tx-key))
-          row-id->operations (TreeMap.)
           evicted-row-ids (Roaring64Bitmap.)]
       (reify ITemporalTxIndexer
         (indexPut [_ iid row-id start-vt end-vt new-entity?]
-          (.put row-id->operations row-id
-                (fn [kd-tree]
-                  (insert-coordinates kd-tree allocator
-                                      (TemporalCoordinates. row-id iid
-                                                            tx-time-μs util/end-of-time-μs
-                                                            start-vt end-vt
-                                                            new-entity? false)))))
+          (set! (.kd-tree this-tm)
+                (insert-coordinates (.kd-tree this-tm) allocator
+                                    (TemporalCoordinates. row-id iid
+                                                          tx-time-μs util/end-of-time-μs
+                                                          start-vt end-vt
+                                                          new-entity? false))))
 
         (indexDelete [_ iid row-id start-vt end-vt new-entity?]
-          (.put row-id->operations row-id
-                (fn [kd-tree]
-                  (insert-coordinates kd-tree allocator
-                                      (TemporalCoordinates. row-id iid
-                                                            tx-time-μs util/end-of-time-μs
-                                                            start-vt end-vt
-                                                            new-entity? true)))))
+          (set! (.kd-tree this-tm)
+                (insert-coordinates (.kd-tree this-tm) allocator
+                                    (TemporalCoordinates. row-id iid
+                                                          tx-time-μs util/end-of-time-μs
+                                                          start-vt end-vt
+                                                          new-entity? true))))
 
-        (indexEvict [_ iid row-id]
-          (.put row-id->operations row-id
-                (fn [kd-tree]
-                  (evict-id kd-tree allocator iid evicted-row-ids))))
+        (indexEvict [_ iid]
+          (set! (.kd-tree this-tm)
+                (evict-id (.kd-tree this-tm) allocator iid evicted-row-ids)))
 
         (endTx [_]
-          (set! (.kd-tree this-tm)
-                (reduce (fn [kd-tree op]
-                          (op kd-tree))
-                        (.kd-tree this-tm)
-                        (.values row-id->operations)))
           evicted-row-ids))))
 
   ITemporalRootsSource
