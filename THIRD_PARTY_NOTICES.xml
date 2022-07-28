@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <licensing disliked-licenses="0" missing-licenses="2" licensing-check="false">
-  <notice> 
-    THIRD-PARTY SOFTWARE NOTICES AND INFORMATION 
-    Do Not Translate or Localize 
-  </notice> 
-  <description> 
-    This project incorporates components from the projects listed below. The original licenses under which JUXT Ltd. received such components are set forth below. JUXT Ltd. reserves all rights not expressly granted herein, whether by implication, estoppel, or otherwise. 
-  </description> 
+  <notice>
+    THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
+    Do Not Translate or Localize
+  </notice>
+  <description>
+    This project incorporates components from the projects listed below. The original licenses under which JUXT LTD. received such components are set forth below. JUXT LTD. reserves all rights not expressly granted herein, whether by implication, estoppel, or otherwise.
+  </description>
   <artifacts>
     <artifact id="integrant:repl:jar:0.3.2" name="repl">
       <license>The MIT License</license>

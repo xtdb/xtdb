@@ -30,7 +30,7 @@ CORE2_PATH=$(realpath $(dirname $0)/..)
     Do Not Translate or Localize \
   </notice> \
   <description> \
-    This project incorporates components from the projects listed below. The original licenses under which JUXT Ltd. received such components are set forth below. JUXT Ltd. reserves all rights not expressly granted herein, whether by implication, estoppel, or otherwise. \
+    This project incorporates components from the projects listed below. The original licenses under which JUXT LTD. received such components are set forth below. JUXT LTD. reserves all rights not expressly granted herein, whether by implication, estoppel, or otherwise. \
   </description> \
 ' ./target/aggregated-third-party-licensing-formatted.xml > ./THIRD_PARTY_NOTICES.xml
 )
