@@ -10,7 +10,7 @@
            [org.apache.arrow.vector.types.pojo ArrowType$Struct ArrowType$Union Field]))
 
 (declare ^core2.vector.IIndirectVector ->direct-vec
-         ->IndirectVector)
+         ^core2.vector.IIndirectVector ->IndirectVector)
 
 (defrecord NullIndirectVector []
   IIndirectVector
@@ -144,7 +144,7 @@
   (getValueCount [_] (.getValueCount v))
 
   (withName [_ name] (->DirectVector v name))
-  (select [_ idxs] (->IndirectVector v name idxs))
+  (select [this idxs] (->IndirectVector this idxs))
 
   (copyTo [_ out-vec]
     ;; we'd like to use .getTransferPair here but DUV is broken again
@@ -179,62 +179,65 @@
       (aset new-left idx (aget sel1 (aget sel2 idx))))
     new-left))
 
-(defrecord IndirectVector [^ValueVector v, ^String col-name, ^ints idxs]
+(defrecord IndirectVector [^IIndirectVector v, ^ints idxs]
   IIndirectVector
-  (getVector [_] v)
+  (getVector [_] (.getVector v))
   (getIndex [_ idx] (aget idxs idx))
-  (getName [_] col-name)
+  (getName [_] (.getName v))
   (getValueCount [_] (alength idxs))
 
-  (withName [_ col-name] (IndirectVector. v col-name idxs))
+  (withName [_ col-name] (IndirectVector. (.withName v col-name) idxs))
+
+  (isPresent [_ idx] (.isPresent v (aget idxs idx)))
 
   (select [this new-idxs]
-    (IndirectVector. v col-name (compose-selection (.idxs this) new-idxs)))
+    (IndirectVector. v (compose-selection (.idxs this) new-idxs)))
 
-  (copyTo [_ out-vec]
+  (copyTo [this out-vec]
     (.clear out-vec)
 
-    (if (instance? DenseUnionVector v)
-      ;; DUV.copyValueSafe is broken - it's not safe, and it calls DenseUnionWriter.setPosition which NPEs
-      (let [^DenseUnionVector from-duv v
-            ^DenseUnionVector to-duv out-vec]
-        (dotimes [idx (alength idxs)]
-          (let [src-idx (aget idxs idx)
-                type-id (.getTypeId from-duv src-idx)
-                dest-sub-vec (.getVectorByType to-duv type-id)
-                dest-offset (.getValueCount dest-sub-vec)
-                tp (.makeTransferPair (.getVectorByType from-duv type-id) dest-sub-vec)]
-            (.setTypeId to-duv idx type-id)
-            (.setOffset to-duv idx dest-offset)
-            (.copyValueSafe tp (.getOffset from-duv src-idx) dest-offset)
-            (.setValueCount to-duv (inc idx)))))
-      (let [tp (.makeTransferPair v out-vec)]
-        (dotimes [idx (alength idxs)]
-          (.copyValueSafe tp (aget idxs idx) idx))))
+    (let [in-vec (.getVector this)]
+      (if (instance? DenseUnionVector in-vec)
+        ;; DUV.copyValueSafe is broken - it's not safe, and it calls DenseUnionWriter.setPosition which NPEs
+        (let [^DenseUnionVector from-duv in-vec
+              ^DenseUnionVector to-duv out-vec]
+          (dotimes [idx (alength idxs)]
+            (let [src-idx (aget idxs idx)
+                  type-id (.getTypeId from-duv src-idx)
+                  dest-sub-vec (.getVectorByType to-duv type-id)
+                  dest-offset (.getValueCount dest-sub-vec)
+                  tp (.makeTransferPair (.getVectorByType from-duv type-id) dest-sub-vec)]
+              (.setTypeId to-duv idx type-id)
+              (.setOffset to-duv idx dest-offset)
+              (.copyValueSafe tp (.getOffset from-duv src-idx) dest-offset)
+              (.setValueCount to-duv (inc idx)))))
+        (let [tp (.makeTransferPair in-vec out-vec)]
+          (dotimes [idx (alength idxs)]
+            (.copyValueSafe tp (aget idxs idx) idx)))))
 
     (DirectVector. (doto out-vec
                      (.setValueCount (alength idxs)))
-                   col-name))
+                   (.getName this)))
 
   (rowCopier [this-vec w]
-    (let [copier (.rowCopier w v)]
+    (let [copier (.rowCopier v w)]
       (reify IRowCopier
         (copyRow [_ idx]
           (.copyRow copier (.getIndex this-vec idx))))))
 
   (monoReader [_]
-    (-> (vec/->mono-reader v)
+    (-> (.monoReader v)
         (vec/->IndirectVectorMonoReader idxs)))
 
   (polyReader [_ ordered-col-types]
-    (-> (vec/->poly-reader v ordered-col-types)
+    (-> (.polyReader v ordered-col-types)
         (vec/->IndirectVectorPolyReader idxs))))
 
 (defn ->direct-vec ^core2.vector.IIndirectVector [^ValueVector in-vec]
   (DirectVector. in-vec (.getName in-vec)))
 
 (defn ->indirect-vec ^core2.vector.IIndirectVector [^ValueVector in-vec, ^ints idxs]
-  (IndirectVector. in-vec (.getName in-vec) idxs))
+  (IndirectVector. (->direct-vec in-vec) idxs))
 
 (deftype IndirectRelation [^Map cols, ^long row-count]
   IIndirectRelation
