@@ -912,12 +912,15 @@
 (defn buf-concat
   "Concatenates multiple byte buffers, to implement variadic string / binary concat."
   ^ByteBuffer [bufs]
-  (let [out (allocate-concat-out-buffer bufs)
-        ;; this does not reset position of input bufs, but it should be ok to consume them, if caller cares, it is possible
-        ;; to reset their positions.
-        _ (reduce (fn [^ByteBuffer out ^ByteBuffer buf] (.put out buf) out) out bufs)]
-    (.position out 0)
-    out))
+
+  (let [out (allocate-concat-out-buffer bufs)]
+    (doseq [^ByteBuffer buf bufs]
+      (let [pos (.position buf)]
+        (.put out buf)
+        (.position buf pos)))
+
+    (doto out
+      (.position 0))))
 
 (defn resolve-utf8-buf ^ByteBuffer [s-or-buf]
   (if (instance? ByteBuffer s-or-buf)

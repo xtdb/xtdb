@@ -741,7 +741,10 @@
     "" nil nil
     nil "" nil
     "" "" ""
-    "a" "b" "ab"))
+    "a" "b" "ab")
+
+  (t/is (= ["a1__" "a2__"] (project '(concat a "__") [{:a "a1"}, {:a "a2"}]))
+        "resets position of literal buffer"))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 (tct/defspec concat-equiv-to-str-prop
