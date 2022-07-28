@@ -46,7 +46,7 @@
 (defmethod tx-op-spec :sql [_]
   (s/cat :op #{:sql}
          :plan vector?
-         :param-rows (s/? (s/coll-of any? :kind vector?))))
+         :param-rows (s/? (s/coll-of map? :kind sequential?))))
 
 (s/def ::tx-op
   (s/and vector? (s/multi-spec tx-op-spec (fn [v _] v))))

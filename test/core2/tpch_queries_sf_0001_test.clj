@@ -6,7 +6,7 @@
   (:import [java.time LocalDate]))
 
 (t/use-fixtures :once (partial tpch-test/with-tpch-data
-                               {:scale-factor 0.001
+                               {:method :docs, :scale-factor 0.001
                                 :node-dir (util/->path "target/tpch-queries-sf-0001")}))
 
 (t/deftest test-q1-pricing-summary-report

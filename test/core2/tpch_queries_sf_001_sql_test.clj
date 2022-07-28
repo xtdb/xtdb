@@ -7,7 +7,7 @@
 
 (def scaffold
   (partial tpch-test/with-tpch-data
-           {:scale-factor 0.01
+           {:method :docs, :scale-factor 0.01
             :node-dir (util/->path "target/tpch-queries-sf-001")}))
 
 (t/use-fixtures :once #'scaffold)
