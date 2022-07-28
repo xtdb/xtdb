@@ -18,3 +18,6 @@ HEALTHCHECK --start-period=15s --timeout=3s \
 ADD docker/core2.edn core2.edn
 ADD docker/logback.xml logback.xml
 ADD target/core2-standalone.jar core2-standalone.jar
+
+RUN mkdir -p /var/lib/xtdb
+VOLUME /var/lib/xtdb
