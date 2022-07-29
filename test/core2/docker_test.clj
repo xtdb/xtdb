@@ -5,10 +5,14 @@
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.string :as str]
-            [core2.test-util :as tu])
+            [core2.test-util :as tu]
+            [core2.local-node :as node]
+            [core2.api :as c2])
   (:import (java.util List)
            (java.util.concurrent TimeUnit)
-           (java.net Socket)))
+           (java.net Socket)
+           (java.nio.file Files)
+           (java.nio.file.attribute FileAttribute)))
 
 (set! *warn-on-reflection* false)
 
@@ -83,13 +87,16 @@
       (when (thread-bound? #'*image*) (set! *image* sha))
       sha)))
 
-(defn require-container []
+(defn require-container [& {:keys [host-volume]}]
   (let [sha (require-image)
 
         lines (atom [])
 
         port (tu/free-port)
-        p (docker "run" (str "-p" port ":5432") "--rm" sha)
+        p (docker "run"
+                  (str "-p" port ":5432")
+                  (when host-volume (str "-v" host-volume ":/var/lib/xtdb"))
+                  "--rm" sha)
 
         consumer
         (delay
@@ -159,14 +166,40 @@
           (future-cancel @consumer)
           (.destroy p))))))
 
+(defn- q [sql]
+  (assert (psql-available?))
+  (:out (sh/sh "psql" "-hlocalhost" (str "-p" *pgwire-port*) "-c" sql)))
+
 (deftest run-and-connect-test
   (require-container)
   (testing "socket connect"
     (with-open [_ (Socket. "localhost" (int *pgwire-port*))]))
   (when (psql-available?)
     (testing "can run a query using psql"
-      (is (= 0 (:exit (sh/sh "psql" "-hlocalhost" (str "-p" *pgwire-port*) "-c" "select ping")))))))
+      (is (str/includes? (q "select ping") "pong")))))
 
-;; set var meta for all tests in this ns
+(deftest host-volume-test
+  (let [hostdir (-> (Files/createTempDirectory "core2-docker-test-" (make-array FileAttribute 0))
+                    .toAbsolutePath
+                    .toString)]
+
+    ;; put data in to the tmp host dir to test the data mount
+    (with-open [node (->> {:core2.log/local-directory-log {:root-path (io/file hostdir "log")}
+                           :core2.buffer-pool/buffer-pool {:cache-path (io/file hostdir "buffers")}
+                           :core2.object-store/file-system-object-store {:root-path (io/file hostdir "objects")}}
+                          (node/start-node))]
+      (-> (node/await-tx-async node (c2/submit-tx node [[:put {:_id 42, :greeting "Hello, world!"}]]))
+          (.orTimeout 5 TimeUnit/SECONDS)
+          deref))
+
+
+    ;; start the container and verify data is available
+    (require-container :host-volume hostdir)
+    (when (psql-available?)
+      (testing "can run a query using psql"
+        (is (str/includes? (q "select a.greeting from a a") "Hello, world!"))))))
+
+;; set var meta for all tests in this ns, keep at end of file
+;; (otherwise we need to remember to tag every test)
 (doseq [var (vals (ns-publics (.-name *ns*)))]
   (alter-meta! var assoc :docker true, :requires-docker true))
