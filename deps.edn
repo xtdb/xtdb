@@ -62,7 +62,7 @@
                             "-XX:MaxMetaspaceSize=512m"]}
 
            :test {:exec-fn cognitect.test-runner.api/test
-                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt]}}
+                  :exec-args {:excludes [:integration :timescale :s3 :kafka :jdbc :slt :docker]}}
 
            :integration-test {:exec-fn cognitect.test-runner.api/test
                               :exec-args {:includes [:integration]}}
@@ -116,6 +116,9 @@
 
            :jdbc-test {:exec-fn cognitect.test-runner.api/test
                        :exec-args {:includes [:jdbc]}}
+
+           :docker-test {:exec-fn cognitect.test-runner.api/test
+                         :exec-args {:includes [:docker]}}
 
            :uberjar {:deps {io.github.seancorfield/build-clj {:git/tag "v0.6.7" :git/sha "22c2d09"}}
                      :replace-paths []
