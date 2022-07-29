@@ -1,0 +1,243 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "column",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "block-idx",
+      "nullable" : true,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 32,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "root-column",
+      "nullable" : true,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "min-row-id",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "max-row-id",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      }]
+    },{
+      "name" : "count",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "types",
+      "nullable" : true,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "i64",
+        "nullable" : true,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : true,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : true,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }],
+        "metadata" : [{
+          "value" : "i64",
+          "key" : "type-head"
+        }]
+      },{
+        "name" : "utf8",
+        "nullable" : true,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : true,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : true,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        }],
+        "metadata" : [{
+          "value" : "utf8",
+          "key" : "type-head"
+        }]
+      },{
+        "name" : "f64",
+        "nullable" : true,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : true,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : true,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        }],
+        "metadata" : [{
+          "value" : "f64",
+          "key" : "type-head"
+        }]
+      }]
+    },{
+      "name" : "bloom",
+      "nullable" : true,
+      "type" : {
+        "name" : "binary"
+      },
+      "children" : [ ]
+    }]
+  },
+  "batches" : [{
+    "count" : 8,
+    "columns" : [{
+      "name" : "column",
+      "count" : 8,
+      "VALIDITY" : [1,1,1,1,1,1,1,1],
+      "OFFSET" : [0,3,6,9,12,15,18,21,24],
+      "DATA" : ["_id","_id","bar","bar","baz","baz","foo","foo"]
+    },{
+      "name" : "block-idx",
+      "count" : 8,
+      "VALIDITY" : [0,1,0,1,0,1,0,1],
+      "DATA" : [0,0,0,0,0,0,0,0]
+    },{
+      "name" : "root-column",
+      "count" : 8,
+      "VALIDITY" : [1,1,1,1,1,1,1,1],
+      "children" : [{
+        "name" : "min-row-id",
+        "count" : 8,
+        "VALIDITY" : [1,1,1,1,1,1,1,1],
+        "DATA" : ["0","0","0","0","0","0","0","0"]
+      },{
+        "name" : "max-row-id",
+        "count" : 8,
+        "VALIDITY" : [1,1,1,1,1,1,1,1],
+        "DATA" : ["1","1","1","1","1","1","1","1"]
+      }]
+    },{
+      "name" : "count",
+      "count" : 8,
+      "VALIDITY" : [1,1,1,1,1,1,1,1],
+      "DATA" : ["2","2","2","2","2","2","2","2"]
+    },{
+      "name" : "types",
+      "count" : 8,
+      "VALIDITY" : [1,1,1,1,1,1,1,1],
+      "children" : [{
+        "name" : "i64",
+        "count" : 8,
+        "VALIDITY" : [1,1,0,0,1,1,1,1],
+        "children" : [{
+          "name" : "min",
+          "count" : 8,
+          "VALIDITY" : [1,1,0,0,1,1,1,1],
+          "DATA" : ["0","0","0","0","12","12","1","1"]
+        },{
+          "name" : "max",
+          "count" : 8,
+          "VALIDITY" : [1,1,0,0,1,1,1,1],
+          "DATA" : ["1","1","0","0","12","12","2","2"]
+        }]
+      },{
+        "name" : "utf8",
+        "count" : 8,
+        "VALIDITY" : [0,0,1,1,0,0,0,0],
+        "children" : [{
+          "name" : "min",
+          "count" : 8,
+          "VALIDITY" : [0,0,1,1,0,0,0,0],
+          "OFFSET" : [0,0,0,5,10,10,10,10,10],
+          "DATA" : ["","","hello","hello","","","",""]
+        },{
+          "name" : "max",
+          "count" : 8,
+          "VALIDITY" : [0,0,1,1,0,0,0,0],
+          "OFFSET" : [0,0,0,5,10,10,10,10,10],
+          "DATA" : ["","","world","world","","","",""]
+        }]
+      },{
+        "name" : "f64",
+        "count" : 8,
+        "VALIDITY" : [0,0,0,0,1,1,0,0],
+        "children" : [{
+          "name" : "min",
+          "count" : 8,
+          "VALIDITY" : [0,0,0,0,1,1,0,0],
+          "DATA" : [0.0,0.0,0.0,0.0,3.3,3.3,0.0,0.0]
+        },{
+          "name" : "max",
+          "count" : 8,
+          "VALIDITY" : [0,0,0,0,1,1,0,0],
+          "DATA" : [0.0,0.0,0.0,0.0,3.3,3.3,0.0,0.0]
+        }]
+      }]
+    },{
+      "name" : "bloom",
+      "count" : 8,
+      "VALIDITY" : [1,1,1,1,1,1,1,1],
+      "OFFSET" : [0,60,120,180,240,308,376,436,496],
+      "DATA" : ["3a300000050000000200000005000100060000000700000008000000300000003200000036000000380000003a000000fed1a117fc2a28c8445d5465","3a300000050000000200000005000100060000000700000008000000300000003200000036000000380000003a000000fed1a117fc2a28c8445d5465","3a300000050000000000000004000000060001000a0000000d000000300000003200000034000000380000003a000000052c9828950c0acc754b517a","3a300000050000000000000004000000060001000a0000000d000000300000003200000034000000380000003a000000052c9828950c0acc754b517a","3a30000006000000010000000400000007000000080000000c0000000d000000380000003a0000003c0000003e000000400000004200000030e0f4107da527b1e31a5a51","3a30000006000000010000000400000007000000080000000c0000000d000000380000003a0000003c0000003e000000400000004200000030e0f4107da527b1e31a5a51","3a30000005000000020001000500000007000000090000000f000000300000003400000036000000380000003a000000468dfed1a117445d1d18f4a2","3a30000005000000020001000500000007000000090000000f000000300000003400000036000000380000003a000000468dfed1a117445d1d18f4a2"]
+    }]
+  }]
+}

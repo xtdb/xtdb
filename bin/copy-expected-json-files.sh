@@ -4,6 +4,7 @@
     for x in writes-log-file \
              can-build-chunk-as-arrow-ipc-file-format \
              can-handle-dynamic-cols-in-same-block \
+             can-index-sql-insert \
              multi-block-metadata \
              ; do
 
@@ -13,8 +14,10 @@
            $(dirname $0)/../test-resources/$x/
     done
 
-    for x in can-submit-tpch-docs-0.001 \
-             can-submit-tpch-docs-0.01 \
+    for x in can-submit-tpch/docs-0.001 \
+             can-submit-tpch/docs-0.01 \
+             can-submit-tpch/dml-0.001 \
+             can-submit-tpch/dml-0.01 \
              ; do
 
         echo "copying $x (metadata only)..."

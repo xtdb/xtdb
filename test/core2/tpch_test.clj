@@ -15,12 +15,14 @@
 
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 1)))
 
-(defn with-tpch-data [{:keys [^Path node-dir scale-factor clock]} f]
+(defn with-tpch-data [{:keys [method ^Path node-dir scale-factor clock]} f]
   (util/delete-dir node-dir)
 
   (with-open [node (tu/->local-node {:node-dir node-dir,
                                      :clock clock})]
-    (let [last-tx (-> (tpch/submit-docs! node scale-factor)
+    (let [last-tx (-> (case method
+                        :docs (tpch/submit-docs! node scale-factor)
+                        :dml (tpch/submit-dml! node scale-factor))
                       (tu/then-await-tx node))]
       (tu/finish-chunk node)
 
@@ -30,11 +32,11 @@
         (binding [*node* node, *db* db]
           (f))))))
 
-(defn- tpch-node-dir ^Path [scale-factor]
-  (util/->path (format "target/can-submit-tpch-docs-%s" scale-factor)))
+(def ^:private ^Path tpch-node-dir
+  (util/->path (format "target/can-submit-tpch")))
 
-(defn- tpch-test-dir ^Path [scale-factor]
-  (.toPath (io/as-file (io/resource (format "can-submit-tpch-docs-%s/" scale-factor)))))
+(def ^:private ^Path tpch-test-dir
+  (.toPath (io/as-file (io/resource "can-submit-tpch/"))))
 
 (defn- object-files [^Path node-dir]
   (iterator-seq (.iterator (Files/list (.resolve node-dir "objects")))))
@@ -44,25 +46,39 @@
   dir, and written-file is the matching file in the node-dir.
 
   Useful to compare or replace expected .json with the ingest output."
-  [scale-factor ^Path node-dir]
-  (let [objects-dir (.resolve node-dir "objects")
-        test-dir (tpch-test-dir scale-factor)]
+  [^Path node-dir, ^Path test-dir]
+  (let [objects-dir (-> node-dir (.resolve "objects"))]
     (for [test-path (iterator-seq (.iterator (Files/list test-dir)))
           :let [written-object-path (.resolve objects-dir (.relativize test-dir test-path))]]
       [test-path written-object-path])))
 
-(defn- test-tpch-ingest [scale-factor expected-objects]
-  (let [node-dir (tpch-node-dir scale-factor)]
-    (with-tpch-data
-      {:node-dir node-dir
-       :scale-factor scale-factor
-       :clock (Clock/fixed (util/->instant #inst "2021-04-01") (ZoneId/of "UTC"))}
+(defn- test-tpch-ingest [method scale-factor expected-objects]
+  (let [sub-dir (format "%s-%s" (name method) scale-factor)
+        node-dir (.resolve tpch-node-dir sub-dir)
+        test-dir (.resolve tpch-test-dir sub-dir)]
+    (with-tpch-data {:method method
+                     :node-dir node-dir
+                     :scale-factor scale-factor
+                     :clock (Clock/fixed (util/->instant #inst "2021-04-01") (ZoneId/of "UTC"))}
       (fn []
         (t/is (= expected-objects (count (object-files node-dir))))
         (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
-        (doseq [[expected-path actual-path] (paired-paths scale-factor node-dir)]
+        (doseq [[expected-path actual-path] (paired-paths node-dir test-dir)]
           (t/is (Files/exists actual-path (make-array LinkOption 0)))
           (tu/check-json-file expected-path actual-path))))))
+
+(t/deftest ^:integration can-submit-tpch-docs-0.01
+  (test-tpch-ingest :docs 0.01 67))
+
+(t/deftest can-submit-tpch-docs-0.001
+  (test-tpch-ingest :docs 0.001 67))
+
+#_
+(t/deftest ^:integration can-submit-tpch-dml-0.01
+  (test-tpch-ingest :dml 0.01 66))
+
+(t/deftest can-submit-tpch-dml-0.001
+  (test-tpch-ingest :dml 0.001 66))
 
 (defn run-query
   ([q] (run-query q {}))
@@ -73,9 +89,3 @@
 
 (defn slurp-query [query-no]
   (slurp (io/resource (str "core2/sql/tpch/" (format "q%02d.sql" query-no)))))
-
-(t/deftest ^:integration can-submit-tpch-docs-0.01
-  (test-tpch-ingest 0.01 67))
-
-(t/deftest can-submit-tpch-docs-0.001
-  (test-tpch-ingest 0.001 67))
