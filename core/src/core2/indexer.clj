@@ -378,65 +378,65 @@
                            [{}])]
           (zmatch query
             [:insert inner-query]
-            (doseq [param-row param-rows
-                    :let [param-row (->> param-row
-                                         (into {} (map (juxt (comp symbol key) val))))]]
-              (with-open [res (op/open-ra inner-query (into {'$ scan-src} param-row)
-                                          {:current-time current-time})]
-                (.forEachRemaining res
-                                   (reify Consumer
-                                     (accept [_ in-rel]
-                                       (let [^IIndirectRelation in-rel in-rel
-                                             row-count (.rowCount in-rel)
-                                             doc-row-copiers (vec
-                                                              (for [^IIndirectVector in-col in-rel
-                                                                    :when (not (temporal/temporal-column? (.getName in-col)))]
-                                                                (doc-row-copier indexer in-col)))
-                                             id-col (.vectorForName in-rel "_id")
-                                             vt-start-rdr (some-> (.vectorForName in-rel "_valid-time-start") (.monoReader))
-                                             vt-end-rdr (some-> (.vectorForName in-rel "_valid-time-end") (.monoReader))]
-                                         (dotimes [idx row-count]
-                                           (let [row-id (.nextRowId indexer)]
-                                             (doseq [^DocRowCopier doc-row-copier doc-row-copiers]
-                                               (.copyDocRow doc-row-copier row-id idx))
-
-                                             (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
-                                                   new-entity? (.isKnownId iid-mgr eid)
-                                                   iid (.getOrCreateInternalId iid-mgr eid row-id)
-                                                   start-vt (if vt-start-rdr
-                                                              (.readLong vt-start-rdr idx)
-                                                              current-time-µs)
-                                                   end-vt (if vt-end-rdr
-                                                            (.readLong vt-end-rdr idx)
-                                                            util/end-of-time-μs)]
-                                               (.logPut log-op-idxer iid row-id start-vt end-vt)
-                                               (.indexPut temporal-idxer iid row-id start-vt end-vt new-entity?))))))))))
-
-            [:delete vt-opts inner-query]
-            (let [^long delete-vt-from-µs (or (some-> (:_valid-time-start vt-opts) util/->instant util/instant->micros)
-                                              Long/MIN_VALUE)
-                  ^long delete-vt-to-µs (or (some-> (:_valid-time-end vt-opts) util/->instant util/instant->micros)
-                                            Long/MAX_VALUE)]
+            (with-open [pq (op/open-prepared-ra inner-query)]
               (doseq [param-row param-rows
                       :let [param-row (->> param-row
                                            (into {} (map (juxt (comp symbol key) val))))]]
-                (with-open [res (op/open-ra inner-query (into {'$ scan-src} param-row)
-                                            {:current-time current-time})]
+                (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
                   (.forEachRemaining res
                                      (reify Consumer
                                        (accept [_ in-rel]
                                          (let [^IIndirectRelation in-rel in-rel
                                                row-count (.rowCount in-rel)
-                                               iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
-                                               vt-start-rdr (.monoReader (.vectorForName in-rel "_valid-time-start"))
-                                               vt-end-rdr (.monoReader (.vectorForName in-rel "_valid-time-end"))]
+                                               doc-row-copiers (vec
+                                                                (for [^IIndirectVector in-col in-rel
+                                                                      :when (not (temporal/temporal-column? (.getName in-col)))]
+                                                                  (doc-row-copier indexer in-col)))
+                                               id-col (.vectorForName in-rel "_id")
+                                               vt-start-rdr (some-> (.vectorForName in-rel "_valid-time-start") (.monoReader))
+                                               vt-end-rdr (some-> (.vectorForName in-rel "_valid-time-end") (.monoReader))]
                                            (dotimes [idx row-count]
-                                             (let [row-id (.nextRowId indexer)
-                                                   iid (.readLong iid-rdr idx)
-                                                   start-vt (Math/max (.readLong vt-start-rdr idx) delete-vt-from-µs)
-                                                   end-vt (Math/min (.readLong vt-end-rdr idx) delete-vt-to-µs)]
-                                               (.logDelete log-op-idxer iid start-vt end-vt)
-                                               (.indexDelete temporal-idxer iid row-id start-vt end-vt false))))))))))
+                                             (let [row-id (.nextRowId indexer)]
+                                               (doseq [^DocRowCopier doc-row-copier doc-row-copiers]
+                                                 (.copyDocRow doc-row-copier row-id idx))
+
+                                               (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
+                                                     new-entity? (.isKnownId iid-mgr eid)
+                                                     iid (.getOrCreateInternalId iid-mgr eid row-id)
+                                                     start-vt (if vt-start-rdr
+                                                                (.readLong vt-start-rdr idx)
+                                                                current-time-µs)
+                                                     end-vt (if vt-end-rdr
+                                                              (.readLong vt-end-rdr idx)
+                                                              util/end-of-time-μs)]
+                                                 (.logPut log-op-idxer iid row-id start-vt end-vt)
+                                                 (.indexPut temporal-idxer iid row-id start-vt end-vt new-entity?)))))))))))
+
+            [:delete vt-opts inner-query]
+            (with-open [pq (op/open-prepared-ra inner-query)]
+              (let [^long delete-vt-from-µs (or (some-> (:_valid-time-start vt-opts) util/->instant util/instant->micros)
+                                                Long/MIN_VALUE)
+                    ^long delete-vt-to-µs (or (some-> (:_valid-time-end vt-opts) util/->instant util/instant->micros)
+                                              Long/MAX_VALUE)]
+                (doseq [param-row param-rows
+                        :let [param-row (->> param-row
+                                             (into {} (map (juxt (comp symbol key) val))))]]
+                  (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
+                    (.forEachRemaining res
+                                       (reify Consumer
+                                         (accept [_ in-rel]
+                                           (let [^IIndirectRelation in-rel in-rel
+                                                 row-count (.rowCount in-rel)
+                                                 iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
+                                                 vt-start-rdr (.monoReader (.vectorForName in-rel "_valid-time-start"))
+                                                 vt-end-rdr (.monoReader (.vectorForName in-rel "_valid-time-end"))]
+                                             (dotimes [idx row-count]
+                                               (let [row-id (.nextRowId indexer)
+                                                     iid (.readLong iid-rdr idx)
+                                                     start-vt (Math/max (.readLong vt-start-rdr idx) delete-vt-from-µs)
+                                                     end-vt (Math/min (.readLong vt-end-rdr idx) delete-vt-to-µs)]
+                                                 (.logDelete log-op-idxer iid start-vt end-vt)
+                                                 (.indexDelete temporal-idxer iid row-id start-vt end-vt false)))))))))))
 
             (throw (UnsupportedOperationException. "sql query"))))))))
 

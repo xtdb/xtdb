@@ -49,7 +49,14 @@
 
 (def ^:dynamic *column->pushdown-bloom* {})
 
-(defn ->scan-col-types [scan-exprs srcs]
+(defn ->scan-cols [{:keys [source columns]}]
+  (let [src-key (or source '$)]
+    (for [column columns]
+      [src-key (zmatch column
+                 [:column col] col
+                 [:select col-map] (key (first col-map)))])))
+
+(defn ->scan-col-types [srcs scan-cols]
   (let [mm+wms (HashMap.)]
     (try
       (letfn [(->mm+wm [src-key]
@@ -71,15 +78,8 @@
                     (t/merge-col-types (.columnType (.metadataManager src) (name col-name))
                                        (.columnType wm (name col-name))))))]
 
-        (->> scan-exprs
-             (into {} (comp (mapcat (fn ->scan-col-keys [{:keys [source columns]}]
-                                      (let [src-key (or source '$)]
-                                        (for [column columns]
-                                          [src-key (zmatch column
-                                                     [:column col] col
-                                                     [:select col-map] (key (first col-map)))]))))
-                            (distinct)
-                            (map (juxt identity ->col-type))))))
+        (->> scan-cols
+             (into {} (map (juxt identity ->col-type)))))
 
       (finally
         (run! util/try-close (map :wm (vals mm+wms)))))))
