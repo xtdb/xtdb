@@ -98,13 +98,14 @@
      (or (and next-values (.hasNext next-values))
          ;; need to call rel->rows eagerly - the rel may have been reused/closed after
          ;; the tryAdvance returns.
-         (and (.tryAdvance cursor
-                           (reify Consumer
-                             (accept [_ rel]
-                               (set! (.-next-values res)
-                                     (.iterator (iv/rel->rows rel))))))
-              next-values
-              (.hasNext next-values)))))
+         (do
+           (while (and (.tryAdvance cursor
+                                    (reify Consumer
+                                      (accept [_ rel]
+                                        (set! (.-next-values res)
+                                              (.iterator (iv/rel->rows rel))))))
+                       (not (and next-values (.hasNext next-values)))))
+           (and next-values (.hasNext next-values))))))
 
   (next [_] (.next next-values))
   (close [_] (.close cursor)))
