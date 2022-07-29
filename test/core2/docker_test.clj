@@ -7,12 +7,15 @@
             [clojure.string :as str]
             [core2.test-util :as tu]
             [core2.local-node :as node]
-            [core2.api :as c2])
+            [core2.api :as c2]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [clojure.data.json :as json])
   (:import (java.util List)
            (java.util.concurrent TimeUnit)
            (java.net Socket)
            (java.nio.file Files)
-           (java.nio.file.attribute FileAttribute)))
+           (java.nio.file.attribute FileAttribute)
+           (org.postgresql.util PGobject)))
 
 (set! *warn-on-reflection* false)
 
@@ -28,7 +31,6 @@
 (defn cmd-available? [cmd] (try (= 0 (:exit (sh/sh "command" "-v" cmd))) (catch Throwable _ false)))
 
 (def docker-available? (partial cmd-available? "docker"))
-(def psql-available? (partial cmd-available? "psql"))
 
 (defn expected-working-dir? [] (.exists (io/file "Dockerfile")))
 
@@ -167,16 +169,15 @@
           (.destroy p))))))
 
 (defn- q [sql]
-  (assert (psql-available?))
-  (:out (sh/sh "psql" "-hlocalhost" (str "-p" *pgwire-port*) "-c" sql)))
+  (->> (jdbc/execute! (format "jdbc:postgresql://:%s/xtdb" *pgwire-port*) [sql])
+       (mapv (fn [r] (update-vals r (fn [o] (if (instance? PGobject o) (json/read-str (str o)) o)))))))
 
 (deftest run-and-connect-test
   (require-container)
   (testing "socket connect"
     (with-open [_ (Socket. "localhost" (int *pgwire-port*))]))
-  (when (psql-available?)
-    (testing "can run a query using psql"
-      (is (str/includes? (q "select ping") "pong")))))
+  (testing "can run a query using jdbc"
+    (is (= [{:ping "pong"}] (q "select ping")))))
 
 (deftest host-volume-test
   (let [hostdir (-> (Files/createTempDirectory "core2-docker-test-" (make-array FileAttribute 0))
@@ -195,9 +196,8 @@
 
     ;; start the container and verify data is available
     (require-container :host-volume hostdir)
-    (when (psql-available?)
-      (testing "can run a query using psql"
-        (is (str/includes? (q "select a.greeting from a a") "Hello, world!"))))))
+    (testing "can run a query using jdbc, returning data from the host dir"
+      (is (= [{:greeting "Hello, world!"}] (q "select a.greeting from a a"))))))
 
 ;; set var meta for all tests in this ns, keep at end of file
 ;; (otherwise we need to remember to tag every test)
