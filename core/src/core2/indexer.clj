@@ -382,7 +382,7 @@
                     :let [param-row (->> param-row
                                          (into {} (map (juxt (comp symbol key) val))))]]
               (with-open [res (op/open-ra inner-query (into {'$ scan-src} param-row)
-                                          {:default-valid-time current-time})]
+                                          {:current-time current-time})]
                 (.forEachRemaining res
                                    (reify Consumer
                                      (accept [_ in-rel]
@@ -421,7 +421,7 @@
                       :let [param-row (->> param-row
                                            (into {} (map (juxt (comp symbol key) val))))]]
                 (with-open [res (op/open-ra inner-query (into {'$ scan-src} param-row)
-                                            {:default-valid-time current-time})]
+                                            {:current-time current-time})]
                   (.forEachRemaining res
                                      (reify Consumer
                                        (accept [_ in-rel]

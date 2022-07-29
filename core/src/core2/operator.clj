@@ -36,14 +36,10 @@
   (let [scan-exprs (->> (lp/child-exprs q) (filterv (comp #{:scan} :op)))]
     (scan/->scan-col-types scan-exprs srcs)))
 
-(deftype ResultCursor [^BufferAllocator allocator, ^ICursor cursor, ^Clock clock, col-types]
-  ;; we could probably move this closer into the expression engine,
-  ;; but it needs some consideration around the EE's caching behaviour.
+(deftype ResultCursor [^BufferAllocator allocator, ^ICursor cursor, col-types]
   IResultCursor
   (columnTypes [_] col-types)
-  (tryAdvance [_ c]
-    (binding [expr/*clock* clock]
-      (.tryAdvance cursor c)))
+  (tryAdvance [_ c] (.tryAdvance cursor c))
 
   (characteristics [_] (.characteristics cursor))
   (estimateSize [_] (.estimateSize cursor))
@@ -60,7 +56,7 @@
   (^core2.IResultCursor [query] (open-ra query {}))
   (^core2.IResultCursor [query args] (open-ra query args {}))
 
-  (^core2.IResultCursor [query args {:keys [default-valid-time default-tz] :as query-opts}]
+  (^core2.IResultCursor [query args {:keys [current-time default-tz] :as query-opts}]
    (let [conformed-query (s/conform ::lp/logical-plan query)]
      (when (s/invalid? conformed-query)
        (throw (err/illegal-arg :malformed-query
@@ -70,26 +66,24 @@
 
      (let [allocator (RootAllocator.)]
        (try
-         (let [default-valid-time (or default-valid-time (.instant expr/*clock*))
-               ;; will later be provided as part of the 'SQL session' (see §6.32)
-               default-tz (or default-tz (.getZone expr/*clock*))
-               clock (Clock/fixed default-valid-time default-tz)]
+         (let [{:keys [srcs params]} (args->srcs+params args)
+               scan-col-types (->scan-col-types conformed-query srcs)
 
-           (binding [expr/*clock* clock]
-             (let [{:keys [srcs params]} (args->srcs+params args)
-                   scan-col-types (->scan-col-types conformed-query srcs)
+               ;; now that we're taking scan-col-types out, we might be able to cache emit-expr
+               {:keys [col-types ->cursor]} (lp/emit-expr conformed-query
+                                                          {:src-keys (set (keys srcs)),
+                                                           :scan-col-types scan-col-types
+                                                           :param-types (expr/->param-types params)})
 
-                   ;; now that we're taking scan-col-types out, we might be able to cache emit-expr
-                   {:keys [col-types ->cursor]} (lp/emit-expr conformed-query
-                                                              {:src-keys (set (keys srcs)),
-                                                               :scan-col-types scan-col-types
-                                                               :param-types (expr/->param-types params)})
-                   cursor (->cursor (into query-opts
-                                          {:srcs srcs, :params params
-                                           :default-valid-time default-valid-time
-                                           :allocator allocator}))]
+               cursor (->cursor (into query-opts
+                                      {:allocator allocator
+                                       :srcs srcs, :params params
 
-               (ResultCursor. allocator cursor clock col-types))))
+                                       :clock (Clock/fixed (or current-time (.instant expr/*clock*))
+                                                           ;; will later be provided as part of the 'SQL session' (see §6.32)
+                                                           (or default-tz (.getZone expr/*clock*)))}))]
+
+           (ResultCursor. allocator cursor col-types))
          (catch Throwable t
            (util/try-close allocator)
            (throw t)))))))

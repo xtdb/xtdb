@@ -99,9 +99,9 @@
             (doseq [el (iterator-seq res)]
               (transit/write writer el))))))))
 
-(s/def ::default-valid-time inst?)
+(s/def ::current-time inst?)
 (s/def ::tx #(instance? TransactionInstant %))
-(s/def ::basis (s/keys :opt-un [::default-valid-time ::tx]))
+(s/def ::basis (s/keys :opt-un [::current-time ::tx]))
 
 (s/def ::basis-timeout
   (st/spec (s/nilable #(instance? Duration %))

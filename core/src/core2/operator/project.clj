@@ -6,6 +6,7 @@
             [core2.vector.indirect :as iv])
   (:import core2.ICursor
            core2.operator.IProjectionSpec
+           java.time.Clock
            java.util.function.Consumer
            java.util.ArrayList
            java.util.List
@@ -64,31 +65,33 @@
 (deftype ProjectCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
                         ^List #_<IProjectionSpec> projection-specs
+                        ^Clock clock
                         params]
   ICursor
   (tryAdvance [_ c]
     (.tryAdvance in-cursor
                  (reify Consumer
                    (accept [_ read-rel]
-                     (let [close-cols (ArrayList.)
-                           out-cols (ArrayList.)]
-                       (try
-                         (doseq [^IProjectionSpec projection-spec projection-specs]
-                           (let [out-col (.project projection-spec allocator read-rel params)]
-                             (when-not (instance? IdentityProjectionSpec projection-spec)
-                               (.add close-cols out-col))
-                             (.add out-cols out-col)))
+                     (binding [expr/*clock* clock]
+                       (let [close-cols (ArrayList.)
+                             out-cols (ArrayList.)]
+                         (try
+                           (doseq [^IProjectionSpec projection-spec projection-specs]
+                             (let [out-col (.project projection-spec allocator read-rel params)]
+                               (when-not (instance? IdentityProjectionSpec projection-spec)
+                                 (.add close-cols out-col))
+                               (.add out-cols out-col)))
 
-                         (.accept c (iv/->indirect-rel out-cols))
+                           (.accept c (iv/->indirect-rel out-cols))
 
-                         (finally
-                           (run! util/try-close close-cols))))))))
+                           (finally
+                             (run! util/try-close close-cols)))))))))
 
   (close [_]
     (util/try-close in-cursor)))
 
-(defn ->project-cursor [{:keys [allocator, params] :as _opts} in-cursor projection-specs]
-  (->ProjectCursor allocator in-cursor projection-specs params))
+(defn ->project-cursor [{:keys [allocator clock params]} in-cursor projection-specs]
+  (->ProjectCursor allocator in-cursor projection-specs clock params))
 
 (defmethod lp/emit-expr :project [{:keys [projections relation], {:keys [append-columns?]} :opts} {:keys [param-types] :as args}]
   (lp/unary-expr relation args

@@ -32,18 +32,18 @@
   api/PClient
   (-open-datalog-async [_ query args]
     (let [{:keys [basis ^Duration basis-timeout]} query
-          {:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
+          {:keys [current-time tx], :or {current-time (Instant/now)}} basis]
       (-> (ingest/snapshot-async ingester tx)
           (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
           (util/then-apply
             (fn [db]
               (let [{:keys [query args]} (-> (dissoc query :basis :basis-timeout)
                                              (d/compile-query args))]
-                (-> (op/open-ra query (merge args {'$ db}) {:default-valid-time default-valid-time})
+                (-> (op/open-ra query (merge args {'$ db}) {:current-time current-time})
                     (op/cursor->result-set))))))))
 
   (-open-sql-async [_ query {:keys [basis ^Duration basis-timeout] :as query-opts}]
-    (let [{:keys [default-valid-time tx], :or {default-valid-time (Instant/now)}} basis]
+    (let [{:keys [current-time tx], :or {current-time (Instant/now)}} basis]
       (-> (ingest/snapshot-async ingester tx)
           (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
           (util/then-apply
@@ -58,7 +58,7 @@
                                   (into {'$ db}
                                         (zipmap (map #(symbol (str "?_" %)) (range))
                                                 (:? query-opts)))
-                                  {:default-valid-time default-valid-time})
+                                  {:current-time current-time})
                       (op/cursor->result-set)))))))))
 
   PNode
