@@ -370,7 +370,7 @@
 (defn- interpret-sql
   "Takes a sql string and returns a map of data about it.
 
-  :statement-type (:canned-response, :set-session-parameter, :ignore, :empty-query or :query)
+  :statement-type determines the rest of the data.
 
   if :canned-response
   :canned-response (the map from the canned-responses)
@@ -379,8 +379,7 @@
   :parameter (the param name)
   :value (the value)
 
-  if :ignore
-  :ignore the kind of statement to ignore (useful to emit the correct msg-command-complete)
+  if :begin or :commit or :rollback (nothing more to say, unparameterized tx controls)
 
   if :empty-query (nothing more to say!)
 
@@ -402,9 +401,14 @@
        :parameter k
        :value v})
 
-    (#{"BEGIN" "COMMIT" "ROLLBACK"} (statement-head sql))
-    {:statement-type :ignore
-     :ignore (statement-head sql)}
+    (= "BEGIN" (statement-head sql))
+    {:statement-type :begin}
+
+    (= "COMMIT" (statement-head sql))
+    {:statement-type :commit}
+
+    (= "ROLLBACK" (statement-head sql))
+    {:statement-type :rollback}
 
     (str/blank? sql)
     {:statement-type :empty-query}
@@ -1386,8 +1390,12 @@
 
         xt-params (vec (map-indexed xtify-param params))
 
+        query-opts
+        {:basis (:basis (:transaction @conn-state))
+         :? xt-params}
+
         ;; execute the query asynchronously (to enable later enable cancellation mid query)
-        query-fut (c2/open-sql-async node transformed-query (if (seq xt-params) {:? xt-params} {}))
+        query-fut (c2/open-sql-async node transformed-query query-opts)
 
         ;; keep the fut around in case of interrupt exc (for cleanup)
         _ (swap! conn-state update :executing (fnil conj #{}) query-fut)
@@ -1428,6 +1436,19 @@
 (defn cmd-describe-query [conn ast]
   (cmd-send-row-description conn (query-projection ast)))
 
+(defn cmd-begin [{:keys [server, conn-state] :as conn}]
+  (let [{:keys [node]} server]
+    (swap! conn-state assoc :transaction {:basis {:tx (:latest-completed-tx (c2/status node))}}))
+  (cmd-write-msg conn msg-command-complete {:command "BEGIN"}))
+
+(defn cmd-commit [{:keys [conn-state] :as conn}]
+  (swap! conn-state dissoc :transaction)
+  (cmd-write-msg conn msg-command-complete {:command "COMMIT"}))
+
+(defn cmd-rollback [{:keys [conn-state] :as conn}]
+  (swap! conn-state dissoc :transaction)
+  (cmd-write-msg conn msg-command-complete {:command "ROLLBACK"}))
+
 (defn cmd-describe
   "Sends description messages (e.g msg-row-description) to the client for a prepared statement or portal."
   [{:keys [conn-state] :as conn} {:keys [describe-type, describe-name] :as msg}]
@@ -1447,8 +1468,10 @@
     (case statement-type
       :empty-query (cmd-write-msg conn msg-no-data)
       :canned-response (cmd-describe-canned-response conn canned-response)
-      :set-session-parameter (cmd-write-msg conn msg-no-data)
-      :ignore (cmd-write-msg conn msg-no-data)
+
+      (:set-session-parameter :begin :commit :rollback)
+      (cmd-write-msg conn msg-no-data)
+
       :query (cmd-describe-query conn ast)
       (cmd-send-error conn (err-protocol-violation "no such description possible")))))
 
@@ -1459,7 +1482,6 @@
    {:keys [ast
            statement-type
            canned-response
-           ignore
            parameter
            value]
     :as stmt}]
@@ -1474,7 +1496,9 @@
     :empty-query (cmd-write-msg conn msg-empty-query)
     :canned-response (cmd-write-canned-response conn canned-response)
     :set-session-parameter (set-session-parameter conn parameter value)
-    :ignore (cmd-write-msg conn msg-command-complete {:command (statement-head ignore)})
+    :begin (cmd-begin conn)
+    :rollback (cmd-rollback conn)
+    :commit (cmd-commit conn)
     :query (cmd-exec-query conn stmt))
 
   (when (and (= :simple (:protocol @conn-state))
@@ -1492,8 +1516,11 @@
   "Sync commands are sent by the client to commit transactions (we do not do anything here yet),
   and to clear the error state of a :extended mode series of commands (e.g the parse/bind/execute dance)"
   [{:keys [conn-state] :as conn}]
-  (swap! conn-state dissoc :skip-until-sync, :protocol)
-  (cmd-send-ready conn :idle))
+  (let [{:keys [transaction]} @conn-state]
+    (swap! conn-state dissoc :skip-until-sync, :protocol)
+    (if transaction
+      (cmd-send-ready conn :transaction)
+      (cmd-send-ready conn :idle))))
 
 (defn cmd-flush
   "Flushes any pending output to the client."

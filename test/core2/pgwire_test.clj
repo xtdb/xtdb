@@ -861,3 +861,39 @@
         (is (= "pong" (ping conn)))))
 
     (is (not (contains? @#'pgwire/servers port)))))
+
+(deftest open-close-transaction-does-not-crash-test
+  (with-open [conn (jdbc-conn)]
+    (jdbc/with-transaction [db conn]
+      (is (= [{:ping "pong"}] (jdbc/execute! db ["select ping;"]))))))
+
+;; for now, behaviour will change later I am sure
+(deftest different-transaction-isolation-levels-accepted-and-ignored-test
+  (with-open [conn (jdbc-conn)]
+    (doseq [level [:read-committed
+                   :read-uncommitted
+                   :repeatable-read
+                   :serializable]]
+      (testing (format "can open and close transaction (%s)" level)
+        (jdbc/with-transaction [db conn {:isolation level}]
+          (is (= [{:ping "pong"}] (jdbc/execute! db ["select ping;"])))))
+      (testing (format "readonly accepted (%s)" level)
+        (jdbc/with-transaction [db conn {:isolation level, :read-only true}]
+          (is (= [{:ping "pong"}] (jdbc/execute! db ["select ping;"])))))
+      (testing (format "rollback only accepted (%s)" level)
+        (jdbc/with-transaction [db conn {:isolation level, :rollback-only true}]
+          (is (= [{:ping "pong"}] (jdbc/execute! db ["select ping;"]))))))))
+
+;; right now all isolation levels have the same defined behaviour
+(deftest transaction-by-default-pins-the-basis-too-last-tx-test
+  (require-node)
+  (let [insert #(future (-> (c2/submit-tx *node* [[:put %]]) (tu/then-await-tx *node*)))]
+    @(insert {:_id :fred, :name "Fred"})
+    (with-open [conn (jdbc-conn)]
+
+      (jdbc/with-transaction [db conn]
+        (is (= [{:name "Fred"}] (q db ["select a.name from a"])))
+        @(insert {:_id :bob, :name "Bob"})
+        (is (= [{:name "Fred"}] (q db ["select a.name from a"]))))
+
+      (is (= [{:name "Fred"}, {:name "Bob"}] (q conn ["select a.name from a"]))))))
