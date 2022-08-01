@@ -14,7 +14,7 @@
            java.nio.charset.StandardCharsets
            [java.nio.file CopyOption FileVisitResult Files LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.time Duration Instant OffsetDateTime ZoneId ZonedDateTime]
+           [java.time Duration Instant OffsetDateTime ZoneId ZonedDateTime LocalDate OffsetTime ZoneOffset]
            java.time.temporal.ChronoUnit
            [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList Map Queue UUID WeakHashMap]
            [java.util.concurrent CompletableFuture ExecutorService Executors ThreadFactory TimeUnit]
@@ -88,7 +88,14 @@
   (->zdt [zdt] zdt)
 
   OffsetDateTime
-  (->instant [odt] (.toInstant odt)))
+  (->instant [odt] (.toInstant odt))
+
+  LocalDate
+  (->instant [ld]
+    (.toInstant
+      (.atTime
+        ld
+        (OffsetTime/of 0 0 0 0 (ZoneOffset/of "Z")))))) ;; TODO needs to take into account SQL session default time zone displacement see #280
 
 (defn instant->micros ^long [^Instant inst]
   (-> (Math/multiplyExact (.getEpochSecond inst) 1000000)
