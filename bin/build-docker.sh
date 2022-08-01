@@ -10,6 +10,6 @@ set -e
     fi
 
     echo Building Docker image...
-    docker build -t juxt.xtdb.labs/core2:${CORE2_VERSION:-latest} .
+    docker build -t xtdb/core2:${CORE2_VERSION:-latest} .
     echo Done
 )

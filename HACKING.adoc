@@ -151,9 +151,11 @@ Core2 artifacts are deployed to Maven Central.
 
 === Docker
 
-* `./bin/build-docker.sh [--clean]` => `juxt.xtdb-labs/core2:latest`
-* `CORE2_VERSION=<version> ./bin/build-docker.sh` to tag as a different version.
+Requires a login to docker with push perms to the xtdb org.
 
+* `./bin/build-docker.sh [--clean]` will build and tag as `xtdb/core2:latest`
+* `docker push
+* `CORE2_VERSION=<version> ./bin/build-docker.sh` to tag as a different version.
 
 == Arrow Fork
 
