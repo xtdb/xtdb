@@ -1,0 +1,76 @@
+= 40. Core2/PGWire transaction behaviour
+
+Date: 2022-08-01
+
+== Status
+
+Proposed
+
+== Context
+
+We've implemented a PGWire adapter as an initial driver for Core2.
+Currently this supports read-only queries, but we'd like to extend this to DML too.
+
+=== General Core2 requirements
+
+There are three main considerations here:
+
+. In Core2, read-only and write transactions follow different paths:
+  * Read-only transactions can be sent to any node, and return a synchronous result (similar to Postgres).
+    Write transactions, though, are fundamentally asynchronous - they need to be sent to the tx-log (usually Kafka), and are then consumed asynchronously by each node.
+  * This means that write transactions are http://jepsen.io/consistency/models/strict-serializable['strictly serialized'] - happy days.
+    Read-only transactions are merely http://jepsen.io/consistency/models/serializable['serialized'] - but this isolation level allows for read-only transactions to be executed at any point in time (including, pathologically, before any write transactions!).
+  * By default, read-only transactions execute against the latest transaction the node in question has indexed - so, in order for a user to reliably read their own writes in such a system (given the node may not have indexed their transaction yet), they must somehow ensure that their write transaction has been included.
+. Separately, we value referentially transparent, 'repeatable' queries - the same query, executed with exactly the same parameters, should return the same resultset regardless of when it's executed.
+  Specifically, it shouldn't matter how many subsequent transactions the queried node has indexed, nor the current wall-clock time of the querying or queried node.
+. That said, in practice, users likely expect the same simple query run multiple times to include new results as they come in.
+
+SQL:2011 does allow a lot of control over the temporal characteristics of the query, using either `FROM <table> FOR SYSTEM TIME ...` or `WHERE app_time OVERLAPS PERIOD(...)` etc.
+However, even this is not strong enough for the above properties:
+
+* By default, SQL:2011 doesn't filter application time - it returns the whole application timeline for each entity.
+  We'll likely be recommending liberal use of `CURRENT_TIMESTAMP` to restrict results - e.g. `WHERE app_time CONTAINS CURRENT_TIMESTAMP`.
+`CURRENT_TIMESTAMP` is obviously a co-effect so, if we're to preserve referential transparency, it needs to be a parameter to the query.
+* If the user doesn't specify a system time constraint on a given table, the SQL semantics specify that this should be filtered to system time intervals containing the current time of the queried node.
+  We could use the same `CURRENT_TIMESTAMP` query argument, but this isn't quite sufficient, because nodes consume the tx-log asynchronously.
++
+Consider a node that's half an hour behind the tx-log: at 16:00, `SELECT * FROM foo FOR SYSTEM TIME AS OF 15:45` wouldn't reflect a transaction from 15:40 - once the node caught up, it would.
+
+So, there are two necessarily distinct co-effect parameters here:
+
+'current timestamp'::
+If it is not explicitly supplied, it defaults to the current time on the submitting node.
+We use the submitting node's clock for `CURRENT_TIMESTAMP` on both write transactions and queries because of https://github.com/xtdb/xtdb/issues/1665[this Core1 issue] - this guarantees that transactions submitted by a node that use `CURRENT_TIMESTAMP` are then included in a later `CURRENT_TIMESTAMP` query filter submitted by that node, regardless of which node the transaction and query are executed on.
++
+'transaction basis'::
+This provides an upper bound on the transactions that are visible to a given query - in addition to any restrictions in the query itself.
+This also provides a lower bound on the visible transactions, so that a user can read their writes - the node must block until it's indexed this transaction to execute the query.
+(In practice, we also advise the user supply a 'basis timeout' to limit how long the node will block.)
++
+If it is not supplied, this defaults to the latest completed transaction (as opposed to the current time, because of the above note regarding asynchronous consumption of the tx-log).
+
+== Options
+
+=== A: single statements
+
+We only support single statements for now, ignore `BEGIN`/`COMMIT`/etc, and behave as if auto-commit is enabled.
+
+* If the driver detects that any one of the statements is a write, it will submit the transaction, and synchronously await it before returning to the user.
+  If none of the statements are writes, it will execute the query synchronously, as it does currently.
+* We'll likely want to support multiple semicolon-delimited statements, in order to preserve the transactional atomicity of a collection of statements.
+* Initially, we might decide to not support specifying the co-effect arguments, as the defaults would be quite reasonable if the connection synchronously awaited write transactions.
+* Later, we might decide to use session parameters to specify these arguments, although their extent may not be clear without a transaction scope - would the user expect them to apply to just the next query, or to the rest of the session (or until they were changed again)?
+
+=== B: scoped transactions
+
+We use session parameters to specify bases, which are then naturally scoped to the transaction block.
+
+* `START TRANSACTION` (SQL:2011 §17.1, p1035) optionally accepts a `<transaction access mode> ::= READ ONLY | READ WRITE` characteristic.
+  In the SQL:2011 spec, the `<transaction access mode>` defaults to `READ WRITE`; however, in Postgres, it defaults to the `default_transaction_read_only` configuration parameter.
+  We could consider defaulting to `READ ONLY`, which would then require users to explicitly `START TRANSACTION READ WRITE` in order to mutate the database.
+
+== Decision
+
+For ease of implementation, we will initially implement option A.
+
+We will later re-consider option B once we have landed option A, and are more familiar with the tradeoffs and nuances involved.
