@@ -1249,20 +1249,106 @@
        ordinality-column (assoc :ordinality-column ordinality-column))
      [:map [{unwind-symbol (expr cve)}] nil]]))
 
+(defn coerce-points-in-time [pit1 pit2]
+  ;; TODO Needs to support LocalDateTime and take into account session timezone see #280
+  (cond
+    (and (instance? java.time.LocalDate pit1)
+         (instance? java.time.LocalDate pit2))
+    [pit1 pit2]
+    (and (instance? java.time.LocalDate pit1)
+         (instance? java.time.OffsetDateTime pit2))
+    [(.atTime pit1 (create-offset-time "0" "0" "0" "0" "0" "0"))
+     pit2]
+
+    (and (instance? java.time.OffsetDateTime pit1)
+         (instance? java.time.LocalDate pit2))
+    [pit1
+     (.atTime pit2 (create-offset-time "0" "0" "0" "0" "0" "0"))]
+
+    (and (instance? java.time.OffsetDateTime pit1)
+         (instance? java.time.OffsetDateTime pit2))
+    [pit1 pit2]))
+
+(defn pit-less-than [pit1 pit2]
+  (let [[pit-1 pit-2] (coerce-points-in-time pit1 pit2)]
+    (neg? (.compareTo pit-1 pit-2))))
+
+(defn pit-less-than-or-equal [pit1 pit2]
+  (let [[pit-1 pit-2] (coerce-points-in-time pit1 pit2)
+        res (.compareTo pit-1 pit-2)]
+    (or (neg? res) (= res 0))))
+
+(defn pit-greater-than [pit1 pit2]
+  (let [[pit-1 pit-2] (coerce-points-in-time pit1 pit2)]
+    (pos? (.compareTo pit-1 pit-2))))
+
 (defn find-system-time-predicates [tp]
   (r/collect-stop
     (fn [tp]
-      (r/zmatch
-        tp
+      (r/zmatch tp
         [:query_system_time_period_specification
          "FOR"
          "SYSTEM_TIME"
          "AS"
          "OF"
-         timestamp]
+         point-in-time]
         ;;=>
-        [{'_tx-time-start (list '<= '_tx-time-start (expr timestamp))}
-         {'_tx-time-end (list '> '_tx-time-end (expr timestamp))}]))
+        [{'_tx-time-start (list '<= '_tx-time-start (expr point-in-time))}
+         {'_tx-time-end (list '> '_tx-time-end (expr point-in-time))}]
+
+        [:query_system_time_period_specification
+         "FOR"
+         "SYSTEM_TIME"
+         "FROM"
+         point-in-time-1
+         "TO"
+         point-in-time-2]
+        ;;=>
+        (let [pit1 (expr point-in-time-1)
+              pit2 (expr point-in-time-2)]
+          (if (pit-less-than pit1 pit2)
+            [{'_tx-time-start (list '< '_tx-time-start pit2)}
+             {'_tx-time-end (list '> '_tx-time-end pit1)}]
+            [:invalid-points-in-time]))
+
+        [:query_system_time_period_specification
+         "FOR"
+         "SYSTEM_TIME"
+         "BETWEEN"
+         point-in-time-1
+         "AND"
+         point-in-time-2]
+        ;;=>
+        (let
+          [pit1 (expr point-in-time-1)
+           pit2 (expr point-in-time-2)]
+          (if (pit-less-than-or-equal pit1 pit2)
+            [{'_tx-time-start (list '<= '_tx-time-start pit2)}
+             {'_tx-time-end (list '> '_tx-time-end pit1)}]
+            [:invalid-points-in-time]))
+
+        [:query_system_time_period_specification
+         "FOR"
+         "SYSTEM_TIME"
+         "BETWEEN"
+         mode
+         point-in-time-1
+         "AND"
+         point-in-time-2]
+        ;;=>
+        (let [pit1 (expr point-in-time-1)
+              pit2 (expr point-in-time-2)
+              [start end] (case mode
+                            "SYMMETRIC"
+                            (if (pit-greater-than pit1 pit2)
+                              [pit2 pit1]
+                              [pit1 pit2])
+                            "ASYMMETRIC"
+                            [pit1 pit2])]
+          (if (pit-less-than-or-equal start end)
+            [{'_tx-time-start (list '<= '_tx-time-start end)}
+             {'_tx-time-end (list '> '_tx-time-end start)}]
+            [:invalid-points-in-time]))))
     tp))
 
 (defn- build-table-primary [tp]
@@ -1276,23 +1362,32 @@
                           (map symbol derived-columns))
           (plan subquery-ref)]
          (plan subquery-ref))
-       [:scan (let [columns (for [{:keys [identifier]} projection]
-                                   (symbol identifier))
-                    columns-with-system-time-predicates
-                    (if system-time-predicates
-                      (concat
+       (cond->>
+         [:scan (let [columns (for [{:keys [identifier]} projection]
+                                (symbol identifier))
+                      columns-with-system-time-predicates
+                      (cond
+                        (= (first system-time-predicates) :invalid-points-in-time)
+                        columns
+
                         system-time-predicates
-                        (remove #(contains? (set (mapcat keys system-time-predicates)) %) columns))
-                      columns)
-                    columns-with-temporal-cols
-                    (vec (mapcat #(if (= % 'APP_TIME)
-                                    ['_valid-time-start '_valid-time-end]
-                                    [%]) columns-with-system-time-predicates))]
-                (if *include-table-column-in-scan?*
-                  (conj
-                    columns-with-temporal-cols
-                    {'_table (list '=  '_table table-or-query-name)})
-                  columns-with-temporal-cols))])]))
+                        (concat
+                          system-time-predicates
+                          (remove #(contains? (set (mapcat keys system-time-predicates)) %) columns))
+
+                        :else
+                        columns)
+                      columns-with-temporal-cols
+                      (vec (mapcat #(if (= % 'APP_TIME)
+                                      ['_valid-time-start '_valid-time-end]
+                                      [%]) columns-with-system-time-predicates))]
+                  (if *include-table-column-in-scan?*
+                    (conj
+                      columns-with-temporal-cols
+                      {'_table (list '=  '_table table-or-query-name)})
+                    columns-with-temporal-cols))]
+         (= (first system-time-predicates) :invalid-points-in-time)
+         (vector :select 'false)))]))
 
 (defn- build-lateral-derived-table [tp qe]
   (let [scope-id (sem/id (sem/scope-element tp))

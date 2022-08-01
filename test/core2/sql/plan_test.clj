@@ -777,15 +777,117 @@
     "TIME '20:40:31+03:44'" #time/offset-time "20:40:31+03:44"
     "TIME '20:40:31.467+14:00'" #time/offset-time "20:40:31.467+14:00"))
 
-(deftest test-find-system-time-predicates
+(deftest test-coerce-points-in-time
+
   (t/is
-    (= (plan/find-system-time-predicates
-         (r/vector-zip
-           [:query_system_time_period_specification
-            "FOR"
-            "SYSTEM_TIME"
-            "AS"
-            "OF"
-            [:boolean_literal "TRUE"]]))
-       [{'_tx-time-start (list '<= '_tx-time-start true)}
-        {'_tx-time-end (list '> '_tx-time-end true)}])))
+    (= [#time/date "2000-03-15" #time/date "3000-03-15"]
+       (plan/coerce-points-in-time #time/date "2000-03-15" #time/date "3000-03-15"))
+    "localdate localdate")
+
+  (t/is
+    (= [#time/offset-date-time "3000-03-15T00:00:00Z" #time/offset-date-time "3000-03-15T20:40:31Z"]
+       (plan/coerce-points-in-time #time/date "3000-03-15" #time/offset-date-time "3000-03-15T20:40:31Z"))
+    "localdate offsetdate")
+
+  (t/is
+    (= [#time/offset-date-time "3000-03-15T20:40:31Z" #time/offset-date-time "3000-03-15T00:00:00Z"]
+       (plan/coerce-points-in-time #time/offset-date-time "3000-03-15T20:40:31Z" #time/date "3000-03-15"))
+    "localdate offsetdate")
+
+  (t/is
+    (= [#time/offset-date-time "2000-03-15T20:40:31Z" #time/offset-date-time "3000-03-15T20:40:31Z"]
+       (plan/coerce-points-in-time #time/offset-date-time "2000-03-15T20:40:31Z" #time/offset-date-time "3000-03-15T20:40:31Z"))
+    "offsetdate offsetdate"))
+
+(deftest test-system-time-queries
+
+  (t/testing "AS OF"
+    (t/is
+      (=plan-file
+        "system-time-as-of"
+        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME AS OF TIMESTAMP '2999-01-01 00:00:00+00:00'"))))
+
+  (t/testing "FROM A to B"
+
+    (t/is
+      (=plan-file
+        "system-time-from-a-to-b-ts-ts"
+        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME FROM TIMESTAMP '2999-01-01 00:00:00+00:00' TO TIMESTAMP '3000-01-01 00:00:00+00:00'")))
+
+    (t/is
+      (=plan-file
+        "system-time-from-a-to-b-date-ts"
+        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO TIMESTAMP '3000-01-01 00:00:00+00:00'")))
+
+    (t/is
+      (=plan-file
+        "system-time-from-a-to-b-date-date"
+        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME FROM DATE '2999-01-01' TO DATE '3000-01-01'")))
+
+    (t/is
+      (=plan-file
+        "system-time-from-a-to-b-when-a-before-b"
+        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME FROM TIMESTAMP '3000-01-01 00:00:00+00:00' TO DATE '3000-01-01'"))
+      "A must to before B"))
+
+
+  (t/testing "BETWEEN A AND B"
+    (t/is
+      (=plan-file
+        "system-time-between-a-and-b-ts-ts"
+        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN TIMESTAMP '2999-01-01 00:00:00+00:00' AND TIMESTAMP '3000-01-01 00:00:00+00:00'")))
+
+    (t/is
+      (=plan-file
+        "system-time-between-a-and-b-date-date"
+        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND DATE '3000-01-01'")))
+
+    (t/is
+      (=plan-file
+        "system-time-between-a-and-b-when-a-equal-b"
+        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN DATE '3000-01-01' AND TIMESTAMP '3000-01-01 00:00:00+00:00'"))
+      "A can be equal to B")
+
+    (t/is
+      (=plan-file
+        "system-time-between-a-and-b-when-a-before-b"
+        (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN TIMESTAMP '3100-01-01 00:00:00+00:00' AND DATE '3000-01-01'"))
+      "A must be before or equal to B"))
+
+  (t/testing "BETWEEN ASYMMETRIC A AND B"
+
+    (t/is
+      (= (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN ASYMMETRIC TIMESTAMP '2999-01-01 00:00:00+00:00' AND TIMESTAMP '3000-01-01 00:00:00+00:00'")
+         (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN TIMESTAMP '2999-01-01 00:00:00+00:00' AND TIMESTAMP '3000-01-01 00:00:00+00:00'"))
+      "ASYMMETRIC should produce same plan as default between")
+
+    (t/is
+      (=
+       (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN ASYMMETRIC DATE '3000-01-01' AND TIMESTAMP '3000-01-01 00:00:00+00:00'")
+       (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN DATE '3000-01-01' AND TIMESTAMP '3000-01-01 00:00:00+00:00'")))
+
+    (t/is
+      (=
+       (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN ASYMMETRIC TIMESTAMP '3100-01-01 00:00:00+00:00' AND DATE '3000-01-01'")
+       (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN TIMESTAMP '3100-01-01 00:00:00+00:00' AND DATE '3000-01-01'"))))
+
+  (t/testing "BETWEEN SYMMETRIC A AND B"
+
+    (t/is
+      (=
+       (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN SYMMETRIC TIMESTAMP '2999-01-01 00:00:00+00:00' AND TIMESTAMP '3000-01-01 00:00:00+00:00'")
+       (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN TIMESTAMP '2999-01-01 00:00:00+00:00' AND TIMESTAMP '3000-01-01 00:00:00+00:00'"))
+      "SYMMETRIC A AND B should equal default if A less than B")
+
+    (t/is
+      (=
+       (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN SYMMETRIC DATE '3000-01-01' AND TIMESTAMP '3000-01-01 00:00:00+00:00'")
+       (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN DATE '3000-01-01' AND TIMESTAMP '3000-01-01 00:00:00+00:00'"))
+      "SYMMETRIC A AND B should equal default if A equal to B")
+
+    (t/is
+      (=
+       (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN SYMMETRIC DATE '3000-01-01' AND DATE '2999-01-01'")
+       (plan-sql "SELECT foo.bar FROM foo FOR SYSTEM_TIME BETWEEN DATE '2999-01-01' AND DATE '3000-01-01'"))
+      "SYMMETRIC A AND B should be equal to default B AND A as long as A is greater than B")))
+

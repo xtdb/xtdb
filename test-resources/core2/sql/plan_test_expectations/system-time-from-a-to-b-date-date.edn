@@ -1,0 +1,10 @@
+[:rename
+ {x3 bar}
+ [:project
+  [x3]
+  [:rename
+   {_tx-time-start x1, _tx-time-end x2, bar x3}
+   [:scan
+    [{_tx-time-start (< _tx-time-start #time/date "3000-01-01")}
+     {_tx-time-end (> _tx-time-end #time/date "2999-01-01")}
+     bar]]]]]
