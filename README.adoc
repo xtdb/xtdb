@@ -73,6 +73,23 @@ Core2's initial objective is to take the key principles embodied in XTDB 1.x -- 
 |===
 
 
+== Quickstart
+
+[source,sh]
+----
+docker pull xtdb/core2
+docker run -p 5432:5432 xtdb/core2
+----
+
+You should see `| PGWire server started on port:  5432`. You can now access that port from outside the Docker container:
+
+[source,sh]
+----
+psql -h localhost
+# as of this writing, DML is not supported over pgwire yet
+----
+
+
 == Documentation
 
 There is currently no official documentation for Core2 outside of the tests and source code in this repository. Please do not open issues on this repository with documentation-related questions at this stage.
