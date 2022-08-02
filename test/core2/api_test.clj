@@ -182,4 +182,27 @@
 
       (t/is (= [{:name "Dave"} {:name "Claire"}]
                (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2019-06-01 00:00:00', TIMESTAMP '2019-07-01 00:00:00')"
-                             {:basis {:tx !tx2}}))))))
+                             {:basis {:tx !tx2}}))))
+
+    (let [!tx3 (c2/submit-tx *node* [[:sql '[:update {:_valid-time-start #inst "2021-07-01"}
+                                             [:map [{name "Sue"}]
+                                              [:scan [_iid {_id (= _id ?id)}
+                                                      _valid-time-start
+                                                      {_valid-time-end (>= _valid-time-end #inst "2021-07-01")}]]]]
+                                      [{:?id :susan}]]])]
+      ;; TODO when we can return `_valid-time-start` etc from `:scan` without errors we can probably coalesce these tests
+      (t/is (= [{:name "Susan"} {:name "Sue"}]
+               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue')"
+                             {:basis {:tx !tx3}})))
+
+      (t/is (= [{:name "Susan"}]
+               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2021-05-01 00:00:00', TIMESTAMP '2021-06-01 00:00:00')"
+                             {:basis {:tx !tx3}})))
+
+      (t/is (= [{:name "Susan"}]
+               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2021-08-01 00:00:00', TIMESTAMP '2021-09-01 00:00:00')"
+                             {:basis {:tx !tx1}})))
+
+      (t/is (= [{:name "Sue"}]
+               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2021-08-01 00:00:00', TIMESTAMP '2021-09-01 00:00:00')"
+                             {:basis {:tx !tx3}}))))))

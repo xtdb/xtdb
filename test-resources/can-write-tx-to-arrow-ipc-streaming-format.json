@@ -542,12 +542,12 @@
       "name" : "tx-ops",
       "count" : 1,
       "VALIDITY" : [1],
-      "OFFSET" : [0,4],
+      "OFFSET" : [0,5],
       "children" : [{
         "name" : "$data$",
-        "count" : 4,
-        "TYPE_ID" : [0,0,3,3],
-        "OFFSET" : [0,1,0,1],
+        "count" : 5,
+        "TYPE_ID" : [0,0,3,3,3],
+        "OFFSET" : [0,1,0,1,2],
         "children" : [{
           "name" : "put",
           "count" : 2,
@@ -818,19 +818,19 @@
           }]
         },{
           "name" : "sql",
-          "count" : 2,
-          "VALIDITY" : [1,1],
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
           "children" : [{
             "name" : "query",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,54,148],
-            "DATA" : ["[:insert [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]","[:delete {:_valid-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:scan [{_id (= _id 1)}]]]"]
+            "count" : 3,
+            "VALIDITY" : [1,1,1],
+            "OFFSET" : [0,54,205,312],
+            "DATA" : ["[:insert [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]","[:update {:_valid-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:project [_iid _row-id _id {bar \"world\"}] [:scan [_iid _row-id {_id (= _id 1)}]]]]","[:delete {:_valid-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:scan [_iid _row-id {_id (= _id 1)}]]]"]
           },{
             "name" : "param-rows",
-            "count" : 2,
-            "VALIDITY" : [1,1],
-            "OFFSET" : [0,2,2],
+            "count" : 3,
+            "VALIDITY" : [1,1,1],
+            "OFFSET" : [0,2,2,2],
             "children" : [{
               "name" : "$data$",
               "count" : 2,
