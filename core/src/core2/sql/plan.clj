@@ -760,17 +760,47 @@
      ;;=>
      (symbol (str "?_" (sem/dynamic-param-idx z)))
 
-     [:period_succeeds_predicate ^:z p1_predicand [:period_succeeds_predicate_part_2 "SUCCEEDS" ^:z p2_predicand]]
+     [:period_contains_predicate ^:z p1_predicand [:period_contains_predicate_part_2 _ ^:z p2_predicand]]
+     ;;=>
+     (let [p1 (expr p1_predicand)
+           p2 (expr p2_predicand)]
+       (list 'and (list '<= (:start p1) (or (:start p2) p2)) (list '>= (:end p1) (or (:end p2) p2))))
+
+     [:period_overlaps_predicate ^:z p1_predicand [:period_overlaps_predicate_part_2 _ ^:z p2_predicand]]
+     ;;=>
+     (let [p1 (expr p1_predicand)
+           p2 (expr p2_predicand)]
+       (list 'and (list '< (:start p1) (:end p2)) (list '> (:end p1) (:start p2))))
+
+     [:period_equals_predicate ^:z p1_predicand [:period_equals_predicate_part_2 _ ^:z p2_predicand]]
+     ;;=>
+     (let [p1 (expr p1_predicand)
+           p2 (expr p2_predicand)]
+       (list 'and (list '= (:start p1) (:start p2)) (list '= (:end p1) (:end p2))))
+
+     [:period_precedes_predicate ^:z p1_predicand [:period_precedes_predicate_part_2 _ ^:z p2_predicand]]
+     ;;=>
+     (let [p1 (expr p1_predicand)
+           p2 (expr p2_predicand)]
+       (list '<= (:end p1) (:start p2)))
+
+     [:period_succeeds_predicate ^:z p1_predicand [:period_succeeds_predicate_part_2 _ ^:z p2_predicand]]
      ;;=>
      (let [p1 (expr p1_predicand)
            p2 (expr p2_predicand)]
        (list '>= (:start p1) (:end p2)))
 
-     [:period_overlaps_predicate ^:z p1_predicand [:period_overlaps_predicate_part_2 "OVERLAPS" ^:z p2_predicand]]
+     [:period_immediately_precedes_predicate ^:z p1_predicand [:period_immediately_precedes_predicate_part_2 _ _ ^:z p2_predicand]]
      ;;=>
      (let [p1 (expr p1_predicand)
            p2 (expr p2_predicand)]
-       (list 'and (list '< (:start p1) (:end p2)) (list '> (:end p1) (:start p2))))
+       (list '= (:end p1) (:start p2)))
+
+     [:period_immediately_succeeds_predicate ^:z p1_predicand [:period_immediately_succeeds_predicate_part_2 _ _ ^:z p2_predicand]]
+     ;;=>
+     (let [p1 (expr p1_predicand)
+           p2 (expr p2_predicand)]
+       (list '= (:start p1) (:end p2)))
 
      [:period_predicand ^:z col]
      ;;=>
