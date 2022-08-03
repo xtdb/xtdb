@@ -59,7 +59,8 @@
                        ;; here because they're only easily accessible for non-nested columns.
                        ;; and we happen to need a marker for root columns anyway.
                        (t/col-type->field "min-row-id" [:union #{:null :i64}])
-                       (t/col-type->field "max-row-id" [:union #{:null :i64}]))
+                       (t/col-type->field "max-row-id" [:union #{:null :i64}])
+                       (t/col-type->field "row-id-bloom" [:union #{:null :varbinary}]))
 
             (t/col-type->field "count" :i64)
 
@@ -248,6 +249,7 @@
         ^StructVector root-col-vec (.getVector metadata-root "root-column")
         ^BigIntVector min-row-id-vec (.getChild root-col-vec "min-row-id")
         ^BigIntVector max-row-id-vec (.getChild root-col-vec "max-row-id")
+        ^VarBinaryVector row-id-bloom-vec (.getChild root-col-vec "row-id-bloom")
 
         ^BigIntVector count-vec (.getVector metadata-root "count")
 
@@ -263,7 +265,8 @@
                   (let [meta-idx (dec (.getRowCount metadata-root))]
                     (.setIndexDefined root-col-vec meta-idx)
                     (.setSafe min-row-id-vec meta-idx (.get row-id-vec 0))
-                    (.setSafe max-row-id-vec meta-idx (.get row-id-vec (dec value-count)))))))
+                    (.setSafe max-row-id-vec meta-idx (.get row-id-vec (dec value-count)))
+                    (bloom/write-bloom row-id-bloom-vec meta-idx row-id-vec)))))
 
             (write-col-meta! [^DenseUnionVector content-vec]
               (let [content-writers (->> (seq content-vec)
