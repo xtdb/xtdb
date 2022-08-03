@@ -102,12 +102,12 @@
   (testing "OVERLAPS"
 
     (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "2000"}
-                                        {:_valid-time-start #inst "2000"}]
+                                        {:app-time-start #inst "2000"}]
                                        [:put {:_id :my-doc, :last_updated "3000"}
-                                        {:_valid-time-start #inst "3000"}]
+                                        {:app-time-start #inst "3000"}]
                                        [:put {:_id :some-other-doc, :last_updated "4000"}
-                                        {:_valid-time-start #inst "4000"
-                                         :_valid-time-end #inst "4001"}]])]
+                                        {:app-time-start #inst "4000"
+                                         :app-time-end #inst "4001"}]])]
 
       (is (= [{:last_updated "2000"} {:last_updated "3000"} {:last_updated "4000"}]
              (query-at-tx
@@ -137,11 +137,11 @@
 (deftest app-time-multiple-tables
 
   (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :foo-doc, :last_updated "2001"}
-                                      {:_valid-time-start #inst "2000"
-                                       :_valid-time-end #inst "2001"}]
+                                      {:app-time-start #inst "2000"
+                                       :app-time-end #inst "2001"}]
                                      [:put {:_id :bar-doc, :l_updated "2003"}
-                                      {:_valid-time-start #inst "2002"
-                                       :_valid-time-end #inst "2003"}]])]
+                                      {:app-time-start #inst "2002"
+                                       :app-time-end #inst "2003"}]])]
 
     (is (= [{:last_updated "2001"}]
            (query-at-tx
@@ -177,13 +177,12 @@
              WHERE foo.APP_TIME OVERLAPS bar.APP_TIME" !tx)))))
 
 (deftest app-time-joins
-
   (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :bill, :name "Bill"}
-                                      {:_valid-time-start #inst "2016"
-                                       :_valid-time-end #inst "2019"}]
+                                      {:app-time-start #inst "2016"
+                                       :app-time-end #inst "2019"}]
                                      [:put {:_id :jeff, :also_name "Jeff"}
-                                      {:_valid-time-start #inst "2018"
-                                       :_valid-time-end #inst "2020"}]])]
+                                      {:app-time-start #inst "2018"
+                                       :app-time-end #inst "2020"}]])]
 
     (is (= []
            (query-at-tx

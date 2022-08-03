@@ -148,7 +148,7 @@
 
 (t/deftest test-basic-sql-dml
   (let [!tx1 (c2/submit-tx *node* [[:sql '[:insert {:table "users"}
-                                           [:table [{:_id ?id, :name ?name, :_valid-time-start ?start-date}]]]
+                                           [:table [{:_id ?id, :name ?name, :application_time_start ?start-date}]]]
                                     [{:?id :dave, :?name "Dave", :?start-date #inst "2018"}
                                      {:?id :claire, :?name "Claire", :?start-date #inst "2019"}
                                      {:?id :alan, :?name "Alan", :?start-date #inst "2020"}
@@ -165,12 +165,12 @@
                            {:basis {:tx !tx1}})))
 
     (let [!tx2 (c2/submit-tx *node* [[:sql '[:delete {:table "users"
-                                                      :_valid-time-start #inst "2020-05-01"}
+                                                      :app-time-start #inst "2020-05-01"}
                                              [:scan [_iid
                                                      {_table (= _table "users")}
                                                      {_id (= _id ?id)}
-                                                     _valid-time-start
-                                                     {_valid-time-end (>= _valid-time-end #inst "2020-05-01")}]]]
+                                                     application_time_start
+                                                     {application_time_end (>= application_time_end #inst "2020-05-01")}]]]
                                       [{:?id :dave}]]])]
 
       (t/is (= [{:name "Claire"} {:name "Alan"}]
@@ -186,15 +186,15 @@
                              {:basis {:tx !tx2}}))))
 
     (let [!tx3 (c2/submit-tx *node* [[:sql '[:update {:table "users"
-                                                      :_valid-time-start #inst "2021-07-01"}
+                                                      :app-time-start #inst "2021-07-01"}
                                              [:map [{name "Sue"}]
                                               [:scan [_iid
                                                       {_id (= _id ?id)}
                                                       {_table (= _table "users")}
-                                                      _valid-time-start
-                                                      {_valid-time-end (>= _valid-time-end #inst "2021-07-01")}]]]]
+                                                      application_time_start
+                                                      {application_time_end (>= application_time_end #inst "2021-07-01")}]]]]
                                       [{:?id :susan}]]])]
-      ;; TODO when we can return `_valid-time-start` etc from `:scan` without errors we can probably coalesce these tests
+      ;; TODO when we can return `application_time_start` etc from `:scan` without errors we can probably coalesce these tests
       (t/is (= [{:name "Susan"} {:name "Sue"}]
                (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue')"
                              {:basis {:tx !tx3}})))

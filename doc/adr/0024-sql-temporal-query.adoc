@@ -13,7 +13,7 @@ This is likely not what we want.
 
 We could consider augmenting the SQL:2011 with similar clauses for application time:
 
-`SELECT foo.x FROM foo FOR VALID_TIME AS OF DATE '2001-01-01' WHERE foo.id = 1`
+`SELECT foo.x FROM foo FOR APP_TIME AS OF DATE '2001-01-01' WHERE foo.id = 1`
 
 DB2 supports the above, but they call their application time period `BUSINESS_TIME`.
 The above is redundant though, and can be specified like this using the standard:
@@ -27,17 +27,17 @@ Inner joins between two tables across application time are done via `OVERLAPS`:
 This would return all valid rows across time, according to the standard.
 Note that in joins it’s in theory enough to limit the time via `AS OF` or predicates for one of the participating tables, as `OVERLAPS` would propagate this.
 
-We will only support a single application time period, called either `VALID_TIME`, `APPLICATION_TIME` or `BUSINESS_TIME` (DB2).
-Note that periods in SQL:2011 are really an alias for a pair of columns, like `VALID_TIME_FROM` and `VALID_TIME_TO`.
+We will only support a single application time period, called either `APP_TIME`, `APPLICATION_TIME` or `BUSINESS_TIME` (DB2).
+Note that periods in SQL:2011 are really an alias for a pair of columns, like `APP_TIME_FROM` and `APP_TIME_TO`.
 This shorthand can only be used in places that explicitly expects a period, and cannot be part of `SELECT` for example.
 
-To be semi-compliant with SQL:2011, one idea is to default `VALID_TIME` to `CURRENT_TIMESTAMP` (like `SYSTEM_TIME`), unless one is explicitly accessing `VALID_TIME` or `SYSTEM_TIME` columns or periods inside the query.
+To be semi-compliant with SQL:2011, one idea is to default `APP_TIME` to `CURRENT_TIMESTAMP` (like `SYSTEM_TIME`), unless one is explicitly accessing `APP_TIME` or `SYSTEM_TIME` columns or periods inside the query.
 This is to avoid having to provide `AS OF CURRENT_TIMESTAMP` for every table in the very common case of querying the current state of the database.
 
 Another alternative is to introduce session variables one can set, which provide defaults.
-This is useful as either wants to override `VALID_TIME` across the entire query.
+This is useful as either wants to override `APP_TIME` across the entire query.
 It could also be used to set it to `CURRENT_TIMESTAMP` and override standards behaviour.
-Explicit access to `VALID_TIME` inside the query would override the default.
+Explicit access to `APP_TIME` inside the query would override the default.
 
 `SYSTEM_TIME` semantics can be left as is, as it’s both has a sane default and is less common to override.
 If one introduce session variables, one could provide one for `SYSTEM_TIME` as well.

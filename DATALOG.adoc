@@ -59,6 +59,7 @@ Transactions are slightly different to XTDB 1.x:
 - `:xt/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
 - `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
 - `tx-time` -> `sys[tem]-time`
+- `valid-time` -> `app[lication]-time`
 
 === Datalog Queries
 In a similar manner to `next.jdbc`[https://github.com/seancorfield/next-jdbc], execute Datalog queries in Core2 using `c2/plan-datalog-query`.
@@ -91,7 +92,7 @@ Same as Datalog, but use `plan-sql-query` instead.
 === Bases
 
 Core2 doesn't have the concept of DBs - instead, we pass the node and (optionally) a 'basis' to queries.
-In Core2, the upper bound for the system-time is applied per-source; the default upper bound for VT is applied at the query level - this is because each data source has their own system-time timeline, but VT is assumed to be a single timeline, consistent across data sources.
+In Core2, the upper bound for the system-time is applied per-source; the default upper bound for app-time is applied at the query level - this is because each data source has their own system-time timeline, but app-time is assumed to be a single timeline, consistent across data sources.
 
 [source,clojure]
 ----
@@ -139,7 +140,7 @@ Unlike Datomic, `$` shouldn't be included in `:in` - if/when we reinstate multip
 `plan-datalog-query-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the query plan.
 (In fact, `plan-datalog-query` just calls `plan-datalog-query-async` and deref's it.)
 
-The basis map can also contain a `:current-time` option, which applies to any entities that don't specify other valid-time constraints (TODO: see #285).
+The basis map can also contain a `:current-time` option, which applies to any entities that don't specify other app-time constraints (TODO: see #285).
 This is for repeatable queries - it defaults to 'now' if not provided.
 
 [source,clojure]

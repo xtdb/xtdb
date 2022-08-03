@@ -45,24 +45,24 @@
   (with-open [node (node/start-node {})]
     (let [ingester (tu/component node :core2/ingester)
           tx @(c2/submit-tx node [[:put {:_id :doc}
-                                   {:_valid-time-start #inst "2021"
-                                    :_valid-time-end #inst "3000"}]])]
+                                   {:app-time-start #inst "2021"
+                                    :app-time-end #inst "3000"}]])]
 
       (let [res (first (op/query-ra '[:scan [_id
-                                             _valid-time-start _valid-time-end
+                                             application_time_start application_time_end
                                              system_time_start system_time_end]]
                                     (ingest/snapshot ingester tx)))]
-        (t/is (= #{:_id :_valid-time-start :_valid-time-end :system_time_end :system_time_start}
+        (t/is (= #{:_id :application_time_start :application_time_end :system_time_end :system_time_start}
                  (-> res keys set)))
 
-        (t/is (= {:_id :doc, :_valid-time-start (util/->zdt #inst "2021"), :_valid-time-end (util/->zdt #inst "3000")}
+        (t/is (= {:_id :doc, :application_time_start (util/->zdt #inst "2021"), :application_time_end (util/->zdt #inst "3000")}
                  (dissoc res :system_time_start :system_time_end))))
 
-      (t/is (= {:_id :doc, :vt-start (util/->zdt #inst "2021"), :vt-end (util/->zdt #inst "3000")}
+      (t/is (= {:_id :doc, :app-time-start (util/->zdt #inst "2021"), :app-time-end (util/->zdt #inst "3000")}
                (-> (first (op/query-ra '[:project [_id
-                                                   {vt-start _valid-time-start}
-                                                   {vt-end _valid-time-end}]
-                                         [:scan [_id _valid-time-start _valid-time-end]]]
+                                                   {app-time-start application_time_start}
+                                                   {app-time-end application_time_end}]
+                                         [:scan [_id application_time_start application_time_end]]]
                                        (ingest/snapshot ingester tx)))
                    (dissoc :system_time_start :system_time_end)))))))
 
@@ -72,7 +72,7 @@
     (let [ingester (tu/component node :core2/ingester)
           tx @(c2/submit-tx node [[:put {:_id :doc}]])]
 
-      (t/is (op/query-ra '[:scan [_valid-time-start _valid-time-end
+      (t/is (op/query-ra '[:scan [application_time_start application_time_end
                                   system_time_start system_time_end]]
                          (ingest/snapshot ingester tx))))))
 

@@ -37,10 +37,10 @@
                            [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]
                     [{:foo 1, :bar nil, :baz 3.3}
                      {:foo 2, :bar "hello", :baz 12}]]
-                   [:sql '[:update {:_valid-time-start #inst "2024"}
+                   [:sql '[:update {:app-time-start #inst "2024"}
                            [:project [_iid _row-id _id {bar "world"}]
                             [:scan [_iid _row-id {_id (= _id 1)}]]]]]
-                   [:sql '[:delete {:_valid-time-start #inst "2024"}
+                   [:sql '[:delete {:app-time-start #inst "2024"}
                            [:scan [_iid _row-id {_id (= _id 1)}]]]]]
                   {:sys-time (util/->instant #inst "2021")
                    :current-time (util/->instant #inst "2021")})

@@ -49,7 +49,7 @@
           },
           "children" : [ ]
         },{
-          "name" : "valid-time-start",
+          "name" : "application-time-start",
           "nullable" : true,
           "type" : {
             "name" : "timestamp",
@@ -58,7 +58,7 @@
           },
           "children" : [ ]
         },{
-          "name" : "valid-time-end",
+          "name" : "application-time-end",
           "nullable" : true,
           "type" : {
             "name" : "timestamp",
@@ -109,12 +109,12 @@
           "VALIDITY" : [1,1,1,1,1,1],
           "DATA" : ["0","1","2","3","4","5"]
         },{
-          "name" : "valid-time-start",
+          "name" : "application-time-start",
           "count" : 6,
           "VALIDITY" : [1,1,1,1,1,1],
           "DATA" : [1577836800000000,1577836800000000,1577836800000000,1577836800000000,1577836800000000,1577836800000000]
         },{
-          "name" : "valid-time-end",
+          "name" : "application-time-end",
           "count" : 6,
           "VALIDITY" : [1,1,1,1,1,1],
           "DATA" : [253402300799999999,253402300799999999,253402300799999999,253402300799999999,253402300799999999,253402300799999999]

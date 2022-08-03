@@ -95,51 +95,51 @@
         μs-2019 (util/instant->micros (util/->instant #inst "2019"))]
     (letfn [(transpose [[mins maxs]]
               (->> (map vector mins maxs)
-                   (zipmap [:sys-end :id :sys-start :row-id :vt-start :vt-end])
+                   (zipmap [:sys-end :id :sys-start :row-id :app-time-start :app-time-end])
                    (into {} (remove (comp #{[Long/MIN_VALUE Long/MAX_VALUE]} val)))))]
-      (t/is (= {:vt-start [Long/MIN_VALUE μs-2019]
-                :vt-end [(inc μs-2019) Long/MAX_VALUE]}
+      (t/is (= {:app-time-start [Long/MIN_VALUE μs-2019]
+                :app-time-end [(inc μs-2019) Long/MAX_VALUE]}
                (transpose (expr.temp/->temporal-min-max-range
-                           {"_valid-time-start" '(<= _valid-time-start #inst "2019")
-                            "_valid-time-end" '(> _valid-time-end #inst "2019")}
+                           {"application_time_start" '(<= application_time_start #inst "2019")
+                            "application_time_end" '(> application_time_end #inst "2019")}
                            {}))))
 
-      (t/is (= {:vt-start [μs-2019 μs-2019]}
+      (t/is (= {:app-time-start [μs-2019 μs-2019]}
                (transpose (expr.temp/->temporal-min-max-range
-                           {"_valid-time-start" '(= _valid-time-start #inst "2019")}
+                           {"application_time_start" '(= application_time_start #inst "2019")}
                            {}))))
 
       (t/testing "symbol column name"
-        (t/is (= {:vt-start [μs-2019 μs-2019]}
+        (t/is (= {:app-time-start [μs-2019 μs-2019]}
                  (transpose (expr.temp/->temporal-min-max-range
-                             {'_valid-time-start '(= _valid-time-start #inst "2019")}
+                             {'application_time_start '(= application_time_start #inst "2019")}
                              {})))))
 
       (t/testing "conjunction"
-        (t/is (= {:vt-start [Long/MIN_VALUE μs-2019]}
+        (t/is (= {:app-time-start [Long/MIN_VALUE μs-2019]}
                  (transpose (expr.temp/->temporal-min-max-range
-                             {"_valid-time-start" '(and (<= _valid-time-start #inst "2019")
-                                                        (<= _valid-time-start #inst "2020"))}
+                             {"application_time_start" '(and (<= application_time_start #inst "2019")
+                                                        (<= application_time_start #inst "2020"))}
                              {})))))
 
       (t/testing "disjunction not supported"
         (t/is (= {}
                  (transpose (expr.temp/->temporal-min-max-range
-                             {"_valid-time-start" '(or (= _valid-time-start #inst "2019")
-                                                       (= _valid-time-start #inst "2020"))}
+                             {"application_time_start" '(or (= application_time_start #inst "2019")
+                                                       (= application_time_start #inst "2020"))}
                              {})))))
 
       (t/testing "parameters"
-        (t/is (= {:vt-start [μs-2018 Long/MAX_VALUE]
-                  :vt-end [Long/MIN_VALUE (dec μs-2018)]
+        (t/is (= {:app-time-start [μs-2018 Long/MAX_VALUE]
+                  :app-time-end [Long/MIN_VALUE (dec μs-2018)]
                   :sys-start [Long/MIN_VALUE μs-2019]
                   :sys-end [(inc μs-2019) Long/MAX_VALUE]}
                  (transpose (expr.temp/->temporal-min-max-range
                              {"system_time_start" '(>= ?sys-time system_time_start)
                               "system_time_end" '(< ?sys-time system_time_end)
-                              "_valid-time-start" '(<= ?vt _valid-time-start)
-                              "_valid-time-end" '(> ?vt _valid-time-end)}
-                             {'?sys-time (util/->instant #inst "2019",) '?vt (util/->instant #inst "2018")}))))))))
+                              "application_time_start" '(<= ?app-time application_time_start)
+                              "application_time_end" '(> ?app-time application_time_end)}
+                             {'?sys-time (util/->instant #inst "2019",) '?app-time (util/->instant #inst "2018")}))))))))
 
 (defn project
   "Use to test an expression on some example documents. See also, project1.

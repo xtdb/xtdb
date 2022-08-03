@@ -342,7 +342,7 @@
               }]
             }]
           },{
-            "name" : "_valid-time-start",
+            "name" : "application_time_start",
             "nullable" : false,
             "type" : {
               "name" : "timestamp",
@@ -351,7 +351,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "_valid-time-end",
+            "name" : "application_time_end",
             "nullable" : false,
             "type" : {
               "name" : "timestamp",
@@ -376,7 +376,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "_valid-time-start",
+            "name" : "application_time_start",
             "nullable" : false,
             "type" : {
               "name" : "timestamp",
@@ -385,7 +385,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "_valid-time-end",
+            "name" : "application_time_end",
             "nullable" : false,
             "type" : {
               "name" : "timestamp",
@@ -776,12 +776,12 @@
               }]
             }]
           },{
-            "name" : "_valid-time-start",
+            "name" : "application_time_start",
             "count" : 2,
             "VALIDITY" : [1,1],
             "DATA" : [1609459200000000,1609459200000000]
           },{
-            "name" : "_valid-time-end",
+            "name" : "application_time_end",
             "count" : 2,
             "VALIDITY" : [1,1],
             "DATA" : [253402300799999999,253402300799999999]
@@ -796,12 +796,12 @@
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]
           },{
-            "name" : "_valid-time-start",
+            "name" : "application_time_start",
             "count" : 0,
             "VALIDITY" : [ ],
             "DATA" : [ ]
           },{
-            "name" : "_valid-time-end",
+            "name" : "application_time_end",
             "count" : 0,
             "VALIDITY" : [ ],
             "DATA" : [ ]
@@ -824,8 +824,8 @@
             "name" : "query",
             "count" : 3,
             "VALIDITY" : [1,1,1],
-            "OFFSET" : [0,54,205,312],
-            "DATA" : ["[:insert [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]","[:update {:_valid-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:project [_iid _row-id _id {bar \"world\"}] [:scan [_iid _row-id {_id (= _id 1)}]]]]","[:delete {:_valid-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:scan [_iid _row-id {_id (= _id 1)}]]]"]
+            "OFFSET" : [0,54,202,306],
+            "DATA" : ["[:insert [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]","[:update {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:project [_iid _row-id _id {bar \"world\"}] [:scan [_iid _row-id {_id (= _id 1)}]]]]","[:delete {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:scan [_iid _row-id {_id (= _id 1)}]]]"]
           },{
             "name" : "param-rows",
             "count" : 3,

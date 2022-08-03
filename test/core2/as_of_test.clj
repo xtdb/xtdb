@@ -8,17 +8,17 @@
   (:import (java.time Clock Duration)
            (java.util List ArrayList)))
 
-(def ^:dynamic ^List *vts*)
+(def ^:dynamic ^List *app-times*)
 
 (t/use-fixtures :each
   (fn with-recording-clock [f]
-    (binding [*vts* (ArrayList.)]
+    (binding [*app-times* (ArrayList.)]
       (let [clock (-> (Clock/systemUTC)
                       (Clock/tick (Duration/ofNanos 1000)))
             clock (proxy [Clock] []
                     (instant []
                       (let [i (.instant clock)]
-                        (.add *vts* i)
+                        (.add *app-times* i)
                         i)))]
         (tu/with-opts {:core2.tx-producer/tx-producer {:clock clock}}
           f))))
@@ -57,30 +57,30 @@
                                          (assoc :basis {:tx !tx1})))
                     (into #{})))))))
 
-(t/deftest test-valid-time
+(t/deftest test-app-time
   (let [ingester (tu/component :core2/ingester)
 
         {:keys [sys-time] :as tx1} @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]
-                                                            [:put {:_id :doc-with-vt}
-                                                             {:_valid-time-start #inst "2021"}]])
+                                                             [:put {:_id :doc-with-app-time}
+                                                              {:app-time-start #inst "2021"}]])
         sys-time (util/->zdt sys-time)
 
-        start-vt (util/->zdt (first *vts*))
+        start-app-time (util/->zdt (first *app-times*))
 
         db (ingest/snapshot ingester tx1)]
 
     (t/is (= {:doc {:_id :doc,
-                    :_valid-time-start start-vt
-                    :_valid-time-end end-of-time-zdt
+                    :application_time_start start-app-time
+                    :application_time_end end-of-time-zdt
                     :system_time_start sys-time
                     :system_time_end end-of-time-zdt}
-              :doc-with-vt {:_id :doc-with-vt,
-                            :_valid-time-start (util/->zdt #inst "2021")
-                            :_valid-time-end end-of-time-zdt
-                            :system_time_start sys-time
-                            :system_time_end end-of-time-zdt}}
+              :doc-with-app-time {:_id :doc-with-app-time,
+                                  :application_time_start (util/->zdt #inst "2021")
+                                  :application_time_end end-of-time-zdt
+                                  :system_time_start sys-time
+                                  :system_time_end end-of-time-zdt}}
              (->> (op/query-ra '[:scan [_id
-                                        _valid-time-start _valid-time-end
+                                        application_time_start application_time_end
                                         system_time_start system_time_end]]
                                db)
                   (into {} (map (juxt :_id identity))))))))
@@ -97,40 +97,40 @@
 
         db (ingest/snapshot ingester tx2)
 
-        [vt1 vt2] (map util/->zdt *vts*)
+        [app-time1 app-time2] (map util/->zdt *app-times*)
 
         replaced-v0-doc {:_id :doc, :version 0
-                         :_valid-time-start vt1
-                         :_valid-time-end vt2
+                         :application_time_start app-time1
+                         :application_time_end app-time2
                          :system_time_start tt2
                          :system_time_end end-of-time-zdt}
 
         v1-doc {:_id :doc, :version 1
-                :_valid-time-start vt2
-                :_valid-time-end end-of-time-zdt
+                :application_time_start app-time2
+                :application_time_end end-of-time-zdt
                 :system_time_start tt2
                 :system_time_end end-of-time-zdt}]
 
     (t/is (= [replaced-v0-doc v1-doc]
              (op/query-ra '[:scan [_id version
-                                   _valid-time-start _valid-time-end
+                                   application_time_start application_time_end
                                    system_time_start system_time_end]]
                           db))
-          "all vt")
+          "all app-time")
 
     #_ ; FIXME
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
              (op/query-ra '[:scan [_id version
-                                   _valid-time-start _valid-time-end
+                                   application_time_start application_time_end
                                    system_time_start {system_time_end (<= system_time_end ?eot)}]]
                           {'$ db, '?eot util/end-of-time}))
-          "all vt, all sys")))
+          "all app, all sys")))
 
 (t/deftest test-evict
   (let [ingester (tu/component :core2/ingester)]
     (letfn [(all-time-docs [db]
               (->> (op/query-ra '[:scan [_id
-                                         _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
+                                         application_time_start {application_time_end (<= application_time_end ?eot)}
                                          system_time_start {system_time_end (<= system_time_end ?eot)}]]
                                 {'$ db, '?eot util/end-of-time})
                    (map :_id)

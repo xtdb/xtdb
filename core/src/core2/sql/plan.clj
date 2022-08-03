@@ -805,8 +805,8 @@
      [:period_predicand ^:z col]
      ;;=>
      (let [app-time-symbol (str (expr col))]
-       {:start (symbol (str/replace app-time-symbol "APP_TIME" "_valid-time-start"))
-        :end (symbol (str/replace app-time-symbol "APP_TIME" "_valid-time-end"))})
+       {:start (symbol (str/replace app-time-symbol "APP_TIME" "application_time_start"))
+        :end (symbol (str/replace app-time-symbol "APP_TIME" "application_time_end"))})
 
      [:period_predicand "PERIOD" start end]
      ;;=>
@@ -1409,7 +1409,7 @@
                         columns)
                       columns-with-temporal-cols
                       (vec (mapcat #(if (= % 'APP_TIME)
-                                      ['_valid-time-start '_valid-time-end]
+                                      ['application_time_start 'application_time_end]
                                       [%]) columns-with-system-time-predicates))]
                   (if *include-table-column-in-scan?*
                     (conj

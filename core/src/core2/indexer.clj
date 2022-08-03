@@ -137,14 +137,14 @@
             (t/col-type->field "system-time" [:timestamp-tz :micro "UTC"])
             (t/col-type->field "ops" '[:list [:struct {iid :i64
                                                        row-id [:union #{:null :i64}]
-                                                       valid-time-start [:union #{:null [:timestamp-tz :micro "UTC"]}]
-                                                       valid-time-end [:union #{:null [:timestamp-tz :micro "UTC"]}]
+                                                       application-time-start [:union #{:null [:timestamp-tz :micro "UTC"]}]
+                                                       application-time-end [:union #{:null [:timestamp-tz :micro "UTC"]}]
                                                        evict? :bool}]])]))
 
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface ILogOpIndexer
-  (^void logPut [^long iid, ^long rowId, ^long vtStart, ^long vtEnd])
-  (^void logDelete [^long iid, ^long vtStart, ^long vtEnd])
+  (^void logPut [^long iid, ^long rowId, ^long app-timeStart, ^long app-timeEnd])
+  (^void logDelete [^long iid, ^long app-timeStart, ^long app-timeEnd])
   (^void logEvict [^long iid])
   (^void endTx []))
 
@@ -168,10 +168,10 @@
         iid-writer (.writerForName ops-data-writer "iid")
         ^BigIntVector iid-vec (.getVector iid-writer)
 
-        vt-start-writer (.writerForName ops-data-writer "valid-time-start")
-        ^TimeStampMicroTZVector vt-start-vec (.getVector vt-start-writer)
-        vt-end-writer (.writerForName ops-data-writer "valid-time-end")
-        ^TimeStampMicroTZVector vt-end-vec (.getVector vt-end-writer)
+        app-time-start-writer (.writerForName ops-data-writer "application-time-start")
+        ^TimeStampMicroTZVector app-time-start-vec (.getVector app-time-start-writer)
+        app-time-end-writer (.writerForName ops-data-writer "application-time-end")
+        ^TimeStampMicroTZVector app-time-end-vec (.getVector app-time-end-writer)
 
         evict-writer (.writerForName ops-data-writer "evict?")
         ^BitVector evict-vec (.getVector evict-writer)]
@@ -184,22 +184,22 @@
           (.setSafe sys-time-vec tx-idx (util/instant->micros (.sys-time tx-key)))
 
           (reify ILogOpIndexer
-            (logPut [_ iid row-id vt-start vt-end]
+            (logPut [_ iid row-id app-time-start app-time-end]
               (let [op-idx (.startValue ops-data-writer)]
                 (.setSafe row-id-vec op-idx row-id)
                 (.setSafe iid-vec op-idx iid)
-                (.setSafe vt-start-vec op-idx vt-start)
-                (.setSafe vt-end-vec op-idx vt-end)
+                (.setSafe app-time-start-vec op-idx app-time-start)
+                (.setSafe app-time-end-vec op-idx app-time-end)
                 (.setSafe evict-vec op-idx 0)
 
                 (.endValue ops-data-writer)))
 
-            (logDelete [_ iid vt-start vt-end]
+            (logDelete [_ iid app-time-start app-time-end]
               (let [op-idx (.startValue ops-data-writer)]
                 (.setSafe iid-vec op-idx iid)
                 (.setNull row-id-vec op-idx)
-                (.setSafe vt-start-vec op-idx vt-start)
-                (.setSafe vt-end-vec op-idx vt-end)
+                (.setSafe app-time-start-vec op-idx app-time-start)
+                (.setSafe app-time-end-vec op-idx app-time-end)
                 (.setSafe evict-vec op-idx 0)
 
                 (.endValue ops-data-writer)))
@@ -208,8 +208,8 @@
               (let [op-idx (.startValue ops-data-writer)]
                 (.setSafe iid-vec op-idx iid)
                 (.setNull row-id-vec op-idx)
-                (.setNull vt-start-vec op-idx)
-                (.setNull vt-end-vec op-idx)
+                (.setNull app-time-start-vec op-idx)
+                (.setNull app-time-end-vec op-idx)
                 (.setSafe evict-vec op-idx 1))
 
               (.endValue ops-data-writer))
@@ -310,8 +310,8 @@
                                                ^DenseUnionVector tx-ops-vec]
   (let [put-vec (.getStruct tx-ops-vec 0)
         ^DenseUnionVector doc-duv (.getChild put-vec "document" DenseUnionVector)
-        ^TimeStampVector valid-time-start-vec (.getChild put-vec "_valid-time-start")
-        ^TimeStampVector valid-time-end-vec (.getChild put-vec "_valid-time-end")
+        ^TimeStampVector app-time-start-vec (.getChild put-vec "application_time_start")
+        ^TimeStampVector app-time-end-vec (.getChild put-vec "application_time_end")
         doc-copier (put-doc-copier indexer tx-ops-vec)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
@@ -324,19 +324,19 @@
               eid (t/get-object id-vec leg-offset)
               new-entity? (not (.isKnownId iid-mgr eid))
               iid (.getOrCreateInternalId iid-mgr eid row-id)
-              start-vt (.get valid-time-start-vec put-offset)
-              end-vt (.get valid-time-end-vec put-offset)]
+              start-app-time (.get app-time-start-vec put-offset)
+              end-app-time (.get app-time-end-vec put-offset)]
           (.copyDocRow doc-copier row-id put-offset)
-          (.logPut log-op-idxer iid row-id start-vt end-vt)
-          (.indexPut temporal-idxer iid row-id start-vt end-vt new-entity?))))))
+          (.logPut log-op-idxer iid row-id start-app-time end-app-time)
+          (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?))))))
 
 (defn- ->delete-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
                                                   ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer,
                                                   ^DenseUnionVector tx-ops-vec]
   (let [delete-vec (.getStruct tx-ops-vec 1)
         ^DenseUnionVector id-vec (.getChild delete-vec "_id" DenseUnionVector)
-        ^TimeStampVector valid-time-start-vec (.getChild delete-vec "_valid-time-start")
-        ^TimeStampVector valid-time-end-vec (.getChild delete-vec "_valid-time-end")]
+        ^TimeStampVector app-time-start-vec (.getChild delete-vec "application_time_start")
+        ^TimeStampVector app-time-end-vec (.getChild delete-vec "application_time_end")]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId indexer)
@@ -344,10 +344,10 @@
               eid (t/get-object id-vec delete-offset)
               new-entity? (not (.isKnownId iid-mgr eid))
               iid (.getOrCreateInternalId iid-mgr eid row-id)
-              start-vt (.get valid-time-start-vec delete-offset)
-              end-vt (.get valid-time-end-vec delete-offset)]
-          (.logDelete log-op-idxer iid start-vt end-vt)
-          (.indexDelete temporal-idxer iid row-id start-vt end-vt new-entity?))))))
+              start-app-time (.get app-time-start-vec delete-offset)
+              end-app-time (.get app-time-end-vec delete-offset)]
+          (.logDelete log-op-idxer iid start-app-time end-app-time)
+          (.indexDelete temporal-idxer iid row-id start-app-time end-app-time new-entity?))))))
 
 (defn- ->evict-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
                                                  ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
@@ -414,8 +414,8 @@
                                                                               :when (not (temporal/temporal-column? (.getName in-col)))]
                                                                           (doc-row-copier indexer in-col))))
                                                  id-col (.vectorForName in-rel "_id")
-                                                 vt-start-rdr (some-> (.vectorForName in-rel "_valid-time-start") (.monoReader))
-                                                 vt-end-rdr (some-> (.vectorForName in-rel "_valid-time-end") (.monoReader))]
+                                                 app-time-start-rdr (some-> (.vectorForName in-rel "application_time_start") (.monoReader))
+                                                 app-time-end-rdr (some-> (.vectorForName in-rel "application_time_end") (.monoReader))]
                                              (dotimes [idx row-count]
                                                (let [row-id (.nextRowId indexer)]
                                                  (doseq [^DocRowCopier doc-row-copier doc-row-copiers]
@@ -424,22 +424,22 @@
                                                  (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
                                                        new-entity? (.isKnownId iid-mgr eid)
                                                        iid (.getOrCreateInternalId iid-mgr eid row-id)
-                                                       start-vt (if vt-start-rdr
-                                                                  (.readLong vt-start-rdr idx)
-                                                                  current-time-µs)
-                                                       end-vt (if vt-end-rdr
-                                                                (.readLong vt-end-rdr idx)
-                                                                util/end-of-time-μs)]
+                                                       start-app-time (if app-time-start-rdr
+                                                                        (.readLong app-time-start-rdr idx)
+                                                                        current-time-µs)
+                                                       end-app-time (if app-time-end-rdr
+                                                                      (.readLong app-time-end-rdr idx)
+                                                                      util/end-of-time-μs)]
 
-                                                   (.logPut log-op-idxer iid row-id start-vt end-vt)
-                                                   (.indexPut temporal-idxer iid row-id start-vt end-vt new-entity?))))))))))))
+                                                   (.logPut log-op-idxer iid row-id start-app-time end-app-time)
+                                                   (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?))))))))))))
 
-            [:update vt-opts inner-query]
+            [:update app-time-opts inner-query]
             (with-open [pq (op/open-prepared-ra inner-query)]
-              (let [^long update-vt-from-µs (or (some-> (:_valid-time-start vt-opts) util/->instant util/instant->micros)
-                                                Long/MIN_VALUE)
-                    ^long update-vt-to-µs (or (some-> (:_valid-time-end vt-opts) util/->instant util/instant->micros)
-                                              Long/MAX_VALUE)]
+              (let [^long update-app-time-from-µs (or (some-> (:app-time-start app-time-opts) util/->instant util/instant->micros)
+                                                      Long/MIN_VALUE)
+                    ^long update-app-time-to-µs (or (some-> (:app-time-end app-time-opts) util/->instant util/instant->micros)
+                                                    Long/MAX_VALUE)]
                 (doseq [param-row param-rows
                         :let [param-row (->> param-row
                                              (into {} (map (juxt (comp symbol key) val))))]]
@@ -454,25 +454,25 @@
                                                                         :when (not (temporal/temporal-column? (.getName in-col)))]
                                                                     (doc-row-copier indexer in-col)))
                                                  iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
-                                                 vt-start-rdr (.monoReader (.vectorForName in-rel "_valid-time-start"))
-                                                 vt-end-rdr (.monoReader (.vectorForName in-rel "_valid-time-end"))]
+                                                 app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start"))
+                                                 app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end"))]
                                              (dotimes [idx row-count]
                                                (let [row-id (.nextRowId indexer)
                                                      iid (.readLong iid-rdr idx)
-                                                     start-vt (Math/max (.readLong vt-start-rdr idx) update-vt-from-µs)
-                                                     end-vt (Math/min (.readLong vt-end-rdr idx) update-vt-to-µs)]
+                                                     start-app-time (Math/max (.readLong app-time-start-rdr idx) update-app-time-from-µs)
+                                                     end-app-time (Math/min (.readLong app-time-end-rdr idx) update-app-time-to-µs)]
                                                  (doseq [^DocRowCopier doc-row-copier doc-row-copiers]
                                                    (.copyDocRow doc-row-copier row-id idx))
 
-                                                 (.logPut log-op-idxer iid row-id start-vt end-vt)
-                                                 (.indexPut temporal-idxer iid row-id start-vt end-vt false)))))))))))
+                                                 (.logPut log-op-idxer iid row-id start-app-time end-app-time)
+                                                 (.indexPut temporal-idxer iid row-id start-app-time end-app-time false)))))))))))
 
-            [:delete vt-opts inner-query]
+            [:delete app-time-opts inner-query]
             (with-open [pq (op/open-prepared-ra inner-query)]
-              (let [^long delete-vt-from-µs (or (some-> (:_valid-time-start vt-opts) util/->instant util/instant->micros)
-                                                Long/MIN_VALUE)
-                    ^long delete-vt-to-µs (or (some-> (:_valid-time-end vt-opts) util/->instant util/instant->micros)
-                                              Long/MAX_VALUE)]
+              (let [^long delete-app-time-from-µs (or (some-> (:app-time-start app-time-opts) util/->instant util/instant->micros)
+                                                      Long/MIN_VALUE)
+                    ^long delete-app-time-to-µs (or (some-> (:app-time-end app-time-opts) util/->instant util/instant->micros)
+                                                    Long/MAX_VALUE)]
                 (doseq [param-row param-rows
                         :let [param-row (->> param-row
                                              (into {} (map (juxt (comp symbol key) val))))]]
@@ -483,15 +483,15 @@
                                            (let [^IIndirectRelation in-rel in-rel
                                                  row-count (.rowCount in-rel)
                                                  iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
-                                                 vt-start-rdr (.monoReader (.vectorForName in-rel "_valid-time-start"))
-                                                 vt-end-rdr (.monoReader (.vectorForName in-rel "_valid-time-end"))]
+                                                 app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start"))
+                                                 app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end"))]
                                              (dotimes [idx row-count]
                                                (let [row-id (.nextRowId indexer)
                                                      iid (.readLong iid-rdr idx)
-                                                     start-vt (Math/max (.readLong vt-start-rdr idx) delete-vt-from-µs)
-                                                     end-vt (Math/min (.readLong vt-end-rdr idx) delete-vt-to-µs)]
-                                                 (.logDelete log-op-idxer iid start-vt end-vt)
-                                                 (.indexDelete temporal-idxer iid row-id start-vt end-vt false)))))))))))
+                                                     start-app-time (Math/max (.readLong app-time-start-rdr idx) delete-app-time-from-µs)
+                                                     end-app-time (Math/min (.readLong app-time-end-rdr idx) delete-app-time-to-µs)]
+                                                 (.logDelete log-op-idxer iid start-app-time end-app-time)
+                                                 (.indexDelete temporal-idxer iid row-id start-app-time end-app-time false)))))))))))
 
             (throw (UnsupportedOperationException. "sql query"))))))))
 

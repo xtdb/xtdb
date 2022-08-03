@@ -72,7 +72,7 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-key (c2/map->TransactionInstant {:tx-id 7677, :sys-time (util/->instant #inst "2020-01-02")})
+        last-tx-key (c2/map->TransactionInstant {:tx-id 7701, :sys-time (util/->instant #inst "2020-01-02")})
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -288,10 +288,10 @@
                                 [:put {:_id "bar"}]])
             (tu/then-await-tx node))
 
-        (-> (c2/submit-tx node [[:delete "foo" {:_valid-time-start #inst "2020-04-01"}]
+        (-> (c2/submit-tx node [[:delete "foo" {:app-time-start #inst "2020-04-01"}]
                                 [:put {:_id "bar", :month "april"},
-                                 {:_valid-time-start #inst "2020-04-01"
-                                  :_valid-time-end #inst "2020-05-01"}]])
+                                 {:app-time-start #inst "2020-04-01"
+                                  :app-time-end #inst "2020-05-01"}]])
             (tu/then-await-tx node))
 
         (tu/finish-chunk node)
@@ -300,7 +300,7 @@
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        last-tx-key (c2/map->TransactionInstant {:tx-id 7677, :sys-time (util/->instant #inst "2020-01-02")})]
+        last-tx-key (c2/map->TransactionInstant {:tx-id 7701, :sys-time (util/->instant #inst "2020-01-02")})]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
