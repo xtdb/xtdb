@@ -47,7 +47,7 @@
   (t/is (map? (c2/status *node*))))
 
 (t/deftest test-simple-query
-  (let [!tx (c2/submit-tx *node* [[:put {:_id :foo, :inst #inst "2021"}]])]
+  (let [!tx (c2/submit-tx *node* [[:put {:id :foo, :inst #inst "2021"}]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
 
     (t/is (= [{:e :foo, :inst (util/->zdt #inst "2021")}]
@@ -61,7 +61,7 @@
 (t/deftest test-validation-errors
   (t/is (thrown? IllegalArgumentException
                  (try
-                   @(c2/submit-tx *node* [[:pot {:_id :foo}]])
+                   @(c2/submit-tx *node* [[:pot {:id :foo}]])
                    (catch ExecutionException e
                      (throw (.getCause e))))))
 
@@ -72,7 +72,7 @@
                      (throw (.getCause e)))))))
 
 (t/deftest round-trips-lists
-  (let [!tx (c2/submit-tx *node* [[:put {:_id :foo, :list [1 2 ["foo" "bar"]]}]])]
+  (let [!tx (c2/submit-tx *node* [[:put {:id :foo, :list [1 2 ["foo" "bar"]]}]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
 
     (t/is (= [{:id :foo
@@ -84,8 +84,8 @@
                                           :basis-timeout (Duration/ofSeconds 1))))))))
 
 (t/deftest round-trips-structs
-  (let [!tx (c2/submit-tx *node* [[:put {:_id :foo, :struct {:a 1, :b {:c "bar"}}}]
-                                  [:put {:_id :bar, :struct {:a true, :d 42.0}}]])]
+  (let [!tx (c2/submit-tx *node* [[:put {:id :foo, :struct {:a 1, :b {:c "bar"}}}]
+                                  [:put {:id :bar, :struct {:a true, :d 42.0}}]])]
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
@@ -97,13 +97,13 @@
                                                :basis-timeout (Duration/ofSeconds 1)))))))))
 
 (t/deftest can-manually-specify-sys-time-47
-  (let [tx1 @(c2/submit-tx *node* [[:put {:_id :foo}]]
+  (let [tx1 @(c2/submit-tx *node* [[:put {:id :foo}]]
                            {:sys-time #inst "2012"})
 
-        _invalid-tx @(c2/submit-tx *node* [[:put {:_id :bar}]]
+        _invalid-tx @(c2/submit-tx *node* [[:put {:id :bar}]]
                                    {:sys-time #inst "2011"})
 
-        tx3 @(c2/submit-tx *node* [[:put {:_id :baz}]])]
+        tx3 @(c2/submit-tx *node* [[:put {:id :baz}]])]
 
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2012")})
              tx1))
@@ -111,7 +111,7 @@
     (letfn [(q-at [tx]
               (->> (c2/datalog-query *node*
                                      (-> '{:find [?id]
-                                           :where [[?e :_id ?id]]}
+                                           :where [[?e :id ?id]]}
                                          (assoc :basis {:tx tx}
                                                 :basis-timeout (Duration/ofSeconds 1))))
                    (into #{} (map :id))))]
@@ -120,10 +120,10 @@
       (t/is (= #{:foo :baz} (q-at tx3))))))
 
 (def ^:private devs
-  [[:put {:_id :jms, :name "James"}]
-   [:put {:_id :hak, :name "Håkan"}]
-   [:put {:_id :mat, :name "Matt"}]
-   [:put {:_id :wot, :name "Dan"}]])
+  [[:put {:id :jms, :name "James"}]
+   [:put {:id :hak, :name "Håkan"}]
+   [:put {:id :mat, :name "Matt"}]
+   [:put {:id :wot, :name "Dan"}]])
 
 (t/deftest test-sql-roundtrip
   (let [!tx (c2/submit-tx *node* devs)]
@@ -148,7 +148,7 @@
 
 (t/deftest test-basic-sql-dml
   (let [!tx1 (c2/submit-tx *node* [[:sql '[:insert {:table "users"}
-                                           [:table [{:_id ?id, :name ?name, :application_time_start ?start-date}]]]
+                                           [:table [{:id ?id, :name ?name, :application_time_start ?start-date}]]]
                                     [{:?id :dave, :?name "Dave", :?start-date #inst "2018"}
                                      {:?id :claire, :?name "Claire", :?start-date #inst "2019"}
                                      {:?id :alan, :?name "Alan", :?start-date #inst "2020"}
@@ -168,7 +168,7 @@
                                                       :app-time-start #inst "2020-05-01"}
                                              [:scan [_iid
                                                      {_table (= _table "users")}
-                                                     {_id (= _id ?id)}
+                                                     {id (= id ?id)}
                                                      application_time_start
                                                      {application_time_end (>= application_time_end #inst "2020-05-01")}]]]
                                       [{:?id :dave}]]])]
@@ -189,7 +189,7 @@
                                                       :app-time-start #inst "2021-07-01"}
                                              [:map [{name "Sue"}]
                                               [:scan [_iid
-                                                      {_id (= _id ?id)}
+                                                      {id (= id ?id)}
                                                       {_table (= _table "users")}
                                                       application_time_start
                                                       {application_time_end (>= application_time_end #inst "2021-07-01")}]]]]

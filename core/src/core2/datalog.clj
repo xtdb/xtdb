@@ -157,20 +157,20 @@
   (let [{[eid-type eid-arg] :e, :keys [src]} (first rel-clauses)
 
         eid-col (case eid-type
-                  :literal {:col-name '_id,
-                            :col-pred (list '= '_id eid-arg)}
+                  :literal {:col-name 'id,
+                            :col-pred (list '= 'id eid-arg)}
 
                   :logic-var (let [retain-e-col? (or (contains? v-vars eid-arg)
                                                      (contains? find-vars eid-arg)
                                                      (> (count (get eid-srcs eid-arg)) 1))]
                                (when (or retain-e-col?
                                          (contains? in-scalars eid-arg))
-                                 (cond-> {:col-name '_id}
+                                 (cond-> {:col-name 'id}
                                    retain-e-col?
                                    (assoc :value-arg eid-arg)
 
                                    (contains? in-scalars eid-arg)
-                                   (assoc :col-pred (list '= '_id eid-arg))))))
+                                   (assoc :col-pred (list '= 'id eid-arg))))))
 
         cols (cond-> (for [[a clauses] (group-by :a rel-clauses)
                            :let [col-name (symbol (name a))]]

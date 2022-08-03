@@ -183,7 +183,7 @@
 
 (defn- insert-statement [node insert-statement]
   (-> (c2/submit-tx node (vec (for [doc (insert->docs node insert-statement)]
-                                [:put (merge {:_id (UUID/randomUUID)} doc)])))
+                                [:put (merge {:id (UUID/randomUUID)} doc)])))
       (tu/then-await-tx node))
   node)
 

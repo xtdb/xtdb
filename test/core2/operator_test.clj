@@ -13,16 +13,16 @@
 
 (t/deftest test-find-gt-ivan
   (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
-    (-> (c2/submit-tx node [[:put {:name "Håkan", :_id :hak}]])
+    (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
 
-    (c2/submit-tx node [[:put {:name "Dan", :_id :dan}]
-                        [:put {:name "Ivan", :_id :iva}]])
+    (c2/submit-tx node [[:put {:name "Dan", :id :dan}]
+                        [:put {:name "Ivan", :id :iva}]])
 
-    (-> (c2/submit-tx node [[:put {:name "James", :_id :jms}]
-                            [:put {:name "Jon", :_id :jon}]])
+    (-> (c2/submit-tx node [[:put {:name "James", :id :jms}]
+                            [:put {:name "Jon", :id :jon}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
@@ -31,10 +31,10 @@
           ingester (tu/component node :core2/ingester)]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
-                         (set (op/query-ra '[:scan [_id {name (> name "Ivan")}]] db))))
+                         (set (op/query-ra '[:scan [id {name (> name "Ivan")}]] db))))
 
                 (t/is (= expected
-                         (set (op/query-ra '[:scan [_id {name (> name ?name)}]]
+                         (set (op/query-ra '[:scan [id {name (> name ?name)}]]
                                            {'$ db, '?name "Ivan"})))))]
 
         (let [db (ingest/snapshot ingester)]
@@ -51,30 +51,30 @@
                                            (expr.meta/->metadata-selector '(> name ?name) '#{name} {'?name "Ivan"})))
                   "only needs to scan chunk 1, block 1"))
 
-          (-> (c2/submit-tx node [[:put {:name "Jeremy", :_id :jdt}]])
+          (-> (c2/submit-tx node [[:put {:name "Jeremy", :id :jdt}]])
               (tu/then-await-tx node))
 
-          (test-query-ivan #{{:_id :jms, :name "James"}
-                             {:_id :jon, :name "Jon"}}
+          (test-query-ivan #{{:id :jms, :name "James"}
+                             {:id :jon, :name "Jon"}}
                            db))
 
         (let [db (ingest/snapshot ingester)]
-          (test-query-ivan #{{:_id :jms, :name "James"}
-                             {:_id :jon, :name "Jon"}
-                             {:_id :jdt, :name "Jeremy"}}
+          (test-query-ivan #{{:id :jms, :name "James"}
+                             {:id :jon, :name "Jon"}
+                             {:id :jdt, :name "Jeremy"}}
                            db))))))
 
 (t/deftest test-find-eq-ivan
   (with-open [node (node/start-node {:core2/row-counts {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
-    (-> (c2/submit-tx node [[:put {:name "Håkan", :_id :hak}]
-                            [:put {:name "James", :_id :jms}]
-                            [:put {:name "Ivan", :_id :iva}]])
+    (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]
+                            [:put {:name "James", :id :jms}]
+                            [:put {:name "Ivan", :id :iva}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
 
-    (-> (c2/submit-tx node [[:put {:name "Håkan", :_id :hak}]
-                            [:put {:name "James", :_id :jms}]])
+    (-> (c2/submit-tx node [[:put {:name "Håkan", :id :hak}]
+                            [:put {:name "James", :id :jms}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
@@ -103,9 +103,9 @@
 
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
-    (let [{tt1 :sys-time} @(c2/submit-tx node [[:put {:_id :my-doc, :last-updated "tx1"}]])
+    (let [{tt1 :sys-time} @(c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx1"}]])
           _ (Thread/sleep 10) ; to prevent same-ms transactions
-          {tt2 :sys-time, :as tx2} @(c2/submit-tx node [[:put {:_id :my-doc, :last-updated "tx2"}]])
+          {tt2 :sys-time, :as tx2} @(c2/submit-tx node [[:put {:id :my-doc, :last-updated "tx2"}]])
           db (ingest/snapshot (tu/component node :core2/ingester) tx2)]
       (letfn [(q [& temporal-constraints]
                 (->> (op/query-ra [:scan (into '[last-updated]

@@ -22,7 +22,7 @@
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.indexer.InternalIdManager
-           (core2.watermark IWatermarkManager Watermark)
+           core2.watermark.IWatermarkManager
            java.lang.AutoCloseable
            java.nio.file.Files
            java.time.Duration
@@ -31,12 +31,12 @@
            [org.apache.arrow.vector.complex StructVector]))
 
 (def txs
-  [[[:put {:_id "device-info-demo000000",
+  [[[:put {:id "device-info-demo000000",
            :api-version "23",
            :manufacturer "iobeam",
            :model "pinto",
            :os-name "6.0.1"}]
-    [:put {:_id "reading-demo000000",
+    [:put {:id "reading-demo000000",
            :device-id "device-info-demo000000",
            :cpu-avg-15min 8.654,
            :rssi -50.0,
@@ -50,12 +50,12 @@
            :cpu-avg-1min 24.81,
            :mem-free 4.10011078E8,
            :mem-used 5.89988922E8}]]
-   [[:put {:_id "device-info-demo000001",
+   [[:put {:id "device-info-demo000001",
            :api-version "23",
            :manufacturer "iobeam",
            :model "mustang",
            :os-name "6.0.1"}]
-    [:put {:_id "reading-demo000001",
+    [:put {:id "reading-demo000001",
            :device-id "device-info-demo000001",
            :cpu-avg-15min 8.822,
            :rssi -61.0,
@@ -97,14 +97,11 @@
         (t/testing "watermark"
           (with-open [^AutoCloseable rc-watermark (.getWatermark wm-mgr)]
             (let [live-roots (:live-roots (:watermark rc-watermark))
-                  first-column (first live-roots)
-                  last-column (last live-roots)]
+                  id-column (find live-roots "id")]
               (t/is (zero? (:chunk-idx (:watermark rc-watermark))))
               (t/is (t/is 20 (count live-roots)))
-              (t/is (= ["_id" 4]
-                       [(key first-column) (.getRowCount ^VectorSchemaRoot (val first-column))]))
-              (t/is (= ["time" 2]
-                       [(key last-column) (.getRowCount ^VectorSchemaRoot (val last-column))])))))
+              (t/is (= ["id" 4]
+                       [(key id-column) (.getRowCount ^VectorSchemaRoot (val id-column))])))))
 
         (tu/finish-chunk node)
 
@@ -142,8 +139,8 @@
               (.load (VectorLoader. metadata-batch) record-batch)
               (t/is (= 36 (.getRowCount metadata-batch)))
               (let [id-col-idx (-> (meta/->metadata-idxs metadata-batch)
-                                   (.columnIndex "_id"))]
-                (t/is (= "_id" (-> (.getVector metadata-batch "column")
+                                   (.columnIndex "id"))]
+                (t/is (= "id" (-> (.getVector metadata-batch "column")
                                    (ty/get-object id-col-idx))))
                 (let [^StructVector utf8-type-vec (-> ^StructVector (.getVector metadata-batch "types")
                                                       (.getChild "utf8"))]
@@ -182,15 +179,15 @@
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
-        tx-ops [[:put {:_id "foo"
+        tx-ops [[:put {:id "foo"
                        :list [12.0 "foo"]}]
-                [:put {:_id 24.0}]
-                [:put {:_id "bar"
+                [:put {:id 24.0}]
+                [:put {:id "bar"
                        :list [#inst "2020-01-01" false]}]
-                [:put {:_id #inst "2021-01-01"
+                [:put {:id #inst "2021-01-01"
                        :struct {:a 1, :b "b"}}]
-                [:put {:_id 52.0}]
-                [:put {:_id #inst "2020-01-01"
+                [:put {:id 52.0}]
+                [:put {:id #inst "2020-01-01"
                        :struct {:a true, :c "c"}}]]]
     (util/delete-dir node-dir)
 
@@ -206,15 +203,15 @@
 
 (t/deftest test-multi-block-metadata
   (let [node-dir (util/->path "target/multi-block-metadata")
-        tx0 [[:put {:_id "foo"
+        tx0 [[:put {:id "foo"
                     :list [12.0 "foo"]}]
-             [:put {:_id #inst "2021-01-01"
+             [:put {:id #inst "2021-01-01"
                     :struct {:a 1, :b "b"}}]
-             [:put {:_id "bar"
+             [:put {:id "bar"
                     :list [#inst "2020-01-01" false]}]
-             [:put {:_id 24.0}]]
-        tx1 [[:put {:_id 52.0}]
-             [:put {:_id #inst "2020-01-01"
+             [:put {:id 24.0}]]
+        tx1 [[:put {:id 52.0}]
+             [:put {:id #inst "2020-01-01"
                     :struct {:a true, :b {:c "c", :d "d"}}}]]]
     (util/delete-dir node-dir)
 
@@ -233,7 +230,7 @@
 
       (let [^IMetadataManager mm (tu/component node ::meta/metadata-manager)]
         (t/is (= [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64}]
-                 (.columnType mm "_id")))
+                 (.columnType mm "id")))
 
         (t/is (= [:list [:union #{:utf8 [:timestamp-tz :micro "UTC"] :f64 :bool}]]
                  (.columnType mm "list")))
@@ -245,15 +242,15 @@
 
 (t/deftest round-trips-nils
   (with-open [node (node/start-node {})]
-    (-> (c2/submit-tx node [[:put {:_id "nil-bar"
+    (-> (c2/submit-tx node [[:put {:id "nil-bar"
                                    :foo "foo"
                                    :bar nil}]
-                            [:put {:_id "no-bar"
+                            [:put {:id "no-bar"
                                    :foo "foo"}]])
         (tu/then-await-tx node (Duration/ofMillis 2000)))
     (t/is (= [{:id "nil-bar", :foo "foo", :bar nil}]
              (c2/datalog-query node '{:find [?id ?foo ?bar]
-                                      :where [[?e :_id ?id]
+                                      :where [[?e :id ?id]
                                               [?e :foo ?foo]
                                               [?e :bar ?bar]]})))))
 
@@ -263,7 +260,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (-> (c2/submit-tx node [[:put {:_id :foo, :uuid uuid}]])
+      (-> (c2/submit-tx node [[:put {:id :foo, :uuid uuid}]])
           (tu/then-await-tx node (Duration/ofMillis 2000)))
 
       (tu/finish-chunk node)
@@ -284,12 +281,12 @@
     (with-open [node (tu/->local-node {:node-dir node-dir})]
       (let [^ObjectStore os (::os/file-system-object-store @(:!system node))]
 
-        (-> (c2/submit-tx node [[:put {:_id "foo"}]
-                                [:put {:_id "bar"}]])
+        (-> (c2/submit-tx node [[:put {:id "foo"}]
+                                [:put {:id "bar"}]])
             (tu/then-await-tx node))
 
         (-> (c2/submit-tx node [[:delete "foo" {:app-time-start #inst "2020-04-01"}]
-                                [:put {:_id "bar", :month "april"},
+                                [:put {:id "bar", :month "april"},
                                  {:app-time-start #inst "2020-04-01"
                                   :app-time-end #inst "2020-05-01"}]])
             (tu/then-await-tx node))
@@ -380,7 +377,7 @@
         (t/is (= [[0 299 300] [300 599 300] [600 899 300] [900 1199 300]
                   [1200 1499 300] [1500 1799 300] [1800 2099 300]
                   [2100 2399 300] [2400 2699 300] [2700 2999 300]]
-                 (row-id-ranges "chunk-0000000000000000-_id.arrow.json")))
+                 (row-id-ranges "chunk-0000000000000000-id.arrow.json")))
 
         (t/is (= [[0 298 150] [300 598 150] [600 898 150] [900 1198 150]
                   [1200 1498 150] [1500 1798 150] [1800 1998 100]]
@@ -394,7 +391,7 @@
         (t/is (= [[3000 3299 300] [3300 3599 300] [3600 3899 300] [3900 4199 300]
                   [4200 4499 300] [4500 4799 300] [4800 5099 300]
                   [5100 5399 300] [5400 5699 300] [5700 5999 300]]
-                 (row-id-ranges "chunk-0000000000000bb8-_id.arrow.json")))
+                 (row-id-ranges "chunk-0000000000000bb8-id.arrow.json")))
 
         (t/is (= [[3000 3299 300] [3300 3599 300] [3600 3899 300] [3900 4199 300]
                   [4200 4499 300] [4500 4799 300] [4800 5099 300]
@@ -490,7 +487,7 @@
 
                 (t/is (= 2000 (count (.id->internal-id iid-mgr)))))
 
-              (t/is (= :utf8 (.columnType mm "_id")))
+              (t/is (= :utf8 (.columnType mm "id")))
 
               (let [^TransactionInstant
                     second-half-tx-key @(reduce
@@ -514,7 +511,7 @@
 
                     (t/is (>= (count (.id->internal-id iid-mgr)) 2000))
 
-                    (t/is (= :utf8 (.columnType mm "_id"))))
+                    (t/is (= :utf8 (.columnType mm "id"))))
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-key (-> second-half-tx-key
@@ -535,7 +532,7 @@
                       (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))
 
-                    (t/is (= :utf8 (.columnType mm "_id")))
+                    (t/is (= :utf8 (.columnType mm "id")))
 
                     (t/is (= 2000 (count (.id->internal-id iid-mgr))))))))))))))
 
@@ -547,15 +544,15 @@
     (with-open [node1 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
       (let [^IMetadataManager mm1 (tu/component node1 ::meta/metadata-manager)]
 
-        (-> (c2/submit-tx node1 [[:put {:_id "foo"}]])
+        (-> (c2/submit-tx node1 [[:put {:id "foo"}]])
             (tu/then-await-tx node1 (Duration/ofMillis 200)))
 
         (tu/finish-chunk node1)
 
-        (t/is (= :utf8 (.columnType mm1 "_id")))
+        (t/is (= :utf8 (.columnType mm1 "id")))
 
-        (let [tx2 (c2/submit-tx node1 [[:put {:_id :bar}]
-                                       [:put {:_id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]])]
+        (let [tx2 (c2/submit-tx node1 [[:put {:id :bar}]
+                                       [:put {:id #uuid "8b190984-2196-4144-9fa7-245eb9a82da8"}]])]
           (tu/then-await-tx tx2 node1 (Duration/ofMillis 200))
 
           (tu/finish-chunk node1)
@@ -563,7 +560,7 @@
           (t/is (= [:union #{:utf8
                              [:extension-type :keyword :utf8 ""]
                              [:extension-type :uuid [:fixed-size-binary 16] ""]}]
-                   (.columnType mm1 "_id")))
+                   (.columnType mm1 "id")))
 
           (with-open [node2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [^IMetadataManager mm2 (tu/component node2 ::meta/metadata-manager)]
@@ -571,7 +568,7 @@
 
               (t/is (= [:union #{:utf8 [:extension-type :keyword :utf8 ""]
                                  [:extension-type :uuid [:fixed-size-binary 16] ""]}]
-                       (.columnType mm2 "_id"))))))))))
+                       (.columnType mm2 "id"))))))))))
 
 (t/deftest test-await-fails-fast
   (with-redefs [idx/->live-root (fn [& _args]
@@ -582,7 +579,7 @@
                                (log* logger level throwable message))))]
     (with-open [node (node/start-node {})]
       (t/is (thrown-with-msg? Exception #"oh no!"
-                              (-> (c2/submit-tx node [[:put {:_id "foo", :count 42}]])
+                              (-> (c2/submit-tx node [[:put {:id "foo", :count 42}]])
                                   (tu/then-await-tx node (Duration/ofSeconds 1))))))))
 
 (t/deftest test-indexes-sql-insert
@@ -600,7 +597,7 @@
         (let [last-tx-key (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")})]
           (t/is (= last-tx-key
                    @(c2/submit-tx node [[:sql '[:insert {:table "table"}
-                                                [:table [{:_id ?id, :foo ?foo, :bar ?bar, :baz ?baz}]]]
+                                                [:table [{:id ?id, :foo ?foo, :bar ?bar, :baz ?baz}]]]
                                          '[{:?id 0, :?foo 2, :?bar "hello", :?baz 12}
                                            {:?id 1, :?foo 1, :?bar "world", :?baz 3.3}]]])))
 

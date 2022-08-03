@@ -23,7 +23,7 @@
     @(.putObject obj-store (name k) buf)))
 
 (defn ^::os-test test-put-delete [^ObjectStore obj-store]
-  (let [alice {:_id :alice, :name "Alice"}]
+  (let [alice {:id :alice, :name "Alice"}]
     (put-object obj-store :alice alice)
 
     (t/is (= alice (get-object obj-store :alice)))
@@ -31,7 +31,7 @@
     (t/is (thrown? IllegalStateException (get-object obj-store :bob)))
 
     (t/testing "doesn't override if present"
-      (put-object obj-store :alice {:_id :alice, :name "Alice", :version 2})
+      (put-object obj-store :alice {:id :alice, :name "Alice", :version 2})
       (t/is (= alice (get-object obj-store :alice))))
 
     (let [temp-path @(.getObject obj-store (name :alice)

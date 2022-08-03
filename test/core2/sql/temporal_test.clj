@@ -17,8 +17,8 @@
 
 (deftest system-time-as-of
 
-  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
-        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
+        !tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
 
     (is (= []
            (query-at-tx
@@ -37,8 +37,8 @@
 
 (deftest system-time-from-a-to-b
 
-  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
-        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
+        !tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
 
     (is (= []
            (query-at-tx
@@ -62,8 +62,8 @@
 
 (deftest system-time-between-a-to-b
 
-  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
-        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
+        !tx2 (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
 
     (is (= []
            (query-at-tx
@@ -101,11 +101,11 @@
 
   (testing "OVERLAPS"
 
-    (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "2000"}
+    (let [!tx (c2/submit-tx tu/*node* [[:put {:id :my-doc, :last_updated "2000"}
                                         {:app-time-start #inst "2000"}]
-                                       [:put {:_id :my-doc, :last_updated "3000"}
+                                       [:put {:id :my-doc, :last_updated "3000"}
                                         {:app-time-start #inst "3000"}]
-                                       [:put {:_id :some-other-doc, :last_updated "4000"}
+                                       [:put {:id :some-other-doc, :last_updated "4000"}
                                         {:app-time-start #inst "4000"
                                          :app-time-end #inst "4001"}]])]
 
@@ -135,11 +135,10 @@
                !tx))))))
 
 (deftest app-time-multiple-tables
-
-  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :foo-doc, :last_updated "2001"}
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :foo-doc, :last_updated "2001"}
                                       {:app-time-start #inst "2000"
                                        :app-time-end #inst "2001"}]
-                                     [:put {:_id :bar-doc, :l_updated "2003"}
+                                     [:put {:id :bar-doc, :l_updated "2003"}
                                       {:app-time-start #inst "2002"
                                        :app-time-end #inst "2003"}]])]
 
@@ -177,10 +176,11 @@
              WHERE foo.APP_TIME OVERLAPS bar.APP_TIME" !tx)))))
 
 (deftest app-time-joins
-  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :bill, :name "Bill"}
+
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:id :bill, :name "Bill"}
                                       {:app-time-start #inst "2016"
                                        :app-time-end #inst "2019"}]
-                                     [:put {:_id :jeff, :also_name "Jeff"}
+                                     [:put {:id :jeff, :also_name "Jeff"}
                                       {:app-time-start #inst "2018"
                                        :app-time-end #inst "2020"}]])]
 

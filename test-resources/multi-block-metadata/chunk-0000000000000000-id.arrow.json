@@ -10,7 +10,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "_id",
+      "name" : "id",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -52,7 +52,7 @@
       "VALIDITY" : [1,1,1],
       "DATA" : ["0","1","2"]
     },{
-      "name" : "_id",
+      "name" : "id",
       "count" : 3,
       "TYPE_ID" : [0,1,0],
       "OFFSET" : [0,0,1],
@@ -82,7 +82,7 @@
       "VALIDITY" : [1,1,1],
       "DATA" : ["3","4","5"]
     },{
-      "name" : "_id",
+      "name" : "id",
       "count" : 3,
       "TYPE_ID" : [2,2,1],
       "OFFSET" : [0,1,0],

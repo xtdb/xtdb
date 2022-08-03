@@ -97,8 +97,8 @@
       "name" : "column",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
-      "OFFSET" : [0,3,6,11,16],
-      "DATA" : ["_id","_id","month","month"]
+      "OFFSET" : [0,2,4,9,14],
+      "DATA" : ["id","id","month","month"]
     },{
       "name" : "block-idx",
       "count" : 4,

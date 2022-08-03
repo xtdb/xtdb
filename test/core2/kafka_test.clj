@@ -11,7 +11,7 @@
 (t/deftest ^:requires-docker ^:kafka test-kafka
   (let [topic-name (str "core2.kafka-test." (UUID/randomUUID))]
     (with-open [node (node/start-node {::k/log {:topic-name topic-name}})]
-      (let [tx (c2/submit-tx node [[:put {:_id :foo}]])
+      (let [tx (c2/submit-tx node [[:put {:id :foo}]])
             db (ingest/snapshot (tu/component node :core2/ingester) tx)]
-        (t/is (= [{:_id :foo}]
-                 (op/query-ra '[:scan [_id]] db)))))))
+        (t/is (= [{:id :foo}]
+                 (op/query-ra '[:scan [id]] db)))))))

@@ -35,7 +35,7 @@
                 "name" : "struct"
               },
               "children" : [{
-                "name" : "_id",
+                "name" : "id",
                 "nullable" : false,
                 "type" : {
                   "name" : "union",
@@ -122,22 +122,6 @@
                 "name" : "struct"
               },
               "children" : [{
-                "name" : "_id",
-                "nullable" : false,
-                "type" : {
-                  "name" : "union",
-                  "mode" : "Dense",
-                  "typeIds" : [0]
-                },
-                "children" : [{
-                  "name" : "utf8",
-                  "nullable" : false,
-                  "type" : {
-                    "name" : "utf8"
-                  },
-                  "children" : [ ]
-                }]
-              },{
                 "name" : "cpu-avg-15min",
                 "nullable" : false,
                 "type" : {
@@ -272,6 +256,22 @@
                   "children" : [ ]
                 }]
               },{
+                "name" : "id",
+                "nullable" : false,
+                "type" : {
+                  "name" : "union",
+                  "mode" : "Dense",
+                  "typeIds" : [0]
+                },
+                "children" : [{
+                  "name" : "utf8",
+                  "nullable" : false,
+                  "type" : {
+                    "name" : "utf8"
+                  },
+                  "children" : [ ]
+                }]
+              },{
                 "name" : "battery-temperature",
                 "nullable" : false,
                 "type" : {
@@ -367,7 +367,7 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "_id",
+            "name" : "id",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -401,7 +401,7 @@
             "name" : "struct"
           },
           "children" : [{
-            "name" : "_id",
+            "name" : "id",
             "nullable" : false,
             "type" : {
               "name" : "union",
@@ -562,7 +562,7 @@
               "count" : 1,
               "VALIDITY" : [1],
               "children" : [{
-                "name" : "_id",
+                "name" : "id",
                 "count" : 1,
                 "TYPE_ID" : [0],
                 "OFFSET" : [0],
@@ -627,18 +627,6 @@
               "count" : 1,
               "VALIDITY" : [1],
               "children" : [{
-                "name" : "_id",
-                "count" : 1,
-                "TYPE_ID" : [0],
-                "OFFSET" : [0],
-                "children" : [{
-                  "name" : "utf8",
-                  "count" : 1,
-                  "VALIDITY" : [1],
-                  "OFFSET" : [0,18],
-                  "DATA" : ["reading-demo000000"]
-                }]
-              },{
                 "name" : "cpu-avg-15min",
                 "count" : 1,
                 "TYPE_ID" : [0],
@@ -730,6 +718,18 @@
                   "DATA" : ["01:02:03:04:05:06"]
                 }]
               },{
+                "name" : "id",
+                "count" : 1,
+                "TYPE_ID" : [0],
+                "OFFSET" : [0],
+                "children" : [{
+                  "name" : "utf8",
+                  "count" : 1,
+                  "VALIDITY" : [1],
+                  "OFFSET" : [0,18],
+                  "DATA" : ["reading-demo000000"]
+                }]
+              },{
                 "name" : "battery-temperature",
                 "count" : 1,
                 "TYPE_ID" : [0],
@@ -791,7 +791,7 @@
           "count" : 0,
           "VALIDITY" : [ ],
           "children" : [{
-            "name" : "_id",
+            "name" : "id",
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]
@@ -811,7 +811,7 @@
           "count" : 0,
           "VALIDITY" : [ ],
           "children" : [{
-            "name" : "_id",
+            "name" : "id",
             "count" : 0,
             "TYPE_ID" : [ ],
             "OFFSET" : [ ]
@@ -824,8 +824,8 @@
             "name" : "query",
             "count" : 3,
             "VALIDITY" : [1,1,1],
-            "OFFSET" : [0,54,202,306],
-            "DATA" : ["[:insert [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]","[:update {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:project [_iid _row-id _id {bar \"world\"}] [:scan [_iid _row-id {_id (= _id 1)}]]]]","[:delete {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:scan [_iid _row-id {_id (= _id 1)}]]]"]
+            "OFFSET" : [0,54,199,301],
+            "DATA" : ["[:insert [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]","[:update {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:project [_iid _row-id id {bar \"world\"}] [:scan [_iid _row-id {id (= id 1)}]]]]","[:delete {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:scan [_iid _row-id {id (= id 1)}]]]"]
           },{
             "name" : "param-rows",
             "count" : 3,

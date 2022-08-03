@@ -15,12 +15,12 @@
     (t/is (= (json/parse-string (slurp expected-file))
              (-> (txp/serialize-tx-ops
                   a
-                  [[:put {:_id "device-info-demo000000",
+                  [[:put {:id "device-info-demo000000",
                           :api-version "23",
                           :manufacturer "iobeam",
                           :model "pinto",
                           :os-name "6.0.1"}]
-                   [:put {:_id "reading-demo000000",
+                   [:put {:id "reading-demo000000",
                           :cpu-avg-15min 8.654,
                           :rssi -50.0,
                           :cpu-avg-5min 10.802,
@@ -38,10 +38,10 @@
                     [{:foo 1, :bar nil, :baz 3.3}
                      {:foo 2, :bar "hello", :baz 12}]]
                    [:sql '[:update {:app-time-start #inst "2024"}
-                           [:project [_iid _row-id _id {bar "world"}]
-                            [:scan [_iid _row-id {_id (= _id 1)}]]]]]
+                           [:project [_iid _row-id id {bar "world"}]
+                            [:scan [_iid _row-id {id (= id 1)}]]]]]
                    [:sql '[:delete {:app-time-start #inst "2024"}
-                           [:scan [_iid _row-id {_id (= _id 1)}]]]]]
+                           [:scan [_iid _row-id {id (= id 1)}]]]]]
                   {:sys-time (util/->instant #inst "2021")
                    :current-time (util/->instant #inst "2021")})
                  (c2-json/arrow-streaming->json)

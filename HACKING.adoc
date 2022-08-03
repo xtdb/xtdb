@@ -68,9 +68,9 @@ wire protocol endpoint, and adds a few sample records for you to query.
 
 ;; TODO: remove this when we have basic DML
 (defn add-sample-txs []
-  (let [tx (c2/submit-tx node [[:put {:_id (random-uuid) :name "James"}]
-                               [:put {:_id (random-uuid) :name "Matt"}]
-                               [:put {:_id (random-uuid) :name "Dan"}]])]
+  (let [tx (c2/submit-tx node [[:put {:id (random-uuid) :name "James"}]
+                               [:put {:id (random-uuid) :name "Matt"}]
+                               [:put {:id (random-uuid) :name "Dan"}]])]
     (println "Sample transaction sent:\n\n" (deref tx))))
 
 (defn run [opts]

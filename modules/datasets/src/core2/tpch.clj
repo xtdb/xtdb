@@ -33,7 +33,7 @@
                         (read-tpch-cell col entity)])
                      (into {}))]
         (assoc doc
-               :_id (->> (mapv doc (get table->pkey table-name))
+               :id (->> (mapv doc (get table->pkey table-name))
                          (str/join "___"))
                :_table table-name)))))
 
@@ -55,7 +55,7 @@
 
 (defn- tpch-table->dml-plan [^TpchTable table]
   [:insert {:table (.getTableName table)}
-   [:table [(into '{:_id ?_id}
+   [:table [(into '{:id ?id}
                   (map (fn [^TpchColumn col]
                          (let [col-name (.getColumnName col)]
                            [(keyword col-name) (symbol (str "?" col-name))])))
@@ -69,9 +69,9 @@
                         (read-tpch-cell col entity)])
                      (into {}))]
         (assoc doc
-               :?_id (->> (mapv #(keyword (str "?" (name %))) (get table->pkey table-name))
-                          (mapv doc)
-                          (str/join "___")))))))
+               :?id (->> (mapv #(keyword (str "?" (name %))) (get table->pkey table-name))
+                         (mapv doc)
+                         (str/join "___")))))))
 
 (defn submit-dml! [tx-producer scale-factor]
   (log/debug "Transacting TPC-H tables...")

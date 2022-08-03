@@ -89,12 +89,12 @@
   (let [iid-mgr (InternalIdManager. (ConcurrentHashMap.))
         known-chunks (.knownChunks metadata-mgr)
         futs (for [chunk-idx known-chunks]
-               (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
+               (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "id"))
                    (util/then-apply util/try-close)))]
     @(CompletableFuture/allOf (into-array CompletableFuture futs))
 
     (doseq [chunk-idx known-chunks]
-      (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
+      (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "id"))
                   id-chunks (util/->chunks id-buffer)]
         (.forEachRemaining id-chunks
                            (reify Consumer
@@ -320,7 +320,7 @@
               leg-type-id (.getTypeId doc-duv put-offset)
               leg-offset (.getOffset doc-duv put-offset)
               id-vec (-> ^StructVector (.getVectorByType doc-duv leg-type-id)
-                         (.getChild "_id"))
+                         (.getChild "id"))
               eid (t/get-object id-vec leg-offset)
               new-entity? (not (.isKnownId iid-mgr eid))
               iid (.getOrCreateInternalId iid-mgr eid row-id)
@@ -334,7 +334,7 @@
                                                   ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer,
                                                   ^DenseUnionVector tx-ops-vec]
   (let [delete-vec (.getStruct tx-ops-vec 1)
-        ^DenseUnionVector id-vec (.getChild delete-vec "_id" DenseUnionVector)
+        ^DenseUnionVector id-vec (.getChild delete-vec "id" DenseUnionVector)
         ^TimeStampVector app-time-start-vec (.getChild delete-vec "application_time_start")
         ^TimeStampVector app-time-end-vec (.getChild delete-vec "application_time_end")]
     (reify OpIndexer
@@ -353,7 +353,7 @@
                                                  ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
                                                  ^DenseUnionVector tx-ops-vec]
   (let [evict-vec (.getStruct tx-ops-vec 2)
-        ^DenseUnionVector id-vec (.getChild evict-vec "_id" DenseUnionVector)]
+        ^DenseUnionVector id-vec (.getChild evict-vec "id" DenseUnionVector)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
         (let [row-id (.nextRowId indexer)
@@ -413,7 +413,7 @@
                                                                         (for [^IIndirectVector in-col in-rel
                                                                               :when (not (temporal/temporal-column? (.getName in-col)))]
                                                                           (doc-row-copier indexer in-col))))
-                                                 id-col (.vectorForName in-rel "_id")
+                                                 id-col (.vectorForName in-rel "id")
                                                  app-time-start-rdr (some-> (.vectorForName in-rel "application_time_start") (.monoReader))
                                                  app-time-end-rdr (some-> (.vectorForName in-rel "application_time_end") (.monoReader))]
                                              (dotimes [idx row-count]

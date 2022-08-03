@@ -844,7 +844,7 @@
 ;; maps cannot be created from SQL yet, or used as parameters - but we can read them from XT.
 (deftest map-read-test
   (with-open [conn (jdbc-conn)]
-    (-> (c2/submit-tx *node* [[:put {:_id "map-test", :a {:b 42}}]])
+    (-> (c2/submit-tx *node* [[:put {:id "map-test", :a {:b 42}}]])
         (tu/then-await-tx *node*))
     (let [rs (q conn ["select a.a from a a"])]
       (is (= [{:a {"b" 42}}] rs)))))
@@ -888,12 +888,12 @@
 (deftest transaction-by-default-pins-the-basis-too-last-tx-test
   (require-node)
   (let [insert #(future (-> (c2/submit-tx *node* [[:put %]]) (tu/then-await-tx *node*)))]
-    @(insert {:_id :fred, :name "Fred"})
+    @(insert {:id :fred, :name "Fred"})
     (with-open [conn (jdbc-conn)]
 
       (jdbc/with-transaction [db conn]
         (is (= [{:name "Fred"}] (q db ["select a.name from a"])))
-        @(insert {:_id :bob, :name "Bob"})
+        @(insert {:id :bob, :name "Bob"})
         (is (= [{:name "Fred"}] (q db ["select a.name from a"]))))
 
       (is (= [{:name "Fred"}, {:name "Bob"}] (q conn ["select a.name from a"]))))))

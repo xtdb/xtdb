@@ -13,8 +13,8 @@
 (t/use-fixtures :each tu/with-node)
 
 (def ivan+petr
-  [[:put {:_id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
-   [:put {:_id :petr, :first-name "Petr", :last-name "Petrov"}]])
+  [[:put {:id :ivan, :first-name "Ivan", :last-name "Ivanov"}]
+   [:put {:id :petr, :first-name "Petr", :last-name "Petrov"}]])
 
 (t/deftest test-scan
   (let [tx (c2/submit-tx tu/*node* ivan+petr)]
@@ -113,10 +113,10 @@
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
 (t/deftest datascript-test-joins
   (let [tx (c2/submit-tx tu/*node*
-                         [[:put {:_id 1, :name "Ivan", :age 15}]
-                          [:put {:_id 2, :name "Petr", :age 37}]
-                          [:put {:_id 3, :name "Ivan", :age 37}]
-                          [:put {:_id 4, :age 15}]])]
+                         [[:put {:id 1, :name "Ivan", :age 15}]
+                          [:put {:id 2, :name "Petr", :age 37}]
+                          [:put {:id 3, :name "Ivan", :age 37}]
+                          [:put {:id 4, :age 15}]])]
 
     (t/is (= #{{:e 1} {:e 2} {:e 3}}
              (->> (c2/plan-datalog tu/*node*
@@ -217,10 +217,10 @@
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
 (t/deftest datascript-test-aggregates
   (let [tx (c2/submit-tx tu/*node*
-                         [[:put {:_id :cerberus, :heads 3}]
-                          [:put {:_id :medusa, :heads 1}]
-                          [:put {:_id :cyclops, :heads 1}]
-                          [:put {:_id :chimera, :heads 1}]])]
+                         [[:put {:id :cerberus, :heads 3}]
+                          [:put {:id :medusa, :heads 1}]
+                          [:put {:id :cyclops, :heads 1}]
+                          [:put {:id :chimera, :heads 1}]])]
     (t/is (= #{{:heads 1, :count-?heads 3} {:heads 3, :count-?heads 1}}
              (->> (c2/plan-datalog tu/*node*
                                    (-> '{:find [?heads (count ?heads)]

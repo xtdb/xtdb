@@ -56,7 +56,7 @@ The CLI parameters, and EDN/JSON configuration file formats are the same as XTDB
 Transactions are slightly different to XTDB 1.x:
 
 - `[:xtdb.api/put <doc>]` -> `[:put <doc>]`. Put and delete supported thus far.
-- `:xt/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
+- `:xt/id` -> `:id`. Valid ID types currently strings, numbers, dates.
 - `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
 - `tx-time` -> `sys[tem]-time`
 - `valid-time` -> `app[lication]-time`

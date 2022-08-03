@@ -10,7 +10,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "_id",
+      "name" : "id",
       "nullable" : false,
       "type" : {
         "name" : "union",
@@ -18,34 +18,33 @@
         "typeIds" : [0]
       },
       "children" : [{
-        "name" : "i64",
+        "name" : "utf8",
         "nullable" : false,
         "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
+          "name" : "utf8"
         },
         "children" : [ ]
       }]
     }]
   },
   "batches" : [{
-    "count" : 2,
+    "count" : 3,
     "columns" : [{
       "name" : "_row-id",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : ["0","1"]
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "DATA" : ["0","1","3"]
     },{
-      "name" : "_id",
-      "count" : 2,
-      "TYPE_ID" : [0,0],
-      "OFFSET" : [0,1],
+      "name" : "id",
+      "count" : 3,
+      "TYPE_ID" : [0,0,0],
+      "OFFSET" : [0,1,2],
       "children" : [{
-        "name" : "i64",
-        "count" : 2,
-        "VALIDITY" : [1,1],
-        "DATA" : ["0","1"]
+        "name" : "utf8",
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "OFFSET" : [0,3,6,9],
+        "DATA" : ["foo","bar","bar"]
       }]
     }]
   }]

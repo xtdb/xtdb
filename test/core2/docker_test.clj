@@ -193,7 +193,7 @@
                            :core2.buffer-pool/buffer-pool {:cache-path (io/file hostdir "buffers")}
                            :core2.object-store/file-system-object-store {:root-path (io/file hostdir "objects")}}
                           (node/start-node))]
-      (-> (node/await-tx-async node (c2/submit-tx node [[:put {:_id 42, :greeting "Hello, world!"}]]))
+      (-> (node/await-tx-async node (c2/submit-tx node [[:put {:id 42, :greeting "Hello, world!"}]]))
           (.orTimeout 5 TimeUnit/SECONDS)
           deref))
 
