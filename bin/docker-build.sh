@@ -9,7 +9,7 @@ set -e
         clojure -Xuberjar
     fi
 
-    echo Building Docker image...
-    docker build -t xtdb/core2:${CORE2_VERSION:-latest} .
+    echo Building Docker image ...
+    docker build -t core2:latest .
     echo Done
 )

@@ -164,11 +164,35 @@ Core2 artifacts are deployed to Maven Central.
 
 === Docker
 
-Requires a login to docker with push perms to the xtdb org.
+==== Building a local image for testing
 
-* `./bin/build-docker.sh [--clean]` will build and tag as `xtdb/core2:latest`
-* `docker push
-* `CORE2_VERSION=<version> ./bin/build-docker.sh` to tag as a different version.
+* `./bin/docker-build-local.sh [--clean]` will build and tag as `core2:latest`, and load it into your images list. The `--clean` flag can be used to ensure the core2 uberjar is rebuilt.
+
+==== Building and pushing a multi-arch image to dockerhub
+
+Pushing core2 images requires a login to docker with permission to push to the xtdb docker hub org, ask @refset or @jarohen if you do not have this.
+
+* install https://github.com/docker/buildx[buildx] if it is not already (docker desktop, recent docker versions have it bundled). This will enable multi-arch builds support.
+
+* `./bin/docker-build-and-push.sh [--clean] [--latest]` will build and push the image as `xtdb/core2:"$sha"` as well as `xtdb/core2:latest` if `--latest` is supplied.
+
+As with a local build, the `--clean` flag can ensure a the core2 uberjar is built afresh.
+
+If you get an error on build like this:
+
+[source,text]
+----
+error: multiple platforms feature is currently not supported for docker driver. Please switch to a different driver (eg. "docker buildx create --use")
+----
+
+You may have to create and switch to a builder using the `docker-container` buildx driver:
+
+[source,shell]
+----
+$ docker buildx create --name mybuilder --driver=docker-container --use
+----
+
+See also this https://www.docker.com/blog/multi-arch-build-and-images-the-simple-way/[blog from docker] and https://cloudolife.com/2022/03/05/Infrastructure-as-Code-IaC/Container/Docker/Docker-buildx-support-multiple-architectures-images/[this tutorial] for more details on multi-arch builds with buildx.
 
 == Arrow Fork
 
