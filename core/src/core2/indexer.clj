@@ -362,6 +362,25 @@
           (.logEvict log-op-idxer iid)
           (.indexEvict temporal-idxer iid))))))
 
+(defn- table-row-writer [^TransactionIndexer indexer, ^String table-name]
+  (let [^VectorSchemaRoot live-root (.getLiveRoot indexer "_table")
+        ^BigIntVector row-id-vec (.getVector live-root "_row-id")
+        ^IVectorWriter vec-writer (-> (.getVector live-root "_table")
+                                      (vw/vec->writer))
+        ^IVectorWriter vec-str-writer (.writerForType (.asDenseUnion vec-writer) :utf8)]
+    (reify DocRowCopier
+      (copyDocRow [_ row-id _src-idx]
+        (let [dest-idx (.getValueCount row-id-vec)]
+          (.setValueCount row-id-vec (inc dest-idx))
+          (.set row-id-vec dest-idx row-id))
+        (.startValue vec-writer)
+        (.startValue vec-str-writer)
+        (t/write-value! table-name vec-str-writer)
+        (.endValue vec-writer)
+
+        (.setRowCount live-root (inc (.getRowCount live-root)))
+        (.syncSchema live-root)))))
+
 (defn- ->sql-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
                                                ^DenseUnionVector tx-ops-vec, ^Instant current-time, ^ScanSource scan-src]
@@ -377,41 +396,43 @@
                            (t/get-object param-rows-vec sql-offset)
                            [{}])]
           (zmatch query
-            [:insert inner-query]
-            (with-open [pq (op/open-prepared-ra inner-query)]
-              (doseq [param-row param-rows
-                      :let [param-row (->> param-row
-                                           (into {} (map (juxt (comp symbol key) val))))]]
-                (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
-                  (.forEachRemaining res
-                                     (reify Consumer
-                                       (accept [_ in-rel]
-                                         (let [^IIndirectRelation in-rel in-rel
-                                               row-count (.rowCount in-rel)
-                                               doc-row-copiers (vec
-                                                                (for [^IIndirectVector in-col in-rel
-                                                                      :when (not (temporal/temporal-column? (.getName in-col)))]
-                                                                  (doc-row-copier indexer in-col)))
-                                               id-col (.vectorForName in-rel "_id")
-                                               vt-start-rdr (some-> (.vectorForName in-rel "_valid-time-start") (.monoReader))
-                                               vt-end-rdr (some-> (.vectorForName in-rel "_valid-time-end") (.monoReader))]
-                                           (dotimes [idx row-count]
-                                             (let [row-id (.nextRowId indexer)]
-                                               (doseq [^DocRowCopier doc-row-copier doc-row-copiers]
-                                                 (.copyDocRow doc-row-copier row-id idx))
+            [:insert opts inner-query]
+            (let [{:keys [table]} opts]
+              (with-open [pq (op/open-prepared-ra inner-query)]
+                (doseq [param-row param-rows
+                        :let [param-row (->> param-row
+                                             (into {} (map (juxt (comp symbol key) val))))]]
+                  (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
+                    (.forEachRemaining res
+                                       (reify Consumer
+                                         (accept [_ in-rel]
+                                           (let [^IIndirectRelation in-rel in-rel
+                                                 row-count (.rowCount in-rel)
+                                                 doc-row-copiers (vec
+                                                                  (cons (table-row-writer indexer table)
+                                                                        (for [^IIndirectVector in-col in-rel
+                                                                              :when (not (temporal/temporal-column? (.getName in-col)))]
+                                                                          (doc-row-copier indexer in-col))))
+                                                 id-col (.vectorForName in-rel "_id")
+                                                 vt-start-rdr (some-> (.vectorForName in-rel "_valid-time-start") (.monoReader))
+                                                 vt-end-rdr (some-> (.vectorForName in-rel "_valid-time-end") (.monoReader))]
+                                             (dotimes [idx row-count]
+                                               (let [row-id (.nextRowId indexer)]
+                                                 (doseq [^DocRowCopier doc-row-copier doc-row-copiers]
+                                                   (.copyDocRow doc-row-copier row-id idx))
 
-                                               (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
-                                                     new-entity? (.isKnownId iid-mgr eid)
-                                                     iid (.getOrCreateInternalId iid-mgr eid row-id)
-                                                     start-vt (if vt-start-rdr
-                                                                (.readLong vt-start-rdr idx)
-                                                                current-time-µs)
-                                                     end-vt (if vt-end-rdr
-                                                              (.readLong vt-end-rdr idx)
-                                                              util/end-of-time-μs)]
+                                                 (let [eid (t/get-object (.getVector id-col) (.getIndex id-col idx))
+                                                       new-entity? (.isKnownId iid-mgr eid)
+                                                       iid (.getOrCreateInternalId iid-mgr eid row-id)
+                                                       start-vt (if vt-start-rdr
+                                                                  (.readLong vt-start-rdr idx)
+                                                                  current-time-µs)
+                                                       end-vt (if vt-end-rdr
+                                                                (.readLong vt-end-rdr idx)
+                                                                util/end-of-time-μs)]
 
-                                                 (.logPut log-op-idxer iid row-id start-vt end-vt)
-                                                 (.indexPut temporal-idxer iid row-id start-vt end-vt new-entity?)))))))))))
+                                                   (.logPut log-op-idxer iid row-id start-vt end-vt)
+                                                   (.indexPut temporal-idxer iid row-id start-vt end-vt new-entity?))))))))))))
 
             [:update vt-opts inner-query]
             (with-open [pq (op/open-prepared-ra inner-query)]

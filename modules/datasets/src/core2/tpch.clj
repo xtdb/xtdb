@@ -54,7 +54,7 @@
                nil)))
 
 (defn- tpch-table->dml-plan [^TpchTable table]
-  [:insert
+  [:insert {:table (.getTableName table)}
    [:table [(into '{:_id ?_id}
                   (map (fn [^TpchColumn col]
                          (let [col-name (.getColumnName col)]
@@ -71,8 +71,7 @@
         (assoc doc
                :?_id (->> (mapv #(keyword (str "?" (name %))) (get table->pkey table-name))
                           (mapv doc)
-                          (str/join "___"))
-               :?_table table-name)))))
+                          (str/join "___")))))))
 
 (defn submit-dml! [tx-producer scale-factor]
   (log/debug "Transacting TPC-H tables...")

@@ -147,7 +147,7 @@
     (t/is (= [] (c2/sql-query n "select a.a from a a" {})))))
 
 (t/deftest test-basic-sql-dml
-  (let [!tx1 (c2/submit-tx *node* [[:sql '[:insert
+  (let [!tx1 (c2/submit-tx *node* [[:sql '[:insert {:table "users"}
                                            [:table [{:_id ?id, :name ?name, :_valid-time-start ?start-date}]]]
                                     [{:?id :dave, :?name "Dave", :?start-date #inst "2018"}
                                      {:?id :claire, :?name "Claire", :?start-date #inst "2019"}
@@ -164,8 +164,10 @@
              (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
                            {:basis {:tx !tx1}})))
 
-    (let [!tx2 (c2/submit-tx *node* [[:sql '[:delete {:_valid-time-start #inst "2020-05-01"}
+    (let [!tx2 (c2/submit-tx *node* [[:sql '[:delete {:table "users"
+                                                      :_valid-time-start #inst "2020-05-01"}
                                              [:scan [_iid
+                                                     {_table (= _table "users")}
                                                      {_id (= _id ?id)}
                                                      _valid-time-start
                                                      {_valid-time-end (>= _valid-time-end #inst "2020-05-01")}]]]
@@ -183,9 +185,12 @@
                (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
                              {:basis {:tx !tx2}}))))
 
-    (let [!tx3 (c2/submit-tx *node* [[:sql '[:update {:_valid-time-start #inst "2021-07-01"}
+    (let [!tx3 (c2/submit-tx *node* [[:sql '[:update {:table "users"
+                                                      :_valid-time-start #inst "2021-07-01"}
                                              [:map [{name "Sue"}]
-                                              [:scan [_iid {_id (= _id ?id)}
+                                              [:scan [_iid
+                                                      {_id (= _id ?id)}
+                                                      {_table (= _table "users")}
                                                       _valid-time-start
                                                       {_valid-time-end (>= _valid-time-end #inst "2021-07-01")}]]]]
                                       [{:?id :susan}]]])]

@@ -78,7 +78,7 @@
   (test-tpch-ingest :dml 0.01 66))
 
 (t/deftest can-submit-tpch-dml-0.001
-  (test-tpch-ingest :dml 0.001 66))
+  (test-tpch-ingest :dml 0.001 67))
 
 (defn run-query
   ([q] (run-query q {}))
