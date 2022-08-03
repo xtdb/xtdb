@@ -135,6 +135,19 @@ To attach YourKit:
 
 == Building / Deploying
 
+=== CircleCI
+
+. Fork this repo
+. 'Follow' the project on your https://app.circleci.com/dashboard[CircleCI dashboard]
+
+At the moment (until #295), you'll need to create a `slack-bot` context:
+
+. Your dashboard -> org settings (for your 'personal org') -> contexts -> create context `slack-bot`
+. add env var `SLACK_ACCESS_TOKEN`: `<ask James>`
+
+I regret using contexts - this is a pain.
+In my defense, I thought a context could be shared between forks, but apparently it can only be shared between projects in the same org.
+
 === Maven Central
 
 TODO: migrate from Lein
