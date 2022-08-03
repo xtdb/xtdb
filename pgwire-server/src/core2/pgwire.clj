@@ -1905,7 +1905,7 @@
 
 (defmethod ig/init-key :core2/pgwire [_ {:keys [node, port, num-threads]}]
   (let [srv (serve node {:port port, :num-threads num-threads})]
-    (log/info "PGWire server started on port: " port)
+    (log/info "PGWire server started on port:" port)
     srv))
 
 (defmethod ig/halt-key! :core2/pgwire [_ pgwire]
