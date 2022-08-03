@@ -156,13 +156,12 @@
 
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx1))
 
-    ;; TODO use `APP_TIME CONTAINS ?` here once it's available
     (t/is (= [{:name "Dave"} {:name "Claire"}]
-             (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2019-06-01 00:00:00', TIMESTAMP '2019-07-01 00:00:00')"
+             (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
                            {:basis {:tx !tx1}})))
 
     (t/is (= [{:name "Dave"} {:name "Claire"} {:name "Alan"}]
-             (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2020-06-01 00:00:00', TIMESTAMP '2020-07-01 00:00:00')"
+             (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
                            {:basis {:tx !tx1}})))
 
     (let [!tx2 (c2/submit-tx *node* [[:sql '[:delete {:_valid-time-start #inst "2020-05-01"}
@@ -173,15 +172,15 @@
                                       [{:?id :dave}]]])]
 
       (t/is (= [{:name "Claire"} {:name "Alan"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2020-06-01 00:00:00', TIMESTAMP '2020-07-01 00:00:00')"
+               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
                              {:basis {:tx !tx2}})))
 
       (t/is (= [{:name "Dave"} {:name "Claire"} {:name "Alan"}]
-               (c2/sql-query *node* "SELECT users.name FROM users WHERE users.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2020-06-01 00:00:00', TIMESTAMP '2020-07-01 00:00:00')"
+               (c2/sql-query *node* "SELECT users.name FROM users WHERE users.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
                              {:basis {:tx !tx1}})))
 
       (t/is (= [{:name "Dave"} {:name "Claire"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2019-06-01 00:00:00', TIMESTAMP '2019-07-01 00:00:00')"
+               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
                              {:basis {:tx !tx2}}))))
 
     (let [!tx3 (c2/submit-tx *node* [[:sql '[:update {:_valid-time-start #inst "2021-07-01"}
@@ -196,13 +195,13 @@
                              {:basis {:tx !tx3}})))
 
       (t/is (= [{:name "Susan"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2021-05-01 00:00:00', TIMESTAMP '2021-06-01 00:00:00')"
+               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-05-01 00:00:00'"
                              {:basis {:tx !tx3}})))
 
       (t/is (= [{:name "Susan"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2021-08-01 00:00:00', TIMESTAMP '2021-09-01 00:00:00')"
+               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-08-01 00:00:00'"
                              {:basis {:tx !tx1}})))
 
       (t/is (= [{:name "Sue"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME OVERLAPS PERIOD (TIMESTAMP '2021-08-01 00:00:00', TIMESTAMP '2021-09-01 00:00:00')"
+               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-08-01 00:00:00'"
                              {:basis {:tx !tx3}}))))))
