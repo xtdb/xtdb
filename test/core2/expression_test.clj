@@ -95,7 +95,7 @@
         μs-2019 (util/instant->micros (util/->instant #inst "2019"))]
     (letfn [(transpose [[mins maxs]]
               (->> (map vector mins maxs)
-                   (zipmap [:tt-end :id :tt-start :row-id :vt-start :vt-end])
+                   (zipmap [:sys-end :id :sys-start :row-id :vt-start :vt-end])
                    (into {} (remove (comp #{[Long/MIN_VALUE Long/MAX_VALUE]} val)))))]
       (t/is (= {:vt-start [Long/MIN_VALUE μs-2019]
                 :vt-end [(inc μs-2019) Long/MAX_VALUE]}
@@ -132,14 +132,14 @@
       (t/testing "parameters"
         (t/is (= {:vt-start [μs-2018 Long/MAX_VALUE]
                   :vt-end [Long/MIN_VALUE (dec μs-2018)]
-                  :tt-start [Long/MIN_VALUE μs-2019]
-                  :tt-end [(inc μs-2019) Long/MAX_VALUE]}
+                  :sys-start [Long/MIN_VALUE μs-2019]
+                  :sys-end [(inc μs-2019) Long/MAX_VALUE]}
                  (transpose (expr.temp/->temporal-min-max-range
-                             {"_tx-time-start" '(>= ?tt _tx-time-start)
-                              "_tx-time-end" '(< ?tt _tx-time-end)
+                             {"system_time_start" '(>= ?sys-time system_time_start)
+                              "system_time_end" '(< ?sys-time system_time_end)
                               "_valid-time-start" '(<= ?vt _valid-time-start)
                               "_valid-time-end" '(> ?vt _valid-time-end)}
-                             {'?tt (util/->instant #inst "2019",) '?vt (util/->instant #inst "2018")}))))))))
+                             {'?sys-time (util/->instant #inst "2019",) '?vt (util/->instant #inst "2018")}))))))))
 
 (defn project
   "Use to test an expression on some example documents. See also, project1.

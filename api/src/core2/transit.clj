@@ -45,5 +45,5 @@
        MonthDay "time/month-day"}
       (update-vals #(transit/write-handler % str))
       (merge
-        {TransactionInstant (transit/write-handler "core2/tx-key" #(select-keys % [:tx-id :tx-time]))
+        {TransactionInstant (transit/write-handler "core2/tx-key" #(select-keys % [:tx-id :sys-time]))
          core2.IllegalArgumentException (transit/write-handler "core2/illegal-arg" ex-data)})))

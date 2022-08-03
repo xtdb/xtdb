@@ -39,7 +39,7 @@
          :vt-opts (s/? (s/keys :opt-un [::_valid-time-start ::_valid-time-end]))))
 
 (defmethod tx-op-spec :evict [_]
-  ;; eventually this could have vt/tt start/end?
+  ;; eventually this could have vt/sys start/end?
   (s/cat :op #{:evict}
          :_id ::id))
 
@@ -85,7 +85,7 @@
                                                                         (types/->field "param-row" types/dense-union-type false)))))
 
             (types/col-type->field "current-time" [:timestamp-tz :micro "UTC"])
-            (types/col-type->field "tx-time" [:union #{:null [:timestamp-tz :micro "UTC"]}])]))
+            (types/col-type->field "system-time" [:union #{:null [:timestamp-tz :micro "UTC"]}])]))
 
 (defn- ->put-writer [^IDenseUnionWriter tx-ops-writer {:keys [current-time]}]
   (let [put-writer (.asStruct (.writerForTypeId tx-ops-writer 0))
@@ -159,7 +159,7 @@
 
       (.endValue sql-writer))))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant tx-time, ^Instant current-time] :as opts}]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [^BufferAllocator allocator tx-ops {:keys [^Instant sys-time, ^Instant current-time] :as opts}]
   (let [tx-ops (conform-tx-ops tx-ops)
         op-count (count tx-ops)]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
@@ -171,9 +171,9 @@
             write-evict! (->evict-writer tx-ops-writer)
             write-sql! (->sql-writer tx-ops-writer)]
 
-        (when tx-time
-          (doto ^TimeStampMicroTZVector (.getVector root "tx-time")
-            (.setSafe 0 (util/instant->micros tx-time))))
+        (when sys-time
+          (doto ^TimeStampMicroTZVector (.getVector root "system-time")
+            (.setSafe 0 (util/instant->micros sys-time))))
 
         (doto ^TimeStampMicroTZVector (.getVector root "current-time")
           (.setSafe 0 (util/instant->micros current-time)))
@@ -205,14 +205,14 @@
     (.submitTx this tx-ops {}))
 
   (submitTx [_ tx-ops opts]
-    (let [{:keys [tx-time] :as opts} (-> opts
+    (let [{:keys [sys-time] :as opts} (-> opts
                                          (assoc :current-time (.instant clock))
-                                         (some-> (update :tx-time util/->instant)))]
+                                         (some-> (update :sys-time util/->instant)))]
       (-> (.appendRecord log (serialize-tx-ops allocator tx-ops opts))
           (util/then-apply
             (fn [^LogRecord result]
               (cond-> (.tx result)
-                tx-time (assoc :tx-time tx-time))))))))
+                sys-time (assoc :sys-time sys-time))))))))
 
 (defmethod ig/prep-key ::tx-producer [_ opts]
   (merge {:clock (Clock/systemDefaultZone)

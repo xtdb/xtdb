@@ -15,36 +15,36 @@
 ;; areas covered are the same. Could or maybe should coalesce.
 
 (defn- ->row-map [^List point]
-  (zipmap [:id :row-id :valid-time-start :valid-time-end :tx-time-start :tx-time-end]
+  (zipmap [:id :row-id :valid-time-start :valid-time-end :sys-time-start :sys-time-end]
           [(.get point temporal/id-idx)
            (.get point temporal/row-id-idx)
            (Date/from (util/micros->instant (.get point temporal/valid-time-start-idx)))
            (Date/from (util/micros->instant (.get point temporal/valid-time-end-idx)))
-           (Date/from (util/micros->instant (.get point temporal/tx-time-start-idx)))
-           (Date/from (util/micros->instant (.get point temporal/tx-time-end-idx)))]))
+           (Date/from (util/micros->instant (.get point temporal/sys-time-start-idx)))
+           (Date/from (util/micros->instant (.get point temporal/sys-time-end-idx)))]))
 
 (defn- temporal-rows [kd-tree row-id->row]
   (vec (for [{:keys [row-id] :as row} (->> (map ->row-map (kd/kd-tree->seq kd-tree))
-                                           (sort-by (juxt :tx-time-start :row-id)))]
+                                           (sort-by (juxt :sys-time-start :row-id)))]
          (merge row (get row-id->row row-id)))))
 
 (defn ->coordinates ^core2.temporal.TemporalCoordinates [{:keys [id
                                                                  ^long row-id
-                                                                 ^Date tx-time-start
-                                                                 ^Date tx-time-end
+                                                                 ^Date sys-time-start
+                                                                 ^Date sys-time-end
                                                                  ^Date valid-time-start
                                                                  ^Date valid-time-end
                                                                  new-entity? tombstone?]}]
   (TemporalCoordinates. row-id id
-                        (util/instant->micros (.toInstant tx-time-start))
-                        (util/instant->micros (or (some-> tx-time-end .toInstant)
+                        (util/instant->micros (.toInstant sys-time-start))
+                        (util/instant->micros (or (some-> sys-time-end .toInstant)
                                                   util/end-of-time))
-                        (util/instant->micros (.toInstant (or valid-time-start tx-time-start)))
+                        (util/instant->micros (.toInstant (or valid-time-start sys-time-start)))
                         (util/instant->micros (or (some-> valid-time-end .toInstant)
                                                   util/end-of-time))
                         new-entity? (boolean tombstone?)))
 
-(t/deftest bitemporal-tx-time-split-test
+(t/deftest bitemporal-sys-time-split-test
   (let [kd-tree nil
         row-id->row (HashMap.)]
     ;; Current Insert
@@ -55,7 +55,7 @@
                                                                 allocator
                                                                 (->coordinates {:id 7797
                                                                                 :row-id 1
-                                                                                :tx-time-start #inst "1998-01-10"
+                                                                                :sys-time-start #inst "1998-01-10"
                                                                                 :new-entity? true}))]
       (.put row-id->row 1 {:customer-number 145})
       (t/is (= [{:id 7797,
@@ -63,8 +63,8 @@
                  :row-id 1,
                  :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                  :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                 :tx-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                 :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                 :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                 :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                (temporal-rows kd-tree row-id->row)))
 
       ;; Current Update
@@ -73,7 +73,7 @@
                                                  allocator
                                                  (->coordinates {:id 7797
                                                                  :row-id 2
-                                                                 :tx-time-start #inst "1998-01-15"
+                                                                 :sys-time-start #inst "1998-01-15"
                                                                  :new-entity? false}))]
         (.put row-id->row 2 {:customer-number 827})
         (t/is (= [{:id 7797,
@@ -81,22 +81,22 @@
                    :customer-number 145,
                    :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                    :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                   :tx-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                   :tx-time-end #inst "1998-01-15T00:00:00.000-00:00"}
+                   :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                   :sys-time-end #inst "1998-01-15T00:00:00.000-00:00"}
                   {:id 7797,
                    :customer-number 145,
                    :row-id 1,
                    :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                    :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                   :tx-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                   :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                   :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                   :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                   {:id 7797,
                    :row-id 2,
                    :customer-number 827,
                    :valid-time-start #inst "1998-01-15T00:00:00.000-00:00",
                    :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                   :tx-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                   :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                   :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                   :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                  (temporal-rows kd-tree row-id->row)))
 
         ;; Current Delete
@@ -105,7 +105,7 @@
                                                    allocator
                                                    (->coordinates {:id 7797
                                                                    :row-id 3
-                                                                   :tx-time-start #inst "1998-01-20"
+                                                                   :sys-time-start #inst "1998-01-20"
                                                                    :new-entity? false
                                                                    :tombstone? true}))]
           (.put row-id->row 3 {:customer-number 827})
@@ -114,29 +114,29 @@
                      :row-id 1,
                      :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                      :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                     :tx-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                     :tx-time-end #inst "1998-01-15T00:00:00.000-00:00"}
+                     :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                     :sys-time-end #inst "1998-01-15T00:00:00.000-00:00"}
                     {:id 7797,
                      :customer-number 145,
                      :row-id 1,
                      :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                      :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                     :tx-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                     :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                     :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                     :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                     {:id 7797,
                      :customer-number 827,
                      :row-id 2,
                      :valid-time-start #inst "1998-01-15T00:00:00.000-00:00",
                      :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                     :tx-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                     :tx-time-end #inst "1998-01-20T00:00:00.000-00:00"}
+                     :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                     :sys-time-end #inst "1998-01-20T00:00:00.000-00:00"}
                     {:id 7797,
                      :customer-number 827,
                      :row-id 2,
                      :valid-time-start #inst "1998-01-15T00:00:00.000-00:00",
                      :valid-time-end #inst "1998-01-20T00:00:00.000-00:00",
-                     :tx-time-start #inst "1998-01-20T00:00:00.000-00:00",
-                     :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                     :sys-time-start #inst "1998-01-20T00:00:00.000-00:00",
+                     :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                    (temporal-rows kd-tree row-id->row)))
 
           ;; Sequenced Insert
@@ -145,7 +145,7 @@
                                                      allocator
                                                      (->coordinates {:id 7797
                                                                      :row-id 4
-                                                                     :tx-time-start #inst "1998-01-23"
+                                                                     :sys-time-start #inst "1998-01-23"
                                                                      :valid-time-start #inst "1998-01-03"
                                                                      :valid-time-end #inst "1998-01-15"
                                                                      :new-entity? false}))]
@@ -155,36 +155,36 @@
                        :row-id 1,
                        :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                        :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                       :tx-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                       :tx-time-end #inst "1998-01-15T00:00:00.000-00:00"}
+                       :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                       :sys-time-end #inst "1998-01-15T00:00:00.000-00:00"}
                       {:id 7797,
                        :customer-number 145,
                        :row-id 1,
                        :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                        :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                       :tx-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                       :tx-time-end #inst "1998-01-23T00:00:00.000-00:00"}
+                       :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                       :sys-time-end #inst "1998-01-23T00:00:00.000-00:00"}
                       {:id 7797,
                        :customer-number 827,
                        :row-id 2,
                        :valid-time-start #inst "1998-01-15T00:00:00.000-00:00",
                        :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                       :tx-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                       :tx-time-end #inst "1998-01-20T00:00:00.000-00:00"}
+                       :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                       :sys-time-end #inst "1998-01-20T00:00:00.000-00:00"}
                       {:id 7797,
                        :row-id 2,
                        :customer-number 827,
                        :valid-time-start #inst "1998-01-15T00:00:00.000-00:00",
                        :valid-time-end #inst "1998-01-20T00:00:00.000-00:00",
-                       :tx-time-start #inst "1998-01-20T00:00:00.000-00:00",
-                       :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                       :sys-time-start #inst "1998-01-20T00:00:00.000-00:00",
+                       :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                       {:id 7797,
                        :customer-number 145,
                        :row-id 4,
                        :valid-time-start #inst "1998-01-03T00:00:00.000-00:00",
                        :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                       :tx-time-start #inst "1998-01-23T00:00:00.000-00:00",
-                       :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                       :sys-time-start #inst "1998-01-23T00:00:00.000-00:00",
+                       :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                      (temporal-rows kd-tree row-id->row)))
 
             ;; NOTE: rows differs from book, but covered area is the same.
@@ -194,7 +194,7 @@
                                                        allocator
                                                        (->coordinates {:id 7797
                                                                        :row-id 5
-                                                                       :tx-time-start #inst "1998-01-26"
+                                                                       :sys-time-start #inst "1998-01-26"
                                                                        :valid-time-start #inst "1998-01-02"
                                                                        :valid-time-end #inst "1998-01-05"
                                                                        :new-entity? false
@@ -205,43 +205,43 @@
                          :row-id 1,
                          :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                          :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                         :tx-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                         :tx-time-end #inst "1998-01-15T00:00:00.000-00:00"}
+                         :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                         :sys-time-end #inst "1998-01-15T00:00:00.000-00:00"}
                         {:id 7797,
                          :customer-number 145,
                          :row-id 1,
                          :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                          :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                         :tx-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                         :tx-time-end #inst "1998-01-23T00:00:00.000-00:00"}
+                         :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                         :sys-time-end #inst "1998-01-23T00:00:00.000-00:00"}
                         {:id 7797,
                          :customer-number 827,
                          :row-id 2,
                          :valid-time-start #inst "1998-01-15T00:00:00.000-00:00",
                          :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                         :tx-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                         :tx-time-end #inst "1998-01-20T00:00:00.000-00:00"}
+                         :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                         :sys-time-end #inst "1998-01-20T00:00:00.000-00:00"}
                         {:id 7797,
                          :customer-number 827,
                          :row-id 2,
                          :valid-time-start #inst "1998-01-15T00:00:00.000-00:00",
                          :valid-time-end #inst "1998-01-20T00:00:00.000-00:00",
-                         :tx-time-start #inst "1998-01-20T00:00:00.000-00:00",
-                         :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                         :sys-time-start #inst "1998-01-20T00:00:00.000-00:00",
+                         :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                         {:id 7797,
                          :customer-number 145,
                          :row-id 4,
                          :valid-time-start #inst "1998-01-03T00:00:00.000-00:00",
                          :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                         :tx-time-start #inst "1998-01-23T00:00:00.000-00:00",
-                         :tx-time-end #inst "1998-01-26T00:00:00.000-00:00"}
+                         :sys-time-start #inst "1998-01-23T00:00:00.000-00:00",
+                         :sys-time-end #inst "1998-01-26T00:00:00.000-00:00"}
                         {:id 7797,
                          :customer-number 145,
                          :row-id 4,
                          :valid-time-start #inst "1998-01-05T00:00:00.000-00:00",
                          :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                         :tx-time-start #inst "1998-01-26T00:00:00.000-00:00",
-                         :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                         :sys-time-start #inst "1998-01-26T00:00:00.000-00:00",
+                         :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                        (temporal-rows kd-tree row-id->row)))
 
               ;; NOTE: rows differs from book, but covered area is the same.
@@ -251,7 +251,7 @@
                                                          allocator
                                                          (->coordinates {:id 7797
                                                                          :row-id 6
-                                                                         :tx-time-start #inst "1998-01-28"
+                                                                         :sys-time-start #inst "1998-01-28"
                                                                          :valid-time-start #inst "1998-01-12"
                                                                          :valid-time-end #inst "1998-01-15"
                                                                          :new-entity? false}))]
@@ -261,57 +261,57 @@
                            :row-id 1,
                            :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                            :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                           :tx-time-start #inst "1998-01-10T00:00:00.000-00:00",
-                           :tx-time-end #inst "1998-01-15T00:00:00.000-00:00"}
+                           :sys-time-start #inst "1998-01-10T00:00:00.000-00:00",
+                           :sys-time-end #inst "1998-01-15T00:00:00.000-00:00"}
                           {:id 7797,
                            :customer-number 145,
                            :row-id 1,
                            :valid-time-start #inst "1998-01-10T00:00:00.000-00:00",
                            :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                           :tx-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                           :tx-time-end #inst "1998-01-23T00:00:00.000-00:00"}
+                           :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                           :sys-time-end #inst "1998-01-23T00:00:00.000-00:00"}
                           {:id 7797,
                            :customer-number 827,
                            :row-id 2,
                            :valid-time-start #inst "1998-01-15T00:00:00.000-00:00",
                            :valid-time-end #inst "9999-12-31T23:59:59.999-00:00",
-                           :tx-time-start #inst "1998-01-15T00:00:00.000-00:00",
-                           :tx-time-end #inst "1998-01-20T00:00:00.000-00:00"}
+                           :sys-time-start #inst "1998-01-15T00:00:00.000-00:00",
+                           :sys-time-end #inst "1998-01-20T00:00:00.000-00:00"}
                           {:id 7797,
                            :customer-number 827,
                            :row-id 2,
                            :valid-time-start #inst "1998-01-15T00:00:00.000-00:00",
                            :valid-time-end #inst "1998-01-20T00:00:00.000-00:00",
-                           :tx-time-start #inst "1998-01-20T00:00:00.000-00:00",
-                           :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                           :sys-time-start #inst "1998-01-20T00:00:00.000-00:00",
+                           :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                           {:id 7797,
                            :customer-number 145,
                            :row-id 4,
                            :valid-time-start #inst "1998-01-03T00:00:00.000-00:00",
                            :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                           :tx-time-start #inst "1998-01-23T00:00:00.000-00:00",
-                           :tx-time-end #inst "1998-01-26T00:00:00.000-00:00"}
+                           :sys-time-start #inst "1998-01-23T00:00:00.000-00:00",
+                           :sys-time-end #inst "1998-01-26T00:00:00.000-00:00"}
                           {:id 7797,
                            :customer-number 145,
                            :row-id 4,
                            :valid-time-start #inst "1998-01-05T00:00:00.000-00:00",
                            :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                           :tx-time-start #inst "1998-01-26T00:00:00.000-00:00",
-                           :tx-time-end #inst "1998-01-28T00:00:00.000-00:00"}
+                           :sys-time-start #inst "1998-01-26T00:00:00.000-00:00",
+                           :sys-time-end #inst "1998-01-28T00:00:00.000-00:00"}
                           {:id 7797,
                            :customer-number 145,
                            :row-id 4,
                            :valid-time-start #inst "1998-01-05T00:00:00.000-00:00",
                            :valid-time-end #inst "1998-01-12T00:00:00.000-00:00",
-                           :tx-time-start #inst "1998-01-28T00:00:00.000-00:00",
-                           :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}
+                           :sys-time-start #inst "1998-01-28T00:00:00.000-00:00",
+                           :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}
                           {:id 7797,
                            :customer-number 827,
                            :row-id 6,
                            :valid-time-start #inst "1998-01-12T00:00:00.000-00:00",
                            :valid-time-end #inst "1998-01-15T00:00:00.000-00:00",
-                           :tx-time-start #inst "1998-01-28T00:00:00.000-00:00",
-                           :tx-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
+                           :sys-time-start #inst "1998-01-28T00:00:00.000-00:00",
+                           :sys-time-end #inst "9999-12-31T23:59:59.999-00:00"}]
                          (temporal-rows kd-tree row-id->row))
 
                       (t/testing "rebuilding tree results in tree with same points"

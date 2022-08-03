@@ -12,8 +12,8 @@
   (appendRecord [_ record]
     (CompletableFuture/completedFuture
      (let [^LogRecord record (-> (swap! !records (fn [records]
-                                                   (let [tx-time (-> (.instant clock) (.truncatedTo ChronoUnit/MICROS))]
-                                                     (conj records (log/->LogRecord (c2/->TransactionInstant (count records) tx-time) record)))))
+                                                   (let [sys-time (-> (.instant clock) (.truncatedTo ChronoUnit/MICROS))]
+                                                     (conj records (log/->LogRecord (c2/->TransactionInstant (count records) sys-time) record)))))
                                  peek)]
        (.notifyTx subscriber-handler (.tx record))
        record)))

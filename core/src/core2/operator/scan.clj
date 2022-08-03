@@ -64,10 +64,10 @@
                                   (reify Function
                                     (apply [_ _src-key]
                                       (let [^ScanSource src (or (get srcs src-key)
-                                                            (throw (err/illegal-arg :unknown-src
-                                                                                    {::err/message "Query refers to unknown source"
-                                                                                     :db src-key
-                                                                                     :src-keys (keys srcs)})))]
+                                                                (throw (err/illegal-arg :unknown-src
+                                                                                        {::err/message "Query refers to unknown source"
+                                                                                         :db src-key
+                                                                                         :src-keys (keys srcs)})))]
                                         {:src src
                                          :wm (.openWatermark src)})))))
 
@@ -253,9 +253,9 @@
                           (let [chunks (->> (for [col-name real-col-names]
                                               (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
                                                   (util/then-apply
-                                                   (fn [buf]
-                                                     (MapEntry/create col-name (util/->chunks buf {:block-idxs block-idxs
-                                                                                                   :close-buffer? true}))))))
+                                                    (fn [buf]
+                                                      (MapEntry/create col-name (util/->chunks buf {:block-idxs block-idxs
+                                                                                                    :close-buffer? true}))))))
                                             (remove nil?)
                                             vec
                                             (into {} (map deref)))]
@@ -280,14 +280,14 @@
       (util/try-close chunk))))
 
 (defn- apply-src-tx! [[^longs temporal-min-range, ^longs temporal-max-range], ^ScanSource src, col-preds]
-  (when-let [tx-time (some-> (.txBasis src) (.tx_time))]
+  (when-let [sys-time (some-> (.txBasis src) (.sys-time))]
     (expr.temp/apply-constraint temporal-min-range temporal-max-range
-                                :<= "_tx-time-start" tx-time)
+                                :<= "system_time_start" sys-time)
 
-    (when-not (or (contains? col-preds "_tx-time-start")
-                  (contains? col-preds "_tx-time-end"))
+    (when-not (or (contains? col-preds "system_time_start")
+                  (contains? col-preds "system_time_end"))
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
-                                  :> "_tx-time-end" tx-time))))
+                                  :> "system_time_end" sys-time))))
 
 (defmethod lp/emit-expr :scan [{:keys [source columns]} {:keys [scan-col-types param-types]}]
   (let [src-key (or source '$)

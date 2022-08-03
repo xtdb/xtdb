@@ -10,7 +10,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "tx-time",
+      "name" : "system-time",
       "nullable" : false,
       "type" : {
         "name" : "timestamp",
@@ -85,7 +85,7 @@
       "VALIDITY" : [1],
       "DATA" : ["0"]
     },{
-      "name" : "tx-time",
+      "name" : "system-time",
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : [1577836800000000]
@@ -134,7 +134,7 @@
       "VALIDITY" : [1],
       "DATA" : ["5165"]
     },{
-      "name" : "tx-time",
+      "name" : "system-time",
       "count" : 1,
       "VALIDITY" : [1],
       "DATA" : [1577923200000000]

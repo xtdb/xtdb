@@ -60,10 +60,10 @@
 (t/deftest test-valid-time
   (let [ingester (tu/component :core2/ingester)
 
-        {:keys [tx-time] :as tx1} @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]
+        {:keys [sys-time] :as tx1} @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]
                                                             [:put {:_id :doc-with-vt}
                                                              {:_valid-time-start #inst "2021"}]])
-        tx-time (util/->zdt tx-time)
+        sys-time (util/->zdt sys-time)
 
         start-vt (util/->zdt (first *vts*))
 
@@ -72,20 +72,20 @@
     (t/is (= {:doc {:_id :doc,
                     :_valid-time-start start-vt
                     :_valid-time-end end-of-time-zdt
-                    :_tx-time-start tx-time
-                    :_tx-time-end end-of-time-zdt}
+                    :system_time_start sys-time
+                    :system_time_end end-of-time-zdt}
               :doc-with-vt {:_id :doc-with-vt,
                             :_valid-time-start (util/->zdt #inst "2021")
                             :_valid-time-end end-of-time-zdt
-                            :_tx-time-start tx-time
-                            :_tx-time-end end-of-time-zdt}}
+                            :system_time_start sys-time
+                            :system_time_end end-of-time-zdt}}
              (->> (op/query-ra '[:scan [_id
                                         _valid-time-start _valid-time-end
-                                        _tx-time-start _tx-time-end]]
+                                        system_time_start system_time_end]]
                                db)
                   (into {} (map (juxt :_id identity))))))))
 
-(t/deftest test-tx-time
+(t/deftest test-sys-time
   (let [ingester (tu/component :core2/ingester)
 
         _ @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 0}]])
@@ -93,7 +93,7 @@
         _ (Thread/sleep 10) ; prevent same-ms transactions
 
         tx2 @(c2/submit-tx tu/*node* [[:put {:_id :doc, :version 1}]])
-        tt2 (util/->zdt (:tx-time tx2))
+        tt2 (util/->zdt (:sys-time tx2))
 
         db (ingest/snapshot ingester tx2)
 
@@ -102,19 +102,19 @@
         replaced-v0-doc {:_id :doc, :version 0
                          :_valid-time-start vt1
                          :_valid-time-end vt2
-                         :_tx-time-start tt2
-                         :_tx-time-end end-of-time-zdt}
+                         :system_time_start tt2
+                         :system_time_end end-of-time-zdt}
 
         v1-doc {:_id :doc, :version 1
                 :_valid-time-start vt2
                 :_valid-time-end end-of-time-zdt
-                :_tx-time-start tt2
-                :_tx-time-end end-of-time-zdt}]
+                :system_time_start tt2
+                :system_time_end end-of-time-zdt}]
 
     (t/is (= [replaced-v0-doc v1-doc]
              (op/query-ra '[:scan [_id version
                                    _valid-time-start _valid-time-end
-                                   _tx-time-start _tx-time-end]]
+                                   system_time_start system_time_end]]
                           db))
           "all vt")
 
@@ -122,16 +122,16 @@
     (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
              (op/query-ra '[:scan [_id version
                                    _valid-time-start _valid-time-end
-                                   _tx-time-start {_tx-time-end (<= _tx-time-end ?eot)}]]
+                                   system_time_start {system_time_end (<= system_time_end ?eot)}]]
                           {'$ db, '?eot util/end-of-time}))
-          "all vt, all tt")))
+          "all vt, all sys")))
 
 (t/deftest test-evict
   (let [ingester (tu/component :core2/ingester)]
     (letfn [(all-time-docs [db]
               (->> (op/query-ra '[:scan [_id
                                          _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
-                                         _tx-time-start {_tx-time-end (<= _tx-time-end ?eot)}]]
+                                         system_time_start {system_time_end (<= system_time_end ?eot)}]]
                                 {'$ db, '?eot util/end-of-time})
                    (map :_id)
                    frequencies))]

@@ -17,8 +17,8 @@
 
 (deftest system-time-as-of
 
-  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:tx-time #inst "3000"})
-        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx2"}]] {:tx-time #inst "3001"})]
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
+        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
 
     (is (= []
            (query-at-tx
@@ -37,8 +37,8 @@
 
 (deftest system-time-from-a-to-b
 
-  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:tx-time #inst "3000"})
-        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx2"}]] {:tx-time #inst "3001"})]
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
+        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
 
     (is (= []
            (query-at-tx
@@ -62,8 +62,8 @@
 
 (deftest system-time-between-a-to-b
 
-  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:tx-time #inst "3000"})
-        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx2"}]] {:tx-time #inst "3001"})]
+  (let [!tx (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx1"}]] {:sys-time #inst "3000"})
+        !tx2 (c2/submit-tx tu/*node* [[:put {:_id :my-doc, :last_updated "tx2"}]] {:sys-time #inst "3001"})]
 
     (is (= []
            (query-at-tx

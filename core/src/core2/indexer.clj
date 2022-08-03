@@ -134,7 +134,7 @@
 
 (def ^:private log-schema
   (Schema. [(t/col-type->field "tx-id" :i64)
-            (t/col-type->field "tx-time" [:timestamp-tz :micro "UTC"])
+            (t/col-type->field "system-time" [:timestamp-tz :micro "UTC"])
             (t/col-type->field "ops" '[:list [:struct {iid :i64
                                                        row-id [:union #{:null :i64}]
                                                        valid-time-start [:union #{:null [:timestamp-tz :micro "UTC"]}]
@@ -157,7 +157,7 @@
 (defn- ->log-indexer [^BufferAllocator allocator, ^long max-rows-per-block]
   (let [log-root (VectorSchemaRoot/create log-schema allocator)
         ^BigIntVector tx-id-vec (.getVector log-root "tx-id")
-        ^TimeStampMicroTZVector tx-time-vec (.getVector log-root "tx-time")
+        ^TimeStampMicroTZVector sys-time-vec (.getVector log-root "system-time")
 
         ops-vec (.getVector log-root "ops")
         ops-writer (.asList (vw/vec->writer ops-vec))
@@ -181,7 +181,7 @@
         (let [tx-idx (.getRowCount log-root)]
           (.startValue ops-writer)
           (.setSafe tx-id-vec tx-idx (.tx-id tx-key))
-          (.setSafe tx-time-vec tx-idx (util/instant->micros (.tx-time tx-key)))
+          (.setSafe sys-time-vec tx-idx (util/instant->micros (.sys-time tx-key)))
 
           (reify ILogOpIndexer
             (logPut [_ iid row-id vt-start vt-end]
@@ -258,12 +258,12 @@
         (fn [^VectorSchemaRoot log-root]
           (let [tx-count (.getRowCount log-root)
                 ^BigIntVector tx-id-vec (.getVector log-root "tx-id")
-                ^TimeStampMicroTZVector tx-time-vec (.getVector log-root "tx-time")
+                ^TimeStampMicroTZVector sys-time-vec (.getVector log-root "system-time")
                 ^BigIntVector row-id-vec (-> ^ListVector (.getVector log-root "ops")
                                              ^StructVector (.getDataVector)
                                              (.getChild "row-id"))]
             {:latest-tx (c2/->TransactionInstant (.get tx-id-vec (dec tx-count))
-                                                 (util/micros->instant (.get tx-time-vec (dec tx-count))))
+                                                 (util/micros->instant (.get sys-time-vec (dec tx-count))))
              :latest-row-id (.get row-id-vec (dec (.getValueCount row-id-vec)))}))))))
 
 (definterface OpIndexer

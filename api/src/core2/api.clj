@@ -7,7 +7,7 @@
            java.util.concurrent.ExecutionException
            java.util.function.Function))
 
-(defrecord TransactionInstant [^long tx-id, ^Instant tx-time]
+(defrecord TransactionInstant [^long tx-id, ^Instant sys-time]
   Comparable
   (compareTo [_ tx-key]
     (Long/compare tx-id (.tx-id ^TransactionInstant tx-key))))

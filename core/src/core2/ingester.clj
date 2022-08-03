@@ -57,18 +57,18 @@
                                     tx-root (.getVectorSchemaRoot sr)]
                           (.loadNextBatch sr)
 
-                          (let [^TimeStampMicroTZVector tx-time-vec (.getVector tx-root "tx-time")
+                          (let [^TimeStampMicroTZVector sys-time-vec (.getVector tx-root "system-time")
                                 ^TransactionInstant tx-key (cond-> (.tx record)
-                                                             (not (.isNull tx-time-vec 0))
-                                                             (assoc :tx-time (-> (.get tx-time-vec 0) (util/micros->instant))))
+                                                             (not (.isNull sys-time-vec 0))
+                                                             (assoc :sys-time (-> (.get sys-time-vec 0) (util/micros->instant))))
                                 latest-completed-tx (.latestCompletedTx indexer)]
 
                             (if (and (not (nil? latest-completed-tx))
-                                     (neg? (compare (.tx-time tx-key)
-                                                    (.tx-time latest-completed-tx))))
+                                     (neg? (compare (.sys-time tx-key)
+                                                    (.sys-time latest-completed-tx))))
                               ;; TODO: we don't yet have the concept of an aborted tx
                               ;; so anyone awaiting this tx will have a Bad Time™.
-                              (log/warnf "specified tx-time '%s' older than current tx '%s'"
+                              (log/warnf "specified sys-time '%s' older than current tx '%s'"
                                          (pr-str tx-key)
                                          (pr-str latest-completed-tx))
 

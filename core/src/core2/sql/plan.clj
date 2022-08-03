@@ -1323,8 +1323,8 @@
          "OF"
          point-in-time]
         ;;=>
-        [{'_tx-time-start (list '<= '_tx-time-start (expr point-in-time))}
-         {'_tx-time-end (list '> '_tx-time-end (expr point-in-time))}]
+        [{'system_time_start (list '<= 'system_time_start (expr point-in-time))}
+         {'system_time_end (list '> 'system_time_end (expr point-in-time))}]
 
         [:query_system_time_period_specification
          "FOR"
@@ -1337,8 +1337,8 @@
         (let [pit1 (expr point-in-time-1)
               pit2 (expr point-in-time-2)]
           (if (pit-less-than pit1 pit2)
-            [{'_tx-time-start (list '< '_tx-time-start pit2)}
-             {'_tx-time-end (list '> '_tx-time-end pit1)}]
+            [{'system_time_start (list '< 'system_time_start pit2)}
+             {'system_time_end (list '> 'system_time_end pit1)}]
             [:invalid-points-in-time]))
 
         [:query_system_time_period_specification
@@ -1353,8 +1353,8 @@
           [pit1 (expr point-in-time-1)
            pit2 (expr point-in-time-2)]
           (if (pit-less-than-or-equal pit1 pit2)
-            [{'_tx-time-start (list '<= '_tx-time-start pit2)}
-             {'_tx-time-end (list '> '_tx-time-end pit1)}]
+            [{'system_time_start (list '<= 'system_time_start pit2)}
+             {'system_time_end (list '> 'system_time_end pit1)}]
             [:invalid-points-in-time]))
 
         [:query_system_time_period_specification
@@ -1376,8 +1376,8 @@
                             "ASYMMETRIC"
                             [pit1 pit2])]
           (if (pit-less-than-or-equal start end)
-            [{'_tx-time-start (list '<= '_tx-time-start end)}
-             {'_tx-time-end (list '> '_tx-time-end start)}]
+            [{'system_time_start (list '<= 'system_time_start end)}
+             {'system_time_end (list '> 'system_time_end start)}]
             [:invalid-points-in-time]))))
     tp))
 

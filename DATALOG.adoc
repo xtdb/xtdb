@@ -58,6 +58,7 @@ Transactions are slightly different to XTDB 1.x:
 - `[:xtdb.api/put <doc>]` -> `[:put <doc>]`. Put and delete supported thus far.
 - `:xt/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
 - `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
+- `tx-time` -> `sys[tem]-time`
 
 === Datalog Queries
 In a similar manner to `next.jdbc`[https://github.com/seancorfield/next-jdbc], execute Datalog queries in Core2 using `c2/plan-datalog-query`.
@@ -90,7 +91,7 @@ Same as Datalog, but use `plan-sql-query` instead.
 === Bases
 
 Core2 doesn't have the concept of DBs - instead, we pass the node and (optionally) a 'basis' to queries.
-In Core2, the upper bound for the tx-time is applied per-source; the default upper bound for VT is applied at the query level - this is because each data source has their own tx-time timeline, but VT is assumed to be a single timeline, consistent across data sources.
+In Core2, the upper bound for the system-time is applied per-source; the default upper bound for VT is applied at the query level - this is because each data source has their own system-time timeline, but VT is assumed to be a single timeline, consistent across data sources.
 
 [source,clojure]
 ----

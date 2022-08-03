@@ -48,7 +48,7 @@
 
 (t/deftest test-simple-query
   (let [!tx (c2/submit-tx *node* [[:put {:_id :foo, :inst #inst "2021"}]])]
-    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
 
     (t/is (= [{:e :foo, :inst (util/->zdt #inst "2021")}]
              (->> (c2/plan-datalog *node*
@@ -73,7 +73,7 @@
 
 (t/deftest round-trips-lists
   (let [!tx (c2/submit-tx *node* [[:put {:_id :foo, :list [1 2 ["foo" "bar"]]}]])]
-    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
 
     (t/is (= [{:id :foo
                :list [1 2 ["foo" "bar"]]}]
@@ -86,7 +86,7 @@
 (t/deftest round-trips-structs
   (let [!tx (c2/submit-tx *node* [[:put {:_id :foo, :struct {:a 1, :b {:c "bar"}}}]
                                   [:put {:_id :bar, :struct {:a true, :d 42.0}}]])]
-    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
 
     (t/is (= #{{:id :foo, :struct {:a 1, :b {:c "bar"}}}
                {:id :bar, :struct {:a true, :d 42.0}}}
@@ -96,16 +96,16 @@
                                         (assoc :basis {:tx !tx}
                                                :basis-timeout (Duration/ofSeconds 1)))))))))
 
-(t/deftest can-manually-specify-tx-time-47
+(t/deftest can-manually-specify-sys-time-47
   (let [tx1 @(c2/submit-tx *node* [[:put {:_id :foo}]]
-                           {:tx-time #inst "2012"})
+                           {:sys-time #inst "2012"})
 
         _invalid-tx @(c2/submit-tx *node* [[:put {:_id :bar}]]
-                                   {:tx-time #inst "2011"})
+                                   {:sys-time #inst "2011"})
 
         tx3 @(c2/submit-tx *node* [[:put {:_id :baz}]])]
 
-    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2012")})
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2012")})
              tx1))
 
     (letfn [(q-at [tx]
@@ -128,7 +128,7 @@
 (t/deftest test-sql-roundtrip
   (let [!tx (c2/submit-tx *node* devs)]
 
-    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx))
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx))
 
     (t/is (= [{:name "James"}]
              (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name = 'James'"
@@ -154,7 +154,7 @@
                                      {:?id :alan, :?name "Alan", :?start-date #inst "2020"}
                                      {:?id :susan, :?name "Susan", :?start-date #inst "2021"}]]])]
 
-    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :tx-time (util/->instant #inst "2020-01-01")}) @!tx1))
+    (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx1))
 
     (t/is (= [{:name "Dave"} {:name "Claire"}]
              (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"

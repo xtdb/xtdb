@@ -50,13 +50,13 @@
 
       (let [res (first (op/query-ra '[:scan [_id
                                              _valid-time-start _valid-time-end
-                                             _tx-time-start _tx-time-end]]
+                                             system_time_start system_time_end]]
                                     (ingest/snapshot ingester tx)))]
-        (t/is (= #{:_id :_valid-time-start :_valid-time-end :_tx-time-end :_tx-time-start}
+        (t/is (= #{:_id :_valid-time-start :_valid-time-end :system_time_end :system_time_start}
                  (-> res keys set)))
 
         (t/is (= {:_id :doc, :_valid-time-start (util/->zdt #inst "2021"), :_valid-time-end (util/->zdt #inst "3000")}
-                 (dissoc res :_tx-time-start :_tx-time-end))))
+                 (dissoc res :system_time_start :system_time_end))))
 
       (t/is (= {:_id :doc, :vt-start (util/->zdt #inst "2021"), :vt-end (util/->zdt #inst "3000")}
                (-> (first (op/query-ra '[:project [_id
@@ -64,7 +64,7 @@
                                                    {vt-end _valid-time-end}]
                                          [:scan [_id _valid-time-start _valid-time-end]]]
                                        (ingest/snapshot ingester tx)))
-                   (dissoc :_tx-time-start :_tx-time-end)))))))
+                   (dissoc :system_time_start :system_time_end)))))))
 
 #_ ; FIXME hangs
 (t/deftest test-only-scanning-temporal-cols-45
@@ -73,7 +73,7 @@
           tx @(c2/submit-tx node [[:put {:_id :doc}]])]
 
       (t/is (op/query-ra '[:scan [_valid-time-start _valid-time-end
-                                  _tx-time-start _tx-time-end]]
+                                  system_time_start system_time_end]]
                          (ingest/snapshot ingester tx))))))
 
 (t/deftest test-scan-col-types
@@ -86,10 +86,10 @@
 
         (let [tx (-> (c2/submit-tx node [[:put {:_id :doc}]])
                      (tu/then-await-tx node))]
-         (tu/finish-chunk node)
+          (tu/finish-chunk node)
 
-         (t/is (= '{_id [:extension-type :keyword :utf8 ""]}
-                  (->col-types tx))))
+          (t/is (= '{_id [:extension-type :keyword :utf8 ""]}
+                   (->col-types tx))))
 
         (let [tx (-> (c2/submit-tx node [[:put {:_id "foo"}]])
                      (tu/then-await-tx node))]

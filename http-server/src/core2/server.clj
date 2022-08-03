@@ -47,14 +47,14 @@
 
 (s/def ::tx-id int?)
 
-(s/def ::tx-time
+(s/def ::sys-time
   (st/spec inst?
            {:decode/string (fn [_ s]
                              (cond
                                (inst? s) s
                                (string? s) (inst/read-instant-date s)))}))
 
-(s/def ::opts (s/keys :opt-un [::tx-time]))
+(s/def ::opts (s/keys :opt-un [::sys-time]))
 
 (defmethod route-handler :status [_]
   {:get (fn [{:keys [node] :as _req}]

@@ -103,75 +103,75 @@
 
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
-    (let [{tt1 :tx-time} @(c2/submit-tx node [[:put {:_id :my-doc, :last-updated "tx1"}]])
+    (let [{tt1 :sys-time} @(c2/submit-tx node [[:put {:_id :my-doc, :last-updated "tx1"}]])
           _ (Thread/sleep 10) ; to prevent same-ms transactions
-          {tt2 :tx-time, :as tx2} @(c2/submit-tx node [[:put {:_id :my-doc, :last-updated "tx2"}]])
+          {tt2 :sys-time, :as tx2} @(c2/submit-tx node [[:put {:_id :my-doc, :last-updated "tx2"}]])
           db (ingest/snapshot (tu/component node :core2/ingester) tx2)]
       (letfn [(q [& temporal-constraints]
                 (->> (op/query-ra [:scan (into '[last-updated]
                                                temporal-constraints)]
-                                  {'$ db, '?tt1 tt1, '?tt2 tt2})
+                                  {'$ db, '?sys-time1 tt1, '?sys-time2 tt2})
                      (into #{} (map :last-updated))))]
         (t/is (= #{"tx1" "tx2"}
                  (q)))
 
         (t/is (= #{"tx1"}
-                 (q '{_tx-time-start (<= _tx-time-start ?tt1)})))
+                 (q '{system_time_start (<= system_time_start ?sys-time1)})))
 
         (t/is (= #{}
-                 (q '{_tx-time-start (< _tx-time-start ?tt1)})))
+                 (q '{system_time_start (< system_time_start ?sys-time1)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{_tx-time-start (<= _tx-time-start ?tt2)})))
+                 (q '{system_time_start (<= system_time_start ?sys-time2)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{_tx-time-start (> _tx-time-start ?tt1)})))
+                 (q '{system_time_start (> system_time_start ?sys-time1)})))
 
         (t/is (= #{}
-                 (q '{_tx-time-end (< _tx-time-end ?tt2)})))
+                 (q '{system_time_end (< system_time_end ?sys-time2)})))
 
         (t/is (= #{"tx1"}
-                 (q '{_tx-time-end (<= _tx-time-end ?tt2)})))
+                 (q '{system_time_end (<= system_time_end ?sys-time2)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{_tx-time-end (> _tx-time-end ?tt2)})))
+                 (q '{system_time_end (> system_time_end ?sys-time2)})))
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{_tx-time-end (>= _tx-time-end ?tt2)})))
+                 (q '{system_time_end (>= system_time_end ?sys-time2)})))
 
         (t/testing "multiple constraints"
           (t/is (= #{"tx1"}
-                   (q '{_tx-time-start (and (<= _tx-time-start ?tt1)
-                                            (<= _tx-time-start ?tt2))})))
+                   (q '{system_time_start (and (<= system_time_start ?sys-time1)
+                                               (<= system_time_start ?sys-time2))})))
 
           (t/is (= #{"tx1"}
-                   (q '{_tx-time-start (and (<= _tx-time-start ?tt2)
-                                            (<= _tx-time-start ?tt1))})))
+                   (q '{system_time_start (and (<= system_time_start ?sys-time2)
+                                               (<= system_time_start ?sys-time1))})))
 
           (t/is (= #{"tx1" "tx2"}
-                   (q '{_tx-time-end (and (> _tx-time-end ?tt2)
-                                          (> _tx-time-end ?tt1))})))
+                   (q '{system_time_end (and (> system_time_end ?sys-time2)
+                                             (> system_time_end ?sys-time1))})))
 
           (t/is (= #{"tx1" "tx2"}
-                   (q '{_tx-time-end (and (> _tx-time-end ?tt1)
-                                          (> _tx-time-end ?tt2))}))))
+                   (q '{system_time_end (and (> system_time_end ?sys-time1)
+                                             (> system_time_end ?sys-time2))}))))
 
         (t/is (= #{}
-                 (q '{_tx-time-start (<= _tx-time-start ?tt1)}
-                    '{_tx-time-end (< _tx-time-end ?tt2)})))
+                 (q '{system_time_start (<= system_time_start ?sys-time1)}
+                    '{system_time_end (< system_time_end ?sys-time2)})))
 
         (t/is (= #{"tx1"}
-                 (q '{_tx-time-start (<= _tx-time-start ?tt1)}
-                    '{_tx-time-end (<= _tx-time-end ?tt2)})))
+                 (q '{system_time_start (<= system_time_start ?sys-time1)}
+                    '{system_time_end (<= system_time_end ?sys-time2)})))
 
         (t/is (= #{"tx1"}
-                 (q '{_tx-time-start (<= _tx-time-start ?tt1)}
-                    '{_tx-time-end (> _tx-time-end ?tt1)}))
+                 (q '{system_time_start (<= system_time_start ?sys-time1)}
+                    '{system_time_end (> system_time_end ?sys-time1)}))
               "as of tt1")
 
         (t/is (= #{"tx1" "tx2"}
-                 (q '{_tx-time-start (<= _tx-time-start ?tt2)}
-                    '{_tx-time-end (> _tx-time-end ?tt2)}))
+                 (q '{system_time_start (<= system_time_start ?sys-time2)}
+                    '{system_time_end (> system_time_end ?sys-time2)}))
               "as of tt2")))))
 
 (t/deftest test-fixpoint-operator

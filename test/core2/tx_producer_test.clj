@@ -42,7 +42,7 @@
                             [:scan [_iid _row-id {_id (= _id 1)}]]]]]
                    [:sql '[:delete {:_valid-time-start #inst "2024"}
                            [:scan [_iid _row-id {_id (= _id 1)}]]]]]
-                  {:tx-time (util/->instant #inst "2021")
+                  {:sys-time (util/->instant #inst "2021")
                    :current-time (util/->instant #inst "2021")})
                  (c2-json/arrow-streaming->json)
                  #_(doto (->> (spit expected-file)))
