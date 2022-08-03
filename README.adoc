@@ -81,7 +81,8 @@ docker pull xtdb/core2
 docker run -p 5432:5432 xtdb/core2
 ----
 
-You should see `| PGWire server started on port: 5432`. You can now access that port from outside the Docker container:
+You should see `hh:mm:ss | PGWire server started on port: 5432`.
+You can now access that port from outside the Docker container:
 
 [source,sh]
 ----
@@ -89,6 +90,26 @@ psql -h localhost
 # as of this writing, DML is not supported over pgwire yet
 ----
 
+If you would like to retain your data when the container reboots,
+mount a volume to your running Docker image like so:
+
+[source,sh]
+----
+docker run -p 5432:5432 -v /tmp/xtdb:/var/lib/xtdb xtdb/core2
+----
+
+=== Troubleshooting
+
+Certain older versions of Docker (< 20.10.10) struggle with newer Linux images.
+When that happens, you will see this error:
+
+[source,sh]
+----
+# There is insufficient memory for the Java Runtime Environment to continue.
+# Cannot create worker GC thread. Out of system resources.
+----
+
+To resolve this, upgrade to the latest version of Docker.
 
 == Documentation
 
