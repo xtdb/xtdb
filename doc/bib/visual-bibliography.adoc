@@ -1,0 +1,61 @@
+= Visual Bibliography
+
+This file contains sections linked from a visual description of the Core2 codebase.
+
+`TODO: Realistically, this could/should be a BibTex file, assuming we can link to it from an SVG.`
+
+== General Database Literature
+
+* https://15445.courses.cs.cmu.edu/fall2021/schedule.html[Intro to Database Systems (Fall 2021)]
+* https://15721.courses.cs.cmu.edu/spring2020/schedule.html[Advanced Database Systems (Spring 2020)]
+
+https://github.com/xtdb/core2/blob/master/doc/bib/visual-bibliography.adoc#general-database-literature
+
+== core2.expression
+
+* https://www.cs.umd.edu/class/spring2015/cmsc724/abadi-column-stores.pdf[(Abadi) The Design and Implementation of Modern Columnar Store Systems]
+
+=== Advanced
+
+* https://arxiv.org/pdf/2004.14471.pdf[Mainlining Databases: Supporting Fast Transactional Workloads on Universal Columnar Data File Formats]
+
+== core2.temporal
+
+* http://www2.cs.arizona.edu/~rts/tdbbook.pdf[(Snodgrass) Developing Time-Oriented Database Applications in SQL]
+
+=== Advanced
+
+* https://people.cs.aau.dk/~csj/Thesis/[(Jensen) Temporal Database Management]
+
+== core2.sql.parser
+
+* https://github.com/JakeWheat/sql-overview[Jake Wheat's SQL Grammars]
+
+== core2.sql.analyze
+
+* https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf[Translating SQL into the Relational Algebra]
+* https://arxiv.org/pdf/2110.07902.pdf[Zipping Strategies and Attribute Grammars]
+
+== core2.sql.plan
+
+* https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.563.8492&rep=rep1&type=pdf[Orthogonal Optimization of Subqueries and Aggregation]
+
+== Query Graph Model
+
+* http://projectsweb.cs.washington.edu/research/projects/db/weld/pirahesh-starburst-92.pdf[Extensible/Rule Based Query Rewrite Optimization in Starburst]
+
+== Deterministic Databases
+
+* http://www.cs.umd.edu/~abadi/papers/abadi-cacm2018.pdf[(Abadi, 2018) An Overview of Deterministic Database Systems]
+
+== pgwire-server
+
+* https://crate.io/docs/crate/reference/en/5.0/interfaces/postgres.html[(CrateDB) PostgreSQL wire protocol]
+
+== Dockerfile
+
+* TODO: SRE justification? (non-academic)
+
+== core2.datalog
+
+* https://www.semanticscholar.org/paper/What-you-Always-Wanted-to-Know-About-Datalog-(And-Ceri-Gottlob/fa1570dc4e7853c2c6d0ff21a1ac8327e4ebe4b5[What you Always Wanted to Know About Datalog (And Never Dared to Ask)]
