@@ -141,7 +141,7 @@
               (let [id-col-idx (-> (meta/->metadata-idxs metadata-batch)
                                    (.columnIndex "id"))]
                 (t/is (= "id" (-> (.getVector metadata-batch "column")
-                                   (ty/get-object id-col-idx))))
+                                  (ty/get-object id-col-idx))))
                 (let [^StructVector utf8-type-vec (-> ^StructVector (.getVector metadata-batch "types")
                                                       (.getChild "utf8"))]
                   (t/is (= "device-info-demo000000"
@@ -506,7 +506,7 @@
 
                     (t/is (<= (:tx-id first-half-tx-key)
                               (:tx-id (-> first-half-tx-key
-                                         (tu/then-await-tx node (Duration/ofSeconds 10))))
+                                          (tu/then-await-tx node (Duration/ofSeconds 10))))
                               (:tx-id second-half-tx-key)))
 
                     (t/is (>= (count (.id->internal-id iid-mgr)) 2000))
@@ -571,8 +571,8 @@
                        (.columnType mm2 "id"))))))))))
 
 (t/deftest test-await-fails-fast
-  (with-redefs [idx/->live-root (fn [& _args]
-                                  (throw (UnsupportedOperationException. "oh no!")))
+  (with-redefs [idx/->live-column (fn [& _args]
+                                    (throw (UnsupportedOperationException. "oh no!")))
                 log/log* (let [log* log/log*]
                            (fn [logger level throwable message]
                              (when-not (instance? UnsupportedOperationException throwable)

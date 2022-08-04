@@ -291,7 +291,7 @@
                 (doseq [^ContentMetadataWriter content-writer content-writers]
                   (.writeContentMetadata content-writer meta-idx))))]
 
-      (doseq [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
+      (doseq [[^String col-name, ^VectorSchemaRoot live-root] (sort-by key live-roots)]
         (write-col-meta! (.getVector live-root col-name))
         (write-root-col-row-ids! (.getVector live-root "_row-id"))
 
