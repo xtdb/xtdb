@@ -444,7 +444,7 @@
                   "name" : "struct"
                 },
                 "children" : [{
-                  "name" : "foo",
+                  "name" : "?_0",
                   "nullable" : false,
                   "type" : {
                     "name" : "union",
@@ -462,7 +462,7 @@
                     "children" : [ ]
                   }]
                 },{
-                  "name" : "bar",
+                  "name" : "?_1",
                   "nullable" : false,
                   "type" : {
                     "name" : "union",
@@ -485,7 +485,7 @@
                     "children" : [ ]
                   }]
                 },{
-                  "name" : "baz",
+                  "name" : "?_2",
                   "nullable" : false,
                   "type" : {
                     "name" : "union",
@@ -824,8 +824,8 @@
             "name" : "query",
             "count" : 3,
             "VALIDITY" : [1,1,1],
-            "OFFSET" : [0,54,199,301],
-            "DATA" : ["[:insert [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]","[:update {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:project [_iid _row-id id {bar \"world\"}] [:scan [_iid _row-id {id (= id 1)}]]]]","[:delete {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:scan [_iid _row-id {id (= id 1)}]]]"]
+            "OFFSET" : [0,51,196,298],
+            "DATA" : ["[:insert [:table [{:foo ?_0, :bar ?_1, :baz ?_2}]]]","[:update {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:project [_iid _row-id id {bar \"world\"}] [:scan [_iid _row-id {id (= id 1)}]]]]","[:delete {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:scan [_iid _row-id {id (= id 1)}]]]"]
           },{
             "name" : "param-rows",
             "count" : 3,
@@ -841,7 +841,7 @@
                 "count" : 2,
                 "VALIDITY" : [1,1],
                 "children" : [{
-                  "name" : "foo",
+                  "name" : "?_0",
                   "count" : 2,
                   "TYPE_ID" : [0,0],
                   "OFFSET" : [0,1],
@@ -852,7 +852,7 @@
                     "DATA" : ["1","2"]
                   }]
                 },{
-                  "name" : "bar",
+                  "name" : "?_1",
                   "count" : 2,
                   "TYPE_ID" : [0,1],
                   "OFFSET" : [0,0],
@@ -867,7 +867,7 @@
                     "DATA" : ["hello"]
                   }]
                 },{
-                  "name" : "baz",
+                  "name" : "?_2",
                   "count" : 2,
                   "TYPE_ID" : [0,1],
                   "OFFSET" : [0,0],

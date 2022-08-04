@@ -2,7 +2,8 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [core2.api :as c2])
-  (:import [io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable]
+  (:import clojure.lang.MapEntry
+           [io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable]
            [java.time LocalDate]))
 
 ;; 0.05 = 7500 customers, 75000 orders, 299814 lineitems, 10000 part, 40000 partsupp, 500 supplier, 25 nation, 5 region
@@ -55,23 +56,21 @@
 
 (defn- tpch-table->dml-plan [^TpchTable table]
   [:insert {:table (.getTableName table)}
-   [:table [(into '{:id ?id}
-                  (map (fn [^TpchColumn col]
-                         (let [col-name (.getColumnName col)]
-                           [(keyword col-name) (symbol (str "?" col-name))])))
+   [:table [(into '{:id ?_0}
+                  (map-indexed (fn [idx ^TpchColumn col]
+                                 (let [col-name (.getColumnName col)]
+                                   [(keyword col-name) (symbol (str "?_" (inc idx)))])))
                   (.getColumns table))]]])
 
 (defn- tpch-table->dml-params [^TpchTable table, scale-factor]
   (let [table-name (.getTableName table)]
     (for [entity (.createGenerator table scale-factor 1 1)]
-      (let [doc (->> (for [^TpchColumn col (.getColumns table)]
-                       [(keyword (str "?" (.getColumnName col)))
-                        (read-tpch-cell col entity)])
-                     (into {}))]
-        (assoc doc
-               :?id (->> (mapv #(keyword (str "?" (name %))) (get table->pkey table-name))
-                         (mapv doc)
-                         (str/join "___")))))))
+      (let [doc (for [^TpchColumn col (.getColumns table)]
+                  (MapEntry/create (keyword (.getColumnName col))
+                                   (read-tpch-cell col entity)))]
+        (cons (->> (mapv (into {} doc) (get table->pkey table-name))
+                   (str/join "___"))
+              (vals doc))))))
 
 (defn submit-dml! [tx-producer scale-factor]
   (log/debug "Transacting TPC-H tables...")

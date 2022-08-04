@@ -34,9 +34,9 @@
                           :mem-free 4.10011078E8,
                           :mem-used 5.89988922E8}]
                    [:sql '[:insert
-                           [:table [{:foo ?foo, :bar ?bar, :baz ?baz}]]]
-                    [{:foo 1, :bar nil, :baz 3.3}
-                     {:foo 2, :bar "hello", :baz 12}]]
+                           [:table [{:foo ?_0, :bar ?_1, :baz ?_2}]]]
+                    [[1 nil 3.3]
+                     [2 "hello" 12]]]
                    [:sql '[:update {:app-time-start #inst "2024"}
                            [:project [_iid _row-id id {bar "world"}]
                             [:scan [_iid _row-id {id (= id 1)}]]]]]

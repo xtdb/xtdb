@@ -46,7 +46,7 @@
 (defmethod tx-op-spec :sql [_]
   (s/cat :op #{:sql}
          :plan vector?
-         :param-rows (s/? (s/coll-of map? :kind sequential?))))
+         :param-rows (s/? (s/coll-of (s/coll-of any? :kind sequential?) :kind sequential?))))
 
 (s/def ::tx-op
   (s/and vector? (s/multi-spec tx-op-spec (fn [v _] v))))
@@ -154,8 +154,9 @@
       (.startValue sql-writer)
 
       (types/write-value! (pr-str plan) plan-writer)
-      (when param-rows
-        (types/write-value! param-rows param-rows-writer))
+      (types/write-value! (vec (for [param-row param-rows]
+                                 (zipmap (map #(keyword (str "?_" %)) (range)) param-row)))
+                          param-rows-writer)
 
       (.endValue sql-writer))))
 
