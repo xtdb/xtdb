@@ -69,8 +69,42 @@ We use session parameters to specify bases, which are then naturally scoped to t
   In the SQL:2011 spec, the `<transaction access mode>` defaults to `READ WRITE`; however, in Postgres, it defaults to the `default_transaction_read_only` configuration parameter.
   We could consider defaulting to `READ ONLY`, which would then require users to explicitly `START TRANSACTION READ WRITE` in order to mutate the database.
 
+In https://github.com/seancorfield/next-jdbc[next.jdbc] it would look like this:
+
+[source,clojure]
+----
+(jdbc/with-transaction [tx conn {:read-only false}]
+  ...)
+----
+
+In Java:
+
+[source,java]
+----
+// pretty standard Java SQL connection transaction shenanigans, AFAICT.
+Connection conn = ...;
+boolean oldReadOnly = conn.getReadOnly();
+conn.setReadOnly(true|false);
+conn.setAutoCommit(false);
+try {
+    ...
+    conn.commit();
+} finally {
+    conn.setReadOnly(oldReadOnly);
+}
+----
+
+Risks:
+
+* There is a risk here that the Postgres JDBC driver doesn't behave as we need to - we'll want to verify this.
+* In `next.jdbc`, the `-transact` implementation seems to https://github.com/seancorfield/next-jdbc/blob/bb4bea7d49b66a21cdca424dfda0e536fb745543/src/next/jdbc/transaction.clj#L68-L69[only set read-only if it's true].
+  If this is an issue, it's likely a quick PR, and in the meantime users can manually set/unset read-only on the `Connection`.
+* My initial internet searching suggests that Hibernate et al should all behave reasonably - but again, worth a check.
+
 == Decision
 
-For ease of implementation, we will initially implement option A.
+We will investigate the risks in option B to see whether any are show-stoppers, and check what's actually sent over the pgwire.
 
-We will later re-consider option B once we have landed option A, and are more familiar with the tradeoffs and nuances involved.
+For ease of implementation, we will initially lean towards implementing option B.
+
+We will later re-consider option A as a sugar atop option B once we have landed option B, and are more familiar with the tradeoffs and nuances involved.
