@@ -7,9 +7,6 @@ ENTRYPOINT ["java", \
     "-Dlogback.configurationFile=logback.xml", \
     "--add-opens=java.base/java.nio=ALL-UNNAMED", \
     "-Dio.netty.tryReflectionSetAccessible=true", \
-    "-Xms1g","-Xmx1g", \
-    "-XX:MaxDirectMemorySize=2g", \
-    "-XX:MaxMetaspaceSize=512m", \
     "-jar","core2-standalone.jar"]
 
 HEALTHCHECK --start-period=15s --timeout=3s \
