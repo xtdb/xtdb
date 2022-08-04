@@ -115,6 +115,7 @@
 #_{:clj-kondo/ignore [:unused-binding]}
 (definterface TransactionIndexer
   (^core2.indexer.LiveColumn getLiveColumn [^String fieldName])
+  (^java.util.Map liveColumnsWith [^long rowId])
   (^long nextRowId [])
   (^core2.watermark.Watermark getWatermark [])
   (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx
@@ -280,7 +281,7 @@
 (definterface DocRowCopier
   (^void copyDocRow [^long rowId, ^int srcIdx]))
 
-(defn- doc-row-copier [^TransactionIndexer indexer, ^IIndirectVector col-rdr]
+(defn- doc-row-copier ^core2.indexer.DocRowCopier [^TransactionIndexer indexer, ^IIndirectVector col-rdr]
   (let [col-name (.getName col-rdr)
         ^LiveColumn live-col (.getLiveColumn indexer col-name)
         ^Roaring64Bitmap row-id-bitmap (.row-id-bitmap live-col)
@@ -458,23 +459,36 @@
                                    (accept [_ in-rel]
                                      (let [^IIndirectRelation in-rel in-rel
                                            row-count (.rowCount in-rel)
-                                           doc-row-copiers (vec
-                                                            (for [^IIndirectVector in-col in-rel
-                                                                  :when (not (temporal/temporal-column? (.getName in-col)))]
-                                                              (doc-row-copier indexer in-col)))
+                                           doc-row-copiers (->> (for [^IIndirectVector in-col in-rel
+                                                                      :let [col-name (.getName in-col)]
+                                                                      :when (not (temporal/temporal-column? col-name))]
+                                                                  [col-name (doc-row-copier indexer in-col)])
+                                                                (into {}))
                                            iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
+                                           row-id-rdr (.monoReader (.vectorForName in-rel "_row-id"))
                                            app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start"))
                                            app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end"))]
                                        (dotimes [idx row-count]
-                                         (let [row-id (.nextRowId indexer)
+                                         (let [old-row-id (.readLong row-id-rdr idx)
+                                               new-row-id (.nextRowId indexer)
                                                iid (.readLong iid-rdr idx)
                                                start-app-time (Math/max (.readLong app-time-start-rdr idx) update-app-time-from-µs)
                                                end-app-time (Math/min (.readLong app-time-end-rdr idx) update-app-time-to-µs)]
-                                           (doseq [^DocRowCopier doc-row-copier doc-row-copiers]
-                                             (.copyDocRow doc-row-copier row-id idx))
+                                           (doseq [^DocRowCopier doc-row-copier (vals doc-row-copiers)]
+                                             (.copyDocRow doc-row-copier new-row-id idx))
 
-                                           (.logPut log-op-idxer iid row-id start-app-time end-app-time)
-                                           (.indexPut temporal-idxer iid row-id start-app-time end-app-time false))))))))))))))
+                                           (doseq [[^String col-name, ^LiveColumn live-col] (.liveColumnsWith indexer old-row-id)
+                                                   :when (not (contains? doc-row-copiers col-name))]
+                                             (let [^VectorSchemaRoot live-root (.live-root live-col)
+                                                   doc-row-copier (doc-row-copier indexer (iv/->direct-vec (.getVector live-root col-name)))
+                                                   ^BigIntVector live-row-id-vec (.getVector live-root "_row-id")]
+                                               ;; TODO these are sorted, so we could binary search instead
+                                               (dotimes [idx (.getRowCount live-root)]
+                                                 (when (= old-row-id (.get live-row-id-vec idx))
+                                                   (.copyDocRow doc-row-copier new-row-id idx)))))
+
+                                           (.logPut log-op-idxer iid new-row-id start-app-time end-app-time)
+                                           (.indexPut temporal-idxer iid new-row-id start-app-time end-app-time false))))))))))))))
 
 (defn- ->sql-delete-indexer ^core2.indexer.SqlOpIndexer [^TransactionIndexer indexer, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
                                                          ^Instant current-time, ^ScanSource scan-src]
@@ -560,6 +574,12 @@
                         (fn [field-name]
                           (->live-column field-name allocator)))))
 
+  (liveColumnsWith [_ row-id]
+    (->> live-columns
+         (into {} (filter (comp (fn [^LiveColumn live-col]
+                                  (.contains ^Roaring64Bitmap (.row-id-bitmap live-col) row-id))
+                                val)))))
+
   (nextRowId [this]
     (let [row-id (+ chunk-idx chunk-row-count)]
       (set! (.chunk-row-count this) (inc chunk-row-count))
@@ -575,7 +595,8 @@
           put-idxer (->put-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           delete-idxer (->delete-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           evict-idxer (->evict-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
-          sql-idxer (->sql-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec current-time (.scanSource this tx-key))]
+          sql-idxer (->sql-indexer this iid-mgr log-op-idxer temporal-idxer
+                                   tx-ops-vec current-time (.scanSource this tx-key))]
 
       (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
         (case (.getTypeId tx-ops-vec tx-op-idx)

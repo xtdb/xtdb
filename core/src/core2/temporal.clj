@@ -138,7 +138,8 @@
 (def temporal-fields
   (->> (for [col-name ["system_time_start" "system_time_end" "application_time_start" "application_time_end"]]
          [col-name (t/col-type->field col-name temporal-col-type)])
-       (into {"_iid" (t/col-type->field "_iid" :i64)})))
+       (into {"_iid" (t/col-type->field "_iid" :i64)
+              "_row-id" (t/col-type->field "_row-id" :i64)})))
 
 (defn temporal-column? [col-name]
   (contains? temporal-fields (name col-name)))
@@ -154,6 +155,7 @@
 (def ^:const ^int app-time-end-idx 5)
 
 (def ^:private column->idx {"_iid" id-idx
+                            "_row-id" row-id-idx
                             "application_time_start" app-time-start-idx
                             "application_time_end" app-time-end-idx
                             "system_time_start" sys-time-start-idx
