@@ -1,11 +1,13 @@
 (ns core2.bench
   (:require [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
+            core2.indexer
             [core2.kafka :as k]
             [core2.local-node :as node]
             [core2.s3 :as s3]
             [core2.util :as util])
-  (:import core2.local_node.Node
+  (:import core2.indexer.Indexer
+           core2.local_node.Node
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            java.util.UUID
@@ -34,7 +36,7 @@
                       (/ (- (System/nanoTime) start-ns#) 1e6)))))))
 
 (defn finish-chunk [^Node node]
-  (.finishChunk (util/component node :core2.indexer/indexer)))
+  (.finishChunk ^Indexer (util/component node :core2.indexer/indexer)))
 
 (defn ^core2.local_node.Node start-node
   ([] (start-node (str (UUID/randomUUID))))
