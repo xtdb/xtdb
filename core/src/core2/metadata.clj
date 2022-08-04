@@ -12,7 +12,7 @@
            core2.object_store.ObjectStore
            core2.ICursor
            java.io.Closeable
-           (java.util HashMap List SortedSet)
+           (java.util ArrayList HashMap List SortedSet)
            (java.util.concurrent ConcurrentSkipListSet)
            (java.util.function BiFunction Consumer Function)
            (org.apache.arrow.memory ArrowBuf BufferAllocator)
@@ -444,6 +444,31 @@
          (with-metadata metadata-mgr chunk-idx metadata-pred))
        vec
        (into [] (keep deref))))
+
+(defn row-id->cols [^IMetadataManager metadata-mgr, ^long row-id]
+  ;; TODO cache which chunk each row-id is in.
+  (let [bloom-hash (bloom/literal-hashes (.allocator ^MetadataManager metadata-mgr) row-id)]
+    (->> (matching-chunks metadata-mgr
+                          (fn [^long chunk-idx ^VectorSchemaRoot metadata-root]
+                            (let [cols (ArrayList.)
+                                  ^VarCharVector col-name-vec (.getVector metadata-root "column")
+                                  ^IntVector block-idx-vec (.getVector metadata-root "block-idx")
+                                  ^StructVector root-col-vec (.getVector metadata-root "root-column")
+                                  ^BigIntVector min-row-id-vec (.getChild root-col-vec "min-row-id" BigIntVector)
+                                  ^BigIntVector max-row-id-vec (.getChild root-col-vec "max-row-id" BigIntVector)
+                                  ^VarBinaryVector row-id-bloom-vec (.getChild root-col-vec "row-id-bloom" VarBinaryVector)]
+                              (dotimes [idx (.getRowCount metadata-root)]
+                                (when (and (not (.isNull block-idx-vec idx))
+                                           (not (.isNull root-col-vec idx))
+                                           (>= row-id (.get min-row-id-vec idx))
+                                           (<= row-id (.get max-row-id-vec idx))
+                                           (bloom/bloom-contains? row-id-bloom-vec idx bloom-hash))
+                                  (.add cols {:col-name (str (.getObject col-name-vec idx))
+                                              :block-idx (.get block-idx-vec idx)})))
+                              (when-not (.isEmpty cols)
+                                {:chunk-idx chunk-idx, :cols cols}))))
+         (remove nil?)
+         first)))
 
 (defmethod ig/prep-key ::metadata-manager [_ opts]
   (merge {:allocator (ig/ref :core2/allocator)
