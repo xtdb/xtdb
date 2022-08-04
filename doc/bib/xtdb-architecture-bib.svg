@@ -13,7 +13,7 @@
    width="4401.9902"
    height="3819.1565"
    id="svg4253"
-   sodipodi:docname="2022-08-xtdb-architecture-bib.svg"
+   sodipodi:docname="xtdb-architecture-bib.svg"
    inkscape:version="1.0.2 (e86c8708, 2021-01-15)">
   <metadata
      id="metadata4257">
@@ -23,7 +23,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -41,16 +41,17 @@
      id="namedview4255"
      showgrid="false"
      inkscape:zoom="0.24194438"
-     inkscape:cx="2113.0283"
-     inkscape:cy="1578.5786"
-     inkscape:window-x="1792"
+     inkscape:cx="2623.773"
+     inkscape:cy="1176.7901"
+     inkscape:window-x="0"
      inkscape:window-y="25"
      inkscape:window-maximized="0"
      inkscape:current-layer="svg4253"
      fit-margin-top="0"
      fit-margin-left="0"
      fit-margin-right="0"
-     fit-margin-bottom="0" />
+     fit-margin-bottom="0"
+     inkscape:document-rotation="0" />
   <!-- svg-source:excalidraw -->
   <rect
      style="fill:#1a1a1a;fill-opacity:1;stroke:#1a1a1a;stroke-width:8.44491;stroke-opacity:1"
@@ -59,7 +60,8 @@
      height="1901.1333"
      x="4.222455"
      y="4.222455"
-     ry="9.4703541" />
+     ry="9.4703541"
+     sodipodi:insensitive="true" />
   <defs
      id="defs3575">
     <style
@@ -136,7 +138,7 @@
   <g
      transform="translate(1813.4898,310.23539)"
      id="g3601"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="139"
        y="20"
@@ -144,7 +146,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3595">/core</text>
     <text
@@ -154,7 +156,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3597" />
     <text
@@ -164,7 +166,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3599">core2.expression</text>
   </g>
@@ -184,7 +186,7 @@
   <g
      transform="translate(658.5799,521.03107)"
      id="g3613"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="65"
        y="20"
@@ -192,7 +194,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3607">/api</text>
     <text
@@ -202,7 +204,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3609" />
     <text
@@ -212,7 +214,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3611">core2.api</text>
   </g>
@@ -232,7 +234,7 @@
   <g
      transform="translate(1813.9898,417.73539)"
      id="g3623"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="139"
        y="20"
@@ -240,7 +242,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3619">relational</text>
     <text
@@ -250,7 +252,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3621">operators</text>
   </g>
@@ -279,7 +281,7 @@
   <g
      transform="translate(875.36561,483.88821)"
      id="g3635"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="108.5"
        y="20"
@@ -287,7 +289,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3631">/core</text>
     <text
@@ -297,7 +299,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3633">core2.sql.parser</text>
   </g>
@@ -326,7 +328,7 @@
   <g
      transform="translate(874.0799,689.31678)"
      id="g3647"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="120.5"
        y="20"
@@ -334,7 +336,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3643">/core</text>
     <text
@@ -344,7 +346,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3645">core2.sql.analyze</text>
   </g>
@@ -373,7 +375,7 @@
   <g
      transform="translate(1309.4639,376.54058)"
      id="g3661"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="106"
        y="20"
@@ -381,7 +383,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3655">/core</text>
     <text
@@ -391,7 +393,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3657" />
     <text
@@ -401,7 +403,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3659">core2.sql.plan</text>
   </g>
@@ -421,7 +423,7 @@
   <g
      transform="translate(1652.4898,330.23539)"
      id="g3677"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="71.5"
        y="19"
@@ -429,7 +431,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3667">execution</text>
     <text
@@ -439,7 +441,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3669">engine</text>
     <text
@@ -449,7 +451,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3671" />
     <text
@@ -459,7 +461,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3673">(many</text>
     <text
@@ -469,7 +471,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3675">nodes)</text>
   </g>
@@ -493,7 +495,7 @@
   <g
      transform="translate(1396.6327,907.04967)"
      id="g3695"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="110.5"
        y="20"
@@ -501,7 +503,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3685">/core</text>
     <text
@@ -511,7 +513,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3687" />
     <text
@@ -521,7 +523,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3689">core2.ingester</text>
     <text
@@ -531,7 +533,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3691" />
     <text
@@ -541,7 +543,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3693">(many nodes)</text>
   </g>
@@ -561,7 +563,7 @@
   <g
      transform="translate(1843.0613,904.83538)"
      id="g3707"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="125"
        y="20"
@@ -569,7 +571,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3701">/core</text>
     <text
@@ -579,7 +581,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3703" />
     <text
@@ -589,7 +591,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3705">core2.object-store</text>
   </g>
@@ -680,7 +682,7 @@
   <g
      transform="translate(1988.7111,684.24255)"
      id="g3739"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="0"
        y="20"
@@ -688,14 +690,14 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3737">read</text>
   </g>
   <g
      transform="translate(1682.347,892.6211)"
      id="g3745"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="0"
        y="19.5"
@@ -703,7 +705,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3741">write</text>
     <text
@@ -713,7 +715,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3743">chunks</text>
   </g>
@@ -762,7 +764,7 @@
   <g
      transform="translate(1652.7065,647.59376)"
      id="g3765"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="0"
        y="19.5"
@@ -770,7 +772,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3761">live</text>
     <text
@@ -780,7 +782,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3763">read</text>
   </g>
@@ -800,7 +802,7 @@
   <g
      transform="translate(1689.4898,1080.4782)"
      id="g3785"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="0"
        y="20"
@@ -808,7 +810,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3771">chunk (128mb)</text>
     <text
@@ -818,7 +820,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3773" />
     <text
@@ -828,7 +830,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3775">* arrow</text>
     <text
@@ -838,7 +840,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3777">* columns</text>
     <text
@@ -848,7 +850,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3779">* metadata</text>
     <text
@@ -858,7 +860,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3781">* temporal delta index</text>
     <text
@@ -868,7 +870,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3783">* tx-log (raw) events</text>
   </g>
@@ -888,7 +890,7 @@
   <g
      transform="translate(453.63877,915.09824)"
      id="g3797"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="164.5"
        y="20"
@@ -896,7 +898,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3791">/api</text>
     <text
@@ -906,7 +908,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3793" />
     <text
@@ -916,7 +918,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3795">core2.api</text>
   </g>
@@ -965,7 +967,7 @@
   <g
      transform="rotate(-4.4645351,12878.501,-11968.438)"
      id="g3815"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="0"
        y="20"
@@ -973,7 +975,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3813">async events (kafka, etc.)</text>
   </g>
@@ -993,7 +995,7 @@
   <g
      transform="translate(943.5002,1122.5693)"
      id="g3831"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="0"
        y="19"
@@ -1001,7 +1003,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3821">event (message)</text>
     <text
@@ -1011,7 +1013,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3823" />
     <text
@@ -1021,7 +1023,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3825">* arrow</text>
     <text
@@ -1031,7 +1033,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3827">* txn operations</text>
     <text
@@ -1041,7 +1043,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="start"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3829">* row-oriented</text>
   </g>
@@ -1061,7 +1063,7 @@
   <g
      transform="translate(1166.143,1200.5693)"
      id="g3839"
-     style="fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1">
+     style="fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1;">
     <text
        x="64.285713"
        y="19"
@@ -1069,7 +1071,7 @@
        font-size="20px"
        fill="#c92a2a"
        text-anchor="middle"
-       style="white-space:pre;fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1"
+       style="white-space:pre;fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1;"
        direction="ltr"
        id="text3837">eviction</text>
   </g>
@@ -1089,7 +1091,7 @@
   <g
      transform="translate(2027.347,1129.3354)"
      id="g3849"
-     style="fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1">
+     style="fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1;">
     <text
        x="65.85714"
        y="19"
@@ -1097,7 +1099,7 @@
        font-size="20px"
        fill="#c92a2a"
        text-anchor="middle"
-       style="white-space:pre;fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1"
+       style="white-space:pre;fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1;"
        direction="ltr"
        id="text3845">eviction</text>
     <text
@@ -1107,7 +1109,7 @@
        font-size="20px"
        fill="#c92a2a"
        text-anchor="middle"
-       style="white-space:pre;fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1"
+       style="white-space:pre;fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1;"
        direction="ltr"
        id="text3847">GC</text>
   </g>
@@ -1156,7 +1158,7 @@
   <g
      transform="translate(2040.2469,1039.764)"
      id="g3867"
-     style="fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1">
+     style="fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1;">
     <text
        x="0"
        y="20"
@@ -1164,7 +1166,7 @@
        font-size="20px"
        fill="#c92a2a"
        text-anchor="start"
-       style="white-space:pre;fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1"
+       style="white-space:pre;fill:#ea0d38;fill-opacity:1;stroke:#ea0d38;stroke-opacity:1;"
        direction="ltr"
        id="text3865">delete</text>
   </g>
@@ -1193,7 +1195,7 @@
   <g
      transform="translate(1399.5543,1076.5306)"
      id="g3881"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="110"
        y="20"
@@ -1201,7 +1203,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3875">/core</text>
     <text
@@ -1211,7 +1213,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3877" />
     <text
@@ -1221,7 +1223,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3879">core2.temporal</text>
   </g>
@@ -1251,7 +1253,7 @@
   <g
      transform="translate(1323.7626,646.8224)"
      id="g3897"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="99.5"
        y="20"
@@ -1259,7 +1261,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3889">IR</text>
     <text
@@ -1269,7 +1271,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3891">(query</text>
     <text
@@ -1279,7 +1281,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3893">graph</text>
     <text
@@ -1289,7 +1291,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3895">model)</text>
   </g>
@@ -1351,7 +1353,7 @@
   <g
      transform="translate(999.30068,585.78042)"
      id="g3919"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="19.285715"
        y="19"
@@ -1359,7 +1361,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3917">AST</text>
   </g>
@@ -1505,7 +1507,7 @@
   <g
      transform="translate(874.36561,773.41678)"
      id="g3969"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="121"
        y="20"
@@ -1513,7 +1515,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3967">rewriter (?)</text>
   </g>
@@ -1611,7 +1613,7 @@
   <g
      transform="translate(797.31563,175.9198)"
      id="g4005"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="193.5"
        y="20"
@@ -1619,7 +1621,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3999">/core</text>
     <text
@@ -1629,7 +1631,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4001" />
     <text
@@ -1639,7 +1641,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4003">core2.datalog</text>
   </g>
@@ -1685,7 +1687,7 @@
   <g
      transform="translate(99.394659,716.83538)"
      id="g4021"
-     style="fill:#3c6ffc;fill-opacity:1;stroke:#047cff;stroke-opacity:1">
+     style="fill:#3c6ffc;fill-opacity:1;stroke:#047cff;stroke-opacity:1;">
     <text
        x="112.5"
        y="20"
@@ -1693,14 +1695,14 @@
        font-size="20px"
        fill="#364fc7"
        text-anchor="middle"
-       style="white-space:pre;fill:#3c6ffc;fill-opacity:1;stroke:#047cff;stroke-opacity:1"
+       style="white-space:pre;fill:#3c6ffc;fill-opacity:1;stroke:#047cff;stroke-opacity:1;"
        direction="ltr"
        id="text4019">pg-wire</text>
   </g>
   <g
      transform="translate(85.82323,449.54967)"
      id="g4025"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="116.5"
        y="20"
@@ -1708,7 +1710,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4023">/http-client-clj</text>
   </g>
@@ -1743,7 +1745,7 @@
   <g
      transform="translate(92.82323,583.54967)"
      id="g4037"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="115"
        y="20"
@@ -1751,7 +1753,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4035">flight sql?</text>
   </g>
@@ -1818,7 +1820,7 @@
        font-size="20px"
        fill="#e67700"
        text-anchor="middle"
-       style="white-space:pre"
+       style="white-space:pre;"
        direction="ltr"
        id="text4057">devops</text>
   </g>
@@ -1843,7 +1845,7 @@
        font-size="20px"
        fill="#e67700"
        text-anchor="middle"
-       style="white-space:pre"
+       style="white-space:pre;"
        direction="ltr"
        id="text4065">SaaS</text>
   </g>
@@ -1868,7 +1870,7 @@
        font-size="20px"
        fill="#e67700"
        text-anchor="middle"
-       style="white-space:pre"
+       style="white-space:pre;"
        direction="ltr"
        id="text4073">benchmarking</text>
   </g>
@@ -1897,7 +1899,7 @@
   <g
      transform="translate(492.72276,715.84535)"
      id="g4085"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="148"
        y="20"
@@ -1905,7 +1907,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4083">/pgwire-server</text>
   </g>
@@ -2009,7 +2011,7 @@
   <g
      transform="translate(489.22276,547.13107)"
      id="g4121"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="79"
        y="20"
@@ -2017,7 +2019,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4119">/http-server</text>
   </g>
@@ -2044,7 +2046,7 @@
        font-size="20px"
        fill="#e67700"
        text-anchor="start"
-       style="white-space:pre"
+       style="white-space:pre;"
        direction="ltr"
        id="text4127">legend</text>
   </g>
@@ -2071,7 +2073,7 @@
   <g
      transform="translate(107.54484,1513.832)"
      id="g4139"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="112"
        y="20"
@@ -2079,7 +2081,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4137">not XTDB specific</text>
   </g>
@@ -2099,7 +2101,7 @@
   <g
      transform="translate(655.17194,178.19456)"
      id="g4151"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="65"
        y="20"
@@ -2107,7 +2109,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4145">/api</text>
     <text
@@ -2117,7 +2119,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4147" />
     <text
@@ -2127,7 +2129,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4149">core2.api</text>
   </g>
@@ -2147,7 +2149,7 @@
   <g
      transform="translate(483.44623,201.29456)"
      id="g4159"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="79"
        y="20"
@@ -2155,7 +2157,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4157">/http-server</text>
   </g>
@@ -2263,7 +2265,7 @@
   <g
      transform="translate(107.37818,1623.3471)"
      id="g4197"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="112"
        y="20"
@@ -2271,7 +2273,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4195">click for papers</text>
   </g>
@@ -2296,7 +2298,7 @@
   <g
      transform="translate(107.37818,1740.6198)"
      id="g4207"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="112"
        y="20"
@@ -2304,7 +2306,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4205">not implemented</text>
   </g>
@@ -2331,7 +2333,7 @@
        font-size="20px"
        fill="#e67700"
        text-anchor="start"
-       style="white-space:pre"
+       style="white-space:pre;"
        direction="ltr"
        id="text4213">packages</text>
   </g>
@@ -2360,7 +2362,7 @@
   <g
      transform="translate(84.093793,1004.4285)"
      id="g4225"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="120.5"
        y="20"
@@ -2368,7 +2370,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4223">/Dockerfile</text>
   </g>
@@ -2395,7 +2397,7 @@
        font-size="20px"
        fill="#e67700"
        text-anchor="start"
-       style="white-space:pre"
+       style="white-space:pre;"
        direction="ltr"
        id="text4231">misc</text>
   </g>
@@ -2452,7 +2454,7 @@
   <g
      transform="translate(453.28411,1073.7653)"
      id="g4251"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="165"
        y="20"
@@ -2460,7 +2462,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text4249">/pgwire-server</text>
   </g>
@@ -2489,7 +2491,7 @@
   <g
      transform="translate(710.20512,1450.8609)"
      id="g3881-4"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="110"
        y="44"
@@ -2497,7 +2499,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3877-0" />
     <text
@@ -2507,7 +2509,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3879-0"><tspan
          sodipodi:role="line"
@@ -2544,7 +2546,7 @@
   <g
      transform="translate(712.50202,1569.8965)"
      id="g3881-4-9"
-     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1">
+     style="fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;">
     <text
        x="110"
        y="44"
@@ -2552,7 +2554,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3877-0-8" />
     <text
@@ -2562,7 +2564,7 @@
        font-size="20px"
        fill="#000000"
        text-anchor="middle"
-       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1"
+       style="white-space:pre;fill:#fffffc;fill-opacity:1;stroke:#ffffff;stroke-opacity:1;"
        direction="ltr"
        id="text3879-0-9"><tspan
          sodipodi:role="line"
