@@ -37,6 +37,7 @@
            [org.apache.arrow.vector BigIntVector BitVector TimeStampMicroTZVector TimeStampVector VarCharVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types.pojo Schema]
+           org.roaringbitmap.RoaringBitmap
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -441,7 +442,8 @@
                                              (.logPut log-op-idxer iid row-id start-app-time end-app-time)
                                              (.indexPut temporal-idxer iid row-id start-app-time end-app-time new-entity?)))))))))))))))
 
-(defn- ->sql-update-indexer ^core2.indexer.SqlOpIndexer [^TransactionIndexer indexer, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
+(defn- ->sql-update-indexer ^core2.indexer.SqlOpIndexer [^TransactionIndexer indexer, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool
+                                                         ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
                                                          ^Instant current-time, ^ScanSource scan-src]
   (reify SqlOpIndexer
     (indexOp [_ inner-query param-rows {:keys [app-time-start app-time-end]}]
@@ -477,15 +479,31 @@
                                            (doseq [^DocRowCopier doc-row-copier (vals doc-row-copiers)]
                                              (.copyDocRow doc-row-copier new-row-id idx))
 
-                                           (doseq [[^String col-name, ^LiveColumn live-col] (.liveColumnsWith indexer old-row-id)
-                                                   :when (not (contains? doc-row-copiers col-name))]
-                                             (let [^VectorSchemaRoot live-root (.live-root live-col)
-                                                   doc-row-copier (doc-row-copier indexer (iv/->direct-vec (.getVector live-root col-name)))
-                                                   ^BigIntVector live-row-id-vec (.getVector live-root "_row-id")]
-                                               ;; TODO these are sorted, so we could binary search instead
-                                               (dotimes [idx (.getRowCount live-root)]
-                                                 (when (= old-row-id (.get live-row-id-vec idx))
-                                                   (.copyDocRow doc-row-copier new-row-id idx)))))
+                                           (letfn [(copy-row [^VectorSchemaRoot root, ^String col-name]
+                                                     (let [doc-row-copier (doc-row-copier indexer (iv/->direct-vec (.getVector root col-name)))
+                                                           ^BigIntVector root-row-id-vec (.getVector root "_row-id")]
+                                                       ;; TODO these are sorted, so we could binary search instead
+                                                       (dotimes [idx (.getRowCount root)]
+                                                         (when (= old-row-id (.get root-row-id-vec idx))
+                                                           (.copyDocRow doc-row-copier new-row-id idx)))))]
+
+                                             (doseq [[^String col-name, ^LiveColumn live-col] (.liveColumnsWith indexer old-row-id)
+                                                     :when (not (contains? doc-row-copiers col-name))]
+                                               (copy-row (.live-root live-col) col-name))
+
+                                             (when-let [{:keys [^long chunk-idx cols]} (meta/row-id->cols metadata-mgr old-row-id)]
+                                               (doseq [{:keys [col-name ^long block-idx]} cols
+                                                       :when (not (contains? doc-row-copiers col-name))]
+                                                 @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
+                                                      (util/then-apply
+                                                        (fn [buf]
+                                                          (with-open [chunks (util/->chunks buf {:block-idxs (doto (RoaringBitmap.)
+                                                                                                               (.add block-idx))
+                                                                                                 :close-buffer? true})]
+                                                            (-> chunks
+                                                                (.forEachRemaining (reify Consumer
+                                                                                     (accept [_ block-root]
+                                                                                       (copy-row block-root col-name))))))))))))
 
                                            (.logPut log-op-idxer iid new-row-id start-app-time end-app-time)
                                            (.indexPut temporal-idxer iid new-row-id start-app-time end-app-time false))))))))))))))
@@ -519,14 +537,14 @@
                                            (.logDelete log-op-idxer iid start-app-time end-app-time)
                                            (.indexDelete temporal-idxer iid row-id start-app-time end-app-time false))))))))))))))
 
-(defn- ->sql-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IInternalIdManager iid-mgr
+(defn- ->sql-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
                                                ^DenseUnionVector tx-ops-vec, ^Instant current-time, ^ScanSource scan-src]
   (let [sql-vec (.getStruct tx-ops-vec 3)
         ^VarCharVector query-vec (.getChild sql-vec "query" VarCharVector)
         ^ListVector param-rows-vec (.getChild sql-vec "param-rows" ListVector)
         insert-idxer (->sql-insert-indexer indexer iid-mgr log-op-idxer temporal-idxer current-time scan-src)
-        update-idxer (->sql-update-indexer indexer log-op-idxer temporal-idxer current-time scan-src)
+        update-idxer (->sql-update-indexer indexer metadata-mgr buffer-pool log-op-idxer temporal-idxer current-time scan-src)
         delete-idxer (->sql-delete-indexer indexer log-op-idxer temporal-idxer current-time scan-src)]
     (reify OpIndexer
       (indexOp [_ tx-op-idx]
@@ -595,7 +613,7 @@
           put-idxer (->put-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           delete-idxer (->delete-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
           evict-idxer (->evict-indexer this iid-mgr log-op-idxer temporal-idxer tx-ops-vec)
-          sql-idxer (->sql-indexer this iid-mgr log-op-idxer temporal-idxer
+          sql-idxer (->sql-indexer this metadata-mgr buffer-pool iid-mgr log-op-idxer temporal-idxer
                                    tx-ops-vec current-time (.scanSource this tx-key))]
 
       (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
