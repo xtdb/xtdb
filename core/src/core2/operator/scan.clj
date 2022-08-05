@@ -315,9 +315,12 @@
                        (into {}))
 
         metadata-args (vec (concat (for [col-name col-names
-                                         :when (not (contains? col-preds (name col-name)))]
+                                         :when (and (not (contains? col-preds (name col-name)))
+                                                    (not (temporal/temporal-column? (name col-name))))]
                                      col-name)
-                                   (vals selects)))]
+                                   (for [[col-name select] selects
+                                         :when (not (temporal/temporal-column? (name col-name)))]
+                                     select)))]
 
     {:col-types col-types
      :->cursor (fn [{:keys [allocator srcs params]}]
