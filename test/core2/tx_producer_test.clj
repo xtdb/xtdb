@@ -33,15 +33,24 @@
                           :cpu-avg-1min 24.81,
                           :mem-free 4.10011078E8,
                           :mem-used 5.89988922E8}]
-                   [:sql '[:insert
+                   [:sql '[:insert {:table "foo"}
                            [:table [{:foo ?_0, :bar ?_1, :baz ?_2}]]]
                     [[1 nil 3.3]
                      [2 "hello" 12]]]
-                   [:sql '[:update {:app-time-start #inst "2024"}
-                           [:project [_iid _row-id id {bar "world"}]
-                            [:scan [_iid _row-id {id (= id 1)}]]]]]
-                   [:sql '[:delete {:app-time-start #inst "2024"}
-                           [:scan [_iid _row-id {id (= id 1)}]]]]]
+                   [:sql '[:update {:table "foo"}
+                           [:project [_iid _row-id id {bar "world"}
+                                      {application_time_start (max application_time_start #inst "2021")}
+                                      {application_time_end (min application_time_end #inst "2024")}]
+                            [:scan [_iid _row-id {id (= id 1)}
+                                    {application_time_start (<= application_time_start #inst "2024")}
+                                    {application_time_end (>= application_time_end #inst "2021")}]]]]]
+                   [:sql '[:delete {:table "foo"}
+                           [:project [_iid
+                                      {application_time_start (max application_time_start #inst "2021")}
+                                      {application_time_end (min application_time_end #inst "2024")}]
+                            [:scan [_iid {id (= id 1)}
+                                    {application_time_start (<= application_time_start #inst "2024")}
+                                    {application_time_end (>= application_time_end #inst "2021")}]]]]]]
                   {:sys-time (util/->instant #inst "2021")
                    :current-time (util/->instant #inst "2021")})
                  (c2-json/arrow-streaming->json)

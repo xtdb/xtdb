@@ -446,96 +446,88 @@
                                                          ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
                                                          ^Instant current-time, ^ScanSource scan-src]
   (reify SqlOpIndexer
-    (indexOp [_ inner-query param-rows {:keys [app-time-start app-time-end]}]
+    (indexOp [_ inner-query param-rows _opts]
       (with-open [pq (op/open-prepared-ra inner-query)]
-        (let [^long update-app-time-from-µs (or (some-> app-time-start util/->instant util/instant->micros)
-                                                Long/MIN_VALUE)
-              ^long update-app-time-to-µs (or (some-> app-time-end util/->instant util/instant->micros)
-                                              Long/MAX_VALUE)]
-          (doseq [param-row param-rows
-                  :let [param-row (->> param-row
-                                       (into {} (map (juxt (comp symbol key) val))))]]
-            (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
-              (.forEachRemaining res
-                                 (reify Consumer
-                                   (accept [_ in-rel]
-                                     (let [^IIndirectRelation in-rel in-rel
-                                           row-count (.rowCount in-rel)
-                                           doc-row-copiers (->> (for [^IIndirectVector in-col in-rel
-                                                                      :let [col-name (.getName in-col)]
-                                                                      :when (not (temporal/temporal-column? col-name))]
-                                                                  [col-name (doc-row-copier indexer in-col)])
-                                                                (into {}))
-                                           iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
-                                           row-id-rdr (.monoReader (.vectorForName in-rel "_row-id"))
-                                           app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start"))
-                                           app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end"))]
-                                       (dotimes [idx row-count]
-                                         (let [old-row-id (.readLong row-id-rdr idx)
-                                               new-row-id (.nextRowId indexer)
-                                               iid (.readLong iid-rdr idx)
-                                               start-app-time (Math/max (.readLong app-time-start-rdr idx) update-app-time-from-µs)
-                                               end-app-time (Math/min (.readLong app-time-end-rdr idx) update-app-time-to-µs)]
-                                           (doseq [^DocRowCopier doc-row-copier (vals doc-row-copiers)]
-                                             (.copyDocRow doc-row-copier new-row-id idx))
+        (doseq [param-row param-rows
+                :let [param-row (->> param-row
+                                     (into {} (map (juxt (comp symbol key) val))))]]
+          (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
+            (.forEachRemaining res
+                               (reify Consumer
+                                 (accept [_ in-rel]
+                                   (let [^IIndirectRelation in-rel in-rel
+                                         row-count (.rowCount in-rel)
+                                         doc-row-copiers (->> (for [^IIndirectVector in-col in-rel
+                                                                    :let [col-name (.getName in-col)]
+                                                                    :when (not (temporal/temporal-column? col-name))]
+                                                                [col-name (doc-row-copier indexer in-col)])
+                                                              (into {}))
+                                         iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
+                                         row-id-rdr (.monoReader (.vectorForName in-rel "_row-id"))
+                                         app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start"))
+                                         app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end"))]
+                                     (dotimes [idx row-count]
+                                       (let [old-row-id (.readLong row-id-rdr idx)
+                                             new-row-id (.nextRowId indexer)
+                                             iid (.readLong iid-rdr idx)
+                                             start-app-time (.readLong app-time-start-rdr idx)
+                                             end-app-time (.readLong app-time-end-rdr idx)]
+                                         (doseq [^DocRowCopier doc-row-copier (vals doc-row-copiers)]
+                                           (.copyDocRow doc-row-copier new-row-id idx))
 
-                                           (letfn [(copy-row [^VectorSchemaRoot root, ^String col-name]
-                                                     (let [doc-row-copier (doc-row-copier indexer (iv/->direct-vec (.getVector root col-name)))
-                                                           ^BigIntVector root-row-id-vec (.getVector root "_row-id")]
-                                                       ;; TODO these are sorted, so we could binary search instead
-                                                       (dotimes [idx (.getRowCount root)]
-                                                         (when (= old-row-id (.get root-row-id-vec idx))
-                                                           (.copyDocRow doc-row-copier new-row-id idx)))))]
+                                         (letfn [(copy-row [^VectorSchemaRoot root, ^String col-name]
+                                                   (let [doc-row-copier (doc-row-copier indexer (iv/->direct-vec (.getVector root col-name)))
+                                                         ^BigIntVector root-row-id-vec (.getVector root "_row-id")]
+                                                     ;; TODO these are sorted, so we could binary search instead
+                                                     (dotimes [idx (.getRowCount root)]
+                                                       (when (= old-row-id (.get root-row-id-vec idx))
+                                                         (.copyDocRow doc-row-copier new-row-id idx)))))]
 
-                                             (doseq [[^String col-name, ^LiveColumn live-col] (.liveColumnsWith indexer old-row-id)
+                                           (doseq [[^String col-name, ^LiveColumn live-col] (.liveColumnsWith indexer old-row-id)
+                                                   :when (not (contains? doc-row-copiers col-name))]
+                                             (copy-row (.live-root live-col) col-name))
+
+                                           (when-let [{:keys [^long chunk-idx cols]} (meta/row-id->cols metadata-mgr old-row-id)]
+                                             (doseq [{:keys [col-name ^long block-idx]} cols
                                                      :when (not (contains? doc-row-copiers col-name))]
-                                               (copy-row (.live-root live-col) col-name))
+                                               @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
+                                                    (util/then-apply
+                                                      (fn [buf]
+                                                        (with-open [chunks (util/->chunks buf {:block-idxs (doto (RoaringBitmap.)
+                                                                                                             (.add block-idx))
+                                                                                               :close-buffer? true})]
+                                                          (-> chunks
+                                                              (.forEachRemaining (reify Consumer
+                                                                                   (accept [_ block-root]
+                                                                                     (copy-row block-root col-name))))))))))))
 
-                                             (when-let [{:keys [^long chunk-idx cols]} (meta/row-id->cols metadata-mgr old-row-id)]
-                                               (doseq [{:keys [col-name ^long block-idx]} cols
-                                                       :when (not (contains? doc-row-copiers col-name))]
-                                                 @(-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
-                                                      (util/then-apply
-                                                        (fn [buf]
-                                                          (with-open [chunks (util/->chunks buf {:block-idxs (doto (RoaringBitmap.)
-                                                                                                               (.add block-idx))
-                                                                                                 :close-buffer? true})]
-                                                            (-> chunks
-                                                                (.forEachRemaining (reify Consumer
-                                                                                     (accept [_ block-root]
-                                                                                       (copy-row block-root col-name))))))))))))
-
-                                           (.logPut log-op-idxer iid new-row-id start-app-time end-app-time)
-                                           (.indexPut temporal-idxer iid new-row-id start-app-time end-app-time false))))))))))))))
+                                         (.logPut log-op-idxer iid new-row-id start-app-time end-app-time)
+                                         (.indexPut temporal-idxer iid new-row-id start-app-time end-app-time false)))))))))))))
 
 (defn- ->sql-delete-indexer ^core2.indexer.SqlOpIndexer [^TransactionIndexer indexer, ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer
                                                          ^Instant current-time, ^ScanSource scan-src]
   (reify SqlOpIndexer
-    (indexOp [_ inner-query param-rows {:keys [app-time-start app-time-end]}]
+    (indexOp [_ inner-query param-rows _opts]
       (with-open [pq (op/open-prepared-ra inner-query)]
-        (let [^long delete-app-time-from-µs (or (some-> app-time-start util/->instant util/instant->micros)
-                                                Long/MIN_VALUE)
-              ^long delete-app-time-to-µs (or (some-> app-time-end util/->instant util/instant->micros)
-                                              Long/MAX_VALUE)]
-          (doseq [param-row param-rows
-                  :let [param-row (->> param-row
-                                       (into {} (map (juxt (comp symbol key) val))))]]
-            (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
-              (.forEachRemaining res
-                                 (reify Consumer
-                                   (accept [_ in-rel]
-                                     (let [^IIndirectRelation in-rel in-rel
-                                           row-count (.rowCount in-rel)
-                                           iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
-                                           app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start"))
-                                           app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end"))]
-                                       (dotimes [idx row-count]
-                                         (let [row-id (.nextRowId indexer)
-                                               iid (.readLong iid-rdr idx)
-                                               start-app-time (Math/max (.readLong app-time-start-rdr idx) delete-app-time-from-µs)
-                                               end-app-time (Math/min (.readLong app-time-end-rdr idx) delete-app-time-to-µs)]
-                                           (.logDelete log-op-idxer iid start-app-time end-app-time)
-                                           (.indexDelete temporal-idxer iid row-id start-app-time end-app-time false))))))))))))))
+        (doseq [param-row param-rows
+                :let [param-row (->> param-row
+                                     (into {} (map (juxt (comp symbol key) val))))]]
+          (with-open [res (.openCursor pq (into {'$ scan-src} param-row) {:current-time current-time})]
+            (.forEachRemaining res
+                               (reify Consumer
+                                 (accept [_ in-rel]
+                                   (let [^IIndirectRelation in-rel in-rel
+                                         row-count (.rowCount in-rel)
+                                         iid-rdr (.monoReader (.vectorForName in-rel "_iid"))
+                                         app-time-start-rdr (.monoReader (.vectorForName in-rel "application_time_start"))
+                                         app-time-end-rdr (.monoReader (.vectorForName in-rel "application_time_end"))]
+                                     (dotimes [idx row-count]
+                                       (let [row-id (.nextRowId indexer)
+                                             iid (.readLong iid-rdr idx)
+                                             start-app-time (.readLong app-time-start-rdr idx)
+                                             end-app-time (.readLong app-time-end-rdr idx)]
+                                         (.logDelete log-op-idxer iid start-app-time end-app-time)
+                                         (.indexDelete temporal-idxer iid row-id start-app-time end-app-time false)))))))))))))
 
 (defn- ->sql-indexer ^core2.indexer.OpIndexer [^TransactionIndexer indexer, ^IMetadataManager metadata-mgr, ^IBufferPool buffer-pool, ^IInternalIdManager iid-mgr
                                                ^ILogOpIndexer log-op-idxer, ^ITemporalTxIndexer temporal-idxer

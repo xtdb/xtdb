@@ -824,8 +824,8 @@
             "name" : "query",
             "count" : 3,
             "VALIDITY" : [1,1,1],
-            "OFFSET" : [0,51,196,298],
-            "DATA" : ["[:insert [:table [{:foo ?_0, :bar ?_1, :baz ?_2}]]]","[:update {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:project [_iid _row-id id {bar \"world\"}] [:scan [_iid _row-id {id (= id 1)}]]]]","[:delete {:app-time-start #inst \"2024-01-01T00:00:00.000-00:00\"} [:scan [_iid _row-id {id (= id 1)}]]]"]
+            "OFFSET" : [0,66,528,957],
+            "DATA" : ["[:insert {:table \"foo\"} [:table [{:foo ?_0, :bar ?_1, :baz ?_2}]]]","[:update {:table \"foo\"} [:project [_iid _row-id id {bar \"world\"} {application_time_start (max application_time_start #inst \"2021-01-01T00:00:00.000-00:00\")} {application_time_end (min application_time_end #inst \"2024-01-01T00:00:00.000-00:00\")}] [:scan [_iid _row-id {id (= id 1)} {application_time_start (<= application_time_start #inst \"2024-01-01T00:00:00.000-00:00\")} {application_time_end (>= application_time_end #inst \"2021-01-01T00:00:00.000-00:00\")}]]]]","[:delete {:table \"foo\"} [:project [_iid {application_time_start (max application_time_start #inst \"2021-01-01T00:00:00.000-00:00\")} {application_time_end (min application_time_end #inst \"2024-01-01T00:00:00.000-00:00\")}] [:scan [_iid {id (= id 1)} {application_time_start (<= application_time_start #inst \"2024-01-01T00:00:00.000-00:00\")} {application_time_end (>= application_time_end #inst \"2021-01-01T00:00:00.000-00:00\")}]]]]"]
           },{
             "name" : "param-rows",
             "count" : 3,
