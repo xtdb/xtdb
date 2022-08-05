@@ -1485,12 +1485,135 @@
                    [{(first ks) (expr z)}])))
              z)]))
 
+(defn- extend-projection? [column-or-expr]
+  (map? column-or-expr))
+
+(defn- ->projected-column [column-or-expr]
+  (if (extend-projection? column-or-expr)
+    (key (first column-or-expr))
+    column-or-expr))
+
+;; NOTE: might be better to try do this via projected-columns and meta
+;; data when building the initial plan? Though that requires rewrites
+;; consistently updating this if they change anything. Some operators
+;; don't know their columns, like csv and arrow, though they might
+;; have some form of AS clause that does at the SQL-level. This
+;; function will mainly be used for decorrelation, so not being able
+;; to deduct this, fail, and keep Apply is also an option, say by
+;; returning nil instead of throwing an exception like now.
+
+(defn- relation-columns [relation-in]
+  (r/zmatch relation-in
+    [:table explicit-column-names _]
+    (vec explicit-column-names)
+
+    [:table table]
+    (mapv symbol (keys (first table)))
+
+    [:scan columns]
+    (mapv ->projected-column columns)
+
+    [:join _ lhs rhs]
+    (vec (mapcat relation-columns [lhs rhs]))
+
+    [:cross-join lhs rhs]
+    (vec (mapcat relation-columns [lhs rhs]))
+
+    [:left-outer-join _ lhs rhs]
+    (vec (mapcat relation-columns [lhs rhs]))
+
+    [:semi-join _ lhs _]
+    (relation-columns lhs)
+
+    [:anti-join _ lhs _]
+    (relation-columns lhs)
+
+    [:mark-join projection lhs _]
+    (conj
+      (relation-columns lhs)
+      (->projected-column projection))
+
+    [:rename prefix-or-columns relation]
+    (if (symbol? prefix-or-columns)
+      (vec (for [c (relation-columns relation)]
+             (symbol (str prefix-or-columns relation-prefix-delimiter  c))))
+      (replace prefix-or-columns (relation-columns relation)))
+
+    [:project projection _]
+    (mapv ->projected-column projection)
+
+    [:map projection relation]
+    (into (relation-columns relation) (map ->projected-column projection))
+
+    [:group-by columns _]
+    (mapv ->projected-column columns)
+
+    [:select _ relation]
+    (relation-columns relation)
+
+    [:order-by _ relation]
+    (relation-columns relation)
+
+    [:top _ relation]
+    (relation-columns relation)
+
+    [:distinct relation]
+    (relation-columns relation)
+
+    [:intersect lhs _]
+    (relation-columns lhs)
+
+    [:difference lhs _]
+    (relation-columns lhs)
+
+    [:union-all lhs _]
+    (relation-columns lhs)
+
+    [:fixpoint _ base _]
+    (relation-columns base)
+
+    [:unwind columns opts relation]
+    (cond-> (conj (relation-columns relation) (val (first columns)))
+      (:ordinality-column opts) (conj (:ordinality-column opts)))
+
+    [:assign _ relation]
+    (relation-columns relation)
+
+    [:apply mode _ independent-relation dependent-relation]
+    (-> (relation-columns independent-relation)
+        (concat
+          (when-let [mark-join-projection (:mark-join mode)]
+            [(->projected-column mark-join-projection)])
+          (case mode
+            (:cross-join :left-outer-join) (relation-columns dependent-relation)
+            []))
+        (vec))
+
+    [:max-1-row relation]
+    (relation-columns relation)
+
+    (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation-in))))))
+
 (defn plan [z]
   (maybe-add-ref
    z
    (r/zmatch z
      [:directly_executable_statement ^:z dsds]
      (plan dsds)
+
+     [:insert_statement "INSERT" "INTO" [:regular_identifier table] ^:z from-subquery]
+
+     [:insert {:table table}
+      (plan from-subquery)]
+
+     [:from_subquery column-list ^:z query-expression]
+     (let [columns (mapv (comp symbol second) (rest column-list))
+           qe-plan (plan query-expression)
+           rename-map (zipmap (relation-columns qe-plan) columns)]
+       [:rename rename-map qe-plan])
+
+     [:from_subquery ^:z query-expression]
+     (plan query-expression)
 
      [:query_expression ^:z qeb]
      (plan qeb)
@@ -1660,115 +1783,10 @@
        :in_value_list (build-values-list z)
        (throw (IllegalArgumentException. (str "Cannot build plan for: "  (pr-str (r/node z)))))))))
 
-(defn- extend-projection? [column-or-expr]
-  (map? column-or-expr))
-
-(defn- ->projected-column [column-or-expr]
-  (if (extend-projection? column-or-expr)
-    (key (first column-or-expr))
-    column-or-expr))
 
 ;; Rewriting of logical plan.
 
-;; NOTE: might be better to try do this via projected-columns and meta
-;; data when building the initial plan? Though that requires rewrites
-;; consistently updating this if they change anything. Some operators
-;; don't know their columns, like csv and arrow, though they might
-;; have some form of AS clause that does at the SQL-level. This
-;; function will mainly be used for decorrelation, so not being able
-;; to deduct this, fail, and keep Apply is also an option, say by
-;; returning nil instead of throwing an exception like now.
-(defn- relation-columns [relation-in]
-  (r/zmatch relation-in
-    [:table explicit-column-names _]
-    (vec explicit-column-names)
 
-    [:table table]
-    (mapv symbol (keys (first table)))
-
-    [:scan columns]
-    (mapv ->projected-column columns)
-
-    [:join _ lhs rhs]
-    (vec (mapcat relation-columns [lhs rhs]))
-
-    [:cross-join lhs rhs]
-    (vec (mapcat relation-columns [lhs rhs]))
-
-    [:left-outer-join _ lhs rhs]
-    (vec (mapcat relation-columns [lhs rhs]))
-
-    [:semi-join _ lhs _]
-    (relation-columns lhs)
-
-    [:anti-join _ lhs _]
-    (relation-columns lhs)
-
-    [:mark-join projection lhs _]
-    (conj
-      (relation-columns lhs)
-      (->projected-column projection))
-
-    [:rename prefix-or-columns relation]
-    (if (symbol? prefix-or-columns)
-      (vec (for [c (relation-columns relation)]
-             (symbol (str prefix-or-columns relation-prefix-delimiter  c))))
-      (replace prefix-or-columns (relation-columns relation)))
-
-    [:project projection _]
-    (mapv ->projected-column projection)
-
-    [:map projection relation]
-    (into (relation-columns relation) (map ->projected-column projection))
-
-    [:group-by columns _]
-    (mapv ->projected-column columns)
-
-    [:select _ relation]
-    (relation-columns relation)
-
-    [:order-by _ relation]
-    (relation-columns relation)
-
-    [:top _ relation]
-    (relation-columns relation)
-
-    [:distinct relation]
-    (relation-columns relation)
-
-    [:intersect lhs _]
-    (relation-columns lhs)
-
-    [:difference lhs _]
-    (relation-columns lhs)
-
-    [:union-all lhs _]
-    (relation-columns lhs)
-
-    [:fixpoint _ base _]
-    (relation-columns base)
-
-    [:unwind columns opts relation]
-    (cond-> (conj (relation-columns relation) (val (first columns)))
-      (:ordinality-column opts) (conj (:ordinality-column opts)))
-
-    [:assign _ relation]
-    (relation-columns relation)
-
-    [:apply mode _ independent-relation dependent-relation]
-    (-> (relation-columns independent-relation)
-        (concat
-          (when-let [mark-join-projection (:mark-join mode)]
-            [(->projected-column mark-join-projection)])
-          (case mode
-            (:cross-join :left-outer-join) (relation-columns dependent-relation)
-            []))
-        (vec))
-
-    [:max-1-row relation]
-    (relation-columns relation)
-
-    (throw (IllegalArgumentException. (str "cannot calculate columns for: " (pr-str relation-in))))))
 
 ;; Attempt to clean up tree, removing names internally and only add
 ;; them back at the top. Scan still needs explicit names to access the
@@ -2771,22 +2789,22 @@
            (let [fired-rules (atom [])
                  instrument-rules (fn [rules]
                                     (apply
-                                     some-fn
-                                     (if instrument-rules?
-                                       (mapv (fn [f]
-                                               (fn [z]
-                                                 (when-let [successful-rewrite (f z)]
-                                                   (swap!
-                                                    fired-rules
-                                                    #(conj
-                                                      %
-                                                      [(name (.toSymbol ^Var f))
-                                                       (r/znode z)
-                                                       successful-rewrite
-                                                       "=================="]))
-                                                   successful-rewrite)))
-                                             rules)
-                                       (mapv deref rules))))
+                                      some-fn
+                                      (if instrument-rules?
+                                        (mapv (fn [f]
+                                                (fn [z]
+                                                  (when-let [successful-rewrite (f z)]
+                                                    (swap!
+                                                      fired-rules
+                                                      #(conj
+                                                         %
+                                                         [(name (.toSymbol ^Var f))
+                                                          (r/znode z)
+                                                          successful-rewrite
+                                                          "=================="]))
+                                                    successful-rewrite)))
+                                              rules)
+                                        (mapv deref rules))))
                  optimize-plan [#'promote-selection-cross-join-to-join
                                 #'promote-selection-to-join
                                 #'push-selection-down-past-apply
@@ -2815,18 +2833,27 @@
                                    #'decorrelate-apply-rule-4
                                    #'decorrelate-apply-rule-8
                                    #'decorrelate-apply-rule-9]
-                 plan (remove-names (plan ag) opts)
-                 add-projection-fn (:add-projection-fn (meta plan))
-                 plan (->> plan
-                           (r/vector-zip)
-                           (#(if decorrelate?
-                               (r/innermost (r/mono-tp (instrument-rules decorrelate-plan)) %)
-                               %))
-                           (r/innermost (r/mono-tp (instrument-rules optimize-plan)))
-                           (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
-                           (r/node)
-                           (add-projection-fn))]
-             (if (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
-               (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
+                 plan (plan ag)
+                 rewrite (fn [plan]
+                           (let [plan (remove-names plan opts)
+                                 add-projection-fn (:add-projection-fn (meta plan))]
+                             plan (->> plan
+                                       (r/vector-zip)
+                                       (#(if decorrelate?
+                                           (r/innermost (r/mono-tp (instrument-rules decorrelate-plan)) %)
+                                           %))
+                                       (r/innermost (r/mono-tp (instrument-rules optimize-plan)))
+                                       (r/topdown (r/adhoc-tp r/id-tp (instrument-rules [#'rewrite-equals-predicates-in-join-as-equi-join-map])))
+                                       (r/node)
+                                       (add-projection-fn))))
+                 validate-plan  (fn [plan]
+                                  (if (and validate-plan? (not (s/valid? ::lp/logical-plan plan)))
+                                    (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan plan)))
+                                    plan))
+                 plan (if (#{:insert} (first plan))
+                        (let [[dml-op dml-op-opts plan] plan]
+                          [dml-op dml-op-opts
+                           (validate-plan (rewrite plan))])
+                        (validate-plan (rewrite plan)))]
                {:plan plan
-                :fired-rules @fired-rules}))))))))
+                :fired-rules @fired-rules})))))))

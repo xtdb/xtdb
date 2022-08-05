@@ -1,8 +1,9 @@
 (ns core2.api-test
-  (:require [clojure.test :as t]
+  (:require [clojure.test :as t :refer [deftest]]
             [core2.api :as c2]
             [core2.client :as client]
             [core2.test-util :as tu :refer [*node*]]
+            [core2.sql.plan-test :as pt]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [core2.local-node :as node])
@@ -147,8 +148,8 @@
     (t/is (= [] (c2/sql-query n "select a.a from a a" {})))))
 
 (t/deftest test-basic-sql-dml
-  (let [!tx1 (c2/submit-tx *node* [[:sql '[:insert {:table "users"}
-                                           [:table [{:id ?_0, :name ?_1, :application_time_start ?_2}]]]
+  (let [!tx1 (c2/submit-tx *node* [[:sql
+                                    (pt/plan-sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)")
                                     [["dave", "Dave", #inst "2018"]
                                      ["claire", "Claire", #inst "2019"]
                                      ["alan", "Alan", #inst "2020"]
@@ -211,3 +212,21 @@
       (t/is (= [{:name "Sue"}]
                (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-08-01 00:00:00'"
                              {:basis {:tx !tx3}}))))))
+
+(deftest test-sql-insert
+  (let [!tx1 (c2/submit-tx *node*
+                           [[:sql (pt/plan-sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)")
+                             [["dave", "Dave", #inst "2018"]
+                              ["claire", "Claire", #inst "2019"]]]])
+
+        _ (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx1))
+
+        !tx2 (c2/submit-tx *node*
+                           [[:sql (pt/plan-sql "INSERT INTO people (id, renamed_name, application_time_start)
+                                               SELECT users.id, users.name, users.application_time_start FROM users
+                                               WHERE users.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00' AND users.name = 'Dave'")]])]
+
+    (t/is (= [{:renamed_name "Dave"}]
+             (c2/sql-query *node* "SELECT people.renamed_name FROM people
+                                  WHERE people.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
+                           {:basis {:tx !tx2}})))))

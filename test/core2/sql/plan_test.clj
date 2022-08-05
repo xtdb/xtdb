@@ -973,3 +973,19 @@
                 WHERE foo.application_time_start = 4 AND foo.application_time_end > 10
                 AND foo.system_time_start = 20 AND foo.system_time_end <= 23
                 AND foo.APP_TIME OVERLAPS PERIOD (DATE '2000-01-01', DATE '2004-01-01')"))))
+
+(deftest test-sql-insert-plan
+  (t/is
+    (=
+     '[:insert {:table "users"}
+       [:rename
+        {x1 id, x2 name, x3 application_time_start}
+        [:table [{x1 ?_0, x2 ?_1, x3 ?_2}]]]]
+     (plan-sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)")
+     (plan-sql
+       "INSERT INTO users SELECT bar.id, bar.name, bar.application_time_start
+       FROM (VALUES (?, ?, ?)) AS bar(id, name, application_time_start)")
+     (plan-sql
+       "INSERT INTO users (id, name, application_time_start)
+       SELECT bar.id, bar.name, bar.application_time_start
+       FROM (VALUES (?, ?, ?)) AS bar(id, name, application_time_start)"))))
