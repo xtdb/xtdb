@@ -675,7 +675,7 @@
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(/ ~@%))})
 
-;; TODO extend min/max to non-numeric
+;; TODO extend min/max to variable width
 (defmethod codegen-mono-call [:max :num :num] [{:keys [arg-types]}]
   {:return-type (types/least-upper-bound arg-types)
    :->call-code #(do `(Math/max ~@%))})

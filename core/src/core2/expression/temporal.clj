@@ -3,11 +3,12 @@
             [core2.expression.metadata :as expr.meta]
             [core2.expression.walk :as ewalk]
             [core2.temporal :as temporal]
+            [core2.types :as types]
             [core2.util :as util])
-  (:import java.time.Instant
-           [org.apache.arrow.vector.types.pojo  ArrowType$Interval ArrowType$Date]
-           [java.time LocalDate Period Duration]
-           [org.apache.arrow.vector PeriodDuration]))
+  (:import [java.time Duration LocalDate Period]
+           java.time.Instant
+           [org.apache.arrow.vector PeriodDuration]
+           [org.apache.arrow.vector.types.pojo ArrowType$Date ArrowType$Interval]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -221,6 +222,16 @@
     :day-time {:return-type [:interval :day-time]
                :->call-code (fn [[a b]] `(pd-day-time-div ~a ~b))}
     (throw (UnsupportedOperationException. "Cannot divide mixed period / duration intervals"))))
+
+(defmethod expr/codegen-mono-call [:min :timestamp-tz :timestamp-tz] [{:keys [arg-types]}]
+  (assert (apply = arg-types))
+  {:return-type (types/least-upper-bound arg-types)
+   :->call-code #(do `(Math/min ~@%))})
+
+(defmethod expr/codegen-mono-call [:max :timestamp-tz :timestamp-tz] [{:keys [arg-types]}]
+  (assert (apply = arg-types))
+  {:return-type (types/least-upper-bound arg-types)
+   :->call-code #(do `(Math/max ~@%))})
 
 (defn interval-abs-ym
   "In SQL the ABS function can be applied to intervals, negating them if they are below some definition of 'zero' for the components
