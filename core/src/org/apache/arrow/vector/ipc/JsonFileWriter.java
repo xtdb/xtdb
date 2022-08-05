@@ -30,7 +30,6 @@ import java.util.Set;
 
 import org.apache.arrow.memory.ArrowBuf;
 import org.apache.arrow.util.Preconditions;
-import org.apache.arrow.vector.BaseLargeVariableWidthVector;
 import org.apache.arrow.vector.BaseVariableWidthVector;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.BitVectorHelper;
@@ -84,10 +83,8 @@ import com.fasterxml.jackson.core.util.DefaultPrettyPrinter.NopIndenter;
 import com.fasterxml.jackson.databind.MappingJsonFactory;
 
 /**
- * A writer that converts binary Vectors into an <em>internal, unstable</em> JSON format suitable
+ * A writer that converts binary Vectors into a JSON format suitable
  * for integration testing.
- *
- * This writer does NOT implement a JSON dataset format like JSONL.
  */
 public class JsonFileWriter implements AutoCloseable {
 
@@ -231,22 +228,11 @@ public class JsonFileWriter implements AutoCloseable {
           if (bufferType.equals(DATA) && (vector.getMinorType() == MinorType.VARCHAR ||
                   vector.getMinorType() == MinorType.VARBINARY)) {
             writeValueToGenerator(bufferType, vectorBuffer, vectorBuffers.get(v - 1), vector, i);
-          } else if (bufferType.equals(OFFSET) && vector.getValueCount() == 0 &&
-              (vector.getMinorType() == MinorType.LIST || vector.getMinorType() == MinorType.MAP ||
-                  vector.getMinorType() == MinorType.VARBINARY || vector.getMinorType() == MinorType.VARCHAR)) {
-            // Empty vectors may not have allocated an offsets buffer
-            try (ArrowBuf vectorBufferTmp = vector.getAllocator().buffer(4)) {
-              vectorBufferTmp.setInt(0, 0);
-              writeValueToGenerator(bufferType, vectorBufferTmp, null, vector, i);
-            }
-          } else if (bufferType.equals(OFFSET) && vector.getValueCount() == 0 &&
-              (vector.getMinorType() == MinorType.LARGELIST || vector.getMinorType() == MinorType.LARGEVARBINARY ||
-                vector.getMinorType() == MinorType.LARGEVARCHAR)) {
-            // Empty vectors may not have allocated an offsets buffer
-            try (ArrowBuf vectorBufferTmp = vector.getAllocator().buffer(8)) {
-              vectorBufferTmp.setLong(0, 0);
-              writeValueToGenerator(bufferType, vectorBufferTmp, null, vector, i);
-            }
+          } else if (bufferType.equals(OFFSET) && vector.getValueCount() == 0) {
+            ArrowBuf vectorBufferTmp = vector.getAllocator().buffer(4);
+            vectorBufferTmp.setInt(0, 0);
+            writeValueToGenerator(bufferType, vectorBufferTmp, null, vector, i);
+            vectorBufferTmp.close();
           } else {
             writeValueToGenerator(bufferType, vectorBuffer, null, vector, i);
           }
@@ -281,21 +267,7 @@ public class JsonFileWriter implements AutoCloseable {
     if (bufferType.equals(TYPE)) {
       generator.writeNumber(buffer.getByte(index * TinyIntVector.TYPE_WIDTH));
     } else if (bufferType.equals(OFFSET)) {
-      switch (vector.getMinorType()) {
-        case VARCHAR:
-        case VARBINARY:
-        case LIST:
-        case MAP:
-          generator.writeNumber(buffer.getInt((long) index * BaseVariableWidthVector.OFFSET_WIDTH));
-          break;
-        case LARGELIST:
-        case LARGEVARBINARY:
-        case LARGEVARCHAR:
-          generator.writeNumber(buffer.getLong((long) index * BaseLargeVariableWidthVector.OFFSET_WIDTH));
-          break;
-        default:
-          throw new IllegalArgumentException("Type has no offset buffer: " + vector.getField());
-      }
+      generator.writeNumber(buffer.getInt(index * BaseVariableWidthVector.OFFSET_WIDTH));
     } else if (bufferType.equals(VALIDITY)) {
       generator.writeNumber(vector.isNull(index) ? 0 : 1);
     } else if (bufferType.equals(DATA)) {
