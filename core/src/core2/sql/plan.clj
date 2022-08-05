@@ -1407,15 +1407,18 @@
 
                         :else
                         columns)
-                      columns-with-temporal-cols
-                      (vec (mapcat #(if (= % 'APP_TIME)
-                                      ['application_time_start 'application_time_end]
-                                      [%]) columns-with-system-time-predicates))]
+                      columns-with-app-time-cols
+                      (if (contains? (set columns-with-system-time-predicates) 'APP_TIME)
+                        (->> columns-with-system-time-predicates
+                             (remove #{'application_time_start 'application_time_end 'APP_TIME})
+                             (concat ['application_time_start 'application_time_end])
+                             vec)
+                        columns-with-system-time-predicates)]
                   (if *include-table-column-in-scan?*
                     (conj
-                      columns-with-temporal-cols
+                      columns-with-app-time-cols
                       {'_table (list '=  '_table table-or-query-name)})
-                    columns-with-temporal-cols))]
+                    columns-with-app-time-cols))]
          (= (first system-time-predicates) :invalid-points-in-time)
          (vector :select 'false)))]))
 
