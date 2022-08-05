@@ -148,21 +148,20 @@
     (t/is (= [] (c2/sql-query n "select a.a from a a" {})))))
 
 (t/deftest test-basic-sql-dml
-  (let [!tx1 (c2/submit-tx *node* [[:sql
-                                    (pt/plan-sql "INSERT INTO users (id, name, application_time_start) VALUES (?, ?, ?)")
-                                    [["dave", "Dave", #inst "2018"]
-                                     ["claire", "Claire", #inst "2019"]
-                                     ["alan", "Alan", #inst "2020"]
-                                     ["susan", "Susan", #inst "2021"]]]])]
+  (let [!tx1 (c2/submit-tx *node* [[:sql (pt/plan-sql "INSERT INTO users (id, first_name, last_name, application_time_start) VALUES (?, ?, ?, ?)")
+                                    [["dave", "Dave", "Davis", #inst "2018"]
+                                     ["claire", "Claire", "Cooper", #inst "2019"]
+                                     ["alan", "Alan", "Andrews", #inst "2020"]
+                                     ["susan", "Susan", "Smith", #inst "2021"]]]])]
 
     (t/is (= (c2/map->TransactionInstant {:tx-id 0, :sys-time (util/->instant #inst "2020-01-01")}) @!tx1))
 
-    (t/is (= [{:name "Dave"} {:name "Claire"}]
-             (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
+    (t/is (= [{:first_name "Dave"} {:first_name "Claire"}]
+             (c2/sql-query *node* "SELECT u.first_name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
                            {:basis {:tx !tx1}})))
 
-    (t/is (= [{:name "Dave"} {:name "Claire"} {:name "Alan"}]
-             (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
+    (t/is (= [{:first_name "Dave"} {:first_name "Claire"} {:first_name "Alan"}]
+             (c2/sql-query *node* "SELECT u.first_name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
                            {:basis {:tx !tx1}})))
 
     (let [!tx2 (c2/submit-tx *node* [[:sql '[:delete {:table "users"
@@ -174,22 +173,23 @@
                                                      {application_time_end (>= application_time_end #inst "2020-05-01")}]]]
                                       [["dave"]]]])]
 
-      (t/is (= [{:name "Claire"} {:name "Alan"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
+      (t/is (= [{:first_name "Claire"} {:first_name "Alan"}]
+               (c2/sql-query *node* "SELECT u.first_name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
                              {:basis {:tx !tx2}})))
 
-      (t/is (= [{:name "Dave"} {:name "Claire"} {:name "Alan"}]
-               (c2/sql-query *node* "SELECT users.name FROM users WHERE users.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
+      (t/is (= [{:first_name "Dave"} {:first_name "Claire"} {:first_name "Alan"}]
+               (c2/sql-query *node* "SELECT users.first_name FROM users WHERE users.APP_TIME CONTAINS TIMESTAMP '2020-06-01 00:00:00'"
                              {:basis {:tx !tx1}})))
 
-      (t/is (= [{:name "Dave"} {:name "Claire"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
+      (t/is (= [{:first_name "Dave"} {:first_name "Claire"}]
+               (c2/sql-query *node* "SELECT u.first_name FROM users u WHERE u.APP_TIME CONTAINS TIMESTAMP '2019-06-01 00:00:00'"
                              {:basis {:tx !tx2}}))))
 
     (let [!tx3 (c2/submit-tx *node* [[:sql '[:update {:table "users"
                                                       :app-time-start #inst "2021-07-01"}
-                                             [:map [{name "Sue"}]
+                                             [:map [{first_name "Sue"}]
                                               [:scan [_iid
+                                                      _row-id
                                                       {id (= id ?_0)}
                                                       {_table (= _table "users")}
                                                       application_time_start
@@ -197,20 +197,20 @@
                                       [["susan"]]]])]
 
       ;; TODO when we can return `application_time_start` etc from `:scan` without errors we can probably coalesce these tests
-      (t/is (= [{:name "Susan"} {:name "Sue"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue')"
+      (t/is (= [{:first_name "Susan", :last_name "Smith"} {:first_name "Sue", :last_name "Smith"}]
+               (c2/sql-query *node* "SELECT u.first_name, u.last_name FROM users u WHERE u.first_name IN ('Susan', 'Sue')"
                              {:basis {:tx !tx3}})))
 
-      (t/is (= [{:name "Susan"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-05-01 00:00:00'"
+      (t/is (= [{:first_name "Susan", :last_name "Smith"}]
+               (c2/sql-query *node* "SELECT u.first_name, u.last_name FROM users u WHERE u.first_name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-05-01 00:00:00'"
                              {:basis {:tx !tx3}})))
 
-      (t/is (= [{:name "Susan"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-08-01 00:00:00'"
+      (t/is (= [{:first_name "Susan", :last_name "Smith"}]
+               (c2/sql-query *node* "SELECT u.first_name, u.last_name FROM users u WHERE u.first_name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-08-01 00:00:00'"
                              {:basis {:tx !tx1}})))
 
-      (t/is (= [{:name "Sue"}]
-               (c2/sql-query *node* "SELECT u.name FROM users u WHERE u.name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-08-01 00:00:00'"
+      (t/is (= [{:first_name "Sue", :last_name "Smith"}]
+               (c2/sql-query *node* "SELECT u.first_name, u.last_name FROM users u WHERE u.first_name IN ('Susan', 'Sue') AND u.APP_TIME CONTAINS TIMESTAMP '2021-08-01 00:00:00'"
                              {:basis {:tx !tx3}}))))))
 
 (deftest test-sql-insert
