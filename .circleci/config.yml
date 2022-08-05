@@ -78,6 +78,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
+      - run: apt-get update && apt-get install -y curl
       - run: 'clojure -Srepro -X:core2:4gb:test'
 
       - slack/notify:
@@ -93,6 +94,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
+      - run: apt-get update && apt-get install -y curl
       # TODO should test the other modules too
       - run: 'clojure -Srepro -X:core2:4gb:integration-test'
 
