@@ -897,3 +897,22 @@
         (is (= [{:name "Fred"}] (q db ["select a.name from a"]))))
 
       (is (= [{:name "Fred"}, {:name "Bob"}] (q conn ["select a.name from a"]))))))
+
+;; SET is not supported properly at the moment, so this ensure we do not really do anything too embarrassing (like crash)
+(deftest set-statement-test
+  (let [params #(-> (get-last-conn) :conn-state deref :session-parameters (select-keys %))]
+    (with-open [conn (jdbc-conn)]
+
+      (testing "literals saved as is (no parser hooked up yet)"
+        (is (q conn ["SET a = 'b'"]))
+        (is (= {"a" "'b'"} (params ["a"])))
+        (is (q conn ["SET b = 42"]))
+        (is (= {"a" "'b'", "b" "42"} (params ["a" "b"]))))
+
+      (testing "properties can be overwritten"
+        (q conn ["SET a = 42"])
+        (is (= {"a" "42"} (params ["a"]))))
+
+      (testing "TO syntax can be used"
+        (q conn ["SET a TO 43"])
+        (is (= {"a" "43"} (params ["a"])))))))

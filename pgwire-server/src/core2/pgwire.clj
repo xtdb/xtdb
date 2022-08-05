@@ -396,7 +396,7 @@
      :canned-response (get-canned-response sql)}
 
     (= "SET" (statement-head sql))
-    (let [[_ k v] (re-find #"SET\s+(\w+)\s*=\s*'?(.*)'?" sql)]
+    (let [[_ k _ v] (re-find #"SET\s+(\w+)\s*(=|TO)\s*(.*)" sql)]
       {:statement-type :set-session-parameter
        :parameter k
        :value v})
@@ -1475,6 +1475,10 @@
       :query (cmd-describe-query conn ast)
       (cmd-send-error conn (err-protocol-violation "no such description possible")))))
 
+(defn cmd-set-session-parameter [conn parameter value]
+  (set-session-parameter conn parameter value)
+  (cmd-write-msg conn msg-command-complete {:command "SET"}))
+
 (defn cmd-exec-stmt
   "Given some kind of statement (from interpret-sql), will execute it. For some statements, this does not mean
   the xt node gets hit - e.g SET some_session_parameter = 42 modifies the connection, not the database."
@@ -1495,7 +1499,7 @@
   (case statement-type
     :empty-query (cmd-write-msg conn msg-empty-query)
     :canned-response (cmd-write-canned-response conn canned-response)
-    :set-session-parameter (set-session-parameter conn parameter value)
+    :set-session-parameter (cmd-set-session-parameter conn parameter value)
     :begin (cmd-begin conn)
     :rollback (cmd-rollback conn)
     :commit (cmd-commit conn)
