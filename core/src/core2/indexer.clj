@@ -392,7 +392,7 @@
       (indexOp [_ tx-op-idx]
         (let [sql-offset (.getOffset tx-ops-vec tx-op-idx)
               query (read-string (t/get-object query-vec sql-offset))
-              param-rows (if-not (.isNull param-rows-vec sql-offset)
+              param-rows (if-not (.isEmpty param-rows-vec sql-offset)
                            (t/get-object param-rows-vec sql-offset)
                            [{}])]
           (zmatch query
